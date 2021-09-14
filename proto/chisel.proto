@@ -1,0 +1,13 @@
+syntax = "proto3";
+
+package chisel;
+
+message StatusRequest { }
+
+message StatusResponse {
+  string message = 1;
+}
+
+service ChiselRpc {
+  rpc GetStatus (StatusRequest) returns (StatusResponse);
+}
