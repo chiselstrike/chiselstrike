@@ -10,8 +10,8 @@ Start the server with:
 cargo run --bin chiseld
 ```
 
-Control the server with:
+Query for the status of the server with:
 
 ```console
-cargo run --bin chisel
+cargo run --bin chisel status
 ```
