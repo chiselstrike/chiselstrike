@@ -6,6 +6,12 @@ edition = "2018"
 
 [dependencies]
 structopt = "0.3.23"
+tonic = "0.5.2"
+prost = "0.8.0"
+tokio = { version = "1.11.0", features = ["full"] }
+
+[build-dependencies]
+tonic-build = "0.5.2"
 
 [[bin]]
 name = "chiseld"
