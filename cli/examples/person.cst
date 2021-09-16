@@ -1,0 +1,8 @@
+type Person {
+  first_name: String
+  last_name: String
+}
+
+type Position {
+  title: String
+}
