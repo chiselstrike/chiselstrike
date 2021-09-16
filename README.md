@@ -15,3 +15,5 @@ Query for the status of the server with:
 ```console
 cargo run --bin chisel status
 ```
+
+See the [command line user guide](cli/docs/manual.md) for more commands.
