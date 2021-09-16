@@ -1,3 +1,5 @@
+pub mod parser;
+
 use chisel::chisel_rpc_client::ChiselRpcClient;
 use chisel::StatusRequest;
 use structopt::StructOpt;
