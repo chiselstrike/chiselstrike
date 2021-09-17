@@ -116,13 +116,38 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let ts = Arc::new(Mutex::new(TypeSystem::new()));
     let rpc = RpcService::new(api.clone(), ts);
     let rpc_addr = opt.rpc_listen_addr.parse()?;
-    let rpc_task = tokio::spawn(async move {
-        Server::builder()
-            .add_service(ChiselRpcServer::new(rpc))
-            .serve(rpc_addr)
-            .await
+
+    let sigterm = tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())?;
+    let sigint = tokio::signal::unix::signal(tokio::signal::unix::SignalKind::interrupt())?;
+    let (tx, mut rx) = tokio::sync::watch::channel(());
+    let sig_task = tokio::spawn(async move {
+        use futures::StreamExt;
+        let sigterm = tokio_stream::wrappers::SignalStream::new(sigterm);
+        let sigint = tokio_stream::wrappers::SignalStream::new(sigint);
+        let mut asig = futures::stream_select!(sigint, sigterm);
+        asig.next().await;
+        info!("Got signal");
+        tx.send(())
     });
-    let api_task = api::spawn(api.clone(), api_addr);
-    let _ = tokio::try_join!(rpc_task, api_task)?;
+
+    let mut rpc_rx = rx.clone();
+    let rpc_task = tokio::spawn(async move {
+        let ret = Server::builder()
+            .add_service(ChiselRpcServer::new(rpc))
+            .serve_with_shutdown(rpc_addr, async move {
+                rpc_rx.changed().await.ok();
+            })
+            .await;
+        info!("Tonic shutdown");
+        ret
+    });
+
+    let api_task = api::spawn(api.clone(), api_addr, async move {
+        rx.changed().await.ok();
+    });
+    let results = tokio::try_join!(rpc_task, api_task, sig_task)?;
+    results.0?;
+    results.1?;
+    results.2?;
     Ok(())
 }

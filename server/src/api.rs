@@ -47,6 +47,7 @@ impl ApiService {
 pub fn spawn(
     api: Arc<Mutex<ApiService>>,
     addr: SocketAddr,
+    shutdown: impl core::future::Future<Output = ()> + Send + 'static,
 ) -> tokio::task::JoinHandle<Result<(), hyper::Error>> {
     let make_svc = make_service_fn(move |_conn| {
         let api = api.clone();
@@ -61,5 +62,9 @@ pub fn spawn(
         }
     });
     let server = Server::bind(&addr).serve(make_svc);
-    tokio::spawn(async move { server.await })
+    tokio::spawn(async move {
+        let ret = server.with_graceful_shutdown(shutdown).await;
+        info!("hyper shutdown");
+        ret
+    })
 }
