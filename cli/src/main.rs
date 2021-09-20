@@ -1,7 +1,6 @@
-pub mod parser;
-
 use chisel::chisel_rpc_client::ChiselRpcClient;
 use chisel::{FieldDefinition, StatusRequest, TypeDefinitionRequest};
+use graphql_parser::schema::{parse_schema, Definition, TypeDefinition};
 use std::fs;
 use structopt::StructOpt;
 
@@ -41,22 +40,30 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
         Opt::Type { cmd } => match cmd {
             TypeCommand::Define { filename } => {
-                let type_system = parser::parse(&fs::read_to_string(filename)?)?;
+                let schema = fs::read_to_string(filename)?;
+                let type_system = parse_schema::<String>(&schema)?;
                 let mut client = ChiselRpcClient::connect("http://localhost:50051").await?;
-                for type_def in &type_system.defs {
-                    let mut field_defs = Vec::default();
-                    for field_def in &type_def.fields {
-                        field_defs.push(FieldDefinition {
-                            name: field_def.name.to_owned(),
-                            r#type: field_def.ty.to_owned(),
-                        });
+                for def in &type_system.definitions {
+                    match def {
+                        Definition::TypeDefinition(TypeDefinition::Object(obj_def)) => {
+                            let mut field_defs = Vec::default();
+                            for field_def in &obj_def.fields {
+                                field_defs.push(FieldDefinition {
+                                    name: field_def.name.to_owned(),
+                                    r#type: format!("{}", field_def.field_type.to_owned()),
+                                });
+                            }
+                            let request = tonic::Request::new(TypeDefinitionRequest {
+                                name: obj_def.name.to_owned(),
+                                field_defs,
+                            });
+                            let response = client.define_type(request).await?.into_inner();
+                            println!("Type defined: {}", response.message);
+                        }
+                        def => {
+                            println!("Ignoring type definition: {:?}", def);
+                        }
                     }
-                    let request = tonic::Request::new(TypeDefinitionRequest {
-                        name: type_def.name.to_owned(),
-                        field_defs: field_defs,
-                    });
-                    let response = client.define_type(request).await?.into_inner();
-                    println!("Type defined: {}", response.message);
                 }
             }
         },
