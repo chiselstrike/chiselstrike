@@ -20,3 +20,7 @@ type Person {
   last_name: String,
 }
 ```
+
+### `chisel type export`
+
+The `chisel type export` command exports the whole type system as TypeScript classes.

@@ -1,5 +1,5 @@
 use chisel::chisel_rpc_client::ChiselRpcClient;
-use chisel::{FieldDefinition, StatusRequest, TypeDefinitionRequest};
+use chisel::{FieldDefinition, StatusRequest, TypeDefinitionRequest, TypeExportRequest};
 use graphql_parser::schema::{parse_schema, Definition, TypeDefinition};
 use std::fs;
 use structopt::StructOpt;
@@ -22,6 +22,8 @@ enum TypeCommand {
         /// Type definition input file.
         filename: String,
     },
+    // Export the type system.
+    Export,
 }
 
 pub mod chisel {
@@ -64,6 +66,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                             println!("Ignoring type definition: {:?}", def);
                         }
                     }
+                }
+            }
+            TypeCommand::Export => {
+                let request = tonic::Request::new(TypeExportRequest {});
+                let mut client = ChiselRpcClient::connect("http://localhost:50051").await?;
+                let response = client.export_types(request).await?.into_inner();
+                for def in response.type_defs {
+                    println!("class {} {{", def.name);
+                    println!("}}");
                 }
             }
         },
