@@ -30,7 +30,7 @@ impl RpcService {
     pub fn new(api: Arc<Mutex<ApiService>>, type_system: Arc<Mutex<TypeSystem>>) -> Self {
         RpcService {
             api,
-            type_system: type_system,
+            type_system,
         }
     }
 }
