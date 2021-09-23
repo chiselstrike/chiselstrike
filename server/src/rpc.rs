@@ -1,4 +1,5 @@
 use crate::api::ApiService;
+use crate::store::{Store, StoreError};
 use crate::types::{Type, TypeSystem};
 use chisel::chisel_rpc_server::{ChiselRpc, ChiselRpcServer};
 use chisel::{
@@ -24,11 +25,39 @@ pub mod chisel {
 pub struct RpcService {
     api: Arc<Mutex<ApiService>>,
     type_system: Arc<Mutex<TypeSystem>>,
+    store: Arc<Mutex<Store>>,
 }
 
 impl RpcService {
-    pub fn new(api: Arc<Mutex<ApiService>>, type_system: Arc<Mutex<TypeSystem>>) -> Self {
-        RpcService { api, type_system }
+    pub fn new(
+        api: Arc<Mutex<ApiService>>,
+        type_system: Arc<Mutex<TypeSystem>>,
+        store: Arc<Mutex<Store>>,
+    ) -> Self {
+        RpcService {
+            api,
+            type_system,
+            store,
+        }
+    }
+
+    pub async fn define_type_endpoints(&self, name: &str) {
+        let path = format!("/{}", name.to_case(Case::Snake));
+        info!("Registered endpoint: '{}'", path);
+        self.api.lock().await.get(
+            &path,
+            Box::new(|| {
+                // Let's return an empty array because we don't do storage yet.
+                let result = json!([]);
+                result.to_string()
+            }),
+        );
+    }
+}
+
+impl From<StoreError> for Status {
+    fn from(err: StoreError) -> Self {
+        Status::internal(format!("{}", err))
     }
 }
 
@@ -52,19 +81,13 @@ impl ChiselRpc for RpcService {
     ) -> Result<Response<TypeDefinitionResponse>, Status> {
         let mut type_system = self.type_system.lock().await;
         let name = request.into_inner().name;
-        type_system.define_type(Type {
+        let ty = Type {
             name: name.to_owned(),
-        });
-        let path = format!("/{}", name.to_case(Case::Snake));
-        info!("Registered endpoint: '{}'", path);
-        self.api.lock().await.get(
-            &path,
-            Box::new(|| {
-                // Let's return an empty array because we don't do storage yet.
-                let result = json!([]);
-                result.to_string()
-            }),
-        );
+        };
+        type_system.define_type(ty.to_owned());
+        let store = self.store.lock().await;
+        store.insert(ty).await?;
+        self.define_type_endpoints(&name).await;
         let response = chisel::TypeDefinitionResponse { message: name };
         Ok(Response::new(response))
     }
