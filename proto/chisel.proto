@@ -13,6 +13,11 @@ message TypeDefinitionRequest {
   repeated FieldDefinition field_defs = 2;
 }
 
+message TypeDefinition {
+  string name = 1;
+  repeated FieldDefinition field_defs = 2;
+}
+
 message FieldDefinition {
   string name = 1;
   string type = 2;
@@ -22,7 +27,15 @@ message TypeDefinitionResponse {
   string message = 1;
 }
 
+message TypeExportRequest {
+}
+
+message TypeExportResponse {
+  repeated TypeDefinition type_defs = 1;
+}
+
 service ChiselRpc {
   rpc GetStatus (StatusRequest) returns (StatusResponse);
   rpc DefineType (TypeDefinitionRequest) returns (TypeDefinitionResponse);
+  rpc ExportTypes (TypeExportRequest) returns (TypeExportResponse);
 }

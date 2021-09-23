@@ -6,7 +6,10 @@ pub mod types;
 
 use api::ApiService;
 use chisel::chisel_rpc_server::{ChiselRpc, ChiselRpcServer};
-use chisel::{StatusRequest, StatusResponse, TypeDefinitionRequest, TypeDefinitionResponse};
+use chisel::{
+    StatusRequest, StatusResponse, TypeDefinitionRequest, TypeDefinitionResponse,
+    TypeExportRequest, TypeExportResponse,
+};
 use convert_case::{Case, Casing};
 use serde_json::json;
 use std::sync::Arc;
@@ -83,6 +86,23 @@ impl ChiselRpc for RpcService {
             }),
         );
         let response = chisel::TypeDefinitionResponse { message: name };
+        Ok(Response::new(response))
+    }
+
+    async fn export_types(
+        &self,
+        _request: tonic::Request<TypeExportRequest>,
+    ) -> Result<tonic::Response<TypeExportResponse>, tonic::Status> {
+        let type_system = self.type_system.lock().await;
+        let mut type_defs = vec![];
+        for ty in type_system.types.values() {
+            let type_def = chisel::TypeDefinition {
+                name: ty.name.to_string(),
+                field_defs: vec![],
+            };
+            type_defs.push(type_def);
+        }
+        let response = chisel::TypeExportResponse { type_defs };
         Ok(Response::new(response))
     }
 }
