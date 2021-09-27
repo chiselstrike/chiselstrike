@@ -2,10 +2,12 @@
 extern crate log;
 
 pub mod api;
+pub mod deno;
 pub mod rpc;
 pub mod types;
 
 use api::ApiService;
+use deno::DenoService;
 use rpc::RpcService;
 use std::sync::Arc;
 use structopt::StructOpt;
@@ -32,6 +34,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let ts = Arc::new(Mutex::new(TypeSystem::new()));
     let rpc = RpcService::new(api.clone(), ts);
     let rpc_addr = opt.rpc_listen_addr.parse()?;
+    let mut deno = DenoService::new();
 
     let sigterm = tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())?;
     let sigint = tokio::signal::unix::signal(tokio::signal::unix::SignalKind::interrupt())?;
@@ -53,6 +56,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let api_task = api::spawn(api.clone(), api_addr, async move {
         rx.changed().await.ok();
     });
+
+    deno.runtime
+        .execute_script("<internal>", r#"Deno.core.print("Hello from Deno\n")"#)?;
+
     let results = tokio::try_join!(rpc_task, api_task, sig_task)?;
     results.0?;
     results.1?;
