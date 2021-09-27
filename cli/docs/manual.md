@@ -21,6 +21,11 @@ type Person {
 }
 ```
 
+### `chisel end-point create path [FILENAME]`
+
+Creates a new endpoint at the given path that executes the code from
+the given file.
+
 ### `chisel type export`
 
 The `chisel type export` command exports the whole type system as TypeScript classes.

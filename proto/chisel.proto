@@ -34,8 +34,18 @@ message TypeExportResponse {
   repeated TypeDefinition type_defs = 1;
 }
 
+message EndPointCreationRequest {
+  string path = 1;
+  string code = 2;
+}
+
+message EndPointCreationResponse {
+  string message = 1;
+}
+
 service ChiselRpc {
   rpc GetStatus (StatusRequest) returns (StatusResponse);
   rpc DefineType (TypeDefinitionRequest) returns (TypeDefinitionResponse);
   rpc ExportTypes (TypeExportRequest) returns (TypeExportResponse);
+  rpc CreateEndPoint (EndPointCreationRequest) returns (EndPointCreationResponse);
 }
