@@ -9,6 +9,7 @@ pub mod types;
 use api::ApiService;
 use deno::DenoService;
 use rpc::RpcService;
+use std::net::SocketAddr;
 use std::sync::Arc;
 use structopt::StructOpt;
 use tokio::sync::Mutex;
@@ -19,21 +20,19 @@ use types::TypeSystem;
 struct Opt {
     /// API server listen address.
     #[structopt(short, long, default_value = "127.0.0.1:3000")]
-    api_listen_addr: String,
+    api_listen_addr: SocketAddr,
     /// RPC server listen address.
     #[structopt(short, long, default_value = "127.0.0.1:50051")]
-    rpc_listen_addr: String,
+    rpc_listen_addr: SocketAddr,
 }
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     pretty_env_logger::init();
     let opt = Opt::from_args();
-    let api_addr = opt.api_listen_addr.parse()?;
     let api = Arc::new(Mutex::new(ApiService::new()));
     let ts = Arc::new(Mutex::new(TypeSystem::new()));
     let rpc = RpcService::new(api.clone(), ts);
-    let rpc_addr = opt.rpc_listen_addr.parse()?;
     let mut deno = DenoService::new();
 
     let sigterm = tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())?;
@@ -50,10 +49,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     });
 
     let mut rpc_rx = rx.clone();
-    let rpc_task = rpc::spawn(rpc, rpc_addr, async move {
+    let rpc_task = rpc::spawn(rpc, opt.rpc_listen_addr, async move {
         rpc_rx.changed().await.ok();
     });
-    let api_task = api::spawn(api.clone(), api_addr, async move {
+    let api_task = api::spawn(api.clone(), opt.api_listen_addr, async move {
         rx.changed().await.ok();
     });
 
