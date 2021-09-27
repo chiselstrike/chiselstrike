@@ -6,6 +6,7 @@ edition = "2018"
 
 [dependencies]
 convert_case = "0.4.0"
+deno_core = "0.100.0"
 futures = "0.3.17"
 hyper = "0.14.13"
 log = "0.4.14"
