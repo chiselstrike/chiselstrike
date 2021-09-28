@@ -33,9 +33,9 @@ pub mod chisel {
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let opt = Opt::from_args();
+    let mut client = ChiselRpcClient::connect("http://localhost:50051").await?;
     match opt {
         Opt::Status => {
-            let mut client = ChiselRpcClient::connect("http://localhost:50051").await?;
             let request = tonic::Request::new(StatusRequest {});
             let response = client.get_status(request).await?.into_inner();
             println!("Server status is {}", response.message);
@@ -44,7 +44,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             TypeCommand::Define { filename } => {
                 let schema = fs::read_to_string(filename)?;
                 let type_system = parse_schema::<String>(&schema)?;
-                let mut client = ChiselRpcClient::connect("http://localhost:50051").await?;
                 for def in &type_system.definitions {
                     match def {
                         Definition::TypeDefinition(TypeDefinition::Object(obj_def)) => {
@@ -70,7 +69,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
             TypeCommand::Export => {
                 let request = tonic::Request::new(TypeExportRequest {});
-                let mut client = ChiselRpcClient::connect("http://localhost:50051").await?;
                 let response = client.export_types(request).await?.into_inner();
                 for def in response.type_defs {
                     println!("class {} {{", def.name);
