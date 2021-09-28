@@ -1,5 +1,8 @@
 use chisel::chisel_rpc_client::ChiselRpcClient;
-use chisel::{FieldDefinition, StatusRequest, TypeDefinitionRequest, TypeExportRequest};
+use chisel::{
+    EndPointCreationRequest, FieldDefinition, StatusRequest, TypeDefinitionRequest,
+    TypeExportRequest,
+};
 use graphql_parser::schema::{parse_schema, Definition, TypeDefinition};
 use std::fs;
 use structopt::StructOpt;
@@ -12,6 +15,10 @@ enum Opt {
     Type {
         #[structopt(subcommand)]
         cmd: TypeCommand,
+    },
+    EndPoint {
+        #[structopt(subcommand)]
+        cmd: EndPointCommand,
     },
 }
 
@@ -26,8 +33,28 @@ enum TypeCommand {
     Export,
 }
 
+#[derive(StructOpt, Debug)]
+enum EndPointCommand {
+    Create { path: String, filename: String },
+}
+
 pub mod chisel {
     tonic::include_proto!("chisel");
+}
+
+async fn create_endpoint(
+    client: &mut ChiselRpcClient<tonic::transport::Channel>,
+    path: String,
+    filename: String,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let code = fs::read_to_string(filename)?;
+    let request = tonic::Request::new(EndPointCreationRequest {
+        path: path,
+        code: code,
+    });
+    let response = client.create_end_point(request).await?.into_inner();
+    println!("End point defined: {}", response.message);
+    Ok(())
 }
 
 #[tokio::main]
@@ -40,6 +67,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             let response = client.get_status(request).await?.into_inner();
             println!("Server status is {}", response.message);
         }
+        Opt::EndPoint { cmd } => match cmd {
+            EndPointCommand::Create { path, filename } => {
+                create_endpoint(&mut client, path, filename).await?
+            }
+        },
         Opt::Type { cmd } => match cmd {
             TypeCommand::Define { filename } => {
                 let schema = fs::read_to_string(filename)?;

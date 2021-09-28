@@ -2,8 +2,8 @@ use crate::api::ApiService;
 use crate::types::{Type, TypeSystem};
 use chisel::chisel_rpc_server::{ChiselRpc, ChiselRpcServer};
 use chisel::{
-    StatusRequest, StatusResponse, TypeDefinitionRequest, TypeDefinitionResponse,
-    TypeExportRequest, TypeExportResponse,
+    EndPointCreationRequest, EndPointCreationResponse, StatusRequest, StatusResponse,
+    TypeDefinitionRequest, TypeDefinitionResponse, TypeExportRequest, TypeExportResponse,
 };
 use convert_case::{Case, Casing};
 use serde_json::json;
@@ -83,6 +83,23 @@ impl ChiselRpc for RpcService {
             type_defs.push(type_def);
         }
         let response = chisel::TypeExportResponse { type_defs };
+        Ok(Response::new(response))
+    }
+
+    async fn create_end_point(
+        &self,
+        request: tonic::Request<EndPointCreationRequest>,
+    ) -> Result<tonic::Response<EndPointCreationResponse>, tonic::Status> {
+        let request = request.into_inner();
+        let path = format!("/{}", request.path);
+        self.api.lock().await.get(
+            &path,
+            Box::new(move || {
+                // Return the code instead of running it for now.
+                request.code.clone()
+            }),
+        );
+        let response = EndPointCreationResponse { message: path };
         Ok(Response::new(response))
     }
 }
