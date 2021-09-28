@@ -1,0 +1,3 @@
+// RUN: @chisel status
+
+// CHECK: Server status is OK
