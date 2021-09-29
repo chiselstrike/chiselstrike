@@ -7,6 +7,7 @@ pub mod rpc;
 pub mod store;
 pub mod types;
 
+use anyhow::Result;
 use api::ApiService;
 use deno::DenoService;
 use rpc::RpcService;
@@ -31,7 +32,7 @@ struct Opt {
 }
 
 #[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
+async fn main() -> Result<()> {
     pretty_env_logger::init();
     let opt = Opt::from_args();
     let store = Store::connect(&opt.metadata_db_uri).await?;

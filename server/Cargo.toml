@@ -5,6 +5,7 @@ authors = ["ChiselStrike"]
 edition = "2018"
 
 [dependencies]
+anyhow = "1.0"
 convert_case = "0.4.0"
 deno_core = "0.100.0"
 futures = "0.3.17"

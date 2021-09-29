@@ -1,3 +1,4 @@
+use anyhow::Result;
 use chisel::chisel_rpc_client::ChiselRpcClient;
 use chisel::{
     EndPointCreationRequest, FieldDefinition, StatusRequest, TypeDefinitionRequest,
@@ -46,7 +47,7 @@ async fn create_endpoint(
     client: &mut ChiselRpcClient<tonic::transport::Channel>,
     path: String,
     filename: String,
-) -> Result<(), Box<dyn std::error::Error>> {
+) -> Result<()> {
     let code = fs::read_to_string(filename)?;
     let request = tonic::Request::new(EndPointCreationRequest {
         path: path,
@@ -58,7 +59,7 @@ async fn create_endpoint(
 }
 
 #[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
+async fn main() -> Result<()> {
     let opt = Opt::from_args();
     let mut client = ChiselRpcClient::connect("http://localhost:50051").await?;
     match opt {
