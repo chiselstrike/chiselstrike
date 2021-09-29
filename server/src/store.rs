@@ -77,7 +77,10 @@ impl Store {
         let mut ts = TypeSystem::new();
         for ty in types {
             let name: String = ty.get(0);
-            ts.define_type(Type { name })?;
+            ts.define_type(Type {
+                name,
+                fields: Vec::default(),
+            })?;
         }
         Ok(ts)
     }

@@ -30,4 +30,5 @@ impl TypeSystem {
 #[derive(Clone, Debug)]
 pub struct Type {
     pub name: String,
+    pub fields: Vec<(String, String)>,
 }
