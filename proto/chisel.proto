@@ -20,7 +20,7 @@ message TypeDefinition {
 
 message FieldDefinition {
   string name = 1;
-  string type = 2;
+  string field_type = 2;
 }
 
 message TypeDefinitionResponse {

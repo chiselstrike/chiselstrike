@@ -81,7 +81,7 @@ async fn main() -> Result<()> {
                             for field_def in &obj_def.fields {
                                 field_defs.push(FieldDefinition {
                                     name: field_def.name.to_owned(),
-                                    r#type: format!("{}", field_def.field_type.to_owned()),
+                                    field_type: format!("{}", field_def.field_type.to_owned()),
                                 });
                             }
                             let request = tonic::Request::new(TypeDefinitionRequest {
