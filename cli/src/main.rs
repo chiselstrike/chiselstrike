@@ -102,6 +102,9 @@ async fn main() -> Result<()> {
                 let response = client.export_types(request).await?.into_inner();
                 for def in response.type_defs {
                     println!("class {} {{", def.name);
+                    for field in def.field_defs {
+                        println!("  {}: {};", field.name, field.field_type);
+                    }
                     println!("}}");
                 }
             }
