@@ -1,4 +1,5 @@
 use crate::api::ApiService;
+use crate::deno;
 use crate::store::{Store, StoreError};
 use crate::types::{Type, TypeSystem};
 use chisel::chisel_rpc_server::{ChiselRpc, ChiselRpcServer};
@@ -115,13 +116,11 @@ impl ChiselRpc for RpcService {
     ) -> Result<tonic::Response<EndPointCreationResponse>, tonic::Status> {
         let request = request.into_inner();
         let path = format!("/{}", request.path);
-        self.api.lock().await.get(
-            &path,
-            Box::new(move || {
-                // Return the code instead of running it for now.
-                request.code.clone()
-            }),
-        );
+        let code = request.code;
+        self.api
+            .lock()
+            .await
+            .get(&path, Box::new(move || deno::run_js(&code)));
         let response = EndPointCreationResponse { message: path };
         Ok(Response::new(response))
     }
