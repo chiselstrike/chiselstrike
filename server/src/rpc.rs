@@ -50,7 +50,7 @@ impl RpcService {
             Box::new(|| {
                 // Let's return an empty array because we don't do storage yet.
                 let result = json!([]);
-                result.to_string()
+                Ok(result.to_string())
             }),
         );
     }
