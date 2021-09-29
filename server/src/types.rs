@@ -17,7 +17,7 @@ impl TypeSystem {
     }
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct Type {
     pub name: String,
 }

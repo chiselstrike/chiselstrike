@@ -10,6 +10,8 @@ Start the server with:
 cargo run --bin chiseld
 ```
 
+See the [server user guide](server/docs/manual.md) for information on `chiseld` command line options.
+
 Query for the status of the server with:
 
 ```console
