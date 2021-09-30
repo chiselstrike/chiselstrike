@@ -49,8 +49,8 @@ async fn create_endpoint(
 ) -> Result<(), Box<dyn std::error::Error>> {
     let code = fs::read_to_string(filename)?;
     let request = tonic::Request::new(EndPointCreationRequest {
-        path: path,
-        code: code,
+        path,
+        code,
     });
     let response = client.create_end_point(request).await?.into_inner();
     println!("End point defined: {}", response.message);
