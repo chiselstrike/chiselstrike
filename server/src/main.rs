@@ -9,7 +9,6 @@ pub mod types;
 
 use anyhow::Result;
 use api::ApiService;
-use deno::DenoService;
 use rpc::RpcService;
 use std::net::SocketAddr;
 use std::sync::Arc;
@@ -45,7 +44,6 @@ async fn main() -> Result<()> {
     for type_name in ts.lock().await.types.keys() {
         rpc.define_type_endpoints(type_name).await;
     }
-    let mut deno = DenoService::new();
 
     let sigterm = tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())?;
     let sigint = tokio::signal::unix::signal(tokio::signal::unix::SignalKind::interrupt())?;
@@ -67,9 +65,6 @@ async fn main() -> Result<()> {
     let api_task = api::spawn(api.clone(), opt.api_listen_addr, async move {
         rx.changed().await.ok();
     });
-
-    deno.runtime
-        .execute_script("<internal>", r#"Deno.core.print("Hello from Deno\n")"#)?;
 
     let results = tokio::try_join!(rpc_task, api_task, sig_task)?;
     results.0?;
