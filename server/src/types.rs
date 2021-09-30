@@ -1,5 +1,11 @@
 use std::collections::HashMap;
 
+#[derive(thiserror::Error, Debug)]
+pub enum TypeSystemError {
+    #[error["type already exists"]]
+    TypeAlreadyExists,
+}
+
 #[derive(Debug)]
 pub struct TypeSystem {
     pub types: HashMap<String, Type>,
@@ -12,8 +18,12 @@ impl TypeSystem {
         }
     }
 
-    pub fn define_type(&mut self, ty: Type) {
+    pub fn define_type(&mut self, ty: Type) -> Result<(), TypeSystemError> {
+        if self.types.contains_key(&ty.name) {
+            return Err(TypeSystemError::TypeAlreadyExists);
+        }
         self.types.insert(ty.name.to_owned(), ty);
+        Ok(())
     }
 }
 
