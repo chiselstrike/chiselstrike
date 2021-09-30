@@ -207,6 +207,7 @@ dependencies = [
 name = "cli"
 version = "0.0.0"
 dependencies = [
+ "anyhow",
  "graphql-parser",
  "lit",
  "prost",
@@ -1463,6 +1464,7 @@ dependencies = [
 name = "server"
 version = "0.0.0"
 dependencies = [
+ "anyhow",
  "convert_case",
  "deno_core",
  "futures",
