@@ -1,7 +1,7 @@
 use crate::api::ApiService;
 use crate::deno;
 use crate::store::{Store, StoreError};
-use crate::types::{Type, TypeSystem};
+use crate::types::{Type, TypeSystem, TypeSystemError};
 use chisel::chisel_rpc_server::{ChiselRpc, ChiselRpcServer};
 use chisel::{
     EndPointCreationRequest, EndPointCreationResponse, StatusRequest, StatusResponse,
@@ -62,6 +62,12 @@ impl From<StoreError> for Status {
     }
 }
 
+impl From<TypeSystemError> for Status {
+    fn from(err: TypeSystemError) -> Self {
+        Status::internal(format!("{}", err))
+    }
+}
+
 #[tonic::async_trait]
 impl ChiselRpc for RpcService {
     /// Get Chisel server status.
@@ -85,7 +91,7 @@ impl ChiselRpc for RpcService {
         let ty = Type {
             name: name.to_owned(),
         };
-        type_system.define_type(ty.to_owned());
+        type_system.define_type(ty.to_owned())?;
         let store = self.store.lock().await;
         store.insert(ty).await?;
         self.define_type_endpoints(&name).await;
