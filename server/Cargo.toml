@@ -7,7 +7,10 @@ edition = "2018"
 [dependencies]
 anyhow = "1.0"
 convert_case = "0.4.0"
-deno_core = "0.100.0"
+deno_broadcast_channel = "0.13.0"
+deno_core = "0.101.0"
+deno_runtime = "0.27.0"
+deno_web = "0.50.0"
 futures = "0.3.17"
 hyper = "0.14.13"
 log = "0.4.14"
@@ -20,6 +23,7 @@ thiserror = "1.0"
 tokio = { version = "1.11.0", features = ["full"] }
 tokio-stream = { version = "0.1.7", features = ["signal"] }
 tonic = "0.5.2"
+url = "2.2.2"
 
 [build-dependencies]
 tonic-build = "0.5.2"
