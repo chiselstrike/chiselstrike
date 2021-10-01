@@ -1,4 +1,4 @@
-use crate::types::{Type, TypeSystem};
+use crate::types::{Type, TypeSystem, TypeSystemError};
 use sqlx::any::{AnyPool, AnyPoolOptions};
 use sqlx::Row;
 
@@ -10,6 +10,8 @@ pub enum StoreError {
     ExecuteFailed(#[source] sqlx::Error),
     #[error["fetch failed"]]
     FetchFailed(#[source] sqlx::Error),
+    #[error["type system error"]]
+    TypeError(#[from] TypeSystemError),
 }
 
 pub struct Store {
@@ -47,7 +49,7 @@ impl Store {
         let mut ts = TypeSystem::new();
         for ty in types {
             let name: String = ty.get(0);
-            ts.define_type(Type { name });
+            ts.define_type(Type { name })?;
         }
         Ok(ts)
     }
