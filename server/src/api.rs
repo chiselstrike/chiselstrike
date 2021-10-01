@@ -31,13 +31,13 @@ impl ApiService {
                 if let Some(route_fn) = self.gets.get(req.uri().path()) {
                     return Ok(Response::new(route_fn().into()));
                 }
-                ApiService::not_found(req)
+                ApiService::not_found()
             }
-            _ => ApiService::not_found(req),
+            _ => ApiService::not_found(),
         }
     }
 
-    fn not_found(_req: Request<Body>) -> hyper::http::Result<Response<Body>> {
+    fn not_found() -> hyper::http::Result<Response<Body>> {
         Response::builder()
             .status(StatusCode::NOT_FOUND)
             .body(Body::default())
