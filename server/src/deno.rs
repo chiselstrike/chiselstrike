@@ -1,6 +1,18 @@
 use deno_core::JsRuntime;
 use std::cell::RefCell;
 
+/// A v8 isolate doesn't want to be moved between or used from
+/// multiple threads. A JsRuntime owns an isolate, so we need to use a
+/// thread local storage.
+///
+/// This has an interesting implication: We cannot easily provide a way to
+/// hold transient server state, since each request can hit a different
+/// thread. A client that wants that would have to put the information in
+/// a database or cookie as appropriate.
+///
+/// The above is probably fine, since at some point we will be
+/// sharding our server, so there is not going to be a single process
+/// anyway.
 struct DenoService {
     runtime: JsRuntime,
 }
