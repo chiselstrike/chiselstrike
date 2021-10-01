@@ -1,7 +1,7 @@
 use deno_core::JsRuntime;
 use std::cell::RefCell;
 
-pub struct DenoService {
+struct DenoService {
     runtime: JsRuntime,
 }
 
