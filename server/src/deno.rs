@@ -30,10 +30,10 @@ thread_local! {
     static DENO: RefCell<DenoService> = RefCell::new(DenoService::new())
 }
 
-pub fn run_js(code: &str) -> Result<String> {
+pub fn run_js(path: &str, code: &str) -> Result<String> {
     DENO.with(|d| {
         let r = &mut d.borrow_mut().runtime;
-        let res = r.execute_script("<internal>", code)?;
+        let res = r.execute_script(path, code)?;
         let scope = &mut r.handle_scope();
         Ok(res.get(scope).to_rust_string_lossy(scope))
     })
