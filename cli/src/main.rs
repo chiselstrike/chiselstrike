@@ -49,10 +49,7 @@ async fn create_endpoint(
     filename: String,
 ) -> Result<()> {
     let code = fs::read_to_string(filename)?;
-    let request = tonic::Request::new(EndPointCreationRequest {
-        path,
-        code,
-    });
+    let request = tonic::Request::new(EndPointCreationRequest { path, code });
     let response = client.create_end_point(request).await?.into_inner();
     println!("End point defined: {}", response.message);
     Ok(())
