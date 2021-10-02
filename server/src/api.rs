@@ -1,3 +1,4 @@
+use anyhow::Result;
 use hyper::service::{make_service_fn, service_fn};
 use hyper::{Body, Method, Request, Response, Server, StatusCode};
 use std::collections::HashMap;
@@ -6,7 +7,7 @@ use std::net::SocketAddr;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 
-type RouteFn = Box<dyn Fn() -> String + Send>;
+type RouteFn = Box<dyn Fn() -> Result<String> + Send>;
 
 /// API service for Chisel server.
 #[derive(Default)]
@@ -29,7 +30,12 @@ impl ApiService {
         match *req.method() {
             Method::GET => {
                 if let Some(route_fn) = self.gets.get(req.uri().path()) {
-                    return Ok(Response::new(route_fn().into()));
+                    return match route_fn() {
+                        Ok(val) => Ok(Response::new(val.into())),
+                        Err(err) => Response::builder()
+                            .status(StatusCode::INTERNAL_SERVER_ERROR)
+                            .body(format!("{:?}\n", err).into()),
+                    };
                 }
                 ApiService::not_found()
             }

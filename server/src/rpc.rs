@@ -50,7 +50,7 @@ impl RpcService {
             Box::new(|| {
                 // Let's return an empty array because we don't do storage yet.
                 let result = json!([]);
-                result.to_string()
+                Ok(result.to_string())
             }),
         );
     }
@@ -122,11 +122,12 @@ impl ChiselRpc for RpcService {
     ) -> Result<tonic::Response<EndPointCreationResponse>, tonic::Status> {
         let request = request.into_inner();
         let path = format!("/{}", request.path);
+        let path2 = path.clone();
         let code = request.code;
         self.api
             .lock()
             .await
-            .get(&path, Box::new(move || deno::run_js(&code)));
+            .get(&path, Box::new(move || deno::run_js(&path2, &code)));
         let response = EndPointCreationResponse { message: path };
         Ok(Response::new(response))
     }
