@@ -8,11 +8,11 @@ This document is the user manual for the ChiselStrike command line tool, `chisel
 
 The `chisel status` command queries a ChiselStrike server for its status.
 
-### `chisel type define [FILENAME]`
+### `chisel type import [FILENAME]`
 
-The `chisel type define` command defines a type in the ChiselStrike type system.
+The `chisel type import` command imports types from a definition file to the ChiselStrike type system.
 
-Example file looks as follows:
+The definition file is in GraphQL schema definition format. Example file looks as follows:
 
 ```
 type Person {

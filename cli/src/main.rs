@@ -25,8 +25,8 @@ enum Opt {
 
 #[derive(StructOpt, Debug)]
 enum TypeCommand {
-    /// Define types in the type system.
-    Define {
+    /// Import types to the type system.
+    Import {
         /// Type definition input file.
         filename: String,
     },
@@ -71,7 +71,7 @@ async fn main() -> Result<()> {
             }
         },
         Opt::Type { cmd } => match cmd {
-            TypeCommand::Define { filename } => {
+            TypeCommand::Import { filename } => {
                 let schema = fs::read_to_string(filename)?;
                 let type_system = parse_schema::<String>(&schema)?;
                 for def in &type_system.definitions {
