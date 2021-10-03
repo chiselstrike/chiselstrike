@@ -122,12 +122,12 @@ impl ChiselRpc for RpcService {
     ) -> Result<tonic::Response<EndPointCreationResponse>, tonic::Status> {
         let request = request.into_inner();
         let path = format!("/{}", request.path);
-        let path2 = path.clone();
         let code = request.code;
-        self.api
-            .lock()
-            .await
-            .get(&path, Box::new(move || deno::run_js(&path2, &code)));
+        let func = {
+            let path = path.clone();
+            move || deno::run_js(&path, &code)
+        };
+        self.api.lock().await.get(&path, Box::new(func));
         let response = EndPointCreationResponse { message: path };
         Ok(Response::new(response))
     }
