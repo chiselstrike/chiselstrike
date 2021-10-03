@@ -6,7 +6,7 @@ pub enum TypeSystemError {
     TypeAlreadyExists,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct TypeSystem {
     pub types: HashMap<String, Type>,
 }
