@@ -36,19 +36,11 @@ impl Store {
     }
 
     pub async fn create_schema(&self) -> Result<(), StoreError> {
-        let create_types = match self.opts.kind() {
-            AnyKind::Postgres => {
-                "CREATE TABLE IF NOT EXISTS types (
-                        type_id SERIAL PRIMARY KEY
-                    )"
-            }
-            AnyKind::Sqlite => {
-                "CREATE TABLE IF NOT EXISTS types (
-                    type_id INTEGER PRIMARY KEY AUTOINCREMENT
-                )"
-            }
-        };
-        let create_types = sqlx::query(create_types);
+        let create_types = format!(
+            "CREATE TABLE IF NOT EXISTS types (type_id {})",
+            Store::primary_key_sql(self.opts.kind())
+        );
+        let create_types = sqlx::query(&create_types);
         let create_type_names = sqlx::query(
             "CREATE TABLE IF NOT EXISTS type_names (
                  type_id INTEGER REFERENCES types(type_id),
@@ -67,6 +59,13 @@ impl Store {
                 .map_err(StoreError::ExecuteFailed)?;
         }
         Ok(())
+    }
+
+    fn primary_key_sql(kind: AnyKind) -> &'static str {
+        match kind {
+            AnyKind::Postgres => "SERIAL PRIMARY KEY",
+            AnyKind::Sqlite => "INTEGER PRIMARY KEY AUTOINCREMENT",
+        }
     }
 
     pub async fn load_schema<'r>(&self) -> Result<TypeSystem, StoreError> {
