@@ -6,8 +6,9 @@ use crate::store::{Store, StoreError};
 use crate::types::{Field, ObjectType, TypeSystem, TypeSystemError};
 use chisel::chisel_rpc_server::{ChiselRpc, ChiselRpcServer};
 use chisel::{
-    EndPointCreationRequest, EndPointCreationResponse, StatusRequest, StatusResponse,
-    TypeDefinitionRequest, TypeDefinitionResponse, TypeExportRequest, TypeExportResponse,
+    EndPointCreationRequest, EndPointCreationResponse, RemoveTypeRequest, RemoveTypeResponse,
+    StatusRequest, StatusResponse, TypeDefinitionRequest, TypeDefinitionResponse,
+    TypeExportRequest, TypeExportResponse,
 };
 use convert_case::{Case, Casing};
 use futures::FutureExt;
@@ -116,6 +117,20 @@ impl ChiselRpc for RpcService {
         let path = format!("/{}", snake_case_name);
         self.define_type_endpoints(&path).await;
         let response = chisel::TypeDefinitionResponse { message: name };
+        Ok(Response::new(response))
+    }
+
+    async fn remove_type(
+        &self,
+        request: tonic::Request<RemoveTypeRequest>,
+    ) -> Result<tonic::Response<RemoveTypeResponse>, tonic::Status> {
+        let mut type_system = self.type_system.lock().await;
+        let request = request.into_inner();
+        let name = request.type_name;
+        type_system.remove_type(&name)?;
+        let store = &self.store;
+        store.remove(&name).await?;
+        let response = chisel::RemoveTypeResponse {};
         Ok(Response::new(response))
     }
 
