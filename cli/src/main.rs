@@ -27,6 +27,8 @@ enum Opt {
 
 #[derive(StructOpt, Debug)]
 enum TypeCommand {
+    /// Add a type to the type system.
+    Add { type_name: String },
     /// Import types to the type system.
     Import {
         /// Type definition input file.
@@ -73,6 +75,14 @@ async fn main() -> Result<()> {
             }
         },
         Opt::Type { cmd } => match cmd {
+            TypeCommand::Add { type_name } => {
+                let request = tonic::Request::new(TypeDefinitionRequest {
+                    name: type_name,
+                    field_defs: vec![],
+                });
+                let response = client.define_type(request).await?.into_inner();
+                println!("Type defined: {}", response.message);
+            }
             TypeCommand::Import { filename } => {
                 let schema = fs::read_to_string(filename)?;
                 let type_system = parse_schema::<String>(&schema)?;

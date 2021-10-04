@@ -1,0 +1,4 @@
+// RUN: @chisel type add Foo && @chisel type export
+// CHECK: Type defined: Foo
+// CHECK: class Foo {
+// CHECK: }
