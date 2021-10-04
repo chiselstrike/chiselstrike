@@ -1,6 +1,6 @@
 use crate::types::{Type, TypeSystem, TypeSystemError};
-use sqlx::Row;
 use sqlx::any::{AnyConnectOptions, AnyKind, AnyPool, AnyPoolOptions};
+use sqlx::Row;
 use std::str::FromStr;
 
 #[derive(thiserror::Error, Debug)]
