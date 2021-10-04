@@ -3,8 +3,8 @@
 use anyhow::Result;
 use chisel::chisel_rpc_client::ChiselRpcClient;
 use chisel::{
-    EndPointCreationRequest, FieldDefinition, StatusRequest, TypeDefinitionRequest,
-    TypeExportRequest,
+    EndPointCreationRequest, FieldDefinition, RemoveTypeRequest, StatusRequest,
+    TypeDefinitionRequest, TypeExportRequest,
 };
 use graphql_parser::schema::{parse_schema, Definition, TypeDefinition};
 use std::fs;
@@ -36,6 +36,8 @@ enum TypeCommand {
     },
     /// Export the type system.
     Export,
+    /// Remove type from the type system.
+    Remove { type_name: String },
 }
 
 #[derive(StructOpt, Debug)]
@@ -133,6 +135,13 @@ async fn main() -> Result<()> {
                     }
                     println!("}}");
                 }
+            }
+            TypeCommand::Remove { type_name } => {
+                let request = tonic::Request::new(RemoveTypeRequest {
+                    type_name: type_name.clone(),
+                });
+                let _ = client.remove_type(request).await?.into_inner();
+                println!("Type removed: {}", type_name);
             }
         },
     }
