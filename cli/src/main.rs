@@ -30,7 +30,7 @@ enum TypeCommand {
         /// Type definition input file.
         filename: String,
     },
-    // Export the type system.
+    /// Export the type system.
     Export,
 }
 
