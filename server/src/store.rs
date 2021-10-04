@@ -1,6 +1,7 @@
 use crate::types::{Type, TypeSystem, TypeSystemError};
-use sqlx::any::{AnyPool, AnyPoolOptions};
 use sqlx::Row;
+use sqlx::any::{AnyConnectOptions, AnyKind, AnyPool, AnyPoolOptions};
+use std::str::FromStr;
 
 #[derive(thiserror::Error, Debug)]
 pub enum StoreError {
@@ -15,24 +16,40 @@ pub enum StoreError {
 }
 
 pub struct Store {
+    opts: AnyConnectOptions,
     pool: AnyPool,
 }
 
 impl Store {
-    pub fn new(pool: AnyPool) -> Self {
-        Self { pool }
+    pub fn new(opts: AnyConnectOptions, pool: AnyPool) -> Self {
+        Self { opts, pool }
     }
 
     pub async fn connect(uri: &str) -> Result<Self, StoreError> {
+        let opts = AnyConnectOptions::from_str(uri).map_err(StoreError::ConnectionFailed)?;
         let pool = AnyPoolOptions::new()
             .connect(uri)
             .await
             .map_err(StoreError::ConnectionFailed)?;
-        Ok(Store::new(pool))
+        Ok(Store::new(opts, pool))
     }
 
     pub async fn create_schema(&self) -> Result<(), StoreError> {
-        let query = sqlx::query("CREATE TABLE IF NOT EXISTS types (name TEXT)");
+        let query = match self.opts.kind() {
+            AnyKind::Postgres => {
+                "CREATE TABLE IF NOT EXISTS types (
+                        type_id SERIAL PRIMARY KEY,
+                        name TEXT
+                    )"
+            }
+            AnyKind::Sqlite => {
+                "CREATE TABLE IF NOT EXISTS types (
+                    type_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    name TEXT
+                )"
+            }
+        };
+        let query = sqlx::query(query);
         query
             .execute(&self.pool)
             .await
