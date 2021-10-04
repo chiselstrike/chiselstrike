@@ -10,9 +10,13 @@ message StatusResponse {
   string message = 1;
 }
 
-message TypeDefinitionRequest {
+message AddTypeRequest {
   string name = 1;
   repeated FieldDefinition field_defs = 2;
+}
+
+message AddTypeResponse {
+  string message = 1;
 }
 
 message TypeDefinition {
@@ -24,10 +28,6 @@ message FieldDefinition {
   string name = 1;
   string field_type = 2;
   repeated string labels = 3;
-}
-
-message TypeDefinitionResponse {
-  string message = 1;
 }
 
 message TypeExportRequest {
@@ -55,7 +55,7 @@ message EndPointCreationResponse {
 
 service ChiselRpc {
   rpc GetStatus (StatusRequest) returns (StatusResponse);
-  rpc DefineType (TypeDefinitionRequest) returns (TypeDefinitionResponse);
+  rpc AddType (AddTypeRequest) returns (AddTypeResponse);
   rpc RemoveType (RemoveTypeRequest) returns (RemoveTypeResponse);
   rpc ExportTypes (TypeExportRequest) returns (TypeExportResponse);
   rpc CreateEndPoint (EndPointCreationRequest) returns (EndPointCreationResponse);

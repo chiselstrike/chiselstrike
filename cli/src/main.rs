@@ -3,8 +3,8 @@
 use anyhow::Result;
 use chisel::chisel_rpc_client::ChiselRpcClient;
 use chisel::{
-    EndPointCreationRequest, FieldDefinition, RemoveTypeRequest, StatusRequest,
-    TypeDefinitionRequest, TypeExportRequest,
+    AddTypeRequest, EndPointCreationRequest, FieldDefinition, RemoveTypeRequest, StatusRequest,
+    TypeExportRequest,
 };
 use graphql_parser::schema::{parse_schema, Definition, TypeDefinition};
 use std::fs;
@@ -78,11 +78,11 @@ async fn main() -> Result<()> {
         },
         Opt::Type { cmd } => match cmd {
             TypeCommand::Add { type_name } => {
-                let request = tonic::Request::new(TypeDefinitionRequest {
+                let request = tonic::Request::new(AddTypeRequest {
                     name: type_name,
                     field_defs: vec![],
                 });
-                let response = client.define_type(request).await?.into_inner();
+                let response = client.add_type(request).await?.into_inner();
                 println!("Type defined: {}", response.message);
             }
             TypeCommand::Import { filename } => {
@@ -103,11 +103,11 @@ async fn main() -> Result<()> {
                                         .collect(),
                                 });
                             }
-                            let request = tonic::Request::new(TypeDefinitionRequest {
+                            let request = tonic::Request::new(AddTypeRequest {
                                 name: obj_def.name.to_owned(),
                                 field_defs,
                             });
-                            let response = client.define_type(request).await?.into_inner();
+                            let response = client.add_type(request).await?.into_inner();
                             println!("Type defined: {}", response.message);
                         }
                         def => {
