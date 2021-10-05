@@ -55,19 +55,17 @@ impl Store {
                  name TEXT UNIQUE
              )",
         );
-
+        let queries = vec![create_types, create_type_names];
         let mut conn = self
             .pool
             .acquire()
             .await
             .map_err(StoreError::ConnectionFailed)?;
-        conn.execute(create_types)
-            .await
-            .map_err(StoreError::ExecuteFailed)?;
-        conn.execute(create_type_names)
-            .await
-            .map_err(StoreError::ExecuteFailed)?;
-
+        for query in queries {
+            conn.execute(query)
+                .await
+                .map_err(StoreError::ExecuteFailed)?;
+        }
         Ok(())
     }
 
