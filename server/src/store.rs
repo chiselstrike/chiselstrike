@@ -1,5 +1,6 @@
 use crate::types::{Type, TypeSystem, TypeSystemError};
 use sqlx::any::{AnyConnectOptions, AnyKind, AnyPool, AnyPoolOptions};
+use sqlx::Executor;
 use sqlx::Row;
 use std::str::FromStr;
 
@@ -35,30 +36,43 @@ impl Store {
     }
 
     pub async fn create_schema(&self) -> Result<(), StoreError> {
-        let query = match self.opts.kind() {
+        let create_types = match self.opts.kind() {
             AnyKind::Postgres => {
                 "CREATE TABLE IF NOT EXISTS types (
-                        type_id SERIAL PRIMARY KEY,
-                        name TEXT
+                        type_id SERIAL PRIMARY KEY
                     )"
             }
             AnyKind::Sqlite => {
                 "CREATE TABLE IF NOT EXISTS types (
-                    type_id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    name TEXT
+                    type_id INTEGER PRIMARY KEY AUTOINCREMENT
                 )"
             }
         };
-        let query = sqlx::query(query);
-        query
-            .execute(&self.pool)
+        let create_types = sqlx::query(create_types);
+        let create_type_names = sqlx::query(
+            "CREATE TABLE IF NOT EXISTS type_names (
+                 type_id INTEGER REFERENCES types(type_id),
+                 name TEXT UNIQUE
+             )",
+        );
+
+        let mut conn = self
+            .pool
+            .acquire()
             .await
             .map_err(StoreError::ConnectionFailed)?;
+        conn.execute(create_types)
+            .await
+            .map_err(StoreError::ExecuteFailed)?;
+        conn.execute(create_type_names)
+            .await
+            .map_err(StoreError::ExecuteFailed)?;
+
         Ok(())
     }
 
     pub async fn load_schema<'r>(&self) -> Result<TypeSystem, StoreError> {
-        let query = sqlx::query("SELECT name FROM types");
+        let query = sqlx::query("SELECT name FROM type_names");
         let types = query
             .fetch_all(&self.pool)
             .await
@@ -72,11 +86,28 @@ impl Store {
     }
 
     pub async fn insert(&self, ty: Type) -> Result<(), StoreError> {
-        let query = sqlx::query("INSERT INTO types (name) VALUES ($1)").bind(ty.name);
-        query
-            .execute(&self.pool)
+        let add_type = sqlx::query("INSERT INTO types DEFAULT VALUES RETURNING *");
+        let add_type_name = sqlx::query("INSERT INTO type_names (type_id, name) VALUES ($1, $2)");
+
+        let mut transaction = self
+            .pool
+            .begin()
             .await
             .map_err(StoreError::ConnectionFailed)?;
+        let row = transaction
+            .fetch_one(add_type)
+            .await
+            .map_err(StoreError::ExecuteFailed)?;
+        let id: i32 = row.get("type_id");
+        let add_type_name = add_type_name.bind(id).bind(ty.name);
+        transaction
+            .execute(add_type_name)
+            .await
+            .map_err(StoreError::ExecuteFailed)?;
+        transaction
+            .commit()
+            .await
+            .map_err(StoreError::ExecuteFailed)?;
         Ok(())
     }
 }
