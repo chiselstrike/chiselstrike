@@ -6,6 +6,7 @@ use deno_core::NoopModuleLoader;
 use deno_runtime::permissions::Permissions;
 use deno_runtime::worker::{MainWorker, WorkerOptions};
 use deno_web::BlobStore;
+use hyper::{Body, Response};
 use rusty_v8 as v8;
 use std::cell::RefCell;
 use std::convert::TryInto;
@@ -87,8 +88,8 @@ thread_local! {
     static DENO: RefCell<DenoService> = RefCell::new(DenoService::new())
 }
 
-pub fn run_js(path: &str, code: &str) -> Result<String> {
-    DENO.with(|d| {
+pub fn run_js(path: &str, code: &str) -> Result<Response<Body>> {
+    DENO.with(|d| -> Result<Response<Body>> {
         let r = &mut d.borrow_mut().worker.js_runtime;
         let res = r.execute_script(path, code)?;
         let scope = &mut r.handle_scope();
@@ -104,6 +105,7 @@ pub fn run_js(path: &str, code: &str) -> Result<String> {
             .ok_or(Error::NotAResponse)?
             .try_into()?;
         let text = text.get(scope).result(scope);
-        Ok(text.to_rust_string_lossy(scope))
+        let body = Response::builder().body(text.to_rust_string_lossy(scope).into())?;
+        Ok(body)
     })
 }
