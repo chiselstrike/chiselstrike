@@ -42,20 +42,37 @@ impl Store {
             "CREATE TABLE IF NOT EXISTS types (type_id {})",
             Store::primary_key_sql(self.opts.kind())
         );
-        let create_types = sqlx::query(&create_types);
-        let create_type_names = sqlx::query(
-            "CREATE TABLE IF NOT EXISTS type_names (
+        let create_type_names = "CREATE TABLE IF NOT EXISTS type_names (
                  type_id INTEGER REFERENCES types(type_id),
                  name TEXT UNIQUE
-             )",
+             )"
+        .to_string();
+        let create_fields = format!(
+            "CREATE TABLE IF NOT EXISTS fields (
+                field_id {},
+                field_type TEXT,
+                type_id INTEGER REFERENCES types(type_id)
+            )",
+            Store::primary_key_sql(self.opts.kind())
         );
-        let queries = vec![create_types, create_type_names];
+        let create_type_fields = "CREATE TABLE IF NOT EXISTS field_names (
+                field_name TEXT UNIQUE,
+                field_id INTEGER REFERENCES fields(field_id)
+            )"
+        .to_string();
+        let queries = vec![
+            create_types,
+            create_type_names,
+            create_fields,
+            create_type_fields,
+        ];
         let mut conn = self
             .pool
             .acquire()
             .await
             .map_err(StoreError::ConnectionFailed)?;
         for query in queries {
+            let query = sqlx::query(&query);
             conn.execute(query)
                 .await
                 .map_err(StoreError::ExecuteFailed)?;
