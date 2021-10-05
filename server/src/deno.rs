@@ -58,11 +58,15 @@ impl DenoService {
             cpu_count: 1,
         };
 
-        let worker = MainWorker::from_options(
-            Url::parse("file:///no/such/file").unwrap(),
-            Permissions::default(),
-            &opts,
-        );
+        let path = "file:///no/such/file";
+
+        let permissions = Permissions {
+            read: Permissions::new_read(&Some(vec![path.into()]), false),
+            ..Permissions::default()
+        };
+
+        let mut worker = MainWorker::from_options(Url::parse(path).unwrap(), permissions, &opts);
+        worker.bootstrap(&opts);
 
         Self { worker }
     }
