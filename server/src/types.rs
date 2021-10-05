@@ -1,3 +1,5 @@
+// SPDX-FileCopyrightText: © 2021 ChiselStrike <info@chiselstrike.com>
+
 use std::collections::HashMap;
 
 #[derive(thiserror::Error, Debug)]

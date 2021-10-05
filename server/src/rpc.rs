@@ -1,3 +1,5 @@
+// SPDX-FileCopyrightText: © 2021 ChiselStrike <info@chiselstrike.com>
+
 use crate::api::ApiService;
 use crate::deno;
 use crate::store::{Store, StoreError};
