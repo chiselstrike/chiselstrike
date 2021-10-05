@@ -1,3 +1,5 @@
+// SPDX-FileCopyrightText: © 2021 ChiselStrike <info@chiselstrike.com>
+
 #[macro_use]
 extern crate log;
 
