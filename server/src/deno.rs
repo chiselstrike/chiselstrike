@@ -88,6 +88,22 @@ thread_local! {
     static DENO: RefCell<DenoService> = RefCell::new(DenoService::new())
 }
 
+fn get_member<'a, T: std::convert::TryFrom<v8::Local<'a, v8::Value>>>(
+    obj: v8::Local<v8::Object>,
+    scope: &mut v8::HandleScope<'a>,
+    key: &str,
+) -> Result<T>
+where
+    T::Error: std::error::Error + Send + Sync + 'static,
+{
+    let key = v8::String::new(scope, key).unwrap();
+    let res: T = (*obj)
+        .get(scope, key.into())
+        .ok_or(Error::NotAResponse)?
+        .try_into()?;
+    return Ok(res);
+}
+
 pub fn run_js(path: &str, code: &str) -> Result<Response<Body>> {
     DENO.with(|d| -> Result<Response<Body>> {
         let r = &mut d.borrow_mut().worker.js_runtime;
@@ -95,22 +111,14 @@ pub fn run_js(path: &str, code: &str) -> Result<Response<Body>> {
         let scope = &mut r.handle_scope();
         let response = res.get(scope).to_object(scope).ok_or(Error::NotAResponse)?;
 
-        let key = v8::String::new(scope, "text").unwrap();
-        let text: v8::Local<v8::Function> = (*response)
-            .get(scope, key.into())
-            .ok_or(Error::NotAResponse)?
-            .try_into()?;
+        let text: v8::Local<v8::Function> = get_member(response, scope, "text")?;
         let text: v8::Local<v8::Promise> = text
             .call(scope, response.into(), &[])
             .ok_or(Error::NotAResponse)?
             .try_into()?;
         let text = text.get(scope).result(scope);
 
-        let key = v8::String::new(scope, "status").unwrap();
-        let status: v8::Local<v8::Number> = (*response)
-            .get(scope, key.into())
-            .ok_or(Error::NotAResponse)?
-            .try_into()?;
+        let status: v8::Local<v8::Number> = get_member(response, scope, "status")?;
         let status = status.value() as u16;
         let body = Response::builder()
             .status(StatusCode::from_u16(status)?)
