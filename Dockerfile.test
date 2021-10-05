@@ -1,0 +1,4 @@
+FROM ubuntu:20.04
+COPY target/debug/chisel /usr/bin/chisel 
+COPY target/debug/chiseld /usr/sbin/chiseld
+CMD /usr/sbin/chiseld

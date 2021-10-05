@@ -1,0 +1,70 @@
+on: [push]
+
+env:
+  REGISTRY: ghcr.io
+
+jobs:
+  release-chiseld:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      # check out the repository (private action)
+      - name: Checkout
+        uses: actions/checkout@v2
+
+      - name: Log in to the Container registry
+        uses: docker/login-action@f054a8b539a109f9f41c372932f1ae047eff08c9
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata (tags, labels) for Docker
+        id: meta
+        uses: docker/metadata-action@98669ae865ea3cffbcbaa878cf57c20bbf1c6c38
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+
+      # note: this doesn't seem to support the toolchain.toml file format, just raw toolchain
+      - name: Install rust toolchain 
+        uses: actions-rs/toolchain@v1
+        with:
+            override: true
+            components: rustfmt, clippy
+
+      - name: Build release mode binaries
+        uses: actions-rs/cargo@v1
+        with:
+            command: build
+            args: --release
+
+      - name: Build and push test Docker image
+        uses: docker/build-push-action@ad44023a93711e3deb337508980b4b5e9bcdc5dc
+        with:
+          context: .
+          file: Dockerfile.test
+          push: true
+          tags: chiselstrike/chiselstrike/test:latest
+          labels: ${{ steps.meta.outputs.labels }}
+
+      - name: Build and push chisel Docker image
+        uses: docker/build-push-action@ad44023a93711e3deb337508980b4b5e9bcdc5dc
+        with:
+          context: .
+          file: Dockerfile.chisel.release
+          push: true
+          tags: chiselstrike/chisel:latest
+          labels: ${{ steps.meta.outputs.labels }}
+
+      - name: Build and push chisel Docker image
+        uses: docker/build-push-action@ad44023a93711e3deb337508980b4b5e9bcdc5dc
+        with:
+          context: .
+          file: Dockerfile.chiseld.release
+          push: true
+          tags: chiselstrike/chiseld:latest
+          labels: ${{ steps.meta.outputs.labels }}
+
+

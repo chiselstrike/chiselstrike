@@ -1,0 +1,11 @@
+name: 'ChiselStrike Release'
+description: 'Release docker images for the various ChiselStrike components'
+inputs:
+  binary-names:
+    description: 'list of binaries to be included in the image. For example, server images may not want to include client binaries'
+    required: true
+runs:
+  using: 'docker'
+  image: 'Dockerfile.release'
+  args:
+    - ${{ inputs.binary-names }}
