@@ -1,6 +1,13 @@
 use anyhow::Result;
-use deno_core::JsRuntime;
+use deno_broadcast_channel::InMemoryBroadcastChannel;
+use deno_core::NoopModuleLoader;
+use deno_runtime::permissions::Permissions;
+use deno_runtime::worker::{MainWorker, WorkerOptions};
+use deno_web::BlobStore;
 use std::cell::RefCell;
+use std::rc::Rc;
+use std::sync::Arc;
+use url::Url;
 
 /// A v8 isolate doesn't want to be moved between or used from
 /// multiple threads. A JsRuntime owns an isolate, so we need to use a
@@ -15,14 +22,49 @@ use std::cell::RefCell;
 /// sharding our server, so there is not going to be a single process
 /// anyway.
 struct DenoService {
-    runtime: JsRuntime,
+    worker: MainWorker,
 }
 
 impl DenoService {
     pub fn new() -> Self {
-        Self {
-            runtime: JsRuntime::new(Default::default()),
-        }
+        let create_web_worker_cb = Arc::new(|_| {
+            todo!("Web workers are not supported");
+        });
+        let module_loader = Rc::new(NoopModuleLoader);
+        let opts = WorkerOptions {
+            apply_source_maps: false,
+            args: vec![],
+            debug_flag: false,
+            unstable: false,
+            enable_testing_features: false,
+            unsafely_ignore_certificate_errors: None,
+            root_cert_store: None,
+            user_agent: "hello_runtime".to_string(),
+            seed: None,
+            js_error_create_fn: None,
+            create_web_worker_cb,
+            maybe_inspector_server: None,
+            should_break_on_first_statement: false,
+            module_loader,
+            runtime_version: "x".to_string(),
+            ts_version: "x".to_string(),
+            no_color: true,
+            get_error_class_fn: None,
+            location: None,
+            origin_storage_dir: None,
+            blob_store: BlobStore::default(),
+            broadcast_channel: InMemoryBroadcastChannel::default(),
+            shared_array_buffer_store: None,
+            cpu_count: 1,
+        };
+
+        let worker = MainWorker::from_options(
+            Url::parse("file:///no/such/file").unwrap(),
+            Permissions::default(),
+            &opts,
+        );
+
+        Self { worker }
     }
 }
 
@@ -32,7 +74,7 @@ thread_local! {
 
 pub fn run_js(path: &str, code: &str) -> Result<String> {
     DENO.with(|d| {
-        let r = &mut d.borrow_mut().runtime;
+        let r = &mut d.borrow_mut().worker.js_runtime;
         let res = r.execute_script(path, code)?;
         let scope = &mut r.handle_scope();
         Ok(res.get(scope).to_rust_string_lossy(scope))
