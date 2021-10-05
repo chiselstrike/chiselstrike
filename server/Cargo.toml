@@ -16,6 +16,7 @@ hyper = "0.14.13"
 log = "0.4.14"
 pretty_env_logger = "0.4.0"
 prost = "0.8.0"
+rusty_v8 = "0.30.0"
 serde_json = "1.0.68"
 sqlx = { version = "0.5.7", features = [ "any", "postgres", "sqlite", "runtime-tokio-native-tls" ] }
 structopt = "0.3.23"

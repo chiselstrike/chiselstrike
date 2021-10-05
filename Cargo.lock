@@ -2747,6 +2747,7 @@ dependencies = [
  "log",
  "pretty_env_logger",
  "prost",
+ "rusty_v8",
  "serde_json",
  "sqlx",
  "structopt",

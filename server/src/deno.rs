@@ -6,10 +6,13 @@ use deno_core::NoopModuleLoader;
 use deno_runtime::permissions::Permissions;
 use deno_runtime::worker::{MainWorker, WorkerOptions};
 use deno_web::BlobStore;
+use rusty_v8 as v8;
 use std::cell::RefCell;
+use std::convert::TryInto;
 use std::rc::Rc;
 use std::sync::Arc;
 use url::Url;
+use v8::Handle;
 
 /// A v8 isolate doesn't want to be moved between or used from
 /// multiple threads. A JsRuntime owns an isolate, so we need to use a
@@ -25,6 +28,12 @@ use url::Url;
 /// anyway.
 struct DenoService {
     worker: MainWorker,
+}
+
+#[derive(thiserror::Error, Debug)]
+enum Error {
+    #[error["Endpoint didn't produce a response"]]
+    NotAResponse,
 }
 
 impl DenoService {
@@ -83,6 +92,20 @@ pub fn run_js(path: &str, code: &str) -> Result<String> {
         let r = &mut d.borrow_mut().worker.js_runtime;
         let res = r.execute_script(path, code)?;
         let scope = &mut r.handle_scope();
-        Ok(res.get(scope).to_rust_string_lossy(scope))
+        let response = res.get(scope).to_object(scope).ok_or(Error::NotAResponse)?;
+
+        let key = v8::String::new(scope, "text").unwrap();
+        let text: v8::Local<v8::Function> = response
+            .get(scope)
+            .get(scope, key.into())
+            .ok_or(Error::NotAResponse)?
+            .try_into()?;
+        let text: v8::Local<v8::Promise> = text
+            .get(scope)
+            .call(scope, response.into(), &[])
+            .ok_or(Error::NotAResponse)?
+            .try_into()?;
+        let text = text.get(scope).result(scope);
+        Ok(text.to_rust_string_lossy(scope))
     })
 }
