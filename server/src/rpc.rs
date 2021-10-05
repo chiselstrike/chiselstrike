@@ -87,9 +87,15 @@ impl ChiselRpc for RpcService {
         request: Request<TypeDefinitionRequest>,
     ) -> Result<Response<TypeDefinitionResponse>, Status> {
         let mut type_system = self.type_system.lock().await;
-        let name = request.into_inner().name;
+        let type_def = request.into_inner();
+        let name = type_def.name;
+        let mut fields = Vec::new();
+        for field in type_def.field_defs {
+            fields.push((field.name, field.field_type));
+        }
         let ty = Type {
             name: name.to_owned(),
+            fields,
         };
         type_system.define_type(ty.to_owned())?;
         let store = self.store.lock().await;
@@ -106,9 +112,16 @@ impl ChiselRpc for RpcService {
         let type_system = self.type_system.lock().await;
         let mut type_defs = vec![];
         for ty in type_system.types.values() {
+            let mut field_defs = vec![];
+            for (field_name, field_type) in &ty.fields {
+                field_defs.push(chisel::FieldDefinition {
+                    name: field_name.to_owned(),
+                    field_type: field_type.to_owned(),
+                });
+            }
             let type_def = chisel::TypeDefinition {
                 name: ty.name.to_string(),
-                field_defs: vec![],
+                field_defs,
             };
             type_defs.push(type_def);
         }
