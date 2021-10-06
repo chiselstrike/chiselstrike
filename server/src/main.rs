@@ -3,18 +3,12 @@
 #[macro_use]
 extern crate log;
 
-pub mod api;
-pub mod deno;
-pub mod rpc;
-pub mod store;
-pub mod types;
-
 use anyhow::Result;
-use api::ApiService;
-use rpc::RpcService;
+use chisel_server::api::ApiService;
+use chisel_server::rpc::RpcService;
+use chisel_server::store::Store;
 use std::net::SocketAddr;
 use std::sync::Arc;
-use store::Store;
 use structopt::StructOpt;
 use tokio::sync::Mutex;
 
@@ -61,10 +55,10 @@ async fn main() -> Result<()> {
     });
 
     let mut rpc_rx = rx.clone();
-    let rpc_task = rpc::spawn(rpc, opt.rpc_listen_addr, async move {
+    let rpc_task = chisel_server::rpc::spawn(rpc, opt.rpc_listen_addr, async move {
         rpc_rx.changed().await.ok();
     });
-    let api_task = api::spawn(api.clone(), opt.api_listen_addr, async move {
+    let api_task = chisel_server::api::spawn(api.clone(), opt.api_listen_addr, async move {
         rx.changed().await.ok();
     });
 
