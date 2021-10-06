@@ -1,6 +1,6 @@
 // SPDX-FileCopyrightText: © 2021 ChiselStrike <info@chiselstrike.com>
 
-use crate::types::{Type, TypeSystem, TypeSystemError};
+use crate::types::{ObjectType, TypeSystem, TypeSystemError};
 use sqlx::any::{AnyConnectOptions, AnyKind, AnyPool, AnyPoolOptions};
 use sqlx::Executor;
 use sqlx::Row;
@@ -79,7 +79,7 @@ impl Store {
         let mut ts = TypeSystem::new();
         for ty in types {
             let name: String = ty.get(0);
-            ts.define_type(Type {
+            ts.define_type(ObjectType {
                 name,
                 fields: Vec::default(),
             })?;
@@ -87,7 +87,7 @@ impl Store {
         Ok(ts)
     }
 
-    pub async fn insert(&self, ty: Type) -> Result<(), StoreError> {
+    pub async fn insert(&self, ty: ObjectType) -> Result<(), StoreError> {
         let add_type = sqlx::query("INSERT INTO types DEFAULT VALUES RETURNING *");
         let add_type_name = sqlx::query("INSERT INTO type_names (type_id, name) VALUES ($1, $2)");
 
