@@ -29,6 +29,10 @@ url = "2.2.2"
 [build-dependencies]
 tonic-build = "0.5.2"
 
+[lib]
+name = "chisel_server"
+path = "src/lib.rs"
+
 [[bin]]
 name = "chiseld"
 path = "src/main.rs"
