@@ -6,11 +6,13 @@ use std::collections::HashMap;
 pub enum TypeSystemError {
     #[error["type already exists"]]
     TypeAlreadyExists,
+    #[error["no such type"]]
+    NoSuchType,
 }
 
 #[derive(Debug, Default)]
 pub struct TypeSystem {
-    pub types: HashMap<String, Type>,
+    pub types: HashMap<String, ObjectType>,
 }
 
 impl TypeSystem {
@@ -20,17 +22,42 @@ impl TypeSystem {
         }
     }
 
-    pub fn define_type(&mut self, ty: Type) -> Result<(), TypeSystemError> {
+    pub fn define_type(&mut self, ty: ObjectType) -> Result<(), TypeSystemError> {
         if self.types.contains_key(&ty.name) {
             return Err(TypeSystemError::TypeAlreadyExists);
         }
         self.types.insert(ty.name.to_owned(), ty);
         Ok(())
     }
+
+    pub fn lookup_type(&self, type_name: &str) -> Result<Type, TypeSystemError> {
+        match type_name {
+            "String" => Ok(Type::String),
+            type_name => match self.types.get(type_name) {
+                Some(ty) => Ok(Type::Object(ty.to_owned())),
+                None => Err(TypeSystemError::NoSuchType),
+            },
+        }
+    }
 }
 
 #[derive(Clone, Debug)]
-pub struct Type {
+pub enum Type {
+    String,
+    Object(ObjectType),
+}
+
+impl Type {
+    pub fn name(&self) -> &str {
+        match self {
+            Type::String => "String",
+            Type::Object(ty) => &ty.name,
+        }
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct ObjectType {
     pub name: String,
-    pub fields: Vec<(String, String)>,
+    pub fields: Vec<(String, Type)>,
 }
