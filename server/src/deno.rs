@@ -119,9 +119,43 @@ pub fn run_js(path: &str, code: &str) -> Result<Response<Body>> {
 
         let status: v8::Local<v8::Number> = get_member(response, scope, "status")?;
         let status = status.value() as u16;
-        let body = Response::builder()
-            .status(StatusCode::from_u16(status)?)
-            .body(text.to_rust_string_lossy(scope).into())?;
+
+        let headers: v8::Local<v8::Object> = get_member(response, scope, "headers")?;
+        let entries: v8::Local<v8::Function> = get_member(headers, scope, "entries")?;
+        let iter: v8::Local<v8::Object> = entries
+            .call(scope, headers.into(), &[])
+            .ok_or(Error::NotAResponse)?
+            .try_into()?;
+        let next: v8::Local<v8::Function> = get_member(iter, scope, "next")?;
+        let mut builder = Response::builder().status(StatusCode::from_u16(status)?);
+
+        loop {
+            let item: v8::Local<v8::Object> = next
+                .call(scope, iter.into(), &[])
+                .ok_or(Error::NotAResponse)?
+                .try_into()?;
+
+            let done: v8::Local<v8::Value> = get_member(item, scope, "done")?;
+            if done.is_true() {
+                break;
+            }
+            let value: v8::Local<v8::Array> = get_member(item, scope, "value")?;
+            let key: v8::Local<v8::String> = value
+                .get_index(scope, 0)
+                .ok_or(Error::NotAResponse)?
+                .try_into()?;
+            let value: v8::Local<v8::String> = value
+                .get_index(scope, 1)
+                .ok_or(Error::NotAResponse)?
+                .try_into()?;
+            // FIXME: Do we have to handle non utf-8 values?
+            builder = builder.header(
+                key.to_rust_string_lossy(scope),
+                value.to_rust_string_lossy(scope),
+            );
+        }
+
+        let body = builder.body(text.to_rust_string_lossy(scope).into())?;
         Ok(body)
     })
 }
