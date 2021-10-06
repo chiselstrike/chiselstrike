@@ -52,7 +52,8 @@ impl RpcService {
             Box::new(|| {
                 // Let's return an empty array because we don't do storage yet.
                 let result = json!([]);
-                Ok(result.to_string())
+                let body = hyper::Response::builder().body(result.to_string().into())?;
+                Ok(body)
             }),
         );
     }
