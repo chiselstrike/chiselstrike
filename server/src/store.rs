@@ -8,13 +8,13 @@ use std::str::FromStr;
 
 #[derive(thiserror::Error, Debug)]
 pub enum StoreError {
-    #[error["connection failed"]]
+    #[error["connection failed `{0}`"]]
     ConnectionFailed(#[source] sqlx::Error),
-    #[error["execution failed"]]
+    #[error["execution failed: `{0}`"]]
     ExecuteFailed(#[source] sqlx::Error),
-    #[error["fetch failed"]]
+    #[error["fetch failed `{0}`"]]
     FetchFailed(#[source] sqlx::Error),
-    #[error["type system error"]]
+    #[error["type system error `{0}`"]]
     TypeError(#[from] TypeSystemError),
 }
 
