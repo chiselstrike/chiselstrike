@@ -95,13 +95,11 @@ pub fn run_js(path: &str, code: &str) -> Result<String> {
         let response = res.get(scope).to_object(scope).ok_or(Error::NotAResponse)?;
 
         let key = v8::String::new(scope, "text").unwrap();
-        let text: v8::Local<v8::Function> = response
-            .get(scope)
+        let text: v8::Local<v8::Function> = (*response)
             .get(scope, key.into())
             .ok_or(Error::NotAResponse)?
             .try_into()?;
         let text: v8::Local<v8::Promise> = text
-            .get(scope)
             .call(scope, response.into(), &[])
             .ok_or(Error::NotAResponse)?
             .try_into()?;
