@@ -13,7 +13,6 @@ use std::convert::TryInto;
 use std::rc::Rc;
 use std::sync::Arc;
 use url::Url;
-use v8::Handle;
 
 /// A v8 isolate doesn't want to be moved between or used from
 /// multiple threads. A JsRuntime owns an isolate, so we need to use a
@@ -97,7 +96,7 @@ where
     T::Error: std::error::Error + Send + Sync + 'static,
 {
     let key = v8::String::new(scope, key).unwrap();
-    let res: T = (*obj)
+    let res: T = obj
         .get(scope, key.into())
         .ok_or(Error::NotAResponse)?
         .try_into()?;
@@ -116,7 +115,7 @@ pub fn run_js(path: &str, code: &str) -> Result<Response<Body>> {
             .call(scope, response.into(), &[])
             .ok_or(Error::NotAResponse)?
             .try_into()?;
-        let text = text.get(scope).result(scope);
+        let text = text.result(scope);
 
         let status: v8::Local<v8::Number> = get_member(response, scope, "status")?;
         let status = status.value() as u16;
