@@ -1,1 +1,7 @@
 /target
+/chiseld.db
+/chiseld.db-shm
+/chiseld.db-wal
+/cli/chiseld.db
+/cli/chiseld.db-shm
+/cli/chiseld.db-wal
