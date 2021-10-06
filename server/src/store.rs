@@ -88,17 +88,31 @@ impl Store {
     }
 
     pub async fn load_schema<'r>(&self) -> Result<TypeSystem, StoreError> {
-        let query = sqlx::query("SELECT name FROM type_names");
-        let types = query
+        let query = sqlx::query("SELECT types.type_id AS type_id, type_names.name AS type_name FROM types INNER JOIN type_names WHERE types.type_id = type_names.type_id");
+        let rows = query
             .fetch_all(&self.pool)
             .await
             .map_err(StoreError::FetchFailed)?;
         let mut ts = TypeSystem::new();
-        for ty in types {
-            let name: String = ty.get(0);
+        for row in rows {
+            let type_id: i32 = row.get("type_id");
+            let type_name: &str = row.get("type_name");
+            let query = sqlx::query("SELECT field_names.field_name AS field_name, fields.field_type AS field_type FROM field_names INNER JOIN fields WHERE fields.type_id = $1 AND field_names.field_id = fields.field_id;");
+            let query = query.bind(type_id);
+            let rows = query
+                .fetch_all(&self.pool)
+                .await
+                .map_err(StoreError::FetchFailed)?;
+            let mut fields = Vec::new();
+            for row in rows {
+                let field_name: &str = row.get("field_name");
+                let field_type: &str = row.get("field_type");
+                let ty = ts.lookup_type(field_type)?;
+                fields.push((field_name.to_string(), ty));
+            }
             ts.define_type(ObjectType {
-                name,
-                fields: Vec::default(),
+                name: type_name.to_string(),
+                fields,
             })?;
         }
         Ok(ts)
