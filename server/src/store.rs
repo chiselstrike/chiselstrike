@@ -149,12 +149,23 @@ impl Store {
     }
 
     pub async fn insert(&self, ty: ObjectType) -> Result<(), StoreError> {
+        // FIXME: Multi-database transaction is needed for consistency.
         let mut transaction = self
             .pool
             .begin()
             .await
             .map_err(StoreError::ConnectionFailed)?;
         self.insert_type(&ty, &mut transaction).await?;
+        transaction
+            .commit()
+            .await
+            .map_err(StoreError::ExecuteFailed)?;
+        let mut transaction = self
+            .data_pool
+            .begin()
+            .await
+            .map_err(StoreError::ConnectionFailed)?;
+        self.create_table(&ty, &mut transaction).await?;
         transaction
             .commit()
             .await
@@ -198,6 +209,24 @@ impl Store {
                 .await
                 .map_err(StoreError::ExecuteFailed)?;
         }
+        Ok(())
+    }
+
+    async fn create_table<'a>(
+        &self,
+        ty: &ObjectType,
+        transaction: &mut Transaction<'a, Any>,
+    ) -> Result<(), StoreError> {
+        let create_table = format!(
+            "CREATE TABLE IF NOT EXISTS {} (id {}, fields TEXT)",
+            ty.backing_table.clone(),
+            Store::primary_key_sql(self.data_opts.kind())
+        );
+        let create_table = sqlx::query(&create_table);
+        transaction
+            .execute(create_table)
+            .await
+            .map_err(StoreError::ExecuteFailed)?;
         Ok(())
     }
 }
