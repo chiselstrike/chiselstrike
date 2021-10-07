@@ -58,6 +58,10 @@ impl Type {
 
 #[derive(Clone, Debug)]
 pub struct ObjectType {
+    /// Name of this type.
     pub name: String,
+    /// Fields of this type.
     pub fields: Vec<(String, Type)>,
+    /// Name of the backing table for this type.
+    pub backing_table: String,
 }

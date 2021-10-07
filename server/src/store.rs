@@ -39,7 +39,7 @@ impl Store {
     /// Create the schema of the underlying metadata store.
     pub async fn create_schema(&self) -> Result<(), StoreError> {
         let create_types = format!(
-            "CREATE TABLE IF NOT EXISTS types (type_id {})",
+            "CREATE TABLE IF NOT EXISTS types (type_id {}, backing_table TEXT UNIQUE)",
             Store::primary_key_sql(self.opts.kind())
         );
         let create_type_names = "CREATE TABLE IF NOT EXISTS type_names (
@@ -89,7 +89,7 @@ impl Store {
 
     /// Load the type system from metadata store.
     pub async fn load_type_system<'r>(&self) -> Result<TypeSystem, StoreError> {
-        let query = sqlx::query("SELECT types.type_id AS type_id, type_names.name AS type_name FROM types INNER JOIN type_names WHERE types.type_id = type_names.type_id");
+        let query = sqlx::query("SELECT types.type_id AS type_id, types.backing_table AS backing_table, type_names.name AS type_name FROM types INNER JOIN type_names WHERE types.type_id = type_names.type_id");
         let rows = query
             .fetch_all(&self.pool)
             .await
@@ -97,11 +97,13 @@ impl Store {
         let mut ts = TypeSystem::new();
         for row in rows {
             let type_id: i32 = row.get("type_id");
+            let backing_table: &str = row.get("backing_table");
             let type_name: &str = row.get("type_name");
             let fields = self.load_type_fields(&ts, type_id).await?;
             ts.define_type(ObjectType {
                 name: type_name.to_string(),
                 fields,
+                backing_table: backing_table.to_string(),
             })?;
         }
         Ok(ts)
@@ -147,9 +149,10 @@ impl Store {
         ty: &ObjectType,
         transaction: &mut Transaction<'a, Any>,
     ) -> Result<(), StoreError> {
-        let add_type = sqlx::query("INSERT INTO types DEFAULT VALUES RETURNING *");
+        let add_type = sqlx::query("INSERT INTO types (backing_table) VALUES ($1) RETURNING *");
         let add_type_name = sqlx::query("INSERT INTO type_names (type_id, name) VALUES ($1, $2)");
 
+        let add_type = add_type.bind(ty.backing_table.clone());
         let row = transaction
             .fetch_one(add_type)
             .await
