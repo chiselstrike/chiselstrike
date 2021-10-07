@@ -1,6 +1,6 @@
 // SPDX-FileCopyrightText: © 2021 ChiselStrike <info@chiselstrike.com>
 
-use crate::types::{ObjectType, TypeSystem, TypeSystemError};
+use crate::types::{ObjectType, Type, TypeSystem, TypeSystemError};
 use sqlx::any::{AnyConnectOptions, AnyKind, AnyPool, AnyPoolOptions};
 use sqlx::Executor;
 use sqlx::Row;
@@ -97,25 +97,34 @@ impl Store {
         for row in rows {
             let type_id: i32 = row.get("type_id");
             let type_name: &str = row.get("type_name");
-            let query = sqlx::query("SELECT field_names.field_name AS field_name, fields.field_type AS field_type FROM field_names INNER JOIN fields WHERE fields.type_id = $1 AND field_names.field_id = fields.field_id;");
-            let query = query.bind(type_id);
-            let rows = query
-                .fetch_all(&self.pool)
-                .await
-                .map_err(StoreError::FetchFailed)?;
-            let mut fields = Vec::new();
-            for row in rows {
-                let field_name: &str = row.get("field_name");
-                let field_type: &str = row.get("field_type");
-                let ty = ts.lookup_type(field_type)?;
-                fields.push((field_name.to_string(), ty));
-            }
+            let fields = self.load_type_fields(&ts, type_id).await?;
             ts.define_type(ObjectType {
                 name: type_name.to_string(),
                 fields,
             })?;
         }
         Ok(ts)
+    }
+
+    async fn load_type_fields(
+        &self,
+        ts: &TypeSystem,
+        type_id: i32,
+    ) -> Result<Vec<(String, Type)>, StoreError> {
+        let query = sqlx::query("SELECT field_names.field_name AS field_name, fields.field_type AS field_type FROM field_names INNER JOIN fields WHERE fields.type_id = $1 AND field_names.field_id = fields.field_id;");
+        let query = query.bind(type_id);
+        let rows = query
+            .fetch_all(&self.pool)
+            .await
+            .map_err(StoreError::FetchFailed)?;
+        let mut fields = Vec::new();
+        for row in rows {
+            let field_name: &str = row.get("field_name");
+            let field_type: &str = row.get("field_type");
+            let ty = ts.lookup_type(field_type)?;
+            fields.push((field_name.to_string(), ty));
+        }
+        Ok(fields)
     }
 
     pub async fn insert(&self, ty: ObjectType) -> Result<(), StoreError> {
