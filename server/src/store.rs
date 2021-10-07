@@ -87,7 +87,8 @@ impl Store {
         }
     }
 
-    pub async fn load_schema<'r>(&self) -> Result<TypeSystem, StoreError> {
+    /// Load the type system from metadata store.
+    pub async fn load_type_system<'r>(&self) -> Result<TypeSystem, StoreError> {
         let query = sqlx::query("SELECT types.type_id AS type_id, type_names.name AS type_name FROM types INNER JOIN type_names WHERE types.type_id = type_names.type_id");
         let rows = query
             .fetch_all(&self.pool)
