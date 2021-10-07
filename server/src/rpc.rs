@@ -46,8 +46,7 @@ impl RpcService {
         }
     }
 
-    pub async fn define_type_endpoints(&self, name: &str) {
-        let path = format!("/{}", name.to_case(Case::Snake));
+    pub async fn define_type_endpoints(&self, path: &str) {
         info!("Registered endpoint: '{}'", path);
         let closure = || {
             // Let's return an empty array because we don't do storage yet.
@@ -107,7 +106,8 @@ impl ChiselRpc for RpcService {
         type_system.define_type(ty.to_owned())?;
         let store = &self.store;
         store.insert(ty).await?;
-        self.define_type_endpoints(&name).await;
+        let path = format!("/{}", name.to_case(Case::Snake));
+        self.define_type_endpoints(&path).await;
         let response = chisel::TypeDefinitionResponse { message: name };
         Ok(Response::new(response))
     }
