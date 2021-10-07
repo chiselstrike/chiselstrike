@@ -37,6 +37,7 @@ impl Store {
         Ok(Store::new(opts, pool))
     }
 
+    /// Create the schema of the underlying metadata store.
     pub async fn create_schema(&self) -> Result<(), StoreError> {
         let create_types = format!(
             "CREATE TABLE IF NOT EXISTS types (type_id {})",
