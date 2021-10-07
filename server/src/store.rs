@@ -1,9 +1,8 @@
 // SPDX-FileCopyrightText: © 2021 ChiselStrike <info@chiselstrike.com>
 
 use crate::types::{ObjectType, Type, TypeSystem, TypeSystemError};
-use sqlx::any::{AnyConnectOptions, AnyKind, AnyPool, AnyPoolOptions};
-use sqlx::Executor;
-use sqlx::Row;
+use sqlx::any::{Any, AnyConnectOptions, AnyKind, AnyPool, AnyPoolOptions};
+use sqlx::{Executor, Row, Transaction};
 use std::str::FromStr;
 
 #[derive(thiserror::Error, Debug)]
@@ -130,25 +129,38 @@ impl Store {
     }
 
     pub async fn insert(&self, ty: ObjectType) -> Result<(), StoreError> {
-        let add_type = sqlx::query("INSERT INTO types DEFAULT VALUES RETURNING *");
-        let add_type_name = sqlx::query("INSERT INTO type_names (type_id, name) VALUES ($1, $2)");
-
         let mut transaction = self
             .pool
             .begin()
             .await
             .map_err(StoreError::ConnectionFailed)?;
+        self.insert_type(&ty, &mut transaction).await?;
+        transaction
+            .commit()
+            .await
+            .map_err(StoreError::ExecuteFailed)?;
+        Ok(())
+    }
+
+    async fn insert_type<'a>(
+        &self,
+        ty: &ObjectType,
+        transaction: &mut Transaction<'a, Any>,
+    ) -> Result<(), StoreError> {
+        let add_type = sqlx::query("INSERT INTO types DEFAULT VALUES RETURNING *");
+        let add_type_name = sqlx::query("INSERT INTO type_names (type_id, name) VALUES ($1, $2)");
+
         let row = transaction
             .fetch_one(add_type)
             .await
             .map_err(StoreError::ExecuteFailed)?;
         let id: i32 = row.get("type_id");
-        let add_type_name = add_type_name.bind(id).bind(ty.name);
+        let add_type_name = add_type_name.bind(id).bind(ty.name.clone());
         transaction
             .execute(add_type_name)
             .await
             .map_err(StoreError::ExecuteFailed)?;
-        for (field_name, field_type) in ty.fields {
+        for (field_name, field_type) in &ty.fields {
             let add_field =
                 sqlx::query("INSERT INTO fields (field_type, type_id) VALUES ($1, $2) RETURNING *");
             let add_field_name =
@@ -165,10 +177,6 @@ impl Store {
                 .await
                 .map_err(StoreError::ExecuteFailed)?;
         }
-        transaction
-            .commit()
-            .await
-            .map_err(StoreError::ExecuteFailed)?;
         Ok(())
     }
 }
