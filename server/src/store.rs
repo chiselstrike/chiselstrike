@@ -1,6 +1,6 @@
 // SPDX-FileCopyrightText: © 2021 ChiselStrike <info@chiselstrike.com>
 
-use crate::types::{ObjectType, TypeSystem, TypeSystemError};
+use crate::types::{ObjectType, Type, TypeSystem, TypeSystemError};
 use sqlx::any::{AnyConnectOptions, AnyKind, AnyPool, AnyPoolOptions};
 use sqlx::Executor;
 use sqlx::Row;
@@ -37,6 +37,7 @@ impl Store {
         Ok(Store::new(opts, pool))
     }
 
+    /// Create the schema of the underlying metadata store.
     pub async fn create_schema(&self) -> Result<(), StoreError> {
         let create_types = format!(
             "CREATE TABLE IF NOT EXISTS types (type_id {})",
@@ -87,7 +88,8 @@ impl Store {
         }
     }
 
-    pub async fn load_schema<'r>(&self) -> Result<TypeSystem, StoreError> {
+    /// Load the type system from metadata store.
+    pub async fn load_type_system<'r>(&self) -> Result<TypeSystem, StoreError> {
         let query = sqlx::query("SELECT types.type_id AS type_id, type_names.name AS type_name FROM types INNER JOIN type_names WHERE types.type_id = type_names.type_id");
         let rows = query
             .fetch_all(&self.pool)
@@ -97,25 +99,34 @@ impl Store {
         for row in rows {
             let type_id: i32 = row.get("type_id");
             let type_name: &str = row.get("type_name");
-            let query = sqlx::query("SELECT field_names.field_name AS field_name, fields.field_type AS field_type FROM field_names INNER JOIN fields WHERE fields.type_id = $1 AND field_names.field_id = fields.field_id;");
-            let query = query.bind(type_id);
-            let rows = query
-                .fetch_all(&self.pool)
-                .await
-                .map_err(StoreError::FetchFailed)?;
-            let mut fields = Vec::new();
-            for row in rows {
-                let field_name: &str = row.get("field_name");
-                let field_type: &str = row.get("field_type");
-                let ty = ts.lookup_type(field_type)?;
-                fields.push((field_name.to_string(), ty));
-            }
+            let fields = self.load_type_fields(&ts, type_id).await?;
             ts.define_type(ObjectType {
                 name: type_name.to_string(),
                 fields,
             })?;
         }
         Ok(ts)
+    }
+
+    async fn load_type_fields(
+        &self,
+        ts: &TypeSystem,
+        type_id: i32,
+    ) -> Result<Vec<(String, Type)>, StoreError> {
+        let query = sqlx::query("SELECT field_names.field_name AS field_name, fields.field_type AS field_type FROM field_names INNER JOIN fields WHERE fields.type_id = $1 AND field_names.field_id = fields.field_id;");
+        let query = query.bind(type_id);
+        let rows = query
+            .fetch_all(&self.pool)
+            .await
+            .map_err(StoreError::FetchFailed)?;
+        let mut fields = Vec::new();
+        for row in rows {
+            let field_name: &str = row.get("field_name");
+            let field_type: &str = row.get("field_type");
+            let ty = ts.lookup_type(field_type)?;
+            fields.push((field_name.to_string(), ty));
+        }
+        Ok(fields)
     }
 
     pub async fn insert(&self, ty: ObjectType) -> Result<(), StoreError> {

@@ -32,7 +32,7 @@ async fn main() -> Result<()> {
     let opt = Opt::from_args();
     let store = Store::connect(&opt.metadata_db_uri).await?;
     store.create_schema().await?;
-    let ts = store.load_schema().await?;
+    let ts = store.load_type_system().await?;
     let store = Arc::new(Mutex::new(store));
     let api = Arc::new(Mutex::new(ApiService::new()));
     let ts = Arc::new(Mutex::new(ts));
