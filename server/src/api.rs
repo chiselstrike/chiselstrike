@@ -1,6 +1,7 @@
 // SPDX-FileCopyrightText: © 2021 ChiselStrike <info@chiselstrike.com>
 
 use anyhow::Result;
+use futures::future::BoxFuture;
 use hyper::service::{make_service_fn, service_fn};
 use hyper::{Body, Method, Request, Response, Server, StatusCode};
 use std::collections::HashMap;
@@ -9,7 +10,7 @@ use std::net::SocketAddr;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 
-type RouteFn = Box<dyn Fn() -> Result<Response<Body>> + Send>;
+type RouteFn = Arc<dyn Fn() -> BoxFuture<'static, Result<Response<Body>>> + Send + Sync>;
 
 /// API service for Chisel server.
 #[derive(Default)]
@@ -32,7 +33,7 @@ impl ApiService {
         match *req.method() {
             Method::GET => {
                 if let Some(route_fn) = self.gets.get(req.uri().path()) {
-                    return match route_fn() {
+                    return match route_fn().await {
                         Ok(val) => Ok(val),
                         Err(err) => Response::builder()
                             .status(StatusCode::INTERNAL_SERVER_ERROR)
