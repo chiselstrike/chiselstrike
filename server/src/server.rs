@@ -21,6 +21,9 @@ pub struct Opt {
     /// Metadata database URI.
     #[structopt(short, long, default_value = "sqlite://chiseld.db?mode=rwc")]
     metadata_db_uri: String,
+    /// Data database URI.
+    #[structopt(short, long, default_value = "sqlite://chiseld-data.db?mode=rwc")]
+    data_db_uri: String,
 }
 
 pub async fn run() -> Result<()> {
