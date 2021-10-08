@@ -55,6 +55,15 @@ jobs:
           override: true
           components: rustfmt, clippy
 
+    - name: set up cache
+      uses: Swatinem/rust-cache@v1
+
+    - name: Format check
+      run: cargo fmt --all
+
+    - name: Clippy check
+      run: cargo clippy --all-targets --all-features
+
     - name: Build debug mode binaries
       uses: actions-rs/cargo@v1
       with:

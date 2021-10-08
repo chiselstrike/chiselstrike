@@ -106,7 +106,7 @@ where
 {
     let key = v8::String::new(scope, key).unwrap();
     let res: T = try_into_or(obj.get(scope, key.into()))?;
-    return Ok(res);
+    Ok(res)
 }
 
 pub fn run_js(path: &str, code: &str) -> Result<Response<Body>> {
