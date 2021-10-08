@@ -55,10 +55,10 @@ impl RpcService {
             let body = hyper::Response::builder().body(result.to_string().into())?;
             Ok(body)
         };
-        self.api
-            .lock()
-            .await
-            .get(&path, Arc::new(move || future::ready(closure()).boxed()));
+        self.api.lock().await.get(
+            &path,
+            Arc::new(move || future::ready(closure()).boxed_local()),
+        );
     }
 }
 
@@ -145,7 +145,7 @@ impl ChiselRpc for RpcService {
         let code = request.code;
         let func = {
             let path = path.clone();
-            move || future::ready(deno::run_js(&path, &code)).boxed()
+            move || future::ready(deno::run_js(&path, &code)).boxed_local()
         };
         self.api.lock().await.get(&path, Arc::new(func));
         let response = EndPointCreationResponse { message: path };

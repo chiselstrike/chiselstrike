@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: © 2021 ChiselStrike <info@chiselstrike.com>
 
 use anyhow::Result;
-use futures::future::BoxFuture;
+use futures::future::LocalBoxFuture;
 use hyper::service::{make_service_fn, service_fn};
 use hyper::{Body, Method, Request, Response, Server, StatusCode};
 use std::collections::HashMap;
@@ -10,7 +10,7 @@ use std::net::SocketAddr;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 
-type RouteFn = Arc<dyn Fn() -> BoxFuture<'static, Result<Response<Body>>> + Send + Sync>;
+type RouteFn = Arc<dyn Fn() -> LocalBoxFuture<'static, Result<Response<Body>>> + Send + Sync>;
 
 /// API service for Chisel server.
 #[derive(Default)]
