@@ -20,20 +20,38 @@ pub enum StoreError {
 pub struct Store {
     opts: AnyConnectOptions,
     pool: AnyPool,
+    data_opts: AnyConnectOptions,
+    data_pool: AnyPool,
 }
 
 impl Store {
-    pub fn new(opts: AnyConnectOptions, pool: AnyPool) -> Self {
-        Self { opts, pool }
+    pub fn new(
+        opts: AnyConnectOptions,
+        pool: AnyPool,
+        data_opts: AnyConnectOptions,
+        data_pool: AnyPool,
+    ) -> Self {
+        Self {
+            opts,
+            pool,
+            data_opts,
+            data_pool,
+        }
     }
 
-    pub async fn connect(uri: &str) -> Result<Self, StoreError> {
-        let opts = AnyConnectOptions::from_str(uri).map_err(StoreError::ConnectionFailed)?;
+    pub async fn connect(meta_uri: &str, data_uri: &str) -> Result<Self, StoreError> {
+        let opts = AnyConnectOptions::from_str(meta_uri).map_err(StoreError::ConnectionFailed)?;
         let pool = AnyPoolOptions::new()
-            .connect(uri)
+            .connect(meta_uri)
             .await
             .map_err(StoreError::ConnectionFailed)?;
-        Ok(Store::new(opts, pool))
+        let data_opts =
+            AnyConnectOptions::from_str(data_uri).map_err(StoreError::ConnectionFailed)?;
+        let data_pool = AnyPoolOptions::new()
+            .connect(data_uri)
+            .await
+            .map_err(StoreError::ConnectionFailed)?;
+        Ok(Store::new(opts, pool, data_opts, data_pool))
     }
 
     /// Create the schema of the underlying metadata store.
