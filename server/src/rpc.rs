@@ -30,14 +30,14 @@ pub mod chisel {
 pub struct RpcService {
     api: Arc<Mutex<ApiService>>,
     type_system: Arc<Mutex<TypeSystem>>,
-    store: Arc<Mutex<Store>>,
+    store: Box<Store>,
 }
 
 impl RpcService {
     pub fn new(
         api: Arc<Mutex<ApiService>>,
         type_system: Arc<Mutex<TypeSystem>>,
-        store: Arc<Mutex<Store>>,
+        store: Box<Store>,
     ) -> Self {
         RpcService {
             api,
@@ -105,7 +105,7 @@ impl ChiselRpc for RpcService {
             fields,
         };
         type_system.define_type(ty.to_owned())?;
-        let store = self.store.lock().await;
+        let store = &self.store;
         store.insert(ty).await?;
         self.define_type_endpoints(&name).await;
         let response = chisel::TypeDefinitionResponse { message: name };
