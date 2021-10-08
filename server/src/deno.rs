@@ -111,9 +111,12 @@ where
 
 fn run_js_aux(d: &RefCell<DenoService>, path: &str, code: &str) -> Result<Response<Body>> {
     let runtime = &mut d.borrow_mut().worker.js_runtime;
-    let res = runtime.execute_script(path, code)?;
+    let result = runtime.execute_script(path, code)?;
     let scope = &mut runtime.handle_scope();
-    let response = res.get(scope).to_object(scope).ok_or(Error::NotAResponse)?;
+    let response = result
+        .get(scope)
+        .to_object(scope)
+        .ok_or(Error::NotAResponse)?;
 
     let text: v8::Local<v8::Function> = get_member(response, scope, "text")?;
     let text: v8::Local<v8::Promise> = try_into_or(text.call(scope, response.into(), &[]))?;
