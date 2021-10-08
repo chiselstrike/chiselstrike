@@ -1,0 +1,15 @@
+FROM ubuntu:20.04
+
+ENV OPENSEARCH_SERVER=1.1.0
+ENV OPENSEARCH_CLI=1.0.0
+
+RUN apt update
+RUN DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends tzdata
+RUN apt install -y postgresql-all postgresql-contrib sqlite3 unzip curl
+
+RUN curl https://artifacts.opensearch.org/releases/bundle/opensearch/${OPENSEARCH_SERVER}/opensearch-${OPENSEARCH_SERVER}-linux-x64.tar.gz | tar xzvf -
+RUN curl https://artifacts.opensearch.org/opensearch-clients/opensearch-cli/opensearch-cli-${OPENSEARCH_CLI}-linux-x64.zip -o opensearch-cli.zip && unzip opensearch-cli.zip
+
+RUN chmod 755 opensearch-cli && cp opensearch-cli /usr/bin
+
+CMD while :; do :; done & kill -STOP $! && wait $!
