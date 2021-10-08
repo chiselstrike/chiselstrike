@@ -84,7 +84,10 @@ impl DenoService {
 }
 
 thread_local! {
-    static DENO: RefCell<DenoService> = RefCell::new(DenoService::new())
+    // There is no 'thread lifetime in rust. So without Rc we can't
+    // convince rust that a future produced with DENO.with doesn't
+    // outlive the DenoService.
+    static DENO: Rc<RefCell<DenoService>> = Rc::new(RefCell::new(DenoService::new()))
 }
 
 fn try_into_or<'s, T: std::convert::TryFrom<v8::Local<'s, v8::Value>>>(
@@ -109,9 +112,13 @@ where
     Ok(res)
 }
 
-fn run_js_aux(d: &RefCell<DenoService>, path: &str, code: &str) -> Result<Response<Body>> {
+async fn run_js_aux(
+    d: Rc<RefCell<DenoService>>,
+    path: String,
+    code: String,
+) -> Result<Response<Body>> {
     let runtime = &mut d.borrow_mut().worker.js_runtime;
-    let result = runtime.execute_script(path, code)?;
+    let result = runtime.execute_script(&path, &code)?;
     let scope = &mut runtime.handle_scope();
     let response = result
         .get(scope)
@@ -154,6 +161,6 @@ fn run_js_aux(d: &RefCell<DenoService>, path: &str, code: &str) -> Result<Respon
     Ok(body)
 }
 
-pub fn run_js(path: &str, code: &str) -> Result<Response<Body>> {
-    DENO.with(|d| run_js_aux(d, path, code))
+pub async fn run_js(path: String, code: String) -> Result<Response<Body>> {
+    DENO.with(|d| run_js_aux(d.clone(), path, code)).await
 }
