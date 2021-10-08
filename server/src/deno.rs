@@ -110,9 +110,9 @@ where
 }
 
 fn run_js_aux(d: &RefCell<DenoService>, path: &str, code: &str) -> Result<Response<Body>> {
-    let r = &mut d.borrow_mut().worker.js_runtime;
-    let res = r.execute_script(path, code)?;
-    let scope = &mut r.handle_scope();
+    let runtime = &mut d.borrow_mut().worker.js_runtime;
+    let res = runtime.execute_script(path, code)?;
+    let scope = &mut runtime.handle_scope();
     let response = res.get(scope).to_object(scope).ok_or(Error::NotAResponse)?;
 
     let text: v8::Local<v8::Function> = get_member(response, scope, "text")?;
