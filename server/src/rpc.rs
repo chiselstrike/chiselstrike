@@ -158,7 +158,7 @@ pub fn spawn(
     addr: SocketAddr,
     shutdown: impl core::future::Future<Output = ()> + Send + 'static,
 ) -> tokio::task::JoinHandle<Result<(), tonic::transport::Error>> {
-    tokio::spawn(async move {
+    tokio::task::spawn_local(async move {
         let ret = Server::builder()
             .add_service(ChiselRpcServer::new(rpc))
             .serve_with_shutdown(addr, shutdown)

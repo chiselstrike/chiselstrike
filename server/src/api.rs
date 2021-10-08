@@ -53,6 +53,18 @@ impl ApiService {
     }
 }
 
+#[derive(Clone)]
+struct LocalExec;
+
+impl<F> hyper::rt::Executor<F> for LocalExec
+where
+    F: std::future::Future + 'static,
+{
+    fn execute(&self, fut: F) {
+        tokio::task::spawn_local(fut);
+    }
+}
+
 pub fn spawn(
     api: Arc<Mutex<ApiService>>,
     addr: SocketAddr,
@@ -70,8 +82,8 @@ pub fn spawn(
             }))
         }
     });
-    let server = Server::bind(&addr).serve(make_svc);
-    tokio::spawn(async move {
+    let server = Server::bind(&addr).executor(LocalExec).serve(make_svc);
+    tokio::task::spawn_local(async move {
         let ret = server.with_graceful_shutdown(shutdown).await;
         info!("hyper shutdown");
         ret
