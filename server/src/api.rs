@@ -10,7 +10,7 @@ use std::net::SocketAddr;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 
-type RouteFn = Arc<dyn Fn() -> LocalBoxFuture<'static, Result<Response<Body>>> + Send + Sync>;
+type RouteFn = Box<dyn Fn() -> LocalBoxFuture<'static, Result<Response<Body>>> + Send + Sync>;
 
 /// API service for Chisel server.
 #[derive(Default)]

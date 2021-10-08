@@ -57,7 +57,7 @@ impl RpcService {
         };
         self.api.lock().await.get(
             &path,
-            Arc::new(move || future::ready(closure()).boxed_local()),
+            Box::new(move || future::ready(closure()).boxed_local()),
         );
     }
 }
@@ -147,7 +147,7 @@ impl ChiselRpc for RpcService {
             let path = path.clone();
             move || future::ready(deno::run_js(&path, &code)).boxed_local()
         };
-        self.api.lock().await.get(&path, Arc::new(func));
+        self.api.lock().await.get(&path, Box::new(func));
         let response = EndPointCreationResponse { message: path };
         Ok(Response::new(response))
     }
