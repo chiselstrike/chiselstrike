@@ -3,10 +3,11 @@
 use crate::api::Body;
 use anyhow::Result;
 use deno_broadcast_channel::InMemoryBroadcastChannel;
-use deno_core::NoopModuleLoader;
+use deno_core::{JsRuntime, NoopModuleLoader};
 use deno_runtime::permissions::Permissions;
 use deno_runtime::worker::{MainWorker, WorkerOptions};
 use deno_web::BlobStore;
+use futures::stream::{try_unfold, Stream};
 use hyper::{Response, StatusCode};
 use rusty_v8 as v8;
 use std::cell::RefCell;
@@ -74,6 +75,10 @@ impl DenoService {
 
         let permissions = Permissions {
             read: Permissions::new_read(&Some(vec![path.into()]), false),
+            // FIXME: Temporary hack to allow easier testing for
+            // now. Which network access is allowed should be a
+            // configured with the endpoint.
+            net: Permissions::new_net(&Some(vec![]), false),
             ..Permissions::default()
         };
 
@@ -113,6 +118,66 @@ where
     Ok(res)
 }
 
+async fn get_read_future(
+    reader: v8::Global<v8::Value>,
+    read: v8::Global<v8::Function>,
+    service: Rc<RefCell<DenoService>>,
+) -> Result<Option<(Box<[u8]>, ())>> {
+    let runtime = &mut service.borrow_mut().worker.js_runtime;
+    let js_promise = {
+        let scope = &mut runtime.handle_scope();
+        let reader = v8::Local::new(scope, reader.clone());
+        let res = read
+            .get(scope)
+            .call(scope, reader, &[])
+            .ok_or(Error::NotAResponse)?;
+        v8::Global::new(scope, res)
+    };
+    let read_result = runtime.resolve_value(js_promise).await?;
+    let scope = &mut runtime.handle_scope();
+    let read_result = read_result
+        .get(scope)
+        .to_object(scope)
+        .ok_or(Error::NotAResponse)?;
+    let done: v8::Local<v8::Boolean> = get_member(read_result, scope, "done")?;
+    if done.is_true() {
+        return Ok(None);
+    }
+    let value: v8::Local<v8::ArrayBufferView> = get_member(read_result, scope, "value")?;
+    let size = value.byte_length();
+    // FIXME: We might want to use an uninitialized buffer.
+    let mut buffer = vec![0; size];
+    let copied = value.copy_contents(&mut buffer);
+    // FIXME: Check in V8 to see when this might fail
+    assert!(copied == size);
+    Ok(Some((buffer.into_boxed_slice(), ())))
+}
+
+fn get_read_stream(
+    runtime: &mut JsRuntime,
+    global_response: v8::Global<v8::Value>,
+    service: Rc<RefCell<DenoService>>,
+) -> Result<impl Stream<Item = Result<Box<[u8]>>>> {
+    let scope = &mut runtime.handle_scope();
+    let response = global_response
+        .get(scope)
+        .to_object(scope)
+        .ok_or(Error::NotAResponse)?;
+
+    let body: v8::Local<v8::Object> = get_member(response, scope, "body")?;
+    let get_reader: v8::Local<v8::Function> = get_member(body, scope, "getReader")?;
+    let reader: v8::Local<v8::Object> = try_into_or(get_reader.call(scope, body.into(), &[]))?;
+    let read: v8::Local<v8::Function> = get_member(reader, scope, "read")?;
+    let reader: v8::Local<v8::Value> = reader.into();
+    let reader: v8::Global<v8::Value> = v8::Global::new(scope, reader);
+    let read = v8::Global::new(scope, read);
+
+    let stream = try_unfold((), move |_| {
+        get_read_future(reader.clone(), read.clone(), service.clone())
+    });
+    Ok(stream)
+}
+
 async fn run_js_aux(
     d: Rc<RefCell<DenoService>>,
     path: String,
@@ -120,15 +185,13 @@ async fn run_js_aux(
 ) -> Result<Response<Body>> {
     let runtime = &mut d.borrow_mut().worker.js_runtime;
     let result = runtime.execute_script(&path, &code)?;
+    let result = runtime.resolve_value(result).await?;
+    let stream = get_read_stream(runtime, result.clone(), d.clone())?;
     let scope = &mut runtime.handle_scope();
     let response = result
         .get(scope)
         .to_object(scope)
         .ok_or(Error::NotAResponse)?;
-
-    let text: v8::Local<v8::Function> = get_member(response, scope, "text")?;
-    let text: v8::Local<v8::Promise> = try_into_or(text.call(scope, response.into(), &[]))?;
-    let text = text.result(scope);
 
     let status: v8::Local<v8::Number> = get_member(response, scope, "status")?;
     let status = status.value() as u16;
@@ -158,7 +221,7 @@ async fn run_js_aux(
         );
     }
 
-    let body = builder.body(text.to_rust_string_lossy(scope).into())?;
+    let body = builder.body(Body::Stream(Box::pin(stream)))?;
     Ok(body)
 }
 

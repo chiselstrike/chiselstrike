@@ -2,6 +2,8 @@
 
 use anyhow::{Error, Result};
 use futures::future::LocalBoxFuture;
+use futures::ready;
+use futures::stream::Stream;
 use hyper::body::HttpBody;
 use hyper::header::HeaderValue;
 use hyper::service::{make_service_fn, service_fn};
@@ -15,8 +17,11 @@ use std::sync::Arc;
 use std::task::{Context, Poll};
 use tokio::sync::Mutex;
 
+type JsStream = Pin<Box<dyn Stream<Item = Result<Box<[u8]>>>>>;
+
 pub enum Body {
     Const(Option<Box<[u8]>>),
+    Stream(JsStream),
 }
 
 impl From<String> for Body {
@@ -37,10 +42,15 @@ impl HttpBody for Body {
 
     fn poll_data(
         self: Pin<&mut Self>,
-        _: &mut Context<'_>,
+        cx: &mut Context<'_>,
     ) -> Poll<Option<Result<Self::Data, Self::Error>>> {
-        let Body::Const(ref mut inner) = self.get_mut();
-        Poll::Ready(inner.take().map(|x| Ok(Cursor::new(x))))
+        let r = match self.get_mut() {
+            Body::Const(ref mut inner) => inner.take().map(|x| Ok(Cursor::new(x))),
+            Body::Stream(ref mut stream) => {
+                ready!(stream.as_mut().poll_next(cx)).map(|x| x.map(Cursor::new))
+            }
+        };
+        Poll::Ready(r)
     }
 
     fn poll_trailers(
