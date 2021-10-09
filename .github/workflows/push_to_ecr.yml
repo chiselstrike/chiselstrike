@@ -1,0 +1,58 @@
+name: Release
+
+on:
+  push:
+    branches:
+      - release*
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+    - name: checkout repo
+      uses: actions/checkout@v2
+
+    # FIXME: Stop using secrets when https://github.com/github/roadmap/issues/249 is released.
+    - name: Configure AWS credentials
+      uses: aws-actions/configure-aws-credentials@v1
+      with:
+        aws-region: us-east-2
+        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+
+    - name: Login to Amazon ECR
+      id: login-ecr
+      uses: aws-actions/amazon-ecr-login@v1
+
+    - name: Install rust toolchain
+      uses: actions-rs/toolchain@v1
+      with:
+          override: true
+          components: rustfmt, clippy
+
+    - name: set up cache
+      uses: Swatinem/rust-cache@v1
+
+    - name: build release binaries
+      run: |
+        cargo build --release --bin=chiseld --bin=chisel
+
+    - name: push image ECR chiseld
+      env:
+        ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+        ECR_REPOSITORY: chiseld
+        IMAGE_TAG: ${{ github.sha }}
+      run: |
+        docker build -f Dockerfile.chiseld -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG -t $ECR_REGISTRY/$ECR_REPOSITORY:latest .
+        docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
+        docker push $ECR_REGISTRY/$ECR_REPOSITORY:latest
+
+    - name: push image ECR toolset
+      env:
+        ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+        ECR_REPOSITORY: toolset
+        IMAGE_TAG: ${{ github.sha }}
+      run: |
+        docker build -f Dockerfile.toolset -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG -t $ECR_REGISTRY/$ECR_REPOSITORY:latest .
+        docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
+        docker push $ECR_REGISTRY/$ECR_REPOSITORY:latest
