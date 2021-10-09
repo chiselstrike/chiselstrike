@@ -1,0 +1,4 @@
+FROM ubuntu:20.04
+
+COPY target/release/chisel /usr/local/bin/chisel
+CMD exec /bin/bash -c "trap : TERM INT; sleep infinity & wait"
