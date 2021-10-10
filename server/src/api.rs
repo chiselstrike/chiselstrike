@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: © 2021 ChiselStrike <info@chiselstrike.com>
 
 use anyhow::Result;
-use futures::future::BoxFuture;
+use futures::future::LocalBoxFuture;
 use hyper::service::{make_service_fn, service_fn};
 use hyper::{Body, Method, Request, Response, Server, StatusCode};
 use std::collections::HashMap;
@@ -10,7 +10,7 @@ use std::net::SocketAddr;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 
-type RouteFn = Arc<dyn Fn() -> BoxFuture<'static, Result<Response<Body>>> + Send + Sync>;
+type RouteFn = Box<dyn Fn() -> LocalBoxFuture<'static, Result<Response<Body>>> + Send + Sync>;
 
 /// API service for Chisel server.
 #[derive(Default)]
@@ -53,6 +53,18 @@ impl ApiService {
     }
 }
 
+#[derive(Clone)]
+struct LocalExec;
+
+impl<F> hyper::rt::Executor<F> for LocalExec
+where
+    F: std::future::Future + 'static,
+{
+    fn execute(&self, fut: F) {
+        tokio::task::spawn_local(fut);
+    }
+}
+
 pub fn spawn(
     api: Arc<Mutex<ApiService>>,
     addr: SocketAddr,
@@ -70,8 +82,8 @@ pub fn spawn(
             }))
         }
     });
-    let server = Server::bind(&addr).serve(make_svc);
-    tokio::spawn(async move {
+    let server = Server::bind(&addr).executor(LocalExec).serve(make_svc);
+    tokio::task::spawn_local(async move {
         let ret = server.with_graceful_shutdown(shutdown).await;
         info!("hyper shutdown");
         ret

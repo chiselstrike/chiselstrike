@@ -30,14 +30,14 @@ pub mod chisel {
 pub struct RpcService {
     api: Arc<Mutex<ApiService>>,
     type_system: Arc<Mutex<TypeSystem>>,
-    store: Arc<Mutex<Store>>,
+    store: Box<Store>,
 }
 
 impl RpcService {
     pub fn new(
         api: Arc<Mutex<ApiService>>,
         type_system: Arc<Mutex<TypeSystem>>,
-        store: Arc<Mutex<Store>>,
+        store: Box<Store>,
     ) -> Self {
         RpcService {
             api,
@@ -55,10 +55,10 @@ impl RpcService {
             let body = hyper::Response::builder().body(result.to_string().into())?;
             Ok(body)
         };
-        self.api
-            .lock()
-            .await
-            .get(&path, Arc::new(move || future::ready(closure()).boxed()));
+        self.api.lock().await.get(
+            &path,
+            Box::new(move || future::ready(closure()).boxed_local()),
+        );
     }
 }
 
@@ -105,7 +105,7 @@ impl ChiselRpc for RpcService {
             fields,
         };
         type_system.define_type(ty.to_owned())?;
-        let store = self.store.lock().await;
+        let store = &self.store;
         store.insert(ty).await?;
         self.define_type_endpoints(&name).await;
         let response = chisel::TypeDefinitionResponse { message: name };
@@ -145,9 +145,9 @@ impl ChiselRpc for RpcService {
         let code = request.code;
         let func = {
             let path = path.clone();
-            move || future::ready(deno::run_js(&path, &code)).boxed()
+            move || future::ready(deno::run_js(&path, &code)).boxed_local()
         };
-        self.api.lock().await.get(&path, Arc::new(func));
+        self.api.lock().await.get(&path, Box::new(func));
         let response = EndPointCreationResponse { message: path };
         Ok(Response::new(response))
     }
@@ -158,7 +158,7 @@ pub fn spawn(
     addr: SocketAddr,
     shutdown: impl core::future::Future<Output = ()> + Send + 'static,
 ) -> tokio::task::JoinHandle<Result<(), tonic::transport::Error>> {
-    tokio::spawn(async move {
+    tokio::task::spawn_local(async move {
         let ret = Server::builder()
             .add_service(ChiselRpcServer::new(rpc))
             .serve_with_shutdown(addr, shutdown)

@@ -29,11 +29,16 @@ struct Opt {
 #[tokio::main]
 async fn main() -> Result<()> {
     pretty_env_logger::init();
+    let local = tokio::task::LocalSet::new();
+    local.run_until(run()).await
+}
+
+async fn run() -> Result<()> {
     let opt = Opt::from_args();
     let store = Store::connect(&opt.metadata_db_uri).await?;
     store.create_schema().await?;
     let ts = store.load_type_system().await?;
-    let store = Arc::new(Mutex::new(store));
+    let store = Box::new(store);
     let api = Arc::new(Mutex::new(ApiService::new()));
     let ts = Arc::new(Mutex::new(ts));
     let rpc = RpcService::new(api.clone(), ts.clone(), store);
@@ -44,7 +49,7 @@ async fn main() -> Result<()> {
     let sigterm = tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())?;
     let sigint = tokio::signal::unix::signal(tokio::signal::unix::SignalKind::interrupt())?;
     let (tx, mut rx) = tokio::sync::watch::channel(());
-    let sig_task = tokio::spawn(async move {
+    let sig_task = tokio::task::spawn_local(async move {
         use futures::StreamExt;
         let sigterm = tokio_stream::wrappers::SignalStream::new(sigterm);
         let sigint = tokio_stream::wrappers::SignalStream::new(sigint);
