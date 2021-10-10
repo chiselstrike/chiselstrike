@@ -84,7 +84,10 @@ impl DenoService {
 }
 
 thread_local! {
-    static DENO: RefCell<DenoService> = RefCell::new(DenoService::new())
+    // There is no 'thread lifetime in rust. So without Rc we can't
+    // convince rust that a future produced with DENO.with doesn't
+    // outlive the DenoService.
+    static DENO: Rc<RefCell<DenoService>> = Rc::new(RefCell::new(DenoService::new()))
 }
 
 fn try_into_or<'s, T: std::convert::TryFrom<v8::Local<'s, v8::Value>>>(
@@ -109,46 +112,55 @@ where
     Ok(res)
 }
 
-pub fn run_js(path: &str, code: &str) -> Result<Response<Body>> {
-    DENO.with(|d| -> Result<Response<Body>> {
-        let r = &mut d.borrow_mut().worker.js_runtime;
-        let res = r.execute_script(path, code)?;
-        let scope = &mut r.handle_scope();
-        let response = res.get(scope).to_object(scope).ok_or(Error::NotAResponse)?;
+async fn run_js_aux(
+    d: Rc<RefCell<DenoService>>,
+    path: String,
+    code: String,
+) -> Result<Response<Body>> {
+    let runtime = &mut d.borrow_mut().worker.js_runtime;
+    let result = runtime.execute_script(&path, &code)?;
+    let scope = &mut runtime.handle_scope();
+    let response = result
+        .get(scope)
+        .to_object(scope)
+        .ok_or(Error::NotAResponse)?;
 
-        let text: v8::Local<v8::Function> = get_member(response, scope, "text")?;
-        let text: v8::Local<v8::Promise> = try_into_or(text.call(scope, response.into(), &[]))?;
-        let text = text.result(scope);
+    let text: v8::Local<v8::Function> = get_member(response, scope, "text")?;
+    let text: v8::Local<v8::Promise> = try_into_or(text.call(scope, response.into(), &[]))?;
+    let text = text.result(scope);
 
-        let status: v8::Local<v8::Number> = get_member(response, scope, "status")?;
-        let status = status.value() as u16;
+    let status: v8::Local<v8::Number> = get_member(response, scope, "status")?;
+    let status = status.value() as u16;
 
-        let headers: v8::Local<v8::Object> = get_member(response, scope, "headers")?;
-        let entries: v8::Local<v8::Function> = get_member(headers, scope, "entries")?;
-        let iter: v8::Local<v8::Object> = try_into_or(entries.call(scope, headers.into(), &[]))?;
+    let headers: v8::Local<v8::Object> = get_member(response, scope, "headers")?;
+    let entries: v8::Local<v8::Function> = get_member(headers, scope, "entries")?;
+    let iter: v8::Local<v8::Object> = try_into_or(entries.call(scope, headers.into(), &[]))?;
 
-        let next: v8::Local<v8::Function> = get_member(iter, scope, "next")?;
-        let mut builder = Response::builder().status(StatusCode::from_u16(status)?);
+    let next: v8::Local<v8::Function> = get_member(iter, scope, "next")?;
+    let mut builder = Response::builder().status(StatusCode::from_u16(status)?);
 
-        loop {
-            let item: v8::Local<v8::Object> = try_into_or(next.call(scope, iter.into(), &[]))?;
+    loop {
+        let item: v8::Local<v8::Object> = try_into_or(next.call(scope, iter.into(), &[]))?;
 
-            let done: v8::Local<v8::Value> = get_member(item, scope, "done")?;
-            if done.is_true() {
-                break;
-            }
-            let value: v8::Local<v8::Array> = get_member(item, scope, "value")?;
-            let key: v8::Local<v8::String> = try_into_or(value.get_index(scope, 0))?;
-            let value: v8::Local<v8::String> = try_into_or(value.get_index(scope, 1))?;
-
-            // FIXME: Do we have to handle non utf-8 values?
-            builder = builder.header(
-                key.to_rust_string_lossy(scope),
-                value.to_rust_string_lossy(scope),
-            );
+        let done: v8::Local<v8::Value> = get_member(item, scope, "done")?;
+        if done.is_true() {
+            break;
         }
+        let value: v8::Local<v8::Array> = get_member(item, scope, "value")?;
+        let key: v8::Local<v8::String> = try_into_or(value.get_index(scope, 0))?;
+        let value: v8::Local<v8::String> = try_into_or(value.get_index(scope, 1))?;
 
-        let body = builder.body(text.to_rust_string_lossy(scope).into())?;
-        Ok(body)
-    })
+        // FIXME: Do we have to handle non utf-8 values?
+        builder = builder.header(
+            key.to_rust_string_lossy(scope),
+            value.to_rust_string_lossy(scope),
+        );
+    }
+
+    let body = builder.body(text.to_rust_string_lossy(scope).into())?;
+    Ok(body)
+}
+
+pub async fn run_js(path: String, code: String) -> Result<Response<Body>> {
+    DENO.with(|d| run_js_aux(d.clone(), path, code)).await
 }

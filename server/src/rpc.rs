@@ -145,7 +145,7 @@ impl ChiselRpc for RpcService {
         let code = request.code;
         let func = {
             let path = path.clone();
-            move || future::ready(deno::run_js(&path, &code)).boxed_local()
+            move || deno::run_js(path.clone(), code.clone()).boxed_local()
         };
         self.api.lock().await.get(&path, Box::new(func));
         let response = EndPointCreationResponse { message: path };
