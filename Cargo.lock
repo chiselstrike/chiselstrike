@@ -2636,6 +2636,28 @@ dependencies = [
 ]
 
 [[package]]
+name = "sea-query"
+version = "0.17.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "26eaf92e3e95d1bd33b684d3fb74b957b855bcc3674b273bee470bca437a2aaa"
+dependencies = [
+ "sea-query-derive",
+]
+
+[[package]]
+name = "sea-query-derive"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "34cdc022b4f606353fe5dc85b09713a04e433323b70163e81513b141c6ae6eb5"
+dependencies = [
+ "heck",
+ "proc-macro2 1.0.29",
+ "quote 1.0.9",
+ "syn 1.0.77",
+ "thiserror",
+]
+
+[[package]]
 name = "security-framework"
 version = "2.3.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2772,6 +2794,7 @@ dependencies = [
  "pretty_env_logger",
  "prost",
  "rusty_v8",
+ "sea-query",
  "serde_json",
  "sqlx",
  "structopt",
