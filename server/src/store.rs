@@ -2,7 +2,7 @@
 
 use crate::types::{ObjectType, Type, TypeSystem, TypeSystemError};
 use sea_query::{
-    ColumnDef, Iden, PostgresQueryBuilder, SchemaBuilder, SqliteQueryBuilder, Table,
+    ColumnDef, ForeignKey, Iden, PostgresQueryBuilder, SchemaBuilder, SqliteQueryBuilder, Table
 };
 use sqlx::any::{Any, AnyConnectOptions, AnyKind, AnyPool, AnyPoolOptions};
 use sqlx::{Executor, Row, Transaction};
@@ -25,6 +25,13 @@ enum Types {
     Table,
     TypeId,
     BackingTable,
+}
+
+#[derive(Iden)]
+enum TypeNames {
+    Table,
+    TypeId,
+    Name,
 }
 
 pub struct Store {
@@ -77,11 +84,17 @@ impl Store {
             )
             .col(ColumnDef::new(Types::BackingTable).text().unique_key())
             .build_any(Self::get_query_builder(&self.opts));
-        let create_type_names = "CREATE TABLE IF NOT EXISTS type_names (
-                 type_id INTEGER REFERENCES types(type_id),
-                 name TEXT UNIQUE
-             )"
-        .to_string();
+        let create_type_names = Table::create()
+            .table(TypeNames::Table)
+            .if_not_exists()
+            .col(ColumnDef::new(TypeNames::TypeId).integer())
+            .col(ColumnDef::new(TypeNames::Name).text().unique_key())
+            .foreign_key(
+                ForeignKey::create()
+                    .from(TypeNames::Table, TypeNames::TypeId)
+                    .to(Types::Table, Types::TypeId),
+            )
+            .build_any(Self::get_query_builder(&self.opts));
         let create_fields = format!(
             "CREATE TABLE IF NOT EXISTS fields (
                 field_id {},
