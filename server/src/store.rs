@@ -1,6 +1,9 @@
 // SPDX-FileCopyrightText: © 2021 ChiselStrike <info@chiselstrike.com>
 
 use crate::types::{ObjectType, Type, TypeSystem, TypeSystemError};
+use sea_query::{
+    ColumnDef, Iden, PostgresQueryBuilder, SchemaBuilder, SqliteQueryBuilder, Table,
+};
 use sqlx::any::{Any, AnyConnectOptions, AnyKind, AnyPool, AnyPoolOptions};
 use sqlx::{Executor, Row, Transaction};
 use std::str::FromStr;
@@ -15,6 +18,13 @@ pub enum StoreError {
     FetchFailed(#[source] sqlx::Error),
     #[error["type system error `{0}`"]]
     TypeError(#[from] TypeSystemError),
+}
+
+#[derive(Iden)]
+enum Types {
+    Table,
+    TypeId,
+    BackingTable,
 }
 
 pub struct Store {
@@ -56,10 +66,17 @@ impl Store {
 
     /// Create the schema of the underlying metadata store.
     pub async fn create_schema(&self) -> Result<(), StoreError> {
-        let create_types = format!(
-            "CREATE TABLE IF NOT EXISTS types (type_id {}, backing_table TEXT UNIQUE)",
-            Store::primary_key_sql(self.opts.kind())
-        );
+        let create_types = Table::create()
+            .table(Types::Table)
+            .if_not_exists()
+            .col(
+                ColumnDef::new(Types::TypeId)
+                    .integer()
+                    .auto_increment()
+                    .primary_key(),
+            )
+            .col(ColumnDef::new(Types::BackingTable).text().unique_key())
+            .build_any(Self::get_query_builder(&self.opts));
         let create_type_names = "CREATE TABLE IF NOT EXISTS type_names (
                  type_id INTEGER REFERENCES types(type_id),
                  name TEXT UNIQUE
@@ -96,6 +113,13 @@ impl Store {
                 .map_err(StoreError::ExecuteFailed)?;
         }
         Ok(())
+    }
+
+    fn get_query_builder(opts: &AnyConnectOptions) -> &dyn SchemaBuilder {
+        match opts.kind() {
+            AnyKind::Postgres => &PostgresQueryBuilder,
+            AnyKind::Sqlite => &SqliteQueryBuilder,
+        }
     }
 
     fn primary_key_sql(kind: AnyKind) -> &'static str {
