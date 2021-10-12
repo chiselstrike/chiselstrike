@@ -321,9 +321,11 @@ name = "cli"
 version = "0.0.0"
 dependencies = [
  "anyhow",
+ "futures",
  "graphql-parser",
  "lit",
  "prost",
+ "server",
  "structopt",
  "tokio",
  "tonic",

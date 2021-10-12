@@ -17,6 +17,8 @@ tonic-build = "0.5.2"
 
 [dev-dependencies]
 lit = "1.0.3"
+server = { path = "../server" }
+futures = "0.3.17"
 
 [[bin]]
 name = "chisel"
