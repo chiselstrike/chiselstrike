@@ -26,7 +26,7 @@ pub struct Opt {
     data_db_uri: String,
 }
 
-pub async fn run() -> Result<()> {
+async fn run() -> Result<()> {
     let opt = Opt::from_args();
     let store = Store::connect(&opt.metadata_db_uri, &opt.data_db_uri).await?;
     store.create_schema().await?;
@@ -65,4 +65,9 @@ pub async fn run() -> Result<()> {
     results.1?;
     results.2?;
     Ok(())
+}
+
+pub async fn run_on_new_localset() -> Result<()> {
+    let local = tokio::task::LocalSet::new();
+    local.run_until(run()).await
 }
