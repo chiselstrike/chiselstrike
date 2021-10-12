@@ -2,7 +2,8 @@
 
 use crate::types::{ObjectType, Type, TypeSystem, TypeSystemError};
 use sea_query::{
-    ColumnDef, ForeignKey, Iden, PostgresQueryBuilder, SchemaBuilder, SqliteQueryBuilder, Table
+    Alias, ColumnDef, ForeignKey, Iden, PostgresQueryBuilder, SchemaBuilder, SqliteQueryBuilder,
+    Table,
 };
 use sqlx::any::{Any, AnyConnectOptions, AnyKind, AnyPool, AnyPoolOptions};
 use sqlx::{Executor, Row, Transaction};
@@ -284,11 +285,17 @@ impl Store {
         ty: &ObjectType,
         transaction: &mut Transaction<'_, Any>,
     ) -> Result<(), StoreError> {
-        let create_table = format!(
-            "CREATE TABLE IF NOT EXISTS {} (id {}, fields TEXT)",
-            ty.backing_table.clone(),
-            Store::primary_key_sql(self.data_opts.kind())
-        );
+        let create_table = Table::create()
+            .table(Alias::new(&ty.backing_table))
+            .if_not_exists()
+            .col(
+                ColumnDef::new(Fields::FieldId)
+                    .integer()
+                    .auto_increment()
+                    .primary_key(),
+            )
+            .col(ColumnDef::new(Alias::new("fields")).text())
+            .build_any(Self::get_query_builder(&self.data_opts));
         let create_table = sqlx::query(&create_table);
         transaction
             .execute(create_table)
