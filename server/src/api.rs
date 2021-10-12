@@ -1,14 +1,54 @@
 // SPDX-FileCopyrightText: © 2021 ChiselStrike <info@chiselstrike.com>
 
-use anyhow::Result;
+use anyhow::{Error, Result};
 use futures::future::LocalBoxFuture;
+use hyper::body::{Bytes, HttpBody};
+use hyper::header::HeaderValue;
 use hyper::service::{make_service_fn, service_fn};
-use hyper::{Body, Method, Request, Response, Server, StatusCode};
+use hyper::{HeaderMap, Method, Request, Response, Server, StatusCode};
 use std::collections::HashMap;
 use std::convert::Infallible;
 use std::net::SocketAddr;
+use std::pin::Pin;
 use std::sync::Arc;
+use std::task::{Context, Poll};
 use tokio::sync::Mutex;
+
+pub enum Body {
+    Const(Option<Bytes>),
+}
+
+impl From<String> for Body {
+    fn from(a: String) -> Self {
+        Body::Const(Some(a.into()))
+    }
+}
+
+impl Default for Body {
+    fn default() -> Self {
+        "".to_string().into()
+    }
+}
+
+impl HttpBody for Body {
+    type Data = Bytes;
+    type Error = Error;
+
+    fn poll_data(
+        self: Pin<&mut Self>,
+        _: &mut Context<'_>,
+    ) -> Poll<Option<Result<Self::Data, Self::Error>>> {
+        let Body::Const(ref mut inner) = self.get_mut();
+        Poll::Ready(inner.take().map(Ok))
+    }
+
+    fn poll_trailers(
+        self: Pin<&mut Self>,
+        _: &mut Context<'_>,
+    ) -> Poll<Result<Option<HeaderMap<HeaderValue>>, Self::Error>> {
+        Poll::Ready(Ok(None))
+    }
+}
 
 type RouteFn = Box<dyn Fn() -> LocalBoxFuture<'static, Result<Response<Body>>> + Send + Sync>;
 
@@ -29,7 +69,10 @@ impl ApiService {
         self.gets.insert(path.to_string(), route_fn);
     }
 
-    pub async fn route(&mut self, req: Request<Body>) -> hyper::http::Result<Response<Body>> {
+    pub async fn route(
+        &mut self,
+        req: Request<hyper::Body>,
+    ) -> hyper::http::Result<Response<Body>> {
         match *req.method() {
             Method::GET => {
                 if let Some(route_fn) = self.gets.get(req.uri().path()) {
