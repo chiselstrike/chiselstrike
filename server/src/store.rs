@@ -1,11 +1,14 @@
 // SPDX-FileCopyrightText: © 2021 ChiselStrike <info@chiselstrike.com>
 
+use crate::query_stream::QueryStream;
 use crate::types::{Field, ObjectType, TypeSystem, TypeSystemError};
+use futures::stream;
 use sea_query::{
     Alias, ColumnDef, ForeignKey, ForeignKeyAction, Iden, PostgresQueryBuilder, SchemaBuilder,
     SqliteQueryBuilder, Table,
 };
-use sqlx::any::{Any, AnyConnectOptions, AnyKind, AnyPool, AnyPoolOptions};
+use sqlx::any::{Any, AnyConnectOptions, AnyKind, AnyPool, AnyPoolOptions, AnyRow};
+use sqlx::error::Error;
 use sqlx::{Executor, Row, Transaction};
 use std::str::FromStr;
 
@@ -279,6 +282,11 @@ impl Store {
                 .map_err(StoreError::ExecuteFailed)?;
         }
         Ok(())
+    }
+
+    pub fn find_all(&self, ty: &ObjectType) -> impl stream::Stream<Item = Result<AnyRow, Error>> {
+        let query_str = format!("SELECT * FROM {}", ty.backing_table);
+        QueryStream::new(query_str, &self.data_pool)
     }
 
     async fn create_table(
