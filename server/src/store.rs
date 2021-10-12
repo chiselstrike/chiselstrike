@@ -34,6 +34,14 @@ enum TypeNames {
     Name,
 }
 
+#[derive(Iden)]
+enum Fields {
+    Table,
+    FieldId,
+    FieldType,
+    TypeId,
+}
+
 pub struct Store {
     opts: AnyConnectOptions,
     pool: AnyPool,
@@ -95,14 +103,23 @@ impl Store {
                     .to(Types::Table, Types::TypeId),
             )
             .build_any(Self::get_query_builder(&self.opts));
-        let create_fields = format!(
-            "CREATE TABLE IF NOT EXISTS fields (
-                field_id {},
-                field_type TEXT,
-                type_id INTEGER REFERENCES types(type_id)
-            )",
-            Store::primary_key_sql(self.opts.kind())
-        );
+        let create_fields = Table::create()
+            .table(Fields::Table)
+            .if_not_exists()
+            .col(
+                ColumnDef::new(Fields::FieldId)
+                    .integer()
+                    .auto_increment()
+                    .primary_key(),
+            )
+            .col(ColumnDef::new(Fields::FieldType).text())
+            .col(ColumnDef::new(TypeNames::TypeId).integer())
+            .foreign_key(
+                ForeignKey::create()
+                    .from(Fields::Table, Fields::TypeId)
+                    .to(Types::Table, Types::TypeId),
+            )
+            .build_any(Self::get_query_builder(&self.opts));
         let create_type_fields = "CREATE TABLE IF NOT EXISTS field_names (
                 field_name TEXT UNIQUE,
                 field_id INTEGER REFERENCES fields(field_id)
