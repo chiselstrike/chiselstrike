@@ -8,4 +8,3 @@ async fn main() -> Result<()> {
     pretty_env_logger::init();
     server::run_on_new_localset().await
 }
-
