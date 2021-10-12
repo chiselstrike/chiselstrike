@@ -166,13 +166,6 @@ impl Store {
         }
     }
 
-    fn primary_key_sql(kind: AnyKind) -> &'static str {
-        match kind {
-            AnyKind::Postgres => "SERIAL PRIMARY KEY",
-            AnyKind::Sqlite => "INTEGER PRIMARY KEY AUTOINCREMENT",
-        }
-    }
-
     /// Load the type system from metadata store.
     pub async fn load_type_system<'r>(&self) -> Result<TypeSystem, StoreError> {
         let query = sqlx::query("SELECT types.type_id AS type_id, types.backing_table AS backing_table, type_names.name AS type_name FROM types INNER JOIN type_names WHERE types.type_id = type_names.type_id");
