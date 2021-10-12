@@ -9,4 +9,3 @@ async fn main() -> Result<()> {
     let local = tokio::task::LocalSet::new();
     local.run_until(server::run()).await
 }
-
