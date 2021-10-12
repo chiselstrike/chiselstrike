@@ -1,9 +1,8 @@
 // SPDX-FileCopyrightText: © 2021 ChiselStrike <info@chiselstrike.com>
 
 use crate::types::{ObjectType, Type, TypeSystem, TypeSystemError};
-use sqlx::any::{AnyConnectOptions, AnyKind, AnyPool, AnyPoolOptions};
-use sqlx::Executor;
-use sqlx::Row;
+use sqlx::any::{Any, AnyConnectOptions, AnyKind, AnyPool, AnyPoolOptions};
+use sqlx::{Executor, Row, Transaction};
 use std::str::FromStr;
 
 #[derive(thiserror::Error, Debug)]
@@ -21,26 +20,44 @@ pub enum StoreError {
 pub struct Store {
     opts: AnyConnectOptions,
     pool: AnyPool,
+    data_opts: AnyConnectOptions,
+    data_pool: AnyPool,
 }
 
 impl Store {
-    pub fn new(opts: AnyConnectOptions, pool: AnyPool) -> Self {
-        Self { opts, pool }
+    pub fn new(
+        opts: AnyConnectOptions,
+        pool: AnyPool,
+        data_opts: AnyConnectOptions,
+        data_pool: AnyPool,
+    ) -> Self {
+        Self {
+            opts,
+            pool,
+            data_opts,
+            data_pool,
+        }
     }
 
-    pub async fn connect(uri: &str) -> Result<Self, StoreError> {
-        let opts = AnyConnectOptions::from_str(uri).map_err(StoreError::ConnectionFailed)?;
+    pub async fn connect(meta_uri: &str, data_uri: &str) -> Result<Self, StoreError> {
+        let opts = AnyConnectOptions::from_str(meta_uri).map_err(StoreError::ConnectionFailed)?;
         let pool = AnyPoolOptions::new()
-            .connect(uri)
+            .connect(meta_uri)
             .await
             .map_err(StoreError::ConnectionFailed)?;
-        Ok(Store::new(opts, pool))
+        let data_opts =
+            AnyConnectOptions::from_str(data_uri).map_err(StoreError::ConnectionFailed)?;
+        let data_pool = AnyPoolOptions::new()
+            .connect(data_uri)
+            .await
+            .map_err(StoreError::ConnectionFailed)?;
+        Ok(Store::new(opts, pool, data_opts, data_pool))
     }
 
     /// Create the schema of the underlying metadata store.
     pub async fn create_schema(&self) -> Result<(), StoreError> {
         let create_types = format!(
-            "CREATE TABLE IF NOT EXISTS types (type_id {})",
+            "CREATE TABLE IF NOT EXISTS types (type_id {}, backing_table TEXT UNIQUE)",
             Store::primary_key_sql(self.opts.kind())
         );
         let create_type_names = "CREATE TABLE IF NOT EXISTS type_names (
@@ -90,7 +107,7 @@ impl Store {
 
     /// Load the type system from metadata store.
     pub async fn load_type_system<'r>(&self) -> Result<TypeSystem, StoreError> {
-        let query = sqlx::query("SELECT types.type_id AS type_id, type_names.name AS type_name FROM types INNER JOIN type_names WHERE types.type_id = type_names.type_id");
+        let query = sqlx::query("SELECT types.type_id AS type_id, types.backing_table AS backing_table, type_names.name AS type_name FROM types INNER JOIN type_names WHERE types.type_id = type_names.type_id");
         let rows = query
             .fetch_all(&self.pool)
             .await
@@ -98,11 +115,13 @@ impl Store {
         let mut ts = TypeSystem::new();
         for row in rows {
             let type_id: i32 = row.get("type_id");
+            let backing_table: &str = row.get("backing_table");
             let type_name: &str = row.get("type_name");
             let fields = self.load_type_fields(&ts, type_id).await?;
             ts.define_type(ObjectType {
                 name: type_name.to_string(),
                 fields,
+                backing_table: backing_table.to_string(),
             })?;
         }
         Ok(ts)
@@ -130,25 +149,50 @@ impl Store {
     }
 
     pub async fn insert(&self, ty: ObjectType) -> Result<(), StoreError> {
-        let add_type = sqlx::query("INSERT INTO types DEFAULT VALUES RETURNING *");
-        let add_type_name = sqlx::query("INSERT INTO type_names (type_id, name) VALUES ($1, $2)");
-
+        // FIXME: Multi-database transaction is needed for consistency.
         let mut transaction = self
             .pool
             .begin()
             .await
             .map_err(StoreError::ConnectionFailed)?;
+        self.insert_type(&ty, &mut transaction).await?;
+        transaction
+            .commit()
+            .await
+            .map_err(StoreError::ExecuteFailed)?;
+        let mut transaction = self
+            .data_pool
+            .begin()
+            .await
+            .map_err(StoreError::ConnectionFailed)?;
+        self.create_table(&ty, &mut transaction).await?;
+        transaction
+            .commit()
+            .await
+            .map_err(StoreError::ExecuteFailed)?;
+        Ok(())
+    }
+
+    async fn insert_type<'a>(
+        &self,
+        ty: &ObjectType,
+        transaction: &mut Transaction<'a, Any>,
+    ) -> Result<(), StoreError> {
+        let add_type = sqlx::query("INSERT INTO types (backing_table) VALUES ($1) RETURNING *");
+        let add_type_name = sqlx::query("INSERT INTO type_names (type_id, name) VALUES ($1, $2)");
+
+        let add_type = add_type.bind(ty.backing_table.clone());
         let row = transaction
             .fetch_one(add_type)
             .await
             .map_err(StoreError::ExecuteFailed)?;
         let id: i32 = row.get("type_id");
-        let add_type_name = add_type_name.bind(id).bind(ty.name);
+        let add_type_name = add_type_name.bind(id).bind(ty.name.clone());
         transaction
             .execute(add_type_name)
             .await
             .map_err(StoreError::ExecuteFailed)?;
-        for (field_name, field_type) in ty.fields {
+        for (field_name, field_type) in &ty.fields {
             let add_field =
                 sqlx::query("INSERT INTO fields (field_type, type_id) VALUES ($1, $2) RETURNING *");
             let add_field_name =
@@ -165,8 +209,22 @@ impl Store {
                 .await
                 .map_err(StoreError::ExecuteFailed)?;
         }
+        Ok(())
+    }
+
+    async fn create_table<'a>(
+        &self,
+        ty: &ObjectType,
+        transaction: &mut Transaction<'a, Any>,
+    ) -> Result<(), StoreError> {
+        let create_table = format!(
+            "CREATE TABLE IF NOT EXISTS {} (id {}, fields TEXT)",
+            ty.backing_table.clone(),
+            Store::primary_key_sql(self.data_opts.kind())
+        );
+        let create_table = sqlx::query(&create_table);
         transaction
-            .commit()
+            .execute(create_table)
             .await
             .map_err(StoreError::ExecuteFailed)?;
         Ok(())

@@ -21,11 +21,14 @@ pub struct Opt {
     /// Metadata database URI.
     #[structopt(short, long, default_value = "sqlite://chiseld.db?mode=rwc")]
     metadata_db_uri: String,
+    /// Data database URI.
+    #[structopt(short, long, default_value = "sqlite://chiseld-data.db?mode=rwc")]
+    data_db_uri: String,
 }
 
 pub async fn run() -> Result<()> {
     let opt = Opt::from_args();
-    let store = Store::connect(&opt.metadata_db_uri).await?;
+    let store = Store::connect(&opt.metadata_db_uri, &opt.data_db_uri).await?;
     store.create_schema().await?;
     let ts = store.load_type_system().await?;
     let store = Box::new(store);
