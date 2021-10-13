@@ -22,8 +22,11 @@ mod tests {
     #[test]
     fn lit() {
         thread::spawn(|| {
+            use chisel_server::server::Opt;
+            use structopt::StructOpt;
             let rt = tokio::runtime::Runtime::new().unwrap();
-            let server = server::run_on_new_localset();
+            let opt = Opt::from_iter(vec![""].iter());
+            let server = server::run_on_new_localset(opt);
             rt.block_on(server).unwrap();
         });
         thread::sleep(time::Duration::from_secs(1));
