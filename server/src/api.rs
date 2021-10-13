@@ -2,12 +2,13 @@
 
 use anyhow::{Error, Result};
 use futures::future::LocalBoxFuture;
-use hyper::body::{Bytes, HttpBody};
+use hyper::body::HttpBody;
 use hyper::header::HeaderValue;
 use hyper::service::{make_service_fn, service_fn};
 use hyper::{HeaderMap, Method, Request, Response, Server, StatusCode};
 use std::collections::HashMap;
 use std::convert::Infallible;
+use std::io::Cursor;
 use std::net::SocketAddr;
 use std::pin::Pin;
 use std::sync::Arc;
@@ -15,12 +16,12 @@ use std::task::{Context, Poll};
 use tokio::sync::Mutex;
 
 pub enum Body {
-    Const(Option<Bytes>),
+    Const(Option<Box<[u8]>>),
 }
 
 impl From<String> for Body {
     fn from(a: String) -> Self {
-        Body::Const(Some(a.into()))
+        Body::Const(Some(a.into_boxed_str().into_boxed_bytes()))
     }
 }
 
@@ -31,7 +32,7 @@ impl Default for Body {
 }
 
 impl HttpBody for Body {
-    type Data = Bytes;
+    type Data = Cursor<Box<[u8]>>;
     type Error = Error;
 
     fn poll_data(
@@ -39,7 +40,7 @@ impl HttpBody for Body {
         _: &mut Context<'_>,
     ) -> Poll<Option<Result<Self::Data, Self::Error>>> {
         let Body::Const(ref mut inner) = self.get_mut();
-        Poll::Ready(inner.take().map(Ok))
+        Poll::Ready(inner.take().map(|x| Ok(Cursor::new(x))))
     }
 
     fn poll_trailers(
