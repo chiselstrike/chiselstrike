@@ -1,12 +1,13 @@
 // SPDX-FileCopyrightText: © 2021 ChiselStrike <info@chiselstrike.com>
 
+use crate::api::Body;
 use anyhow::Result;
 use deno_broadcast_channel::InMemoryBroadcastChannel;
 use deno_core::NoopModuleLoader;
 use deno_runtime::permissions::Permissions;
 use deno_runtime::worker::{MainWorker, WorkerOptions};
 use deno_web::BlobStore;
-use hyper::{Body, Response, StatusCode};
+use hyper::{Response, StatusCode};
 use rusty_v8 as v8;
 use std::cell::RefCell;
 use std::convert::TryInto;
