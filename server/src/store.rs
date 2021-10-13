@@ -173,10 +173,10 @@ impl Store {
         Ok(())
     }
 
-    async fn insert_type<'a>(
+    async fn insert_type(
         &self,
         ty: &ObjectType,
-        transaction: &mut Transaction<'a, Any>,
+        transaction: &mut Transaction<'_, Any>,
     ) -> Result<(), StoreError> {
         let add_type = sqlx::query("INSERT INTO types (backing_table) VALUES ($1) RETURNING *");
         let add_type_name = sqlx::query("INSERT INTO type_names (type_id, name) VALUES ($1, $2)");
@@ -212,10 +212,10 @@ impl Store {
         Ok(())
     }
 
-    async fn create_table<'a>(
+    async fn create_table(
         &self,
         ty: &ObjectType,
-        transaction: &mut Transaction<'a, Any>,
+        transaction: &mut Transaction<'_, Any>,
     ) -> Result<(), StoreError> {
         let create_table = format!(
             "CREATE TABLE IF NOT EXISTS {} (id {}, fields TEXT)",

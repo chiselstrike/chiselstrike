@@ -55,7 +55,7 @@ impl RpcService {
             Ok(body)
         };
         self.api.lock().await.get(
-            &path,
+            path,
             Box::new(move || future::ready(closure()).boxed_local()),
         );
     }
