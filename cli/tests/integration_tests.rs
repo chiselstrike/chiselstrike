@@ -25,7 +25,7 @@ mod tests {
             use chisel_server::server::Opt;
             use structopt::StructOpt;
             let rt = tokio::runtime::Runtime::new().unwrap();
-            let opt = Opt::from_iter(vec![""].iter());
+            let opt = Opt::from_iter(vec!["", "-d", "sqlite://:memory:", "-m", "sqlite://:memory:"].iter());
             let server = server::run_on_new_localset(opt);
             rt.block_on(server).unwrap();
         });
