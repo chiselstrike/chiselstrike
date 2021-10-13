@@ -111,7 +111,7 @@ where
 pub fn spawn(
     api: Arc<Mutex<ApiService>>,
     addr: SocketAddr,
-    shutdown: impl core::future::Future<Output = ()> + Send + 'static,
+    shutdown: impl core::future::Future<Output = ()> + 'static,
 ) -> tokio::task::JoinHandle<Result<(), hyper::Error>> {
     let make_svc = make_service_fn(move |_conn| {
         let api = api.clone();
