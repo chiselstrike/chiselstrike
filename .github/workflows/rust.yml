@@ -62,7 +62,7 @@ jobs:
       run: cargo fmt --all
 
     - name: Clippy check
-      run: cargo clippy --all-targets --all-features
+      run: cargo clippy --all-targets --all-features -- -D warnings
 
     - name: Build debug mode binaries
       uses: actions-rs/cargo@v1
