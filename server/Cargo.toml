@@ -12,7 +12,7 @@ deno_core = "0.101.0"
 deno_runtime = "0.27.0"
 deno_web = "0.50.0"
 futures = "0.3.17"
-hyper = "0.14.13"
+hyper = { git = "https://github.com/hyperium/hyper", rev = "1d553e52c6953ea3b039f5c3f89d35cb56e2436a", features = ["server", "tcp", "http1"]}
 log = "0.4.14"
 pretty_env_logger = "0.4.0"
 prost = "0.8.0"

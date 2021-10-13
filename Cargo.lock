@@ -633,7 +633,7 @@ dependencies = [
  "bytes",
  "deno_core",
  "deno_websocket",
- "hyper",
+ "hyper 0.14.13 (registry+https://github.com/rust-lang/crates.io-index)",
  "ring",
  "serde",
  "tokio",
@@ -684,7 +684,7 @@ dependencies = [
  "fs3",
  "fwdansi",
  "http",
- "hyper",
+ "hyper 0.14.13 (registry+https://github.com/rust-lang/crates.io-index)",
  "lazy_static",
  "libc",
  "log",
@@ -785,7 +785,7 @@ dependencies = [
  "deno_core",
  "deno_tls",
  "http",
- "hyper",
+ "hyper 0.14.13 (registry+https://github.com/rust-lang/crates.io-index)",
  "serde",
  "tokio",
  "tokio-rustls",
@@ -1425,13 +1425,35 @@ dependencies = [
 ]
 
 [[package]]
+name = "hyper"
+version = "0.14.13"
+source = "git+https://github.com/hyperium/hyper?rev=1d553e52c6953ea3b039f5c3f89d35cb56e2436a#1d553e52c6953ea3b039f5c3f89d35cb56e2436a"
+dependencies = [
+ "bytes",
+ "futures-channel",
+ "futures-core",
+ "futures-util",
+ "http",
+ "http-body",
+ "httparse",
+ "httpdate",
+ "itoa",
+ "pin-project-lite",
+ "socket2 0.4.2",
+ "tokio",
+ "tower-service",
+ "tracing",
+ "want",
+]
+
+[[package]]
 name = "hyper-rustls"
 version = "0.22.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5f9f7a97316d44c0af9b0301e65010573a853a9fc97046d7331d7f6bc0fd5a64"
 dependencies = [
  "futures-util",
- "hyper",
+ "hyper 0.14.13 (registry+https://github.com/rust-lang/crates.io-index)",
  "log",
  "rustls",
  "tokio",
@@ -1445,7 +1467,7 @@ version = "0.4.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "bbb958482e8c7be4bc3cf272a766a2b0bf1a6755e7a6ae777f017a31d11b13b1"
 dependencies = [
- "hyper",
+ "hyper 0.14.13 (registry+https://github.com/rust-lang/crates.io-index)",
  "pin-project-lite",
  "tokio",
  "tokio-io-timeout",
@@ -2416,7 +2438,7 @@ dependencies = [
  "futures-util",
  "http",
  "http-body",
- "hyper",
+ "hyper 0.14.13 (registry+https://github.com/rust-lang/crates.io-index)",
  "hyper-rustls",
  "ipnet",
  "js-sys",
@@ -2745,7 +2767,7 @@ dependencies = [
  "deno_runtime",
  "deno_web",
  "futures",
- "hyper",
+ "hyper 0.14.13 (git+https://github.com/hyperium/hyper?rev=1d553e52c6953ea3b039f5c3f89d35cb56e2436a)",
  "log",
  "pretty_env_logger",
  "prost",
@@ -3260,7 +3282,7 @@ dependencies = [
  "h2",
  "http",
  "http-body",
- "hyper",
+ "hyper 0.14.13 (registry+https://github.com/rust-lang/crates.io-index)",
  "hyper-timeout",
  "percent-encoding",
  "pin-project",
