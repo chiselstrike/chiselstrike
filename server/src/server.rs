@@ -5,6 +5,7 @@ use crate::rpc::RpcService;
 use crate::store::Store;
 use anyhow::Result;
 use std::net::SocketAddr;
+use std::panic;
 use std::sync::Arc;
 use structopt::StructOpt;
 use tokio::sync::Mutex;
@@ -40,6 +41,11 @@ async fn run(opt: Opt) -> Result<()> {
 
     let sigterm = tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())?;
     let sigint = tokio::signal::unix::signal(tokio::signal::unix::SignalKind::interrupt())?;
+    let default_hook = panic::take_hook();
+    panic::set_hook(Box::new(move |info| {
+        default_hook(info);
+        nix::sys::signal::raise(nix::sys::signal::Signal::SIGINT).unwrap();
+    }));
     let (tx, mut rx) = tokio::sync::watch::channel(());
     let sig_task = tokio::task::spawn_local(async move {
         use futures::StreamExt;
