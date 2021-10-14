@@ -7,7 +7,7 @@ use futures::stream::Stream;
 use hyper::body::HttpBody;
 use hyper::header::HeaderValue;
 use hyper::service::{make_service_fn, service_fn};
-use hyper::{HeaderMap, Method, Request, Response, Server, StatusCode};
+use hyper::{HeaderMap, Request, Response, Server, StatusCode};
 use std::collections::HashMap;
 use std::convert::Infallible;
 use std::io::Cursor;
@@ -84,20 +84,15 @@ impl ApiService {
         &mut self,
         req: Request<hyper::Body>,
     ) -> hyper::http::Result<Response<Body>> {
-        match *req.method() {
-            Method::GET => {
-                if let Some(route_fn) = self.gets.get(req.uri().path()) {
-                    return match route_fn().await {
-                        Ok(val) => Ok(val),
-                        Err(err) => Response::builder()
-                            .status(StatusCode::INTERNAL_SERVER_ERROR)
-                            .body(format!("{:?}\n", err).into()),
-                    };
-                }
-                ApiService::not_found()
-            }
-            _ => ApiService::not_found(),
+        if let Some(route_fn) = self.gets.get(req.uri().path()) {
+            return match route_fn().await {
+                Ok(val) => Ok(val),
+                Err(err) => Response::builder()
+                    .status(StatusCode::INTERNAL_SERVER_ERROR)
+                    .body(format!("{:?}\n", err).into()),
+            };
         }
+        ApiService::not_found()
     }
 
     fn not_found() -> hyper::http::Result<Response<Body>> {
