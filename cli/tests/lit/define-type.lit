@@ -1,0 +1,12 @@
+# SPDX-FileCopyrightText: © 2021 ChiselStrike <info@chiselstrike.com>
+
+# RUN: CHISEL="@chisel" CURL="@curl" sh -ex @file
+
+$CHISEL type import examples/person.graphql
+
+$CURL -o - localhost:3000/person
+
+# CHECK: Type defined: Person
+# CHECK: Type defined: Position
+# CHECK: HTTP/1.1 200 OK
+# CHECK: []
