@@ -37,6 +37,9 @@ mod tests {
             config.add_search_path("tests/lit");
             config.add_extension("lit");
             config.constants.insert("chisel".to_owned(), chisel());
+            config
+                .constants
+                .insert("curl".to_owned(), "curl -S -s -i".to_owned());
         })
         .expect("Lit tests failed");
     }
