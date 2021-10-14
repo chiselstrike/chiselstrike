@@ -6,6 +6,7 @@ extern crate lit;
 mod tests {
     use chisel_server::server;
     use std::path::PathBuf;
+    use std::process::Command;
     use std::{env, thread, time};
 
     fn bin_dir() -> PathBuf {
@@ -38,5 +39,14 @@ mod tests {
             config.constants.insert("chisel".to_owned(), chisel());
         })
         .expect("Lit tests failed");
+    }
+
+    #[test]
+    fn check_formating() {
+        let status = Command::new("cargo")
+            .args(["fmt", "--all", "--", "--check"])
+            .status()
+            .unwrap();
+        assert!(status.success());
     }
 }
