@@ -2,25 +2,31 @@
 
 use anyhow::{Error, Result};
 use futures::future::LocalBoxFuture;
-use hyper::body::{Bytes, HttpBody};
+use futures::ready;
+use futures::stream::Stream;
+use hyper::body::HttpBody;
 use hyper::header::HeaderValue;
 use hyper::service::{make_service_fn, service_fn};
 use hyper::{HeaderMap, Method, Request, Response, Server, StatusCode};
 use std::collections::HashMap;
 use std::convert::Infallible;
+use std::io::Cursor;
 use std::net::SocketAddr;
 use std::pin::Pin;
 use std::sync::Arc;
 use std::task::{Context, Poll};
 use tokio::sync::Mutex;
 
+type JsStream = Pin<Box<dyn Stream<Item = Result<Box<[u8]>>>>>;
+
 pub enum Body {
-    Const(Option<Bytes>),
+    Const(Option<Box<[u8]>>),
+    Stream(JsStream),
 }
 
 impl From<String> for Body {
     fn from(a: String) -> Self {
-        Body::Const(Some(a.into()))
+        Body::Const(Some(a.into_boxed_str().into_boxed_bytes()))
     }
 }
 
@@ -31,15 +37,20 @@ impl Default for Body {
 }
 
 impl HttpBody for Body {
-    type Data = Bytes;
+    type Data = Cursor<Box<[u8]>>;
     type Error = Error;
 
     fn poll_data(
         self: Pin<&mut Self>,
-        _: &mut Context<'_>,
+        cx: &mut Context<'_>,
     ) -> Poll<Option<Result<Self::Data, Self::Error>>> {
-        let Body::Const(ref mut inner) = self.get_mut();
-        Poll::Ready(inner.take().map(Ok))
+        let r = match self.get_mut() {
+            Body::Const(ref mut inner) => inner.take().map(|x| Ok(Cursor::new(x))),
+            Body::Stream(ref mut stream) => {
+                ready!(stream.as_mut().poll_next(cx)).map(|x| x.map(Cursor::new))
+            }
+        };
+        Poll::Ready(r)
     }
 
     fn poll_trailers(
@@ -111,7 +122,7 @@ where
 pub fn spawn(
     api: Arc<Mutex<ApiService>>,
     addr: SocketAddr,
-    shutdown: impl core::future::Future<Output = ()> + Send + 'static,
+    shutdown: impl core::future::Future<Output = ()> + 'static,
 ) -> tokio::task::JoinHandle<Result<(), hyper::Error>> {
     let make_svc = make_service_fn(move |_conn| {
         let api = api.clone();

@@ -1,10 +1,15 @@
 // SPDX-FileCopyrightText: © 2021 ChiselStrike <info@chiselstrike.com>
 
-// For now we just return whatever Response the endpoint evaluates to.
-new Response("Hello from chiselstrike\n",{
-    status: 203,
-    headers: [
-        ["foo", "bar"],
-        ["baz", "zed"]
-    ]
-});
+// The endpoint should evaluate to a promise that resolves to a
+// Response.
+async function foo() {
+    const response = await fetch("https://www.wikipedia.org/portal/wikipedia.org/assets/img/Wikipedia-logo-v2@2x.png");
+    return new Response(response.body, {
+        status: 203,
+        headers: [
+            ["foo", "bar"],
+            ["baz", "zed"]
+        ]
+    });
+}
+foo()
