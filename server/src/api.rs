@@ -61,7 +61,9 @@ impl HttpBody for Body {
     }
 }
 
-type RouteFn = Box<dyn Fn() -> LocalBoxFuture<'static, Result<Response<Body>>> + Send + Sync>;
+type RouteFn = Box<
+    dyn Fn(Request<hyper::Body>) -> LocalBoxFuture<'static, Result<Response<Body>>> + Send + Sync,
+>;
 
 /// API service for Chisel server.
 #[derive(Default)]
@@ -85,7 +87,7 @@ impl ApiService {
         req: Request<hyper::Body>,
     ) -> hyper::http::Result<Response<Body>> {
         if let Some(route_fn) = self.gets.get(req.uri().path()) {
-            return match route_fn().await {
+            return match route_fn(req).await {
                 Ok(val) => Ok(val),
                 Err(err) => Response::builder()
                     .status(StatusCode::INTERNAL_SERVER_ERROR)
