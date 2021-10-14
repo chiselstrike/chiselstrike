@@ -61,7 +61,13 @@ pub struct ObjectType {
     /// Name of this type.
     pub name: String,
     /// Fields of this type.
-    pub fields: Vec<(String, Type)>,
+    pub fields: Vec<Field>,
     /// Name of the backing table for this type.
     pub backing_table: String,
+}
+
+#[derive(Clone, Debug)]
+pub struct Field {
+    pub name: String,
+    pub type_: Type,
 }
