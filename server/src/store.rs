@@ -1,6 +1,10 @@
 // SPDX-FileCopyrightText: © 2021 ChiselStrike <info@chiselstrike.com>
 
 use crate::types::{ObjectType, Type, TypeSystem, TypeSystemError};
+use sea_query::{
+    Alias, ColumnDef, ForeignKey, Iden, PostgresQueryBuilder, SchemaBuilder, SqliteQueryBuilder,
+    Table,
+};
 use sqlx::any::{Any, AnyConnectOptions, AnyKind, AnyPool, AnyPoolOptions};
 use sqlx::{Executor, Row, Transaction};
 use std::str::FromStr;
@@ -15,6 +19,35 @@ pub enum StoreError {
     FetchFailed(#[source] sqlx::Error),
     #[error["type system error `{0}`"]]
     TypeError(#[from] TypeSystemError),
+}
+
+#[derive(Iden)]
+enum Types {
+    Table,
+    TypeId,
+    BackingTable,
+}
+
+#[derive(Iden)]
+enum TypeNames {
+    Table,
+    TypeId,
+    Name,
+}
+
+#[derive(Iden)]
+enum Fields {
+    Table,
+    FieldId,
+    FieldType,
+    TypeId,
+}
+
+#[derive(Iden)]
+enum FieldNames {
+    Table,
+    FieldName,
+    FieldId,
 }
 
 pub struct Store {
@@ -56,28 +89,57 @@ impl Store {
 
     /// Create the schema of the underlying metadata store.
     pub async fn create_schema(&self) -> Result<(), StoreError> {
-        let create_types = format!(
-            "CREATE TABLE IF NOT EXISTS types (type_id {}, backing_table TEXT UNIQUE)",
-            Store::primary_key_sql(self.opts.kind())
-        );
-        let create_type_names = "CREATE TABLE IF NOT EXISTS type_names (
-                 type_id INTEGER REFERENCES types(type_id),
-                 name TEXT UNIQUE
-             )"
-        .to_string();
-        let create_fields = format!(
-            "CREATE TABLE IF NOT EXISTS fields (
-                field_id {},
-                field_type TEXT,
-                type_id INTEGER REFERENCES types(type_id)
-            )",
-            Store::primary_key_sql(self.opts.kind())
-        );
-        let create_type_fields = "CREATE TABLE IF NOT EXISTS field_names (
-                field_name TEXT UNIQUE,
-                field_id INTEGER REFERENCES fields(field_id)
-            )"
-        .to_string();
+        let query_builder = Self::get_query_builder(&self.opts);
+        let create_types = Table::create()
+            .table(Types::Table)
+            .if_not_exists()
+            .col(
+                ColumnDef::new(Types::TypeId)
+                    .integer()
+                    .auto_increment()
+                    .primary_key(),
+            )
+            .col(ColumnDef::new(Types::BackingTable).text().unique_key())
+            .build_any(query_builder);
+        let create_type_names = Table::create()
+            .table(TypeNames::Table)
+            .if_not_exists()
+            .col(ColumnDef::new(TypeNames::TypeId).integer())
+            .col(ColumnDef::new(TypeNames::Name).text().unique_key())
+            .foreign_key(
+                ForeignKey::create()
+                    .from(TypeNames::Table, TypeNames::TypeId)
+                    .to(Types::Table, Types::TypeId),
+            )
+            .build_any(query_builder);
+        let create_fields = Table::create()
+            .table(Fields::Table)
+            .if_not_exists()
+            .col(
+                ColumnDef::new(Fields::FieldId)
+                    .integer()
+                    .auto_increment()
+                    .primary_key(),
+            )
+            .col(ColumnDef::new(Fields::FieldType).text())
+            .col(ColumnDef::new(TypeNames::TypeId).integer())
+            .foreign_key(
+                ForeignKey::create()
+                    .from(Fields::Table, Fields::TypeId)
+                    .to(Types::Table, Types::TypeId),
+            )
+            .build_any(query_builder);
+        let create_type_fields = Table::create()
+            .table(FieldNames::Table)
+            .if_not_exists()
+            .col(ColumnDef::new(FieldNames::FieldName).text().unique_key())
+            .col(ColumnDef::new(FieldNames::FieldId).integer())
+            .foreign_key(
+                ForeignKey::create()
+                    .from(FieldNames::Table, Fields::FieldId)
+                    .to(Fields::Table, Fields::FieldId),
+            )
+            .build_any(query_builder);
         let queries = vec![
             create_types,
             create_type_names,
@@ -98,10 +160,10 @@ impl Store {
         Ok(())
     }
 
-    fn primary_key_sql(kind: AnyKind) -> &'static str {
-        match kind {
-            AnyKind::Postgres => "SERIAL PRIMARY KEY",
-            AnyKind::Sqlite => "INTEGER PRIMARY KEY AUTOINCREMENT",
+    fn get_query_builder(opts: &AnyConnectOptions) -> &dyn SchemaBuilder {
+        match opts.kind() {
+            AnyKind::Postgres => &PostgresQueryBuilder,
+            AnyKind::Sqlite => &SqliteQueryBuilder,
         }
     }
 
@@ -217,11 +279,17 @@ impl Store {
         ty: &ObjectType,
         transaction: &mut Transaction<'_, Any>,
     ) -> Result<(), StoreError> {
-        let create_table = format!(
-            "CREATE TABLE IF NOT EXISTS {} (id {}, fields TEXT)",
-            ty.backing_table.clone(),
-            Store::primary_key_sql(self.data_opts.kind())
-        );
+        let create_table = Table::create()
+            .table(Alias::new(&ty.backing_table))
+            .if_not_exists()
+            .col(
+                ColumnDef::new(Fields::FieldId)
+                    .integer()
+                    .auto_increment()
+                    .primary_key(),
+            )
+            .col(ColumnDef::new(Alias::new("fields")).text())
+            .build_any(Self::get_query_builder(&self.data_opts));
         let create_table = sqlx::query(&create_table);
         transaction
             .execute(create_table)
