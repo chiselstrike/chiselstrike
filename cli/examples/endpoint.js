@@ -2,8 +2,8 @@
 
 // The endpoint should evaluate to a promise that resolves to a
 // Response.
-async function foo() {
-    const response = await fetch("https://www.wikipedia.org/portal/wikipedia.org/assets/img/Wikipedia-logo-v2@2x.png");
+async function chisel(req) {
+    const response = await fetch(req + "/portal/wikipedia.org/assets/img/Wikipedia-logo-v2@2x.png");
     return new Response(response.body, {
         status: 203,
         headers: [
@@ -12,4 +12,3 @@ async function foo() {
         ]
     });
 }
-foo()
