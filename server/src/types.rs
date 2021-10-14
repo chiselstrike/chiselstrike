@@ -70,4 +70,5 @@ pub struct ObjectType {
 pub struct Field {
     pub name: String,
     pub type_: Type,
+    pub labels: Vec<String>,
 }

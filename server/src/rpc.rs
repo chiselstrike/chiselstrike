@@ -101,6 +101,7 @@ impl ChiselRpc for RpcService {
             fields.push(Field {
                 name: field.name.clone(),
                 type_: ty,
+                labels: vec![],
             });
         }
         let ty = ObjectType {

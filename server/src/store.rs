@@ -208,6 +208,7 @@ impl Store {
             fields.push(Field {
                 name: field_name.to_string(),
                 type_: ty,
+                labels: vec![],
             });
         }
         Ok(fields)
