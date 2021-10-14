@@ -58,9 +58,6 @@ jobs:
     - name: set up cache
       uses: Swatinem/rust-cache@v1
 
-    - name: Clippy check
-      run: cargo clippy --all-targets --all-features -- -D warnings
-
     - name: Build debug mode binaries
       uses: actions-rs/cargo@v1
       with:

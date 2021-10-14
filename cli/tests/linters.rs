@@ -11,4 +11,20 @@ mod tests {
             .unwrap();
         assert!(status.success());
     }
+
+    #[test]
+    fn check_clippy() {
+        let status = Command::new("cargo")
+            .args([
+                "clippy",
+                "--all-targets",
+                "--all-features",
+                "--",
+                "-D",
+                "warnings",
+            ])
+            .status()
+            .unwrap();
+        assert!(status.success());
+    }
 }
