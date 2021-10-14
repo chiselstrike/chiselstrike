@@ -89,6 +89,7 @@ impl Store {
 
     /// Create the schema of the underlying metadata store.
     pub async fn create_schema(&self) -> Result<(), StoreError> {
+        let query_builder = Self::get_query_builder(&self.opts);
         let create_types = Table::create()
             .table(Types::Table)
             .if_not_exists()
@@ -99,7 +100,7 @@ impl Store {
                     .primary_key(),
             )
             .col(ColumnDef::new(Types::BackingTable).text().unique_key())
-            .build_any(Self::get_query_builder(&self.opts));
+            .build_any(query_builder);
         let create_type_names = Table::create()
             .table(TypeNames::Table)
             .if_not_exists()
@@ -110,7 +111,7 @@ impl Store {
                     .from(TypeNames::Table, TypeNames::TypeId)
                     .to(Types::Table, Types::TypeId),
             )
-            .build_any(Self::get_query_builder(&self.opts));
+            .build_any(query_builder);
         let create_fields = Table::create()
             .table(Fields::Table)
             .if_not_exists()
@@ -127,7 +128,7 @@ impl Store {
                     .from(Fields::Table, Fields::TypeId)
                     .to(Types::Table, Types::TypeId),
             )
-            .build_any(Self::get_query_builder(&self.opts));
+            .build_any(query_builder);
         let create_type_fields = Table::create()
             .table(FieldNames::Table)
             .if_not_exists()
@@ -138,7 +139,7 @@ impl Store {
                     .from(FieldNames::Table, Fields::FieldId)
                     .to(Fields::Table, Fields::FieldId),
             )
-            .build_any(Self::get_query_builder(&self.opts));
+            .build_any(query_builder);
         let queries = vec![
             create_types,
             create_type_names,
