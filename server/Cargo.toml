@@ -26,6 +26,7 @@ tokio = { version = "1.11.0", features = ["full"] }
 tokio-stream = { version = "0.1.7", features = ["signal"] }
 tonic = "0.5.2"
 url = "2.2.2"
+nix = "0.22.2"
 
 [build-dependencies]
 tonic-build = "0.5.2"

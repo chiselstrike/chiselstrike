@@ -2791,6 +2791,7 @@ dependencies = [
  "futures",
  "hyper 0.14.13 (git+https://github.com/hyperium/hyper?rev=1d553e52c6953ea3b039f5c3f89d35cb56e2436a)",
  "log",
+ "nix",
  "pretty_env_logger",
  "prost",
  "rusty_v8",
