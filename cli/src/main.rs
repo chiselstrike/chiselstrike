@@ -8,6 +8,7 @@ use chisel::{
 };
 use graphql_parser::schema::{parse_schema, Definition, TypeDefinition};
 use std::fs;
+use std::io::{stdin, Read};
 use structopt::StructOpt;
 
 #[derive(StructOpt, Debug)]
@@ -49,12 +50,23 @@ pub mod chisel {
     tonic::include_proto!("chisel");
 }
 
+/// Opens and reads an entire file (or stdin, if filename is "-")
+fn read_to_string(filename: &str) -> Result<String, std::io::Error> {
+    if filename == "-" {
+        let mut s = "".to_string();
+        stdin().read_to_string(&mut s)?;
+        Ok(s)
+    } else {
+        fs::read_to_string(filename)
+    }
+}
+
 async fn create_endpoint(
     client: &mut ChiselRpcClient<tonic::transport::Channel>,
     path: String,
     filename: String,
 ) -> Result<()> {
-    let code = fs::read_to_string(filename)?;
+    let code = read_to_string(&filename)?;
     let request = tonic::Request::new(EndPointCreationRequest { path, code });
     let response = client.create_end_point(request).await?.into_inner();
     println!("End point defined: {}", response.message);
@@ -86,7 +98,7 @@ async fn main() -> Result<()> {
                 println!("Type defined: {}", response.message);
             }
             TypeCommand::Import { filename } => {
-                let schema = fs::read_to_string(filename)?;
+                let schema = read_to_string(&filename)?;
                 let type_system = parse_schema::<String>(&schema)?;
                 for def in &type_system.definitions {
                     match def {
