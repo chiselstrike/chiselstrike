@@ -63,7 +63,8 @@ impl DenoService {
             ts_version: "x".to_string(),
             no_color: true,
             get_error_class_fn: None,
-            location: None,
+            // FIXME: make location a configuration parameter
+            location: Some(Url::parse("http://chiselstrike.com").unwrap()),
             origin_storage_dir: None,
             blob_store: BlobStore::default(),
             broadcast_channel: InMemoryBroadcastChannel::default(),
@@ -182,7 +183,7 @@ async fn run_js_aux(
     d: Rc<RefCell<DenoService>>,
     path: String,
     code: String,
-    _req: Request<hyper::Body>,
+    req: Request<hyper::Body>,
 ) -> Result<Response<Body>> {
     let runtime = &mut d.borrow_mut().worker.js_runtime;
     runtime.execute_script(&path, &code)?;
@@ -191,11 +192,39 @@ async fn run_js_aux(
         let global_context = runtime.global_context();
         let scope = &mut runtime.handle_scope();
         let global_proxy = global_context.get(scope).global(scope);
-        let res: v8::Local<v8::Function> = get_member(global_proxy, scope, "chisel")?;
-        // Pass in a dummy request for now
-        let req = v8::String::new(scope, "https://www.wikipedia.org").unwrap();
-        let result = res
-            .call(scope, global_proxy.into(), &[req.into()])
+
+        let request: v8::Local<v8::Function> = get_member(global_proxy, scope, "Request")?;
+        let url = v8::String::new(scope, &req.uri().to_string()).unwrap();
+        let init = v8::Object::new(scope);
+
+        let method_key = v8::String::new(scope, "method").unwrap().into();
+        let method_value = v8::String::new(scope, &req.method().to_string())
+            .unwrap()
+            .into();
+        init.set(scope, method_key, method_value)
+            .ok_or(Error::NotAResponse)?;
+
+        let headers = v8::Object::new(scope);
+        for (k, v) in req.headers().iter() {
+            let k = v8::String::new(scope, k.as_str()).ok_or(Error::NotAResponse)?;
+            let v = v8::String::new(scope, v.to_str()?).ok_or(Error::NotAResponse)?;
+            headers
+                .set(scope, k.into(), v.into())
+                .ok_or(Error::NotAResponse)?;
+        }
+        let headers_key = v8::String::new(scope, "headers").unwrap().into();
+        init.set(scope, headers_key, headers.into())
+            .ok_or(Error::NotAResponse)?;
+
+        // FIXME: Also map the request body
+
+        let request = request
+            .new_instance(scope, &[url.into(), init.into()])
+            .ok_or(Error::NotAResponse)?;
+
+        let chisel: v8::Local<v8::Function> = get_member(global_proxy, scope, "chisel")?;
+        let result = chisel
+            .call(scope, global_proxy.into(), &[request.into()])
             .ok_or(Error::NotAResponse)?;
         v8::Global::new(scope, result)
     };
