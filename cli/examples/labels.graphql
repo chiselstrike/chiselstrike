@@ -1,5 +1,0 @@
-# SPDX-FileCopyrightText: © 2021 ChiselStrike <info@chiselstrike.com>
-
-type TestLabels {
-  foo: String @a @b
-}

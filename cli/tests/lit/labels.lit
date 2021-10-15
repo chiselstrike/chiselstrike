@@ -2,7 +2,7 @@
 
 # RUN: CHISEL="@chisel" CURL="@curl" sh -ex @file
 
-$CHISEL type import examples/labels.graphql
+echo 'type TestLabels {foo: String @a @b}' | $CHISEL type import -
 
 $CHISEL type export
 
