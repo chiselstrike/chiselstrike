@@ -1,0 +1,4 @@
+// RUN: @chisel type add Bar && @chisel type remove Bar && @chisel type add Bar
+// CHECK: Type defined: Bar
+// CHECK: Type removed: Bar
+// CHECK: Type defined: Bar

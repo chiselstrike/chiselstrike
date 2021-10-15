@@ -6,8 +6,9 @@ use crate::store::{Store, StoreError};
 use crate::types::{Field, ObjectType, TypeSystem, TypeSystemError};
 use chisel::chisel_rpc_server::{ChiselRpc, ChiselRpcServer};
 use chisel::{
-    EndPointCreationRequest, EndPointCreationResponse, StatusRequest, StatusResponse,
-    TypeDefinitionRequest, TypeDefinitionResponse, TypeExportRequest, TypeExportResponse,
+    AddTypeRequest, AddTypeResponse, EndPointCreationRequest, EndPointCreationResponse,
+    RemoveTypeRequest, RemoveTypeResponse, StatusRequest, StatusResponse, TypeExportRequest,
+    TypeExportResponse,
 };
 use convert_case::{Case, Casing};
 use futures::FutureExt;
@@ -87,11 +88,11 @@ impl ChiselRpc for RpcService {
         Ok(Response::new(response))
     }
 
-    /// Define a type.
-    async fn define_type(
+    /// Add a type.
+    async fn add_type(
         &self,
-        request: Request<TypeDefinitionRequest>,
-    ) -> Result<Response<TypeDefinitionResponse>, Status> {
+        request: Request<AddTypeRequest>,
+    ) -> Result<Response<AddTypeResponse>, Status> {
         let mut type_system = self.type_system.lock().await;
         let type_def = request.into_inner();
         let name = type_def.name;
@@ -115,7 +116,22 @@ impl ChiselRpc for RpcService {
         store.insert(ty).await?;
         let path = format!("/{}", snake_case_name);
         self.define_type_endpoints(&path).await;
-        let response = chisel::TypeDefinitionResponse { message: name };
+        self.define_type_endpoints(&name).await;
+        let response = chisel::AddTypeResponse { message: name };
+        Ok(Response::new(response))
+    }
+
+    async fn remove_type(
+        &self,
+        request: tonic::Request<RemoveTypeRequest>,
+    ) -> Result<tonic::Response<RemoveTypeResponse>, tonic::Status> {
+        let mut type_system = self.type_system.lock().await;
+        let request = request.into_inner();
+        let name = request.type_name;
+        type_system.remove_type(&name)?;
+        let store = &self.store;
+        store.remove(&name).await?;
+        let response = chisel::RemoveTypeResponse {};
         Ok(Response::new(response))
     }
 

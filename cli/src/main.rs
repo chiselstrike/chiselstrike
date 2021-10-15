@@ -3,7 +3,7 @@
 use anyhow::Result;
 use chisel::chisel_rpc_client::ChiselRpcClient;
 use chisel::{
-    EndPointCreationRequest, FieldDefinition, StatusRequest, TypeDefinitionRequest,
+    AddTypeRequest, EndPointCreationRequest, FieldDefinition, RemoveTypeRequest, StatusRequest,
     TypeExportRequest,
 };
 use graphql_parser::schema::{parse_schema, Definition, TypeDefinition};
@@ -27,6 +27,8 @@ enum Opt {
 
 #[derive(StructOpt, Debug)]
 enum TypeCommand {
+    /// Add a type to the type system.
+    Add { type_name: String },
     /// Import types to the type system.
     Import {
         /// Type definition input file.
@@ -34,6 +36,8 @@ enum TypeCommand {
     },
     /// Export the type system.
     Export,
+    /// Remove type from the type system.
+    Remove { type_name: String },
 }
 
 #[derive(StructOpt, Debug)]
@@ -73,6 +77,14 @@ async fn main() -> Result<()> {
             }
         },
         Opt::Type { cmd } => match cmd {
+            TypeCommand::Add { type_name } => {
+                let request = tonic::Request::new(AddTypeRequest {
+                    name: type_name,
+                    field_defs: vec![],
+                });
+                let response = client.add_type(request).await?.into_inner();
+                println!("Type defined: {}", response.message);
+            }
             TypeCommand::Import { filename } => {
                 let schema = fs::read_to_string(filename)?;
                 let type_system = parse_schema::<String>(&schema)?;
@@ -91,11 +103,11 @@ async fn main() -> Result<()> {
                                         .collect(),
                                 });
                             }
-                            let request = tonic::Request::new(TypeDefinitionRequest {
+                            let request = tonic::Request::new(AddTypeRequest {
                                 name: obj_def.name.to_owned(),
                                 field_defs,
                             });
-                            let response = client.define_type(request).await?.into_inner();
+                            let response = client.add_type(request).await?.into_inner();
                             println!("Type defined: {}", response.message);
                         }
                         def => {
@@ -123,6 +135,13 @@ async fn main() -> Result<()> {
                     }
                     println!("}}");
                 }
+            }
+            TypeCommand::Remove { type_name } => {
+                let request = tonic::Request::new(RemoveTypeRequest {
+                    type_name: type_name.clone(),
+                });
+                let _ = client.remove_type(request).await?.into_inner();
+                println!("Type removed: {}", type_name);
             }
         },
     }

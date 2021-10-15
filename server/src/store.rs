@@ -2,8 +2,8 @@
 
 use crate::types::{Field, ObjectType, TypeSystem, TypeSystemError};
 use sea_query::{
-    Alias, ColumnDef, ForeignKey, Iden, PostgresQueryBuilder, SchemaBuilder, SqliteQueryBuilder,
-    Table,
+    Alias, ColumnDef, ForeignKey, ForeignKeyAction, Iden, PostgresQueryBuilder, SchemaBuilder,
+    SqliteQueryBuilder, Table,
 };
 use sqlx::any::{Any, AnyConnectOptions, AnyKind, AnyPool, AnyPoolOptions};
 use sqlx::{Executor, Row, Transaction};
@@ -109,7 +109,8 @@ impl Store {
             .foreign_key(
                 ForeignKey::create()
                     .from(TypeNames::Table, TypeNames::TypeId)
-                    .to(Types::Table, Types::TypeId),
+                    .to(Types::Table, Types::TypeId)
+                    .on_delete(ForeignKeyAction::Cascade),
             )
             .build_any(query_builder);
         let create_fields = Table::create()
@@ -126,7 +127,8 @@ impl Store {
             .foreign_key(
                 ForeignKey::create()
                     .from(Fields::Table, Fields::TypeId)
-                    .to(Types::Table, Types::TypeId),
+                    .to(Types::Table, Types::TypeId)
+                    .on_delete(ForeignKeyAction::Cascade),
             )
             .build_any(query_builder);
         let create_type_fields = Table::create()
@@ -137,7 +139,8 @@ impl Store {
             .foreign_key(
                 ForeignKey::create()
                     .from(FieldNames::Table, Fields::FieldId)
-                    .to(Fields::Table, Fields::FieldId),
+                    .to(Fields::Table, Fields::FieldId)
+                    .on_delete(ForeignKeyAction::Cascade),
             )
             .build_any(query_builder);
         let queries = vec![
@@ -297,6 +300,27 @@ impl Store {
         let create_table = sqlx::query(&create_table);
         transaction
             .execute(create_table)
+            .await
+            .map_err(StoreError::ExecuteFailed)?;
+        Ok(())
+    }
+
+    pub async fn remove(&self, type_name: &str) -> Result<(), StoreError> {
+        let delete_type = sqlx::query(
+            "DELETE FROM types WHERE type_id = (SELECT type_id FROM type_names WHERE name = $1)",
+        );
+        let mut transaction = self
+            .pool
+            .begin()
+            .await
+            .map_err(StoreError::ConnectionFailed)?;
+        let delete_type = delete_type.bind(type_name);
+        transaction
+            .execute(delete_type)
+            .await
+            .map_err(StoreError::ExecuteFailed)?;
+        transaction
+            .commit()
             .await
             .map_err(StoreError::ExecuteFailed)?;
         Ok(())

@@ -30,6 +30,14 @@ impl TypeSystem {
         Ok(())
     }
 
+    pub fn remove_type(&mut self, type_name: &str) -> Result<(), TypeSystemError> {
+        if !self.types.contains_key(type_name) {
+            return Err(TypeSystemError::NoSuchType);
+        }
+        self.types.remove(type_name);
+        Ok(())
+    }
+
     pub fn lookup_type(&self, type_name: &str) -> Result<Type, TypeSystemError> {
         match type_name {
             "String" => Ok(Type::String),
