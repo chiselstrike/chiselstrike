@@ -185,21 +185,7 @@ async fn run_js_aux(
     _req: Request<hyper::Body>,
 ) -> Result<Response<Body>> {
     let runtime = &mut d.borrow_mut().worker.js_runtime;
-    runtime.execute_script(&path, &code)?;
-
-    let result = {
-        let global_context = runtime.global_context();
-        let scope = &mut runtime.handle_scope();
-        let global_proxy = global_context.get(scope).global(scope);
-        let res: v8::Local<v8::Function> = get_member(global_proxy, scope, "chisel")?;
-        // Pass in a dummy request for now
-        let req = v8::String::new(scope, "https://www.wikipedia.org").unwrap();
-        let result = res
-            .call(scope, global_proxy.into(), &[req.into()])
-            .ok_or(Error::NotAResponse)?;
-        v8::Global::new(scope, result)
-    };
-
+    let result = runtime.execute_script(&path, &code)?;
     let result = runtime.resolve_value(result).await?;
     let stream = get_read_stream(runtime, result.clone(), d.clone())?;
     let scope = &mut runtime.handle_scope();
