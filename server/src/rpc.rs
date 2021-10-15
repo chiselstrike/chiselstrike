@@ -101,7 +101,7 @@ impl ChiselRpc for RpcService {
             fields.push(Field {
                 name: field.name.clone(),
                 type_: ty,
-                labels: vec![],
+                labels: field.labels,
             });
         }
         let ty = ObjectType {
@@ -130,6 +130,7 @@ impl ChiselRpc for RpcService {
                 field_defs.push(chisel::FieldDefinition {
                     name: field.name.to_owned(),
                     field_type: field.type_.name().to_string(),
+                    labels: field.labels.clone(),
                 });
             }
             let type_def = chisel::TypeDefinition {
