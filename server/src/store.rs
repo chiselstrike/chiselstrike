@@ -1,6 +1,6 @@
 // SPDX-FileCopyrightText: © 2021 ChiselStrike <info@chiselstrike.com>
 
-use crate::types::{ObjectType, Type, TypeSystem, TypeSystemError};
+use crate::types::{Field, ObjectType, TypeSystem, TypeSystemError};
 use sea_query::{
     Alias, ColumnDef, ForeignKey, Iden, PostgresQueryBuilder, SchemaBuilder, SqliteQueryBuilder,
     Table,
@@ -193,7 +193,7 @@ impl Store {
         &self,
         ts: &TypeSystem,
         type_id: i32,
-    ) -> Result<Vec<(String, Type)>, StoreError> {
+    ) -> Result<Vec<Field>, StoreError> {
         let query = sqlx::query("SELECT field_names.field_name AS field_name, fields.field_type AS field_type FROM field_names INNER JOIN fields WHERE fields.type_id = $1 AND field_names.field_id = fields.field_id;");
         let query = query.bind(type_id);
         let rows = query
@@ -205,7 +205,11 @@ impl Store {
             let field_name: &str = row.get("field_name");
             let field_type: &str = row.get("field_type");
             let ty = ts.lookup_type(field_type)?;
-            fields.push((field_name.to_string(), ty));
+            fields.push(Field {
+                name: field_name.to_string(),
+                type_: ty,
+                labels: vec![],
+            });
         }
         Ok(fields)
     }
@@ -254,18 +258,18 @@ impl Store {
             .execute(add_type_name)
             .await
             .map_err(StoreError::ExecuteFailed)?;
-        for (field_name, field_type) in &ty.fields {
+        for field in &ty.fields {
             let add_field =
                 sqlx::query("INSERT INTO fields (field_type, type_id) VALUES ($1, $2) RETURNING *");
             let add_field_name =
                 sqlx::query("INSERT INTO field_names (field_name, field_id) VALUES ($1, $2)");
-            let add_field = add_field.bind(field_type.name()).bind(id);
+            let add_field = add_field.bind(field.type_.name()).bind(id);
             let row = transaction
                 .fetch_one(add_field)
                 .await
                 .map_err(StoreError::ExecuteFailed)?;
             let field_id: i32 = row.get("field_id");
-            let add_field_name = add_field_name.bind(field_name).bind(field_id);
+            let add_field_name = add_field_name.bind(field.name.clone()).bind(field_id);
             transaction
                 .execute(add_field_name)
                 .await

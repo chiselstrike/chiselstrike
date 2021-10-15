@@ -84,6 +84,11 @@ async fn main() -> Result<()> {
                                 field_defs.push(FieldDefinition {
                                     name: field_def.name.to_owned(),
                                     field_type: format!("{}", field_def.field_type.to_owned()),
+                                    labels: field_def
+                                        .directives
+                                        .iter()
+                                        .map(|d| d.name.clone())
+                                        .collect(),
                                 });
                             }
                             let request = tonic::Request::new(TypeDefinitionRequest {
@@ -105,7 +110,16 @@ async fn main() -> Result<()> {
                 for def in response.type_defs {
                     println!("class {} {{", def.name);
                     for field in def.field_defs {
-                        println!("  {}: {};", field.name, field.field_type);
+                        println!(
+                            "  {}: {}{}",
+                            field.name,
+                            field.field_type,
+                            field
+                                .labels
+                                .iter()
+                                .map(|x| format!(" @{}", x))
+                                .collect::<String>()
+                        );
                     }
                     println!("}}");
                 }

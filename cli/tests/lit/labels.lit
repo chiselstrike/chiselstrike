@@ -1,0 +1,9 @@
+# SPDX-FileCopyrightText: © 2021 ChiselStrike <info@chiselstrike.com>
+
+# RUN: CHISEL="@chisel" CURL="@curl" sh -ex @file
+
+$CHISEL type import examples/labels.graphql
+
+$CHISEL type export
+
+# CHECK: foo: String @a @b

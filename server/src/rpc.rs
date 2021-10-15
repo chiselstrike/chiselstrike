@@ -3,7 +3,7 @@
 use crate::api::ApiService;
 use crate::deno;
 use crate::store::{Store, StoreError};
-use crate::types::{ObjectType, TypeSystem, TypeSystemError};
+use crate::types::{Field, ObjectType, TypeSystem, TypeSystemError};
 use chisel::chisel_rpc_server::{ChiselRpc, ChiselRpcServer};
 use chisel::{
     EndPointCreationRequest, EndPointCreationResponse, StatusRequest, StatusResponse,
@@ -98,7 +98,11 @@ impl ChiselRpc for RpcService {
         let mut fields = Vec::new();
         for field in type_def.field_defs {
             let ty = type_system.lookup_type(&field.field_type)?;
-            fields.push((field.name, ty));
+            fields.push(Field {
+                name: field.name.clone(),
+                type_: ty,
+                labels: field.labels,
+            });
         }
         let ty = ObjectType {
             name: name.to_owned(),
@@ -122,10 +126,11 @@ impl ChiselRpc for RpcService {
         let mut type_defs = vec![];
         for ty in type_system.types.values() {
             let mut field_defs = vec![];
-            for (field_name, field_type) in &ty.fields {
+            for field in &ty.fields {
                 field_defs.push(chisel::FieldDefinition {
-                    name: field_name.to_owned(),
-                    field_type: field_type.name().to_string(),
+                    name: field.name.to_owned(),
+                    field_type: field.type_.name().to_string(),
+                    labels: field.labels.clone(),
                 });
             }
             let type_def = chisel::TypeDefinition {
