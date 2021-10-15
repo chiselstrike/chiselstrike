@@ -1,8 +1,8 @@
 # SPDX-FileCopyrightText: © 2021 ChiselStrike <info@chiselstrike.com>
 
-# RUN: CHISEL="@chisel" CURL="@curl" sh -ex @file
+# RUN: CHISEL="@chisel" sh -ex @file
 
-$CHISEL type import examples/labels.graphql
+echo 'type TestLabels {foo: String @a @b}' | $CHISEL type import -
 
 $CHISEL type export
 
