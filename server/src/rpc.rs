@@ -10,7 +10,6 @@ use chisel::{
     TypeDefinitionRequest, TypeDefinitionResponse, TypeExportRequest, TypeExportResponse,
 };
 use convert_case::{Case, Casing};
-use futures::future;
 use futures::FutureExt;
 use serde_json::json;
 use std::net::SocketAddr;
@@ -46,18 +45,20 @@ impl RpcService {
         }
     }
 
+    async fn create_js_endpoint(&self, path: &str, code: String) {
+        let func = {
+            let path = path.to_owned();
+            move |req| deno::run_js(path.clone(), code.clone(), req).boxed_local()
+        };
+        self.api.lock().await.get(path, Box::new(func));
+    }
+
     pub async fn define_type_endpoints(&self, path: &str) {
         info!("Registered endpoint: '{}'", path);
-        let closure = || {
-            // Let's return an empty array because we don't do storage yet.
-            let result = json!([]);
-            let body = hyper::Response::builder().body(result.to_string().into())?;
-            Ok(body)
-        };
-        self.api.lock().await.get(
-            path,
-            Box::new(move || future::ready(closure()).boxed_local()),
-        );
+        // Let's return an empty array because we don't do storage yet.
+        let result = json!([]);
+        let code = format!("new Response(\"{}\")", result);
+        self.create_js_endpoint(path, code).await;
     }
 }
 
@@ -150,11 +151,7 @@ impl ChiselRpc for RpcService {
         let request = request.into_inner();
         let path = format!("/{}", request.path);
         let code = request.code;
-        let func = {
-            let path = path.clone();
-            move || deno::run_js(path.clone(), code.clone()).boxed_local()
-        };
-        self.api.lock().await.get(&path, Box::new(func));
+        self.create_js_endpoint(&path, code).await;
         let response = EndPointCreationResponse { message: path };
         Ok(Response::new(response))
     }

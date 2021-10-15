@@ -8,7 +8,7 @@ use deno_runtime::permissions::Permissions;
 use deno_runtime::worker::{MainWorker, WorkerOptions};
 use deno_web::BlobStore;
 use futures::stream::{try_unfold, Stream};
-use hyper::{Response, StatusCode};
+use hyper::{Request, Response, StatusCode};
 use rusty_v8 as v8;
 use std::cell::RefCell;
 use std::convert::TryInto;
@@ -182,6 +182,7 @@ async fn run_js_aux(
     d: Rc<RefCell<DenoService>>,
     path: String,
     code: String,
+    _req: Request<hyper::Body>,
 ) -> Result<Response<Body>> {
     let runtime = &mut d.borrow_mut().worker.js_runtime;
     let result = runtime.execute_script(&path, &code)?;
@@ -225,6 +226,10 @@ async fn run_js_aux(
     Ok(body)
 }
 
-pub async fn run_js(path: String, code: String) -> Result<Response<Body>> {
-    DENO.with(|d| run_js_aux(d.clone(), path, code)).await
+pub async fn run_js(
+    path: String,
+    code: String,
+    req: Request<hyper::Body>,
+) -> Result<Response<Body>> {
+    DENO.with(|d| run_js_aux(d.clone(), path, code, req)).await
 }
