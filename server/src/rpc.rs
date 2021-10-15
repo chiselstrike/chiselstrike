@@ -58,7 +58,10 @@ impl RpcService {
         info!("Registered endpoint: '{}'", path);
         // Let's return an empty array because we don't do storage yet.
         let result = json!([]);
-        let code = format!("new Response(\"{}\")", result);
+        let code = format!(
+            "function chisel(req) {{ return new Response(\"{}\"); }}",
+            result
+        );
         self.create_js_endpoint(path, code).await;
     }
 }
