@@ -5,7 +5,8 @@ use sea_query::{
     Alias, ColumnDef, ForeignKey, ForeignKeyAction, Iden, PostgresQueryBuilder, SchemaBuilder,
     SqliteQueryBuilder, Table,
 };
-use sqlx::any::{Any, AnyConnectOptions, AnyKind, AnyPool, AnyPoolOptions};
+use sqlx::any::{Any, AnyConnectOptions, AnyKind, AnyPool, AnyPoolOptions, AnyRow};
+use sqlx::error::Error;
 use sqlx::{Executor, Row, Transaction};
 use std::str::FromStr;
 
@@ -279,6 +280,12 @@ impl Store {
                 .map_err(StoreError::ExecuteFailed)?;
         }
         Ok(())
+    }
+
+    pub async fn find_all<'e>(&self, ty: &ObjectType) -> Result<Vec<AnyRow>, Error> {
+        let query = format!("SELECT * FROM {}", ty.backing_table);
+        let query = sqlx::query(&query);
+        query.fetch_all(&self.data_pool).await
     }
 
     async fn create_table(
