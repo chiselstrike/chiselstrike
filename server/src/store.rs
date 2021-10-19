@@ -1,12 +1,10 @@
 // SPDX-FileCopyrightText: © 2021 ChiselStrike <info@chiselstrike.com>
 
+use crate::meta::schema;
 use crate::query_stream::QueryStream;
 use crate::types::{Field, ObjectType, TypeSystem, TypeSystemError};
 use futures::stream;
-use sea_query::{
-    Alias, ColumnDef, ForeignKey, ForeignKeyAction, Iden, PostgresQueryBuilder, SchemaBuilder,
-    SqliteQueryBuilder, Table,
-};
+use sea_query::{Alias, ColumnDef, PostgresQueryBuilder, SchemaBuilder, SqliteQueryBuilder, Table};
 use sqlx::any::{Any, AnyConnectOptions, AnyKind, AnyPool, AnyPoolOptions, AnyRow};
 use sqlx::error::Error;
 use sqlx::{Executor, Row, Transaction};
@@ -22,35 +20,6 @@ pub enum StoreError {
     FetchFailed(#[source] sqlx::Error),
     #[error["type system error `{0}`"]]
     TypeError(#[from] TypeSystemError),
-}
-
-#[derive(Iden)]
-enum Types {
-    Table,
-    TypeId,
-    BackingTable,
-}
-
-#[derive(Iden)]
-enum TypeNames {
-    Table,
-    TypeId,
-    Name,
-}
-
-#[derive(Iden)]
-enum Fields {
-    Table,
-    FieldId,
-    FieldType,
-    TypeId,
-}
-
-#[derive(Iden)]
-enum FieldNames {
-    Table,
-    FieldName,
-    FieldId,
 }
 
 pub struct Store {
@@ -93,71 +62,14 @@ impl Store {
     /// Create the schema of the underlying metadata store.
     pub async fn create_schema(&self) -> Result<(), StoreError> {
         let query_builder = Self::get_query_builder(&self.opts);
-        let create_types = Table::create()
-            .table(Types::Table)
-            .if_not_exists()
-            .col(
-                ColumnDef::new(Types::TypeId)
-                    .integer()
-                    .auto_increment()
-                    .primary_key(),
-            )
-            .col(ColumnDef::new(Types::BackingTable).text().unique_key())
-            .build_any(query_builder);
-        let create_type_names = Table::create()
-            .table(TypeNames::Table)
-            .if_not_exists()
-            .col(ColumnDef::new(TypeNames::TypeId).integer())
-            .col(ColumnDef::new(TypeNames::Name).text().unique_key())
-            .foreign_key(
-                ForeignKey::create()
-                    .from(TypeNames::Table, TypeNames::TypeId)
-                    .to(Types::Table, Types::TypeId)
-                    .on_delete(ForeignKeyAction::Cascade),
-            )
-            .build_any(query_builder);
-        let create_fields = Table::create()
-            .table(Fields::Table)
-            .if_not_exists()
-            .col(
-                ColumnDef::new(Fields::FieldId)
-                    .integer()
-                    .auto_increment()
-                    .primary_key(),
-            )
-            .col(ColumnDef::new(Fields::FieldType).text())
-            .col(ColumnDef::new(TypeNames::TypeId).integer())
-            .foreign_key(
-                ForeignKey::create()
-                    .from(Fields::Table, Fields::TypeId)
-                    .to(Types::Table, Types::TypeId)
-                    .on_delete(ForeignKeyAction::Cascade),
-            )
-            .build_any(query_builder);
-        let create_type_fields = Table::create()
-            .table(FieldNames::Table)
-            .if_not_exists()
-            .col(ColumnDef::new(FieldNames::FieldName).text().unique_key())
-            .col(ColumnDef::new(FieldNames::FieldId).integer())
-            .foreign_key(
-                ForeignKey::create()
-                    .from(FieldNames::Table, Fields::FieldId)
-                    .to(Fields::Table, Fields::FieldId)
-                    .on_delete(ForeignKeyAction::Cascade),
-            )
-            .build_any(query_builder);
-        let queries = vec![
-            create_types,
-            create_type_names,
-            create_fields,
-            create_type_fields,
-        ];
+        let tables = schema::tables();
         let mut conn = self
             .pool
             .acquire()
             .await
             .map_err(StoreError::ConnectionFailed)?;
-        for query in queries {
+        for table in tables {
+            let query = table.build_any(query_builder);
             let query = sqlx::query(&query);
             conn.execute(query)
                 .await
@@ -298,7 +210,7 @@ impl Store {
             .table(Alias::new(&ty.backing_table))
             .if_not_exists()
             .col(
-                ColumnDef::new(Fields::FieldId)
+                ColumnDef::new(Alias::new("id"))
                     .integer()
                     .auto_increment()
                     .primary_key(),
