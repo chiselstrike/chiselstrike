@@ -298,7 +298,7 @@ impl Store {
             .table(Alias::new(&ty.backing_table))
             .if_not_exists()
             .col(
-                ColumnDef::new(Fields::FieldId)
+                ColumnDef::new(Alias::new("id"))
                     .integer()
                     .auto_increment()
                     .primary_key(),
