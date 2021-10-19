@@ -7,8 +7,8 @@ use crate::types::{Field, ObjectType, TypeSystem, TypeSystemError};
 use chisel::chisel_rpc_server::{ChiselRpc, ChiselRpcServer};
 use chisel::{
     AddTypeRequest, AddTypeResponse, EndPointCreationRequest, EndPointCreationResponse,
-    RemoveTypeRequest, RemoveTypeResponse, StatusRequest, StatusResponse, TypeExportRequest,
-    TypeExportResponse,
+    RemoveTypeRequest, RemoveTypeResponse, RestartRequest, RestartResponse, StatusRequest,
+    StatusResponse, TypeExportRequest, TypeExportResponse,
 };
 use convert_case::{Case, Casing};
 use futures::FutureExt;
@@ -173,6 +173,14 @@ impl ChiselRpc for RpcService {
         self.create_js_endpoint(&path, code).await;
         let response = EndPointCreationResponse { message: path };
         Ok(Response::new(response))
+    }
+
+    async fn restart(
+        &self,
+        _request: tonic::Request<RestartRequest>,
+    ) -> Result<tonic::Response<RestartResponse>, tonic::Status> {
+        let ok = nix::sys::signal::raise(nix::sys::signal::Signal::SIGHUP).is_ok();
+        Ok(Response::new(RestartResponse { ok }))
     }
 }
 
