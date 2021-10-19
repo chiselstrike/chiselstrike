@@ -10,7 +10,7 @@ use std::sync::Arc;
 use structopt::StructOpt;
 use tokio::sync::Mutex;
 
-#[derive(StructOpt, Debug)]
+#[derive(StructOpt, Debug, Clone)]
 #[structopt(name = "chiseld")]
 pub struct Opt {
     /// API server listen address.
@@ -27,7 +27,13 @@ pub struct Opt {
     data_db_uri: String,
 }
 
-async fn run(opt: Opt) -> Result<()> {
+/// Whether an action should be repeated.
+enum DoRepeat {
+    Yes,
+    No,
+}
+
+async fn run(opt: Opt) -> Result<DoRepeat> {
     let store = Store::connect(&opt.metadata_db_uri, &opt.data_db_uri).await?;
     store.create_schema().await?;
     let ts = store.load_type_system().await?;
@@ -69,10 +75,11 @@ async fn run(opt: Opt) -> Result<()> {
     results.0?;
     results.1?;
     results.2?;
-    Ok(())
+    Ok(DoRepeat::No)
 }
 
 pub async fn run_on_new_localset(opt: Opt) -> Result<()> {
     let local = tokio::task::LocalSet::new();
-    local.run_until(run(opt)).await
+    while let DoRepeat::Yes = local.run_until(run(opt.clone())).await? {}
+    Ok(())
 }
