@@ -5,6 +5,7 @@ extern crate log;
 
 pub mod api;
 pub mod deno;
+pub mod meta;
 pub mod query_stream;
 pub mod rpc;
 pub mod server;
