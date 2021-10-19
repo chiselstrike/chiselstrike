@@ -21,10 +21,29 @@ type Person {
 }
 ```
 
-### `chisel end-point create path [FILENAME]`
+### `chisel end-point create [PATH] [FILENAME]`
 
 Creates a new endpoint at the given path that executes the code from
 the given file.
+
+Example endpoint code looks as follows:
+
+```javascript
+// hello.js
+async function chisel(req) {
+    const response = "hello, world";
+    return new Response(response, {
+        status: 200,
+        headers: [],
+    });
+}
+```
+
+You can create an ChiselStrike endpoint with the following command:
+
+```
+chisel end-point create hello hello.js
+```
 
 ### `chisel type export`
 
