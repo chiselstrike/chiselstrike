@@ -6,6 +6,7 @@ use deno_broadcast_channel::InMemoryBroadcastChannel;
 use deno_core::{JsRuntime, NoopModuleLoader};
 use deno_runtime::permissions::Permissions;
 use deno_runtime::worker::{MainWorker, WorkerOptions};
+use deno_runtime::BootstrapOptions;
 use deno_web::BlobStore;
 use futures::stream::{try_unfold, Stream};
 use hyper::{Request, Response, StatusCode};
@@ -45,11 +46,20 @@ impl DenoService {
         });
         let module_loader = Rc::new(NoopModuleLoader);
         let opts = WorkerOptions {
-            apply_source_maps: false,
-            args: vec![],
-            debug_flag: false,
-            unstable: false,
-            enable_testing_features: false,
+            bootstrap: BootstrapOptions {
+                apply_source_maps: false,
+                args: vec![],
+                cpu_count: 1,
+                debug_flag: false,
+                enable_testing_features: false,
+                // FIXME: make location a configuration parameter
+                location: Some(Url::parse("http://chiselstrike.com").unwrap()),
+                no_color: true,
+                runtime_version: "x".to_string(),
+                ts_version: "x".to_string(),
+                unstable: false,
+            },
+            extensions: vec![],
             unsafely_ignore_certificate_errors: None,
             root_cert_store: None,
             user_agent: "hello_runtime".to_string(),
@@ -59,17 +69,12 @@ impl DenoService {
             maybe_inspector_server: None,
             should_break_on_first_statement: false,
             module_loader,
-            runtime_version: "x".to_string(),
-            ts_version: "x".to_string(),
-            no_color: true,
             get_error_class_fn: None,
-            // FIXME: make location a configuration parameter
-            location: Some(Url::parse("http://chiselstrike.com").unwrap()),
             origin_storage_dir: None,
             blob_store: BlobStore::default(),
             broadcast_channel: InMemoryBroadcastChannel::default(),
             shared_array_buffer_store: None,
-            cpu_count: 1,
+            compiled_wasm_module_store: None,
         };
 
         let path = "file:///no/such/file";
@@ -83,9 +88,8 @@ impl DenoService {
             ..Permissions::default()
         };
 
-        let mut worker = MainWorker::from_options(Url::parse(path).unwrap(), permissions, &opts);
-        worker.bootstrap(&opts);
-
+        let worker =
+            MainWorker::bootstrap_from_options(Url::parse(path).unwrap(), permissions, opts);
         Self { worker }
     }
 }
