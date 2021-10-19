@@ -3,8 +3,8 @@
 use anyhow::Result;
 use chisel::chisel_rpc_client::ChiselRpcClient;
 use chisel::{
-    AddTypeRequest, EndPointCreationRequest, FieldDefinition, RemoveTypeRequest, StatusRequest,
-    TypeExportRequest,
+    AddTypeRequest, EndPointCreationRequest, FieldDefinition, RemoveTypeRequest, RestartRequest,
+    StatusRequest, TypeExportRequest,
 };
 use graphql_parser::schema::{parse_schema, Definition, TypeDefinition};
 use std::fs;
@@ -24,6 +24,7 @@ enum Opt {
         #[structopt(subcommand)]
         cmd: EndPointCommand,
     },
+    Restart,
 }
 
 #[derive(StructOpt, Debug)]
@@ -156,6 +157,13 @@ async fn main() -> Result<()> {
                 println!("Type removed: {}", type_name);
             }
         },
+        Opt::Restart => {
+            let response = client
+                .restart(tonic::Request::new(RestartRequest {}))
+                .await?
+                .into_inner();
+            println!("{}", if response.ok { "success" } else { "failure" });
+        }
     }
     Ok(())
 }

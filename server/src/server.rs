@@ -10,7 +10,7 @@ use std::sync::Arc;
 use structopt::StructOpt;
 use tokio::sync::Mutex;
 
-#[derive(StructOpt, Debug)]
+#[derive(StructOpt, Debug, Clone)]
 #[structopt(name = "chiseld")]
 pub struct Opt {
     /// API server listen address.
@@ -27,7 +27,13 @@ pub struct Opt {
     data_db_uri: String,
 }
 
-async fn run(opt: Opt) -> Result<()> {
+/// Whether an action should be repeated.
+enum DoRepeat {
+    Yes,
+    No,
+}
+
+async fn run(opt: Opt) -> Result<DoRepeat> {
     let store = Store::connect(&opt.metadata_db_uri, &opt.data_db_uri).await?;
     store.create_schema().await?;
     let ts = store.load_type_system().await?;
@@ -39,8 +45,9 @@ async fn run(opt: Opt) -> Result<()> {
         rpc.define_type_endpoints(type_name).await;
     }
 
-    let sigterm = tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())?;
-    let sigint = tokio::signal::unix::signal(tokio::signal::unix::SignalKind::interrupt())?;
+    let mut sigterm = tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())?;
+    let mut sigint = tokio::signal::unix::signal(tokio::signal::unix::SignalKind::interrupt())?;
+    let mut sighup = tokio::signal::unix::signal(tokio::signal::unix::SignalKind::hangup())?;
     let default_hook = panic::take_hook();
     panic::set_hook(Box::new(move |info| {
         default_hook(info);
@@ -48,13 +55,15 @@ async fn run(opt: Opt) -> Result<()> {
     }));
     let (tx, mut rx) = tokio::sync::watch::channel(());
     let sig_task = tokio::task::spawn_local(async move {
-        use futures::StreamExt;
-        let sigterm = tokio_stream::wrappers::SignalStream::new(sigterm);
-        let sigint = tokio_stream::wrappers::SignalStream::new(sigint);
-        let mut asig = futures::stream_select!(sigint, sigterm);
-        asig.next().await;
+        use futures::FutureExt;
+        let res = futures::select! {
+            _ = sigterm.recv().fuse() => { info!("Got SIGTERM"); DoRepeat::No },
+            _ = sigint.recv().fuse() => { info!("Got SIGINT"); DoRepeat::No },
+            _ = sighup.recv().fuse() => { info!("Got SIGHUP"); DoRepeat::Yes },
+        };
         info!("Got signal");
-        tx.send(())
+        tx.send(())?;
+        Ok(res)
     });
 
     let mut rpc_rx = rx.clone();
@@ -68,11 +77,11 @@ async fn run(opt: Opt) -> Result<()> {
     let results = tokio::try_join!(rpc_task, api_task, sig_task)?;
     results.0?;
     results.1?;
-    results.2?;
-    Ok(())
+    results.2
 }
 
 pub async fn run_on_new_localset(opt: Opt) -> Result<()> {
     let local = tokio::task::LocalSet::new();
-    local.run_until(run(opt)).await
+    while let DoRepeat::Yes = local.run_until(run(opt.clone())).await? {}
+    Ok(())
 }

@@ -53,10 +53,17 @@ message EndPointCreationResponse {
   string message = 1;
 }
 
+message RestartRequest { }
+
+message RestartResponse {
+  bool ok = 1;
+}
+
 service ChiselRpc {
   rpc GetStatus (StatusRequest) returns (StatusResponse);
   rpc AddType (AddTypeRequest) returns (AddTypeResponse);
   rpc RemoveType (RemoveTypeRequest) returns (RemoveTypeResponse);
   rpc ExportTypes (TypeExportRequest) returns (TypeExportResponse);
   rpc CreateEndPoint (EndPointCreationRequest) returns (EndPointCreationResponse);
+  rpc Restart (RestartRequest) returns (RestartResponse);
 }
