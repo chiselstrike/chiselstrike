@@ -57,9 +57,8 @@ jobs:
 
     - name: set up cache
       uses: Swatinem/rust-cache@v1
-
-    - name: work around broken cache
-      run: find .  -name '*rusty*v8*'  | xargs rm -rf
+      with:
+          key: avoid-broken-rusty-v8-cache-v1
 
     - name: Build debug mode binaries
       uses: actions-rs/cargo@v1
