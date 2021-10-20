@@ -2926,6 +2926,7 @@ dependencies = [
  "deno_web",
  "futures",
  "hyper 0.14.13 (git+https://github.com/hyperium/hyper?rev=1d553e52c6953ea3b039f5c3f89d35cb56e2436a)",
+ "itertools 0.10.1",
  "log",
  "nix",
  "pretty_env_logger",

@@ -144,7 +144,12 @@ impl ChiselRpc for RpcService {
     ) -> Result<tonic::Response<TypeExportResponse>, tonic::Status> {
         let type_system = self.type_system.lock().await;
         let mut type_defs = vec![];
-        for ty in type_system.types.values() {
+        use itertools::Itertools;
+        for ty in type_system
+            .types
+            .values()
+            .sorted_by(|x, y| x.name.cmp(&y.name))
+        {
             let mut field_defs = vec![];
             for field in &ty.fields {
                 field_defs.push(chisel::FieldDefinition {
