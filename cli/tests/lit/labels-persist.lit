@@ -1,0 +1,25 @@
+# SPDX-FileCopyrightText: © 2021 ChiselStrike <info@chiselstrike.com>
+
+# RUN: CHISEL="@chisel" sh -ex @file
+
+cat << EOF | $CHISEL type import -
+  type TestLabelsPersist1 {
+    one: String @a @b
+    two: String @a
+  }
+
+  type TestLabelsPersist2 {
+    three: String @c @b
+    four: String @a
+  }
+EOF
+
+$CHISEL restart
+sleep 1s
+
+$CHISEL type export
+
+# CHECK: one: String @a @b
+# CHECK: two: String @a
+# CHECK: three: String @c @b
+# CHECK: four: String @a

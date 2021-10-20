@@ -13,6 +13,7 @@ deno_runtime = "0.30.0"
 deno_web = "0.53.0"
 futures = "0.3.17"
 hyper = { git = "https://github.com/hyperium/hyper", rev = "1d553e52c6953ea3b039f5c3f89d35cb56e2436a", features = ["server", "tcp", "http1"]}
+itertools = "0.10.1"
 log = "0.4.14"
 pretty_env_logger = "0.4.0"
 prost = "0.8.0"

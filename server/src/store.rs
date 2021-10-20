@@ -112,7 +112,7 @@ impl Store {
         ts: &TypeSystem,
         type_id: i32,
     ) -> Result<Vec<Field>, StoreError> {
-        let query = sqlx::query("SELECT field_names.field_name AS field_name, fields.field_type AS field_type FROM field_names INNER JOIN fields WHERE fields.type_id = $1 AND field_names.field_id = fields.field_id;");
+        let query = sqlx::query("SELECT fields.field_id AS field_id, field_names.field_name AS field_name, fields.field_type AS field_type FROM field_names INNER JOIN fields WHERE fields.type_id = $1 AND field_names.field_id = fields.field_id;");
         let query = query.bind(type_id);
         let rows = query
             .fetch_all(&self.pool)
@@ -122,11 +122,22 @@ impl Store {
         for row in rows {
             let field_name: &str = row.get("field_name");
             let field_type: &str = row.get("field_type");
+            let field_id: i32 = row.get("field_id");
             let ty = ts.lookup_type(field_type)?;
+            let labels_query =
+                sqlx::query("SELECT label_name FROM field_labels WHERE field_id = $1");
+            let labels = labels_query
+                .bind(field_id)
+                .fetch_all(&self.pool)
+                .await
+                .map_err(StoreError::FetchFailed)?
+                .iter()
+                .map(|r| r.get("label_name"))
+                .collect::<Vec<String>>();
             fields.push(Field {
                 name: field_name.to_string(),
                 type_: ty,
-                labels: vec![],
+                labels,
             });
         }
         Ok(fields)
@@ -192,6 +203,14 @@ impl Store {
                 .execute(add_field_name)
                 .await
                 .map_err(StoreError::ExecuteFailed)?;
+            for label in &field.labels {
+                let q =
+                    sqlx::query("INSERT INTO field_labels (label_name, field_id) VALUES ($1, $2)");
+                transaction
+                    .execute(q.bind(label).bind(field_id))
+                    .await
+                    .map_err(StoreError::ExecuteFailed)?;
+            }
         }
         Ok(())
     }
