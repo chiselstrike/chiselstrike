@@ -3,6 +3,11 @@
 use crate::api::Body;
 use anyhow::Result;
 use deno_broadcast_channel::InMemoryBroadcastChannel;
+use deno_core::op_async;
+use deno_core::OpState;
+use deno_core::Resource;
+use deno_core::ResourceId;
+use deno_core::ZeroCopyBuf;
 use deno_core::{JsRuntime, NoopModuleLoader};
 use deno_runtime::inspector_server::InspectorServer;
 use deno_runtime::permissions::Permissions;
@@ -10,6 +15,8 @@ use deno_runtime::worker::{MainWorker, WorkerOptions};
 use deno_runtime::BootstrapOptions;
 use deno_web::BlobStore;
 use futures::stream::{try_unfold, Stream};
+use hyper::body::HttpBody;
+use hyper::Method;
 use hyper::{Request, Response, StatusCode};
 use rusty_v8 as v8;
 use std::cell::RefCell;
@@ -112,8 +119,23 @@ impl DenoService {
     }
 }
 
+async fn op_deno_read_body(
+    state: Rc<RefCell<OpState>>,
+    body_rid: ResourceId,
+    _: (),
+) -> Result<Option<ZeroCopyBuf>> {
+    let resource: Rc<BodyResource> = state.borrow().resource_table.get(body_rid)?;
+    let mut borrow = resource.body.borrow_mut();
+    Ok(borrow.data().await.transpose()?.map(|x| x.to_vec().into()))
+}
+
+static DENO_READ_BODY: &str = "deno_read_body";
+
 fn create_deno() -> Rc<RefCell<DenoService>> {
-    let d = DenoService::new();
+    let mut d = DenoService::new();
+    let runtime = &mut d.worker.js_runtime;
+    runtime.register_op(DENO_READ_BODY, op_async(op_deno_read_body));
+    runtime.sync_ops_cache();
     Rc::new(RefCell::new(d))
 }
 
@@ -206,22 +228,81 @@ fn get_read_stream(
     Ok(stream)
 }
 
+// FIXME: Implement close to cancel the future that is trying to read
+// this.
+struct BodyResource {
+    body: RefCell<hyper::Body>,
+}
+
+impl Resource for BodyResource {}
+
+// The pull function passed to ReadableStream's constructor
+fn pull(scope: &mut v8::HandleScope, args: v8::FunctionCallbackArguments, mut rv: v8::ReturnValue) {
+    // FIXME: Propagate errors with scope.throw_exception.
+    let context = scope.get_current_context();
+    let global_proxy = context.global(scope);
+    let rid: v8::Local<v8::Integer> = args.data().unwrap().try_into().unwrap();
+    let deno: v8::Local<v8::Object> = get_member(global_proxy, scope, "Deno").unwrap();
+    let core: v8::Local<v8::Object> = get_member(deno, scope, "core").unwrap();
+    let op_async: v8::Local<v8::Function> = get_member(core, scope, "opAsync").unwrap();
+    let read_body = v8::String::new(scope, DENO_READ_BODY)
+        .ok_or(Error::NotAResponse)
+        .unwrap()
+        .into();
+    let promise = op_async
+        .call(scope, core.into(), &[read_body, rid.into()])
+        .unwrap();
+    let promise: v8::Local<v8::Promise> = promise.try_into().unwrap();
+
+    // FIXME: This is a lifetime hack, try to avoid it.
+    let controller = v8::Global::new(scope, args.get(0));
+    let controller = v8::Local::new(scope, controller);
+
+    let then = v8::Function::builder(
+        |scope: &mut v8::HandleScope, args: v8::FunctionCallbackArguments, _: v8::ReturnValue| {
+            let controller = args.data().unwrap();
+            let controller: v8::Local<v8::Object> = controller.try_into().unwrap();
+
+            let result = args.get(0);
+            if result.is_uint8_array() {
+                let result: v8::Local<v8::Uint8Array> = result.try_into().unwrap();
+                let enqueue: v8::Local<v8::Function> =
+                    get_member(controller, scope, "enqueue").unwrap();
+                enqueue
+                    .call(scope, controller.into(), &[result.into()])
+                    .unwrap();
+            } else {
+                let close: v8::Local<v8::Function> =
+                    get_member(controller, scope, "close").unwrap();
+                close.call(scope, controller.into(), &[]).unwrap();
+            }
+        },
+    )
+    .data(controller)
+    .build(scope)
+    .unwrap();
+
+    let promise = promise.then(scope, then).unwrap();
+    rv.set(promise.into());
+}
+
 fn get_result(
     runtime: &mut JsRuntime,
-    req: &Request<hyper::Body>,
+    req: &mut Request<hyper::Body>,
 ) -> Result<v8::Global<v8::Value>> {
+    let op_state = runtime.op_state();
     let global_context = runtime.global_context();
     let scope = &mut runtime.handle_scope();
     let global_proxy = global_context.get(scope).global(scope);
 
+    // FIXME: this request conversion is probably simplistic. Check deno/ext/http/lib.rs
     let request: v8::Local<v8::Function> = get_member(global_proxy, scope, "Request")?;
     let url = v8::String::new(scope, &req.uri().to_string()).unwrap();
     let init = v8::Object::new(scope);
 
+    let method = req.method();
     let method_key = v8::String::new(scope, "method").unwrap().into();
-    let method_value = v8::String::new(scope, &req.method().to_string())
-        .unwrap()
-        .into();
+    let method_value = v8::String::new(scope, method.as_str()).unwrap().into();
     init.set(scope, method_key, method_value)
         .ok_or(Error::NotAResponse)?;
 
@@ -237,7 +318,37 @@ fn get_result(
     init.set(scope, headers_key, headers.into())
         .ok_or(Error::NotAResponse)?;
 
-    // FIXME: Also map the request body
+    if method != Method::GET && method != Method::HEAD {
+        let body = hyper::Body::empty();
+        let body = std::mem::replace(req.body_mut(), body);
+        let resource = BodyResource {
+            body: RefCell::new(body),
+        };
+        // FIXME: Fix resource leak. We have to remove the body from the table when:
+        // * We finish reading it.
+        // * The ReadableStream is canceled.
+        let rid = op_state.borrow_mut().resource_table.add(resource);
+        let rid = v8::Integer::new_from_unsigned(scope, rid).into();
+
+        let pull = v8::Function::builder(pull)
+            .data(rid)
+            .build(scope)
+            .ok_or(Error::NotAResponse)?;
+        let pull_key = v8::String::new(scope, "pull").ok_or(Error::NotAResponse)?;
+        let underlying_source = v8::Object::new(scope);
+        underlying_source.set(scope, pull_key.into(), pull.into());
+
+        let readable_stream: v8::Local<v8::Function> =
+            get_member(global_proxy, scope, "ReadableStream")?;
+        let body = readable_stream
+            .new_instance(scope, &[underlying_source.into()])
+            .ok_or(Error::NotAResponse)?;
+        let body_key = v8::String::new(scope, "body")
+            .ok_or(Error::NotAResponse)?
+            .into();
+        init.set(scope, body_key, body.into())
+            .ok_or(Error::NotAResponse)?;
+    }
 
     let request = request
         .new_instance(scope, &[url.into(), init.into()])
@@ -254,7 +365,7 @@ async fn run_js_aux(
     d: Rc<RefCell<DenoService>>,
     path: String,
     code: String,
-    req: Request<hyper::Body>,
+    mut req: Request<hyper::Body>,
 ) -> Result<Response<Body>> {
     let runtime = &mut d.borrow_mut().worker.js_runtime;
 
@@ -266,7 +377,8 @@ async fn run_js_aux(
 
     runtime.execute_script(&path, &code)?;
 
-    let result = get_result(runtime, &req)?;
+    let result = get_result(runtime, &mut req)?;
+
     let result = runtime.resolve_value(result).await?;
     let stream = get_read_stream(runtime, result.clone(), d.clone())?;
     let scope = &mut runtime.handle_scope();
