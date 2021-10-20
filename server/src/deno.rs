@@ -201,6 +201,50 @@ fn get_read_stream(
     Ok(stream)
 }
 
+fn get_result(
+    runtime: &mut JsRuntime,
+    req: &Request<hyper::Body>,
+) -> Result<v8::Global<v8::Value>> {
+    let global_context = runtime.global_context();
+    let scope = &mut runtime.handle_scope();
+    let global_proxy = global_context.get(scope).global(scope);
+
+    let request: v8::Local<v8::Function> = get_member(global_proxy, scope, "Request")?;
+    let url = v8::String::new(scope, &req.uri().to_string()).unwrap();
+    let init = v8::Object::new(scope);
+
+    let method_key = v8::String::new(scope, "method").unwrap().into();
+    let method_value = v8::String::new(scope, &req.method().to_string())
+        .unwrap()
+        .into();
+    init.set(scope, method_key, method_value)
+        .ok_or(Error::NotAResponse)?;
+
+    let headers = v8::Object::new(scope);
+    for (k, v) in req.headers().iter() {
+        let k = v8::String::new(scope, k.as_str()).ok_or(Error::NotAResponse)?;
+        let v = v8::String::new(scope, v.to_str()?).ok_or(Error::NotAResponse)?;
+        headers
+            .set(scope, k.into(), v.into())
+            .ok_or(Error::NotAResponse)?;
+    }
+    let headers_key = v8::String::new(scope, "headers").unwrap().into();
+    init.set(scope, headers_key, headers.into())
+        .ok_or(Error::NotAResponse)?;
+
+    // FIXME: Also map the request body
+
+    let request = request
+        .new_instance(scope, &[url.into(), init.into()])
+        .ok_or(Error::NotAResponse)?;
+
+    let chisel: v8::Local<v8::Function> = get_member(global_proxy, scope, "chisel")?;
+    let result = chisel
+        .call(scope, global_proxy.into(), &[request.into()])
+        .ok_or(Error::NotAResponse)?;
+    Ok(v8::Global::new(scope, result))
+}
+
 async fn run_js_aux(
     d: Rc<RefCell<DenoService>>,
     path: String,
@@ -217,47 +261,7 @@ async fn run_js_aux(
 
     runtime.execute_script(&path, &code)?;
 
-    let result = {
-        let global_context = runtime.global_context();
-        let scope = &mut runtime.handle_scope();
-        let global_proxy = global_context.get(scope).global(scope);
-
-        let request: v8::Local<v8::Function> = get_member(global_proxy, scope, "Request")?;
-        let url = v8::String::new(scope, &req.uri().to_string()).unwrap();
-        let init = v8::Object::new(scope);
-
-        let method_key = v8::String::new(scope, "method").unwrap().into();
-        let method_value = v8::String::new(scope, &req.method().to_string())
-            .unwrap()
-            .into();
-        init.set(scope, method_key, method_value)
-            .ok_or(Error::NotAResponse)?;
-
-        let headers = v8::Object::new(scope);
-        for (k, v) in req.headers().iter() {
-            let k = v8::String::new(scope, k.as_str()).ok_or(Error::NotAResponse)?;
-            let v = v8::String::new(scope, v.to_str()?).ok_or(Error::NotAResponse)?;
-            headers
-                .set(scope, k.into(), v.into())
-                .ok_or(Error::NotAResponse)?;
-        }
-        let headers_key = v8::String::new(scope, "headers").unwrap().into();
-        init.set(scope, headers_key, headers.into())
-            .ok_or(Error::NotAResponse)?;
-
-        // FIXME: Also map the request body
-
-        let request = request
-            .new_instance(scope, &[url.into(), init.into()])
-            .ok_or(Error::NotAResponse)?;
-
-        let chisel: v8::Local<v8::Function> = get_member(global_proxy, scope, "chisel")?;
-        let result = chisel
-            .call(scope, global_proxy.into(), &[request.into()])
-            .ok_or(Error::NotAResponse)?;
-        v8::Global::new(scope, result)
-    };
-
+    let result = get_result(runtime, &req)?;
     let result = runtime.resolve_value(result).await?;
     let stream = get_read_stream(runtime, result.clone(), d.clone())?;
     let scope = &mut runtime.handle_scope();
