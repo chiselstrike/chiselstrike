@@ -55,8 +55,8 @@ $CURL --data foobar -o - localhost:3000/echo
 # CHECK:     },
 # CHECK:     "redirect": "follow",
 # CHECK:     "signal": {},
-# CHECK:     "body": "",
-# CHECK:     "bodyUsed": false
+# CHECK:     "body": "foobar",
+# CHECK:     "bodyUsed": true
 # CHECK: }
 
 echo
@@ -82,6 +82,6 @@ $CURL -H 'Expect: 100-continue' --data foobar -o - localhost:3000/echo
 # CHECK:     },
 # CHECK:     "redirect": "follow",
 # CHECK:     "signal": {},
-# CHECK:     "body": "",
-# CHECK:     "bodyUsed": false
+# CHECK:     "body": "foobar",
+# CHECK:     "bodyUsed": true
 # CHECK: }
