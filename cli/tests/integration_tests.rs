@@ -15,6 +15,13 @@ mod tests {
         path
     }
 
+    fn repo_dir() -> PathBuf {
+        let mut path = bin_dir();
+        path.pop();
+        path.pop();
+        path
+    }
+
     fn chisel() -> String {
         bin_dir().join("chisel").to_str().unwrap().to_string()
     }
@@ -39,6 +46,9 @@ mod tests {
             config
                 .constants
                 .insert("curl".to_owned(), "curl -S -s -i".to_owned());
+            let mut path = repo_dir();
+            path.push("cli/tests/test-wrapper.sh");
+            config.shell = path.to_str().unwrap().to_string();
         })
         .expect("Lit tests failed");
     }
