@@ -1,4 +1,8 @@
-// RUN: @chisel type add Foo && @chisel type export
-// CHECK: Type defined: Foo
-// CHECK: class Foo {
-// CHECK: }
+# RUN: CHISEL="@chisel" sh -e @file
+
+$CHISEL type add Foo
+$CHISEL type export
+
+# CHECK: Type defined: Foo
+# CHECK: class Foo {
+# CHECK: }
