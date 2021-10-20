@@ -33,6 +33,13 @@ enum FieldNames {
     FieldId,
 }
 
+#[derive(Iden)]
+enum FieldLabels {
+    Table,
+    LabelName,
+    FieldId,
+}
+
 pub fn tables() -> Vec<TableCreateStatement> {
     let types = Table::create()
         .table(Types::Table)
@@ -87,5 +94,17 @@ pub fn tables() -> Vec<TableCreateStatement> {
                 .on_delete(ForeignKeyAction::Cascade),
         )
         .to_owned();
-    vec![types, type_names, fields, type_fields]
+    let field_labels = Table::create()
+        .table(FieldLabels::Table)
+        .if_not_exists()
+        .col(ColumnDef::new(FieldLabels::LabelName).text()) // Denormalized, to keep it simple.
+        .col(ColumnDef::new(FieldLabels::FieldId).integer())
+        .foreign_key(
+            ForeignKey::create()
+                .from(FieldLabels::Table, FieldLabels::FieldId)
+                .to(Fields::Table, Fields::FieldId)
+                .on_delete(ForeignKeyAction::Cascade),
+        )
+        .to_owned();
+    vec![types, type_names, fields, type_fields, field_labels]
 }
