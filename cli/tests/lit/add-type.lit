@@ -2,7 +2,16 @@
 
 $CHISEL type add Foo
 $CHISEL type export
+$CHISEL restart
+sleep 2
+$CHISEL type export
 
 # CHECK: Type defined: Foo
+
+# CHECK: class Foo {
+# CHECK: }
+
+# CHECK: success
+
 # CHECK: class Foo {
 # CHECK: }
