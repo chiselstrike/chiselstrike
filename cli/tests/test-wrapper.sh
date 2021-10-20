@@ -2,7 +2,9 @@
 
 set -e
 
-$CHISELD -d sqlite://:memory: -m sqlite://:memory: &
+DIR=$(mktemp -d)
+
+$CHISELD -d "sqlite://$DIR/chiseld.db?mode=rwc" -m "sqlite://$DIR/chiseld-data.db?mode=rwc" &
 PID=$!
 sleep 1
 
@@ -13,5 +15,6 @@ set -e
 
 kill $PID
 wait
+rm -rf "$DIR"
 
 exit $ret
