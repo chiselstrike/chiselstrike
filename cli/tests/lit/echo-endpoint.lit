@@ -1,0 +1,60 @@
+# SPDX-FileCopyrightText: © 2021 ChiselStrike <info@chiselstrike.com>
+
+# RUN: CHISEL="@chisel" CURL="@curl" sh -e @file
+
+cat << EOF | $CHISEL end-point create echo -
+// This function produces a response whose body is a json of the request
+async function chisel(req) {
+    // The replacer function is not async, so read the body first.
+    let body_text = await req.text();
+
+    // Stringfy needs some help to see some of the fields
+    function replacer(key, value) {
+        const ret = {};
+        if (key == "") {
+            for (const k in value) {
+                ret[k] = value[k];
+            }
+            return ret;
+        }
+        if (key == "headers") {
+            for (const header of value) {
+                ret[header[0]] = header[1];
+            }
+            return ret;
+        }
+        if (key == "body") {
+            return body_text;
+        }
+        return value;
+    }
+
+    const body = JSON.stringify(req, replacer, 4);
+    return new Response(body);
+}
+EOF
+
+$CURL -F foo=bar -o - localhost:3000/echo
+
+# CHECK: End point defined: /echo
+
+# CHECK: HTTP/1.1 200 OK
+# CHECK: content-type: text/plain;charset=UTF-8
+# CHECK: transfer-encoding: chunked
+# CHECK: date:
+
+# CHECK: {
+# CHECK:     "method": "POST",
+# CHECK:     "url": "http://chiselstrike.com/echo",
+# CHECK:     "headers": {
+# CHECK:         "accept": "*/*",
+# CHECK:         "content-length": "141",
+# CHECK:         "content-type": "multipart/form-data; boundary=[[.*]]",
+# CHECK:         "host": "localhost:3000",
+# CHECK:         "user-agent": "curl/[[.*]]"
+# CHECK:     },
+# CHECK:     "redirect": "follow",
+# CHECK:     "signal": {},
+# CHECK:     "body": "",
+# CHECK:     "bodyUsed": false
+# CHECK: }
