@@ -89,7 +89,7 @@ pub fn tables() -> Vec<TableCreateStatement> {
         .col(ColumnDef::new(FieldNames::FieldId).integer())
         .foreign_key(
             ForeignKey::create()
-                .from(FieldNames::Table, Fields::FieldId)
+                .from(FieldNames::Table, FieldNames::FieldId)
                 .to(Fields::Table, Fields::FieldId)
                 .on_delete(ForeignKeyAction::Cascade),
         )
