@@ -4,6 +4,7 @@ use crate::api::Body;
 use anyhow::Result;
 use deno_broadcast_channel::InMemoryBroadcastChannel;
 use deno_core::{JsRuntime, NoopModuleLoader};
+use deno_runtime::inspector_server::InspectorServer;
 use deno_runtime::permissions::Permissions;
 use deno_runtime::worker::{MainWorker, WorkerOptions};
 use deno_runtime::BootstrapOptions;
@@ -13,9 +14,13 @@ use hyper::{Request, Response, StatusCode};
 use rusty_v8 as v8;
 use std::cell::RefCell;
 use std::convert::TryInto;
+use std::net::SocketAddr;
 use std::rc::Rc;
 use std::sync::Arc;
 use url::Url;
+
+/// Change to true to block waiting for the debugger to attach.
+static DEBUG: bool = false;
 
 /// A v8 isolate doesn't want to be moved between or used from
 /// multiple threads. A JsRuntime owns an isolate, so we need to use a
@@ -31,6 +36,9 @@ use url::Url;
 /// anyway.
 struct DenoService {
     worker: MainWorker,
+
+    // We need a copy to keep it alive
+    _inspector: Option<Arc<InspectorServer>>,
 }
 
 #[derive(thiserror::Error, Debug)]
@@ -45,6 +53,13 @@ impl DenoService {
             todo!("Web workers are not supported");
         });
         let module_loader = Rc::new(NoopModuleLoader);
+
+        let mut inspector = None;
+        if DEBUG {
+            let addr: SocketAddr = "127.0.0.1:9229".parse().unwrap();
+            inspector = Some(Arc::new(InspectorServer::new(addr, "chisel".to_string())));
+        }
+
         let opts = WorkerOptions {
             bootstrap: BootstrapOptions {
                 apply_source_maps: false,
@@ -66,7 +81,7 @@ impl DenoService {
             seed: None,
             js_error_create_fn: None,
             create_web_worker_cb,
-            maybe_inspector_server: None,
+            maybe_inspector_server: inspector.clone(),
             should_break_on_first_statement: false,
             module_loader,
             get_error_class_fn: None,
@@ -90,7 +105,10 @@ impl DenoService {
 
         let worker =
             MainWorker::bootstrap_from_options(Url::parse(path).unwrap(), permissions, opts);
-        Self { worker }
+        Self {
+            worker,
+            _inspector: inspector,
+        }
     }
 }
 
@@ -190,6 +208,13 @@ async fn run_js_aux(
     req: Request<hyper::Body>,
 ) -> Result<Response<Body>> {
     let runtime = &mut d.borrow_mut().worker.js_runtime;
+
+    if DEBUG {
+        runtime
+            .inspector()
+            .wait_for_session_and_break_on_next_statement();
+    }
+
     runtime.execute_script(&path, &code)?;
 
     let result = {
