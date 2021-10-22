@@ -112,11 +112,16 @@ impl DenoService {
     }
 }
 
+fn create_deno() -> Rc<RefCell<DenoService>> {
+    let d = DenoService::new();
+    Rc::new(RefCell::new(d))
+}
+
 thread_local! {
     // There is no 'thread lifetime in rust. So without Rc we can't
     // convince rust that a future produced with DENO.with doesn't
     // outlive the DenoService.
-    static DENO: Rc<RefCell<DenoService>> = Rc::new(RefCell::new(DenoService::new()))
+    static DENO: Rc<RefCell<DenoService>> = create_deno()
 }
 
 fn try_into_or<'s, T: std::convert::TryFrom<v8::Local<'s, v8::Value>>>(
