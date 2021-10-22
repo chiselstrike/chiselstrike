@@ -58,3 +58,30 @@ $CURL --data foobar -o - localhost:3000/echo
 # CHECK:     "body": "",
 # CHECK:     "bodyUsed": false
 # CHECK: }
+
+echo
+# Adding the 100-continue header causes curl to wait, which is a good
+# way to test pending futures on the deno side.
+$CURL -H 'Expect: 100-continue' --data foobar -o - localhost:3000/echo
+
+# CHECK: HTTP/1.1 200 OK
+# CHECK: content-type: text/plain;charset=UTF-8
+# CHECK: transfer-encoding: chunked
+# CHECK: date:
+
+# CHECK: {
+# CHECK:     "method": "POST",
+# CHECK:     "url": "http://chiselstrike.com/echo",
+# CHECK:     "headers": {
+# CHECK:         "accept": "*/*",
+# CHECK:         "content-length": "6",
+# CHECK:         "content-type": "application/x-www-form-urlencoded",
+# CHECK:         "expect": "100-continue",
+# CHECK:         "host": "localhost:3000",
+# CHECK:         "user-agent": "curl/[[.*]]"
+# CHECK:     },
+# CHECK:     "redirect": "follow",
+# CHECK:     "signal": {},
+# CHECK:     "body": "",
+# CHECK:     "bodyUsed": false
+# CHECK: }
