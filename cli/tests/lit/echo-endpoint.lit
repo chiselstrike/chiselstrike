@@ -36,7 +36,7 @@ EOF
 
 # CHECK: End point defined: /echo
 
-$CURL -F foo=bar -o - localhost:3000/echo
+$CURL --data foobar -o - localhost:3000/echo
 
 # CHECK: HTTP/1.1 200 OK
 # CHECK: content-type: text/plain;charset=UTF-8
@@ -48,8 +48,8 @@ $CURL -F foo=bar -o - localhost:3000/echo
 # CHECK:     "url": "http://chiselstrike.com/echo",
 # CHECK:     "headers": {
 # CHECK:         "accept": "*/*",
-# CHECK:         "content-length": "141",
-# CHECK:         "content-type": "multipart/form-data; boundary=[[.*]]",
+# CHECK:         "content-length": "6",
+# CHECK:         "content-type": "application/x-www-form-urlencoded",
 # CHECK:         "host": "localhost:3000",
 # CHECK:         "user-agent": "curl/[[.*]]"
 # CHECK:     },
