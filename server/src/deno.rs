@@ -12,6 +12,7 @@ use deno_web::BlobStore;
 use futures::stream::{try_unfold, Stream};
 use hyper::{Request, Response, StatusCode};
 use rusty_v8 as v8;
+use scoped_tls::scoped_thread_local;
 use std::cell::RefCell;
 use std::convert::TryInto;
 use std::net::SocketAddr;
@@ -34,7 +35,7 @@ static DEBUG: bool = false;
 /// The above is probably fine, since at some point we will be
 /// sharding our server, so there is not going to be a single process
 /// anyway.
-struct DenoService {
+pub struct DenoService {
     worker: MainWorker,
 
     // We need a copy to keep it alive
@@ -112,12 +113,7 @@ impl DenoService {
     }
 }
 
-thread_local! {
-    // There is no 'thread lifetime in rust. So without Rc we can't
-    // convince rust that a future produced with DENO.with doesn't
-    // outlive the DenoService.
-    static DENO: Rc<RefCell<DenoService>> = Rc::new(RefCell::new(DenoService::new()))
-}
+scoped_thread_local!(pub static DENO: Rc<RefCell<DenoService>>);
 
 fn try_into_or<'s, T: std::convert::TryFrom<v8::Local<'s, v8::Value>>>(
     val: Option<v8::Local<'s, v8::Value>>,
