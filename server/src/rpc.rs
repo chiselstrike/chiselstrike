@@ -2,8 +2,9 @@
 
 use crate::api::ApiService;
 use crate::deno;
-use crate::store::{Store, StoreError};
-use crate::types::{Field, ObjectType, TypeSystem, TypeSystemError};
+use crate::runtime;
+use crate::store::StoreError;
+use crate::types::{Field, ObjectType, TypeSystemError};
 use chisel::chisel_rpc_server::{ChiselRpc, ChiselRpcServer};
 use chisel::{
     AddTypeRequest, AddTypeResponse, EndPointCreationRequest, EndPointCreationResponse,
@@ -29,21 +30,11 @@ pub mod chisel {
 /// endpoints. The user-generated data plane endpoints are serviced with REST.
 pub struct RpcService {
     api: Arc<Mutex<ApiService>>,
-    type_system: Arc<Mutex<TypeSystem>>,
-    store: Box<Store>,
 }
 
 impl RpcService {
-    pub fn new(
-        api: Arc<Mutex<ApiService>>,
-        type_system: Arc<Mutex<TypeSystem>>,
-        store: Box<Store>,
-    ) -> Self {
-        RpcService {
-            api,
-            type_system,
-            store,
-        }
+    pub fn new(api: Arc<Mutex<ApiService>>) -> Self {
+        RpcService { api }
     }
 
     async fn create_js_endpoint(&self, path: &str, code: String) {
@@ -96,7 +87,8 @@ impl ChiselRpc for RpcService {
         &self,
         request: Request<AddTypeRequest>,
     ) -> Result<Response<AddTypeResponse>, Status> {
-        let mut type_system = self.type_system.lock().await;
+        let runtime = &mut runtime::get().await;
+        let type_system = &mut runtime.type_system;
         let type_def = request.into_inner();
         let name = type_def.name;
         let snake_case_name = name.to_case(Case::Snake);
@@ -115,7 +107,7 @@ impl ChiselRpc for RpcService {
             backing_table: snake_case_name.clone(),
         };
         type_system.define_type(ty.to_owned())?;
-        let store = &self.store;
+        let store = &runtime.store;
         store.insert(ty).await?;
         let path = format!("/{}", snake_case_name);
         self.define_type_endpoints(&path).await;
@@ -128,11 +120,12 @@ impl ChiselRpc for RpcService {
         &self,
         request: tonic::Request<RemoveTypeRequest>,
     ) -> Result<tonic::Response<RemoveTypeResponse>, tonic::Status> {
-        let mut type_system = self.type_system.lock().await;
+        let runtime = &mut runtime::get().await;
+        let type_system = &mut runtime.type_system;
         let request = request.into_inner();
         let name = request.type_name;
         type_system.remove_type(&name)?;
-        let store = &self.store;
+        let store = &runtime.store;
         store.remove(&name).await?;
         let response = chisel::RemoveTypeResponse {};
         Ok(Response::new(response))
@@ -142,7 +135,7 @@ impl ChiselRpc for RpcService {
         &self,
         _request: tonic::Request<TypeExportRequest>,
     ) -> Result<tonic::Response<TypeExportResponse>, tonic::Status> {
-        let type_system = self.type_system.lock().await;
+        let type_system = &runtime::get().await.type_system;
         let mut type_defs = vec![];
         use itertools::Itertools;
         for ty in type_system
