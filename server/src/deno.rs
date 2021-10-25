@@ -1,8 +1,11 @@
 // SPDX-FileCopyrightText: © 2021 ChiselStrike <info@chiselstrike.com>
 
 use crate::api::Body;
-use anyhow::Result;
+use crate::runtime;
+use crate::types::Type;
+use anyhow::{anyhow, Result};
 use deno_broadcast_channel::InMemoryBroadcastChannel;
+use deno_core::error::AnyError;
 use deno_core::op_async;
 use deno_core::CancelFuture;
 use deno_core::CancelHandle;
@@ -17,15 +20,20 @@ use deno_runtime::permissions::Permissions;
 use deno_runtime::worker::{MainWorker, WorkerOptions};
 use deno_runtime::BootstrapOptions;
 use deno_web::BlobStore;
+use futures::stream;
 use futures::stream::{try_unfold, Stream};
 use hyper::body::HttpBody;
 use hyper::Method;
 use hyper::{Request, Response, StatusCode};
 use once_cell::unsync::OnceCell;
 use rusty_v8 as v8;
+use serde_json::Value;
+use sqlx::any::AnyRow;
+use sqlx::Row;
 use std::cell::RefCell;
 use std::convert::TryInto;
 use std::net::SocketAddr;
+use std::pin::Pin;
 use std::rc::Rc;
 use std::sync::Arc;
 use url::Url;
@@ -129,12 +137,69 @@ async fn op_chisel_read_body(
     Ok(fut.await?.transpose()?.map(|x| x.to_vec().into()))
 }
 
+struct QueryStreamResource {
+    #[allow(clippy::type_complexity)]
+    stream: RefCell<Pin<Box<dyn stream::Stream<Item = Result<AnyRow, sqlx::Error>>>>>,
+}
+
+impl<'a> Resource for QueryStreamResource {}
+
+async fn op_chisel_query_create(
+    op_state: Rc<RefCell<OpState>>,
+    type_name: Option<String>,
+    _: (),
+) -> Result<Option<ResourceId>, AnyError> {
+    if let Some(type_name) = type_name {
+        let runtime = &mut runtime::get().await;
+        let ts = &runtime.type_system;
+        let stream = match ts.lookup_type(&type_name) {
+            Ok(Type::Object(ty)) => {
+                let store = &mut runtime.store;
+                store.find_all(&ty)
+            }
+            Ok(_) => {
+                return Err(anyhow!("Type {} is not an object type", type_name));
+            }
+            Err(e) => {
+                return Err(anyhow!("Failed to look up type {}: {}", type_name, e));
+            }
+        };
+        let resource = QueryStreamResource {
+            stream: RefCell::new(Box::pin(stream)),
+        };
+        let rid = op_state.borrow_mut().resource_table.add(resource);
+        Ok(Some(rid))
+    } else {
+        Ok(None)
+    }
+}
+
+async fn op_chisel_query_next(
+    state: Rc<RefCell<OpState>>,
+    query_stream_rid: ResourceId,
+    _: (),
+) -> Result<Option<serde_json::Value>> {
+    let resource: Rc<QueryStreamResource> = state.borrow().resource_table.get(query_stream_rid)?;
+    let mut stream = resource.stream.borrow_mut();
+    use futures::stream::StreamExt;
+    if let Some(row) = stream.next().await {
+        let row = row.unwrap();
+        let fields: &str = row.try_get("fields")?;
+        let v: Value = serde_json::from_str(fields)?;
+        Ok(Some(v))
+    } else {
+        Ok(None)
+    }
+}
+
 fn create_deno(inspect_brk: bool) -> DenoService {
     let mut d = DenoService::new(inspect_brk);
     let runtime = &mut d.worker.js_runtime;
 
     // FIXME: Turn this into a deno extension
     runtime.register_op("chisel_read_body", op_async(op_chisel_read_body));
+    runtime.register_op("chisel_query_create", op_async(op_chisel_query_create));
+    runtime.register_op("chisel_query_next", op_async(op_chisel_query_next));
     runtime.sync_ops_cache();
 
     // FIXME: Include this js in the snapshop

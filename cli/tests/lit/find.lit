@@ -1,0 +1,31 @@
+# SPDX-FileCopyrightText: © 2021 ChiselStrike <info@chiselstrike.com>
+
+# RUN: CHISEL="@chisel" CURL="@curl" sh -e @file
+
+cat << EOF | $CHISEL type import -
+type Person {
+  first_name: String
+  last_name: String
+}
+EOF
+
+cat << EOF | $CHISEL end-point create --method=GET find -
+async function chisel(req) {
+    let response = "";
+    let people = await Chisel.find_all("Person");
+    for await (let person of people) {
+        response += person.first_name;
+        response += " ";
+    }
+    return new Response(response);
+}
+EOF
+
+# CHECK: Type defined: Person
+# CHECK: End point defined: /find
+
+$CURL -d '{"first_name": "Glauber", "last_name": "Costa"}' -X POST -H "Content-Type: application/json" http://localhost:3000/person
+
+$CURL -o - localhost:3000/find
+
+# CHECK: Glauber 
