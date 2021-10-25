@@ -2929,6 +2929,7 @@ dependencies = [
  "itertools 0.10.1",
  "log",
  "nix",
+ "once_cell",
  "pretty_env_logger",
  "prost",
  "rusty_v8",
