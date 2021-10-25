@@ -1,0 +1,52 @@
+# SPDX-FileCopyrightText: © 2021 ChiselStrike <info@chiselstrike.com>
+
+# RUN: CHISEL="@chisel" CURL="@curl" sh -e @file
+
+cat << EOF | $CHISEL end-point create test -
+async function chisel(req) {
+    let res = Deno.core.resources();
+    if (res[3] != "chisel_server::deno::BodyResource") {
+        throw "Missing resource";
+    }
+    let body = await req.text();
+    if (body != "foobar") {
+       throw "Wrong body";
+    }
+    res = Deno.core.resources();
+    if (res[3] !== undefined) {
+       throw "Body resource was not released";
+    }
+    return new Response("test is ok");
+}
+EOF
+
+# CHECK: End point defined: /test
+
+$CURL --data foobar -o - localhost:3000/test
+
+# CHECK: HTTP/1.1 200 OK
+# CHECK: test is ok
+
+echo
+
+cat << EOF | $CHISEL end-point create test -
+async function chisel(req) {
+    let res = Deno.core.resources();
+    if (res[4] != "chisel_server::deno::BodyResource") {
+        throw "Missing resource";
+    }
+    await req.body.cancel();
+    res = Deno.core.resources();
+    if (res[4] !== undefined) {
+       throw "Body resource was not released";
+    }
+    return new Response("test is ok");
+}
+EOF
+
+# CHECK: End point defined: /test
+
+$CURL --data foobar -o - localhost:3000/test
+
+# CHECK: HTTP/1.1 200 OK
+# CHECK: test is ok

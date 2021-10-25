@@ -7,7 +7,11 @@ Chisel.buildReadableStreamForBody = function(rid) {
                 controller.enqueue(chunk);
             } else {
                 controller.close();
+                Deno.core.opSync("op_close", rid);
             }
+        },
+        cancel() {
+            Deno.core.opSync("op_close", rid);
         }
     });
 }
