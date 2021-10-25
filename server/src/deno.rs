@@ -134,8 +134,15 @@ static DENO_READ_BODY: &str = "deno_read_body";
 fn create_deno() -> Rc<RefCell<DenoService>> {
     let mut d = DenoService::new();
     let runtime = &mut d.worker.js_runtime;
+
+    // FIXME: Turn this into a deno extension
     runtime.register_op(DENO_READ_BODY, op_async(op_deno_read_body));
     runtime.sync_ops_cache();
+
+    // FIXME: Include this js in the snapshop
+    let script = std::str::from_utf8(include_bytes!("chisel.js")).unwrap();
+    runtime.execute_script("chisel.js", script).unwrap();
+
     Rc::new(RefCell::new(d))
 }
 
@@ -236,56 +243,6 @@ struct BodyResource {
 
 impl Resource for BodyResource {}
 
-// The pull function passed to ReadableStream's constructor
-fn pull(scope: &mut v8::HandleScope, args: v8::FunctionCallbackArguments, mut rv: v8::ReturnValue) {
-    // FIXME: Propagate errors with scope.throw_exception.
-    let context = scope.get_current_context();
-    let global_proxy = context.global(scope);
-    let rid: v8::Local<v8::Integer> = args.data().unwrap().try_into().unwrap();
-    let deno: v8::Local<v8::Object> = get_member(global_proxy, scope, "Deno").unwrap();
-    let core: v8::Local<v8::Object> = get_member(deno, scope, "core").unwrap();
-    let op_async: v8::Local<v8::Function> = get_member(core, scope, "opAsync").unwrap();
-    let read_body = v8::String::new(scope, DENO_READ_BODY)
-        .ok_or(Error::NotAResponse)
-        .unwrap()
-        .into();
-    let promise = op_async
-        .call(scope, core.into(), &[read_body, rid.into()])
-        .unwrap();
-    let promise: v8::Local<v8::Promise> = promise.try_into().unwrap();
-
-    // FIXME: This is a lifetime hack, try to avoid it.
-    let controller = v8::Global::new(scope, args.get(0));
-    let controller = v8::Local::new(scope, controller);
-
-    let then = v8::Function::builder(
-        |scope: &mut v8::HandleScope, args: v8::FunctionCallbackArguments, _: v8::ReturnValue| {
-            let controller = args.data().unwrap();
-            let controller: v8::Local<v8::Object> = controller.try_into().unwrap();
-
-            let result = args.get(0);
-            if result.is_uint8_array() {
-                let result: v8::Local<v8::Uint8Array> = result.try_into().unwrap();
-                let enqueue: v8::Local<v8::Function> =
-                    get_member(controller, scope, "enqueue").unwrap();
-                enqueue
-                    .call(scope, controller.into(), &[result.into()])
-                    .unwrap();
-            } else {
-                let close: v8::Local<v8::Function> =
-                    get_member(controller, scope, "close").unwrap();
-                close.call(scope, controller.into(), &[]).unwrap();
-            }
-        },
-    )
-    .data(controller)
-    .build(scope)
-    .unwrap();
-
-    let promise = promise.then(scope, then).unwrap();
-    rv.set(promise.into());
-}
-
 fn get_result(
     runtime: &mut JsRuntime,
     req: &mut Request<hyper::Body>,
@@ -330,24 +287,14 @@ fn get_result(
         let rid = op_state.borrow_mut().resource_table.add(resource);
         let rid = v8::Integer::new_from_unsigned(scope, rid).into();
 
-        let pull = v8::Function::builder(pull)
-            .data(rid)
-            .build(scope)
-            .ok_or(Error::NotAResponse)?;
-        let pull_key = v8::String::new(scope, "pull").ok_or(Error::NotAResponse)?;
-        let underlying_source = v8::Object::new(scope);
-        underlying_source.set(scope, pull_key.into(), pull.into());
-
-        let readable_stream: v8::Local<v8::Function> =
-            get_member(global_proxy, scope, "ReadableStream")?;
-        let body = readable_stream
-            .new_instance(scope, &[underlying_source.into()])
-            .ok_or(Error::NotAResponse)?;
+        let chisel: v8::Local<v8::Object> = get_member(global_proxy, scope, "Chisel").unwrap();
+        let build: v8::Local<v8::Function> =
+            get_member(chisel, scope, "buildReadableStreamForBody").unwrap();
+        let body = build.call(scope, chisel.into(), &[rid]).unwrap();
         let body_key = v8::String::new(scope, "body")
             .ok_or(Error::NotAResponse)?
             .into();
-        init.set(scope, body_key, body.into())
-            .ok_or(Error::NotAResponse)?;
+        init.set(scope, body_key, body).ok_or(Error::NotAResponse)?;
     }
 
     let request = request
