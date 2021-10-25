@@ -281,9 +281,6 @@ fn get_result(
         let resource = BodyResource {
             body: RefCell::new(body),
         };
-        // FIXME: Fix resource leak. We have to remove the body from the table when:
-        // * We finish reading it.
-        // * The ReadableStream is canceled.
         let rid = op_state.borrow_mut().resource_table.add(resource);
         let rid = v8::Integer::new_from_unsigned(scope, rid).into();
 
