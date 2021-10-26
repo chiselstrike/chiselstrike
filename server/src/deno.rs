@@ -4,7 +4,10 @@ use crate::api::Body;
 use anyhow::Result;
 use deno_broadcast_channel::InMemoryBroadcastChannel;
 use deno_core::op_async;
+use deno_core::CancelFuture;
+use deno_core::CancelHandle;
 use deno_core::OpState;
+use deno_core::RcRef;
 use deno_core::Resource;
 use deno_core::ResourceId;
 use deno_core::ZeroCopyBuf;
@@ -125,8 +128,10 @@ async fn op_deno_read_body(
     _: (),
 ) -> Result<Option<ZeroCopyBuf>> {
     let resource: Rc<BodyResource> = state.borrow().resource_table.get(body_rid)?;
+    let cancel = RcRef::map(&resource, |r| &r.cancel);
     let mut borrow = resource.body.borrow_mut();
-    Ok(borrow.data().await.transpose()?.map(|x| x.to_vec().into()))
+    let fut = borrow.data().or_cancel(cancel);
+    Ok(fut.await?.transpose()?.map(|x| x.to_vec().into()))
 }
 
 static DENO_READ_BODY: &str = "deno_read_body";
@@ -235,13 +240,16 @@ fn get_read_stream(
     Ok(stream)
 }
 
-// FIXME: Implement close to cancel the future that is trying to read
-// this.
 struct BodyResource {
     body: RefCell<hyper::Body>,
+    cancel: CancelHandle,
 }
 
-impl Resource for BodyResource {}
+impl Resource for BodyResource {
+    fn close(self: Rc<Self>) {
+        self.cancel.cancel();
+    }
+}
 
 fn get_result(
     runtime: &mut JsRuntime,
@@ -280,6 +288,7 @@ fn get_result(
         let body = std::mem::replace(req.body_mut(), body);
         let resource = BodyResource {
             body: RefCell::new(body),
+            cancel: Default::default(),
         };
         let rid = op_state.borrow_mut().resource_table.add(resource);
         let rid = v8::Integer::new_from_unsigned(scope, rid).into();
