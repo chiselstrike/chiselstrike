@@ -1,3 +1,5 @@
+// SPDX-FileCopyrightText: © 2021 ChiselStrike <info@chiselstrike.com>
+
 Chisel = {}
 Chisel.buildReadableStreamForBody = function(rid) {
     return new ReadableStream({
