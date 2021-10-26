@@ -1,6 +1,7 @@
 // SPDX-FileCopyrightText: © 2021 ChiselStrike <info@chiselstrike.com>
 
 use crate::api::ApiService;
+use crate::deno::init_deno;
 use crate::rpc::RpcService;
 use crate::store::Store;
 use anyhow::Result;
@@ -34,6 +35,10 @@ enum DoRepeat {
 }
 
 async fn run(opt: Opt) -> Result<DoRepeat> {
+    // FIXME: We have to create one per thread. For now we only have
+    // one thread, so this is fine.
+    init_deno();
+
     let store = Store::connect(&opt.metadata_db_uri, &opt.data_db_uri).await?;
     store.create_schema().await?;
     let ts = store.load_type_system().await?;
