@@ -136,7 +136,7 @@ async fn op_deno_read_body(
 
 static DENO_READ_BODY: &str = "deno_read_body";
 
-fn create_deno() -> Rc<RefCell<DenoService>> {
+fn create_deno() -> DenoService {
     let mut d = DenoService::new();
     let runtime = &mut d.worker.js_runtime;
 
@@ -147,15 +147,28 @@ fn create_deno() -> Rc<RefCell<DenoService>> {
     // FIXME: Include this js in the snapshop
     let script = std::str::from_utf8(include_bytes!("chisel.js")).unwrap();
     runtime.execute_script("chisel.js", script).unwrap();
+    d
+}
 
-    Rc::new(RefCell::new(d))
+pub fn init_deno() {
+    DENO.with(|d| {
+        // FIXME: We probably need to use a AsyncRefCell, as the rpc
+        // implementation is multi-threaded.
+        let mut borrow = d.borrow_mut();
+
+        // Drop the old DenoService first to keep the isolate stack well
+        // formed. See https://github.com/denoland/rusty_v8/issues/814 for the details.
+        *borrow = None;
+
+        *borrow = Some(create_deno());
+    })
 }
 
 thread_local! {
     // There is no 'thread lifetime in rust. So without Rc we can't
     // convince rust that a future produced with DENO.with doesn't
     // outlive the DenoService.
-    static DENO: Rc<RefCell<DenoService>> = create_deno()
+    static DENO: Rc<RefCell<Option<DenoService>>> = Rc::new(RefCell::new(None));
 }
 
 fn try_into_or<'s, T: std::convert::TryFrom<v8::Local<'s, v8::Value>>>(
@@ -183,9 +196,14 @@ where
 async fn get_read_future(
     reader: v8::Global<v8::Value>,
     read: v8::Global<v8::Function>,
-    service: Rc<RefCell<DenoService>>,
+    service: Rc<RefCell<Option<DenoService>>>,
 ) -> Result<Option<(Box<[u8]>, ())>> {
-    let runtime = &mut service.borrow_mut().worker.js_runtime;
+    let mut borrow = service.borrow_mut();
+    let runtime = &mut borrow
+        .as_mut()
+        .expect("deno not inialized")
+        .worker
+        .js_runtime;
     let js_promise = {
         let scope = &mut runtime.handle_scope();
         let reader = v8::Local::new(scope, reader.clone());
@@ -218,7 +236,7 @@ async fn get_read_future(
 fn get_read_stream(
     runtime: &mut JsRuntime,
     global_response: v8::Global<v8::Value>,
-    service: Rc<RefCell<DenoService>>,
+    service: Rc<RefCell<Option<DenoService>>>,
 ) -> Result<impl Stream<Item = Result<Box<[u8]>>>> {
     let scope = &mut runtime.handle_scope();
     let response = global_response
@@ -315,12 +333,17 @@ fn get_result(
 }
 
 async fn run_js_aux(
-    d: Rc<RefCell<DenoService>>,
+    d: Rc<RefCell<Option<DenoService>>>,
     path: String,
     code: String,
     mut req: Request<hyper::Body>,
 ) -> Result<Response<Body>> {
-    let runtime = &mut d.borrow_mut().worker.js_runtime;
+    let mut borrow = d.borrow_mut();
+    let runtime = &mut borrow
+        .as_mut()
+        .expect("deno not inialized")
+        .worker
+        .js_runtime;
 
     if DEBUG {
         runtime
