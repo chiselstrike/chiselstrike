@@ -1,3 +1,43 @@
+# Initial Design for v0.1 Demo
+
+A _policy_ is a mechanism allowing the admin to change endpoint
+behaviour.  When a policy applies to some endpoint, that endpoint does
+something different than when the policy doesn't apply.  The policy
+specifies which endpoints it affects by listing endpoint labels.  Each
+endpoint is subject to policies targeting at least one of its labels.
+
+One family of policies transforms data read from storage before
+handing it off to JavaScript.  When such a policy applies, it makes
+the endpoint perform a transformation on individual field values
+whenever it fetches a row from storage.  The transformed value is then
+passed on in lieu of the original field value.
+
+To define a policy of this kind, we must specify which endpoints it
+covers and which transformation to perform.  We specify endpoints via
+a list of labels; the policy applies to all endpoints labelled by any
+element of that list.  The transformation can be expressed in a
+limited language with helpful intrinsic functions.  For example, it
+can be described as `fn1(@L2)`, which means that the endpoint should
+invoke the function `fn1` on any field labelled `@L2` and replace the
+field value with the value returned by that function call.
+
+In v0.1, we will implement the `anonymize` function.  This function
+replaces the field value with a generic value of the same type.  That
+way we can demo a policy that anonymizes `@pii` data.
+
+Note that multiple policies may end up affecting the same field.  For
+example, one policy may target `@L2` and another `@L3`; any field
+labelled with both will undergo two transformations (perhaps in the
+same order as labels are listed on the field?).  We can forbid this
+situation, but that requires analysis of policies and labels on every
+DDL change.
+
+We could also allow a policy to reference a set of field labels:
+`fn1(@L2 or @L3)` would be applicable to any field labelled by either
+`@L2` or `@L3`.
+
+# Long-Term Vision
+
 This is the v1 proposal for ChiselStrike data description language (DDL).
 This is not yet the short term vision, so I am not using Prisma.
 
