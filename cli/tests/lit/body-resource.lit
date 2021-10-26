@@ -2,10 +2,10 @@
 
 # RUN: CHISEL="@chisel" CURL="@curl" sh -e @file
 
-cat << EOF | $CHISEL end-point create test -
+cat << EOF | $CHISEL end-point create test1 -
 async function chisel(req) {
     let res = Deno.core.resources();
-    if (res[3] != "chisel_server::deno::BodyResource") {
+    if (res[3] !== "chisel_server::deno::BodyResource") {
         throw "Missing resource";
     }
     let body = await req.text();
@@ -16,23 +16,23 @@ async function chisel(req) {
     if (res[3] !== undefined) {
        throw "Body resource was not released";
     }
-    return new Response("test is ok");
+    return new Response("test1 is ok");
 }
 EOF
 
-# CHECK: End point defined: /test
+# CHECK: End point defined: /test1
 
-$CURL --data foobar -o - localhost:3000/test
+$CURL --data foobar -o - localhost:3000/test1
 
 # CHECK: HTTP/1.1 200 OK
-# CHECK: test is ok
+# CHECK: test1 is ok
 
 echo
 
-cat << EOF | $CHISEL end-point create test -
+cat << EOF | $CHISEL end-point create test2 -
 async function chisel(req) {
     let res = Deno.core.resources();
-    if (res[4] != "chisel_server::deno::BodyResource") {
+    if (res[4] !== "chisel_server::deno::BodyResource") {
         throw "Missing resource";
     }
     await req.body.cancel();
@@ -40,13 +40,13 @@ async function chisel(req) {
     if (res[4] !== undefined) {
        throw "Body resource was not released";
     }
-    return new Response("test is ok");
+    return new Response("test2 is ok");
 }
 EOF
 
-# CHECK: End point defined: /test
+# CHECK: End point defined: /test2
 
-$CURL --data foobar -o - localhost:3000/test
+$CURL --data foobar -o - localhost:3000/test2
 
 # CHECK: HTTP/1.1 200 OK
-# CHECK: test is ok
+# CHECK: test2 is ok
