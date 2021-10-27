@@ -17,6 +17,7 @@ tonic-build = "0.5.2"
 
 [dev-dependencies]
 lit = "1.0.3"
+ntest = "0.7.3"
 server = { path = "../server" }
 futures = "0.3.17"
 
