@@ -37,6 +37,7 @@ mod tests {
         assert!(status.success());
         let chiseld = bin_dir().join("chiseld").to_str().unwrap().to_string();
         env::set_var("CHISELD", chiseld);
+        env::set_var("CHISEL", chisel());
         lit::run::tests(lit::event_handler::Default::default(), |config| {
             config.add_search_path("tests/lit");
             config.add_extension("lit");
