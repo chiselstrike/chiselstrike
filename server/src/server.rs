@@ -53,7 +53,7 @@ async fn run(opt: Opt) -> Result<DoRepeat> {
         rpc.define_type_endpoints(type_name).await;
     }
     let rt = Runtime::new(store, ts);
-    runtime::set(rt).await;
+    runtime::set(rt);
 
     let mut sigterm = tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())?;
     let mut sigint = tokio::signal::unix::signal(tokio::signal::unix::SignalKind::interrupt())?;

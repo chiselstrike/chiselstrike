@@ -2,8 +2,8 @@
 
 use crate::store::Store;
 use crate::types::TypeSystem;
-use once_cell::sync::Lazy;
-use tokio::sync::{MappedMutexGuard, Mutex, MutexGuard};
+use once_cell::sync::OnceCell;
+use tokio::sync::{Mutex, MutexGuard};
 
 pub struct Runtime {
     pub store: Store,
@@ -16,15 +16,19 @@ impl Runtime {
     }
 }
 
-pub async fn set(rt: Runtime) {
-    let mut g = RUNTIME.lock().await;
-    *g = Some(rt);
+pub fn set(rt: Runtime) {
+    RUNTIME
+        .set(Mutex::new(rt))
+        .map_err(|_| ())
+        .expect("Runtime is already initialized.");
 }
 
-pub async fn get() -> MappedMutexGuard<'static, Runtime> {
-    MutexGuard::map(RUNTIME.lock().await, |x| {
-        x.as_mut().expect("Runtime is not yet initialized.")
-    })
+pub async fn get() -> MutexGuard<'static, Runtime> {
+    RUNTIME
+        .get()
+        .expect("Runtime is not yet initialized.")
+        .lock()
+        .await
 }
 
-static RUNTIME: Lazy<Mutex<Option<Runtime>>> = Lazy::new(|| Mutex::new(None));
+static RUNTIME: OnceCell<Mutex<Runtime>> = OnceCell::new();
