@@ -2920,6 +2920,7 @@ version = "0.0.0"
 dependencies = [
  "anyhow",
  "convert_case",
+ "deno_broadcast_channel",
  "deno_core",
  "deno_runtime",
  "deno_web",
