@@ -122,7 +122,7 @@ impl DenoService {
     }
 }
 
-async fn op_deno_read_body(
+async fn op_chisel_read_body(
     state: Rc<RefCell<OpState>>,
     body_rid: ResourceId,
     _: (),
@@ -134,14 +134,12 @@ async fn op_deno_read_body(
     Ok(fut.await?.transpose()?.map(|x| x.to_vec().into()))
 }
 
-static DENO_READ_BODY: &str = "deno_read_body";
-
 fn create_deno() -> DenoService {
     let mut d = DenoService::new();
     let runtime = &mut d.worker.js_runtime;
 
     // FIXME: Turn this into a deno extension
-    runtime.register_op(DENO_READ_BODY, op_async(op_deno_read_body));
+    runtime.register_op("chisel_read_body", op_async(op_chisel_read_body));
     runtime.sync_ops_cache();
 
     // FIXME: Include this js in the snapshop
