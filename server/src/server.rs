@@ -34,7 +34,7 @@ pub struct Opt {
 }
 
 /// Whether an action should be repeated.
-enum DoRepeat {
+pub enum DoRepeat {
     Yes,
     No,
 }
@@ -90,8 +90,7 @@ async fn run(opt: Opt) -> Result<DoRepeat> {
     results.2
 }
 
-pub async fn run_on_new_localset(opt: Opt) -> Result<()> {
+pub async fn run_on_new_localset(opt: Opt) -> Result<DoRepeat> {
     let local = tokio::task::LocalSet::new();
-    while let DoRepeat::Yes = local.run_until(run(opt.clone())).await? {}
-    Ok(())
+    local.run_until(run(opt)).await
 }
