@@ -29,9 +29,6 @@ use std::rc::Rc;
 use std::sync::Arc;
 use url::Url;
 
-/// Change to true to block waiting for the debugger to attach.
-static DEBUG: bool = false;
-
 /// A v8 isolate doesn't want to be moved between or used from
 /// multiple threads. A JsRuntime owns an isolate, so we need to use a
 /// thread local storage.
@@ -48,7 +45,7 @@ struct DenoService {
     worker: MainWorker,
 
     // We need a copy to keep it alive
-    _inspector: Option<Arc<InspectorServer>>,
+    inspector: Option<Arc<InspectorServer>>,
 }
 
 #[derive(thiserror::Error, Debug)]
@@ -58,14 +55,14 @@ enum Error {
 }
 
 impl DenoService {
-    pub fn new() -> Self {
+    pub fn new(inspect_brk: bool) -> Self {
         let create_web_worker_cb = Arc::new(|_| {
             todo!("Web workers are not supported");
         });
         let module_loader = Rc::new(NoopModuleLoader);
 
         let mut inspector = None;
-        if DEBUG {
+        if inspect_brk {
             let addr: SocketAddr = "127.0.0.1:9229".parse().unwrap();
             inspector = Some(Arc::new(InspectorServer::new(addr, "chisel".to_string())));
         }
@@ -115,10 +112,7 @@ impl DenoService {
 
         let worker =
             MainWorker::bootstrap_from_options(Url::parse(path).unwrap(), permissions, opts);
-        Self {
-            worker,
-            _inspector: inspector,
-        }
+        Self { worker, inspector }
     }
 }
 
@@ -134,8 +128,8 @@ async fn op_chisel_read_body(
     Ok(fut.await?.transpose()?.map(|x| x.to_vec().into()))
 }
 
-fn create_deno() -> DenoService {
-    let mut d = DenoService::new();
+fn create_deno(inspect_brk: bool) -> DenoService {
+    let mut d = DenoService::new(inspect_brk);
     let runtime = &mut d.worker.js_runtime;
 
     // FIXME: Turn this into a deno extension
@@ -148,7 +142,7 @@ fn create_deno() -> DenoService {
     d
 }
 
-pub fn init_deno() {
+pub fn init_deno(inspect_brk: bool) {
     DENO.with(|d| {
         // FIXME: We probably need to use a AsyncRefCell, as the rpc
         // implementation is multi-threaded.
@@ -158,7 +152,7 @@ pub fn init_deno() {
         // formed. See https://github.com/denoland/rusty_v8/issues/814 for the details.
         *borrow = None;
 
-        *borrow = Some(create_deno());
+        *borrow = Some(create_deno(inspect_brk));
     })
 }
 
@@ -337,13 +331,10 @@ async fn run_js_aux(
     mut req: Request<hyper::Body>,
 ) -> Result<Response<Body>> {
     let mut borrow = d.borrow_mut();
-    let runtime = &mut borrow
-        .as_mut()
-        .expect("deno not inialized")
-        .worker
-        .js_runtime;
+    let service = borrow.as_mut().expect("deno not inialized");
+    let runtime = &mut service.worker.js_runtime;
 
-    if DEBUG {
+    if service.inspector.is_some() {
         runtime
             .inspector()
             .wait_for_session_and_break_on_next_statement();
