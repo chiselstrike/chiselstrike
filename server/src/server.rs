@@ -28,6 +28,9 @@ pub struct Opt {
     /// Data database URI.
     #[structopt(short, long, default_value = "sqlite://chiseld-data.db?mode=rwc")]
     data_db_uri: String,
+    /// Should we wait for a debugger before executing any JS?
+    #[structopt(long)]
+    inspect_brk: bool,
 }
 
 /// Whether an action should be repeated.
@@ -39,7 +42,7 @@ enum DoRepeat {
 async fn run(opt: Opt) -> Result<DoRepeat> {
     // FIXME: We have to create one per thread. For now we only have
     // one thread, so this is fine.
-    init_deno();
+    init_deno(opt.inspect_brk);
 
     let store = Store::connect(&opt.metadata_db_uri, &opt.data_db_uri).await?;
     store.create_schema().await?;
