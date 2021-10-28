@@ -4,10 +4,10 @@ use std::collections::HashMap;
 
 #[derive(thiserror::Error, Debug)]
 pub enum TypeSystemError {
-    #[error["type already exists"]]
-    TypeAlreadyExists,
-    #[error["no such type"]]
-    NoSuchType,
+    #[error["Type `{0}` already exists"]]
+    TypeAlreadyExists(String),
+    #[error["No such type: `{0}`"]]
+    NoSuchType(String),
     #[error["`{0}` is not an object type"]]
     NotObjectType(String),
 }
@@ -26,7 +26,7 @@ impl TypeSystem {
 
     pub fn define_type(&mut self, ty: ObjectType) -> Result<(), TypeSystemError> {
         if self.types.contains_key(&ty.name) {
-            return Err(TypeSystemError::TypeAlreadyExists);
+            return Err(TypeSystemError::TypeAlreadyExists(ty.name));
         }
         self.types.insert(ty.name.to_owned(), ty);
         Ok(())
@@ -34,7 +34,7 @@ impl TypeSystem {
 
     pub fn remove_type(&mut self, type_name: &str) -> Result<(), TypeSystemError> {
         if !self.types.contains_key(type_name) {
-            return Err(TypeSystemError::NoSuchType);
+            return Err(TypeSystemError::NoSuchType(type_name.to_string()));
         }
         self.types.remove(type_name);
         Ok(())
@@ -62,7 +62,7 @@ impl TypeSystem {
             "String" => Ok(Type::String),
             type_name => match self.types.get(type_name) {
                 Some(ty) => Ok(Type::Object(ty.to_owned())),
-                None => Err(TypeSystemError::NoSuchType),
+                None => Err(TypeSystemError::NoSuchType(type_name.to_string())),
             },
         }
     }
