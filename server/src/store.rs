@@ -215,6 +215,30 @@ impl Store {
         Ok(())
     }
 
+    pub async fn create_object(
+        &self,
+        ty: &ObjectType,
+        fields: serde_json::Value,
+    ) -> Result<(), StoreError> {
+        // TODO: validate fields against type!
+        let mut transaction = self
+            .data_pool
+            .begin()
+            .await
+            .map_err(StoreError::ConnectionFailed)?;
+        let query = format!("INSERT INTO {} (fields) VALUES ($1)", ty.backing_table);
+        let query = sqlx::query(&query);
+        transaction
+            .execute(query.bind(fields.to_string()))
+            .await
+            .map_err(StoreError::ExecuteFailed)?;
+        transaction
+            .commit()
+            .await
+            .map_err(StoreError::ExecuteFailed)?;
+        Ok(())
+    }
+
     pub fn find_all(&self, ty: &ObjectType) -> impl stream::Stream<Item = Result<AnyRow, Error>> {
         let query_str = format!("SELECT * FROM {}", ty.backing_table);
         QueryStream::new(query_str, &self.data_pool)
