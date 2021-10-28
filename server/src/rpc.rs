@@ -1,5 +1,6 @@
 // SPDX-FileCopyrightText: © 2021 ChiselStrike <info@chiselstrike.com>
 
+use crate::api;
 use crate::api::ApiService;
 use crate::deno;
 use crate::runtime;
@@ -14,7 +15,6 @@ use chisel::{
 };
 use convert_case::{Case, Casing};
 use futures::FutureExt;
-use serde_json::json;
 use std::net::SocketAddr;
 use std::sync::Arc;
 use tokio::sync::Mutex;
@@ -57,17 +57,31 @@ impl RpcService {
         Ok(())
     }
 
-    pub async fn define_type_endpoints(&self, path: &str) -> Result<()> {
-        info!("Registered endpoint: '{}'", path);
-        // Let's return an empty array because we don't do storage yet.
-        let result = json!([]);
-        let code = format!(
-            "function chisel(req) {{ return new Response(\"{}\"); }}",
-            result
-        );
-        self.create_js_endpoint(path, "GET", code).await?;
+    pub async fn define_type_endpoints(&self, type_name: &str) -> Result<()> {
+        info!("Registering built-in endpoints for type: '{}'", type_name);
+        let func = {
+            let type_name = type_name.to_string();
+            move |req| builtin_object_create(req, type_name.clone()).boxed_local()
+        };
+        let snake_case_name = type_name.to_case(Case::Snake);
+        let path = format!("/{}", snake_case_name);
+        self.api.lock().await.post(&path, Box::new(func));
         Ok(())
     }
+}
+
+async fn builtin_object_create(
+    req: hyper::Request<hyper::Body>,
+    type_name: String,
+) -> Result<hyper::Response<api::Body>> {
+    let runtime = &mut runtime::get().await;
+    let type_system = &mut runtime.type_system;
+    let ty = type_system.lookup_object_type(&type_name)?;
+    let body = hyper::body::to_bytes(req.into_body()).await?;
+    let fields = serde_json::from_slice(&body)?;
+    let store = &runtime.store;
+    store.create_object(&ty, fields).await?;
+    Ok(hyper::Response::new(api::Body::Const(None)))
 }
 
 impl From<StoreError> for Status {
@@ -122,10 +136,6 @@ impl ChiselRpc for RpcService {
         type_system.define_type(ty.to_owned())?;
         let store = &runtime.store;
         store.create_type(ty).await?;
-        let path = format!("/{}", snake_case_name);
-        if let Err(e) = self.define_type_endpoints(&path).await {
-            return Err(Status::internal(format!("{}", e)));
-        }
         if let Err(e) = self.define_type_endpoints(&name).await {
             return Err(Status::internal(format!("{}", e)));
         }
