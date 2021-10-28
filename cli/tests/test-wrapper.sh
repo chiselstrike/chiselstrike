@@ -4,7 +4,7 @@ set -e
 
 export TEMPDIR=$(mktemp -d)
 
-$CHISELD -d "sqlite://$TEMPDIR/chiseld.db?mode=rwc" -m "sqlite://$TEMPDIR/chiseld-data.db?mode=rwc" &
+$CHISELD -m "sqlite://$TEMPDIR/chiseld.db?mode=rwc" -d "sqlite://$TEMPDIR/chiseld-data.db?mode=rwc" &
 PID=$!
 
 function cleanup() {
