@@ -40,6 +40,23 @@ impl TypeSystem {
         Ok(())
     }
 
+    /// Looks up an object type with name `type_name`.
+    ///
+    /// # Arguments
+    ///
+    /// * `type_name` name of object type to look up.
+    ///
+    /// # Errors
+    ///
+    /// If the looked up type does not exists or is a built-in type, the function returns a `TypeSystemError`.
+    pub fn lookup_object_type(&self, type_name: &str) -> Result<ObjectType, TypeSystemError> {
+        match self.lookup_type(type_name) {
+            Ok(Type::Object(ty)) => Ok(ty),
+            Ok(_) => Err(TypeSystemError::ObjectTypeRequired(type_name.to_string())),
+            Err(e) => Err(e),
+        }
+    }
+
     pub fn lookup_type(&self, type_name: &str) -> Result<Type, TypeSystemError> {
         match type_name {
             "String" => Ok(Type::String),
