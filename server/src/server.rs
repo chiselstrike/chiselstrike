@@ -50,7 +50,7 @@ async fn run(opt: Opt) -> Result<DoRepeat> {
     let api = Arc::new(Mutex::new(ApiService::new()));
     let rpc = RpcService::new(api.clone());
     for type_name in ts.types.keys() {
-        rpc.define_type_endpoints(type_name).await;
+        rpc.define_type_endpoints(type_name).await?;
     }
     let rt = Runtime::new(store, ts);
     runtime::set(rt);

@@ -5,6 +5,7 @@ use crate::deno;
 use crate::runtime;
 use crate::store::StoreError;
 use crate::types::{Field, ObjectType, TypeSystemError};
+use anyhow::{anyhow, Result};
 use chisel::chisel_rpc_server::{ChiselRpc, ChiselRpcServer};
 use chisel::{
     AddTypeRequest, AddTypeResponse, EndPointCreationRequest, EndPointCreationResponse,
@@ -37,15 +38,26 @@ impl RpcService {
         RpcService { api }
     }
 
-    async fn create_js_endpoint(&self, path: &str, code: String) {
+    async fn create_js_endpoint(&self, path: &str, method: &str, code: String) -> Result<()> {
         let func = {
             let path = path.to_owned();
             move |req| deno::run_js(path.clone(), code.clone(), req).boxed_local()
         };
-        self.api.lock().await.get(path, Box::new(func));
+        match method {
+            "GET" => {
+                self.api.lock().await.get(path, Box::new(func));
+            }
+            "POST" => {
+                self.api.lock().await.post(path, Box::new(func));
+            }
+            _ => {
+                return Err(anyhow!("HTTP method is unsupported: `{}`", method));
+            }
+        }
+        Ok(())
     }
 
-    pub async fn define_type_endpoints(&self, path: &str) {
+    pub async fn define_type_endpoints(&self, path: &str) -> Result<()> {
         info!("Registered endpoint: '{}'", path);
         // Let's return an empty array because we don't do storage yet.
         let result = json!([]);
@@ -53,7 +65,8 @@ impl RpcService {
             "function chisel(req) {{ return new Response(\"{}\"); }}",
             result
         );
-        self.create_js_endpoint(path, code).await;
+        self.create_js_endpoint(path, "GET", code).await?;
+        Ok(())
     }
 }
 
@@ -110,8 +123,12 @@ impl ChiselRpc for RpcService {
         let store = &runtime.store;
         store.insert(ty).await?;
         let path = format!("/{}", snake_case_name);
-        self.define_type_endpoints(&path).await;
-        self.define_type_endpoints(&name).await;
+        if let Err(e) = self.define_type_endpoints(&path).await {
+            return Err(Status::internal(format!("{}", e)));
+        }
+        if let Err(e) = self.define_type_endpoints(&name).await {
+            return Err(Status::internal(format!("{}", e)));
+        }
         let response = chisel::AddTypeResponse { message: name };
         Ok(Response::new(response))
     }
@@ -168,7 +185,9 @@ impl ChiselRpc for RpcService {
         let request = request.into_inner();
         let path = format!("/{}", request.path);
         let code = request.code;
-        self.create_js_endpoint(&path, code).await;
+        if let Err(e) = self.create_js_endpoint(&path, &request.method, code).await {
+            return Err(Status::internal(format!("{}", e)));
+        }
         let response = EndPointCreationResponse { message: path };
         Ok(Response::new(response))
     }

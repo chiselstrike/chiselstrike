@@ -47,6 +47,7 @@ message RemoveTypeResponse {
 message EndPointCreationRequest {
   string path = 1;
   string code = 2;
+  string method = 3;
 }
 
 message EndPointCreationResponse {

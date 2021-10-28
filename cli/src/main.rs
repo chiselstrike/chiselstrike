@@ -44,7 +44,13 @@ enum TypeCommand {
 
 #[derive(StructOpt, Debug)]
 enum EndPointCommand {
-    Create { path: String, filename: String },
+    Create {
+        #[structopt(short, long)]
+        /// HTTP method of the endpoint (default: `GET`).
+        method: Option<String>,
+        path: String,
+        filename: String,
+    },
 }
 
 pub mod chisel {
@@ -65,10 +71,11 @@ fn read_to_string(filename: &str) -> Result<String, std::io::Error> {
 async fn create_endpoint(
     client: &mut ChiselRpcClient<tonic::transport::Channel>,
     path: String,
+    method: String,
     filename: String,
 ) -> Result<()> {
     let code = read_to_string(&filename)?;
-    let request = tonic::Request::new(EndPointCreationRequest { path, code });
+    let request = tonic::Request::new(EndPointCreationRequest { path, method, code });
     let response = client.create_end_point(request).await?.into_inner();
     println!("End point defined: {}", response.message);
     Ok(())
@@ -85,8 +92,18 @@ async fn main() -> Result<()> {
             println!("Server status is {}", response.message);
         }
         Opt::EndPoint { cmd } => match cmd {
-            EndPointCommand::Create { path, filename } => {
-                create_endpoint(&mut client, path, filename).await?
+            EndPointCommand::Create {
+                path,
+                method,
+                filename,
+            } => {
+                create_endpoint(
+                    &mut client,
+                    path,
+                    method.unwrap_or_else(|| "GET".to_string()),
+                    filename,
+                )
+                .await?
             }
         },
         Opt::Type { cmd } => match cmd {

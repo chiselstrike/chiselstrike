@@ -2,7 +2,7 @@
 
 # RUN: CHISEL="@chisel" CURL="@curl" sh -e @file
 
-cat << EOF | $CHISEL end-point create echo -
+cat << EOF | $CHISEL end-point create --method=POST echo -
 // This function produces a response whose body is a json of the request
 async function chisel(req) {
     // The replacer function is not async, so read the body first.

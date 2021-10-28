@@ -7,7 +7,7 @@ use futures::stream::Stream;
 use hyper::body::HttpBody;
 use hyper::header::HeaderValue;
 use hyper::service::{make_service_fn, service_fn};
-use hyper::{HeaderMap, Request, Response, Server, StatusCode};
+use hyper::{HeaderMap, Method, Request, Response, Server, StatusCode};
 use std::collections::HashMap;
 use std::convert::Infallible;
 use std::io::Cursor;
@@ -69,12 +69,14 @@ type RouteFn = Box<
 #[derive(Default)]
 pub struct ApiService {
     gets: HashMap<String, RouteFn>,
+    posts: HashMap<String, RouteFn>,
 }
 
 impl ApiService {
     pub fn new() -> Self {
         Self {
             gets: HashMap::default(),
+            posts: HashMap::default(),
         }
     }
 
@@ -82,11 +84,20 @@ impl ApiService {
         self.gets.insert(path.to_string(), route_fn);
     }
 
+    pub fn post(&mut self, path: &str, route_fn: RouteFn) {
+        self.posts.insert(path.to_string(), route_fn);
+    }
+
     pub async fn route(
         &mut self,
         req: Request<hyper::Body>,
     ) -> hyper::http::Result<Response<Body>> {
-        if let Some(route_fn) = self.gets.get(req.uri().path()) {
+        let route_fn = match *req.method() {
+            Method::GET => self.gets.get(req.uri().path()),
+            Method::POST => self.posts.get(req.uri().path()),
+            _ => None,
+        };
+        if let Some(route_fn) = route_fn {
             return match route_fn(req).await {
                 Ok(val) => Ok(val),
                 Err(err) => Response::builder()
