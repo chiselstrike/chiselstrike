@@ -1,6 +1,8 @@
 // SPDX-FileCopyrightText: © 2021 ChiselStrike <info@chiselstrike.com>
 
 use crate::api::Body;
+use crate::runtime;
+use crate::types::{Type, TypeSystemError};
 use anyhow::Result;
 use deno_broadcast_channel::InMemoryBroadcastChannel;
 use deno_core::op_async;
@@ -22,6 +24,7 @@ use hyper::body::HttpBody;
 use hyper::Method;
 use hyper::{Request, Response, StatusCode};
 use rusty_v8 as v8;
+use serde_json;
 use std::cell::RefCell;
 use std::convert::TryInto;
 use std::net::SocketAddr;
@@ -52,6 +55,10 @@ struct DenoService {
 enum Error {
     #[error["Endpoint didn't produce a response"]]
     NotAResponse,
+    #[error["Type name error; the .name key must have a string value"]]
+    TypeName,
+    #[error["Store error `{0}`"]]
+    Store(#[from] crate::store::StoreError),
 }
 
 impl DenoService {
@@ -128,12 +135,32 @@ async fn op_chisel_read_body(
     Ok(fut.await?.transpose()?.map(|x| x.to_vec().into()))
 }
 
+async fn op_chisel_store(
+    _state: Rc<RefCell<OpState>>,
+    content: serde_json::Value,
+    _: (),
+) -> Result<()> {
+    let type_name = content["name"].as_str().ok_or(Error::TypeName)?;
+    let runtime = &mut runtime::get().await;
+    let ty = match runtime.type_system.lookup_type(type_name)? {
+        Type::String => return Err(TypeSystemError::TypeMustBeCompound.into()),
+        Type::Object(t) => t,
+    };
+    let type_value = content["value"].to_string();
+    runtime
+        .store
+        .add_row(&ty, type_value)
+        .await
+        .map_err(|e| e.into())
+}
+
 fn create_deno(inspect_brk: bool) -> DenoService {
     let mut d = DenoService::new(inspect_brk);
     let runtime = &mut d.worker.js_runtime;
 
     // FIXME: Turn this into a deno extension
     runtime.register_op("chisel_read_body", op_async(op_chisel_read_body));
+    runtime.register_op("chisel_store", op_async(op_chisel_store));
     runtime.sync_ops_cache();
 
     // FIXME: Include this js in the snapshop
