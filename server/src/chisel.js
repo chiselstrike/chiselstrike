@@ -17,6 +17,31 @@ Chisel.buildReadableStreamForBody = function(rid) {
         }
     });
 }
+
 Chisel.store = async function(type_name, content) {
     await Deno.core.opAsync("chisel_store", {name: type_name, value: content});
+}
+
+Chisel.find_all = async function(type_name) {
+    const rid = await Deno.core.opAsync("chisel_query_create", type_name);
+    let result = {
+        [Symbol.asyncIterator]() {
+            return {
+                async next() {
+                    const value = await Deno.core.opAsync("chisel_query_next", rid);
+                    if (value) {
+                        return { value: value, done: false };
+                    } else {
+                        Deno.core.opSync("op_close", rid);
+                        return { done: true };
+                    }
+                },
+                return() {
+                    Deno.core.opSync("op_close", rid);
+                    return { done: true };
+                }
+            }
+        }
+    };
+    return result;
 }
