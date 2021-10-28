@@ -8,6 +8,8 @@ pub enum TypeSystemError {
     TypeAlreadyExists,
     #[error["no such type"]]
     NoSuchType,
+    #[error["`{0}` is not an object type"]]
+    NotObjectType(String),
 }
 
 #[derive(Debug, Default)]
@@ -36,6 +38,23 @@ impl TypeSystem {
         }
         self.types.remove(type_name);
         Ok(())
+    }
+
+    /// Looks up an object type with name `type_name`.
+    ///
+    /// # Arguments
+    ///
+    /// * `type_name` name of object type to look up.
+    ///
+    /// # Errors
+    ///
+    /// If the looked up type does not exists or is a built-in type, the function returns a `TypeSystemError`.
+    pub fn lookup_object_type(&self, type_name: &str) -> Result<ObjectType, TypeSystemError> {
+        match self.lookup_type(type_name) {
+            Ok(Type::Object(ty)) => Ok(ty),
+            Ok(_) => Err(TypeSystemError::NotObjectType(type_name.to_string())),
+            Err(e) => Err(e),
+        }
     }
 
     pub fn lookup_type(&self, type_name: &str) -> Result<Type, TypeSystemError> {
