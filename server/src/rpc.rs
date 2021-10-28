@@ -121,7 +121,7 @@ impl ChiselRpc for RpcService {
         };
         type_system.define_type(ty.to_owned())?;
         let store = &runtime.store;
-        store.insert(ty).await?;
+        store.create_type(ty).await?;
         let path = format!("/{}", snake_case_name);
         if let Err(e) = self.define_type_endpoints(&path).await {
             return Err(Status::internal(format!("{}", e)));

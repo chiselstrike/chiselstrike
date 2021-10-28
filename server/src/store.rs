@@ -143,7 +143,7 @@ impl Store {
         Ok(fields)
     }
 
-    pub async fn insert(&self, ty: ObjectType) -> Result<(), StoreError> {
+    pub async fn create_type(&self, ty: ObjectType) -> Result<(), StoreError> {
         // FIXME: Multi-database transaction is needed for consistency.
         let mut transaction = self
             .pool
