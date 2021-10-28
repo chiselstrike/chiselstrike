@@ -4,6 +4,7 @@ extern crate lit;
 
 #[cfg(test)]
 mod tests {
+    use ntest::timeout;
     use std::env;
     use std::path::PathBuf;
     use std::process::Command;
@@ -27,6 +28,7 @@ mod tests {
     }
 
     #[test]
+    #[timeout(100_000)]
     fn lit() {
         let repo = repo_dir();
         let status = Command::new("cargo")
