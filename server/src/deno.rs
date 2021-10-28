@@ -212,7 +212,7 @@ async fn op_chisel_query_next(
     }
 }
 
-fn create_deno(inspect_brk: bool) -> DenoService {
+fn create_deno(inspect_brk: bool) -> Result<DenoService> {
     let mut d = DenoService::new(inspect_brk);
     let runtime = &mut d.worker.js_runtime;
 
@@ -224,17 +224,19 @@ fn create_deno(inspect_brk: bool) -> DenoService {
     runtime.sync_ops_cache();
 
     // FIXME: Include this js in the snapshop
-    let script = std::str::from_utf8(include_bytes!("chisel.js")).unwrap();
-    runtime.execute_script("chisel.js", script).unwrap();
-    d
+    let script = std::str::from_utf8(include_bytes!("chisel.js"))?;
+    runtime.execute_script("chisel.js", script)?;
+    Ok(d)
 }
 
-pub fn init_deno(inspect_brk: bool) {
+pub fn init_deno(inspect_brk: bool) -> Result<()> {
+    let service = Rc::new(RefCell::new(create_deno(inspect_brk)?));
     DENO.with(|d| {
-        d.set(Rc::new(RefCell::new(create_deno(inspect_brk))))
+        d.set(service)
             .map_err(|_| ())
             .expect("Deno is already initialized.");
-    })
+    });
+    Ok(())
 }
 
 thread_local! {
