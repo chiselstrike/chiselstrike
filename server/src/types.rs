@@ -8,6 +8,8 @@ pub enum TypeSystemError {
     TypeAlreadyExists,
     #[error["no such type"]]
     NoSuchType,
+    #[error["compound type expected, got string instead"]]
+    TypeMustBeCompound,
 }
 
 #[derive(Debug, Default)]

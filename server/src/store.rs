@@ -264,4 +264,27 @@ impl Store {
             .map_err(StoreError::ExecuteFailed)?;
         Ok(())
     }
+
+    pub async fn add_row(&self, ty: &ObjectType, val: String) -> Result<(), StoreError> {
+        // TODO: escape quotes in val where necessary.
+        let query = format!(
+            "INSERT INTO {}(fields) VALUES ('{}')",
+            ty.backing_table, val
+        );
+        let insert_stmt = sqlx::query(&query);
+        let mut transaction = self
+            .data_pool
+            .begin()
+            .await
+            .map_err(StoreError::ConnectionFailed)?;
+        transaction
+            .execute(insert_stmt)
+            .await
+            .map_err(StoreError::ExecuteFailed)?;
+        transaction
+            .commit()
+            .await
+            .map_err(StoreError::ExecuteFailed)?;
+        Ok(())
+    }
 }
