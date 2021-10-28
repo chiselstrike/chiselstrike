@@ -2,15 +2,15 @@
 
 set -e
 
-DIR=$(mktemp -d)
+export TEMPDIR=$(mktemp -d)
 
-$CHISELD -d "sqlite://$DIR/chiseld.db?mode=rwc" -m "sqlite://$DIR/chiseld-data.db?mode=rwc" &
+$CHISELD -m "sqlite://$TEMPDIR/chiseld.db?mode=rwc" -d "sqlite://$TEMPDIR/chiseld-data.db?mode=rwc" &
 PID=$!
 
 function cleanup() {
     kill $PID
     wait
-    rm -rf "$DIR"
+    rm -rf "$TEMPDIR"
 }
 
 trap cleanup EXIT
