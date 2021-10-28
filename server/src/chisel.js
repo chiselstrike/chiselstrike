@@ -1,6 +1,6 @@
 // SPDX-FileCopyrightText: © 2021 ChiselStrike <info@chiselstrike.com>
 
-Chisel = {}
+var Chisel = {}
 Chisel.buildReadableStreamForBody = function(rid) {
     return new ReadableStream({
         async pull(controller) {
@@ -45,3 +45,5 @@ Chisel.find_all = async function(type_name) {
     };
     return result;
 }
+
+globalThis.Chisel = Chisel;

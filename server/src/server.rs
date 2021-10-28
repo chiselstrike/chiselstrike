@@ -42,7 +42,7 @@ pub enum DoRepeat {
 async fn run(opt: Opt) -> Result<DoRepeat> {
     // FIXME: We have to create one per thread. For now we only have
     // one thread, so this is fine.
-    init_deno(opt.inspect_brk)?;
+    init_deno(opt.inspect_brk).await?;
 
     let store = Store::connect(&opt.metadata_db_uri, &opt.data_db_uri).await?;
     store.create_schema().await?;

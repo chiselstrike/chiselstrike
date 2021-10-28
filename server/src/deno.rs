@@ -9,12 +9,13 @@ use deno_core::error::AnyError;
 use deno_core::op_async;
 use deno_core::CancelFuture;
 use deno_core::CancelHandle;
+use deno_core::FsModuleLoader;
+use deno_core::JsRuntime;
 use deno_core::OpState;
 use deno_core::RcRef;
 use deno_core::Resource;
 use deno_core::ResourceId;
 use deno_core::ZeroCopyBuf;
-use deno_core::{JsRuntime, NoopModuleLoader};
 use deno_runtime::inspector_server::InspectorServer;
 use deno_runtime::permissions::Permissions;
 use deno_runtime::worker::{MainWorker, WorkerOptions};
@@ -73,7 +74,7 @@ impl DenoService {
         let create_web_worker_cb = Arc::new(|_| {
             todo!("Web workers are not supported");
         });
-        let module_loader = Rc::new(NoopModuleLoader);
+        let module_loader = Rc::new(FsModuleLoader);
 
         let mut inspector = None;
         if inspect_brk {
@@ -212,7 +213,7 @@ async fn op_chisel_query_next(
     }
 }
 
-fn create_deno(inspect_brk: bool) -> Result<DenoService> {
+async fn create_deno(inspect_brk: bool) -> Result<DenoService> {
     let mut d = DenoService::new(inspect_brk);
     let runtime = &mut d.worker.js_runtime;
 
@@ -224,13 +225,17 @@ fn create_deno(inspect_brk: bool) -> Result<DenoService> {
     runtime.sync_ops_cache();
 
     // FIXME: Include this js in the snapshop
-    let script = std::str::from_utf8(include_bytes!("chisel.js"))?;
-    runtime.execute_script("chisel.js", script)?;
+    let script = std::str::from_utf8(include_bytes!("chisel.js"))?.to_string();
+    let specifier = deno_core::resolve_path("chisel.js")?;
+    let module_id = runtime.load_main_module(&specifier, Some(script)).await?;
+    let receiver = runtime.mod_evaluate(module_id);
+    runtime.run_event_loop(false).await?;
+    receiver.await??;
     Ok(d)
 }
 
-pub fn init_deno(inspect_brk: bool) -> Result<()> {
-    let service = Rc::new(RefCell::new(create_deno(inspect_brk)?));
+pub async fn init_deno(inspect_brk: bool) -> Result<()> {
+    let service = Rc::new(RefCell::new(create_deno(inspect_brk).await?));
     DENO.with(|d| {
         d.set(service)
             .map_err(|_| ())
