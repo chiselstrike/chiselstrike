@@ -3,7 +3,7 @@
 // The endpoint consists of a function that evaluates to a promise
 // that resolves to a Response.
 
-async function chisel(req) {
+export default async function chisel(req) {
     return new Response(req.body, {
         status: 203,
         headers: [

@@ -7,7 +7,7 @@ echo 'type Foo { a: String, b: String }' | $CHISEL type import -
 # CHECK: Type defined: Foo
 
 cat << EOF | $CHISEL end-point create ins -
-async function chisel(req) {
+export default async function chisel(req) {
     if (req.method == 'POST') {
         const payload = await req.json();
         await Chisel.store('Foo', payload);

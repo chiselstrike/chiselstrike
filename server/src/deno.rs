@@ -64,6 +64,7 @@ struct DenoService {
     inspector: Option<Arc<InspectorServer>>,
 
     module_loader: Rc<ModuleLoader>,
+    next_end_point_id: i32,
 }
 
 #[derive(thiserror::Error, Debug)]
@@ -86,11 +87,11 @@ static DUMMY_PATH: Lazy<Url> =
 impl deno_core::ModuleLoader for ModuleLoader {
     fn resolve(
         &self,
-        _specifier: &str,
+        specifier: &str,
         _referrer: &str,
         _is_main: bool,
     ) -> Result<ModuleSpecifier, AnyError> {
-        Ok(DUMMY_PATH.clone())
+        Ok(ModuleSpecifier::parse(specifier)?)
     }
 
     fn load(
@@ -175,6 +176,7 @@ impl DenoService {
             worker,
             inspector,
             module_loader,
+            next_end_point_id: 0,
         }
     }
 }
@@ -399,6 +401,7 @@ impl Resource for BodyResource {
 
 fn get_result(
     runtime: &mut JsRuntime,
+    request_handler: v8::Global<v8::Function>,
     req: &mut Request<hyper::Body>,
 ) -> Result<v8::Global<v8::Value>> {
     let op_state = runtime.op_state();
@@ -453,8 +456,8 @@ fn get_result(
         .new_instance(scope, &[url.into(), init.into()])
         .ok_or(Error::NotAResponse)?;
 
-    let chisel: v8::Local<v8::Function> = get_member(global_proxy, scope, "chisel")?;
-    let result = chisel
+    let result = request_handler
+        .get(scope)
         .call(scope, global_proxy.into(), &[request.into()])
         .ok_or(Error::NotAResponse)?;
     Ok(v8::Global::new(scope, result))
@@ -467,17 +470,38 @@ async fn run_js_aux(
     mut req: Request<hyper::Body>,
 ) -> Result<Response<Body>> {
     let service = &mut *d.borrow_mut();
-    let runtime = &mut service.worker.js_runtime;
+    let worker = &mut service.worker;
 
     if service.inspector.is_some() {
+        let runtime = &mut worker.js_runtime;
         runtime
             .inspector()
             .wait_for_session_and_break_on_next_statement();
     }
 
-    runtime.execute_script(&path, &code)?;
+    // Modules are never unloaded, so we need to create an unique
+    // path. This will not be a problem once we publish the entire app
+    // at once, since then we can create a new isolate for it.
+    let url = format!("file://$chisel{}$/path{}", service.next_end_point_id, path);
+    let url = Url::parse(&url).unwrap();
+    service
+        .module_loader
+        .code_map
+        .borrow_mut()
+        .insert(url.clone(), code.clone());
+    service.next_end_point_id += 1;
+    worker.execute_side_module(&url).await?;
 
-    let result = get_result(runtime, &mut req)?;
+    let runtime = &mut service.worker.js_runtime;
+    let ret = runtime.execute_script(&path, &format!("import(\"{}\")", url))?;
+    let ret = runtime.resolve_value(ret).await?;
+    let request_handler = {
+        let scope = &mut runtime.handle_scope();
+        let local = ret.get(scope).to_object(scope).unwrap();
+        let request_handler: v8::Local<v8::Function> = get_member(local, scope, "default")?;
+        v8::Global::<v8::Function>::new(scope, request_handler)
+    };
+    let result = get_result(runtime, request_handler, &mut req)?;
 
     let result = runtime.resolve_value(result).await?;
     let stream = get_read_stream(runtime, result.clone(), d.clone())?;

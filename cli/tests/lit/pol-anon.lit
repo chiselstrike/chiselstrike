@@ -12,7 +12,7 @@ EOF
 # CHECK: Type defined: Foo
 
 cat << EOF | $CHISEL end-point create ins -
-async function chisel(req) {
+export default async function chisel(req) {
     if (req.method == 'POST') {
         const payload = await req.json();
         await Chisel.store('Foo', payload);
@@ -29,7 +29,7 @@ $CURL --data '{"pub":"hello", "priv":"world"}' -o - localhost:3000/ins
 # CHECK: ok
 
 cat << EOF | $CHISEL end-point create find -
-async function chisel(req) {
+export default async function chisel(req) {
     let response = "";
     let foos = await Chisel.find_all("Foo");
     for await (let f of foos) {

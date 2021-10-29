@@ -1,0 +1,32 @@
+# SPDX-FileCopyrightText: © 2021 ChiselStrike <info@chiselstrike.com>
+
+# RUN: CHISEL="@chisel" CURL="@curl" sh -e @file
+
+# Test that we can have multiple end points, that they can use the
+# same function name and that that name is arbitrary.
+
+cat << EOF | $CHISEL end-point create foo -
+export default async function my_req_func(req) {
+    return new Response("foo\n");
+}
+EOF
+
+# CHECK: End point defined: /foo
+
+cat << EOF | $CHISEL end-point create bar -
+export default async function my_req_func(req) {
+    return new Response("bar\n");
+}
+EOF
+
+# CHECK: End point defined: /bar
+
+$CURL -o - localhost:3000/foo
+
+# CHECK: HTTP/1.1 200 OK
+# CHECK: foo
+
+$CURL -o - localhost:3000/bar
+
+# CHECK: HTTP/1.1 200 OK
+# CHECK: bar
