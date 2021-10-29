@@ -9,8 +9,10 @@ use deno_core::error::AnyError;
 use deno_core::op_async;
 use deno_core::CancelFuture;
 use deno_core::CancelHandle;
-use deno_core::FsModuleLoader;
 use deno_core::JsRuntime;
+use deno_core::ModuleSource;
+use deno_core::ModuleSourceFuture;
+use deno_core::ModuleSpecifier;
 use deno_core::OpState;
 use deno_core::RcRef;
 use deno_core::Resource;
@@ -23,9 +25,11 @@ use deno_runtime::BootstrapOptions;
 use deno_web::BlobStore;
 use futures::stream;
 use futures::stream::{try_unfold, Stream};
+use futures::FutureExt;
 use hyper::body::HttpBody;
 use hyper::Method;
 use hyper::{Request, Response, StatusCode};
+use once_cell::sync::Lazy;
 use once_cell::unsync::OnceCell;
 use rusty_v8 as v8;
 use serde_json;
@@ -69,12 +73,46 @@ enum Error {
     Store(#[from] crate::query::store::StoreError),
 }
 
+struct ModuleLoader;
+
+static DUMMY_PATH: Lazy<Url> =
+    Lazy::new(|| ModuleSpecifier::parse("file://$chisel$/main.js").unwrap());
+
+impl deno_core::ModuleLoader for ModuleLoader {
+    fn resolve(
+        &self,
+        _specifier: &str,
+        _referrer: &str,
+        _is_main: bool,
+    ) -> Result<ModuleSpecifier, AnyError> {
+        Ok(DUMMY_PATH.clone())
+    }
+
+    fn load(
+        &self,
+        specifier: &ModuleSpecifier,
+        _maybe_referrer: Option<ModuleSpecifier>,
+        _is_dyn_import: bool,
+    ) -> Pin<Box<ModuleSourceFuture>> {
+        let specifier = specifier.to_string();
+        let f = || async {
+            let code = std::str::from_utf8(include_bytes!("chisel.js"))?.to_string();
+            Ok(ModuleSource {
+                code,
+                module_url_specified: specifier.clone(),
+                module_url_found: specifier,
+            })
+        };
+        f().boxed_local()
+    }
+}
+
 impl DenoService {
     pub fn new(inspect_brk: bool) -> Self {
         let create_web_worker_cb = Arc::new(|_| {
             todo!("Web workers are not supported");
         });
-        let module_loader = Rc::new(FsModuleLoader);
+        let module_loader = Rc::new(ModuleLoader);
 
         let mut inspector = None;
         if inspect_brk {
@@ -225,9 +263,7 @@ async fn create_deno(inspect_brk: bool) -> Result<DenoService> {
     runtime.sync_ops_cache();
 
     // FIXME: Include this js in the snapshop
-    let script = std::str::from_utf8(include_bytes!("chisel.js"))?.to_string();
-    let specifier = deno_core::resolve_path("chisel.js")?;
-    let module_id = runtime.load_main_module(&specifier, Some(script)).await?;
+    let module_id = runtime.load_main_module(&DUMMY_PATH, None).await?;
     let receiver = runtime.mod_evaluate(module_id);
     runtime.run_event_loop(false).await?;
     receiver.await??;
