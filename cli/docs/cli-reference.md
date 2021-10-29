@@ -1,14 +1,12 @@
-# ChiselStrike Command Line Manual
+# Command-Line Reference
 
 This document is the user manual for the ChiselStrike command line tool, `chisel`.
 
-## Command Reference
-
-### `chisel status`
+## `chisel status`
 
 The `chisel status` command queries a ChiselStrike server for its status.
 
-### `chisel type import [FILENAME]`
+## `chisel type import [FILENAME]`
 
 The `chisel type import` command imports types from a definition file to the ChiselStrike type system.
 
@@ -21,7 +19,7 @@ type Person {
 }
 ```
 
-### `chisel end-point create [PATH] [FILENAME]`
+## `chisel end-point create [PATH] [FILENAME]`
 
 Creates a new endpoint at the given path that executes the code from
 the given file.
@@ -45,6 +43,6 @@ You can create an ChiselStrike endpoint with the following command:
 chisel end-point create hello hello.js
 ```
 
-### `chisel type export`
+## `chisel type export`
 
 The `chisel type export` command exports the whole type system as TypeScript classes.
