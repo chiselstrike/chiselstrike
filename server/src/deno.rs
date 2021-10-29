@@ -37,6 +37,7 @@ use serde_json::Value;
 use sqlx::any::AnyRow;
 use sqlx::Row;
 use std::cell::RefCell;
+use std::collections::HashMap;
 use std::convert::TryInto;
 use std::net::SocketAddr;
 use std::pin::Pin;
@@ -61,6 +62,8 @@ struct DenoService {
 
     // We need a copy to keep it alive
     inspector: Option<Arc<InspectorServer>>,
+
+    module_loader: Rc<ModuleLoader>,
 }
 
 #[derive(thiserror::Error, Debug)]
@@ -73,7 +76,9 @@ enum Error {
     Store(#[from] crate::query::store::StoreError),
 }
 
-struct ModuleLoader;
+struct ModuleLoader {
+    code_map: RefCell<HashMap<ModuleSpecifier, String>>,
+}
 
 static DUMMY_PATH: Lazy<Url> =
     Lazy::new(|| ModuleSpecifier::parse("file://$chisel$/main.js").unwrap());
@@ -94,9 +99,9 @@ impl deno_core::ModuleLoader for ModuleLoader {
         _maybe_referrer: Option<ModuleSpecifier>,
         _is_dyn_import: bool,
     ) -> Pin<Box<ModuleSourceFuture>> {
+        let code = self.code_map.borrow().get(specifier).unwrap().clone();
         let specifier = specifier.to_string();
         let f = || async {
-            let code = std::str::from_utf8(include_bytes!("chisel.js"))?.to_string();
             Ok(ModuleSource {
                 code,
                 module_url_specified: specifier.clone(),
@@ -112,7 +117,8 @@ impl DenoService {
         let create_web_worker_cb = Arc::new(|_| {
             todo!("Web workers are not supported");
         });
-        let module_loader = Rc::new(ModuleLoader);
+        let code_map = RefCell::new(HashMap::new());
+        let module_loader = Rc::new(ModuleLoader { code_map });
 
         let mut inspector = None;
         if inspect_brk {
@@ -143,7 +149,7 @@ impl DenoService {
             create_web_worker_cb,
             maybe_inspector_server: inspector.clone(),
             should_break_on_first_statement: false,
-            module_loader,
+            module_loader: module_loader.clone(),
             get_error_class_fn: None,
             origin_storage_dir: None,
             blob_store: BlobStore::default(),
@@ -165,7 +171,11 @@ impl DenoService {
 
         let worker =
             MainWorker::bootstrap_from_options(Url::parse(path).unwrap(), permissions, opts);
-        Self { worker, inspector }
+        Self {
+            worker,
+            inspector,
+            module_loader,
+        }
     }
 }
 
@@ -264,6 +274,12 @@ async fn create_deno(inspect_brk: bool) -> Result<DenoService> {
     runtime.sync_ops_cache();
 
     // FIXME: Include this js in the snapshop
+    let code = std::str::from_utf8(include_bytes!("chisel.js"))?.to_string();
+    d.module_loader
+        .code_map
+        .borrow_mut()
+        .insert(DUMMY_PATH.clone(), code);
+
     worker.execute_main_module(&DUMMY_PATH).await?;
     Ok(d)
 }
