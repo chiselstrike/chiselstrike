@@ -66,7 +66,7 @@ enum Error {
     #[error["Type name error; the .name key must have a string value"]]
     TypeName,
     #[error["Store error `{0}`"]]
-    Store(#[from] crate::store::StoreError),
+    Store(#[from] crate::query::store::StoreError),
 }
 
 impl DenoService {

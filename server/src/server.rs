@@ -2,10 +2,10 @@
 
 use crate::api::ApiService;
 use crate::deno::init_deno;
+use crate::query::store::Store;
 use crate::rpc::RpcService;
 use crate::runtime;
 use crate::runtime::Runtime;
-use crate::store::Store;
 use anyhow::Result;
 use std::net::SocketAddr;
 use std::panic;

@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: © 2021 ChiselStrike <info@chiselstrike.com>
 
-use crate::meta::schema;
-use crate::query_stream::QueryStream;
+use crate::query::meta::schema;
+use crate::query::query_stream::QueryStream;
 use crate::types::{Field, ObjectType, TypeSystem, TypeSystemError};
 use futures::stream;
 use sea_query::{Alias, ColumnDef, PostgresQueryBuilder, SchemaBuilder, SqliteQueryBuilder, Table};
