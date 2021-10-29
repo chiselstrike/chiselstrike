@@ -253,7 +253,8 @@ async fn op_chisel_query_next(
 
 async fn create_deno(inspect_brk: bool) -> Result<DenoService> {
     let mut d = DenoService::new(inspect_brk);
-    let runtime = &mut d.worker.js_runtime;
+    let worker = &mut d.worker;
+    let runtime = &mut worker.js_runtime;
 
     // FIXME: Turn this into a deno extension
     runtime.register_op("chisel_read_body", op_async(op_chisel_read_body));
@@ -263,10 +264,7 @@ async fn create_deno(inspect_brk: bool) -> Result<DenoService> {
     runtime.sync_ops_cache();
 
     // FIXME: Include this js in the snapshop
-    let module_id = runtime.load_main_module(&DUMMY_PATH, None).await?;
-    let receiver = runtime.mod_evaluate(module_id);
-    runtime.run_event_loop(false).await?;
-    receiver.await??;
+    worker.execute_main_module(&DUMMY_PATH).await?;
     Ok(d)
 }
 
