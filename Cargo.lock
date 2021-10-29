@@ -355,7 +355,7 @@ dependencies = [
 
 [[package]]
 name = "cli"
-version = "0.0.0"
+version = "0.1.0"
 dependencies = [
  "anyhow",
  "futures",
@@ -2967,7 +2967,7 @@ dependencies = [
 
 [[package]]
 name = "server"
-version = "0.0.0"
+version = "0.1.0"
 dependencies = [
  "anyhow",
  "convert_case",
