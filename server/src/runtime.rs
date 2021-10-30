@@ -1,18 +1,24 @@
 // SPDX-FileCopyrightText: © 2021 ChiselStrike <info@chiselstrike.com>
 
 use crate::query::store::Store;
+use crate::query::MetaService;
 use crate::types::TypeSystem;
 use once_cell::sync::OnceCell;
 use tokio::sync::{Mutex, MutexGuard};
 
 pub struct Runtime {
     pub store: Store,
+    pub meta: MetaService,
     pub type_system: TypeSystem,
 }
 
 impl Runtime {
-    pub fn new(store: Store, type_system: TypeSystem) -> Self {
-        Self { store, type_system }
+    pub fn new(store: Store, meta: MetaService, type_system: TypeSystem) -> Self {
+        Self {
+            store,
+            meta,
+            type_system,
+        }
     }
 }
 

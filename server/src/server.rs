@@ -3,6 +3,7 @@
 use crate::api::ApiService;
 use crate::deno::init_deno;
 use crate::query::store::Store;
+use crate::query::MetaService;
 use crate::rpc::RpcService;
 use crate::runtime;
 use crate::runtime::Runtime;
@@ -43,16 +44,16 @@ async fn run(opt: Opt) -> Result<DoRepeat> {
     // FIXME: We have to create one per thread. For now we only have
     // one thread, so this is fine.
     init_deno(opt.inspect_brk).await?;
-
-    let store = Store::connect(&opt.metadata_db_uri, &opt.data_db_uri).await?;
-    store.create_schema().await?;
-    let ts = store.load_type_system().await?;
+    let meta = MetaService::connect(&opt.metadata_db_uri).await?;
+    let store = Store::connect(&opt.data_db_uri).await?;
+    meta.create_schema().await?;
+    let ts = meta.load_type_system().await?;
     let api = Arc::new(Mutex::new(ApiService::new()));
     let rpc = RpcService::new(api.clone());
     for type_name in ts.types.keys() {
         rpc.define_type_endpoints(type_name).await;
     }
-    let rt = Runtime::new(store, ts);
+    let rt = Runtime::new(store, meta, ts);
     runtime::set(rt);
 
     let mut sigterm = tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())?;

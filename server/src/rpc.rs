@@ -3,6 +3,7 @@
 use crate::api::ApiService;
 use crate::deno;
 use crate::query::store::StoreError;
+use crate::query::MetaServiceError;
 use crate::runtime;
 use crate::types::{Field, ObjectType, TypeSystemError};
 use chisel::chisel_rpc_server::{ChiselRpc, ChiselRpcServer};
@@ -57,6 +58,12 @@ impl RpcService {
     }
 }
 
+impl From<MetaServiceError> for Status {
+    fn from(err: MetaServiceError) -> Self {
+        Status::internal(format!("{}", err))
+    }
+}
+
 impl From<StoreError> for Status {
     fn from(err: StoreError) -> Self {
         Status::internal(format!("{}", err))
@@ -107,6 +114,9 @@ impl ChiselRpc for RpcService {
             backing_table: snake_case_name.clone(),
         };
         type_system.define_type(ty.to_owned())?;
+        // FIXME: Consistency between metadata and backing store updates.
+        let meta = &runtime.meta;
+        meta.insert(ty.clone()).await?;
         let store = &runtime.store;
         store.insert(ty).await?;
         let path = format!("/{}", snake_case_name);
@@ -125,8 +135,8 @@ impl ChiselRpc for RpcService {
         let request = request.into_inner();
         let name = request.type_name;
         type_system.remove_type(&name)?;
-        let store = &runtime.store;
-        store.remove(&name).await?;
+        let meta = &runtime.meta;
+        meta.remove(&name).await?;
         let response = chisel::RemoveTypeResponse {};
         Ok(Response::new(response))
     }
