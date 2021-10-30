@@ -1,13 +1,18 @@
 // SPDX-FileCopyrightText: © 2021 ChiselStrike <info@chiselstrike.com>
 
-use crate::query::query_stream::QueryStream;
 use crate::types::{ObjectType, TypeSystemError};
 use futures::stream;
+use futures::stream::BoxStream;
+use futures::stream::Stream;
 use sea_query::{Alias, ColumnDef, PostgresQueryBuilder, SchemaBuilder, SqliteQueryBuilder, Table};
-use sqlx::any::{AnyConnectOptions, AnyKind, AnyPool, AnyPoolOptions, AnyRow};
+use sqlx::any::{Any, AnyConnectOptions, AnyKind, AnyPool, AnyPoolOptions, AnyRow};
 use sqlx::error::Error;
 use sqlx::Executor;
+use std::cell::RefCell;
+use std::marker::PhantomPinned;
+use std::pin::Pin;
 use std::str::FromStr;
+use std::task::{Context, Poll};
 
 #[derive(thiserror::Error, Debug)]
 pub enum StoreError {
@@ -19,6 +24,36 @@ pub enum StoreError {
     FetchFailed(#[source] sqlx::Error),
     #[error["type system error `{0}`"]]
     TypeError(#[from] TypeSystemError),
+}
+
+pub struct QueryStream<'a> {
+    raw_query: String,
+    stream: RefCell<Option<BoxStream<'a, Result<AnyRow, Error>>>>,
+    _marker: PhantomPinned, // QueryStream cannot be moved
+}
+
+impl<'a> QueryStream<'a> {
+    pub fn new(raw_query: String, pool: &AnyPool) -> Pin<Box<Self>> {
+        let ret = Box::pin(QueryStream {
+            raw_query,
+            stream: RefCell::new(None),
+            _marker: PhantomPinned,
+        });
+        let ptr: *const String = &ret.raw_query;
+        let query = sqlx::query::<Any>(unsafe { &*ptr });
+        let stream = query.fetch(pool);
+        ret.stream.replace(Some(stream));
+        ret
+    }
+}
+
+impl Stream for QueryStream<'_> {
+    type Item = Result<AnyRow, Error>;
+
+    fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
+        let mut borrow = self.stream.borrow_mut();
+        borrow.as_mut().unwrap().as_mut().poll_next(cx)
+    }
 }
 
 pub struct Store {
