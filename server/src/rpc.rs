@@ -110,8 +110,8 @@ impl ChiselRpc for RpcService {
         // FIXME: Consistency between metadata and backing store updates.
         let meta = &runtime.meta;
         meta.insert(ty.clone()).await?;
-        let store = &runtime.store;
-        store.create_table(ty).await?;
+        let query_engine = &runtime.query_engine;
+        query_engine.create_table(ty).await?;
         let path = format!("/{}", snake_case_name);
         self.define_type_endpoints(&path).await;
         self.define_type_endpoints(&name).await;

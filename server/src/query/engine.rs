@@ -45,12 +45,12 @@ impl Stream for QueryStream<'_> {
     }
 }
 
-pub struct Store {
+pub struct QueryEngine {
     data_opts: AnyConnectOptions,
     data_pool: AnyPool,
 }
 
-impl Store {
+impl QueryEngine {
     pub fn new(data_opts: AnyConnectOptions, data_pool: AnyPool) -> Self {
         Self {
             data_opts,
@@ -65,7 +65,7 @@ impl Store {
             .connect(data_uri)
             .await
             .map_err(QueryError::ConnectionFailed)?;
-        Ok(Store::new(data_opts, data_pool))
+        Ok(QueryEngine::new(data_opts, data_pool))
     }
 
     fn get_query_builder(opts: &AnyConnectOptions) -> &dyn SchemaBuilder {

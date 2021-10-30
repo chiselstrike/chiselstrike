@@ -2,7 +2,7 @@
 
 use crate::api::ApiService;
 use crate::deno::init_deno;
-use crate::query::{MetaService, Store};
+use crate::query::{MetaService, QueryEngine};
 use crate::rpc::RpcService;
 use crate::runtime;
 use crate::runtime::Runtime;
@@ -44,7 +44,7 @@ async fn run(opt: Opt) -> Result<DoRepeat> {
     // one thread, so this is fine.
     init_deno(opt.inspect_brk).await?;
     let meta = MetaService::connect(&opt.metadata_db_uri).await?;
-    let store = Store::connect(&opt.data_db_uri).await?;
+    let query_engine = QueryEngine::connect(&opt.data_db_uri).await?;
     meta.create_schema().await?;
     let ts = meta.load_type_system().await?;
     let api = Arc::new(Mutex::new(ApiService::new()));
@@ -52,7 +52,7 @@ async fn run(opt: Opt) -> Result<DoRepeat> {
     for type_name in ts.types.keys() {
         rpc.define_type_endpoints(type_name).await;
     }
-    let rt = Runtime::new(store, meta, ts);
+    let rt = Runtime::new(query_engine, meta, ts);
     runtime::set(rt);
 
     let mut sigterm = tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())?;

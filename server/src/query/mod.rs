@@ -2,8 +2,8 @@
 
 use crate::types::TypeSystemError;
 
+pub mod engine;
 pub mod meta;
-pub mod store;
 
 #[derive(thiserror::Error, Debug)]
 pub enum QueryError {
@@ -17,5 +17,5 @@ pub enum QueryError {
     TypeError(#[from] TypeSystemError),
 }
 
+pub use engine::QueryEngine;
 pub use meta::MetaService;
-pub use store::Store;
