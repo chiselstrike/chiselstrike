@@ -2,7 +2,7 @@
 
 use crate::api::ApiService;
 use crate::deno;
-use crate::query::{MetaServiceError, StoreError};
+use crate::query::QueryError;
 use crate::runtime;
 use crate::types::{Field, ObjectType, TypeSystemError};
 use chisel::chisel_rpc_server::{ChiselRpc, ChiselRpcServer};
@@ -57,14 +57,8 @@ impl RpcService {
     }
 }
 
-impl From<MetaServiceError> for Status {
-    fn from(err: MetaServiceError) -> Self {
-        Status::internal(format!("{}", err))
-    }
-}
-
-impl From<StoreError> for Status {
-    fn from(err: StoreError) -> Self {
+impl From<QueryError> for Status {
+    fn from(err: QueryError) -> Self {
         Status::internal(format!("{}", err))
     }
 }

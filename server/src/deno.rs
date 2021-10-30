@@ -69,8 +69,8 @@ enum Error {
     NotAResponse,
     #[error["Type name error; the .name key must have a string value"]]
     TypeName,
-    #[error["Store error `{0}`"]]
-    Store(#[from] crate::query::StoreError),
+    #[error["Query execution error `{0}`"]]
+    Query(#[from] crate::query::QueryError),
 }
 
 struct ModuleLoader;

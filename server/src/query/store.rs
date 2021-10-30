@@ -1,6 +1,7 @@
 // SPDX-FileCopyrightText: © 2021 ChiselStrike <info@chiselstrike.com>
 
-use crate::types::{ObjectType, TypeSystemError};
+use crate::query::QueryError;
+use crate::types::ObjectType;
 use futures::stream;
 use futures::stream::BoxStream;
 use futures::stream::Stream;
@@ -13,18 +14,6 @@ use std::marker::PhantomPinned;
 use std::pin::Pin;
 use std::str::FromStr;
 use std::task::{Context, Poll};
-
-#[derive(thiserror::Error, Debug)]
-pub enum StoreError {
-    #[error["connection failed `{0}`"]]
-    ConnectionFailed(#[source] sqlx::Error),
-    #[error["execution failed: `{0}`"]]
-    ExecuteFailed(#[source] sqlx::Error),
-    #[error["fetch failed `{0}`"]]
-    FetchFailed(#[source] sqlx::Error),
-    #[error["type system error `{0}`"]]
-    TypeError(#[from] TypeSystemError),
-}
 
 pub struct QueryStream<'a> {
     raw_query: String,
@@ -69,13 +58,13 @@ impl Store {
         }
     }
 
-    pub async fn connect(data_uri: &str) -> Result<Self, StoreError> {
+    pub async fn connect(data_uri: &str) -> Result<Self, QueryError> {
         let data_opts =
-            AnyConnectOptions::from_str(data_uri).map_err(StoreError::ConnectionFailed)?;
+            AnyConnectOptions::from_str(data_uri).map_err(QueryError::ConnectionFailed)?;
         let data_pool = AnyPoolOptions::new()
             .connect(data_uri)
             .await
-            .map_err(StoreError::ConnectionFailed)?;
+            .map_err(QueryError::ConnectionFailed)?;
         Ok(Store::new(data_opts, data_pool))
     }
 
@@ -91,7 +80,7 @@ impl Store {
         QueryStream::new(query_str, &self.data_pool)
     }
 
-    pub async fn create_table(&self, ty: ObjectType) -> Result<(), StoreError> {
+    pub async fn create_table(&self, ty: ObjectType) -> Result<(), QueryError> {
         let create_table = Table::create()
             .table(Alias::new(&ty.backing_table))
             .if_not_exists()
@@ -107,20 +96,20 @@ impl Store {
             .data_pool
             .begin()
             .await
-            .map_err(StoreError::ConnectionFailed)?;
+            .map_err(QueryError::ConnectionFailed)?;
         let create_table = sqlx::query(&create_table);
         transaction
             .execute(create_table)
             .await
-            .map_err(StoreError::ExecuteFailed)?;
+            .map_err(QueryError::ExecuteFailed)?;
         transaction
             .commit()
             .await
-            .map_err(StoreError::ExecuteFailed)?;
+            .map_err(QueryError::ExecuteFailed)?;
         Ok(())
     }
 
-    pub async fn add_row(&self, ty: &ObjectType, val: String) -> Result<(), StoreError> {
+    pub async fn add_row(&self, ty: &ObjectType, val: String) -> Result<(), QueryError> {
         // TODO: escape quotes in val where necessary.
         let query = format!(
             "INSERT INTO {}(fields) VALUES ('{}')",
@@ -131,15 +120,15 @@ impl Store {
             .data_pool
             .begin()
             .await
-            .map_err(StoreError::ConnectionFailed)?;
+            .map_err(QueryError::ConnectionFailed)?;
         transaction
             .execute(insert_stmt)
             .await
-            .map_err(StoreError::ExecuteFailed)?;
+            .map_err(QueryError::ExecuteFailed)?;
         transaction
             .commit()
             .await
-            .map_err(StoreError::ExecuteFailed)?;
+            .map_err(QueryError::ExecuteFailed)?;
         Ok(())
     }
 }
