@@ -2,8 +2,7 @@
 
 use crate::api::ApiService;
 use crate::deno;
-use crate::query::store::StoreError;
-use crate::query::MetaServiceError;
+use crate::query::{MetaServiceError, StoreError};
 use crate::runtime;
 use crate::types::{Field, ObjectType, TypeSystemError};
 use chisel::chisel_rpc_server::{ChiselRpc, ChiselRpcServer};
