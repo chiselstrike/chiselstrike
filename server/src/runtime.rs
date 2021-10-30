@@ -1,7 +1,6 @@
 // SPDX-FileCopyrightText: © 2021 ChiselStrike <info@chiselstrike.com>
 
-use crate::query::store::Store;
-use crate::query::MetaService;
+use crate::query::{MetaService, Store};
 use crate::types::TypeSystem;
 use once_cell::sync::OnceCell;
 use tokio::sync::{Mutex, MutexGuard};

@@ -2,8 +2,7 @@
 
 use crate::api::ApiService;
 use crate::deno::init_deno;
-use crate::query::store::Store;
-use crate::query::MetaService;
+use crate::query::{MetaService, Store};
 use crate::rpc::RpcService;
 use crate::runtime;
 use crate::runtime::Runtime;
