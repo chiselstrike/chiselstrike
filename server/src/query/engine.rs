@@ -15,15 +15,15 @@ use std::pin::Pin;
 use std::str::FromStr;
 use std::task::{Context, Poll};
 
-pub struct QueryStream<'a> {
+pub struct QueryResults<'a> {
     raw_query: String,
     stream: RefCell<Option<BoxStream<'a, Result<AnyRow, Error>>>>,
     _marker: PhantomPinned, // QueryStream cannot be moved
 }
 
-impl<'a> QueryStream<'a> {
+impl<'a> QueryResults<'a> {
     pub fn new(raw_query: String, pool: &AnyPool) -> Pin<Box<Self>> {
-        let ret = Box::pin(QueryStream {
+        let ret = Box::pin(QueryResults {
             raw_query,
             stream: RefCell::new(None),
             _marker: PhantomPinned,
@@ -36,7 +36,7 @@ impl<'a> QueryStream<'a> {
     }
 }
 
-impl Stream for QueryStream<'_> {
+impl Stream for QueryResults<'_> {
     type Item = Result<AnyRow, Error>;
 
     fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
@@ -77,7 +77,7 @@ impl QueryEngine {
 
     pub fn find_all(&self, ty: &ObjectType) -> impl stream::Stream<Item = Result<AnyRow, Error>> {
         let query_str = format!("SELECT * FROM {}", ty.backing_table);
-        QueryStream::new(query_str, &self.data_pool)
+        QueryResults::new(query_str, &self.data_pool)
     }
 
     pub async fn create_table(&self, ty: ObjectType) -> Result<(), QueryError> {
