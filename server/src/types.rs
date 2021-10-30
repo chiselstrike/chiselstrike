@@ -1,5 +1,6 @@
 // SPDX-FileCopyrightText: © 2021 ChiselStrike <info@chiselstrike.com>
 
+use serde_json::{json, Value};
 use std::collections::HashMap;
 
 #[derive(thiserror::Error, Debug)]
@@ -11,6 +12,8 @@ pub enum TypeSystemError {
     #[error["compound type expected, got string instead"]]
     TypeMustBeCompound,
 }
+
+pub type Policies = HashMap<String, &'static dyn Fn(Value) -> Value>;
 
 #[derive(Debug, Default)]
 pub struct TypeSystem {
@@ -49,6 +52,16 @@ impl TypeSystem {
             },
         }
     }
+
+    /// Adds the current policies of ty to policies.
+    pub fn get_policies(&self, ty: &ObjectType, policies: &mut Policies) {
+        for f in &ty.fields {
+            // TODO: Read the policies from the metadatabase.
+            if f.labels.contains(&"pii".into()) {
+                policies.insert(f.name.clone(), &anonymize);
+            }
+        }
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -81,4 +94,9 @@ pub struct Field {
     pub name: String,
     pub type_: Type,
     pub labels: Vec<String>,
+}
+
+fn anonymize(_: Value) -> Value {
+    // TODO: use type-specific anonymization.
+    json!("xxxxx")
 }

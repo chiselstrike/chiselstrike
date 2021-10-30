@@ -1,0 +1,48 @@
+# SPDX-FileCopyrightText: © 2021 ChiselStrike <info@chiselstrike.com>
+
+# RUN: CHISEL="@chisel" CURL="@curl" sh -e @file
+
+cat << EOF | $CHISEL type import -
+type Foo {
+  pub: String
+  priv: String @pii
+}
+EOF
+
+# CHECK: Type defined: Foo
+
+cat << EOF | $CHISEL end-point create ins -
+async function chisel(req) {
+    if (req.method == 'POST') {
+        const payload = await req.json();
+        await Chisel.store('Foo', payload);
+        return new Response('ok\n');
+    }
+    return new Response('ignored\n');
+}
+EOF
+
+# CHECK: End point defined: /ins
+
+$CURL --data '{"pub":"hello", "priv":"world"}' -o - localhost:3000/ins
+
+# CHECK: ok
+
+cat << EOF | $CHISEL end-point create find -
+async function chisel(req) {
+    let response = "";
+    let foos = await Chisel.find_all("Foo");
+    for await (let f of foos) {
+        response += f.pub + " " + f.priv;
+        response += " ";
+    }
+    return new Response(response);
+}
+EOF
+
+# CHECK: End point defined: /find
+
+$CURL -o - localhost:3000/find
+
+# CHECK: HTTP/1.1 200 OK
+# CHECK: hello xxxxx
