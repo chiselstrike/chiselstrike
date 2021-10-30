@@ -118,7 +118,7 @@ impl ChiselRpc for RpcService {
         let meta = &runtime.meta;
         meta.insert(ty.clone()).await?;
         let store = &runtime.store;
-        store.insert(ty).await?;
+        store.create_table(ty).await?;
         let path = format!("/{}", snake_case_name);
         self.define_type_endpoints(&path).await;
         self.define_type_endpoints(&name).await;
