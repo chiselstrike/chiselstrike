@@ -219,7 +219,7 @@ async fn op_chisel_query_create(
     type_name: String,
     _: (),
 ) -> Result<ResourceId, AnyError> {
-    let mut policies = HashMap::default();
+    let mut policies = Policies::default();
     let runtime = &mut runtime::get().await;
     let ts = &runtime.type_system;
     let stream = match ts.lookup_type(&type_name) {
