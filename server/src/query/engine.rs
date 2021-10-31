@@ -46,26 +46,22 @@ impl Stream for QueryResults<'_> {
 }
 
 pub struct QueryEngine {
-    data_opts: AnyConnectOptions,
-    data_pool: AnyPool,
+    opts: AnyConnectOptions,
+    pool: AnyPool,
 }
 
 impl QueryEngine {
-    pub fn new(data_opts: AnyConnectOptions, data_pool: AnyPool) -> Self {
-        Self {
-            data_opts,
-            data_pool,
-        }
+    pub fn new(opts: AnyConnectOptions, pool: AnyPool) -> Self {
+        Self { opts, pool }
     }
 
-    pub async fn connect(data_uri: &str) -> Result<Self, QueryError> {
-        let data_opts =
-            AnyConnectOptions::from_str(data_uri).map_err(QueryError::ConnectionFailed)?;
-        let data_pool = AnyPoolOptions::new()
-            .connect(data_uri)
+    pub async fn connect(uri: &str) -> Result<Self, QueryError> {
+        let opts = AnyConnectOptions::from_str(uri).map_err(QueryError::ConnectionFailed)?;
+        let pool = AnyPoolOptions::new()
+            .connect(uri)
             .await
             .map_err(QueryError::ConnectionFailed)?;
-        Ok(QueryEngine::new(data_opts, data_pool))
+        Ok(QueryEngine::new(opts, pool))
     }
 
     fn get_query_builder(opts: &AnyConnectOptions) -> &dyn SchemaBuilder {
@@ -77,7 +73,7 @@ impl QueryEngine {
 
     pub fn find_all(&self, ty: &ObjectType) -> impl stream::Stream<Item = Result<AnyRow, Error>> {
         let query_str = format!("SELECT * FROM {}", ty.backing_table);
-        QueryResults::new(query_str, &self.data_pool)
+        QueryResults::new(query_str, &self.pool)
     }
 
     pub async fn create_table(&self, ty: ObjectType) -> Result<(), QueryError> {
@@ -91,9 +87,9 @@ impl QueryEngine {
                     .primary_key(),
             )
             .col(ColumnDef::new(Alias::new("fields")).text())
-            .build_any(Self::get_query_builder(&self.data_opts));
+            .build_any(Self::get_query_builder(&self.opts));
         let mut transaction = self
-            .data_pool
+            .pool
             .begin()
             .await
             .map_err(QueryError::ConnectionFailed)?;
@@ -117,7 +113,7 @@ impl QueryEngine {
         );
         let insert_stmt = sqlx::query(&query);
         let mut transaction = self
-            .data_pool
+            .pool
             .begin()
             .await
             .map_err(QueryError::ConnectionFailed)?;
