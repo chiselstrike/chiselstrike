@@ -72,8 +72,8 @@ enum Error {
     NotAResponse,
     #[error["Type name error; the .name key must have a string value"]]
     TypeName,
-    #[error["Store error `{0}`"]]
-    Store(#[from] crate::query::store::StoreError),
+    #[error["Query execution error `{0}`"]]
+    Query(#[from] crate::query::QueryError),
 }
 
 struct ModuleLoader {
@@ -204,7 +204,7 @@ async fn op_chisel_store(
     };
     let type_value = content["value"].to_string();
     runtime
-        .store
+        .query_engine
         .add_row(&ty, type_value)
         .await
         .map_err(|e| e.into())
@@ -226,8 +226,8 @@ async fn op_chisel_query_create(
     let ts = &runtime.type_system;
     let stream = match ts.lookup_type(&type_name) {
         Ok(Type::Object(ty)) => {
-            let store = &mut runtime.store;
-            store.find_all(&ty)
+            let query_engine = &mut runtime.query_engine;
+            query_engine.find_all(&ty)
         }
         Ok(_) => {
             return Err(TypeSystemError::TypeMustBeCompound.into());
