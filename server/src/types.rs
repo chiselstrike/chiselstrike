@@ -13,6 +13,7 @@ pub enum TypeSystemError {
     TypeMustBeCompound,
 }
 
+/// Maps a field name to the transformation we apply to that field's values.
 pub type Policies = HashMap<String, &'static dyn Fn(Value) -> Value>;
 
 #[derive(Debug, Default)]
