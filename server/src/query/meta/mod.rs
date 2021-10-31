@@ -9,6 +9,10 @@ use sqlx::any::{Any, AnyConnectOptions, AnyKind, AnyPool, AnyPoolOptions};
 use sqlx::{Executor, Row, Transaction};
 use std::str::FromStr;
 
+/// Meta service.
+///
+/// The meta service is responsible for managing metadata such as object
+/// types and labels persistently.
 pub struct MetaService {
     opts: AnyConnectOptions,
     pool: AnyPool,

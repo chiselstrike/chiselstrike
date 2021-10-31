@@ -45,6 +45,10 @@ impl Stream for QueryResults<'_> {
     }
 }
 
+/// Query engine.
+///
+/// The query engine provides a way to persist objects and retrieve them from
+/// a backing store for ChiselStrike endpoints.
 pub struct QueryEngine {
     opts: AnyConnectOptions,
     pool: AnyPool,
