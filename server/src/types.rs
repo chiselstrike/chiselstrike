@@ -9,8 +9,8 @@ pub enum TypeSystemError {
     TypeAlreadyExists,
     #[error["no such type: {0}"]]
     NoSuchType(String),
-    #[error["compound type expected, got string instead"]]
-    TypeMustBeCompound,
+    #[error["object type expected, got `{0}` instead"]]
+    ObjectTypeRequired(String),
 }
 
 /// Maps a field name to the transformation we apply to that field's values.

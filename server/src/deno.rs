@@ -197,7 +197,9 @@ async fn op_chisel_store(_state: Rc<RefCell<OpState>>, content: Value, _: ()) ->
     let type_name = content["name"].as_str().ok_or(Error::TypeName)?;
     let runtime = &mut runtime::get().await;
     let ty = match runtime.type_system.lookup_type(type_name)? {
-        Type::String => return Err(TypeSystemError::TypeMustBeCompound.into()),
+        Type::String => {
+            return Err(TypeSystemError::ObjectTypeRequired(type_name.to_string()).into())
+        }
         Type::Object(t) => t,
     };
     let type_value = content["value"].to_string();
@@ -230,7 +232,7 @@ async fn op_chisel_query_create(
             runtime.query_engine.find_all(&ty)
         }
         Ok(_) => {
-            return Err(TypeSystemError::TypeMustBeCompound.into());
+            return Err(TypeSystemError::ObjectTypeRequired(type_name.to_string()).into());
         }
         Err(e) => {
             return Err(anyhow!("Failed to look up type {}: {}", type_name, e));
