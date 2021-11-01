@@ -2,9 +2,11 @@
 
 This RFC describes the type system of the ChiselStrike platform.
 
-## Built-in types
+## Types
 
-ChiselStrike has the following built-in types (same as GraphQL):
+### Primitive types
+
+The ChiselStrike runtime has the following primitive types:
 
 * `ID` is an opaque type that serializes to `String`.
 * `String` is a sequence of Unicode points.
@@ -12,13 +14,15 @@ ChiselStrike has the following built-in types (same as GraphQL):
 * `Float` is a signed double precision floating point.
 * `Boolean` is a scalar type that represents `true` or `false` values.
 
+### Object types
+
 TODO: `List`
 
-TODO: Objects
+TODO: `Blob`
 
 TODO: Prisma type system
 
-## Types
+## Operations
 
 ### Adding a new type
 
