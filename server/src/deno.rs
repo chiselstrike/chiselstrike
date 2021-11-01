@@ -2,7 +2,7 @@
 
 use crate::api::Body;
 use crate::runtime;
-use crate::types::{Type, TypeSystemError};
+use crate::types::{Policies, Type, TypeSystemError};
 use anyhow::{anyhow, Result};
 use deno_broadcast_channel::InMemoryBroadcastChannel;
 use deno_core::error::AnyError;
@@ -191,11 +191,7 @@ async fn op_chisel_read_body(
     Ok(fut.await?.transpose()?.map(|x| x.to_vec().into()))
 }
 
-async fn op_chisel_store(
-    _state: Rc<RefCell<OpState>>,
-    content: serde_json::Value,
-    _: (),
-) -> Result<()> {
+async fn op_chisel_store(_state: Rc<RefCell<OpState>>, content: Value, _: ()) -> Result<()> {
     let type_name = content["name"].as_str().ok_or(Error::TypeName)?;
     let runtime = &mut runtime::get().await;
     let ty = match runtime.type_system.lookup_type(type_name)? {
@@ -213,6 +209,7 @@ async fn op_chisel_store(
 struct QueryStreamResource {
     #[allow(clippy::type_complexity)]
     stream: RefCell<Pin<Box<dyn stream::Stream<Item = Result<AnyRow, sqlx::Error>>>>>,
+    policies: Policies,
 }
 
 impl<'a> Resource for QueryStreamResource {}
@@ -222,12 +219,13 @@ async fn op_chisel_query_create(
     type_name: String,
     _: (),
 ) -> Result<ResourceId, AnyError> {
+    let mut policies = Policies::default();
     let runtime = &mut runtime::get().await;
     let ts = &runtime.type_system;
     let stream = match ts.lookup_type(&type_name) {
         Ok(Type::Object(ty)) => {
-            let query_engine = &mut runtime.query_engine;
-            query_engine.find_all(&ty)
+            ts.get_policies(&ty, &mut policies);
+            runtime.query_engine.find_all(&ty)
         }
         Ok(_) => {
             return Err(TypeSystemError::TypeMustBeCompound.into());
@@ -238,6 +236,7 @@ async fn op_chisel_query_create(
     };
     let resource = QueryStreamResource {
         stream: RefCell::new(Box::pin(stream)),
+        policies,
     };
     let rid = op_state.borrow_mut().resource_table.add(resource);
     Ok(rid)
@@ -254,7 +253,10 @@ async fn op_chisel_query_next(
     if let Some(row) = stream.next().await {
         let row = row.unwrap();
         let fields: &str = row.try_get("fields")?;
-        let v: Value = serde_json::from_str(fields)?;
+        let mut v: Value = serde_json::from_str(fields)?;
+        for (field, xform) in &resource.policies {
+            v[field] = xform(v[field].take());
+        }
         Ok(Some(v))
     } else {
         Ok(None)
