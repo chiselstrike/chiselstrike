@@ -1,8 +1,9 @@
 // SPDX-FileCopyrightText: © 2021 ChiselStrike <info@chiselstrike.com>
 
 use crate::api::Body;
+use crate::policies::FieldPolicies;
 use crate::runtime;
-use crate::types::{FieldPolicies, ObjectType, Type, TypeSystemError};
+use crate::types::{ObjectType, Type, TypeSystemError};
 use anyhow::{anyhow, Result};
 use deno_broadcast_channel::InMemoryBroadcastChannel;
 use deno_core::error::AnyError;
@@ -231,7 +232,7 @@ async fn op_chisel_query_create(
     let ts = &runtime.type_system;
     let (stream, ty) = match ts.lookup_type(&type_name) {
         Ok(Type::Object(ty)) => {
-            ts.get_policies(&ty, &mut policies);
+            runtime.get_policies(&ty, &mut policies);
             let query_engine = &mut runtime.query_engine;
             (query_engine.find_all(&ty), ty)
         }
