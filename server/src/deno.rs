@@ -490,7 +490,6 @@ async fn run_js_aux(
         .borrow_mut()
         .insert(url.clone(), code.clone());
     service.next_end_point_id += 1;
-    worker.execute_side_module(&url).await?;
 
     let runtime = &mut service.worker.js_runtime;
     let ret = runtime.execute_script(&path, &format!("import(\"{}\")", url))?;
