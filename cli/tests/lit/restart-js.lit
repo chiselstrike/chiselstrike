@@ -7,7 +7,7 @@ function foo() {
     return "test OK"
 }
 
-async function chisel(req) {
+export default async function chisel(req) {
     return new Response(foo());
 }
 EOF
@@ -26,7 +26,7 @@ $CHISEL restart
 sleep 1
 
 cat << EOF | $CHISEL end-point create test2 -
-async function chisel(req) {
+export default async function chisel(req) {
     return new Response(foo());
 }
 EOF

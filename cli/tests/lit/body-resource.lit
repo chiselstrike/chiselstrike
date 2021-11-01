@@ -3,7 +3,7 @@
 # RUN: CHISEL="@chisel" CURL="@curl" sh -e @file
 
 cat << EOF | $CHISEL end-point create test1 -
-async function chisel(req) {
+export default async function chisel(req) {
     let res = Deno.core.resources();
     if (res[3] !== "chisel_server::deno::BodyResource") {
         throw "Missing resource";
@@ -30,7 +30,7 @@ $CURL --data foobar -o - localhost:3000/test1
 echo
 
 cat << EOF | $CHISEL end-point create test2 -
-async function chisel(req) {
+export default async function chisel(req) {
     let res = Deno.core.resources();
     if (res[4] !== "chisel_server::deno::BodyResource") {
         throw "Missing resource";
