@@ -15,7 +15,7 @@ cat << EOF | $CHISEL type import -
 EOF
 
 $CHISEL restart
-sleep 1s
+$CHISEL wait
 
 $CHISEL type export
 
