@@ -49,3 +49,4 @@ $ chisel apply
 ## References
 
 * https://developers.cloudflare.com/workers/get-started/guide
+* https://docs.netlify.com/cli/get-started/
