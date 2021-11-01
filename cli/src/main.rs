@@ -9,6 +9,8 @@ use chisel::{
 use graphql_parser::schema::{parse_schema, Definition, TypeDefinition};
 use std::fs;
 use std::io::{stdin, Read};
+use std::thread;
+use std::time::Duration;
 use structopt::StructOpt;
 
 #[derive(StructOpt, Debug)]
@@ -25,6 +27,7 @@ enum Opt {
         cmd: EndPointCommand,
     },
     Restart,
+    Wait,
 }
 
 #[derive(StructOpt, Debug)]
@@ -77,20 +80,23 @@ async fn create_endpoint(
 #[tokio::main]
 async fn main() -> Result<()> {
     let opt = Opt::from_args();
-    let mut client = ChiselRpcClient::connect("http://localhost:50051").await?;
+    let server_url = "http://localhost:50051";
     match opt {
         Opt::Status => {
+            let mut client = ChiselRpcClient::connect(server_url).await?;
             let request = tonic::Request::new(StatusRequest {});
             let response = client.get_status(request).await?.into_inner();
             println!("Server status is {}", response.message);
         }
         Opt::EndPoint { cmd } => match cmd {
             EndPointCommand::Create { path, filename } => {
+                let mut client = ChiselRpcClient::connect(server_url).await?;
                 create_endpoint(&mut client, path, filename).await?
             }
         },
         Opt::Type { cmd } => match cmd {
             TypeCommand::Add { type_name } => {
+                let mut client = ChiselRpcClient::connect(server_url).await?;
                 let request = tonic::Request::new(AddTypeRequest {
                     name: type_name,
                     field_defs: vec![],
@@ -99,6 +105,7 @@ async fn main() -> Result<()> {
                 println!("Type defined: {}", response.message);
             }
             TypeCommand::Import { filename } => {
+                let mut client = ChiselRpcClient::connect(server_url).await?;
                 let schema = read_to_string(&filename)?;
                 let type_system = parse_schema::<String>(&schema)?;
                 for def in &type_system.definitions {
@@ -130,6 +137,7 @@ async fn main() -> Result<()> {
                 }
             }
             TypeCommand::Export => {
+                let mut client = ChiselRpcClient::connect(server_url).await?;
                 let request = tonic::Request::new(TypeExportRequest {});
                 let response = client.export_types(request).await?.into_inner();
                 for def in response.type_defs {
@@ -150,6 +158,7 @@ async fn main() -> Result<()> {
                 }
             }
             TypeCommand::Remove { type_name } => {
+                let mut client = ChiselRpcClient::connect(server_url).await?;
                 let request = tonic::Request::new(RemoveTypeRequest {
                     type_name: type_name.clone(),
                 });
@@ -158,11 +167,34 @@ async fn main() -> Result<()> {
             }
         },
         Opt::Restart => {
+            let mut client = ChiselRpcClient::connect(server_url).await?;
             let response = client
                 .restart(tonic::Request::new(RestartRequest {}))
                 .await?
                 .into_inner();
             println!("{}", if response.ok { "success" } else { "failure" });
+        }
+        Opt::Wait => {
+            let mut wait_time = 1;
+            loop {
+                let mut client = match ChiselRpcClient::connect(server_url).await {
+                    Ok(client) => client,
+                    Err(_) => {
+                        thread::sleep(Duration::from_secs(wait_time));
+                        wait_time *= 2;
+                        continue;
+                    }
+                };
+                let request = tonic::Request::new(StatusRequest {});
+                match client.get_status(request).await {
+                    Ok(_) => break,
+                    Err(_) => {
+                        thread::sleep(Duration::from_secs(wait_time));
+                        wait_time *= 2;
+                        continue;
+                    }
+                }
+            }
         }
     }
     Ok(())

@@ -15,15 +15,7 @@ function cleanup() {
 
 trap cleanup EXIT
 
-sleep 1
-
-for i in {1..5}; do
-  $CHISEL status
-  if [ $? -eq 0 ]; then
-    break
-  fi
-  sleep $i
-done
+$CHISEL wait
 
 set +e
 sh -c "$2"
