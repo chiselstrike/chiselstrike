@@ -16,7 +16,7 @@ The ChiselStrike runtime has the following primitive types:
 
 ### Object types
 
-TODO
+Object types define a collection of fields, which are a `(name, type)` tuple.
 
 ### TODO
 
