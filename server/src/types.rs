@@ -14,7 +14,7 @@ pub enum TypeSystemError {
 }
 
 /// Maps a field name to the transformation we apply to that field's values.
-pub type Policies = HashMap<String, &'static dyn Fn(Value) -> Value>;
+pub type FieldPolicies = HashMap<String, &'static dyn Fn(Value) -> Value>;
 
 #[derive(Debug, Default)]
 pub struct TypeSystem {
@@ -55,7 +55,7 @@ impl TypeSystem {
     }
 
     /// Adds the current policies of ty to policies.
-    pub fn get_policies(&self, ty: &ObjectType, policies: &mut Policies) {
+    pub fn get_policies(&self, ty: &ObjectType, policies: &mut FieldPolicies) {
         for f in &ty.fields {
             // TODO: Read the policies from the metadatabase.
             if f.labels.contains(&"pii".into()) {
