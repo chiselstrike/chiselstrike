@@ -490,7 +490,7 @@ async fn run_js_aux(
         .module_loader
         .code_map
         .borrow_mut()
-        .insert(url.clone(), code.clone());
+        .insert(url.clone(), code);
     service.next_end_point_id += 1;
 
     let runtime = &mut service.worker.js_runtime;
