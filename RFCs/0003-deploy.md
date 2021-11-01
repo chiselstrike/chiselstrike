@@ -11,6 +11,7 @@ app "paper-search" {
   types = [ "paper.graphql" ]
   endpoints = [ "paper.ts" ]
 }
+```
 
 A new application skeleton can be created with the `chisel new` command.
 
