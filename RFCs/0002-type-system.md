@@ -16,11 +16,19 @@ The ChiselStrike runtime has the following primitive types:
 
 ### Object types
 
-TODO: `List`
+TODO
 
-TODO: `Blob`
+### TODO
 
-TODO: Prisma type system
+* `BigInt`/`Long`
+* `Decimal`
+* `DateTime`
+* `List`
+* `Bytes`/`Blob`
+* `Json`
+* Enumerations
+* Composite IDs
+* Labels
 
 ## Operations
 
@@ -118,3 +126,5 @@ TODO
 https://spec.graphql.org/draft/
 
 https://github.com/ankane/strong_migrations
+
+https://www.prisma.io/docs/concepts/components/prisma-schema/data-model
