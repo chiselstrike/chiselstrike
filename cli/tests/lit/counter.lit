@@ -1,0 +1,41 @@
+# SPDX-FileCopyrightText: © 2021 ChiselStrike <info@chiselstrike.com>
+
+# RUN: CURL="@curl" sh -e @file
+
+cat << EOF | $CHISEL end-point create counter -
+let count = 0;
+export default async function chisel(req) {
+    count += 1;
+    return new Response("Requests so far: " + count + ".\n");
+}
+EOF
+
+# CHECK: End point defined: /counter
+
+$CURL -o - $CHISELD_HOST/counter
+
+# CHECK: HTTP/1.1 200 OK
+# CHECK: Requests so far: 1.
+
+$CURL -o - $CHISELD_HOST/counter
+# CHECK: HTTP/1.1 200 OK
+# CHECK: Requests so far: 2.
+
+cat << EOF | $CHISEL end-point create counter -
+let count = 0;
+export default async function chisel(req) {
+    count += 1;
+    return new Response("Requests so far: " + count + "!\n");
+}
+EOF
+
+# CHECK: End point defined: /counter
+
+$CURL -o - $CHISELD_HOST/counter
+
+# CHECK: HTTP/1.1 200 OK
+# CHECK: Requests so far: 1!
+
+$CURL -o - $CHISELD_HOST/counter
+# CHECK: HTTP/1.1 200 OK
+# CHECK: Requests so far: 2!
