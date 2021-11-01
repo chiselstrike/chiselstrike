@@ -2,7 +2,7 @@
 
 use crate::api::Body;
 use crate::runtime;
-use crate::types::{Policies, Type, TypeSystemError};
+use crate::types::{ObjectType, Policies, Type, TypeSystemError};
 use anyhow::{anyhow, Result};
 use deno_broadcast_channel::InMemoryBroadcastChannel;
 use deno_core::error::AnyError;
@@ -33,7 +33,6 @@ use once_cell::sync::Lazy;
 use once_cell::unsync::OnceCell;
 use rusty_v8 as v8;
 use serde_json;
-use serde_json::Value;
 use sqlx::any::AnyRow;
 use sqlx::Row;
 use std::cell::RefCell;
@@ -193,7 +192,11 @@ async fn op_chisel_read_body(
     Ok(fut.await?.transpose()?.map(|x| x.to_vec().into()))
 }
 
-async fn op_chisel_store(_state: Rc<RefCell<OpState>>, content: Value, _: ()) -> Result<()> {
+async fn op_chisel_store(
+    _state: Rc<RefCell<OpState>>,
+    content: serde_json::Value,
+    _: (),
+) -> Result<()> {
     let type_name = content["name"].as_str().ok_or(Error::TypeName)?;
     let runtime = &mut runtime::get().await;
     let ty = match runtime.type_system.lookup_type(type_name)? {
@@ -202,10 +205,9 @@ async fn op_chisel_store(_state: Rc<RefCell<OpState>>, content: Value, _: ()) ->
         }
         Type::Object(t) => t,
     };
-    let type_value = content["value"].to_string();
     runtime
         .query_engine
-        .add_row(&ty, type_value)
+        .add_row(&ty, &content["value"])
         .await
         .map_err(|e| e.into())
 }
@@ -214,6 +216,7 @@ struct QueryStreamResource {
     #[allow(clippy::type_complexity)]
     stream: RefCell<Pin<Box<dyn stream::Stream<Item = Result<AnyRow, sqlx::Error>>>>>,
     policies: Policies,
+    ty: ObjectType,
 }
 
 impl<'a> Resource for QueryStreamResource {}
@@ -226,10 +229,11 @@ async fn op_chisel_query_create(
     let mut policies = Policies::default();
     let runtime = &mut runtime::get().await;
     let ts = &runtime.type_system;
-    let stream = match ts.lookup_type(&type_name) {
+    let (stream, ty) = match ts.lookup_type(&type_name) {
         Ok(Type::Object(ty)) => {
             ts.get_policies(&ty, &mut policies);
-            runtime.query_engine.find_all(&ty)
+            let query_engine = &mut runtime.query_engine;
+            (query_engine.find_all(&ty), ty)
         }
         Ok(_) => {
             return Err(TypeSystemError::ObjectTypeRequired(type_name.to_string()).into());
@@ -241,6 +245,7 @@ async fn op_chisel_query_create(
     let resource = QueryStreamResource {
         stream: RefCell::new(Box::pin(stream)),
         policies,
+        ty,
     };
     let rid = op_state.borrow_mut().resource_table.add(resource);
     Ok(rid)
@@ -254,10 +259,14 @@ async fn op_chisel_query_next(
     let resource: Rc<QueryStreamResource> = state.borrow().resource_table.get(query_stream_rid)?;
     let mut stream = resource.stream.borrow_mut();
     use futures::stream::StreamExt;
+
     if let Some(row) = stream.next().await {
         let row = row.unwrap();
-        let fields: &str = row.try_get("fields")?;
-        let mut v: Value = serde_json::from_str(fields)?;
+        let mut v = serde_json::json!({});
+        for field in &resource.ty.fields {
+            let field_v: &str = row.try_get(&*field.name)?;
+            v[&field.name] = serde_json::json!(field_v);
+        }
         for (field, xform) in &resource.policies {
             v[field] = xform(v[field].take());
         }

@@ -5,6 +5,7 @@ use crate::types::ObjectType;
 use futures::stream;
 use futures::stream::BoxStream;
 use futures::stream::Stream;
+use itertools::Itertools;
 use sea_query::{Alias, ColumnDef, PostgresQueryBuilder, SchemaBuilder, SqliteQueryBuilder, Table};
 use sqlx::any::{Any, AnyConnectOptions, AnyKind, AnyPool, AnyPoolOptions, AnyRow};
 use sqlx::error::Error;
@@ -81,7 +82,7 @@ impl QueryEngine {
     }
 
     pub async fn create_table(&self, ty: ObjectType) -> Result<(), QueryError> {
-        let create_table = Table::create()
+        let mut create_table = Table::create()
             .table(Alias::new(&ty.backing_table))
             .if_not_exists()
             .col(
@@ -90,8 +91,13 @@ impl QueryEngine {
                     .auto_increment()
                     .primary_key(),
             )
-            .col(ColumnDef::new(Alias::new("fields")).text())
-            .build_any(Self::get_query_builder(&self.opts));
+            .to_owned();
+        for field in ty.fields {
+            // TODO: Replace .text() with suitable type with respect to field's type?
+            create_table.col(ColumnDef::new(Alias::new(&field.name)).text());
+        }
+        let create_table = create_table.build_any(Self::get_query_builder(&self.opts));
+
         let mut transaction = self
             .pool
             .begin()
@@ -109,20 +115,35 @@ impl QueryEngine {
         Ok(())
     }
 
-    pub async fn add_row(&self, ty: &ObjectType, val: String) -> Result<(), QueryError> {
-        // TODO: escape quotes in val where necessary.
-        let query = format!(
-            "INSERT INTO {}(fields) VALUES ('{}')",
-            ty.backing_table, val
+    pub async fn add_row(
+        &self,
+        ty: &ObjectType,
+        ty_value: &serde_json::Value,
+    ) -> Result<(), QueryError> {
+        let insert_query = std::format!(
+            "INSERT INTO {} ({}) VALUES ({})",
+            &ty.backing_table,
+            ty.fields.iter().map(|f| &f.name).join(", "),
+            (0..ty.fields.len())
+                .map(|i| std::format!("${}", i + 1))
+                .join(", ")
         );
-        let insert_stmt = sqlx::query(&query);
+
+        let mut insert_query = sqlx::query(&insert_query);
+        for field in &ty.fields {
+            let value = ty_value[&field.name]
+                .as_str()
+                .ok_or_else(|| QueryError::IncompatibleData(ty.name.to_owned()))?;
+            insert_query = insert_query.bind(value);
+        }
+
         let mut transaction = self
             .pool
             .begin()
             .await
             .map_err(QueryError::ConnectionFailed)?;
         transaction
-            .execute(insert_stmt)
+            .execute(insert_query)
             .await
             .map_err(QueryError::ExecuteFailed)?;
         transaction
