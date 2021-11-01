@@ -44,3 +44,7 @@ Finally, the user can apply the required transformations to deploy the applicati
 ```
 $ chisel apply
 ```
+
+## References
+
+* https://developers.cloudflare.com/workers/get-started/guide
