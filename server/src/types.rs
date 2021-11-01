@@ -7,8 +7,8 @@ use std::collections::HashMap;
 pub enum TypeSystemError {
     #[error["type already exists"]]
     TypeAlreadyExists,
-    #[error["no such type"]]
-    NoSuchType,
+    #[error["no such type: {0}"]]
+    NoSuchType(String),
     #[error["compound type expected, got string instead"]]
     TypeMustBeCompound,
 }
@@ -38,7 +38,7 @@ impl TypeSystem {
 
     pub fn remove_type(&mut self, type_name: &str) -> Result<(), TypeSystemError> {
         if !self.types.contains_key(type_name) {
-            return Err(TypeSystemError::NoSuchType);
+            return Err(TypeSystemError::NoSuchType(type_name.to_owned()));
         }
         self.types.remove(type_name);
         Ok(())
@@ -49,7 +49,7 @@ impl TypeSystem {
             "String" => Ok(Type::String),
             type_name => match self.types.get(type_name) {
                 Some(ty) => Ok(Type::Object(ty.to_owned())),
-                None => Err(TypeSystemError::NoSuchType),
+                None => Err(TypeSystemError::NoSuchType(type_name.to_owned())),
             },
         }
     }
