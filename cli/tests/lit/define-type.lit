@@ -1,6 +1,6 @@
 # SPDX-FileCopyrightText: © 2021 ChiselStrike <info@chiselstrike.com>
 
-# RUN: CHISEL="@chisel" CURL="@curl" sh -ex @file
+# RUN: CURL="@curl" sh -ex @file
 
 $CHISEL type import examples/person.graphql
 
