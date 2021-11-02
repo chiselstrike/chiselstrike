@@ -36,7 +36,7 @@ EOF
 
 # CHECK: End point defined: /echo
 
-$CURL --data foobar -o - localhost:3000/echo
+$CURL --data foobar -o - $CHISELD_HOST/echo
 
 # CHECK: HTTP/1.1 200 OK
 # CHECK: content-type: text/plain;charset=UTF-8
@@ -62,7 +62,7 @@ $CURL --data foobar -o - localhost:3000/echo
 echo
 # Adding the 100-continue header causes curl to wait, which is a good
 # way to test pending futures on the deno side.
-$CURL -H 'Expect: 100-continue' --data foobar -o - localhost:3000/echo
+$CURL -H 'Expect: 100-continue' --data foobar -o - $CHISELD_HOST/echo
 
 # CHECK: HTTP/1.1 200 OK
 # CHECK: content-type: text/plain;charset=UTF-8

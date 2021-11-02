@@ -14,7 +14,7 @@ EOF
 
 # CHECK: End point defined: /test1
 
-$CURL -o - localhost:3000/test1
+$CURL -o - $CHISELD_HOST/test1
 # CHECK: HTTP/1.1 200 OK
 # CHECK: test OK
 
@@ -33,7 +33,7 @@ EOF
 
 # CHECK: End point defined: /test2
 
-$CURL -o - localhost:3000/test2
+$CURL -o - $CHISELD_HOST/test2
 
 # CHECK: HTTP/1.1 500 Internal Server Error
 # CHECK: foo is not defined

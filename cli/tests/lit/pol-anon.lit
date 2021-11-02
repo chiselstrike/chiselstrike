@@ -24,7 +24,7 @@ EOF
 
 # CHECK: End point defined: /ins
 
-$CURL --data '{"pub":"hello", "priv":"world"}' -o - localhost:3000/ins
+$CURL --data '{"pub":"hello", "priv":"world"}' -o - $CHISELD_HOST/ins
 
 # CHECK: ok
 
@@ -42,7 +42,7 @@ EOF
 
 # CHECK: End point defined: /find
 
-$CURL -o - localhost:3000/find
+$CURL -o - $CHISELD_HOST/find
 
 # CHECK: HTTP/1.1 200 OK
 # CHECK: hello xxxxx

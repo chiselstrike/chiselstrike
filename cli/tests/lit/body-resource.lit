@@ -22,7 +22,7 @@ EOF
 
 # CHECK: End point defined: /test1
 
-$CURL --data foobar -o - localhost:3000/test1
+$CURL --data foobar -o - $CHISELD_HOST/test1
 
 # CHECK: HTTP/1.1 200 OK
 # CHECK: test1 is ok
@@ -46,7 +46,7 @@ EOF
 
 # CHECK: End point defined: /test2
 
-$CURL --data foobar -o - localhost:3000/test2
+$CURL --data foobar -o - $CHISELD_HOST/test2
 
 # CHECK: HTTP/1.1 200 OK
 # CHECK: test2 is ok
