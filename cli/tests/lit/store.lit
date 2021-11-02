@@ -2,9 +2,9 @@
 
 # RUN: CURL="@curl" sh -e @file
 
-echo 'type Foo { a: String, b: String }' | $CHISEL type import -
+echo 'type Person { a: String, b: String }' | $CHISEL type import -
 
-# CHECK: Type defined: Foo
+# CHECK: Type defined: Person
 
 $CHISEL end-point create ins examples/store.js
 

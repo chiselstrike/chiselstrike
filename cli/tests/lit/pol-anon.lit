@@ -3,13 +3,13 @@
 # RUN: CURL="@curl" sh -e @file
 
 cat << EOF | $CHISEL type import -
-type Foo {
+type Person {
   pub: String
   priv: String @pii
 }
 EOF
 
-# CHECK: Type defined: Foo
+# CHECK: Type defined: Person
 
 $CHISEL end-point create ins examples/store.js
 
@@ -22,8 +22,8 @@ $CURL --data '{"pub":"hello", "priv":"world"}' -o - $CHISELD_HOST/ins
 cat << EOF | $CHISEL end-point create find -
 export default async function chisel(req) {
     let response = "";
-    let foos = await Chisel.find_all("Foo");
-    for await (let f of foos) {
+    let persons = await Chisel.find_all("Person");
+    for await (let f of persons) {
         response += f.pub + " " + f.priv;
         response += " ";
     }
