@@ -43,6 +43,9 @@ impl TypeSystem {
     pub fn lookup_type(&self, type_name: &str) -> Result<Type, TypeSystemError> {
         match type_name {
             "String" => Ok(Type::String),
+            "Int" => Ok(Type::Int),
+            "Float" => Ok(Type::Float),
+            "Boolean" => Ok(Type::Boolean),
             type_name => match self.types.get(type_name) {
                 Some(ty) => Ok(Type::Object(ty.to_owned())),
                 None => Err(TypeSystemError::NoSuchType(type_name.to_owned())),
@@ -54,12 +57,18 @@ impl TypeSystem {
 #[derive(Clone, Debug)]
 pub enum Type {
     String,
+    Int,
+    Float,
+    Boolean,
     Object(ObjectType),
 }
 
 impl Type {
     pub fn name(&self) -> &str {
         match self {
+            Type::Float => "Float",
+            Type::Boolean => "Boolean",
+            Type::Int => "Int",
             Type::String => "String",
             Type::Object(ty) => &ty.name,
         }
