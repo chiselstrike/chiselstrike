@@ -4,8 +4,8 @@
 
 cat << EOF | $CHISEL type import -
 type Person {
-  pub: String
-  priv: String @pii
+  first_name: String
+  last_name: String @pii
 }
 EOF
 
@@ -15,21 +15,11 @@ $CHISEL end-point create ins examples/store.js
 
 # CHECK: End point defined: /ins
 
-$CURL --data '{"pub":"hello", "priv":"world"}' -o - $CHISELD_HOST/ins
+$CURL --data '{"first_name":"hello", "last_name":"world"}' -o - $CHISELD_HOST/ins
 
 # CHECK: ok
 
-cat << EOF | $CHISEL end-point create find -
-export default async function chisel(req) {
-    let response = "";
-    let persons = await Chisel.find_all("Person");
-    for await (let f of persons) {
-        response += f.pub + " " + f.priv;
-        response += " ";
-    }
-    return new Response(response);
-}
-EOF
+$CHISEL end-point create find examples/find.js
 
 # CHECK: End point defined: /find
 

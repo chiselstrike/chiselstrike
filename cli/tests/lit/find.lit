@@ -19,17 +19,7 @@ $CURL --data '{"first_name":"Glauber", "last_name":"Costa"}' -o - $CHISELD_HOST/
 
 # CHECK: ok
 
-cat << EOF | $CHISEL end-point create find -
-export default async function chisel(req) {
-    let response = "";
-    let people = await Chisel.find_all("Person");
-    for await (let p of people) {
-        response += p.first_name + " " + p.last_name;
-        response += " ";
-    }
-    return new Response(response);
-}
-EOF
+$CHISEL end-point create find examples/find.js
 
 # CHECK: End point defined: /find
 
