@@ -17,7 +17,7 @@ use tokio::sync::Mutex;
 #[structopt(name = "chiseld")]
 pub struct Opt {
     /// API server listen address.
-    #[structopt(short, long, default_value = "127.0.0.1:3000")]
+    #[structopt(short, long, default_value = "127.0.0.1:8080")]
     api_listen_addr: SocketAddr,
     /// RPC server listen address.
     #[structopt(short, long, default_value = "127.0.0.1:50051")]

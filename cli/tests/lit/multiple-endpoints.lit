@@ -21,12 +21,12 @@ EOF
 
 # CHECK: End point defined: /bar
 
-$CURL -o - localhost:3000/foo
+$CURL -o - $CHISELD_HOST/foo
 
 # CHECK: HTTP/1.1 200 OK
 # CHECK: foo
 
-$CURL -o - localhost:3000/bar
+$CURL -o - $CHISELD_HOST/bar
 
 # CHECK: HTTP/1.1 200 OK
 # CHECK: bar

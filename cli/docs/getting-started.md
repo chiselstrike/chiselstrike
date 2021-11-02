@@ -10,7 +10,7 @@ To start up the server, run:
 chiseld
 ```
 
-And now you have the ChiselStrike server listening to HTTP port 3000 on localhost.
+And now you have the ChiselStrike server listening to HTTP port 8080 on localhost.
 
 Next, we will define some types in the ChiselStrike type system.
 
@@ -69,7 +69,7 @@ End point defined: /create-person
 and now you can create a new `Person` object with:
 
 ```
-curl --data '{"first_name":"Glauber", "last_name":"Costa"}' -o - localhost:3000/create-person
+curl --data '{"first_name":"Glauber", "last_name":"Costa"}' -o - localhost:8080/create-person
 ```
 
 The next endpoint we will create is a `/find-all-people` endpoint that returns all objects of type `Person`:
@@ -97,5 +97,5 @@ End point defined: /find-all-people
 and now you can query all the objects of type `Person` in the system with:
 
 ```
-curl -o - localhost:3000/find-all-people
+curl -o - localhost:8080/find-all-people
 ```

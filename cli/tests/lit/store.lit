@@ -19,6 +19,6 @@ EOF
 
 # CHECK: End point defined: /ins
 
-$CURL --data '{"a":"aaa", "b":"bbb"}' -o - localhost:3000/ins
+$CURL --data '{"a":"aaa", "b":"bbb"}' -o - $CHISELD_HOST/ins
 
 # CHECK: ok

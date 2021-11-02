@@ -4,7 +4,7 @@
 
 $CHISEL type import examples/person.graphql
 
-$CURL -o - localhost:3000/person
+$CURL -o - $CHISELD_HOST/person
 
 # CHECK: Type defined: Person
 # CHECK: Type defined: Position
