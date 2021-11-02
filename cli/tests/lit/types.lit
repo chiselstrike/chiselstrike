@@ -9,3 +9,14 @@ EOF
 
 # CHECK: Type defined: Foo
 # CHECK: Type defined: Bar
+
+$CHISEL restart
+$CHISEL wait
+$CHISEL type export
+
+# CHECK: class Bar {
+# CHECK:   [[^ *a: String]]
+# CHECK: }
+# CHECK: class Foo {
+# CHECK:   [[^ *a: String]]
+# CHECK: }
