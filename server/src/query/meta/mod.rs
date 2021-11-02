@@ -13,6 +13,7 @@ use std::str::FromStr;
 ///
 /// The meta service is responsible for managing metadata such as object
 /// types and labels persistently.
+#[derive(Debug)]
 pub struct MetaService {
     opts: AnyConnectOptions,
     pool: AnyPool,
