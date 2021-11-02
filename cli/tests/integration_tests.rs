@@ -40,7 +40,7 @@ mod tests {
         let chiseld = bin_dir().join("chiseld").to_str().unwrap().to_string();
         env::set_var("CHISELD", chiseld);
         env::set_var("CHISEL", chisel());
-        env::set_var("CHISELD_HOST", "localhost:3000");
+        env::set_var("CHISELD_HOST", "localhost:8080");
         lit::run::tests(lit::event_handler::Default::default(), |config| {
             config.add_search_path("tests/lit");
             config.add_extension("lit");
