@@ -20,3 +20,11 @@ $CHISEL type export
 # CHECK: class Foo {
 # CHECK:   [[^ *a: String]]
 # CHECK: }
+
+set +e
+cat << EOF | $CHISEL type import - 2>&1
+type Zed { a: String, a: String }
+EOF
+set -e
+
+# CHECK: UNIQUE constraint failed: field_names.field_name
