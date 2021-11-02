@@ -15,8 +15,8 @@ pub enum QueryError {
     FetchFailed(#[source] sqlx::Error),
     #[error["type system error `{0}`"]]
     TypeError(#[from] TypeSystemError),
-    #[error["provided data are incompatible with given type `{0}`"]]
-    IncompatibleData(String),
+    #[error["provided data for field `{0}` are incompatible with given type `{1}`"]]
+    IncompatibleData(String, String),
 }
 
 pub use engine::QueryEngine;

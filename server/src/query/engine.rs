@@ -131,9 +131,9 @@ impl QueryEngine {
 
         let mut insert_query = sqlx::query(&insert_query);
         for field in &ty.fields {
-            let value = ty_value[&field.name]
-                .as_str()
-                .ok_or_else(|| QueryError::IncompatibleData(ty.name.to_owned()))?;
+            let value = ty_value[&field.name].as_str().ok_or_else(|| {
+                QueryError::IncompatibleData(field.name.to_owned(), ty.name.to_owned())
+            })?;
             insert_query = insert_query.bind(value);
         }
 
