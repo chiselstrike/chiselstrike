@@ -1,8 +1,9 @@
 // SPDX-FileCopyrightText: © 2021 ChiselStrike <info@chiselstrike.com>
 
 use crate::api::Body;
+use crate::policies::FieldPolicies;
 use crate::runtime;
-use crate::types::{ObjectType, Policies, Type, TypeSystemError};
+use crate::types::{ObjectType, Type, TypeSystemError};
 use anyhow::{anyhow, Result};
 use deno_broadcast_channel::InMemoryBroadcastChannel;
 use deno_core::error::AnyError;
@@ -216,7 +217,7 @@ async fn op_chisel_store(
 struct QueryStreamResource {
     #[allow(clippy::type_complexity)]
     stream: RefCell<Pin<Box<dyn stream::Stream<Item = Result<AnyRow, sqlx::Error>>>>>,
-    policies: Policies,
+    policies: FieldPolicies,
     ty: ObjectType,
 }
 
@@ -227,12 +228,12 @@ async fn op_chisel_query_create(
     type_name: String,
     _: (),
 ) -> Result<ResourceId, AnyError> {
-    let mut policies = Policies::default();
+    let mut policies = FieldPolicies::default();
     let runtime = &mut runtime::get().await;
     let ts = &runtime.type_system;
     let (stream, ty) = match ts.lookup_type(&type_name) {
         Ok(Type::Object(ty)) => {
-            ts.get_policies(&ty, &mut policies);
+            runtime.get_policies(&ty, &mut policies);
             let query_engine = &mut runtime.query_engine;
             (query_engine.find_all(&ty), ty)
         }

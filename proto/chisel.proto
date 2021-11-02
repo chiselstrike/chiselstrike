@@ -59,6 +59,15 @@ message RestartResponse {
   bool ok = 1;
 }
 
+message PolicyUpdateRequest {
+  string label = 2;
+  string transform = 3;
+}
+
+message PolicyUpdateResponse {
+  string message = 1;
+}
+
 service ChiselRpc {
   rpc GetStatus (StatusRequest) returns (StatusResponse);
   rpc AddType (AddTypeRequest) returns (AddTypeResponse);
@@ -66,4 +75,5 @@ service ChiselRpc {
   rpc ExportTypes (TypeExportRequest) returns (TypeExportResponse);
   rpc CreateEndPoint (EndPointCreationRequest) returns (EndPointCreationResponse);
   rpc Restart (RestartRequest) returns (RestartResponse);
+  rpc PolicyUpdate (PolicyUpdateRequest) returns (PolicyUpdateResponse);
 }
