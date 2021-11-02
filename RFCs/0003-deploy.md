@@ -24,7 +24,7 @@ An application can be deployed locally with:
 $ chisel run
 ```
 
-The command assumes that a default file `chisel.cf` exists.
+The command assumes that a default file `chisel.cf` exists. When the file changes, types and endpoints are automatically reloaded.
 
 ## Remote deployments
 
