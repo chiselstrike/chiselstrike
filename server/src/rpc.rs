@@ -191,7 +191,7 @@ impl ChiselRpc for RpcService {
     ) -> Result<tonic::Response<PolicyUpdateResponse>, tonic::Status> {
         let request = request.into_inner();
         let policies = &mut runtime::get().await.policies;
-        let xform = match &request.transform[..] {
+        let transform = match &request.transform[..] {
             "anonymize" => crate::policies::anonymize,
             _ => {
                 return Err(Status::internal(format!(
@@ -200,7 +200,7 @@ impl ChiselRpc for RpcService {
                 )))
             }
         };
-        policies.insert(request.label.clone(), xform);
+        policies.insert(request.label.clone(), transform);
         Ok(Response::new(PolicyUpdateResponse {
             message: format!("{}(@{})", request.label, request.transform),
         }))
