@@ -15,7 +15,16 @@ use structopt::StructOpt;
 
 #[derive(StructOpt, Debug)]
 #[structopt(name = "chisel")]
-enum Opt {
+struct Opt {
+    /// RPC server address.
+    #[structopt(short, long, default_value = "http://localhost:50051")]
+    rpc_addr: String,
+    #[structopt(subcommand)]
+    cmd: Command,
+}
+
+#[derive(StructOpt, Debug)]
+enum Command {
     /// Shows information about ChiselStrike server status.
     Status,
     Type {
@@ -80,21 +89,21 @@ async fn create_endpoint(
 #[tokio::main]
 async fn main() -> Result<()> {
     let opt = Opt::from_args();
-    let server_url = "http://localhost:50051";
-    match opt {
-        Opt::Status => {
+    let server_url = opt.rpc_addr;
+    match opt.cmd {
+        Command::Status => {
             let mut client = ChiselRpcClient::connect(server_url).await?;
             let request = tonic::Request::new(StatusRequest {});
             let response = client.get_status(request).await?.into_inner();
             println!("Server status is {}", response.message);
         }
-        Opt::EndPoint { cmd } => match cmd {
+        Command::EndPoint { cmd } => match cmd {
             EndPointCommand::Create { path, filename } => {
                 let mut client = ChiselRpcClient::connect(server_url).await?;
                 create_endpoint(&mut client, path, filename).await?
             }
         },
-        Opt::Type { cmd } => match cmd {
+        Command::Type { cmd } => match cmd {
             TypeCommand::Add { type_name } => {
                 let mut client = ChiselRpcClient::connect(server_url).await?;
                 let request = tonic::Request::new(AddTypeRequest {
@@ -166,7 +175,7 @@ async fn main() -> Result<()> {
                 println!("Type removed: {}", type_name);
             }
         },
-        Opt::Restart => {
+        Command::Restart => {
             let mut client = ChiselRpcClient::connect(server_url).await?;
             let response = client
                 .restart(tonic::Request::new(RestartRequest {}))
@@ -174,10 +183,10 @@ async fn main() -> Result<()> {
                 .into_inner();
             println!("{}", if response.ok { "success" } else { "failure" });
         }
-        Opt::Wait => {
+        Command::Wait => {
             let mut wait_time = 1;
             loop {
-                let mut client = match ChiselRpcClient::connect(server_url).await {
+                let mut client = match ChiselRpcClient::connect(server_url.clone()).await {
                     Ok(client) => client,
                     Err(_) => {
                         thread::sleep(Duration::from_secs(wait_time));
