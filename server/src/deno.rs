@@ -201,7 +201,7 @@ async fn op_chisel_store(
     let type_name = content["name"].as_str().ok_or(Error::TypeName)?;
     let runtime = &mut runtime::get().await;
     let ty = match runtime.type_system.lookup_type(type_name)? {
-        Type::String => {
+        Type::String | Type::Int | Type::Float | Type::Boolean => {
             return Err(TypeSystemError::ObjectTypeRequired(type_name.to_string()).into())
         }
         Type::Object(t) => t,
