@@ -565,7 +565,7 @@ pub async fn run_js(
     req: Request<hyper::Body>,
 ) -> Result<Response<Body>> {
     DENO.with(|d| {
-        let d = d.get().expect("Deno is not not yet inialized");
+        let d = d.get().expect("Deno is not not yet initialized");
         run_js_aux(d.clone(), path, code, req)
     })
     .await
