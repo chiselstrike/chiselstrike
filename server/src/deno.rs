@@ -549,6 +549,8 @@ async fn run_js_aux(
         );
     }
 
+    builder = builder.header("Access-Control-Allow-Origin".to_string(), "*".to_string());
+
     let body = builder.body(Body::Stream(Box::pin(stream)))?;
     Ok(body)
 }
