@@ -1,6 +1,6 @@
 // SPDX-FileCopyrightText: © 2021 ChiselStrike <info@chiselstrike.com>
 
-use crate::policies::{anonymize, FieldPolicies, LabelPolicies};
+use crate::policies::{FieldPolicies, LabelPolicies};
 use crate::query::{MetaService, QueryEngine};
 use crate::types::{ObjectType, TypeSystem};
 use once_cell::sync::OnceCell;
@@ -15,26 +15,12 @@ pub struct Runtime {
 
 impl Runtime {
     pub fn new(query_engine: QueryEngine, meta: MetaService, type_system: TypeSystem) -> Self {
-        let mut r = Self {
+        Self {
             query_engine,
             meta,
             type_system,
-            policies: LabelPolicies::default(), // THIS DOESN'T COMPILE: HashMap::from([("pii".to_string(), anonymize.into())]),
-                                                // Best rustc error ever:
-                                                //
-                                                //  the trait `From<fn(serde_json::Value) -> serde_json::Value {policies::anonymize}>` is not
-                                                // implemented for `fn(serde_json::Value) -> serde_json::Value`
-                                                //
-                                                // Other non-compiling forms for the second argument:
-                                                // - anonymize
-                                                // - &anonymize
-                                                // - *anonymize
-                                                // - std::ptr::addr_of(anonymize)
-                                                // - let f:fn(Value)->Value = anonymize; f
-                                                // - let f:fn(Value)->Value = anonymize.into(); f
-        };
-        r.policies.insert("pii".into(), anonymize); // TODO: This should be done via RPC.
-        r
+            policies: LabelPolicies::default(),
+        }
     }
 
     /// Adds the current policies of ty to policies.

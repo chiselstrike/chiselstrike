@@ -8,8 +8,9 @@ use crate::types::{Field, ObjectType, TypeSystemError};
 use chisel::chisel_rpc_server::{ChiselRpc, ChiselRpcServer};
 use chisel::{
     AddTypeRequest, AddTypeResponse, EndPointCreationRequest, EndPointCreationResponse,
-    RemoveTypeRequest, RemoveTypeResponse, RestartRequest, RestartResponse, StatusRequest,
-    StatusResponse, TypeExportRequest, TypeExportResponse,
+    PolicyUpdateRequest, PolicyUpdateResponse, RemoveTypeRequest, RemoveTypeResponse,
+    RestartRequest, RestartResponse, StatusRequest, StatusResponse, TypeExportRequest,
+    TypeExportResponse,
 };
 use convert_case::{Case, Casing};
 use futures::FutureExt;
@@ -182,6 +183,27 @@ impl ChiselRpc for RpcService {
     ) -> Result<tonic::Response<RestartResponse>, tonic::Status> {
         let ok = nix::sys::signal::raise(nix::sys::signal::Signal::SIGHUP).is_ok();
         Ok(Response::new(RestartResponse { ok }))
+    }
+
+    async fn policy_update(
+        &self,
+        request: tonic::Request<PolicyUpdateRequest>,
+    ) -> Result<tonic::Response<PolicyUpdateResponse>, tonic::Status> {
+        let request = request.into_inner();
+        let policies = &mut runtime::get().await.policies;
+        let xform = match &request.transform[..] {
+            "anonymize" => crate::policies::anonymize,
+            _ => {
+                return Err(Status::internal(format!(
+                    "unknown transform: {}",
+                    request.transform
+                )))
+            }
+        };
+        policies.insert(request.label.clone(), xform);
+        Ok(Response::new(PolicyUpdateResponse {
+            message: format!("{}(@{})", request.label, request.transform),
+        }))
     }
 }
 

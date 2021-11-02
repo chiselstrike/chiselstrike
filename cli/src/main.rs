@@ -3,8 +3,8 @@
 use anyhow::Result;
 use chisel::chisel_rpc_client::ChiselRpcClient;
 use chisel::{
-    AddTypeRequest, EndPointCreationRequest, FieldDefinition, RemoveTypeRequest, RestartRequest,
-    StatusRequest, TypeExportRequest,
+    AddTypeRequest, EndPointCreationRequest, FieldDefinition, PolicyUpdateRequest,
+    RemoveTypeRequest, RestartRequest, StatusRequest, TypeExportRequest,
 };
 use graphql_parser::schema::{parse_schema, Definition, TypeDefinition};
 use std::fs;
@@ -37,6 +37,10 @@ enum Command {
     },
     Restart,
     Wait,
+    Policy {
+        #[structopt(subcommand)]
+        cmd: PolicyCommand,
+    },
 }
 
 #[derive(StructOpt, Debug)]
@@ -57,6 +61,12 @@ enum TypeCommand {
 #[derive(StructOpt, Debug)]
 enum EndPointCommand {
     Create { path: String, filename: String },
+}
+
+#[derive(StructOpt, Debug)]
+enum PolicyCommand {
+    /// Must be "transformation ( @label )", where transformation is a known transform function.
+    Update { policy_desc: String },
 }
 
 pub mod chisel {
@@ -205,6 +215,29 @@ async fn main() -> Result<()> {
                 }
             }
         }
+        Opt::Policy { cmd } => match cmd {
+            PolicyCommand::Update { policy_desc } => {
+                let parts: Vec<&str> = policy_desc.split(&['(', ')'][..]).collect();
+                if parts.len() != 3
+                    || parts[0].is_empty()
+                    || parts[1].is_empty()
+                    || !parts[1].starts_with('@')
+                    || !parts[2].is_empty()
+                {
+                    eprintln!("Parsing error: please use <transform>(@<label>)");
+                    std::process::exit(1);
+                }
+                let response = ChiselRpcClient::connect(server_url)
+                    .await?
+                    .policy_update(tonic::Request::new(PolicyUpdateRequest {
+                        label: parts[1][1..].into(),
+                        transform: parts[0].into(),
+                    }))
+                    .await?
+                    .into_inner();
+                println!("Policy updated: {}", response.message);
+            }
+        },
     }
     Ok(())
 }
