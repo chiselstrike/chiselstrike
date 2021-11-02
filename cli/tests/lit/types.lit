@@ -1,0 +1,11 @@
+# SPDX-FileCopyrightText: © 2021 ChiselStrike <info@chiselstrike.com>
+
+# RUN: CURL="@curl" sh -e @file
+
+cat << EOF | $CHISEL type import -
+type Foo { a: String }
+type Bar { a: String }
+EOF
+
+# CHECK: Type defined: Foo
+# CHECK: Type defined: Bar

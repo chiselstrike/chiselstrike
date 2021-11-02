@@ -85,7 +85,7 @@ pub fn tables() -> Vec<TableCreateStatement> {
     let type_fields = Table::create()
         .table(FieldNames::Table)
         .if_not_exists()
-        .col(ColumnDef::new(FieldNames::FieldName).text().unique_key())
+        .col(ColumnDef::new(FieldNames::FieldName).text())
         .col(ColumnDef::new(FieldNames::FieldId).integer())
         .foreign_key(
             ForeignKey::create()
