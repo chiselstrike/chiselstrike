@@ -11,16 +11,7 @@ EOF
 
 # CHECK: Type defined: Foo
 
-cat << EOF | $CHISEL end-point create ins -
-export default async function chisel(req) {
-    if (req.method == 'POST') {
-        const payload = await req.json();
-        await Chisel.store('Foo', payload);
-        return new Response('ok\n');
-    }
-    return new Response('ignored\n');
-}
-EOF
+$CHISEL end-point create ins examples/store.js
 
 # CHECK: End point defined: /ins
 
