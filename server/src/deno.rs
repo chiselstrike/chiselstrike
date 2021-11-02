@@ -3,8 +3,8 @@
 use crate::api::Body;
 use crate::policies::FieldPolicies;
 use crate::runtime;
-use crate::types::{ObjectType, Type, TypeSystemError};
-use anyhow::{anyhow, Result};
+use crate::types::ObjectType;
+use anyhow::Result;
 use deno_broadcast_channel::InMemoryBroadcastChannel;
 use deno_core::error::AnyError;
 use deno_core::op_async;
@@ -201,12 +201,7 @@ async fn op_chisel_store(
 ) -> Result<()> {
     let type_name = content["name"].as_str().ok_or(Error::TypeName)?;
     let runtime = &mut runtime::get().await;
-    let ty = match runtime.type_system.lookup_type(type_name)? {
-        Type::String | Type::Int | Type::Float | Type::Boolean => {
-            return Err(TypeSystemError::ObjectTypeRequired(type_name.to_string()).into())
-        }
-        Type::Object(t) => t,
-    };
+    let ty = runtime.type_system.lookup_object_type(type_name)?;
     runtime
         .query_engine
         .add_row(&ty, &content["value"])
@@ -231,19 +226,10 @@ async fn op_chisel_query_create(
     let mut policies = FieldPolicies::default();
     let runtime = &mut runtime::get().await;
     let ts = &runtime.type_system;
-    let (stream, ty) = match ts.lookup_type(&type_name) {
-        Ok(Type::Object(ty)) => {
-            runtime.get_policies(&ty, &mut policies);
-            let query_engine = &mut runtime.query_engine;
-            (query_engine.find_all(&ty), ty)
-        }
-        Ok(_) => {
-            return Err(TypeSystemError::ObjectTypeRequired(type_name.to_string()).into());
-        }
-        Err(e) => {
-            return Err(anyhow!("Failed to look up type {}: {}", type_name, e));
-        }
-    };
+    let ty = ts.lookup_object_type(&type_name)?;
+    runtime.get_policies(&ty, &mut policies);
+    let query_engine = &mut runtime.query_engine;
+    let stream = query_engine.find_all(&ty);
     let resource = QueryStreamResource {
         stream: RefCell::new(Box::pin(stream)),
         policies,
