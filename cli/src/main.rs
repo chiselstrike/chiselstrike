@@ -215,7 +215,7 @@ async fn main() -> Result<()> {
                 }
             }
         }
-        Opt::Policy { cmd } => match cmd {
+        Command::Policy { cmd } => match cmd {
             PolicyCommand::Update { policy_desc } => {
                 let parts: Vec<&str> = policy_desc.split(&['(', ')'][..]).collect();
                 if parts.len() != 3

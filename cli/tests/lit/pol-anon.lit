@@ -49,7 +49,7 @@ $CURL -o - $CHISELD_HOST/find
 
 $CHISEL policy update 'anonymize(@pii)'
 
-$CURL -o - localhost:3000/find
+$CURL -o - $CHISELD_HOST/find
 
 # CHECK: HTTP/1.1 200 OK
 # CHECK: hello xxxxx
