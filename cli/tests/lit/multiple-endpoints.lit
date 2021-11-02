@@ -1,6 +1,6 @@
 # SPDX-FileCopyrightText: © 2021 ChiselStrike <info@chiselstrike.com>
 
-# RUN: CHISEL="@chisel" CURL="@curl" sh -e @file
+# RUN: CURL="@curl" sh -e @file
 
 # Test that we can have multiple end points, that they can use the
 # same function name and that that name is arbitrary.

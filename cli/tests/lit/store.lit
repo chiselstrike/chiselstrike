@@ -1,6 +1,6 @@
 # SPDX-FileCopyrightText: © 2021 ChiselStrike <info@chiselstrike.com>
 
-# RUN: CHISEL="@chisel" CURL="@curl" sh -e @file
+# RUN: CURL="@curl" sh -e @file
 
 echo 'type Foo { a: String, b: String }' | $CHISEL type import -
 

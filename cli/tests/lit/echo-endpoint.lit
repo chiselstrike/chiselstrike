@@ -1,6 +1,6 @@
 # SPDX-FileCopyrightText: © 2021 ChiselStrike <info@chiselstrike.com>
 
-# RUN: CHISEL="@chisel" CURL="@curl" sh -e @file
+# RUN: CURL="@curl" sh -e @file
 
 cat << EOF | $CHISEL end-point create echo -
 // This function produces a response whose body is a json of the request
