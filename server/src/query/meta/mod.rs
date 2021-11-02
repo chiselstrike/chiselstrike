@@ -95,6 +95,7 @@ impl MetaService {
         let mut fields = Vec::new();
         for row in rows {
             let field_name: &str = row.get("field_name");
+            let field_name = field_name.split_once('.').unwrap().1;
             let field_type: &str = row.get("field_type");
             let field_id: i32 = row.get("field_id");
             let ty = ts.lookup_type(field_type)?;
@@ -161,7 +162,8 @@ impl MetaService {
                 .await
                 .map_err(QueryError::ExecuteFailed)?;
             let field_id: i32 = row.get("field_id");
-            let add_field_name = add_field_name.bind(field.name.clone()).bind(field_id);
+            let full_name = ty.name.clone() + "." + &field.name;
+            let add_field_name = add_field_name.bind(full_name).bind(field_id);
             transaction
                 .execute(add_field_name)
                 .await
