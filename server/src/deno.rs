@@ -27,6 +27,7 @@ use futures::stream;
 use futures::stream::{try_unfold, Stream};
 use futures::FutureExt;
 use hyper::body::HttpBody;
+use hyper::header::HeaderValue;
 use hyper::Method;
 use hyper::{Request, Response, StatusCode};
 use once_cell::sync::Lazy;
@@ -549,7 +550,9 @@ async fn run_js_aux(
         );
     }
 
-    builder = builder.header("Access-Control-Allow-Origin".to_string(), "*".to_string());
+    let headers = builder.headers_mut().ok_or(Error::NotAResponse)?;
+    let entry = headers.entry("Access-Control-Allow-Origin");
+    entry.or_insert(HeaderValue::from_static("*"));
 
     let body = builder.body(Body::Stream(Box::pin(stream)))?;
     Ok(body)
