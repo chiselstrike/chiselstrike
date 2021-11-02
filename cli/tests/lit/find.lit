@@ -2,12 +2,7 @@
 
 # RUN: CURL="@curl" sh -e @file
 
-cat << EOF | $CHISEL type import -
-type Person {
-  first_name: String
-  last_name: String
-}
-EOF
+$CHISEL type import examples/person.graphql
 
 # CHECK: Type defined: Person
 
