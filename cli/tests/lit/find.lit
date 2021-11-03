@@ -10,7 +10,13 @@ $CHISEL end-point create ins examples/store.js
 
 # CHECK: End point defined: /ins
 
-$CURL --data '{"first_name":"Glauber", "last_name":"Costa"}' -o - $CHISELD_HOST/ins
+$CURL --data '{
+    "first_name":"Glauber", 
+    "last_name":"Costa", 
+    "age": 666, 
+    "human": true, 
+    "height": 10.01
+}' -o - $CHISELD_HOST/ins
 
 # CHECK: ok
 
@@ -21,4 +27,4 @@ $CHISEL end-point create find examples/find.js
 $CURL -o - $CHISELD_HOST/find
 
 # CHECK: HTTP/1.1 200 OK
-# CHECK: Glauber Costa
+# CHECK: Glauber Costa 666 true 10.01

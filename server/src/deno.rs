@@ -35,7 +35,6 @@ use once_cell::unsync::OnceCell;
 use rusty_v8 as v8;
 use serde_json;
 use sqlx::any::AnyRow;
-use sqlx::Row;
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::convert::TryInto;
@@ -249,11 +248,7 @@ async fn op_chisel_query_next(
 
     if let Some(row) = stream.next().await {
         let row = row.unwrap();
-        let mut v = serde_json::json!({});
-        for field in &resource.ty.fields {
-            let field_v: &str = row.try_get(&*field.name)?;
-            v[&field.name] = serde_json::json!(field_v);
-        }
+        let mut v = crate::query::engine::row_to_json(&resource.ty, &row)?;
         for (field, xform) in &resource.policies {
             v[field] = xform(v[field].take());
         }

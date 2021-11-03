@@ -13,10 +13,14 @@ pub enum QueryError {
     ExecuteFailed(#[source] sqlx::Error),
     #[error["fetch failed `{0}`"]]
     FetchFailed(#[source] sqlx::Error),
+    #[error["row parsing failed `{0}`"]]
+    ParsingFailed(#[source] sqlx::Error),
     #[error["type system error `{0}`"]]
     TypeError(#[from] TypeSystemError),
     #[error["provided data for field `{0}` are incompatible with given type `{1}`"]]
     IncompatibleData(String, String),
+    #[error["feature `{0}` is not implemented"]]
+    NotImplemented(String),
 }
 
 pub use engine::QueryEngine;
