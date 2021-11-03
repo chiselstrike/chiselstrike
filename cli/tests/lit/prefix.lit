@@ -1,0 +1,34 @@
+# SPDX-FileCopyrightText: © 2021 ChiselStrike <info@chiselstrike.com>
+
+# RUN: CURL="@curl" sh -e @file
+
+cat << EOF | $CHISEL end-point create foo -
+export default async function chisel(req) {
+    return new Response("foo with url " + req.url + "\n");
+}
+EOF
+
+# CHECK: End point defined: /foo
+
+cat << EOF | $CHISEL end-point create foo/bar -
+export default async function chisel(req) {
+    return new Response("foo/bar with url " + req.url + "\n");
+}
+EOF
+
+# CHECK: End point defined: /foo/bar
+
+$CURL -o - $CHISELD_HOST/foo
+
+# CHECK: HTTP/1.1 200 OK
+# CHECK: foo with url http://chiselstrike.com/foo
+
+$CURL -o - $CHISELD_HOST/foo/bar
+
+# CHECK: HTTP/1.1 200 OK
+# CHECK: foo/bar with url http://chiselstrike.com/foo/bar
+
+$CURL -o - $CHISELD_HOST/foo/zed
+
+# CHECK: HTTP/1.1 200 OK
+# CHECK: foo with url http://chiselstrike.com/foo/zed
