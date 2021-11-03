@@ -1,0 +1,31 @@
+# SPDX-FileCopyrightText: © 2021 ChiselStrike <info@chiselstrike.com>
+
+# RUN: CURL="@curl" sh -e @file
+
+cat << EOF | $CHISEL end-point create title -
+const titles = {'glauber': 'CEO', 'dejan': 'CTO'}
+
+export default async function chisel(req) {
+    let u = new URL(req.url);
+    let name = u.searchParams.get('name');
+    let ret = name in titles ? titles[name] : 'coder';
+    return new Response(ret + '\n');
+}
+EOF
+
+# CHECK: End point defined: /title
+
+$CURL -o - $CHISELD_HOST/title?name=glauber
+
+# CHECK: HTTP/1.1 200 OK
+# CHECK: CEO
+
+$CURL -o - $CHISELD_HOST/title?name=dejan
+
+# CHECK: HTTP/1.1 200 OK
+# CHECK: CTO
+
+$CURL -o - $CHISELD_HOST/title?name=rafael
+
+# CHECK: HTTP/1.1 200 OK
+# CHECK: coder
