@@ -68,25 +68,25 @@ type RouteFn = Box<
 /// API service for Chisel server.
 #[derive(Default)]
 pub struct ApiService {
-    gets: HashMap<String, RouteFn>,
+    paths: HashMap<String, RouteFn>,
 }
 
 impl ApiService {
     pub fn new() -> Self {
         Self {
-            gets: HashMap::default(),
+            paths: HashMap::default(),
         }
     }
 
     pub fn get(&mut self, path: &str, route_fn: RouteFn) {
-        self.gets.insert(path.to_string(), route_fn);
+        self.paths.insert(path.to_string(), route_fn);
     }
 
     pub async fn route(
         &mut self,
         req: Request<hyper::Body>,
     ) -> hyper::http::Result<Response<Body>> {
-        if let Some(route_fn) = self.gets.get(req.uri().path()) {
+        if let Some(route_fn) = self.paths.get(req.uri().path()) {
             return match route_fn(req).await {
                 Ok(val) => Ok(val),
                 Err(err) => Response::builder()
