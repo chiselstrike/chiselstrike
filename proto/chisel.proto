@@ -60,8 +60,7 @@ message RestartResponse {
 }
 
 message PolicyUpdateRequest {
-  string label = 2;
-  string transform = 3;
+  string policy_config = 1;
 }
 
 message PolicyUpdateResponse {

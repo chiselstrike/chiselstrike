@@ -14,11 +14,13 @@ use chisel::{
 };
 use convert_case::{Case, Casing};
 use futures::FutureExt;
+use log::debug;
 use serde_json::json;
 use std::net::SocketAddr;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 use tonic::{transport::Server, Request, Response, Status};
+use yaml_rust::YamlLoader;
 
 pub mod chisel {
     tonic::include_proto!("chisel");
@@ -190,19 +192,45 @@ impl ChiselRpc for RpcService {
         request: tonic::Request<PolicyUpdateRequest>,
     ) -> Result<tonic::Response<PolicyUpdateResponse>, tonic::Status> {
         let request = request.into_inner();
-        let policies = &mut runtime::get().await.policies;
-        let transform = match &request.transform[..] {
-            "anonymize" => crate::policies::anonymize,
-            _ => {
-                return Err(Status::internal(format!(
-                    "unknown transform: {}",
-                    request.transform
-                )))
-            }
-        };
-        policies.insert(request.label.clone(), transform);
+
+        let docs = YamlLoader::load_from_str(&request.policy_config)
+            .map_err(|err| Status::internal(format!("{}", err)))?;
+
+        let config = &docs[0];
+
+        for label in config["labels"].as_vec().get_or_insert(&[].into()).iter() {
+            let name = label["name"].as_str().ok_or_else(|| {
+                Status::internal(format!(
+                    "couldn't parse yaml: label without a name: {:?}",
+                    label
+                ))
+            })?;
+            debug!("Applying policy for label {:?}", name);
+
+            // FIXME: only transform implemented
+            let policies = &mut runtime::get().await.policies;
+            let transform = match label["transform"].as_str() {
+                Some("anonymize") => Ok(crate::policies::anonymize),
+                Some(x) => Err(Status::internal(format!(
+                    "unknown transform: {} for label {}",
+                    x, name
+                ))),
+                None => Err(Status::internal(format!(
+                    "found empty transform for label {}",
+                    name
+                ))),
+            }?;
+            policies.insert(name.to_owned(), transform);
+        }
+
+        for _endpoint in config["endpoints"].as_vec().iter() {
+            log::info!("endpoint behavior not yet implemented");
+        }
+
+        // FIXME: return number of effective changes? Probably depends on how we implement
+        // terraform-like workflow (x added, y removed, z modified)
         Ok(Response::new(PolicyUpdateResponse {
-            message: format!("{}(@{})", request.label, request.transform),
+            message: "ok".to_owned(),
         }))
     }
 }

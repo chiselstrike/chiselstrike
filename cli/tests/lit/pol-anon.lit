@@ -23,7 +23,11 @@ $CURL -o - $CHISELD_HOST/find
 # CHECK: HTTP/1.1 200 OK
 # CHECK: hello world
 
-$CHISEL policy update 'anonymize(@pii)'
+cat << EOF | $CHISEL policy update -
+labels:
+  - name: pii
+    transform: anonymize
+EOF
 
 $CURL -o - $CHISELD_HOST/find
 
