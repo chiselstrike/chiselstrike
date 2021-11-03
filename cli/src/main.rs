@@ -1,6 +1,6 @@
 // SPDX-FileCopyrightText: © 2021 ChiselStrike <info@chiselstrike.com>
 
-use anyhow::Result;
+use anyhow::{anyhow, Context, Result};
 use chisel::chisel_rpc_client::ChiselRpcClient;
 use chisel::{
     AddTypeRequest, EndPointCreationRequest, FieldDefinition, PolicyUpdateRequest,
@@ -42,6 +42,7 @@ enum Command {
         #[structopt(subcommand)]
         cmd: PolicyCommand,
     },
+    Apply,
 }
 
 #[derive(StructOpt, Debug)]
@@ -83,6 +84,49 @@ fn read_to_string<P: AsRef<Path>>(filename: P) -> Result<String, std::io::Error>
     } else {
         fs::read_to_string(filename.as_ref())
     }
+}
+
+fn read_dir<P: AsRef<Path>>(dir: P) -> Result<fs::ReadDir, anyhow::Error> {
+    fs::read_dir(dir.as_ref()).with_context(|| format!("Could not open {}", dir.as_ref().display()))
+}
+
+async fn import_types<P>(
+    client: &mut ChiselRpcClient<tonic::transport::Channel>,
+    filename: P,
+) -> Result<()>
+where
+    P: AsRef<Path>,
+{
+    let schema = read_to_string(filename)?;
+    let type_system = parse_schema::<String>(&schema)?;
+    for def in &type_system.definitions {
+        match def {
+            Definition::TypeDefinition(TypeDefinition::Object(obj_def)) => {
+                let mut field_defs = Vec::default();
+                for field_def in &obj_def.fields {
+                    field_defs.push(FieldDefinition {
+                        name: field_def.name.to_owned(),
+                        field_type: format!("{}", field_def.field_type.to_owned()),
+                        labels: field_def
+                            .directives
+                            .iter()
+                            .map(|d| d.name.clone())
+                            .collect(),
+                    });
+                }
+                let request = tonic::Request::new(AddTypeRequest {
+                    name: obj_def.name.to_owned(),
+                    field_defs,
+                });
+                let response = client.add_type(request).await?.into_inner();
+                println!("Type defined: {}", response.message);
+            }
+            def => {
+                println!("Ignoring type definition: {:?}", def);
+            }
+        }
+    }
+    Ok(())
 }
 
 async fn create_endpoint<P>(
@@ -129,35 +173,7 @@ async fn main() -> Result<()> {
             }
             TypeCommand::Import { filename } => {
                 let mut client = ChiselRpcClient::connect(server_url).await?;
-                let schema = read_to_string(&filename)?;
-                let type_system = parse_schema::<String>(&schema)?;
-                for def in &type_system.definitions {
-                    match def {
-                        Definition::TypeDefinition(TypeDefinition::Object(obj_def)) => {
-                            let mut field_defs = Vec::default();
-                            for field_def in &obj_def.fields {
-                                field_defs.push(FieldDefinition {
-                                    name: field_def.name.to_owned(),
-                                    field_type: format!("{}", field_def.field_type.to_owned()),
-                                    labels: field_def
-                                        .directives
-                                        .iter()
-                                        .map(|d| d.name.clone())
-                                        .collect(),
-                                });
-                            }
-                            let request = tonic::Request::new(AddTypeRequest {
-                                name: obj_def.name.to_owned(),
-                                field_defs,
-                            });
-                            let response = client.add_type(request).await?.into_inner();
-                            println!("Type defined: {}", response.message);
-                        }
-                        def => {
-                            println!("Ignoring type definition: {:?}", def);
-                        }
-                    }
-                }
+                import_types(&mut client, filename).await?;
             }
             TypeCommand::Export => {
                 let mut client = ChiselRpcClient::connect(server_url).await?;
@@ -233,6 +249,47 @@ async fn main() -> Result<()> {
                 println!("Policy updated: {}", response.message);
             }
         },
+        Command::Apply => {
+            let types = read_dir("./types")?;
+            let endpoints = read_dir("./endpoints")?;
+            let policies = read_dir("./policies")?;
+
+            let mut client = ChiselRpcClient::connect(server_url).await?;
+
+            for entry in types {
+                let entry = entry?;
+                // FIXME: will fail the second time until we implement type evolution
+                import_types(&mut client, entry.path()).await?;
+            }
+
+            for entry in endpoints {
+                let filename = entry?;
+                // FIXME: disambiguate endpoint and endpoint.js. If you have both, this has to
+                // error out. For now simplify.
+                let endpoint_name = filename
+                    .path()
+                    .file_stem()
+                    .ok_or_else(|| anyhow!("Invalid endpoint filename {:?}", filename))?
+                    .to_os_string()
+                    .into_string()
+                    .unwrap();
+
+                create_endpoint(&mut client, endpoint_name, filename.path()).await?;
+            }
+
+            for entry in policies {
+                let filename = entry?;
+                let policystr = read_to_string(filename.path())?;
+
+                let response = client
+                    .policy_update(tonic::Request::new(PolicyUpdateRequest {
+                        policy_config: policystr,
+                    }))
+                    .await?
+                    .into_inner();
+                println!("Policy applied: {}", response.message);
+            }
+        }
     }
     Ok(())
 }
