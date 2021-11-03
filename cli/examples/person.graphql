@@ -2,7 +2,7 @@
 
 type Person {
   first_name: String
-  last_name: String
+  last_name: String @pii
 }
 
 type Position {
