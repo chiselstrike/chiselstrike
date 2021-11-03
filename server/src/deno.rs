@@ -31,7 +31,6 @@ use hyper::body::HttpBody;
 use hyper::header::HeaderValue;
 use hyper::Method;
 use hyper::{Request, Response, StatusCode};
-use once_cell::sync::Lazy;
 use once_cell::unsync::OnceCell;
 use rusty_v8 as v8;
 use serde_json;
@@ -79,11 +78,10 @@ enum Error {
 }
 
 struct ModuleLoader {
-    code_map: RefCell<HashMap<ModuleSpecifier, String>>,
+    code_map: RefCell<HashMap<String, String>>,
 }
 
-static DUMMY_PATH: Lazy<Url> =
-    Lazy::new(|| ModuleSpecifier::parse("file://$chisel$/main.js").unwrap());
+const DUMMY_PREFIX: &str = "file://$chisel$";
 
 impl deno_core::ModuleLoader for ModuleLoader {
     fn resolve(
@@ -101,7 +99,8 @@ impl deno_core::ModuleLoader for ModuleLoader {
         _maybe_referrer: Option<ModuleSpecifier>,
         _is_dyn_import: bool,
     ) -> Pin<Box<ModuleSourceFuture>> {
-        let code = self.code_map.borrow().get(specifier).unwrap().clone();
+        let path = specifier.path();
+        let code = self.code_map.borrow().get(path).unwrap().clone();
         let specifier = specifier.to_string();
         let f = || async {
             Ok(ModuleSource {
@@ -281,9 +280,11 @@ async fn create_deno(inspect_brk: bool) -> Result<DenoService> {
     d.module_loader
         .code_map
         .borrow_mut()
-        .insert(DUMMY_PATH.clone(), code);
+        .insert("/".to_string(), code);
 
-    worker.execute_main_module(&DUMMY_PATH).await?;
+    worker
+        .execute_main_module(&ModuleSpecifier::parse(DUMMY_PREFIX).unwrap())
+        .await?;
     Ok(d)
 }
 
@@ -481,13 +482,18 @@ async fn run_js_aux(
     // Modules are never unloaded, so we need to create an unique
     // path. This will not be a problem once we publish the entire app
     // at once, since then we can create a new isolate for it.
-    let url = format!("file://$chisel{}$/path{}", service.next_end_point_id, path);
+    let url = format!(
+        "{}/{}?ver={}",
+        DUMMY_PREFIX,
+        path.clone(),
+        service.next_end_point_id
+    );
     let url = Url::parse(&url).unwrap();
     service
         .module_loader
         .code_map
         .borrow_mut()
-        .insert(url.clone(), code);
+        .insert(path.clone(), code);
     service.next_end_point_id += 1;
 
     let runtime = &mut service.worker.js_runtime;
