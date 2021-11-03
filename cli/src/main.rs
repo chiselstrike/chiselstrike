@@ -66,7 +66,7 @@ enum EndPointCommand {
 #[derive(StructOpt, Debug)]
 enum PolicyCommand {
     /// Must be "transformation ( @label )", where transformation is a known transform function.
-    Update { policy_desc: String },
+    Update { filename: String },
 }
 
 pub mod chisel {
@@ -216,22 +216,13 @@ async fn main() -> Result<()> {
             }
         }
         Command::Policy { cmd } => match cmd {
-            PolicyCommand::Update { policy_desc } => {
-                let parts: Vec<&str> = policy_desc.split(&['(', ')'][..]).collect();
-                if parts.len() != 3
-                    || parts[0].is_empty()
-                    || parts[1].is_empty()
-                    || !parts[1].starts_with('@')
-                    || !parts[2].is_empty()
-                {
-                    eprintln!("Parsing error: please use <transform>(@<label>)");
-                    std::process::exit(1);
-                }
+            PolicyCommand::Update { filename } => {
+                let policystr = read_to_string(&filename)?;
+
                 let response = ChiselRpcClient::connect(server_url)
                     .await?
                     .policy_update(tonic::Request::new(PolicyUpdateRequest {
-                        label: parts[1][1..].into(),
-                        transform: parts[0].into(),
+                        policy_config: policystr,
                     }))
                     .await?
                     .into_inner();
