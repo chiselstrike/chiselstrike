@@ -9,6 +9,7 @@ use chisel::{
 use graphql_parser::schema::{parse_schema, Definition, TypeDefinition};
 use std::fs;
 use std::io::{stdin, Read};
+use std::path::Path;
 use std::thread;
 use std::time::Duration;
 use structopt::StructOpt;
@@ -74,21 +75,24 @@ pub mod chisel {
 }
 
 /// Opens and reads an entire file (or stdin, if filename is "-")
-fn read_to_string(filename: &str) -> Result<String, std::io::Error> {
-    if filename == "-" {
+fn read_to_string<P: AsRef<Path>>(filename: P) -> Result<String, std::io::Error> {
+    if filename.as_ref() == Path::new("-") {
         let mut s = "".to_string();
         stdin().read_to_string(&mut s)?;
         Ok(s)
     } else {
-        fs::read_to_string(filename)
+        fs::read_to_string(filename.as_ref())
     }
 }
 
-async fn create_endpoint(
+async fn create_endpoint<P>(
     client: &mut ChiselRpcClient<tonic::transport::Channel>,
     path: String,
-    filename: String,
-) -> Result<()> {
+    filename: P,
+) -> Result<()>
+where
+    P: AsRef<Path>,
+{
     let code = read_to_string(&filename)?;
     let request = tonic::Request::new(EndPointCreationRequest { path, code });
     let response = client.create_end_point(request).await?.into_inner();
