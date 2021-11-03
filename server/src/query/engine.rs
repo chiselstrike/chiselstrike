@@ -1,7 +1,8 @@
 // SPDX-FileCopyrightText: © 2021 ChiselStrike <info@chiselstrike.com>
 
 use crate::query::QueryError;
-use crate::types::ObjectType;
+use crate::types::{ObjectType, Type};
+use anyhow::Result;
 use futures::stream;
 use futures::stream::BoxStream;
 use futures::stream::Stream;
@@ -9,7 +10,7 @@ use itertools::Itertools;
 use sea_query::{Alias, ColumnDef, PostgresQueryBuilder, SchemaBuilder, SqliteQueryBuilder, Table};
 use sqlx::any::{Any, AnyConnectOptions, AnyKind, AnyPool, AnyPoolOptions, AnyRow};
 use sqlx::error::Error;
-use sqlx::Executor;
+use sqlx::{Executor, Row};
 use std::cell::RefCell;
 use std::marker::PhantomPinned;
 use std::pin::Pin;
@@ -93,8 +94,19 @@ impl QueryEngine {
             )
             .to_owned();
         for field in ty.fields {
-            // TODO: Replace .text() with suitable type with respect to field's type?
-            create_table.col(ColumnDef::new(Alias::new(&field.name)).text());
+            let mut column_def = ColumnDef::new(Alias::new(&field.name));
+            match field.type_ {
+                Type::String => column_def.text(),
+                Type::Int => column_def.integer(),
+                Type::Float => column_def.double(),
+                Type::Boolean => column_def.boolean(),
+                Type::Object(_) => {
+                    return Err(QueryError::NotImplemented(
+                        "support for type Object".to_owned(),
+                    ));
+                }
+            };
+            create_table.col(&mut column_def);
         }
         let create_table = create_table.build_any(Self::get_query_builder(&self.opts));
 
@@ -131,10 +143,29 @@ impl QueryEngine {
 
         let mut insert_query = sqlx::query(&insert_query);
         for field in &ty.fields {
-            let value = ty_value[&field.name].as_str().ok_or_else(|| {
-                QueryError::IncompatibleData(field.name.to_owned(), ty.name.to_owned())
-            })?;
-            insert_query = insert_query.bind(value);
+            macro_rules! bind_json_value {
+                ($as_type:ident) => {{
+                    let value_json = ty_value.get(&field.name).ok_or_else(|| {
+                        QueryError::IncompatibleData(field.name.to_owned(), ty.name.to_owned())
+                    })?;
+                    let value = value_json.$as_type().ok_or_else(|| {
+                        QueryError::IncompatibleData(field.name.to_owned(), ty.name.to_owned())
+                    })?;
+                    insert_query = insert_query.bind(value);
+                }};
+            }
+
+            match field.type_ {
+                Type::String => bind_json_value!(as_str),
+                Type::Int => bind_json_value!(as_i64),
+                Type::Float => bind_json_value!(as_f64),
+                Type::Boolean => bind_json_value!(as_bool),
+                Type::Object(_) => {
+                    return Err(QueryError::NotImplemented(
+                        "support for type Object".to_owned(),
+                    ));
+                }
+            }
         }
 
         let mut transaction = self
@@ -152,4 +183,31 @@ impl QueryEngine {
             .map_err(QueryError::ExecuteFailed)?;
         Ok(())
     }
+}
+
+pub fn row_to_json(ty: &ObjectType, row: &AnyRow) -> Result<serde_json::Value, QueryError> {
+    let mut v = serde_json::json!({});
+    for field in &ty.fields {
+        macro_rules! try_setting_field {
+            ($value_type:ty) => {{
+                let str_val = row
+                    .try_get::<$value_type, _>(&*field.name)
+                    .map_err(QueryError::ParsingFailed)?;
+                v[&field.name] = serde_json::json!(str_val);
+            }};
+        }
+
+        match field.type_ {
+            Type::String => try_setting_field!(&str),
+            Type::Int => try_setting_field!(i32),
+            Type::Float => try_setting_field!(f64),
+            Type::Boolean => try_setting_field!(bool),
+            Type::Object(_) => {
+                return Err(QueryError::NotImplemented(
+                    "support for type Object".to_owned(),
+                ));
+            }
+        }
+    }
+    Ok(v)
 }

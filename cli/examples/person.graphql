@@ -3,7 +3,11 @@
 type Person {
   first_name: String
   last_name: String @pii
+  age: Int
+  human: Boolean
+  height: Float
 }
+
 
 type Position {
   title: String

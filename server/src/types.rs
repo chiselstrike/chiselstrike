@@ -84,9 +84,9 @@ impl Type {
     pub fn name(&self) -> &str {
         match self {
             Type::Float => "Float",
-            Type::Boolean => "Boolean",
             Type::Int => "Int",
             Type::String => "String",
+            Type::Boolean => "Boolean",
             Type::Object(ty) => &ty.name,
         }
     }

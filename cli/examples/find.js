@@ -3,7 +3,8 @@ export default async function chisel(req) {
     let response = "";
     let people = await Chisel.find_all("Person");
     for await (let person of people) {
-        response += person.first_name + " " + person.last_name;
+        let fields = [person.first_name, person.last_name, person.age, person.human, person.height];
+        response += fields.join(" ");
         response += " ";
     }
     return new Response(response);
