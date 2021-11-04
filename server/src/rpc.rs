@@ -15,7 +15,6 @@ use chisel::{
 use convert_case::{Case, Casing};
 use futures::FutureExt;
 use log::debug;
-use serde_json::json;
 use std::net::SocketAddr;
 use std::sync::Arc;
 use tokio::sync::Mutex;
@@ -47,17 +46,6 @@ impl RpcService {
             move |req| deno::run_js(path.clone(), req).boxed_local()
         };
         self.api.lock().await.get(path, Box::new(func));
-    }
-
-    pub async fn define_type_endpoints(&self, path: &str) {
-        info!("Registered endpoint: '{}'", path);
-        // Let's return an empty array because we don't do storage yet.
-        let result = json!([]);
-        let code = format!(
-            "export default function chisel(req) {{ return new Response(\"{}\"); }}",
-            result
-        );
-        self.create_js_endpoint(path, code).await;
     }
 }
 
@@ -116,9 +104,6 @@ impl ChiselRpc for RpcService {
         meta.insert(ty.clone()).await?;
         let query_engine = &runtime.query_engine;
         query_engine.create_table(ty).await?;
-        let path = format!("/{}", snake_case_name);
-        self.define_type_endpoints(&path).await;
-        self.define_type_endpoints(&name).await;
         let response = chisel::AddTypeResponse { message: name };
         Ok(Response::new(response))
     }
