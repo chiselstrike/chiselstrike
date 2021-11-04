@@ -31,18 +31,31 @@ use hyper::body::HttpBody;
 use hyper::header::HeaderValue;
 use hyper::Method;
 use hyper::{Request, Response, StatusCode};
+use once_cell::sync::Lazy;
 use once_cell::unsync::OnceCell;
 use rusty_v8 as v8;
 use serde_json;
 use sqlx::any::AnyRow;
 use std::cell::RefCell;
+use std::collections::hash_map::Entry;
 use std::collections::HashMap;
 use std::convert::TryInto;
 use std::net::SocketAddr;
 use std::pin::Pin;
 use std::rc::Rc;
 use std::sync::Arc;
+use tokio::sync::Mutex;
 use url::Url;
+
+struct VersionedHandler {
+    func: v8::Global<v8::Function>,
+    version: u64,
+}
+
+struct VersionedCode {
+    code: String,
+    version: u64,
+}
 
 /// A v8 isolate doesn't want to be moved between or used from
 /// multiple threads. A JsRuntime owns an isolate, so we need to use a
@@ -63,7 +76,7 @@ struct DenoService {
     inspector: Option<Arc<InspectorServer>>,
 
     module_loader: Rc<ModuleLoader>,
-    next_end_point_id: i32,
+    handlers: HashMap<String, VersionedHandler>,
 }
 
 #[derive(thiserror::Error, Debug)]
@@ -175,7 +188,7 @@ impl DenoService {
             worker,
             inspector,
             module_loader,
-            next_end_point_id: 0,
+            handlers: HashMap::new(),
         }
     }
 }
@@ -299,6 +312,10 @@ thread_local! {
     // outlive the DenoService.
     static DENO: OnceCell<Rc<RefCell<DenoService>>> = OnceCell::new();
 }
+
+// Map from an endpoint path to the corresponding code and version. A
+// new version is created when the code is updated.
+static CODE: Lazy<Mutex<HashMap<String, VersionedCode>>> = Lazy::new(|| Mutex::new(HashMap::new()));
 
 fn try_into_or<'s, T: std::convert::TryFrom<v8::Local<'s, v8::Value>>>(
     val: Option<v8::Local<'s, v8::Value>>,
@@ -461,45 +478,48 @@ fn get_result(
 async fn run_js_aux(
     d: Rc<RefCell<DenoService>>,
     path: String,
-    code: String,
     mut req: Request<hyper::Body>,
 ) -> Result<Response<Body>> {
     let service = &mut *d.borrow_mut();
+    // Build a new handler if out of date.
+    let request_handler = {
+        let map = CODE.lock().await;
+        let code = map.get(&path).unwrap();
+        let entry = service.handlers.entry(path.clone());
+        let get_handler = || {
+            get_endpoint(
+                &service.module_loader,
+                &mut service.worker.js_runtime,
+                path,
+                code,
+            )
+        };
+
+        match entry {
+            Entry::Vacant(v) => {
+                let func = get_handler().await?;
+                v.insert(func).func.clone()
+            }
+            Entry::Occupied(mut o) => {
+                let o = o.get_mut();
+                if code.version != o.version {
+                    let func = get_handler().await?;
+                    *o = func;
+                }
+                o.func.clone()
+            }
+        }
+    };
+
     let worker = &mut service.worker;
+    let runtime = &mut worker.js_runtime;
 
     if service.inspector.is_some() {
-        let runtime = &mut worker.js_runtime;
         runtime
             .inspector()
             .wait_for_session_and_break_on_next_statement();
     }
 
-    // Modules are never unloaded, so we need to create an unique
-    // path. This will not be a problem once we publish the entire app
-    // at once, since then we can create a new isolate for it.
-    let url = format!(
-        "{}/{}?ver={}",
-        DUMMY_PREFIX,
-        path.clone(),
-        service.next_end_point_id
-    );
-    let url = Url::parse(&url).unwrap();
-    service
-        .module_loader
-        .code_map
-        .borrow_mut()
-        .insert(path.clone(), code);
-    service.next_end_point_id += 1;
-
-    let runtime = &mut service.worker.js_runtime;
-    let ret = runtime.execute_script(&path, &format!("import(\"{}\")", url))?;
-    let ret = runtime.resolve_value(ret).await?;
-    let request_handler = {
-        let scope = &mut runtime.handle_scope();
-        let local = ret.get(scope).to_object(scope).unwrap();
-        let request_handler: v8::Local<v8::Function> = get_member(local, scope, "default")?;
-        v8::Global::<v8::Function>::new(scope, request_handler)
-    };
     let result = get_result(runtime, request_handler, &mut req)?;
 
     let result = runtime.resolve_value(result).await?;
@@ -546,14 +566,57 @@ async fn run_js_aux(
     Ok(body)
 }
 
-pub async fn run_js(
-    path: String,
-    code: String,
-    req: Request<hyper::Body>,
-) -> Result<Response<Body>> {
+pub async fn run_js(path: String, req: Request<hyper::Body>) -> Result<Response<Body>> {
     DENO.with(|d| {
         let d = d.get().expect("Deno is not not yet initialized");
-        run_js_aux(d.clone(), path, code, req)
+        run_js_aux(d.clone(), path, req)
     })
     .await
+}
+
+async fn get_endpoint(
+    module_loader: &ModuleLoader,
+    runtime: &mut JsRuntime,
+    path: String,
+    code: &VersionedCode,
+) -> Result<VersionedHandler> {
+    // Modules are never unloaded, so we need to create an unique
+    // path. This will not be a problem once we publish the entire app
+    // at once, since then we can create a new isolate for it.
+    let url = format!("{}/{}?ver={}", DUMMY_PREFIX, path, code.version);
+    let url = Url::parse(&url).unwrap();
+
+    module_loader
+        .code_map
+        .borrow_mut()
+        .insert(path.clone(), code.code.clone());
+    let promise = runtime.execute_script(&path, &format!("import(\"{}\")", url))?;
+    let module = runtime.resolve_value(promise).await?;
+    module_loader.code_map.borrow_mut().remove(&path);
+
+    let scope = &mut runtime.handle_scope();
+    let module = module
+        .get(scope)
+        .to_object(scope)
+        .ok_or(Error::NotAResponse)?;
+    let request_handler: v8::Local<v8::Function> = get_member(module, scope, "default")?;
+    let ret = VersionedHandler {
+        func: v8::Global::new(scope, request_handler),
+        version: code.version,
+    };
+    Ok(ret)
+}
+
+pub async fn define_endpoint(path: &str, code: String) {
+    let mut map = CODE.lock().await;
+    match map.entry(path.to_string()) {
+        Entry::Vacant(v) => {
+            v.insert(VersionedCode { code, version: 0 });
+        }
+        Entry::Occupied(mut o) => {
+            let o = o.get_mut();
+            o.version += 1;
+            o.code = code;
+        }
+    }
 }

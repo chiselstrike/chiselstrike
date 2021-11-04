@@ -41,9 +41,10 @@ impl RpcService {
     }
 
     async fn create_js_endpoint(&self, path: &str, code: String) {
+        deno::define_endpoint(path, code).await;
         let func = {
             let path = path.to_owned();
-            move |req| deno::run_js(path.clone(), code.clone(), req).boxed_local()
+            move |req| deno::run_js(path.clone(), req).boxed_local()
         };
         self.api.lock().await.get(path, Box::new(func));
     }
