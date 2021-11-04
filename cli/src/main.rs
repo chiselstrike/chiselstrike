@@ -22,16 +22,25 @@ impl Manifest {
         Manifest {}
     }
 
-    pub fn types(&self) -> Result<std::fs::ReadDir, anyhow::Error> {
-        read_dir("./types")
+    pub fn types(&self) -> Result<Vec<std::path::PathBuf>, anyhow::Error> {
+        Self::dir_to_paths("./types")
     }
 
-    pub fn endpoints(&self) -> Result<std::fs::ReadDir, anyhow::Error> {
-        read_dir("./endpoints")
+    pub fn endpoints(&self) -> Result<Vec<std::path::PathBuf>, anyhow::Error> {
+        Self::dir_to_paths("./endpoints")
     }
 
-    pub fn policies(&self) -> Result<std::fs::ReadDir, anyhow::Error> {
-        read_dir("./policies")
+    pub fn policies(&self) -> Result<Vec<std::path::PathBuf>, anyhow::Error> {
+        Self::dir_to_paths("./policies")
+    }
+
+    fn dir_to_paths(root: &str) -> Result<Vec<std::path::PathBuf>, anyhow::Error> {
+        let mut paths = vec![];
+        for dentry in read_dir(root)? {
+            let dentry = dentry?;
+            paths.push(dentry.path());
+        }
+        Ok(paths)
     }
 }
 
@@ -282,29 +291,25 @@ async fn main() -> Result<()> {
             let mut client = ChiselRpcClient::connect(server_url).await?;
 
             for entry in types {
-                let entry = entry?;
                 // FIXME: will fail the second time until we implement type evolution
-                import_types(&mut client, entry.path()).await?;
+                import_types(&mut client, entry).await?;
             }
 
             for entry in endpoints {
-                let filename = entry?;
                 // FIXME: disambiguate endpoint and endpoint.js. If you have both, this has to
                 // error out. For now simplify.
-                let endpoint_name = filename
-                    .path()
+                let endpoint_name = entry
                     .file_stem()
-                    .ok_or_else(|| anyhow!("Invalid endpoint filename {:?}", filename))?
+                    .ok_or_else(|| anyhow!("Invalid endpoint filename {:?}", entry))?
                     .to_os_string()
                     .into_string()
                     .unwrap();
 
-                create_endpoint(&mut client, endpoint_name, filename.path()).await?;
+                create_endpoint(&mut client, endpoint_name, entry).await?;
             }
 
             for entry in policies {
-                let filename = entry?;
-                let policystr = read_to_string(filename.path())?;
+                let policystr = read_to_string(entry)?;
 
                 let response = client
                     .policy_update(tonic::Request::new(PolicyUpdateRequest {
