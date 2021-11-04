@@ -98,19 +98,18 @@ impl ChiselRpc for RpcService {
             fields,
             backing_table: snake_case_name.clone(),
         };
-        if type_system.type_exists(&ty.name) {
-            let existing = type_system.lookup_object_type(&ty.name)?;
-            // TODO: Support label changes.
-            if ty != existing {
-                return Err(Status::internal(format!("Type mismatch: `{}`", ty.name)));
+        match type_system.add_type(ty.to_owned()) {
+            Ok(_) => {
+                // FIXME: Consistency between metadata and backing store updates.
+                let meta = &runtime.meta;
+                meta.insert(ty.clone()).await?;
+                let query_engine = &runtime.query_engine;
+                query_engine.create_table(ty).await?;
             }
-        } else {
-            type_system.add_type(ty.to_owned())?;
-            // FIXME: Consistency between metadata and backing store updates.
-            let meta = &runtime.meta;
-            meta.insert(ty.clone()).await?;
-            let query_engine = &runtime.query_engine;
-            query_engine.create_table(ty).await?;
+            Err(TypeSystemError::TypeAlreadyExists) => {
+                type_system.replace_type(ty)?;
+            }
+            Err(e) => return Err(e.into()),
         }
         let response = chisel::AddTypeResponse { message: name };
         Ok(Response::new(response))
