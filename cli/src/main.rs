@@ -15,30 +15,40 @@ use std::time::Duration;
 use structopt::StructOpt;
 
 /// Manifest defines the files that describe types, endpoints, and policies.
-struct Manifest {}
+struct Manifest {
+    types: Vec<String>,
+    endpoints: Vec<String>,
+    policies: Vec<String>,
+}
 
 impl Manifest {
-    pub fn new() -> Self {
-        Manifest {}
+    pub fn new(types: Vec<String>, endpoints: Vec<String>, policies: Vec<String>) -> Self {
+        Manifest {
+            types,
+            endpoints,
+            policies,
+        }
     }
 
     pub fn types(&self) -> Result<Vec<std::path::PathBuf>, anyhow::Error> {
-        Self::dir_to_paths("./types")
+        Self::dirs_to_paths(&self.types)
     }
 
     pub fn endpoints(&self) -> Result<Vec<std::path::PathBuf>, anyhow::Error> {
-        Self::dir_to_paths("./endpoints")
+        Self::dirs_to_paths(&self.endpoints)
     }
 
     pub fn policies(&self) -> Result<Vec<std::path::PathBuf>, anyhow::Error> {
-        Self::dir_to_paths("./policies")
+        Self::dirs_to_paths(&self.policies)
     }
 
-    fn dir_to_paths(root: &str) -> Result<Vec<std::path::PathBuf>, anyhow::Error> {
+    fn dirs_to_paths(dirs: &[String]) -> Result<Vec<std::path::PathBuf>, anyhow::Error> {
         let mut paths = vec![];
-        for dentry in read_dir(root)? {
-            let dentry = dentry?;
-            paths.push(dentry.path());
+        for dir in dirs {
+            for dentry in read_dir(dir)? {
+                let dentry = dentry?;
+                paths.push(dentry.path());
+            }
         }
         Ok(paths)
     }
@@ -283,7 +293,11 @@ async fn main() -> Result<()> {
             }
         },
         Command::Apply => {
-            let manifest = Manifest::new();
+            let manifest = Manifest::new(
+                vec!["./types".to_string()],
+                vec!["./endpoints".to_string()],
+                vec!["./policies".to_string()],
+            );
             let types = manifest.types()?;
             let endpoints = manifest.endpoints()?;
             let policies = manifest.policies()?;
