@@ -96,7 +96,7 @@ impl ApiService {
         None
     }
 
-    pub fn get(&mut self, path: &str, route_fn: RouteFn) {
+    pub fn add_route(&mut self, path: &str, route_fn: RouteFn) {
         let path: PathBuf = path.into();
         let pos = self.paths.binary_search_by(|p| path.cmp(&p.0));
         let elem = (path, route_fn);
