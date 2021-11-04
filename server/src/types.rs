@@ -49,6 +49,10 @@ impl TypeSystem {
         Ok(())
     }
 
+    pub fn type_exists(&self, type_name: &str) -> bool {
+        self.types.contains_key(type_name)
+    }
+
     /// Looks up an object type with name `type_name`.
     ///
     /// # Arguments
