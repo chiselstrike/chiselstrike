@@ -144,6 +144,29 @@ where
     Ok(())
 }
 
+async fn wait(server_url: String) {
+    let mut wait_time = 1;
+    loop {
+        let mut client = match ChiselRpcClient::connect(server_url.clone()).await {
+            Ok(client) => client,
+            Err(_) => {
+                thread::sleep(Duration::from_secs(wait_time));
+                wait_time *= 2;
+                continue;
+            }
+        };
+        let request = tonic::Request::new(StatusRequest {});
+        match client.get_status(request).await {
+            Ok(_) => break,
+            Err(_) => {
+                thread::sleep(Duration::from_secs(wait_time));
+                wait_time *= 2;
+                continue;
+            }
+        }
+    }
+}
+
 #[tokio::main]
 async fn main() -> Result<()> {
     let opt = Opt::from_args();
@@ -206,35 +229,15 @@ async fn main() -> Result<()> {
             }
         },
         Command::Restart => {
-            let mut client = ChiselRpcClient::connect(server_url).await?;
+            let mut client = ChiselRpcClient::connect(server_url.clone()).await?;
             let response = client
                 .restart(tonic::Request::new(RestartRequest {}))
                 .await?
                 .into_inner();
             println!("{}", if response.ok { "success" } else { "failure" });
+            wait(server_url).await
         }
-        Command::Wait => {
-            let mut wait_time = 1;
-            loop {
-                let mut client = match ChiselRpcClient::connect(server_url.clone()).await {
-                    Ok(client) => client,
-                    Err(_) => {
-                        thread::sleep(Duration::from_secs(wait_time));
-                        wait_time *= 2;
-                        continue;
-                    }
-                };
-                let request = tonic::Request::new(StatusRequest {});
-                match client.get_status(request).await {
-                    Ok(_) => break,
-                    Err(_) => {
-                        thread::sleep(Duration::from_secs(wait_time));
-                        wait_time *= 2;
-                        continue;
-                    }
-                }
-            }
-        }
+        Command::Wait => wait(server_url).await,
         Command::Policy { cmd } => match cmd {
             PolicyCommand::Update { filename } => {
                 let policystr = read_to_string(&filename)?;
