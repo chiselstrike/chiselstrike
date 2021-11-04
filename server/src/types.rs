@@ -24,7 +24,16 @@ impl TypeSystem {
         }
     }
 
-    pub fn define_type(&mut self, ty: ObjectType) -> Result<(), TypeSystemError> {
+    /// Adds an object type to the type system.
+    ///
+    /// # Arguments
+    ///
+    /// * `ty` object to add
+    ///
+    /// # Errors
+    ///
+    /// If type `ty` already exists in the type system, the function returns `TypeSystemError`.
+    pub fn add_type(&mut self, ty: ObjectType) -> Result<(), TypeSystemError> {
         if self.types.contains_key(&ty.name) {
             return Err(TypeSystemError::TypeAlreadyExists);
         }
@@ -38,6 +47,10 @@ impl TypeSystem {
         }
         self.types.remove(type_name);
         Ok(())
+    }
+
+    pub fn type_exists(&self, type_name: &str) -> bool {
+        self.types.contains_key(type_name)
     }
 
     /// Looks up an object type with name `type_name`.
@@ -71,7 +84,7 @@ impl TypeSystem {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum Type {
     String,
     Int,
@@ -92,7 +105,7 @@ impl Type {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct ObjectType {
     /// Name of this type.
     pub name: String,
@@ -102,7 +115,7 @@ pub struct ObjectType {
     pub backing_table: String,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct Field {
     pub name: String,
     pub type_: Type,

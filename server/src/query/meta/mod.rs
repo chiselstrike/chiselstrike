@@ -72,7 +72,7 @@ impl MetaService {
             let backing_table: &str = row.get("backing_table");
             let type_name: &str = row.get("type_name");
             let fields = self.load_type_fields(&ts, type_id).await?;
-            ts.define_type(ObjectType {
+            ts.add_type(ObjectType {
                 name: type_name.to_string(),
                 fields,
                 backing_table: backing_table.to_string(),
