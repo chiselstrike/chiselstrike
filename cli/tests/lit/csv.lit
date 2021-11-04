@@ -10,11 +10,13 @@ $CHISEL end-point create csv examples/csv.js
 
 # CHECK: End point defined: /csv
 
-$CURL --data 'adam,smith
+$CURL --data '
+adam,smith
 amanda,dodger
 bob,bliss
 terry,stone
-jill,lasalle' $CHISELD_HOST/csv
+jill,lasalle
+' $CHISELD_HOST/csv
 
 # CHECK: ok
 
