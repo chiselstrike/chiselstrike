@@ -1,0 +1,30 @@
+# SPDX-FileCopyrightText: © 2021 ChiselStrike <info@chiselstrike.com>
+
+# RUN: CURL="@curl" sh -e @file
+
+$CHISEL type import examples/person.graphql
+
+# CHECK: Type defined: Person
+
+$CHISEL end-point create csv examples/csv.js
+
+# CHECK: End point defined: /csv
+
+$CURL --data '
+adam,smith
+amanda,dodger
+bob,bliss
+terry,stone
+jill,lasalle
+' $CHISELD_HOST/csv
+
+# CHECK: ok
+
+$CHISEL end-point create find examples/find.js
+
+# CHECK: End point defined: /find
+
+$CURL -o - $CHISELD_HOST/find
+
+# CHECK: HTTP/1.1 200 OK
+# CHECK: adam smith 100 true 5 amanda dodger 100 true 5 bob bliss 100 true 5 terry stone 100 true 5 jill lasalle 100 true 5
