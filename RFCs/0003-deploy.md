@@ -6,16 +6,18 @@ currently known to chiseld.
 # How does chiseld set its internal state?
 
 A client runs `chisel apply` from a directory with the expected
-structure (see #187).  This overwrites the prior state, though not
-necessarily the content of any databases.  After `chisel apply`
-succeeds, subsequent API requests to chiseld reflect the new internal
-state.  This is easily done with endpoints and policies: the new state
-simply overwrites the old.  Types are a bit different, though, because
-they impact how user's data is stored and accessed.  Here it is not
-enough for the new state to overwrite the old; existing user's data
-may have to change, too.  In many cases, it's obvious how to bring the
-user's data in sync with the new state; for instance, if we add a new
-field with a default value, existing rows can be extended.
+structure (see
+[#187](https://github.com/chiselstrike/chiselstrike/pull/187)).  This
+overwrites the prior state, though not necessarily the content of any
+databases.  After `chisel apply` succeeds, subsequent API requests to
+chiseld reflect the new internal state.  This is easily done with
+endpoints and policies: the new state simply overwrites the old.
+Types are a bit different, though, because they impact how user's data
+is stored and accessed.  Here it is not enough for the new state to
+overwrite the old; existing user's data may have to change, too.  In
+many cases, it's obvious how to bring the user's data in sync with the
+new state; for instance, if we add a new field with a default value,
+existing rows can be extended.
 
 # What's an example of a valid type-system change for which it isn't obvious how to update the prior user's data?
 
