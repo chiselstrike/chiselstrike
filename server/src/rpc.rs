@@ -98,7 +98,7 @@ impl ChiselRpc for RpcService {
             fields,
             backing_table: snake_case_name.clone(),
         };
-        type_system.define_type(ty.to_owned())?;
+        type_system.add_type(ty.to_owned())?;
         // FIXME: Consistency between metadata and backing store updates.
         let meta = &runtime.meta;
         meta.insert(ty.clone()).await?;

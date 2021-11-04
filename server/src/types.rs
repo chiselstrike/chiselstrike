@@ -24,7 +24,16 @@ impl TypeSystem {
         }
     }
 
-    pub fn define_type(&mut self, ty: ObjectType) -> Result<(), TypeSystemError> {
+    /// Adds an object type to the type system.
+    ///
+    /// # Arguments
+    ///
+    /// * `ty` object to add
+    ///
+    /// # Errors
+    ///
+    /// If type `ty` already exists in the type system, the function returns `TypeSystemError`.
+    pub fn add_type(&mut self, ty: ObjectType) -> Result<(), TypeSystemError> {
         if self.types.contains_key(&ty.name) {
             return Err(TypeSystemError::TypeAlreadyExists);
         }
