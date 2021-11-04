@@ -1,0 +1,4 @@
+#!/bin/bash
+
+cargo install --path server --bin chiseld
+cargo install --path cli --bin chisel
