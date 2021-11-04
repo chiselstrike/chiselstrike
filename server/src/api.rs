@@ -8,10 +8,11 @@ use hyper::body::HttpBody;
 use hyper::header::HeaderValue;
 use hyper::service::{make_service_fn, service_fn};
 use hyper::{HeaderMap, Request, Response, Server, StatusCode};
-use std::collections::HashMap;
 use std::convert::Infallible;
 use std::io::Cursor;
 use std::net::SocketAddr;
+use std::path::Path;
+use std::path::PathBuf;
 use std::pin::Pin;
 use std::sync::Arc;
 use std::task::{Context, Poll};
@@ -68,25 +69,52 @@ type RouteFn = Box<
 /// API service for Chisel server.
 #[derive(Default)]
 pub struct ApiService {
-    paths: HashMap<String, RouteFn>,
+    // Kept reverse sorted so that if an entry is a prefix of another,
+    // it comes later. This makes it easy to find which entry shares
+    // the longest prefix with a request.
+    //
+    // Both insertions and search are O(n) and could be O(request path
+    // size) with a tree, but that is probably OK with a normal number
+    // of endpoints.
+    paths: Vec<(PathBuf, RouteFn)>,
 }
 
 impl ApiService {
     pub fn new() -> Self {
         Self {
-            paths: HashMap::default(),
+            paths: Vec::default(),
         }
     }
 
+    fn longest_prefix(&self, request: &str) -> Option<&RouteFn> {
+        let request: &Path = request.as_ref();
+        for p in &self.paths {
+            if request.starts_with(&p.0) {
+                return Some(&p.1);
+            }
+        }
+        None
+    }
+
     pub fn get(&mut self, path: &str, route_fn: RouteFn) {
-        self.paths.insert(path.to_string(), route_fn);
+        let path: PathBuf = path.into();
+        let pos = self.paths.binary_search_by(|p| path.cmp(&p.0));
+        let elem = (path, route_fn);
+        match pos {
+            Ok(pos) => {
+                self.paths[pos] = elem;
+            }
+            Err(pos) => {
+                self.paths.insert(pos, elem);
+            }
+        }
     }
 
     pub async fn route(
         &mut self,
         req: Request<hyper::Body>,
     ) -> hyper::http::Result<Response<Body>> {
-        if let Some(route_fn) = self.paths.get(req.uri().path()) {
+        if let Some(route_fn) = self.longest_prefix(req.uri().path()) {
             return match route_fn(req).await {
                 Ok(val) => Ok(val),
                 Err(err) => Response::builder()
