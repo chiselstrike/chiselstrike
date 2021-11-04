@@ -22,7 +22,6 @@ prost = "0.8.0"
 rusty_v8 = "0.32.0"
 sea-query = { version = "0.17.1", features = [ "thread-safe" ] }
 serde_json = "1.0.68"
-yaml-rust = "0.4"
 sqlx = { version = "0.5.7", features = [ "any", "postgres", "sqlite", "runtime-tokio-native-tls" ] }
 structopt = "0.3.23"
 thiserror = "1.0"
@@ -30,6 +29,7 @@ tokio = { version = "1.11.0", features = ["full"] }
 tokio-stream = { version = "0.1.7", features = ["signal"] }
 tonic = "0.5.2"
 url = "2.2.2"
+yaml-rust = "0.4"
 
 [build-dependencies]
 tonic-build = "0.5.2"
