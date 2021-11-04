@@ -2,6 +2,9 @@
 
 set -e
 
+# Enables backtraces on panic and anyhow errors.
+export RUST_BACKTRACE=1
+
 export TEMPDIR=$(mktemp -d)
 
 $CHISELD -m "sqlite://$TEMPDIR/chiseld.db?mode=rwc" -d "sqlite://$TEMPDIR/chiseld-data.db?mode=rwc" &
