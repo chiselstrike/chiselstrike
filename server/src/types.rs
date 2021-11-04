@@ -84,7 +84,7 @@ impl TypeSystem {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum Type {
     String,
     Int,
@@ -105,7 +105,7 @@ impl Type {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct ObjectType {
     /// Name of this type.
     pub name: String,
@@ -115,7 +115,7 @@ pub struct ObjectType {
     pub backing_table: String,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct Field {
     pub name: String,
     pub type_: Type,
