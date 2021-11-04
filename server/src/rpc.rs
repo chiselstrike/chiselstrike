@@ -45,7 +45,7 @@ impl RpcService {
             let path = path.to_owned();
             move |req| deno::run_js(path.clone(), req).boxed_local()
         };
-        self.api.lock().await.get(path, Box::new(func));
+        self.api.lock().await.add_route(path, Box::new(func));
     }
 }
 
