@@ -42,7 +42,8 @@ I don't think so.  Even if the database changed contents atomically
 and reliably (belying the CAP theorem), independent chiselds can't
 ensure they all query it _after_ the change to update their internal
 state.  Without coordinating among themselves, their read queries will
-race with the write query that updates the database.
+race with the write query that updates the database, and they'll set
+their internal state from the query result at different times.
 
 # Would implementing Paxos in chiseld avoid a mixed-state fleet?
 
