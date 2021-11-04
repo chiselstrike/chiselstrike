@@ -49,9 +49,6 @@ async fn run(opt: Opt) -> Result<DoRepeat> {
     let ts = meta.load_type_system().await?;
     let api = Arc::new(Mutex::new(ApiService::new()));
     let rpc = RpcService::new(api.clone());
-    for type_name in ts.types.keys() {
-        rpc.define_type_endpoints(type_name).await;
-    }
     let rt = Runtime::new(query_engine, meta, ts);
     runtime::set(rt);
 
