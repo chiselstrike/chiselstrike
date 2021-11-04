@@ -7,6 +7,7 @@ use chisel::{
     RemoveTypeRequest, RestartRequest, StatusRequest, TypeExportRequest,
 };
 use graphql_parser::schema::{parse_schema, Definition, TypeDefinition};
+use serde_derive::Deserialize;
 use std::fs;
 use std::io::{stdin, Read};
 use std::path::Path;
@@ -15,6 +16,7 @@ use std::time::Duration;
 use structopt::StructOpt;
 
 /// Manifest defines the files that describe types, endpoints, and policies.
+#[derive(Deserialize)]
 struct Manifest {
     types: Vec<String>,
     endpoints: Vec<String>,
@@ -293,11 +295,14 @@ async fn main() -> Result<()> {
             }
         },
         Command::Apply => {
-            let manifest = Manifest::new(
-                vec!["./types".to_string()],
-                vec!["./endpoints".to_string()],
-                vec!["./policies".to_string()],
-            );
+            let manifest = match read_to_string("Chisel.toml") {
+                Ok(manifest) => toml::from_str(&manifest)?,
+                _ => Manifest::new(
+                    vec!["./types".to_string()],
+                    vec!["./endpoints".to_string()],
+                    vec!["./policies".to_string()],
+                ),
+            };
             let types = manifest.types()?;
             let endpoints = manifest.endpoints()?;
             let policies = manifest.policies()?;
