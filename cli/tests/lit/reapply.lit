@@ -1,0 +1,86 @@
+# SPDX-FileCopyrightText: © 2021 ChiselStrike <info@chiselstrike.com>
+
+# RUN: CURL="@curl" sh -e @file
+
+mkdir -p "$TEMPDIR/types" "$TEMPDIR/endpoints" "$TEMPDIR/policies"
+cat << EOF > "$TEMPDIR/types/foo.graphql"
+type Foo {
+  a: String @L1
+  b: Float @L2
+}
+EOF
+
+cd "$TEMPDIR"
+$CHISEL apply
+# CHECK: Type defined: Foo
+
+## Identical definition is OK.
+$CHISEL apply
+# CHECK: Type defined: Foo
+
+## Changing labels is OK.
+cat << EOF > "$TEMPDIR/types/foo.graphql"
+type Foo {
+  a: String
+  b: Float @L1
+}
+EOF
+$CHISEL apply
+# CHECK: Type defined: Foo
+
+## Two compatible definitions in different files are (currently) OK.  TODO : should be rejected.
+cat << EOF > "$TEMPDIR/types/fooNoteADifferentFilenameHere.graphql"
+type Foo {
+  a: String
+  b: Float
+}
+EOF
+$CHISEL apply
+# CHECK: Type defined: Foo
+# CHECK: Type defined: Foo
+rm "$TEMPDIR/types/fooNoteADifferentFilenameHere.graphql"
+
+## Changing b's type is not OK.
+cat << EOF > "$TEMPDIR/types/foo.graphql"
+type Foo {
+  a: String
+  b: String
+}
+EOF
+$CHISEL apply 2>&1 || echo # (swallow the apply abort)
+# CHECK: unsafe to replace type: Foo
+
+## Adding a field is not OK.
+cat << EOF > "$TEMPDIR/types/foo.graphql"
+type Foo {
+  a: String
+  b: Float
+  c: Int
+}
+EOF
+$CHISEL apply 2>&1 || echo # (swallow the apply abort)
+# CHECK: unsafe to replace type: Foo
+
+## Reordering fields is not OK.  TODO : perhaps it should be?
+cat << EOF > "$TEMPDIR/types/foo.graphql"
+type Foo {
+  b: Float
+  a: String
+}
+EOF
+$CHISEL apply 2>&1 || echo # (swallow the apply abort)
+# CHECK: unsafe to replace type: Foo
+
+## Removing fields is not OK for now.
+cat << EOF > "$TEMPDIR/types/foo.graphql"
+type Foo {
+  a: String
+}
+EOF
+$CHISEL apply 2>&1 || echo # (swallow the apply abort)
+# CHECK: unsafe to replace type: Foo
+
+## Redefining elemental types is not OK.
+echo 'type Float { a: Float }' > "$TEMPDIR/types/foo.graphql"
+$CHISEL apply 2>&1 || echo # (swallow the apply abort)
+# CHECK: unsafe to replace type: Float

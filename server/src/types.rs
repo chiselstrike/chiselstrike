@@ -10,6 +10,8 @@ pub enum TypeSystemError {
     NoSuchType(String),
     #[error["object type expected, got `{0}` instead"]]
     ObjectTypeRequired(String),
+    #[error["unsafe to replace type: {0}"]]
+    UnsafeReplacement(String),
 }
 
 #[derive(Debug, Default)]
@@ -34,7 +36,7 @@ impl TypeSystem {
     ///
     /// If type `ty` already exists in the type system, the function returns `TypeSystemError`.
     pub fn add_type(&mut self, ty: ObjectType) -> Result<(), TypeSystemError> {
-        if self.types.contains_key(&ty.name) {
+        if self.lookup_type(&ty.name).is_ok() {
             return Err(TypeSystemError::TypeAlreadyExists);
         }
         self.types.insert(ty.name.to_owned(), ty);
@@ -49,8 +51,15 @@ impl TypeSystem {
         Ok(())
     }
 
-    pub fn type_exists(&self, type_name: &str) -> bool {
-        self.types.contains_key(type_name)
+    pub fn replace_type(&mut self, new_type: ObjectType) -> Result<(), TypeSystemError> {
+        let old_type = self.lookup_type(&new_type.name)?;
+        if new_type.is_safe_replacement_for(&old_type) {
+            self.types.remove(&new_type.name);
+            self.types.insert(new_type.name.clone(), new_type);
+            Ok(())
+        } else {
+            Err(TypeSystemError::UnsafeReplacement(new_type.name))
+        }
     }
 
     /// Looks up an object type with name `type_name`.
@@ -113,6 +122,25 @@ pub struct ObjectType {
     pub fields: Vec<Field>,
     /// Name of the backing table for this type.
     pub backing_table: String,
+}
+
+impl ObjectType {
+    /// True iff self can replace another type in the type system without any changes to the backing table.
+    fn is_safe_replacement_for(&self, another_type: &Type) -> bool {
+        match another_type {
+            Type::Object(another_type) => {
+                self.name == another_type.name
+                    && self.backing_table == another_type.backing_table
+                    && self.fields.len() == another_type.fields.len()
+                    && self
+                        .fields
+                        .iter()
+                        .zip(&another_type.fields)
+                        .all(|(f1, f2)| f1.name == f2.name && f1.type_ == f2.type_)
+            }
+            _ => false, // We cannot replace an elemental type.
+        }
+    }
 }
 
 #[derive(Clone, Debug, PartialEq)]
