@@ -14,6 +14,27 @@ use std::thread;
 use std::time::Duration;
 use structopt::StructOpt;
 
+/// Manifest defines the files that describe types, endpoints, and policies.
+struct Manifest {}
+
+impl Manifest {
+    pub fn new() -> Self {
+        Manifest {}
+    }
+
+    pub fn types(&self) -> Result<std::fs::ReadDir, anyhow::Error> {
+        read_dir("./types")
+    }
+
+    pub fn endpoints(&self) -> Result<std::fs::ReadDir, anyhow::Error> {
+        read_dir("./endpoints")
+    }
+
+    pub fn policies(&self) -> Result<std::fs::ReadDir, anyhow::Error> {
+        read_dir("./policies")
+    }
+}
+
 #[derive(StructOpt, Debug)]
 #[structopt(name = "chisel")]
 struct Opt {
@@ -253,9 +274,10 @@ async fn main() -> Result<()> {
             }
         },
         Command::Apply => {
-            let types = read_dir("./types")?;
-            let endpoints = read_dir("./endpoints")?;
-            let policies = read_dir("./policies")?;
+            let manifest = Manifest::new();
+            let types = manifest.types()?;
+            let endpoints = manifest.endpoints()?;
+            let policies = manifest.policies()?;
 
             let mut client = ChiselRpcClient::connect(server_url).await?;
 
