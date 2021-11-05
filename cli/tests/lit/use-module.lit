@@ -1,0 +1,18 @@
+# SPDX-FileCopyrightText: © 2021 ChiselStrike <info@chiselstrike.com>
+
+# RUN: CURL="@curl" sh -e @file
+
+cat << EOF | $CHISEL end-point create pad -
+import indent from 'https://cdn.skypack.dev/pin/indent-string@v5.0.0-VgKPSgi4hUX5NbF4n3aC/mode=imports,min/optimized/indent-string.js'
+
+export default async function chisel(req) {
+    return new Response("test" + indent("foo\n", 4));
+}
+EOF
+
+# CHECK: End point defined: /pad
+
+$CURL -o - $CHISELD_HOST/pad
+
+# CHECK: HTTP/1.1 200 OK
+# CHECK: test    foo

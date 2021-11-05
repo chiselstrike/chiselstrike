@@ -95,14 +95,27 @@ struct ModuleLoader {
 
 const DUMMY_PREFIX: &str = "file://$chisel$";
 
+fn wrap(specifier: &ModuleSpecifier, code: String) -> Result<ModuleSource> {
+    Ok(ModuleSource {
+        code,
+        module_url_specified: specifier.to_string(),
+        module_url_found: specifier.to_string(),
+    })
+}
+
+async fn load_code(specifier: ModuleSpecifier) -> Result<ModuleSource> {
+    let code = reqwest::get(specifier.clone()).await?.text().await?;
+    wrap(&specifier, code)
+}
+
 impl deno_core::ModuleLoader for ModuleLoader {
     fn resolve(
         &self,
         specifier: &str,
-        _referrer: &str,
+        referrer: &str,
         _is_main: bool,
     ) -> Result<ModuleSpecifier, AnyError> {
-        Ok(ModuleSpecifier::parse(specifier)?)
+        Ok(deno_core::resolve_import(specifier, referrer)?)
     }
 
     fn load(
@@ -111,17 +124,14 @@ impl deno_core::ModuleLoader for ModuleLoader {
         _maybe_referrer: Option<ModuleSpecifier>,
         _is_dyn_import: bool,
     ) -> Pin<Box<ModuleSourceFuture>> {
-        let path = specifier.path();
-        let code = self.code_map.borrow().get(path).unwrap().clone();
-        let specifier = specifier.to_string();
-        let f = || async {
-            Ok(ModuleSource {
-                code,
-                module_url_specified: specifier.clone(),
-                module_url_found: specifier,
-            })
-        };
-        f().boxed_local()
+        if specifier.as_str().starts_with(DUMMY_PREFIX) {
+            let path = specifier.path();
+            let code = self.code_map.borrow().get(path).unwrap().clone();
+            let code = wrap(specifier, code);
+            std::future::ready(code).boxed_local()
+        } else {
+            load_code(specifier.clone()).boxed_local()
+        }
     }
 }
 

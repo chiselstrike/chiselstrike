@@ -1593,6 +1593,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "hyper-tls"
+version = "0.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d6183ddfa99b85da61a140bea0efc93fdf56ceaa041b37d553518030827f9905"
+dependencies = [
+ "bytes",
+ "hyper 0.14.13 (registry+https://github.com/rust-lang/crates.io-index)",
+ "native-tls",
+ "tokio",
+ "tokio-native-tls",
+]
+
+[[package]]
 name = "idna"
 version = "0.2.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2629,11 +2642,13 @@ dependencies = [
  "http-body",
  "hyper 0.14.13 (registry+https://github.com/rust-lang/crates.io-index)",
  "hyper-rustls",
+ "hyper-tls",
  "ipnet",
  "js-sys",
  "lazy_static",
  "log",
  "mime",
+ "native-tls",
  "percent-encoding",
  "pin-project-lite",
  "rustls",
@@ -2641,6 +2656,7 @@ dependencies = [
  "serde_json",
  "serde_urlencoded",
  "tokio",
+ "tokio-native-tls",
  "tokio-rustls",
  "tokio-util",
  "url",
@@ -2986,6 +3002,7 @@ dependencies = [
  "once_cell",
  "pretty_env_logger",
  "prost",
+ "reqwest",
  "rusty_v8",
  "sea-query",
  "serde_json",
