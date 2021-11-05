@@ -202,18 +202,20 @@ impl ChiselRpc for RpcService {
 
             // FIXME: only transform implemented
             let policies = &mut runtime::get().await.policies;
-            let transform = match label["transform"].as_str() {
-                Some("anonymize") => Ok(crate::policies::anonymize),
+            match label["transform"].as_str() {
+                Some("anonymize") => {
+                    policies.insert(name.to_owned(), crate::policies::anonymize);
+                    Ok(())
+                }
                 Some(x) => Err(Status::internal(format!(
                     "unknown transform: {} for label {}",
                     x, name
                 ))),
-                None => Err(Status::internal(format!(
-                    "found empty transform for label {}",
-                    name
-                ))),
+                None => {
+                    policies.remove(&name.to_owned());
+                    Ok(())
+                }
             }?;
-            policies.insert(name.to_owned(), transform);
         }
 
         for _endpoint in config["endpoints"].as_vec().iter() {
