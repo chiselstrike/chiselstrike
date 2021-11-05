@@ -366,9 +366,12 @@ dependencies = [
  "lit",
  "ntest",
  "prost",
+ "serde",
+ "serde_derive",
  "server",
  "structopt",
  "tokio",
+ "toml",
  "tonic",
  "tonic-build",
 ]

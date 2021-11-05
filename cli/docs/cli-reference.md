@@ -2,6 +2,18 @@
 
 This document is the user manual for the ChiselStrike command line tool, `chisel`.
 
+## `chisel apply`
+
+The `chisel apply` command updates `chiseld` state as per a manifest file `Chisel.toml`, which has the following format:
+
+```toml
+types = ["types"]
+endpoints = ["endpoints"]
+policies = ["policies"]
+```
+
+If a `Chisel.toml` file does not exists, types are read from a `types` directory, endpoints from an `endpoints` directory, and policies from a `policies` directory.
+
 ## `chisel status`
 
 The `chisel status` command queries a ChiselStrike server for its status.

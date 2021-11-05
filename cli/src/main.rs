@@ -7,12 +7,62 @@ use chisel::{
     RemoveTypeRequest, RestartRequest, StatusRequest, TypeExportRequest,
 };
 use graphql_parser::schema::{parse_schema, Definition, TypeDefinition};
+use serde_derive::Deserialize;
 use std::fs;
 use std::io::{stdin, Read};
 use std::path::Path;
 use std::thread;
 use std::time::Duration;
 use structopt::StructOpt;
+
+/// Manifest defines the files that describe types, endpoints, and policies.
+///
+/// The manifest is a high-level declaration of application behavior.
+/// The individual definitions are passed to `chiseld`, which processes them
+/// accordingly. For example, type definitions are imported as types and
+/// endpoints are made executable via Deno.
+#[derive(Deserialize)]
+struct Manifest {
+    /// Vector of directories to scan for type definitions.
+    types: Vec<String>,
+    /// Vector of directories to scan for endpoint definitions.
+    endpoints: Vec<String>,
+    /// Vector of directories to scan for policy definitions.
+    policies: Vec<String>,
+}
+
+impl Manifest {
+    pub fn new(types: Vec<String>, endpoints: Vec<String>, policies: Vec<String>) -> Self {
+        Manifest {
+            types,
+            endpoints,
+            policies,
+        }
+    }
+
+    pub fn types(&self) -> Result<Vec<std::path::PathBuf>, anyhow::Error> {
+        Self::dirs_to_paths(&self.types)
+    }
+
+    pub fn endpoints(&self) -> Result<Vec<std::path::PathBuf>, anyhow::Error> {
+        Self::dirs_to_paths(&self.endpoints)
+    }
+
+    pub fn policies(&self) -> Result<Vec<std::path::PathBuf>, anyhow::Error> {
+        Self::dirs_to_paths(&self.policies)
+    }
+
+    fn dirs_to_paths(dirs: &[String]) -> Result<Vec<std::path::PathBuf>, anyhow::Error> {
+        let mut paths = vec![];
+        for dir in dirs {
+            for dentry in read_dir(dir)? {
+                let dentry = dentry?;
+                paths.push(dentry.path());
+            }
+        }
+        Ok(paths)
+    }
+}
 
 #[derive(StructOpt, Debug)]
 #[structopt(name = "chisel")]
@@ -253,36 +303,40 @@ async fn main() -> Result<()> {
             }
         },
         Command::Apply => {
-            let types = read_dir("./types")?;
-            let endpoints = read_dir("./endpoints")?;
-            let policies = read_dir("./policies")?;
+            let manifest = match read_to_string("Chisel.toml") {
+                Ok(manifest) => toml::from_str(&manifest)?,
+                _ => Manifest::new(
+                    vec!["./types".to_string()],
+                    vec!["./endpoints".to_string()],
+                    vec!["./policies".to_string()],
+                ),
+            };
+            let types = manifest.types()?;
+            let endpoints = manifest.endpoints()?;
+            let policies = manifest.policies()?;
 
             let mut client = ChiselRpcClient::connect(server_url).await?;
 
             for entry in types {
-                let entry = entry?;
                 // FIXME: will fail the second time until we implement type evolution
-                import_types(&mut client, entry.path()).await?;
+                import_types(&mut client, entry).await?;
             }
 
             for entry in endpoints {
-                let filename = entry?;
                 // FIXME: disambiguate endpoint and endpoint.js. If you have both, this has to
                 // error out. For now simplify.
-                let endpoint_name = filename
-                    .path()
+                let endpoint_name = entry
                     .file_stem()
-                    .ok_or_else(|| anyhow!("Invalid endpoint filename {:?}", filename))?
+                    .ok_or_else(|| anyhow!("Invalid endpoint filename {:?}", entry))?
                     .to_os_string()
                     .into_string()
                     .unwrap();
 
-                create_endpoint(&mut client, endpoint_name, filename.path()).await?;
+                create_endpoint(&mut client, endpoint_name, entry).await?;
             }
 
             for entry in policies {
-                let filename = entry?;
-                let policystr = read_to_string(filename.path())?;
+                let policystr = read_to_string(entry)?;
 
                 let response = client
                     .policy_update(tonic::Request::new(PolicyUpdateRequest {
