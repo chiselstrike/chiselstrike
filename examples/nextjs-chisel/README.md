@@ -23,7 +23,8 @@ chisel type import examples/nextjs-chisel/types.graphql
 Define endpoint:
 
 ```
-chisel end-point create posts examples/nextjs-chisel/endpoint.js
+chisel end-point create api/import_person examples/nextjs-chisel/endpoints/import_person.js
+chisel end-point create api/get_all_people examples/nextjs-chisel/endpoints/get_all_people.js
 ```
 
 TODO: Insert some data to database.
