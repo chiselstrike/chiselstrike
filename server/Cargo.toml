@@ -5,7 +5,7 @@ authors = ["ChiselStrike"]
 edition = "2021"
 
 [dependencies]
-anyhow = "1.0"
+anyhow = { version = "1.0.45", features = ["backtrace"] }
 convert_case = "0.4.0"
 deno_broadcast_channel = "0.17.0"
 deno_core = "0.105.0"
