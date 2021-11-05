@@ -16,10 +16,18 @@ use std::time::Duration;
 use structopt::StructOpt;
 
 /// Manifest defines the files that describe types, endpoints, and policies.
+///
+/// The manifest is a high-level declaration of application behavior.
+/// The individual definitions are passed to `chiseld`, which processes them
+/// accordingly. For example, type definitions are imported as types and
+/// endpoints are made executable via Deno.
 #[derive(Deserialize)]
 struct Manifest {
+    /// Vector of directories to scan for type definitions.
     types: Vec<String>,
+    /// Vector of directories to scan for endpoint definitions.
     endpoints: Vec<String>,
+    /// Vector of directories to scan for policy definitions.
     policies: Vec<String>,
 }
 
