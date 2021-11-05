@@ -27,4 +27,4 @@ chisel end-point create api/get_random_images endpoints/get_random_images.js
 
 ### Finally, to run the angular server:
 
-Run `ng serve` for a dev server. Navigate to `http://localhost:4200/`. The app will automatically reload if you change any of the source files.
+Run `ng serve` for a dev server. If it crashes, you might need to do `npm update`. Then navigate to `http://localhost:4200/`. The app will automatically reload if you change any of the source files. 
