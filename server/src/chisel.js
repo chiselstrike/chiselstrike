@@ -22,9 +22,8 @@ Chisel.store = async function(type_name, content) {
     await Deno.core.opAsync("chisel_store", {name: type_name, value: content});
 }
 
-Chisel.find_all = async function(type_name) {
-    const rid = await Deno.core.opAsync("chisel_query_create", type_name);
-    let result = {
+function create_result_iterator(rid) {
+    return {
         [Symbol.asyncIterator]() {
             return {
                 async next() {
@@ -42,9 +41,25 @@ Chisel.find_all = async function(type_name) {
                 }
             }
         }
-    };
-    return result;
+    }
 }
+
+Chisel.find_all = async function(type_name) {
+    const rid = await Deno.core.opAsync("chisel_query_create", {
+        type_name: type_name
+    });
+    return create_result_iterator(rid);
+}
+
+Chisel.find_all_by = async function(type_name, field_name, value) {
+    const rid = await Deno.core.opAsync("chisel_query_create", {
+        type_name: type_name,
+        field_name: field_name,
+        value: value
+    });
+    return create_result_iterator(rid);
+}
+
 
 Chisel.json = function(body, status = 200) {
     return new Response(JSON.stringify(body), {

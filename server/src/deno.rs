@@ -85,6 +85,8 @@ enum Error {
     NotAResponse,
     #[error["Type name error; the .name key must have a string value"]]
     TypeName,
+    #[error["Json field type error; field `{0}` should be of type `{1}`"]]
+    JsonField(String, String),
     #[error["Query execution error `{0}`"]]
     Query(#[from] crate::query::QueryError),
 }
@@ -241,18 +243,37 @@ impl<'a> Resource for QueryStreamResource {}
 
 async fn op_chisel_query_create(
     op_state: Rc<RefCell<OpState>>,
-    type_name: String,
+    content: serde_json::Value,
     _: (),
 ) -> Result<ResourceId, AnyError> {
+    let json_error = |field: &str, ty_: &str| Error::JsonField(field.to_string(), ty_.to_string());
+    let type_name = content["type_name"]
+        .as_str()
+        .ok_or_else(|| json_error("type_name", "string"))?;
+    let field_name = match content.get("field_name") {
+        None => None,
+        Some(value) => Some(
+            value
+                .as_str()
+                .ok_or_else(|| json_error("field_name", "string"))?,
+        ),
+    };
+
     let mut policies = FieldPolicies::default();
     let runtime = &mut runtime::get().await;
     let ts = &runtime.type_system;
-    let ty = ts.lookup_object_type(&type_name)?;
+    let ty = ts.lookup_object_type(type_name)?;
     runtime.get_policies(&ty, &mut policies);
+
     let query_engine = &mut runtime.query_engine;
-    let stream = query_engine.find_all(&ty);
+    let stream: Pin<Box<dyn Stream<Item = _>>> = match field_name {
+        None => Box::pin(query_engine.find_all(&ty)?),
+        Some(field_name) => {
+            Box::pin(query_engine.find_all_by(&ty, field_name, &content["value"])?)
+        }
+    };
     let resource = QueryStreamResource {
-        stream: RefCell::new(Box::pin(stream)),
+        stream: RefCell::new(stream),
         policies,
         ty,
     };

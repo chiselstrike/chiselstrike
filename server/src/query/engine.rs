@@ -7,7 +7,9 @@ use futures::stream;
 use futures::stream::BoxStream;
 use futures::stream::Stream;
 use itertools::Itertools;
-use sea_query::{Alias, ColumnDef, PostgresQueryBuilder, SchemaBuilder, SqliteQueryBuilder, Table};
+use sea_query::{
+    Alias, ColumnDef, Expr, PostgresQueryBuilder, Query, SchemaBuilder, SqliteQueryBuilder, Table,
+};
 use sqlx::any::{Any, AnyConnectOptions, AnyKind, AnyPool, AnyPoolOptions, AnyRow};
 use sqlx::error::Error;
 use sqlx::{Executor, Row};
@@ -77,11 +79,6 @@ impl QueryEngine {
         }
     }
 
-    pub fn find_all(&self, ty: &ObjectType) -> impl stream::Stream<Item = Result<AnyRow, Error>> {
-        let query_str = format!("SELECT * FROM {}", ty.backing_table);
-        QueryResults::new(query_str, &self.pool)
-    }
-
     pub async fn create_table(&self, ty: ObjectType) -> Result<(), QueryError> {
         let mut create_table = Table::create()
             .table(Alias::new(&ty.backing_table))
@@ -125,6 +122,62 @@ impl QueryEngine {
             .await
             .map_err(QueryError::ExecuteFailed)?;
         Ok(())
+    }
+
+    pub fn find_all(
+        &self,
+        ty: &ObjectType,
+    ) -> Result<impl stream::Stream<Item = Result<AnyRow, Error>>, QueryError> {
+        let query_str = format!("SELECT * FROM {}", ty.backing_table);
+        Ok(QueryResults::new(query_str, &self.pool))
+    }
+
+    pub fn find_all_by(
+        &self,
+        ty: &ObjectType,
+        field_name: &str,
+        value_json: &serde_json::Value,
+    ) -> Result<impl stream::Stream<Item = Result<AnyRow, Error>>, QueryError> {
+        let key_field = ty
+            .fields
+            .iter()
+            .find(|&f| f.name == field_name)
+            .ok_or_else(|| QueryError::UnknownField(ty.name.clone(), field_name.to_string()))?;
+
+        macro_rules! make_column_filter {
+            ($as_type:ident) => {{
+                let value = value_json.$as_type().ok_or_else(|| {
+                    QueryError::IncompatibleData(key_field.name.to_owned(), ty.name.to_owned())
+                })?;
+                Expr::col(Alias::new(field_name)).eq(value)
+            }};
+        }
+        let col_filter = match key_field.type_ {
+            Type::String => make_column_filter!(as_str),
+            Type::Int => make_column_filter!(as_i64),
+            Type::Float => make_column_filter!(as_f64),
+            Type::Boolean => make_column_filter!(as_bool),
+            Type::Object(_) => {
+                return Err(QueryError::NotImplemented(
+                    "support for type Object".to_owned(),
+                ));
+            }
+        };
+
+        let mut query = Query::select();
+        for field in &ty.fields {
+            query.column(Alias::new(&field.name));
+        }
+        let query = query
+            .from(Alias::new(&ty.backing_table))
+            .cond_where(col_filter)
+            .to_owned();
+
+        let query_str = match self.opts.kind() {
+            AnyKind::Postgres => query.to_string(PostgresQueryBuilder),
+            AnyKind::Sqlite => query.to_string(SqliteQueryBuilder),
+        };
+        Ok(QueryResults::new(query_str, &self.pool))
     }
 
     pub async fn add_row(

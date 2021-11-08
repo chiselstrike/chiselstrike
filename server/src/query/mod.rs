@@ -17,6 +17,8 @@ pub enum QueryError {
     ParsingFailed(#[source] sqlx::Error),
     #[error["type system error `{0}`"]]
     TypeError(#[from] TypeSystemError),
+    #[error["type `{0}` has no field `{1}`"]]
+    UnknownField(String, String),
     #[error["provided data for field `{0}` are incompatible with given type `{1}`"]]
     IncompatibleData(String, String),
     #[error["feature `{0}` is not implemented"]]
