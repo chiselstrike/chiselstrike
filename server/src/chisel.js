@@ -46,4 +46,13 @@ Chisel.find_all = async function(type_name) {
     return result;
 }
 
+Chisel.json = function(body, status = 200) {
+    return new Response(JSON.stringify(body), {
+        status: status,
+        headers: [
+            ["content-type", "application/json"]
+        ]
+    })
+}
+
 globalThis.Chisel = Chisel;
