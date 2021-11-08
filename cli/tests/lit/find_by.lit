@@ -1,0 +1,94 @@
+# SPDX-FileCopyrightText: © 2021 ChiselStrike <info@chiselstrike.com>
+
+# RUN: CURL="@curl" sh -e @file
+
+$CHISEL type import examples/person.graphql
+
+# CHECK: Type defined: Person
+
+$CHISEL end-point create ins examples/store.js
+
+# CHECK: End point defined: /ins
+
+$CURL --data '{
+    "first_name":"Glauber", 
+    "last_name":"Costa", 
+    "age": 666, 
+    "human": true, 
+    "height": 10.01
+}' -o - $CHISELD_HOST/ins
+
+$CURL --data '{
+    "first_name":"Jan", 
+    "last_name":"Plhak", 
+    "age": -666, 
+    "human": true, 
+    "height": 10.02
+}' -o - $CHISELD_HOST/ins
+
+# CHECK: ok
+
+$CHISEL end-point create find_by examples/find_by.js
+
+# CHECK: End point defined: /find_by
+
+$CURL --data '{
+    "field_name":"first_name",
+    "value":"Jan"
+}' -o - $CHISELD_HOST/find_by
+
+# CHECK: HTTP/1.1 200 OK
+# CHECK: Jan Plhak -666 true 10.02
+
+$CURL --data '{
+    "field_name":"last_name",
+    "value":"Costa"
+}' -o - $CHISELD_HOST/find_by
+
+# CHECK: HTTP/1.1 200 OK
+# CHECK: Glauber Costa 666 true 10.01
+
+$CURL --data '{
+    "field_name":"last_name",
+    "value":"bagr"
+}' -o - $CHISELD_HOST/find_by
+
+# CHECK: HTTP/1.1 200 OK
+# CHECK: 
+
+$CURL --data '{
+    "field_name":"age",
+    "value":-666
+}' -o - $CHISELD_HOST/find_by
+
+# CHECK: HTTP/1.1 200 OK
+# CHECK: Jan Plhak -666 true 10.02
+
+$CURL --data '{
+    "field_name":"human",
+    "value":true
+}' -o - $CHISELD_HOST/find_by
+
+# CHECK: HTTP/1.1 200 OK
+# CHECK: Glauber Costa 666 true 10.01 Jan Plhak -666 true 10.02
+
+$CURL --data '{
+    "field_name":"height",
+    "value":10.01
+}' -o - $CHISELD_HOST/find_by
+
+# CHECK: HTTP/1.1 200 OK
+# CHECK: Glauber Costa 666 true 10.01
+
+$CURL --data '{
+    "field_name":"height"
+}' -o - $CHISELD_HOST/find_by
+
+# CHECK: HTTP/1.1 500 Internal Server Error
+
+$CURL --data '{
+    "field_name":"misspelled_field_name"
+    "value":10.01
+}' -o - $CHISELD_HOST/find_by
+
+# CHECK: HTTP/1.1 500 Internal Server Error
