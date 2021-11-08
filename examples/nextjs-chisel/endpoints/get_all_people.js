@@ -1,9 +1,3 @@
-function makeResponse(status, msg) {
-    var blob = new Blob([JSON.stringify(msg, null, 2)], {type : 'application/json'});
-    var init = { "status" : status , "message" : blob };
-    return new Response(blob, init);
-}
-
 export default async function chisel(req) {
     if (req.method == 'GET') {
         try {
@@ -12,10 +6,10 @@ export default async function chisel(req) {
             for await (let img of images) {
                 resp_json.push(img);
             }
-            return makeResponse(200, resp_json);
+            return Chisel.json(resp_json);
         } catch (e) {
-            return makeResponse(500, e);
+            return Chisel.json(e, 500);
         }
     }
-    return makeResponse(405, "Only GET is allowed");
+    return Chisel.json("Only GET is allowed", 405);
 }
