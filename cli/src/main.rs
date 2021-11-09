@@ -219,6 +219,17 @@ async fn wait(server_url: String) {
     }
 }
 
+fn read_manifest() -> Result<Manifest> {
+    Ok(match read_to_string("Chisel.toml") {
+        Ok(manifest) => toml::from_str(&manifest)?,
+        _ => Manifest::new(
+            vec!["./types".to_string()],
+            vec!["./endpoints".to_string()],
+            vec!["./policies".to_string()],
+        ),
+    })
+}
+
 #[tokio::main]
 async fn main() -> Result<()> {
     let opt = Opt::from_args();
@@ -312,14 +323,7 @@ async fn main() -> Result<()> {
             }
         },
         Command::Apply => {
-            let manifest = match read_to_string("Chisel.toml") {
-                Ok(manifest) => toml::from_str(&manifest)?,
-                _ => Manifest::new(
-                    vec!["./types".to_string()],
-                    vec!["./endpoints".to_string()],
-                    vec!["./policies".to_string()],
-                ),
-            };
+            let manifest = read_manifest()?;
             let types = manifest.types()?;
             let endpoints = manifest.endpoints()?;
             let policies = manifest.policies()?;
