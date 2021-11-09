@@ -76,6 +76,8 @@ struct Opt {
 
 #[derive(StructOpt, Debug)]
 enum Command {
+    /// Start a ChiselStrike server for local development.
+    Dev,
     /// Shows information about ChiselStrike server status.
     Status,
     Type {
@@ -222,6 +224,13 @@ async fn main() -> Result<()> {
     let opt = Opt::from_args();
     let server_url = opt.rpc_addr;
     match opt.cmd {
+        Command::Dev => {
+            let mut cmd = std::env::current_exe()?;
+            cmd.pop();
+            cmd.push("chiseld");
+            let mut server = std::process::Command::new(cmd).spawn()?;
+            server.wait()?;
+        }
         Command::Status => {
             let mut client = ChiselRpcClient::connect(server_url).await?;
             let request = tonic::Request::new(StatusRequest {});
