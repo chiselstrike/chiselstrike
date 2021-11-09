@@ -230,6 +230,46 @@ fn read_manifest() -> Result<Manifest> {
     })
 }
 
+async fn apply(server_url: String) -> Result<()> {
+    let manifest = read_manifest()?;
+    let types = manifest.types()?;
+    let endpoints = manifest.endpoints()?;
+    let policies = manifest.policies()?;
+
+    let mut client = ChiselRpcClient::connect(server_url).await?;
+
+    for entry in types {
+        // FIXME: will fail the second time until we implement type evolution
+        import_types(&mut client, entry).await?;
+    }
+
+    for entry in endpoints {
+        // FIXME: disambiguate endpoint and endpoint.js. If you have both, this has to
+        // error out. For now simplify.
+        let endpoint_name = entry
+            .file_stem()
+            .ok_or_else(|| anyhow!("Invalid endpoint filename {:?}", entry))?
+            .to_os_string()
+            .into_string()
+            .unwrap();
+
+        create_endpoint(&mut client, endpoint_name, entry).await?;
+    }
+
+    for entry in policies {
+        let policystr = read_to_string(entry)?;
+
+        let response = client
+            .policy_update(tonic::Request::new(PolicyUpdateRequest {
+                policy_config: policystr,
+            }))
+            .await?
+            .into_inner();
+        println!("Policy applied: {}", response.message);
+    }
+    Ok(())
+}
+
 #[tokio::main]
 async fn main() -> Result<()> {
     let opt = Opt::from_args();
@@ -323,42 +363,7 @@ async fn main() -> Result<()> {
             }
         },
         Command::Apply => {
-            let manifest = read_manifest()?;
-            let types = manifest.types()?;
-            let endpoints = manifest.endpoints()?;
-            let policies = manifest.policies()?;
-
-            let mut client = ChiselRpcClient::connect(server_url).await?;
-
-            for entry in types {
-                // FIXME: will fail the second time until we implement type evolution
-                import_types(&mut client, entry).await?;
-            }
-
-            for entry in endpoints {
-                // FIXME: disambiguate endpoint and endpoint.js. If you have both, this has to
-                // error out. For now simplify.
-                let endpoint_name = entry
-                    .file_stem()
-                    .ok_or_else(|| anyhow!("Invalid endpoint filename {:?}", entry))?
-                    .to_os_string()
-                    .into_string()
-                    .unwrap();
-
-                create_endpoint(&mut client, endpoint_name, entry).await?;
-            }
-
-            for entry in policies {
-                let policystr = read_to_string(entry)?;
-
-                let response = client
-                    .policy_update(tonic::Request::new(PolicyUpdateRequest {
-                        policy_config: policystr,
-                    }))
-                    .await?
-                    .into_inner();
-                println!("Policy applied: {}", response.message);
-            }
+            apply(server_url.clone()).await?;
         }
     }
     Ok(())
