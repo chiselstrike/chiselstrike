@@ -7,6 +7,7 @@ use chisel::{
     RemoveTypeRequest, RestartRequest, StatusRequest, TypeExportRequest,
 };
 use graphql_parser::schema::{parse_schema, Definition, TypeDefinition};
+use regex::Regex;
 use serde_derive::Deserialize;
 use std::fs;
 use std::io::{stdin, Read};
@@ -57,11 +58,28 @@ impl Manifest {
         for dir in dirs {
             for dentry in read_dir(dir)? {
                 let dentry = dentry?;
-                paths.push(dentry.path());
+                let path = dentry.path();
+                if !ignore_path(&path) {
+                    paths.push(path);
+                }
             }
         }
         Ok(paths)
     }
+}
+
+/// Return true if path should be ignored.
+///
+/// This function rejects paths that are known to be temporary files.
+fn ignore_path(path: &Path) -> bool {
+    let patterns = vec![".*~", ".*.swp"];
+    for pat in patterns {
+        let re = Regex::new(pat).unwrap();
+        if re.is_match(path.to_str().unwrap()) {
+            return true;
+        }
+    }
+    false
 }
 
 #[derive(StructOpt, Debug)]

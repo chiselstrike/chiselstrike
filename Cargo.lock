@@ -366,6 +366,7 @@ dependencies = [
  "lit",
  "ntest",
  "prost",
+ "regex",
  "serde",
  "serde_derive",
  "server",
