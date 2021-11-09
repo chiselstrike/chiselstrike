@@ -6,7 +6,10 @@ use chisel::{
     AddTypeRequest, EndPointCreationRequest, FieldDefinition, PolicyUpdateRequest,
     RemoveTypeRequest, RestartRequest, StatusRequest, TypeExportRequest,
 };
+use futures::channel::mpsc::channel;
+use futures::{SinkExt, StreamExt};
 use graphql_parser::schema::{parse_schema, Definition, TypeDefinition};
+use notify::{Event, RecommendedWatcher, RecursiveMode, Watcher};
 use regex::Regex;
 use serde_derive::Deserialize;
 use std::fs;
@@ -294,10 +297,44 @@ async fn main() -> Result<()> {
     let server_url = opt.rpc_addr;
     match opt.cmd {
         Command::Dev => {
+            let manifest = read_manifest()?;
+            let types = manifest.types()?;
+            let endpoints = manifest.endpoints()?;
+            let policies = manifest.policies()?;
             let mut cmd = std::env::current_exe()?;
             cmd.pop();
             cmd.push("chiseld");
             let mut server = std::process::Command::new(cmd).spawn()?;
+            wait(server_url.clone()).await;
+            apply(server_url.clone()).await?;
+            let (mut tx, mut rx) = channel(1);
+            let mut apply_watcher =
+                RecommendedWatcher::new(move |res: Result<Event, notify::Error>| {
+                    futures::executor::block_on(async {
+                        tx.send(res).await.unwrap();
+                    });
+                })?;
+            let watcher_config = notify::Config::OngoingEvents(Some(Duration::from_secs(1)));
+            apply_watcher.configure(watcher_config)?;
+            for ty in types {
+                apply_watcher.watch(&ty, RecursiveMode::NonRecursive)?;
+            }
+            for endpoint in endpoints {
+                apply_watcher.watch(&endpoint, RecursiveMode::NonRecursive)?;
+            }
+            for policy in policies {
+                apply_watcher.watch(&policy, RecursiveMode::NonRecursive)?;
+            }
+            while let Some(res) = rx.next().await {
+                match res {
+                    Ok(event) => {
+                        if event.kind.is_modify() {
+                            apply(server_url.clone()).await?;
+                        }
+                    }
+                    Err(e) => println!("watch error: {:?}", e),
+                }
+            }
             server.wait()?;
         }
         Command::Status => {

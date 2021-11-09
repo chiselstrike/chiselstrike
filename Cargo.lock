@@ -364,6 +364,7 @@ dependencies = [
  "futures",
  "graphql-parser",
  "lit",
+ "notify",
  "ntest",
  "prost",
  "regex",
