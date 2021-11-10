@@ -8,9 +8,8 @@ use crate::types::{Field, ObjectType, TypeSystemError};
 use chisel::chisel_rpc_server::{ChiselRpc, ChiselRpcServer};
 use chisel::{
     AddTypeRequest, AddTypeResponse, EndPointCreationRequest, EndPointCreationResponse,
-    PolicyUpdateRequest, PolicyUpdateResponse, RemoveTypeRequest, RemoveTypeResponse,
-    RestartRequest, RestartResponse, StatusRequest, StatusResponse, TypeExportRequest,
-    TypeExportResponse,
+    PolicyUpdateRequest, PolicyUpdateResponse, RestartRequest, RestartResponse, StatusRequest,
+    StatusResponse, TypeExportRequest, TypeExportResponse,
 };
 use convert_case::{Case, Casing};
 use futures::FutureExt;
@@ -112,21 +111,6 @@ impl ChiselRpc for RpcService {
             Err(e) => return Err(e.into()),
         }
         let response = chisel::AddTypeResponse { message: name };
-        Ok(Response::new(response))
-    }
-
-    async fn remove_type(
-        &self,
-        request: tonic::Request<RemoveTypeRequest>,
-    ) -> Result<tonic::Response<RemoveTypeResponse>, tonic::Status> {
-        let runtime = &mut runtime::get().await;
-        let type_system = &mut runtime.type_system;
-        let request = request.into_inner();
-        let name = request.type_name;
-        type_system.remove_type(&name)?;
-        let meta = &runtime.meta;
-        meta.remove(&name).await?;
-        let response = chisel::RemoveTypeResponse {};
         Ok(Response::new(response))
     }
 

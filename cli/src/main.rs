@@ -3,8 +3,8 @@
 use anyhow::{anyhow, Context, Result};
 use chisel::chisel_rpc_client::ChiselRpcClient;
 use chisel::{
-    AddTypeRequest, EndPointCreationRequest, FieldDefinition, PolicyUpdateRequest,
-    RemoveTypeRequest, RestartRequest, StatusRequest, TypeExportRequest,
+    AddTypeRequest, EndPointCreationRequest, FieldDefinition, PolicyUpdateRequest, RestartRequest,
+    StatusRequest, TypeExportRequest,
 };
 use futures::channel::mpsc::channel;
 use futures::{SinkExt, StreamExt};
@@ -120,8 +120,6 @@ enum Command {
 
 #[derive(StructOpt, Debug)]
 enum TypeCommand {
-    /// Add a type to the type system.
-    Add { type_name: String },
     /// Import types to the type system.
     Import {
         /// Type definition input file.
@@ -129,8 +127,6 @@ enum TypeCommand {
     },
     /// Export the type system.
     Export,
-    /// Remove type from the type system.
-    Remove { type_name: String },
 }
 
 #[derive(StructOpt, Debug)]
@@ -350,15 +346,6 @@ async fn main() -> Result<()> {
             }
         },
         Command::Type { cmd } => match cmd {
-            TypeCommand::Add { type_name } => {
-                let mut client = ChiselRpcClient::connect(server_url).await?;
-                let request = tonic::Request::new(AddTypeRequest {
-                    name: type_name,
-                    field_defs: vec![],
-                });
-                let response = client.add_type(request).await?.into_inner();
-                println!("Type defined: {}", response.message);
-            }
             TypeCommand::Import { filename } => {
                 let mut client = ChiselRpcClient::connect(server_url).await?;
                 import_types(&mut client, filename).await?;
@@ -383,14 +370,6 @@ async fn main() -> Result<()> {
                     }
                     println!("}}");
                 }
-            }
-            TypeCommand::Remove { type_name } => {
-                let mut client = ChiselRpcClient::connect(server_url).await?;
-                let request = tonic::Request::new(RemoveTypeRequest {
-                    type_name: type_name.clone(),
-                });
-                let _ = client.remove_type(request).await?.into_inner();
-                println!("Type removed: {}", type_name);
             }
         },
         Command::Restart => {
