@@ -6,7 +6,11 @@ use chisel::{
     AddTypeRequest, EndPointCreationRequest, FieldDefinition, PolicyUpdateRequest,
     RemoveTypeRequest, RestartRequest, StatusRequest, TypeExportRequest,
 };
+use futures::channel::mpsc::channel;
+use futures::{SinkExt, StreamExt};
 use graphql_parser::schema::{parse_schema, Definition, TypeDefinition};
+use notify::{Event, RecommendedWatcher, RecursiveMode, Watcher};
+use regex::Regex;
 use serde_derive::Deserialize;
 use std::fs;
 use std::io::{stdin, Read};
@@ -57,11 +61,28 @@ impl Manifest {
         for dir in dirs {
             for dentry in read_dir(dir)? {
                 let dentry = dentry?;
-                paths.push(dentry.path());
+                let path = dentry.path();
+                if !ignore_path(&path) {
+                    paths.push(path);
+                }
             }
         }
         Ok(paths)
     }
+}
+
+/// Return true if path should be ignored.
+///
+/// This function rejects paths that are known to be temporary files.
+fn ignore_path(path: &Path) -> bool {
+    let patterns = vec![".*~", ".*.swp"];
+    for pat in patterns {
+        let re = Regex::new(pat).unwrap();
+        if re.is_match(path.to_str().unwrap()) {
+            return true;
+        }
+    }
+    false
 }
 
 #[derive(StructOpt, Debug)]
@@ -76,6 +97,8 @@ struct Opt {
 
 #[derive(StructOpt, Debug)]
 enum Command {
+    /// Start a ChiselStrike server for local development.
+    Dev,
     /// Shows information about ChiselStrike server status.
     Status,
     Type {
@@ -217,11 +240,103 @@ async fn wait(server_url: String) {
     }
 }
 
+fn read_manifest() -> Result<Manifest> {
+    Ok(match read_to_string("Chisel.toml") {
+        Ok(manifest) => toml::from_str(&manifest)?,
+        _ => Manifest::new(
+            vec!["./types".to_string()],
+            vec!["./endpoints".to_string()],
+            vec!["./policies".to_string()],
+        ),
+    })
+}
+
+async fn apply(server_url: String) -> Result<()> {
+    let manifest = read_manifest()?;
+    let types = manifest.types()?;
+    let endpoints = manifest.endpoints()?;
+    let policies = manifest.policies()?;
+
+    let mut client = ChiselRpcClient::connect(server_url).await?;
+
+    for entry in types {
+        // FIXME: will fail the second time until we implement type evolution
+        import_types(&mut client, entry).await?;
+    }
+
+    for entry in endpoints {
+        // FIXME: disambiguate endpoint and endpoint.js. If you have both, this has to
+        // error out. For now simplify.
+        let endpoint_name = entry
+            .file_stem()
+            .ok_or_else(|| anyhow!("Invalid endpoint filename {:?}", entry))?
+            .to_os_string()
+            .into_string()
+            .unwrap();
+
+        create_endpoint(&mut client, endpoint_name, entry).await?;
+    }
+
+    for entry in policies {
+        let policystr = read_to_string(entry)?;
+
+        let response = client
+            .policy_update(tonic::Request::new(PolicyUpdateRequest {
+                policy_config: policystr,
+            }))
+            .await?
+            .into_inner();
+        println!("Policy applied: {}", response.message);
+    }
+    Ok(())
+}
+
 #[tokio::main]
 async fn main() -> Result<()> {
     let opt = Opt::from_args();
     let server_url = opt.rpc_addr;
     match opt.cmd {
+        Command::Dev => {
+            let manifest = read_manifest()?;
+            let types = manifest.types()?;
+            let endpoints = manifest.endpoints()?;
+            let policies = manifest.policies()?;
+            let mut cmd = std::env::current_exe()?;
+            cmd.pop();
+            cmd.push("chiseld");
+            let mut server = std::process::Command::new(cmd).spawn()?;
+            wait(server_url.clone()).await;
+            apply(server_url.clone()).await?;
+            let (mut tx, mut rx) = channel(1);
+            let mut apply_watcher =
+                RecommendedWatcher::new(move |res: Result<Event, notify::Error>| {
+                    futures::executor::block_on(async {
+                        tx.send(res).await.unwrap();
+                    });
+                })?;
+            let watcher_config = notify::Config::OngoingEvents(Some(Duration::from_secs(1)));
+            apply_watcher.configure(watcher_config)?;
+            for ty in types {
+                apply_watcher.watch(&ty, RecursiveMode::NonRecursive)?;
+            }
+            for endpoint in endpoints {
+                apply_watcher.watch(&endpoint, RecursiveMode::NonRecursive)?;
+            }
+            for policy in policies {
+                apply_watcher.watch(&policy, RecursiveMode::NonRecursive)?;
+            }
+            while let Some(res) = rx.next().await {
+                match res {
+                    Ok(event) => {
+                        if event.kind.is_modify() {
+                            apply(server_url.clone()).await?;
+                        }
+                    }
+                    Err(e) => println!("watch error: {:?}", e),
+                }
+            }
+            server.wait()?;
+        }
         Command::Status => {
             let mut client = ChiselRpcClient::connect(server_url).await?;
             let request = tonic::Request::new(StatusRequest {});
@@ -303,49 +418,7 @@ async fn main() -> Result<()> {
             }
         },
         Command::Apply => {
-            let manifest = match read_to_string("Chisel.toml") {
-                Ok(manifest) => toml::from_str(&manifest)?,
-                _ => Manifest::new(
-                    vec!["./types".to_string()],
-                    vec!["./endpoints".to_string()],
-                    vec!["./policies".to_string()],
-                ),
-            };
-            let types = manifest.types()?;
-            let endpoints = manifest.endpoints()?;
-            let policies = manifest.policies()?;
-
-            let mut client = ChiselRpcClient::connect(server_url).await?;
-
-            for entry in types {
-                // FIXME: will fail the second time until we implement type evolution
-                import_types(&mut client, entry).await?;
-            }
-
-            for entry in endpoints {
-                // FIXME: disambiguate endpoint and endpoint.js. If you have both, this has to
-                // error out. For now simplify.
-                let endpoint_name = entry
-                    .file_stem()
-                    .ok_or_else(|| anyhow!("Invalid endpoint filename {:?}", entry))?
-                    .to_os_string()
-                    .into_string()
-                    .unwrap();
-
-                create_endpoint(&mut client, endpoint_name, entry).await?;
-            }
-
-            for entry in policies {
-                let policystr = read_to_string(entry)?;
-
-                let response = client
-                    .policy_update(tonic::Request::new(PolicyUpdateRequest {
-                        policy_config: policystr,
-                    }))
-                    .await?
-                    .into_inner();
-                println!("Policy applied: {}", response.message);
-            }
+            apply(server_url.clone()).await?;
         }
     }
     Ok(())
