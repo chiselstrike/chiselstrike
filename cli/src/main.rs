@@ -102,6 +102,8 @@ struct Opt {
 
 #[derive(StructOpt, Debug)]
 enum Command {
+    /// Initialize a new ChiselStrike project.
+    Init,
     /// Start a ChiselStrike server for local development.
     Dev,
     /// Shows information about ChiselStrike server status.
@@ -260,13 +262,17 @@ async fn wait(server_url: String) -> Result<tonic::Response<StatusResponse>> {
     .await
 }
 
+const TYPES_DIR: &str = "./types";
+const ENDPOINTS_DIR: &str = "./endpoints";
+const POLICIES_DIR: &str = "./policies";
+
 fn read_manifest() -> Result<Manifest> {
     Ok(match read_to_string("Chisel.toml") {
         Ok(manifest) => toml::from_str(&manifest)?,
         _ => Manifest::new(
-            vec!["./types".to_string()],
-            vec!["./endpoints".to_string()],
-            vec!["./policies".to_string()],
+            vec![TYPES_DIR.to_string()],
+            vec![ENDPOINTS_DIR.to_string()],
+            vec![POLICIES_DIR.to_string()],
         ),
     })
 }
@@ -316,6 +322,13 @@ async fn main() -> Result<()> {
     let opt = Opt::from_args();
     let server_url = opt.rpc_addr;
     match opt.cmd {
+        Command::Init => {
+            fs::create_dir(TYPES_DIR)?;
+            fs::create_dir(ENDPOINTS_DIR)?;
+            fs::create_dir(POLICIES_DIR)?;
+            let endpoints = std::str::from_utf8(include_bytes!("template/hello.js"))?.to_string();
+            fs::write(format!("{}/hello.js", ENDPOINTS_DIR), endpoints)?;
+        }
         Command::Dev => {
             let manifest = read_manifest()?;
             let types = manifest.types()?;
