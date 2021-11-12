@@ -44,6 +44,14 @@ use std::net::SocketAddr;
 use std::pin::Pin;
 use std::rc::Rc;
 use std::sync::Arc;
+use swc_common::sync::Lrc;
+use swc_common::{
+    errors::{emitter, Handler},
+    SourceMap,
+};
+use swc_ecma_codegen::{text_writer::JsWriter, Emitter};
+use swc_ecma_parser::{lexer::Lexer, Parser, StringInput, Syntax};
+
 use tokio::sync::Mutex;
 use url::Url;
 
@@ -302,6 +310,54 @@ async fn op_chisel_query_next(
     }
 }
 
+fn _compile_ts_file(file_path: &std::path::Path) -> String {
+    let cm: Lrc<SourceMap> = Default::default();
+    let emitter = Box::new(emitter::EmitterWriter::new(
+        Box::new(std::io::stdout()),
+        Some(cm.clone()),
+        false,
+        true,
+    ));
+    let handler = Handler::with_emitter(true, false, emitter);
+
+    let fm = cm.load_file(file_path).expect("failed to load chisel.js");
+
+    let lexer = Lexer::new(
+        Syntax::Typescript(Default::default()),
+        Default::default(),
+        StringInput::from(&*fm),
+        None,
+    );
+
+    let mut parser = Parser::new_from(lexer);
+
+    for e in parser.take_errors() {
+        e.into_diagnostic(&handler).emit();
+    }
+
+    let module = parser
+        .parse_typescript_module()
+        .map_err(|e| {
+            // Unrecoverable fatal error occurred
+            e.into_diagnostic(&handler).emit()
+        })
+        .unwrap();
+
+    let mut buf = vec![];
+    {
+        let mut emitter = Emitter {
+            cfg: swc_ecma_codegen::Config {
+                ..Default::default()
+            },
+            cm: cm.clone(),
+            comments: None,
+            wr: JsWriter::new(cm, "\n", &mut buf, None),
+        };
+        emitter.emit_module(&module).unwrap();
+    }
+    String::from_utf8_lossy(&buf).to_string()
+}
+
 async fn create_deno(inspect_brk: bool) -> Result<DenoService> {
     let mut d = DenoService::new(inspect_brk);
     let worker = &mut d.worker;
@@ -316,6 +372,10 @@ async fn create_deno(inspect_brk: bool) -> Result<DenoService> {
 
     // FIXME: Include this js in the snapshop
     let code = std::str::from_utf8(include_bytes!("chisel.js"))?.to_string();
+
+    // This will break the tests because the relative paths will be different and I don't
+    // have the time to do it properly :(
+    // let code = _compile_ts_file(std::path::Path::new("server/src/chisel.js"));
     d.module_loader
         .code_map
         .borrow_mut()
