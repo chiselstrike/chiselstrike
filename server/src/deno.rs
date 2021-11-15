@@ -39,10 +39,12 @@ use std::cell::RefCell;
 use std::collections::hash_map::Entry;
 use std::collections::HashMap;
 use std::convert::TryInto;
+use std::future::Future;
 use std::net::SocketAddr;
 use std::pin::Pin;
 use std::rc::Rc;
 use std::sync::Arc;
+use std::task::{Context, Poll};
 use swc_common::sync::Lrc;
 use swc_common::{
     errors::{emitter, Handler},
@@ -502,7 +504,34 @@ impl Resource for BodyResource {
     }
 }
 
-fn get_result(
+thread_local! {
+    static CURRENT_REQUEST_PATH : RefCell<String> = RefCell::new("".into());
+}
+
+fn set_current_path(current_path: String) {
+    CURRENT_REQUEST_PATH.with(|path| {
+        let mut borrow = path.borrow_mut();
+        *borrow = current_path.clone();
+    });
+}
+
+struct RequestFuture<F> {
+    request_path: String,
+    inner: F,
+}
+
+impl<F: Future> Future for RequestFuture<F> {
+    type Output = F::Output;
+
+    fn poll(self: Pin<&mut Self>, c: &mut Context<'_>) -> Poll<F::Output> {
+        set_current_path(self.request_path.clone());
+        // Structural Pinning, it is OK because inner is pinned when we are.
+        let inner = unsafe { self.map_unchecked_mut(|s| &mut s.inner) };
+        inner.poll(c)
+    }
+}
+
+fn get_result_aux(
     runtime: &mut JsRuntime,
     request_handler: v8::Global<v8::Function>,
     req: &mut Request<hyper::Body>,
@@ -566,6 +595,29 @@ fn get_result(
     Ok(v8::Global::new(scope, result))
 }
 
+async fn get_result(
+    runtime: &mut JsRuntime,
+    request_handler: v8::Global<v8::Function>,
+    req: &mut Request<hyper::Body>,
+    path: String,
+) -> Result<v8::Global<v8::Value>> {
+    // Set the current path to cover JS code that runs before
+    // blocking. This in particular covers code that doesn't block at
+    // all.
+    set_current_path(path.clone());
+    let result = get_result_aux(runtime, request_handler, req)?;
+    let result = runtime.resolve_value(result);
+    // We got here without blocking and now have a future representing
+    // pending work for the endpoint. We might not get to that future
+    // before the current path is changed, so wrap the future in a
+    // RequestFuture that will reset the current path before polling.
+    RequestFuture {
+        request_path: path,
+        inner: result,
+    }
+    .await
+}
+
 async fn run_js_aux(
     d: Rc<RefCell<DenoService>>,
     path: String,
@@ -577,6 +629,7 @@ async fn run_js_aux(
         let map = CODE.lock().await;
         let code = map.get(&path).unwrap();
         let entry = service.handlers.entry(path.clone());
+        let path = path.clone();
         let get_handler = || {
             get_endpoint(
                 &service.module_loader,
@@ -611,9 +664,8 @@ async fn run_js_aux(
             .wait_for_session_and_break_on_next_statement();
     }
 
-    let result = get_result(runtime, request_handler, &mut req)?;
+    let result = get_result(runtime, request_handler, &mut req, path).await?;
 
-    let result = runtime.resolve_value(result).await?;
     let stream = get_read_stream(runtime, result.clone(), d.clone())?;
     let scope = &mut runtime.handle_scope();
     let response = result
