@@ -57,8 +57,6 @@ jobs:
 
     - name: set up cache
       uses: Swatinem/rust-cache@v1
-      with:
-          key: avoid-broken-rusty-v8-cache-v1
 
     - name: Build debug mode binaries
       uses: actions-rs/cargo@v1
