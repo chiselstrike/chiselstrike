@@ -33,7 +33,6 @@ use hyper::Method;
 use hyper::{Request, Response, StatusCode};
 use once_cell::sync::Lazy;
 use once_cell::unsync::OnceCell;
-use rusty_v8 as v8;
 use serde_json;
 use sqlx::any::AnyRow;
 use std::cell::RefCell;
@@ -51,6 +50,7 @@ use swc_common::{
 };
 use swc_ecma_codegen::{text_writer::JsWriter, Emitter};
 use swc_ecma_parser::{lexer::Lexer, Parser, StringInput, Syntax};
+use v8;
 
 use tokio::sync::Mutex;
 use url::Url;
@@ -441,7 +441,7 @@ async fn get_read_future(
         let scope = &mut runtime.handle_scope();
         let reader = v8::Local::new(scope, reader.clone());
         let res = read
-            .get(scope)
+            .open(scope)
             .call(scope, reader, &[])
             .ok_or(Error::NotAResponse)?;
         v8::Global::new(scope, res)
@@ -449,7 +449,7 @@ async fn get_read_future(
     let read_result = runtime.resolve_value(js_promise).await?;
     let scope = &mut runtime.handle_scope();
     let read_result = read_result
-        .get(scope)
+        .open(scope)
         .to_object(scope)
         .ok_or(Error::NotAResponse)?;
     let done: v8::Local<v8::Boolean> = get_member(read_result, scope, "done")?;
@@ -473,7 +473,7 @@ fn get_read_stream(
 ) -> Result<impl Stream<Item = Result<Box<[u8]>>>> {
     let scope = &mut runtime.handle_scope();
     let response = global_response
-        .get(scope)
+        .open(scope)
         .to_object(scope)
         .ok_or(Error::NotAResponse)?;
 
@@ -510,7 +510,7 @@ fn get_result(
     let op_state = runtime.op_state();
     let global_context = runtime.global_context();
     let scope = &mut runtime.handle_scope();
-    let global_proxy = global_context.get(scope).global(scope);
+    let global_proxy = global_context.open(scope).global(scope);
 
     // FIXME: this request conversion is probably simplistic. Check deno/ext/http/lib.rs
     let request: v8::Local<v8::Function> = get_member(global_proxy, scope, "Request")?;
@@ -560,7 +560,7 @@ fn get_result(
         .ok_or(Error::NotAResponse)?;
 
     let result = request_handler
-        .get(scope)
+        .open(scope)
         .call(scope, global_proxy.into(), &[request.into()])
         .ok_or(Error::NotAResponse)?;
     Ok(v8::Global::new(scope, result))
@@ -617,7 +617,7 @@ async fn run_js_aux(
     let stream = get_read_stream(runtime, result.clone(), d.clone())?;
     let scope = &mut runtime.handle_scope();
     let response = result
-        .get(scope)
+        .open(scope)
         .to_object(scope)
         .ok_or(Error::NotAResponse)?;
 
@@ -687,7 +687,7 @@ async fn get_endpoint(
 
     let scope = &mut runtime.handle_scope();
     let module = module
-        .get(scope)
+        .open(scope)
         .to_object(scope)
         .ok_or(Error::NotAResponse)?;
     let request_handler: v8::Local<v8::Function> = get_member(module, scope, "default")?;
