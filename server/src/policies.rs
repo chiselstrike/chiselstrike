@@ -4,7 +4,10 @@ use serde_json::{json, Value};
 use std::collections::HashMap;
 
 pub struct Policy {
+    /// How this policy transforms values read from storage.
     pub transform: fn(Value) -> Value,
+
+    /// This policy doesn't apply when the request URI matches.
     pub except_uri: regex::Regex,
 }
 
