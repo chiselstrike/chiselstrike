@@ -273,7 +273,7 @@ async fn op_chisel_query_create(
     let runtime = &mut runtime::get().await;
     let ts = &runtime.type_system;
     let ty = ts.lookup_object_type(type_name)?;
-    runtime.get_policies(&ty, &mut policies);
+    CURRENT_REQUEST_PATH.with(|p| runtime.get_policies(&ty, &mut policies, &p.borrow()));
 
     let query_engine = &mut runtime.query_engine;
     let stream: Pin<Box<dyn Stream<Item = _>>> = match field_name {

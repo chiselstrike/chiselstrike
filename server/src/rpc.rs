@@ -2,6 +2,7 @@
 
 use crate::api::ApiService;
 use crate::deno;
+use crate::policies::Policy;
 use crate::query::QueryError;
 use crate::runtime;
 use crate::types::{Field, ObjectType, TypeSystemError};
@@ -188,7 +189,19 @@ impl ChiselRpc for RpcService {
             let policies = &mut runtime::get().await.policies;
             match label["transform"].as_str() {
                 Some("anonymize") => {
-                    policies.insert(name.to_owned(), crate::policies::anonymize);
+                    let pattern = label["except_uri"].as_str().unwrap_or("^$"); // ^$ never matches; each path has at least a '/' in it.
+                    policies.insert(
+                        name.to_owned(),
+                        Policy {
+                            transform: crate::policies::anonymize,
+                            except_uri: regex::Regex::new(pattern).map_err(|e| {
+                                Status::internal(format!(
+                                    "error '{}' parsing regular expression '{}'",
+                                    e, pattern
+                                ))
+                            })?,
+                        },
+                    );
                     Ok(())
                 }
                 Some(x) => Err(Status::internal(format!(

@@ -24,11 +24,13 @@ impl Runtime {
     }
 
     /// Adds the current policies of ty to policies.
-    pub fn get_policies(&self, ty: &ObjectType, policies: &mut FieldPolicies) {
+    pub fn get_policies(&self, ty: &ObjectType, policies: &mut FieldPolicies, current_path: &str) {
         for fld in &ty.fields {
-            for (lbl, xform) in &self.policies {
-                if fld.labels.contains(lbl) {
-                    policies.insert(fld.name.clone(), *xform);
+            for lbl in &fld.labels {
+                if let Some(p) = self.policies.get(lbl) {
+                    if !p.except_uri.is_match(current_path) {
+                        policies.insert(fld.name.clone(), p.transform);
+                    }
                 }
             }
         }
