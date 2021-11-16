@@ -39,3 +39,27 @@ $CURL -o - $CHISELD_HOST/find
 
 # CHECK: HTTP/1.1 200 OK
 # CHECK: hello xxxxx
+
+cat << EOF | $CHISEL type import -
+type Person {
+  first_name: String @L1 @L2 @L3
+  last_name: String @pii @L2
+  age: Int @L1
+  human: Boolean @L1 @L3
+  height: Float
+}
+EOF
+
+cat << EOF | $CHISEL policy update -
+labels:
+  - name: Linf
+    transform: anonymize
+  - name: L1
+  - name: L2
+    transform: anonymize
+EOF
+
+$CURL -o - $CHISELD_HOST/find
+
+# CHECK: HTTP/1.1 200 OK
+# CHECK: xxxxx xxxxx
