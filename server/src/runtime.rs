@@ -27,8 +27,8 @@ impl Runtime {
     pub fn get_policies(&self, ty: &ObjectType, policies: &mut FieldPolicies) {
         for fld in &ty.fields {
             for lbl in &fld.labels {
-                if let Some(xform) = self.policies.get(lbl) {
-                    policies.insert(fld.name.clone(), *xform);
+                if let Some(p) = self.policies.get(lbl) {
+                    policies.insert(fld.name.clone(), p.transform);
                 }
             }
         }

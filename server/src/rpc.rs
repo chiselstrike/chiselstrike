@@ -2,6 +2,7 @@
 
 use crate::api::ApiService;
 use crate::deno;
+use crate::policies::Policy;
 use crate::query::QueryError;
 use crate::runtime;
 use crate::types::{Field, ObjectType, TypeSystemError};
@@ -188,7 +189,12 @@ impl ChiselRpc for RpcService {
             let policies = &mut runtime::get().await.policies;
             match label["transform"].as_str() {
                 Some("anonymize") => {
-                    policies.insert(name.to_owned(), crate::policies::anonymize);
+                    policies.insert(
+                        name.to_owned(),
+                        Policy {
+                            transform: crate::policies::anonymize,
+                        },
+                    );
                     Ok(())
                 }
                 Some(x) => Err(Status::internal(format!(

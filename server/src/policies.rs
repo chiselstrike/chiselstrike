@@ -3,8 +3,12 @@
 use serde_json::{json, Value};
 use std::collections::HashMap;
 
+pub struct Policy {
+    pub transform: fn(Value) -> Value,
+}
+
 /// Maps labels to their applicable policies.
-pub type LabelPolicies = HashMap<String, fn(Value) -> Value>;
+pub type LabelPolicies = HashMap<String, Policy>;
 
 /// Maps a field name to the transformation we apply to that field's values.
 pub type FieldPolicies = HashMap<String, fn(Value) -> Value>;
