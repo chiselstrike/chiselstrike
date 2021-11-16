@@ -5,6 +5,7 @@ use std::collections::HashMap;
 
 pub struct Policy {
     pub transform: fn(Value) -> Value,
+    pub except_uri: regex::Regex,
 }
 
 /// Maps labels to their applicable policies.

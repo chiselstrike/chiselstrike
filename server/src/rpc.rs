@@ -189,10 +189,17 @@ impl ChiselRpc for RpcService {
             let policies = &mut runtime::get().await.policies;
             match label["transform"].as_str() {
                 Some("anonymize") => {
+                    let pattern = label["except_uri"].as_str().unwrap_or("^$");
                     policies.insert(
                         name.to_owned(),
                         Policy {
                             transform: crate::policies::anonymize,
+                            except_uri: regex::Regex::new(pattern).map_err(|e| {
+                                Status::internal(format!(
+                                    "error '{}' parsing regular expression '{}'",
+                                    e, pattern
+                                ))
+                            })?,
                         },
                     );
                     Ok(())

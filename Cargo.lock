@@ -3587,6 +3587,7 @@ dependencies = [
  "once_cell",
  "pretty_env_logger",
  "prost",
+ "regex",
  "reqwest",
  "sea-query",
  "serde_json",
