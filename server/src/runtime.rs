@@ -26,8 +26,8 @@ impl Runtime {
     /// Adds the current policies of ty to policies.
     pub fn get_policies(&self, ty: &ObjectType, policies: &mut FieldPolicies) {
         for fld in &ty.fields {
-            for (lbl, xform) in &self.policies {
-                if fld.labels.contains(lbl) {
+            for lbl in &fld.labels {
+                if let Some(xform) = self.policies.get(lbl) {
                     policies.insert(fld.name.clone(), *xform);
                 }
             }
