@@ -189,7 +189,7 @@ impl ChiselRpc for RpcService {
             let policies = &mut runtime::get().await.policies;
             match label["transform"].as_str() {
                 Some("anonymize") => {
-                    let pattern = label["except_uri"].as_str().unwrap_or("^$");
+                    let pattern = label["except_uri"].as_str().unwrap_or("^$"); // ^$ never matches; each path has at least a '/' in it.
                     policies.insert(
                         name.to_owned(),
                         Policy {
