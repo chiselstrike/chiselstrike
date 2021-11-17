@@ -21,6 +21,9 @@ use std::time::Duration;
 use structopt::StructOpt;
 use tonic::transport::Channel;
 
+// Timeout when waiting for connection or server status.
+const TIMEOUT: u64 = 10;
+
 /// Manifest defines the files that describe types, endpoints, and policies.
 ///
 /// The manifest is a high-level declaration of application behavior.
@@ -215,41 +218,46 @@ where
     Ok(())
 }
 
-async fn with_retry<A, T, E, F, Fut>(mut a: A, mut f: F) -> T
+async fn with_retry<A, T, F, Fut>(timeout: u64, mut a: A, mut f: F) -> Result<T>
 where
-    Fut: Future<Output = (A, Result<T, E>)>,
+    Fut: Future<Output = Result<T, A>>,
     F: FnMut(A) -> Fut,
 {
     let mut wait_time = 1;
+    let mut total = 0;
     loop {
-        let pair = f(a).await;
-        a = pair.0;
-        match pair.1 {
-            Ok(v) => return v,
-            Err(_) => {
+        match f(a).await {
+            Ok(v) => return Ok(v),
+            Err(e) => {
+                a = e;
+                if total > timeout {
+                    return Err(anyhow!("Timeout"));
+                }
                 thread::sleep(Duration::from_secs(wait_time));
+                total += wait_time;
                 wait_time *= 2;
             }
         }
     }
 }
 
-async fn connect_with_retry(server_url: String) -> ChiselRpcClient<Channel> {
-    with_retry((), |_| async {
+async fn connect_with_retry(server_url: String) -> Result<ChiselRpcClient<Channel>> {
+    with_retry(TIMEOUT, (), |_| async {
         let c = ChiselRpcClient::connect(server_url.clone()).await;
-        ((), c)
+        c.map_err(|_| ())
     })
     .await
 }
 
-async fn wait(server_url: String) {
-    let client = connect_with_retry(server_url).await;
-    with_retry(client, |mut client| async {
+use crate::chisel::StatusResponse;
+async fn wait(server_url: String) -> Result<tonic::Response<StatusResponse>> {
+    let client = connect_with_retry(server_url).await?;
+    with_retry(TIMEOUT, client, |mut client| async {
         let request = tonic::Request::new(StatusRequest {});
         let s = client.get_status(request).await;
-        (client, s)
+        s.map_err(|_| client)
     })
-    .await;
+    .await
 }
 
 fn read_manifest() -> Result<Manifest> {
@@ -317,7 +325,7 @@ async fn main() -> Result<()> {
             cmd.pop();
             cmd.push("chiseld");
             let mut server = std::process::Command::new(cmd).spawn()?;
-            wait(server_url.clone()).await;
+            wait(server_url.clone()).await?;
             apply(server_url.clone()).await?;
             let (mut tx, mut rx) = channel(1);
             let mut apply_watcher =
@@ -395,9 +403,11 @@ async fn main() -> Result<()> {
                 .await?
                 .into_inner();
             println!("{}", if response.ok { "success" } else { "failure" });
-            wait(server_url).await
+            wait(server_url).await?;
         }
-        Command::Wait => wait(server_url).await,
+        Command::Wait => {
+            wait(server_url).await?;
+        }
         Command::Policy { cmd } => match cmd {
             PolicyCommand::Update { filename } => {
                 let policystr = read_to_string(&filename)?;
