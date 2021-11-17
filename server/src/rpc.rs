@@ -174,49 +174,47 @@ impl ChiselRpc for RpcService {
         let docs = YamlLoader::load_from_str(&request.policy_config)
             .map_err(|err| Status::internal(format!("{}", err)))?;
 
-        let config = &docs[0];
+        // FIXME: only transform implemented
+        let policies = &mut runtime::get().await.policies;
+        policies.clear();
 
-        for label in config["labels"].as_vec().get_or_insert(&[].into()).iter() {
-            let name = label["name"].as_str().ok_or_else(|| {
-                Status::internal(format!(
-                    "couldn't parse yaml: label without a name: {:?}",
-                    label
-                ))
-            })?;
-            debug!("Applying policy for label {:?}", name);
+        for config in docs.iter() {
+            for label in config["labels"].as_vec().get_or_insert(&[].into()).iter() {
+                let name = label["name"].as_str().ok_or_else(|| {
+                    Status::internal(format!(
+                        "couldn't parse yaml: label without a name: {:?}",
+                        label
+                    ))
+                })?;
+                debug!("Applying policy for label {:?}", name);
 
-            // FIXME: only transform implemented
-            let policies = &mut runtime::get().await.policies;
-            match label["transform"].as_str() {
-                Some("anonymize") => {
-                    let pattern = label["except_uri"].as_str().unwrap_or("^$"); // ^$ never matches; each path has at least a '/' in it.
-                    policies.insert(
-                        name.to_owned(),
-                        Policy {
-                            transform: crate::policies::anonymize,
-                            except_uri: regex::Regex::new(pattern).map_err(|e| {
-                                Status::internal(format!(
-                                    "error '{}' parsing regular expression '{}'",
-                                    e, pattern
-                                ))
-                            })?,
-                        },
-                    );
-                    Ok(())
-                }
-                Some(x) => Err(Status::internal(format!(
-                    "unknown transform: {} for label {}",
-                    x, name
-                ))),
-                None => {
-                    policies.remove(&name.to_owned());
-                    Ok(())
-                }
-            }?;
-        }
-
-        for _endpoint in config["endpoints"].as_vec().iter() {
-            log::info!("endpoint behavior not yet implemented");
+                match label["transform"].as_str() {
+                    Some("anonymize") => {
+                        let pattern = label["except_uri"].as_str().unwrap_or("^$"); // ^$ never matches; each path has at least a '/' in it.
+                        policies.insert(
+                            name.to_owned(),
+                            Policy {
+                                transform: crate::policies::anonymize,
+                                except_uri: regex::Regex::new(pattern).map_err(|e| {
+                                    Status::internal(format!(
+                                        "error '{}' parsing regular expression '{}'",
+                                        e, pattern
+                                    ))
+                                })?,
+                            },
+                        );
+                        Ok(())
+                    }
+                    Some(x) => Err(Status::internal(format!(
+                        "unknown transform: {} for label {}",
+                        x, name
+                    ))),
+                    None => Ok(()),
+                }?;
+            }
+            for _endpoint in config["endpoints"].as_vec().iter() {
+                log::info!("endpoint behavior not yet implemented");
+            }
         }
 
         // FIXME: return number of effective changes? Probably depends on how we implement
