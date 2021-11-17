@@ -23,7 +23,6 @@ echo
 $CHISEL restart
 
 # CHECK: success
-sleep 1
 
 cat << EOF | $CHISEL end-point create test2 -
 export default async function chisel(req) {
