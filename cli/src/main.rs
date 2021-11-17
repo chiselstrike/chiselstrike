@@ -21,8 +21,8 @@ use std::time::Duration;
 use structopt::StructOpt;
 use tonic::transport::Channel;
 
-// Timeout when waiting for connection or server status.
-const TIMEOUT: u64 = 10;
+// Timeout in milliseconds when waiting for connection or server status.
+const TIMEOUT: u64 = 10_100;
 
 /// Manifest defines the files that describe types, endpoints, and policies.
 ///
@@ -233,7 +233,7 @@ where
                 if total > timeout {
                     return Err(anyhow!("Timeout"));
                 }
-                thread::sleep(Duration::from_secs(wait_time));
+                thread::sleep(Duration::from_millis(wait_time));
                 total += wait_time;
                 wait_time *= 2;
             }
