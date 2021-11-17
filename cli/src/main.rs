@@ -13,6 +13,7 @@ use notify::{Event, RecommendedWatcher, RecursiveMode, Watcher};
 use regex::Regex;
 use serde_derive::Deserialize;
 use std::fs;
+use std::future::Future;
 use std::io::{stdin, Read};
 use std::path::Path;
 use std::thread;
@@ -214,32 +215,41 @@ where
     Ok(())
 }
 
-async fn connect_with_retry(server_url: String) -> ChiselRpcClient<Channel> {
+async fn with_retry<A, T, E, F, Fut>(mut a: A, mut f: F) -> T
+where
+    Fut: Future<Output = (A, Result<T, E>)>,
+    F: FnMut(A) -> Fut,
+{
     let mut wait_time = 1;
     loop {
-        match ChiselRpcClient::connect(server_url.clone()).await {
-            Ok(client) => return client,
-            Err(_) => {
-                thread::sleep(Duration::from_secs(wait_time));
-                wait_time *= 2;
-            }
-        };
-    }
-}
-
-async fn wait(server_url: String) {
-    let mut client = connect_with_retry(server_url).await;
-    let mut wait_time = 1;
-    loop {
-        let request = tonic::Request::new(StatusRequest {});
-        match client.get_status(request).await {
-            Ok(_) => break,
+        let pair = f(a).await;
+        a = pair.0;
+        match pair.1 {
+            Ok(v) => return v,
             Err(_) => {
                 thread::sleep(Duration::from_secs(wait_time));
                 wait_time *= 2;
             }
         }
     }
+}
+
+async fn connect_with_retry(server_url: String) -> ChiselRpcClient<Channel> {
+    with_retry((), |_| async {
+        let c = ChiselRpcClient::connect(server_url.clone()).await;
+        ((), c)
+    })
+    .await
+}
+
+async fn wait(server_url: String) {
+    let client = connect_with_retry(server_url).await;
+    with_retry(client, |mut client| async {
+        let request = tonic::Request::new(StatusRequest {});
+        let s = client.get_status(request).await;
+        (client, s)
+    })
+    .await;
 }
 
 fn read_manifest() -> Result<Manifest> {
