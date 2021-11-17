@@ -69,7 +69,6 @@ labels:
   - name: L2
     transform: anonymize
     except_uri: find
-  - name: pii
 EOF
 
 $CURL -o - $CHISELD_HOST/find
