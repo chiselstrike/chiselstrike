@@ -18,6 +18,7 @@ use std::path::Path;
 use std::thread;
 use std::time::Duration;
 use structopt::StructOpt;
+use tonic::transport::Channel;
 
 /// Manifest defines the files that describe types, endpoints, and policies.
 ///
@@ -213,24 +214,29 @@ where
     Ok(())
 }
 
-async fn wait(server_url: String) {
+async fn connect_with_retry(server_url: String) -> ChiselRpcClient<Channel> {
     let mut wait_time = 1;
     loop {
-        let mut client = match ChiselRpcClient::connect(server_url.clone()).await {
-            Ok(client) => client,
+        match ChiselRpcClient::connect(server_url.clone()).await {
+            Ok(client) => return client,
             Err(_) => {
                 thread::sleep(Duration::from_secs(wait_time));
                 wait_time *= 2;
-                continue;
             }
         };
+    }
+}
+
+async fn wait(server_url: String) {
+    let mut client = connect_with_retry(server_url).await;
+    let mut wait_time = 1;
+    loop {
         let request = tonic::Request::new(StatusRequest {});
         match client.get_status(request).await {
             Ok(_) => break,
             Err(_) => {
                 thread::sleep(Duration::from_secs(wait_time));
                 wait_time *= 2;
-                continue;
             }
         }
     }
