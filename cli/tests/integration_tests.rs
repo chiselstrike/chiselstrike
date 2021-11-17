@@ -31,13 +31,18 @@ mod tests {
     #[timeout(100_000)]
     fn lit() {
         let repo = repo_dir();
+        let bd = bin_dir();
+        let mut args = vec!["build"];
+        if bd.ends_with("release") {
+            args.push("--release");
+        }
         let status = Command::new("cargo")
-            .args(["build"])
+            .args(args)
             .current_dir(repo.clone())
             .status()
             .unwrap();
         assert!(status.success());
-        let chiseld = bin_dir().join("chiseld").to_str().unwrap().to_string();
+        let chiseld = bd.join("chiseld").to_str().unwrap().to_string();
         env::set_var("CHISELD", chiseld);
         env::set_var("CHISEL", chisel());
         env::set_var("CHISELD_HOST", "localhost:8080");
