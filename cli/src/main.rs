@@ -223,8 +223,9 @@ where
 
 // Retry calling 'f(a)' until it succeeds. This uses an exponential
 // backoff and gives up once the timeout has passed. On failure 'f'
-// must give 'a' back to us. That is used instead of calling 'f(&mut
-// a)' to avoid lifetime concerns.
+// must return an 'A' that we feed to the next retry.  (This can be
+// the same 'a' passed to it -- an idiomatic way to satisfy lifetime
+// constraints.)
 async fn with_retry<A, T, F, Fut>(timeout: Duration, mut a: A, mut f: F) -> Result<T>
 where
     Fut: Future<Output = Result<T, A>>,
