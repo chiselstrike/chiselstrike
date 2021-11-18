@@ -12,6 +12,7 @@ use std::panic;
 use std::sync::Arc;
 use structopt::StructOpt;
 use tokio::sync::Mutex;
+use tokio::task::JoinHandle;
 
 #[derive(StructOpt, Debug, Clone)]
 #[structopt(name = "chiseld")]
@@ -31,6 +32,9 @@ pub struct Opt {
     /// Should we wait for a debugger before executing any JS?
     #[structopt(long)]
     inspect_brk: bool,
+    /// How many executor threads to create
+    #[structopt(short, long, default_value = "1")]
+    executor_threads: usize,
 }
 
 /// Whether an action should be repeated.
@@ -39,18 +43,71 @@ pub enum DoRepeat {
     No,
 }
 
-async fn run(opt: Opt) -> Result<DoRepeat> {
+#[derive(Clone)]
+pub struct SharedState {
+    signal_rx: tokio::sync::watch::Receiver<()>,
+    readiness_tx: tokio::sync::mpsc::Sender<()>,
+    metadata_db_uri: String,
+    data_db_uri: String,
+    api_listen_addr: SocketAddr,
+    inspect_brk: bool,
+    api_service: Arc<Mutex<ApiService>>,
+    executor_threads: usize,
+}
+
+impl SharedState {
+    pub fn executor_threads(&self) -> usize {
+        self.executor_threads
+    }
+}
+
+pub struct SharedTasks {
+    rpc_task: JoinHandle<Result<()>>,
+    sig_task: JoinHandle<Result<DoRepeat>>,
+}
+
+impl SharedTasks {
+    pub async fn join(self) -> Result<DoRepeat> {
+        self.rpc_task.await??;
+        self.sig_task.await?
+    }
+}
+
+async fn run(state: SharedState) -> Result<()> {
     // FIXME: We have to create one per thread. For now we only have
     // one thread, so this is fine.
-    init_deno(opt.inspect_brk).await?;
-    let meta = MetaService::connect(&opt.metadata_db_uri).await?;
-    let query_engine = QueryEngine::connect(&opt.data_db_uri).await?;
+    init_deno(state.inspect_brk).await?;
+
+    let meta = MetaService::connect(&state.metadata_db_uri).await?;
+    let query_engine = QueryEngine::connect(&state.data_db_uri).await?;
     meta.create_schema().await?;
     let ts = meta.load_type_system().await?;
-    let api = Arc::new(Mutex::new(ApiService::new()));
-    let rpc = RpcService::new(api.clone());
+
     let rt = Runtime::new(query_engine, meta, ts);
     runtime::set(rt);
+
+    let mut rx = state.signal_rx.clone();
+    let api_task = crate::api::spawn(
+        state.api_service.clone(),
+        state.api_listen_addr,
+        async move {
+            rx.changed().await.ok();
+        },
+    );
+    state.readiness_tx.send(()).await?;
+
+    api_task.await??;
+    Ok(())
+}
+
+pub async fn run_shared_state(opt: Opt) -> Result<(SharedTasks, SharedState)> {
+    assert_eq!(
+        opt.executor_threads, 1,
+        "For now, only one executor thread supported"
+    );
+
+    let api = Arc::new(Mutex::new(ApiService::new()));
+    let rpc = RpcService::new(api.clone());
 
     let mut sigterm = tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())?;
     let mut sigint = tokio::signal::unix::signal(tokio::signal::unix::SignalKind::interrupt())?;
@@ -60,8 +117,9 @@ async fn run(opt: Opt) -> Result<DoRepeat> {
         default_hook(info);
         nix::sys::signal::raise(nix::sys::signal::Signal::SIGINT).unwrap();
     }));
-    let (tx, mut rx) = tokio::sync::watch::channel(());
-    let sig_task = tokio::task::spawn_local(async move {
+
+    let (tx, rx) = tokio::sync::watch::channel(());
+    let sig_task = tokio::task::spawn(async move {
         use futures::FutureExt;
         let res = futures::select! {
             _ = sigterm.recv().fuse() => { info!("Got SIGTERM"); DoRepeat::No },
@@ -73,21 +131,39 @@ async fn run(opt: Opt) -> Result<DoRepeat> {
         Ok(res)
     });
 
-    let mut rpc_rx = rx.clone();
-    let rpc_task = crate::rpc::spawn(rpc, opt.rpc_listen_addr, async move {
-        rpc_rx.changed().await.ok();
-    });
-    let api_task = crate::api::spawn(api.clone(), opt.api_listen_addr, async move {
-        rx.changed().await.ok();
-    });
+    // rpc server should start listening only when all threads start
+    let (readiness_tx, mut readiness_rx) = tokio::sync::mpsc::channel(opt.executor_threads);
 
-    let results = tokio::try_join!(rpc_task, api_task, sig_task)?;
-    results.0?;
-    results.1?;
-    results.2
+    let start_wait = async move {
+        for _id in 0..opt.executor_threads {
+            readiness_rx.recv().await;
+        }
+    };
+
+    let mut rpc_rx = rx.clone();
+    let shutdown = async move {
+        rpc_rx.changed().await.ok();
+    };
+
+    let rpc_task = crate::rpc::spawn(rpc, opt.rpc_listen_addr, start_wait, shutdown);
+
+    let state = SharedState {
+        signal_rx: rx,
+        readiness_tx,
+        metadata_db_uri: opt.metadata_db_uri.clone(),
+        data_db_uri: opt.data_db_uri.clone(),
+        api_listen_addr: opt.api_listen_addr,
+        inspect_brk: opt.inspect_brk,
+        executor_threads: opt.executor_threads,
+        api_service: api,
+    };
+
+    let tasks = SharedTasks { rpc_task, sig_task };
+
+    Ok((tasks, state))
 }
 
-pub async fn run_on_new_localset(opt: Opt) -> Result<DoRepeat> {
+pub async fn run_on_new_localset(state: SharedState) -> Result<()> {
     let local = tokio::task::LocalSet::new();
-    local.run_until(run(opt)).await
+    local.run_until(run(state)).await
 }

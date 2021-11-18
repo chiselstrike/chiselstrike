@@ -228,14 +228,18 @@ impl ChiselRpc for RpcService {
 pub fn spawn(
     rpc: RpcService,
     addr: SocketAddr,
+    start_wait: impl core::future::Future<Output = ()> + Send + 'static,
     shutdown: impl core::future::Future<Output = ()> + Send + 'static,
-) -> tokio::task::JoinHandle<Result<(), tonic::transport::Error>> {
-    tokio::task::spawn_local(async move {
+) -> tokio::task::JoinHandle<anyhow::Result<()>> {
+    tokio::task::spawn(async move {
+        start_wait.await;
+
         let ret = Server::builder()
             .add_service(ChiselRpcServer::new(rpc))
             .serve_with_shutdown(addr, shutdown)
             .await;
         info!("Tonic shutdown");
-        ret
+        ret?;
+        Ok(())
     })
 }

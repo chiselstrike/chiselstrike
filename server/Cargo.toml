@@ -37,6 +37,7 @@ tokio-stream = { version = "0.1.7", features = ["signal"] }
 tonic = "0.5.2"
 url = "2.2.2"
 yaml-rust = "0.4"
+enclose = "1.1"
 
 [build-dependencies]
 tonic-build = "0.5.2"

@@ -1092,6 +1092,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "enclose"
+version = "1.1.8"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1056f553da426e9c025a662efa48b52e62e0a3a7648aa2d15aeaaf7f0d329357"
+
+[[package]]
 name = "encoding_rs"
 version = "0.8.29"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3579,6 +3585,7 @@ dependencies = [
  "deno_core",
  "deno_runtime",
  "deno_web",
+ "enclose",
  "futures",
  "hyper 0.14.13 (git+https://github.com/hyperium/hyper?rev=1d553e52c6953ea3b039f5c3f89d35cb56e2436a)",
  "itertools 0.10.1",
