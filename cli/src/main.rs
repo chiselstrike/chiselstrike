@@ -1,5 +1,6 @@
 // SPDX-FileCopyrightText: © 2021 ChiselStrike <info@chiselstrike.com>
 
+use crate::chisel::StatusResponse;
 use anyhow::{anyhow, Context, Result};
 use chisel::chisel_rpc_client::ChiselRpcClient;
 use chisel::{
@@ -21,8 +22,8 @@ use std::time::Duration;
 use structopt::StructOpt;
 use tonic::transport::Channel;
 
-// Timeout in milliseconds when waiting for connection or server status.
-const TIMEOUT: u64 = 10_100;
+// Timeout when waiting for connection or server status.
+const TIMEOUT: Duration = Duration::from_secs(10);
 
 /// Manifest defines the files that describe types, endpoints, and policies.
 ///
@@ -220,13 +221,17 @@ where
     Ok(())
 }
 
-async fn with_retry<A, T, F, Fut>(timeout: u64, mut a: A, mut f: F) -> Result<T>
+// Retry calling 'f(a)' until it succeeds. This uses an exponential
+// backoff and gives up once the timeout has passed. On failure 'f'
+// must give 'a' back to us. That is used instead of calling 'f(&mut
+// a)' to avoid lifetime concerns.
+async fn with_retry<A, T, F, Fut>(timeout: Duration, mut a: A, mut f: F) -> Result<T>
 where
     Fut: Future<Output = Result<T, A>>,
     F: FnMut(A) -> Fut,
 {
-    let mut wait_time = 1;
-    let mut total = 0;
+    let mut wait_time = Duration::from_millis(1);
+    let mut total = Duration::from_millis(0);
     loop {
         match f(a).await {
             Ok(v) => return Ok(v),
@@ -235,7 +240,7 @@ where
                 if total > timeout {
                     return Err(anyhow!("Timeout"));
                 }
-                thread::sleep(Duration::from_millis(wait_time));
+                thread::sleep(wait_time);
                 total += wait_time;
                 wait_time *= 2;
             }
@@ -251,7 +256,6 @@ async fn connect_with_retry(server_url: String) -> Result<ChiselRpcClient<Channe
     .await
 }
 
-use crate::chisel::StatusResponse;
 async fn wait(server_url: String) -> Result<tonic::Response<StatusResponse>> {
     let client = connect_with_retry(server_url).await?;
     with_retry(TIMEOUT, client, |mut client| async {
