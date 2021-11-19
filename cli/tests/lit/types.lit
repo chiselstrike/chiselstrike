@@ -2,7 +2,6 @@
 
 # RUN: sh -e @file
 
-mkdir -p "$TEMPDIR/types"
 cd "$TEMPDIR"
 
 cat << EOF > "$TEMPDIR/types/types.graphql"

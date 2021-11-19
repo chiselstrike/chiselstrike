@@ -2,8 +2,6 @@
 
 # RUN: sh -e @file
 
-mkdir -p "$TEMPDIR/types"
-
 cat << EOF > "$TEMPDIR/types/types.graphql"
   type TestLabelsPersist1 {
     one: String @a @b
