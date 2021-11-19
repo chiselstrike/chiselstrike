@@ -2,13 +2,16 @@
 
 # RUN: sh -e @file
 
-$CHISEL type import examples/person.graphql
+mkdir -p "$TEMPDIR/types" "$TEMPDIR/endpoints"
+cp examples/person.graphql "$TEMPDIR/types"
+cp examples/csv.js examples/find.js "$TEMPDIR/endpoints"
+
+cd "$TEMPDIR"
+$CHISEL apply
 
 # CHECK: Type defined: Person
-
-$CHISEL end-point create csv examples/csv.js
-
 # CHECK: End point defined: /csv
+# CHECK: End point defined: /find
 
 $CURL --data '
 adam,smith
@@ -19,10 +22,6 @@ jill,lasalle
 ' $CHISELD_HOST/csv
 
 # CHECK: ok
-
-$CHISEL end-point create find examples/find.js
-
-# CHECK: End point defined: /find
 
 $CURL -o - $CHISELD_HOST/find
 

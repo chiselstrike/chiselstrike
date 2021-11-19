@@ -2,10 +2,14 @@
 
 # RUN: sh -e @file
 
-cat << EOF | $CHISEL type import -
+mkdir -p "$TEMPDIR/types"
+cd "$TEMPDIR"
+
+cat << EOF > "$TEMPDIR/types/types.graphql"
 type Foo { a: String }
 type Bar { a: String }
 EOF
+$CHISEL apply
 
 # CHECK: Type defined: Foo
 # CHECK: Type defined: Bar
@@ -20,10 +24,11 @@ $CHISEL type export
 # CHECK:   [[^ *a: String]]
 # CHECK: }
 
-set +e
-cat << EOF | $CHISEL type import - 2>&1
+cat << EOF > "$TEMPDIR/types/types.graphql"
 type Zed { a: String, a: String }
 EOF
+set +e
+$CHISEL apply 2>&1
 set -e
 
 # CHECK: UNIQUE constraint failed: field_names.field_name
