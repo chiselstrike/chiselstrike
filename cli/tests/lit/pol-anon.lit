@@ -2,7 +2,6 @@
 
 # RUN: sh -e @file
 
-mkdir -p "$TEMPDIR/types" "$TEMPDIR/endpoints" "$TEMPDIR/policies"
 cp examples/person.graphql "$TEMPDIR/types"
 cp examples/store.js "$TEMPDIR/endpoints/ins.js"
 cp examples/find.js "$TEMPDIR/endpoints/"

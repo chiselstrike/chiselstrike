@@ -2,8 +2,6 @@
 
 # RUN: sh -e @file
 
-mkdir -p "$TEMPDIR/types"
-
 echo 'type TestLabels {foo: String @a @b}' > "$TEMPDIR/types/types.graphql"
 
 cd "$TEMPDIR"

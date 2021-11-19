@@ -2,7 +2,6 @@
 
 # RUN: sh -e @file
 
-mkdir -p "$TEMPDIR/types" "$TEMPDIR/endpoints" "$TEMPDIR/policies"
 cat << EOF > "$TEMPDIR/types/foo.graphql"
 type Foo {
   a: String @L1
