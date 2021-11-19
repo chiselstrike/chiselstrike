@@ -1,6 +1,6 @@
 # SPDX-FileCopyrightText: © 2021 ChiselStrike <info@chiselstrike.com>
 
-# RUN: CURL="@curl" sh -e @file
+# RUN: sh -e @file
 
 mkdir -p "$TEMPDIR/types" "$TEMPDIR/endpoints" "$TEMPDIR/policies"
 cat << EOF > "$TEMPDIR/types/foo.graphql"
