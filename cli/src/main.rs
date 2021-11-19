@@ -73,6 +73,7 @@ impl Manifest {
                 }
             }
         }
+        paths.sort_unstable();
         Ok(paths)
     }
 }
