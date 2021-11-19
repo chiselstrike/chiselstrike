@@ -1,6 +1,6 @@
 # SPDX-FileCopyrightText: © 2021 ChiselStrike <info@chiselstrike.com>
 
-# RUN: sh -ex @file
+# RUN: sh -e @file
 
 echo 'type TestLabels {foo: String @a @b}' | $CHISEL type import -
 
