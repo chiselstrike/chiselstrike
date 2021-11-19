@@ -151,10 +151,6 @@ enum Command {
         #[structopt(subcommand)]
         cmd: TypeCommand,
     },
-    EndPoint {
-        #[structopt(subcommand)]
-        cmd: EndPointCommand,
-    },
     Restart,
     Wait,
     Policy {
@@ -168,11 +164,6 @@ enum Command {
 enum TypeCommand {
     /// Export the type system.
     Export,
-}
-
-#[derive(StructOpt, Debug)]
-enum EndPointCommand {
-    Create { path: String, filename: String },
 }
 
 #[derive(StructOpt, Debug)]
@@ -417,12 +408,6 @@ async fn main() -> Result<()> {
             let response = client.get_status(request).await?.into_inner();
             println!("Server status is {}", response.message);
         }
-        Command::EndPoint { cmd } => match cmd {
-            EndPointCommand::Create { path, filename } => {
-                let mut client = ChiselRpcClient::connect(server_url).await?;
-                create_endpoint(&mut client, path, filename).await?
-            }
-        },
         Command::Type { cmd } => match cmd {
             TypeCommand::Export => {
                 let mut client = ChiselRpcClient::connect(server_url).await?;
