@@ -1,6 +1,6 @@
 # SPDX-FileCopyrightText: © 2021 ChiselStrike <info@chiselstrike.com>
 
-# RUN: CURL="@curl" sh -e @file
+# RUN: sh -e @file
 
 cat << EOF | $CHISEL end-point create title -
 const titles = {'glauber': 'CEO', 'dejan': 'CTO'}
