@@ -2,7 +2,12 @@
 
 # RUN: sh -e @file
 
-echo 'type TestLabels {foo: String @a @b}' | $CHISEL type import -
+mkdir -p "$TEMPDIR/types"
+
+echo 'type TestLabels {foo: String @a @b}' > "$TEMPDIR/types/types.graphql"
+
+cd "$TEMPDIR"
+$CHISEL apply
 
 $CHISEL type export
 

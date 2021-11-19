@@ -2,7 +2,9 @@
 
 # RUN: sh -e @file
 
-cat << EOF | $CHISEL type import -
+mkdir -p "$TEMPDIR/types"
+
+cat << EOF > "$TEMPDIR/types/types.graphql"
   type TestLabelsPersist1 {
     one: String @a @b
     two: String @a
@@ -13,6 +15,9 @@ cat << EOF | $CHISEL type import -
     four: String @a
   }
 EOF
+
+cd "$TEMPDIR"
+$CHISEL apply
 
 $CHISEL restart
 

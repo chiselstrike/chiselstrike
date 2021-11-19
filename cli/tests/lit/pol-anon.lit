@@ -2,12 +2,16 @@
 
 # RUN: sh -e @file
 
-$CHISEL type import examples/person.graphql
+mkdir -p "$TEMPDIR/types" "$TEMPDIR/endpoints" "$TEMPDIR/policies"
+cp examples/person.graphql "$TEMPDIR/types"
+cp examples/store.js "$TEMPDIR/endpoints/ins.js"
+cp examples/find.js "$TEMPDIR/endpoints/"
+
+cd "$TEMPDIR"
+$CHISEL apply
 
 # CHECK: Type defined: Person
-
-$CHISEL end-point create ins examples/store.js
-
+# CHECK: End point defined: /find
 # CHECK: End point defined: /ins
 
 $CURL --data '{
@@ -20,27 +24,24 @@ $CURL --data '{
 
 # CHECK: ok
 
-$CHISEL end-point create find examples/find.js
-
-# CHECK: End point defined: /find
-
 $CURL -o - $CHISELD_HOST/find
 
 # CHECK: HTTP/1.1 200 OK
 # CHECK: hello world 2147483647 false 12742333
 
-cat << EOF | $CHISEL policy update -
+cat << EOF > "$TEMPDIR/policies/pol.yaml"
 labels:
   - name: pii
     transform: anonymize
 EOF
+$CHISEL apply
 
 $CURL -o - $CHISELD_HOST/find
 
 # CHECK: HTTP/1.1 200 OK
 # CHECK: hello xxxxx
 
-cat << EOF | $CHISEL type import -
+cat << EOF > "$TEMPDIR/types/person.graphql"
 type Person {
   first_name: String @L1 @L2 @L3
   last_name: String @pii @L2
@@ -49,8 +50,9 @@ type Person {
   height: Float
 }
 EOF
+$CHISEL apply
 
-cat << EOF | $CHISEL policy update -
+cat << EOF > "$TEMPDIR/policies/pol.yaml"
 labels:
   - name: Linf
     transform: anonymize
@@ -58,40 +60,44 @@ labels:
   - name: L2
     transform: anonymize
 EOF
+$CHISEL apply
 
 $CURL -o - $CHISELD_HOST/find
 
 # CHECK: HTTP/1.1 200 OK
 # CHECK: xxxxx xxxxx
 
-cat << EOF | $CHISEL policy update -
+cat << EOF > "$TEMPDIR/policies/pol.yaml"
 labels:
   - name: L2
     transform: anonymize
     except_uri: find
 EOF
+$CHISEL apply
 
 $CURL -o - $CHISELD_HOST/find
 # CHECK: HTTP/1.1 200 OK
 # CHECK: hello world
 
-cat << EOF | $CHISEL policy update -
+cat << EOF > "$TEMPDIR/policies/pol.yaml"
 labels:
   - name: L2
     transform: anonymize
     except_uri: d$
 EOF
+$CHISEL apply
 
 $CURL -o - $CHISELD_HOST/find
 # CHECK: HTTP/1.1 200 OK
 # CHECK: hello world
 
-cat << EOF | $CHISEL policy update -
+cat << EOF > "$TEMPDIR/policies/pol.yaml"
 labels:
   - name: L2
     transform: anonymize
     except_uri: ^no_match
 EOF
+$CHISEL apply
 
 $CURL -o - $CHISELD_HOST/find
 # CHECK: HTTP/1.1 200 OK
