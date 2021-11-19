@@ -271,14 +271,23 @@ const TYPES_DIR: &str = "./types";
 const ENDPOINTS_DIR: &str = "./endpoints";
 const POLICIES_DIR: &str = "./policies";
 
+fn if_is_dir(path: &str) -> Vec<String> {
+    let mut ret = vec![];
+    if Path::new(path).is_dir() {
+        ret.push(path.to_string());
+    }
+    ret
+}
+
 fn read_manifest() -> Result<Manifest> {
     Ok(match read_to_string("Chisel.toml") {
         Ok(manifest) => toml::from_str(&manifest)?,
-        _ => Manifest::new(
-            vec![TYPES_DIR.to_string()],
-            vec![ENDPOINTS_DIR.to_string()],
-            vec![POLICIES_DIR.to_string()],
-        ),
+        _ => {
+            let types = if_is_dir(TYPES_DIR);
+            let endpoints = if_is_dir(ENDPOINTS_DIR);
+            let policies = if_is_dir(POLICIES_DIR);
+            Manifest::new(types, endpoints, policies)
+        }
     })
 }
 
