@@ -51,7 +51,6 @@ pub struct SharedState {
     data_db_uri: String,
     api_listen_addr: SocketAddr,
     inspect_brk: bool,
-    api_service: Arc<Mutex<ApiService>>,
     executor_threads: usize,
 }
 
@@ -74,6 +73,8 @@ impl SharedTasks {
 }
 
 async fn run(state: SharedState) -> Result<()> {
+    let api_service = Arc::new(Mutex::new(ApiService::new()));
+
     // FIXME: We have to create one per thread. For now we only have
     // one thread, so this is fine.
     init_deno(state.inspect_brk).await?;
@@ -83,17 +84,13 @@ async fn run(state: SharedState) -> Result<()> {
     meta.create_schema().await?;
     let ts = meta.load_type_system().await?;
 
-    let rt = Runtime::new(query_engine, meta, ts);
+    let rt = Runtime::new(api_service.clone(), query_engine, meta, ts);
     runtime::set(rt);
 
     let mut rx = state.signal_rx.clone();
-    let api_task = crate::api::spawn(
-        state.api_service.clone(),
-        state.api_listen_addr,
-        async move {
-            rx.changed().await.ok();
-        },
-    );
+    let api_task = crate::api::spawn(api_service, state.api_listen_addr, async move {
+        rx.changed().await.ok();
+    });
     state.readiness_tx.send(()).await?;
 
     api_task.await??;
@@ -106,8 +103,7 @@ pub async fn run_shared_state(opt: Opt) -> Result<(SharedTasks, SharedState)> {
         "For now, only one executor thread supported"
     );
 
-    let api = Arc::new(Mutex::new(ApiService::new()));
-    let rpc = RpcService::new(api.clone());
+    let rpc = RpcService::new();
 
     let mut sigterm = tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())?;
     let mut sigint = tokio::signal::unix::signal(tokio::signal::unix::SignalKind::interrupt())?;
@@ -155,7 +151,6 @@ pub async fn run_shared_state(opt: Opt) -> Result<(SharedTasks, SharedState)> {
         api_listen_addr: opt.api_listen_addr,
         inspect_brk: opt.inspect_brk,
         executor_threads: opt.executor_threads,
-        api_service: api,
     };
 
     let tasks = SharedTasks { rpc_task, sig_task };

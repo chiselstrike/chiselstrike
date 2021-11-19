@@ -1,12 +1,15 @@
 // SPDX-FileCopyrightText: © 2021 ChiselStrike <info@chiselstrike.com>
 
+use crate::api::ApiService;
 use crate::policies::{FieldPolicies, LabelPolicies};
 use crate::query::{MetaService, QueryEngine};
 use crate::types::{ObjectType, TypeSystem};
 use once_cell::sync::OnceCell;
+use std::sync::Arc;
 use tokio::sync::{Mutex, MutexGuard};
 
 pub struct Runtime {
+    pub api: Arc<Mutex<ApiService>>,
     pub query_engine: QueryEngine,
     pub meta: MetaService,
     pub type_system: TypeSystem,
@@ -14,8 +17,14 @@ pub struct Runtime {
 }
 
 impl Runtime {
-    pub fn new(query_engine: QueryEngine, meta: MetaService, type_system: TypeSystem) -> Self {
+    pub fn new(
+        api: Arc<Mutex<ApiService>>,
+        query_engine: QueryEngine,
+        meta: MetaService,
+        type_system: TypeSystem,
+    ) -> Self {
         Self {
+            api,
             query_engine,
             meta,
             type_system,

@@ -1,6 +1,5 @@
 // SPDX-FileCopyrightText: © 2021 ChiselStrike <info@chiselstrike.com>
 
-use crate::api::ApiService;
 use crate::deno;
 use crate::policies::Policy;
 use crate::query::QueryError;
@@ -17,8 +16,6 @@ use convert_case::{Case, Casing};
 use futures::FutureExt;
 use log::debug;
 use std::net::SocketAddr;
-use std::sync::Arc;
-use tokio::sync::Mutex;
 use tonic::{transport::Server, Request, Response, Status};
 use yaml_rust::YamlLoader;
 
@@ -31,13 +28,12 @@ pub mod chisel {
 /// The RPC service provides a Protobuf-based interface for Chisel control
 /// plane. For example, the service has RPC calls for managing types and
 /// endpoints. The user-generated data plane endpoints are serviced with REST.
-pub struct RpcService {
-    api: Arc<Mutex<ApiService>>,
-}
+#[derive(Default)]
+pub struct RpcService {}
 
 impl RpcService {
-    pub fn new(api: Arc<Mutex<ApiService>>) -> Self {
-        RpcService { api }
+    pub fn new() -> Self {
+        Self {}
     }
 
     async fn create_js_endpoint(&self, path: &str, code: String) {
@@ -46,7 +42,9 @@ impl RpcService {
             let path = path.to_owned();
             move |req| deno::run_js(path.clone(), req).boxed_local()
         };
-        self.api.lock().await.add_route(path, Box::new(func));
+
+        let runtime = &mut runtime::get().await;
+        runtime.api.lock().await.add_route(path, Box::new(func));
     }
 }
 
@@ -166,7 +164,9 @@ impl ChiselRpc for RpcService {
 
         let regex = regex::Regex::new(&request.path.unwrap_or_else(|| ".*".into()))
             .map_err(|x| Status::internal(format!("invalid regex: {}", x)))?;
-        let removed = self.api.lock().await.remove_routes(regex) as i32;
+
+        let runtime = &mut runtime::get().await;
+        let removed = runtime.api.lock().await.remove_routes(regex) as i32;
 
         let response = EndPointRemoveResponse { removed };
         Ok(Response::new(response))
