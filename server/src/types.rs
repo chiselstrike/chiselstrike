@@ -14,7 +14,7 @@ pub enum TypeSystemError {
     UnsafeReplacement(String),
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct TypeSystem {
     pub types: HashMap<String, ObjectType>,
 }
@@ -90,6 +90,12 @@ impl TypeSystem {
                 None => Err(TypeSystemError::NoSuchType(type_name.to_owned())),
             },
         }
+    }
+
+    /// Update the current TypeSystem object from another instance
+    pub fn update(&mut self, other: &TypeSystem) {
+        self.types.clear();
+        self.types = other.types.clone();
     }
 }
 
