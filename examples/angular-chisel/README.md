@@ -12,17 +12,10 @@ This guide expects you to be in the `examples/angular-chisel` folder.
 chiseld
 ```
 
-### Define types:
+### Apply the file:
 
 ```bash
-chisel type import graphql/types.graphql
-```
-
-### Define endpoints:
-
-```
-chisel end-point create api/import_images endpoints/import_images.js
-chisel end-point create api/get_random_images endpoints/get_random_images.js
+chisel appy
 ```
 
 ### Finally, to run the angular server:

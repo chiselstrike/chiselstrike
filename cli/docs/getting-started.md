@@ -17,18 +17,19 @@ Next, we will define some types in the ChiselStrike type system.
 ## Types 
 
 Types are a way to define domain objects in your application.
-The types are defined using GraphQL schemas and registered to ChiselStrike via the `chisel type import` command.
+The types are defined using GraphQL schemas and registered to ChiselStrike via the `chisel apply` command.
 
-For example, to define a type `Person` with two `String` fields, `first_name` and `last_name`, run:
+For example, to define a type `Person` with two `String` fields,
+`first_name` and `last_name`, create a file in the `types` directory with
 
 ```
-cat << EOF | chisel type import -
 type Person {
   first_name: String
   last_name: String
 }
-EOF
 ```
+
+and run `chisel apply`.
 
 The command will output the following:
 

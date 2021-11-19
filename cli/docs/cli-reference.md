@@ -18,19 +18,6 @@ If a `Chisel.toml` file does not exists, types are read from a `types` directory
 
 The `chisel status` command queries a ChiselStrike server for its status.
 
-## `chisel type import [FILENAME]`
-
-The `chisel type import` command imports types from a definition file to the ChiselStrike type system.
-
-The definition file is in GraphQL schema definition format. Example file looks as follows:
-
-```
-type Person {
-  first_name: String,
-  last_name: String,
-}
-```
-
 ## `chisel end-point create [PATH] [FILENAME]`
 
 Creates a new endpoint at the given path that executes the code from

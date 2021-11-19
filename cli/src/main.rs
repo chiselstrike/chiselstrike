@@ -129,11 +129,6 @@ enum Command {
 
 #[derive(StructOpt, Debug)]
 enum TypeCommand {
-    /// Import types to the type system.
-    Import {
-        /// Type definition input file.
-        filename: String,
-    },
     /// Export the type system.
     Export,
 }
@@ -398,10 +393,6 @@ async fn main() -> Result<()> {
             }
         },
         Command::Type { cmd } => match cmd {
-            TypeCommand::Import { filename } => {
-                let mut client = ChiselRpcClient::connect(server_url).await?;
-                import_types(&mut client, filename).await?;
-            }
             TypeCommand::Export => {
                 let mut client = ChiselRpcClient::connect(server_url).await?;
                 let request = tonic::Request::new(TypeExportRequest {});
