@@ -14,18 +14,12 @@ Then, start up ChiselStrike server:
 chiseld
 ```
 
-Define types:
+and apply the files
 
 ```bash
-chisel type import examples/nextjs-chisel/types.graphql
+chisel appy
 ```
 
-Define endpoint:
-
-```
-chisel end-point create api/import_person examples/nextjs-chisel/endpoints/import_person.js
-chisel end-point create api/get_all_people examples/nextjs-chisel/endpoints/get_all_people.js
-```
 
 TODO: Insert some data to database.
 
