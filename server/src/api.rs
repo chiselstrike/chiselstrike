@@ -110,6 +110,17 @@ impl ApiService {
         }
     }
 
+    /// Remove all routes that match this regular expression, and return
+    /// the amount of routes removed.
+    pub fn remove_routes(&mut self, path: regex::Regex) -> usize {
+        let before = self.paths.len();
+        self.paths.retain(|x| {
+            let s = x.0.clone().into_os_string().into_string().unwrap();
+            !path.is_match(&s)
+        });
+        before - self.paths.len()
+    }
+
     pub async fn route(
         &mut self,
         req: Request<hyper::Body>,

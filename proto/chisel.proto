@@ -46,6 +46,14 @@ message EndPointCreationResponse {
   string message = 1;
 }
 
+message EndPointRemoveRequest {
+  optional string path = 1;
+}
+
+message EndPointRemoveResponse {
+  int32 removed = 1;
+}
+
 message RestartRequest { }
 
 message RestartResponse {
@@ -65,6 +73,7 @@ service ChiselRpc {
   rpc AddType (AddTypeRequest) returns (AddTypeResponse);
   rpc ExportTypes (TypeExportRequest) returns (TypeExportResponse);
   rpc CreateEndPoint (EndPointCreationRequest) returns (EndPointCreationResponse);
+  rpc RemoveEndPoint (EndPointRemoveRequest) returns (EndPointRemoveResponse);
   rpc Restart (RestartRequest) returns (RestartResponse);
   rpc PolicyUpdate (PolicyUpdateRequest) returns (PolicyUpdateResponse);
 }
