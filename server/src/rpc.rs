@@ -9,8 +9,9 @@ use crate::types::{Field, ObjectType, TypeSystemError};
 use chisel::chisel_rpc_server::{ChiselRpc, ChiselRpcServer};
 use chisel::{
     AddTypeRequest, AddTypeResponse, EndPointCreationRequest, EndPointCreationResponse,
-    PolicyUpdateRequest, PolicyUpdateResponse, RestartRequest, RestartResponse, StatusRequest,
-    StatusResponse, TypeExportRequest, TypeExportResponse,
+    EndPointRemoveRequest, EndPointRemoveResponse, PolicyUpdateRequest, PolicyUpdateResponse,
+    RestartRequest, RestartResponse, StatusRequest, StatusResponse, TypeExportRequest,
+    TypeExportResponse,
 };
 use convert_case::{Case, Casing};
 use futures::FutureExt;
@@ -154,6 +155,20 @@ impl ChiselRpc for RpcService {
         let code = request.code;
         self.create_js_endpoint(&path, code).await;
         let response = EndPointCreationResponse { message: path };
+        Ok(Response::new(response))
+    }
+
+    async fn remove_end_point(
+        &self,
+        request: Request<EndPointRemoveRequest>,
+    ) -> Result<Response<EndPointRemoveResponse>, Status> {
+        let request = request.into_inner();
+
+        let regex = regex::Regex::new(&request.path.unwrap_or_else(|| ".*".into()))
+            .map_err(|x| Status::internal(format!("invalid regex: {}", x)))?;
+        let removed = self.api.lock().await.remove_routes(regex) as i32;
+
+        let response = EndPointRemoveResponse { removed };
         Ok(Response::new(response))
     }
 

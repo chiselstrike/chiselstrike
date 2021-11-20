@@ -4,8 +4,8 @@ use crate::chisel::StatusResponse;
 use anyhow::{anyhow, Context, Result};
 use chisel::chisel_rpc_client::ChiselRpcClient;
 use chisel::{
-    AddTypeRequest, EndPointCreationRequest, FieldDefinition, PolicyUpdateRequest, RestartRequest,
-    StatusRequest, TypeExportRequest,
+    AddTypeRequest, EndPointCreationRequest, EndPointRemoveRequest, FieldDefinition,
+    PolicyUpdateRequest, RestartRequest, StatusRequest, TypeExportRequest,
 };
 use futures::channel::mpsc::channel;
 use futures::{SinkExt, StreamExt};
@@ -304,6 +304,9 @@ async fn apply(server_url: String) -> Result<()> {
         // FIXME: will fail the second time until we implement type evolution
         import_types(&mut client, entry).await?;
     }
+
+    let request = tonic::Request::new(EndPointRemoveRequest { path: None });
+    client.remove_end_point(request).await?;
 
     for entry in endpoints {
         // FIXME: disambiguate endpoint and endpoint.js. If you have both, this has to
