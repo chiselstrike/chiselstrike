@@ -2,7 +2,7 @@
 
 # RUN: sh -e @file
 
-cat << EOF | $CHISEL end-point create echo -
+cat << EOF > "$TEMPDIR/endpoints/echo.js"
 // This function produces a response whose body is a json of the request
 export default async function chisel(req) {
     // The replacer function is not async, so read the body first.
@@ -33,6 +33,9 @@ export default async function chisel(req) {
     return new Response(body);
 }
 EOF
+
+cd "$TEMPDIR"
+$CHISEL apply
 
 # CHECK: End point defined: /echo
 

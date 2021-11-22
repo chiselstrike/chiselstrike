@@ -2,7 +2,7 @@
 
 # RUN: sh -e @file
 
-cat << EOF | $CHISEL end-point create test1 -
+cat << EOF > "$TEMPDIR/endpoints/test1.js"
 function foo() {
     return "test OK"
 }
@@ -11,6 +11,9 @@ export default async function chisel(req) {
     return new Response(foo());
 }
 EOF
+
+cd "$TEMPDIR"
+$CHISEL apply
 
 # CHECK: End point defined: /test1
 
@@ -24,11 +27,12 @@ $CHISEL restart
 
 # CHECK: success
 
-cat << EOF | $CHISEL end-point create test2 -
+cat << EOF > "$TEMPDIR/endpoints/test2.js"
 export default async function chisel(req) {
     return new Response(foo());
 }
 EOF
+$CHISEL apply
 
 # CHECK: End point defined: /test2
 

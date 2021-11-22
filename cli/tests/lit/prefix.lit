@@ -2,11 +2,14 @@
 
 # RUN: sh -e @file
 
-cat << EOF | $CHISEL end-point create foo -
+cat << EOF > "$TEMPDIR/endpoints/foo.js"
 export default async function chisel(req) {
     return new Response("foo with url " + req.url + "\n");
 }
 EOF
+
+cd "$TEMPDIR"
+$CHISEL apply
 
 # CHECK: End point defined: /foo
 

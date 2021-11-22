@@ -2,7 +2,7 @@
 
 # RUN: sh -e @file
 
-cat << EOF | $CHISEL end-point create test1 -
+cat << EOF > "$TEMPDIR/endpoints/test1.js"
 export default async function chisel(req) {
     let res = Deno.core.resources();
     if (res[3] !== "chisel_server::deno::BodyResource") {
@@ -20,16 +20,7 @@ export default async function chisel(req) {
 }
 EOF
 
-# CHECK: End point defined: /test1
-
-$CURL --data foobar -o - $CHISELD_HOST/test1
-
-# CHECK: HTTP/1.1 200 OK
-# CHECK: test1 is ok
-
-echo
-
-cat << EOF | $CHISEL end-point create test2 -
+cat << EOF > "$TEMPDIR/endpoints/test2.js"
 export default async function chisel(req) {
     let res = Deno.core.resources();
     if (res[4] !== "chisel_server::deno::BodyResource") {
@@ -44,7 +35,19 @@ export default async function chisel(req) {
 }
 EOF
 
+cd "$TEMPDIR"
+$CHISEL apply
+
+# CHECK: End point defined: /test1
 # CHECK: End point defined: /test2
+
+$CURL --data foobar -o - $CHISELD_HOST/test1
+
+echo
+
+# CHECK: HTTP/1.1 200 OK
+# CHECK: test1 is ok
+
 
 $CURL --data foobar -o - $CHISELD_HOST/test2
 

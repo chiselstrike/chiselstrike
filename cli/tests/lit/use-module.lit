@@ -2,13 +2,16 @@
 
 # RUN: sh -e @file
 
-cat << EOF | $CHISEL end-point create pad -
+cat << EOF > "$TEMPDIR/endpoints/pad.js"
 import indent from 'https://cdn.skypack.dev/pin/indent-string@v5.0.0-VgKPSgi4hUX5NbF4n3aC/mode=imports,min/optimized/indent-string.js'
 
 export default async function chisel(req) {
     return new Response("test" + indent("foo\n", 4));
 }
 EOF
+
+cd "$TEMPDIR"
+$CHISEL apply
 
 # CHECK: End point defined: /pad
 

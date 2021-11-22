@@ -2,7 +2,7 @@
 
 # RUN: sh -e @file
 
-cat << EOF | $CHISEL end-point create title -
+cat << EOF > "$TEMPDIR/endpoints/title.js"
 const titles = {'glauber': 'CEO', 'dejan': 'CTO'}
 
 export default async function chisel(req) {
@@ -12,6 +12,9 @@ export default async function chisel(req) {
     return new Response(ret + '\n');
 }
 EOF
+
+cd "$TEMPDIR"
+$CHISEL apply
 
 # CHECK: End point defined: /title
 

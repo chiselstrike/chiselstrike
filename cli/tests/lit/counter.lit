@@ -2,13 +2,16 @@
 
 # RUN: sh -e @file
 
-cat << EOF | $CHISEL end-point create counter -
+cat << EOF > "$TEMPDIR/endpoints/counter.js"
 let count = 0;
 export default async function chisel(req) {
     count += 1;
     return new Response("Requests so far: " + count + ".\n");
 }
 EOF
+
+cd "$TEMPDIR"
+$CHISEL apply
 
 # CHECK: End point defined: /counter
 
@@ -21,13 +24,14 @@ $CURL -o - $CHISELD_HOST/counter
 # CHECK: HTTP/1.1 200 OK
 # CHECK: Requests so far: 2.
 
-cat << EOF | $CHISEL end-point create counter -
+cat << EOF > "$TEMPDIR/endpoints/counter.js"
 let count = 0;
 export default async function chisel(req) {
     count += 1;
     return new Response("Requests so far: " + count + "!\n");
 }
 EOF
+$CHISEL apply
 
 # CHECK: End point defined: /counter
 
