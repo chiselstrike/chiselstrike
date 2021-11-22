@@ -16,7 +16,7 @@ use serde_derive::Deserialize;
 use std::fs;
 use std::future::Future;
 use std::io::{stdin, Read};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::thread;
 use std::time::Duration;
 use structopt::StructOpt;
@@ -50,19 +50,19 @@ impl Manifest {
         }
     }
 
-    pub fn types(&self) -> Result<Vec<std::path::PathBuf>, anyhow::Error> {
+    pub fn types(&self) -> Result<Vec<PathBuf>, anyhow::Error> {
         Self::dirs_to_paths(&self.types)
     }
 
-    pub fn endpoints(&self) -> Result<Vec<std::path::PathBuf>, anyhow::Error> {
+    pub fn endpoints(&self) -> Result<Vec<PathBuf>, anyhow::Error> {
         Self::dirs_to_paths(&self.endpoints)
     }
 
-    pub fn policies(&self) -> Result<Vec<std::path::PathBuf>, anyhow::Error> {
+    pub fn policies(&self) -> Result<Vec<PathBuf>, anyhow::Error> {
         Self::dirs_to_paths(&self.policies)
     }
 
-    fn dirs_to_paths(dirs: &[String]) -> Result<Vec<std::path::PathBuf>, anyhow::Error> {
+    fn dirs_to_paths(dirs: &[String]) -> Result<Vec<PathBuf>, anyhow::Error> {
         let mut paths = vec![];
         for dir in dirs {
             for dentry in read_dir(dir)? {
