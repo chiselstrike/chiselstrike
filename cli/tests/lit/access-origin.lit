@@ -2,23 +2,13 @@
 
 # RUN: sh -e @file
 
-cat << EOF | $CHISEL end-point create foo -
+cat << EOF > "$TEMPDIR/endpoints/foo.js"
 export default async function chisel(req) {
     return new Response("foo");
 }
 EOF
 
-# CHECK: End point defined: /foo
-
-$CURL -o - $CHISELD_HOST/foo
-
-# CHECK: HTTP/1.1 200 OK
-# CHECK: access-control-allow-origin: *
-# CHECK: foo
-
-echo
-
-cat << EOF | $CHISEL end-point create bar -
+cat << EOF > "$TEMPDIR/endpoints/bar.js"
 export default async function chisel(req) {
     return new Response("bar", {
         headers: [
@@ -28,7 +18,19 @@ export default async function chisel(req) {
 }
 EOF
 
+cd "$TEMPDIR"
+$CHISEL apply
+
 # CHECK: End point defined: /bar
+# CHECK: End point defined: /foo
+
+$CURL -o - $CHISELD_HOST/foo
+
+# CHECK: HTTP/1.1 200 OK
+# CHECK: access-control-allow-origin: *
+# CHECK: foo
+
+echo
 
 $CURL -o - $CHISELD_HOST/bar
 
