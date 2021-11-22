@@ -8,17 +8,17 @@ export default async function chisel(req) {
 }
 EOF
 
-cd "$TEMPDIR"
-$CHISEL apply
-
-# CHECK: End point defined: /foo
-
-cat << EOF | $CHISEL end-point create foo/bar -
+mkdir "$TEMPDIR/endpoints/foo"
+cat << EOF > "$TEMPDIR/endpoints/foo/bar.js"
 export default async function chisel(req) {
     return new Response("foo/bar with url " + req.url + "\n");
 }
 EOF
 
+cd "$TEMPDIR"
+$CHISEL apply
+
+# CHECK: End point defined: /foo
 # CHECK: End point defined: /foo/bar
 
 $CURL -o - $CHISELD_HOST/foo

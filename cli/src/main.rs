@@ -16,7 +16,7 @@ use serde_derive::Deserialize;
 use std::fs;
 use std::future::Future;
 use std::io::{stdin, Read};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::thread;
 use std::time::Duration;
 use structopt::StructOpt;
@@ -41,6 +41,25 @@ struct Manifest {
     policies: Vec<String>,
 }
 
+fn dir_to_paths(dir: &Path, paths: &mut Vec<PathBuf>) -> Result<(), anyhow::Error> {
+    for dentry in read_dir(dir)? {
+        let dentry = dentry?;
+        let path = dentry.path();
+        if dentry.file_type()?.is_dir() {
+            dir_to_paths(&path, paths)?;
+        } else if !ignore_path(&path) {
+            paths.push(path);
+        }
+    }
+    Ok(())
+}
+
+#[derive(PartialOrd, PartialEq, Eq, Ord)]
+struct Endpoint {
+    name: String,
+    file_path: PathBuf,
+}
+
 impl Manifest {
     pub fn new(types: Vec<String>, endpoints: Vec<String>, policies: Vec<String>) -> Self {
         Manifest {
@@ -50,28 +69,46 @@ impl Manifest {
         }
     }
 
-    pub fn types(&self) -> Result<Vec<std::path::PathBuf>, anyhow::Error> {
+    pub fn types(&self) -> Result<Vec<PathBuf>, anyhow::Error> {
         Self::dirs_to_paths(&self.types)
     }
 
-    pub fn endpoints(&self) -> Result<Vec<std::path::PathBuf>, anyhow::Error> {
-        Self::dirs_to_paths(&self.endpoints)
+    pub fn endpoints(&self) -> Result<Vec<Endpoint>, anyhow::Error> {
+        let mut ret = vec![];
+        for dir in &self.endpoints {
+            let mut paths = vec![];
+            let dir = Path::new(dir);
+            dir_to_paths(dir, &mut paths)?;
+            for file_path in paths {
+                // FIXME: We should probably require a .ts or .js
+                // extension. We should also error out if we have both
+                // foo.js and foo.ts.
+                //
+                // file_stem returns None only if there is no file name.
+                let stem = file_path.file_stem().unwrap();
+                // parent returns None only for the root.
+                let mut parent = file_path.parent().unwrap().to_path_buf();
+                parent.push(stem);
+                let name = parent.strip_prefix(&dir)?;
+                let name = name
+                    .to_str()
+                    .ok_or_else(|| anyhow!("filename is not utf8 {:?}", name))?
+                    .to_string();
+                ret.push(Endpoint { file_path, name });
+            }
+        }
+        ret.sort_unstable();
+        Ok(ret)
     }
 
-    pub fn policies(&self) -> Result<Vec<std::path::PathBuf>, anyhow::Error> {
+    pub fn policies(&self) -> Result<Vec<PathBuf>, anyhow::Error> {
         Self::dirs_to_paths(&self.policies)
     }
 
-    fn dirs_to_paths(dirs: &[String]) -> Result<Vec<std::path::PathBuf>, anyhow::Error> {
+    fn dirs_to_paths(dirs: &[String]) -> Result<Vec<PathBuf>, anyhow::Error> {
         let mut paths = vec![];
         for dir in dirs {
-            for dentry in read_dir(dir)? {
-                let dentry = dentry?;
-                let path = dentry.path();
-                if !ignore_path(&path) {
-                    paths.push(path);
-                }
-            }
+            dir_to_paths(Path::new(dir), &mut paths)?
         }
         paths.sort_unstable();
         Ok(paths)
@@ -114,10 +151,6 @@ enum Command {
         #[structopt(subcommand)]
         cmd: TypeCommand,
     },
-    EndPoint {
-        #[structopt(subcommand)]
-        cmd: EndPointCommand,
-    },
     Restart,
     Wait,
     Policy {
@@ -131,11 +164,6 @@ enum Command {
 enum TypeCommand {
     /// Export the type system.
     Export,
-}
-
-#[derive(StructOpt, Debug)]
-enum EndPointCommand {
-    Create { path: String, filename: String },
 }
 
 #[derive(StructOpt, Debug)]
@@ -304,16 +332,7 @@ async fn apply(server_url: String) -> Result<()> {
     client.remove_end_point(request).await?;
 
     for entry in endpoints {
-        // FIXME: disambiguate endpoint and endpoint.js. If you have both, this has to
-        // error out. For now simplify.
-        let endpoint_name = entry
-            .file_stem()
-            .ok_or_else(|| anyhow!("Invalid endpoint filename {:?}", entry))?
-            .to_os_string()
-            .into_string()
-            .unwrap();
-
-        create_endpoint(&mut client, endpoint_name, entry).await?;
+        create_endpoint(&mut client, entry.name, entry.file_path).await?;
     }
 
     for entry in policies {
@@ -366,7 +385,7 @@ async fn main() -> Result<()> {
                 apply_watcher.watch(&ty, RecursiveMode::NonRecursive)?;
             }
             for endpoint in endpoints {
-                apply_watcher.watch(&endpoint, RecursiveMode::NonRecursive)?;
+                apply_watcher.watch(&endpoint.file_path, RecursiveMode::NonRecursive)?;
             }
             for policy in policies {
                 apply_watcher.watch(&policy, RecursiveMode::NonRecursive)?;
@@ -389,12 +408,6 @@ async fn main() -> Result<()> {
             let response = client.get_status(request).await?.into_inner();
             println!("Server status is {}", response.message);
         }
-        Command::EndPoint { cmd } => match cmd {
-            EndPointCommand::Create { path, filename } => {
-                let mut client = ChiselRpcClient::connect(server_url).await?;
-                create_endpoint(&mut client, path, filename).await?
-            }
-        },
         Command::Type { cmd } => match cmd {
             TypeCommand::Export => {
                 let mut client = ChiselRpcClient::connect(server_url).await?;
