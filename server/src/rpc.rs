@@ -1,11 +1,10 @@
 // SPDX-FileCopyrightText: © 2021 ChiselStrike <info@chiselstrike.com>
 
-use crate::api::ApiService;
 use crate::deno;
-use crate::policies::Policy;
+use crate::policies::{LabelPolicies, Policy};
 use crate::query::QueryError;
 use crate::runtime;
-use crate::types::{Field, ObjectType, TypeSystemError};
+use crate::types::{Field, ObjectType, TypeSystem, TypeSystemError};
 use chisel::chisel_rpc_server::{ChiselRpc, ChiselRpcServer};
 use chisel::{
     AddTypeRequest, AddTypeResponse, EndPointCreationRequest, EndPointCreationResponse,
@@ -26,18 +25,36 @@ pub mod chisel {
     tonic::include_proto!("chisel");
 }
 
+// First, guarantees that a single RPC command is executing throught the lock that goes over a
+// static instance of this.
+//
+// But also for things like type, we need to have a copy of the current view of the system so that
+// we can validate changes against. We don't want to wait until the executors error out on adding
+// types (especially because they may error out in different ways due to ordering).
+//
+// Policies and endpoints are stateless so we don't need a global copy.
+pub struct GlobalRpcState {
+    type_system: TypeSystem,
+}
+
+impl GlobalRpcState {
+    pub fn new(type_system: TypeSystem) -> Self {
+        Self { type_system }
+    }
+}
+
 /// RPC service for Chisel server.
 ///
 /// The RPC service provides a Protobuf-based interface for Chisel control
 /// plane. For example, the service has RPC calls for managing types and
 /// endpoints. The user-generated data plane endpoints are serviced with REST.
 pub struct RpcService {
-    api: Arc<Mutex<ApiService>>,
+    state: Arc<Mutex<GlobalRpcState>>,
 }
 
 impl RpcService {
-    pub fn new(api: Arc<Mutex<ApiService>>) -> Self {
-        RpcService { api }
+    pub fn new(state: Arc<Mutex<GlobalRpcState>>) -> Self {
+        Self { state }
     }
 
     async fn create_js_endpoint(&self, path: &str, code: String) {
@@ -46,7 +63,9 @@ impl RpcService {
             let path = path.to_owned();
             move |req| deno::run_js(path.clone(), req).boxed_local()
         };
-        self.api.lock().await.add_route(path, Box::new(func));
+
+        let runtime = &mut runtime::get().await;
+        runtime.api.lock().await.add_route(path, Box::new(func));
     }
 }
 
@@ -80,8 +99,11 @@ impl ChiselRpc for RpcService {
         &self,
         request: Request<AddTypeRequest>,
     ) -> Result<Response<AddTypeResponse>, Status> {
+        let mut state = self.state.lock().await;
+        let type_system = &mut state.type_system;
+
         let runtime = &mut runtime::get().await;
-        let type_system = &mut runtime.type_system;
+
         let type_def = request.into_inner();
         let name = type_def.name;
         let snake_case_name = name.to_case(Case::Snake);
@@ -112,6 +134,8 @@ impl ChiselRpc for RpcService {
             }
             Err(e) => return Err(e.into()),
         }
+
+        runtime.type_system.update(type_system);
         let response = chisel::AddTypeResponse { message: name };
         Ok(Response::new(response))
     }
@@ -120,7 +144,9 @@ impl ChiselRpc for RpcService {
         &self,
         _request: tonic::Request<TypeExportRequest>,
     ) -> Result<tonic::Response<TypeExportResponse>, tonic::Status> {
-        let type_system = &runtime::get().await.type_system;
+        let state = self.state.lock().await;
+        let type_system = &state.type_system;
+
         let mut type_defs = vec![];
         use itertools::Itertools;
         for ty in type_system
@@ -166,7 +192,9 @@ impl ChiselRpc for RpcService {
 
         let regex = regex::Regex::new(&request.path.unwrap_or_else(|| ".*".into()))
             .map_err(|x| Status::internal(format!("invalid regex: {}", x)))?;
-        let removed = self.api.lock().await.remove_routes(regex) as i32;
+
+        let runtime = &mut runtime::get().await;
+        let removed = runtime.api.lock().await.remove_routes(regex) as i32;
 
         let response = EndPointRemoveResponse { removed };
         Ok(Response::new(response))
@@ -190,8 +218,7 @@ impl ChiselRpc for RpcService {
             .map_err(|err| Status::internal(format!("{}", err)))?;
 
         // FIXME: only transform implemented
-        let policies = &mut runtime::get().await.policies;
-        policies.clear();
+        let mut policies = LabelPolicies::default();
 
         for config in docs.iter() {
             for label in config["labels"].as_vec().get_or_insert(&[].into()).iter() {
@@ -231,6 +258,8 @@ impl ChiselRpc for RpcService {
                 log::info!("endpoint behavior not yet implemented");
             }
         }
+
+        runtime::get().await.policies = policies;
 
         // FIXME: return number of effective changes? Probably depends on how we implement
         // terraform-like workflow (x added, y removed, z modified)

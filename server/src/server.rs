@@ -2,8 +2,8 @@
 
 use crate::api::ApiService;
 use crate::deno::init_deno;
-use crate::query::{MetaService, QueryEngine};
-use crate::rpc::RpcService;
+use crate::query::{DbConnection, MetaService, QueryEngine};
+use crate::rpc::{GlobalRpcState, RpcService};
 use crate::runtime;
 use crate::runtime::Runtime;
 use anyhow::Result;
@@ -47,12 +47,11 @@ pub enum DoRepeat {
 pub struct SharedState {
     signal_rx: tokio::sync::watch::Receiver<()>,
     readiness_tx: tokio::sync::mpsc::Sender<()>,
-    metadata_db_uri: String,
-    data_db_uri: String,
     api_listen_addr: SocketAddr,
     inspect_brk: bool,
-    api_service: Arc<Mutex<ApiService>>,
     executor_threads: usize,
+    data_db: DbConnection,
+    metadata_db: DbConnection,
 }
 
 impl SharedState {
@@ -74,26 +73,28 @@ impl SharedTasks {
 }
 
 async fn run(state: SharedState) -> Result<()> {
+    let api_service = Arc::new(Mutex::new(ApiService::new()));
+
     // FIXME: We have to create one per thread. For now we only have
     // one thread, so this is fine.
     init_deno(state.inspect_brk).await?;
 
-    let meta = MetaService::connect(&state.metadata_db_uri).await?;
-    let query_engine = QueryEngine::connect(&state.data_db_uri).await?;
-    meta.create_schema().await?;
+    let meta = MetaService::local_connection(&state.metadata_db).await?;
+
     let ts = meta.load_type_system().await?;
 
-    let rt = Runtime::new(query_engine, meta, ts);
+    let rt = Runtime::new(
+        api_service.clone(),
+        QueryEngine::local_connection(&state.data_db).await?,
+        meta,
+        ts,
+    );
     runtime::set(rt);
 
     let mut rx = state.signal_rx.clone();
-    let api_task = crate::api::spawn(
-        state.api_service.clone(),
-        state.api_listen_addr,
-        async move {
-            rx.changed().await.ok();
-        },
-    );
+    let api_task = crate::api::spawn(api_service, state.api_listen_addr, async move {
+        rx.changed().await.ok();
+    });
     state.readiness_tx.send(()).await?;
 
     api_task.await??;
@@ -106,8 +107,14 @@ pub async fn run_shared_state(opt: Opt) -> Result<(SharedTasks, SharedState)> {
         "For now, only one executor thread supported"
     );
 
-    let api = Arc::new(Mutex::new(ApiService::new()));
-    let rpc = RpcService::new(api.clone());
+    let meta_conn = DbConnection::connect(&opt.metadata_db_uri).await?;
+    let meta = MetaService::local_connection(&meta_conn).await?;
+
+    meta.create_schema().await?;
+    let ts = meta.load_type_system().await?;
+    let state = Arc::new(Mutex::new(GlobalRpcState::new(ts)));
+
+    let rpc = RpcService::new(state);
 
     let mut sigterm = tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())?;
     let mut sigint = tokio::signal::unix::signal(tokio::signal::unix::SignalKind::interrupt())?;
@@ -150,12 +157,11 @@ pub async fn run_shared_state(opt: Opt) -> Result<(SharedTasks, SharedState)> {
     let state = SharedState {
         signal_rx: rx,
         readiness_tx,
-        metadata_db_uri: opt.metadata_db_uri.clone(),
-        data_db_uri: opt.data_db_uri.clone(),
         api_listen_addr: opt.api_listen_addr,
         inspect_brk: opt.inspect_brk,
         executor_threads: opt.executor_threads,
-        api_service: api,
+        data_db: DbConnection::connect(&opt.data_db_uri).await?,
+        metadata_db: meta_conn,
     };
 
     let tasks = SharedTasks { rpc_task, sig_task };

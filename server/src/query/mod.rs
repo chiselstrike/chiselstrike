@@ -2,6 +2,7 @@
 
 use crate::types::TypeSystemError;
 
+mod dbconn;
 pub mod engine;
 pub mod meta;
 
@@ -25,5 +26,7 @@ pub enum QueryError {
     NotImplemented(String),
 }
 
+pub use dbconn::DbConnection;
+pub use dbconn::Kind;
 pub use engine::QueryEngine;
 pub use meta::MetaService;
