@@ -4,7 +4,10 @@ use crate::deno;
 use crate::policies::{LabelPolicies, Policy};
 use crate::query::QueryError;
 use crate::runtime;
+use crate::server::Command;
+use crate::server::CommandResult;
 use crate::types::{Field, ObjectType, TypeSystem, TypeSystemError};
+use anyhow::Result;
 use async_mutex::Mutex;
 use chisel::chisel_rpc_server::{ChiselRpc, ChiselRpcServer};
 use chisel::{
@@ -15,6 +18,7 @@ use chisel::{
 };
 use convert_case::{Case, Casing};
 use futures::FutureExt;
+use itertools::zip;
 use log::debug;
 use std::net::SocketAddr;
 use std::sync::Arc;
@@ -35,11 +39,21 @@ pub mod chisel {
 // Policies and endpoints are stateless so we don't need a global copy.
 pub struct GlobalRpcState {
     type_system: TypeSystem,
+    command_txs: Vec<async_channel::Sender<Command>>,
+    result_rxs: Vec<async_channel::Receiver<CommandResult>>,
 }
 
 impl GlobalRpcState {
-    pub fn new(type_system: TypeSystem) -> Self {
-        Self { type_system }
+    pub fn new(
+        type_system: TypeSystem,
+        command_txs: Vec<async_channel::Sender<Command>>,
+        result_rxs: Vec<async_channel::Receiver<CommandResult>>,
+    ) -> Self {
+        Self {
+            type_system,
+            command_txs,
+            result_rxs,
+        }
     }
 }
 
@@ -57,8 +71,19 @@ impl RpcService {
         Self { state }
     }
 
-    async fn create_js_endpoint(&self, path: &str, code: String) {
-        deno::define_endpoint(path, code).await;
+    async fn create_js_endpoint(&self, path: &str, code: String) -> Result<()> {
+        let state = self.state.lock().await;
+        let closure = {
+            let path = path.to_string();
+            move || deno::define_endpoint(path, code).boxed_local()
+        };
+        let closure = Box::new(closure);
+
+        for (tx, rx) in zip(&state.command_txs, &state.result_rxs) {
+            // Send fails only if the channel is closed, so unwrap is ok.
+            tx.send(closure.clone()).await.unwrap();
+            rx.recv().await.unwrap()?;
+        }
         let func = {
             let path = path.to_owned();
             move |req| deno::run_js(path.clone(), req).boxed_local()
@@ -66,6 +91,7 @@ impl RpcService {
 
         let runtime = &mut runtime::get().await;
         runtime.api.lock().await.add_route(path, Box::new(func));
+        Ok(())
     }
 }
 
@@ -179,7 +205,10 @@ impl ChiselRpc for RpcService {
         let request = request.into_inner();
         let path = format!("/{}", request.path);
         let code = request.code;
-        self.create_js_endpoint(&path, code).await;
+
+        // FIXME: Convert the error
+        self.create_js_endpoint(&path, code).await.unwrap();
+
         let response = EndPointCreationResponse { message: path };
         Ok(Response::new(response))
     }

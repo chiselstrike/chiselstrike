@@ -31,7 +31,6 @@ use hyper::body::HttpBody;
 use hyper::header::HeaderValue;
 use hyper::Method;
 use hyper::{Request, Response, StatusCode};
-use once_cell::sync::Lazy;
 use once_cell::unsync::OnceCell;
 use serde_json;
 use sqlx::any::AnyRow;
@@ -54,7 +53,6 @@ use swc_ecma_codegen::{text_writer::JsWriter, Emitter};
 use swc_ecma_parser::{lexer::Lexer, Parser, StringInput, Syntax};
 use v8;
 
-use async_mutex::Mutex;
 use url::Url;
 
 struct VersionedHandler {
@@ -406,10 +404,6 @@ thread_local! {
     static DENO: OnceCell<Rc<RefCell<DenoService>>> = OnceCell::new();
 }
 
-// Map from an endpoint path to the corresponding code and version. A
-// new version is created when the code is updated.
-static CODE: Lazy<Mutex<HashMap<String, VersionedCode>>> = Lazy::new(|| Mutex::new(HashMap::new()));
-
 fn try_into_or<'s, T: std::convert::TryFrom<v8::Local<'s, v8::Value>>>(
     val: Option<v8::Local<'s, v8::Value>>,
 ) -> Result<T>
@@ -624,36 +618,7 @@ async fn run_js_aux(
     mut req: Request<hyper::Body>,
 ) -> Result<Response<Body>> {
     let service = &mut *d.borrow_mut();
-    // Build a new handler if out of date.
-    let request_handler = {
-        let map = CODE.lock().await;
-        let code = map.get(&path).unwrap();
-        let entry = service.handlers.entry(path.clone());
-        let path = path.clone();
-        let get_handler = || {
-            get_endpoint(
-                &service.module_loader,
-                &mut service.worker.js_runtime,
-                path,
-                code,
-            )
-        };
-
-        match entry {
-            Entry::Vacant(v) => {
-                let func = get_handler().await?;
-                v.insert(func).func.clone()
-            }
-            Entry::Occupied(mut o) => {
-                let o = o.get_mut();
-                if code.version != o.version {
-                    let func = get_handler().await?;
-                    *o = func;
-                }
-                o.func.clone()
-            }
-        }
-    };
+    let request_handler = service.handlers.get(&path).unwrap().func.clone();
 
     let worker = &mut service.worker;
     let runtime = &mut worker.js_runtime;
@@ -750,16 +715,47 @@ async fn get_endpoint(
     Ok(ret)
 }
 
-pub async fn define_endpoint(path: &str, code: String) {
-    let mut map = CODE.lock().await;
-    match map.entry(path.to_string()) {
+async fn define_endpoint_aux(
+    d: Rc<RefCell<DenoService>>,
+    path: String,
+    code: String,
+) -> Result<()> {
+    let service = &mut *d.borrow_mut();
+    match service.handlers.entry(path.clone()) {
         Entry::Vacant(v) => {
-            v.insert(VersionedCode { code, version: 0 });
+            let code = VersionedCode { code, version: 0 };
+            let e = get_endpoint(
+                &service.module_loader,
+                &mut service.worker.js_runtime,
+                path,
+                &code,
+            )
+            .await?;
+            v.insert(e);
         }
         Entry::Occupied(mut o) => {
             let o = o.get_mut();
-            o.version += 1;
-            o.code = code;
+            let code = VersionedCode {
+                code,
+                version: o.version + 1,
+            };
+            let e = get_endpoint(
+                &service.module_loader,
+                &mut service.worker.js_runtime,
+                path,
+                &code,
+            )
+            .await?;
+            *o = e;
         }
     }
+    Ok(())
+}
+
+pub async fn define_endpoint(path: String, code: String) -> Result<()> {
+    DENO.with(|d| {
+        let d = d.get().expect("Deno is not not yet initialized");
+        define_endpoint_aux(d.clone(), path, code)
+    })
+    .await
 }
