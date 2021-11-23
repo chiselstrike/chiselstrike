@@ -7,11 +7,11 @@ use crate::rpc::{GlobalRpcState, RpcService};
 use crate::runtime;
 use crate::runtime::Runtime;
 use anyhow::Result;
+use async_mutex::Mutex;
 use std::net::SocketAddr;
 use std::panic;
 use std::sync::Arc;
 use structopt::StructOpt;
-use tokio::sync::Mutex;
 use tokio::task::JoinHandle;
 
 #[derive(StructOpt, Debug, Clone)]

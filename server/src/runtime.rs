@@ -4,9 +4,9 @@ use crate::api::ApiService;
 use crate::policies::{FieldPolicies, LabelPolicies};
 use crate::query::{MetaService, QueryEngine};
 use crate::types::{ObjectType, TypeSystem};
+use async_mutex::{Mutex, MutexGuard};
 use once_cell::sync::OnceCell;
 use std::sync::Arc;
-use tokio::sync::{Mutex, MutexGuard};
 
 pub struct Runtime {
     pub api: Arc<Mutex<ApiService>>,

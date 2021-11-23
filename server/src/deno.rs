@@ -54,7 +54,7 @@ use swc_ecma_codegen::{text_writer::JsWriter, Emitter};
 use swc_ecma_parser::{lexer::Lexer, Parser, StringInput, Syntax};
 use v8;
 
-use tokio::sync::Mutex;
+use async_mutex::Mutex;
 use url::Url;
 
 struct VersionedHandler {

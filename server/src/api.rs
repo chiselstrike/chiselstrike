@@ -1,6 +1,7 @@
 // SPDX-FileCopyrightText: © 2021 ChiselStrike <info@chiselstrike.com>
 
 use anyhow::{Error, Result};
+use async_mutex::Mutex;
 use futures::future::LocalBoxFuture;
 use futures::ready;
 use futures::stream::Stream;
@@ -16,7 +17,6 @@ use std::path::PathBuf;
 use std::pin::Pin;
 use std::sync::Arc;
 use std::task::{Context, Poll};
-use tokio::sync::Mutex;
 
 type JsStream = Pin<Box<dyn Stream<Item = Result<Box<[u8]>>>>>;
 
