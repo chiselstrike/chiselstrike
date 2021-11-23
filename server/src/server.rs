@@ -132,10 +132,13 @@ pub async fn run_shared_state(
     );
 
     let meta_conn = DbConnection::connect(&opt.metadata_db_uri).await?;
+    let data_db = DbConnection::connect(&opt.data_db_uri).await?;
+
     let meta = MetaService::local_connection(&meta_conn).await?;
+    let query_engine = QueryEngine::local_connection(&data_db).await?;
 
     meta.create_schema().await?;
-    let ts = meta.load_type_system().await?;
+
     let (command_tx, command_rx) = async_channel::bounded(1);
     let command_tx = vec![command_tx];
     let command_rx = vec![command_rx];
@@ -143,7 +146,10 @@ pub async fn run_shared_state(
     let (result_tx, result_rx) = async_channel::bounded(1);
     let result_tx = vec![result_tx];
     let result_rx = vec![result_rx];
-    let state = Arc::new(Mutex::new(GlobalRpcState::new(ts, command_tx, result_rx)));
+
+    let state = Arc::new(Mutex::new(
+        GlobalRpcState::new(meta, query_engine, command_tx, result_rx).await?,
+    ));
 
     let rpc = RpcService::new(state);
 
@@ -191,7 +197,7 @@ pub async fn run_shared_state(
         api_listen_addr: opt.api_listen_addr,
         inspect_brk: opt.inspect_brk,
         executor_threads: opt.executor_threads,
-        data_db: DbConnection::connect(&opt.data_db_uri).await?,
+        data_db,
         metadata_db: meta_conn,
     };
 

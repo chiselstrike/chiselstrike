@@ -66,9 +66,8 @@ type RouteFn = Box<
     dyn Fn(Request<hyper::Body>) -> LocalBoxFuture<'static, Result<Response<Body>>> + Send + Sync,
 >;
 
-/// API service for Chisel server.
 #[derive(Default)]
-pub struct ApiService {
+pub struct RoutePaths {
     // Kept reverse sorted so that if an entry is a prefix of another,
     // it comes later. This makes it easy to find which entry shares
     // the longest prefix with a request.
@@ -79,13 +78,7 @@ pub struct ApiService {
     paths: Vec<(PathBuf, RouteFn)>,
 }
 
-impl ApiService {
-    pub fn new() -> Self {
-        Self {
-            paths: Vec::default(),
-        }
-    }
-
+impl RoutePaths {
     fn longest_prefix(&self, request: &str) -> Option<&RouteFn> {
         let request: &Path = request.as_ref();
         for p in &self.paths {
@@ -119,6 +112,34 @@ impl ApiService {
             !path.is_match(&s)
         });
         before - self.paths.len()
+    }
+}
+
+/// API service for Chisel server.
+#[derive(Default)]
+pub struct ApiService {
+    paths: RoutePaths,
+}
+
+impl ApiService {
+    pub fn new() -> Self {
+        Self {
+            paths: RoutePaths::default(),
+        }
+    }
+
+    fn longest_prefix(&self, request: &str) -> Option<&RouteFn> {
+        self.paths.longest_prefix(request)
+    }
+
+    pub fn add_route(&mut self, path: &str, route_fn: RouteFn) {
+        self.paths.add_route(path, route_fn)
+    }
+
+    /// Remove all routes that match this regular expression, and return
+    /// the amount of routes removed.
+    pub fn remove_routes(&mut self, path: regex::Regex) -> usize {
+        self.paths.remove_routes(path)
     }
 
     pub async fn route(

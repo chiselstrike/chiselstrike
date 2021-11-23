@@ -1,8 +1,10 @@
 // SPDX-FileCopyrightText: © 2021 ChiselStrike <info@chiselstrike.com>
 
+use crate::api::RoutePaths;
 use crate::deno;
 use crate::policies::{LabelPolicies, Policy};
 use crate::query::QueryError;
+use crate::query::{MetaService, QueryEngine};
 use crate::runtime;
 use crate::server::Command;
 use crate::server::CommandResult;
@@ -39,21 +41,30 @@ pub mod chisel {
 // Policies and endpoints are stateless so we don't need a global copy.
 pub struct GlobalRpcState {
     type_system: TypeSystem,
+    meta: MetaService,
+    query_engine: QueryEngine,
+    routes: RoutePaths, // For globally keeping track of routes
     command_txs: Vec<async_channel::Sender<Command>>,
     result_rxs: Vec<async_channel::Receiver<CommandResult>>,
 }
 
 impl GlobalRpcState {
-    pub fn new(
-        type_system: TypeSystem,
+    pub async fn new(
+        meta: MetaService,
+        query_engine: QueryEngine,
         command_txs: Vec<async_channel::Sender<Command>>,
         result_rxs: Vec<async_channel::Receiver<CommandResult>>,
-    ) -> Self {
-        Self {
+    ) -> anyhow::Result<Self> {
+        let type_system = meta.load_type_system().await?;
+
+        Ok(Self {
             type_system,
+            meta,
+            query_engine,
             command_txs,
             result_rxs,
-        }
+            routes: RoutePaths::default(),
+        })
     }
 }
 
@@ -72,7 +83,7 @@ impl RpcService {
     }
 
     async fn create_js_endpoint(&self, path: &str, code: String) -> Result<()> {
-        let state = self.state.lock().await;
+        let mut state = self.state.lock().await;
         let closure = {
             let path = path.to_string();
             move || deno::define_endpoint(path, code).boxed_local()
@@ -84,13 +95,14 @@ impl RpcService {
             tx.send(closure.clone()).await.unwrap();
             rx.recv().await.unwrap()?;
         }
-        let func = {
+        let func = Box::new({
             let path = path.to_owned();
             move |req| deno::run_js(path.clone(), req).boxed_local()
-        };
+        });
+        state.routes.add_route(path, func.clone());
 
         let runtime = &mut runtime::get().await;
-        runtime.api.lock().await.add_route(path, Box::new(func));
+        runtime.api.lock().await.add_route(path, func.clone());
         Ok(())
     }
 }
@@ -126,16 +138,13 @@ impl ChiselRpc for RpcService {
         request: Request<AddTypeRequest>,
     ) -> Result<Response<AddTypeResponse>, Status> {
         let mut state = self.state.lock().await;
-        let type_system = &mut state.type_system;
-
-        let runtime = &mut runtime::get().await;
 
         let type_def = request.into_inner();
         let name = type_def.name;
         let snake_case_name = name.to_case(Case::Snake);
         let mut fields = Vec::new();
         for field in type_def.field_defs {
-            let ty = type_system.lookup_type(&field.field_type)?;
+            let ty = state.type_system.lookup_type(&field.field_type)?;
             fields.push(Field {
                 name: field.name.clone(),
                 type_: ty,
@@ -147,21 +156,24 @@ impl ChiselRpc for RpcService {
             fields,
             backing_table: snake_case_name.clone(),
         };
-        match type_system.add_type(ty.to_owned()) {
+        match state.type_system.add_type(ty.to_owned()) {
             Ok(_) => {
                 // FIXME: Consistency between metadata and backing store updates.
-                let meta = &runtime.meta;
+                let meta = &state.meta;
                 meta.insert(ty.clone()).await?;
-                let query_engine = &runtime.query_engine;
+
+                let query_engine = &state.query_engine;
                 query_engine.create_table(ty).await?;
             }
             Err(TypeSystemError::TypeAlreadyExists) => {
-                type_system.replace_type(ty)?;
+                state.type_system.replace_type(ty)?;
             }
             Err(e) => return Err(e.into()),
         }
 
-        runtime.type_system.update(type_system);
+        let runtime = &mut runtime::get().await;
+        runtime.type_system.update(&state.type_system);
+
         let response = chisel::AddTypeResponse { message: name };
         Ok(Response::new(response))
     }
@@ -222,8 +234,11 @@ impl ChiselRpc for RpcService {
         let regex = regex::Regex::new(&request.path.unwrap_or_else(|| ".*".into()))
             .map_err(|x| Status::internal(format!("invalid regex: {}", x)))?;
 
+        let mut state = self.state.lock().await;
+        let removed = state.routes.remove_routes(regex.clone()) as i32;
+
         let runtime = &mut runtime::get().await;
-        let removed = runtime.api.lock().await.remove_routes(regex) as i32;
+        runtime.api.lock().await.remove_routes(regex);
 
         let response = EndPointRemoveResponse { removed };
         Ok(Response::new(response))
