@@ -153,10 +153,6 @@ enum Command {
     },
     Restart,
     Wait,
-    Policy {
-        #[structopt(subcommand)]
-        cmd: PolicyCommand,
-    },
     Apply,
 }
 
@@ -164,12 +160,6 @@ enum Command {
 enum TypeCommand {
     /// Export the type system.
     Export,
-}
-
-#[derive(StructOpt, Debug)]
-enum PolicyCommand {
-    /// Must be "transformation ( @label )", where transformation is a known transform function.
-    Update { filename: String },
 }
 
 pub mod chisel {
@@ -443,20 +433,6 @@ async fn main() -> Result<()> {
         Command::Wait => {
             wait(server_url).await?;
         }
-        Command::Policy { cmd } => match cmd {
-            PolicyCommand::Update { filename } => {
-                let policystr = read_to_string(&filename)?;
-
-                let response = ChiselRpcClient::connect(server_url)
-                    .await?
-                    .policy_update(tonic::Request::new(PolicyUpdateRequest {
-                        policy_config: policystr,
-                    }))
-                    .await?
-                    .into_inner();
-                println!("Policy updated: {}", response.message);
-            }
-        },
         Command::Apply => {
             apply(server_url.clone()).await?;
         }
