@@ -45,8 +45,8 @@ pub enum DoRepeat {
 
 #[derive(Clone)]
 pub struct SharedState {
-    signal_rx: tokio::sync::watch::Receiver<()>,
-    readiness_tx: tokio::sync::mpsc::Sender<()>,
+    signal_rx: async_channel::Receiver<()>,
+    readiness_tx: async_channel::Sender<()>,
     api_listen_addr: SocketAddr,
     inspect_brk: bool,
     executor_threads: usize,
@@ -91,9 +91,8 @@ async fn run(state: SharedState) -> Result<()> {
     );
     runtime::set(rt);
 
-    let mut rx = state.signal_rx.clone();
     let api_task = crate::api::spawn(api_service, state.api_listen_addr, async move {
-        rx.changed().await.ok();
+        state.signal_rx.recv().await.ok();
     });
     state.readiness_tx.send(()).await?;
 
@@ -125,7 +124,7 @@ pub async fn run_shared_state(opt: Opt) -> Result<(SharedTasks, SharedState)> {
         nix::sys::signal::raise(nix::sys::signal::Signal::SIGINT).unwrap();
     }));
 
-    let (tx, rx) = tokio::sync::watch::channel(());
+    let (tx, rx) = async_channel::bounded(1);
     let sig_task = tokio::task::spawn(async move {
         use futures::FutureExt;
         let res = futures::select! {
@@ -134,22 +133,22 @@ pub async fn run_shared_state(opt: Opt) -> Result<(SharedTasks, SharedState)> {
             _ = sighup.recv().fuse() => { info!("Got SIGHUP"); DoRepeat::Yes },
         };
         info!("Got signal");
-        tx.send(())?;
+        tx.send(()).await?;
         Ok(res)
     });
 
     // rpc server should start listening only when all threads start
-    let (readiness_tx, mut readiness_rx) = tokio::sync::mpsc::channel(opt.executor_threads);
+    let (readiness_tx, readiness_rx) = async_channel::bounded(opt.executor_threads);
 
     let start_wait = async move {
         for _id in 0..opt.executor_threads {
-            readiness_rx.recv().await;
+            readiness_rx.recv().await.unwrap();
         }
     };
 
-    let mut rpc_rx = rx.clone();
+    let rpc_rx = rx.clone();
     let shutdown = async move {
-        rpc_rx.changed().await.ok();
+        rpc_rx.recv().await.ok();
     };
 
     let rpc_task = crate::rpc::spawn(rpc, opt.rpc_listen_addr, start_wait, shutdown);
