@@ -2,12 +2,10 @@ pub mod schema;
 
 // SPDX-FileCopyrightText: © 2021 ChiselStrike <info@chiselstrike.com>
 
-use crate::query::QueryError;
+use crate::query::{DbConnection, Kind, QueryError};
 use crate::types::{Field, ObjectType, TypeSystem};
-use sea_query::{PostgresQueryBuilder, SchemaBuilder, SqliteQueryBuilder};
-use sqlx::any::{Any, AnyConnectOptions, AnyKind, AnyPool, AnyPoolOptions};
+use sqlx::any::{Any, AnyPool};
 use sqlx::{Executor, Row, Transaction};
-use std::str::FromStr;
 
 /// Meta service.
 ///
@@ -15,27 +13,23 @@ use std::str::FromStr;
 /// types and labels persistently.
 #[derive(Debug)]
 pub struct MetaService {
-    opts: AnyConnectOptions,
+    kind: Kind,
     pool: AnyPool,
 }
 
 impl MetaService {
-    pub fn new(opts: AnyConnectOptions, pool: AnyPool) -> Self {
-        Self { opts, pool }
+    pub fn new(kind: Kind, pool: AnyPool) -> Self {
+        Self { kind, pool }
     }
 
-    pub async fn connect(meta_uri: &str) -> Result<Self, QueryError> {
-        let opts = AnyConnectOptions::from_str(meta_uri).map_err(QueryError::ConnectionFailed)?;
-        let pool = AnyPoolOptions::new()
-            .connect(meta_uri)
-            .await
-            .map_err(QueryError::ConnectionFailed)?;
-        Ok(MetaService { opts, pool })
+    pub async fn local_connection(conn: &DbConnection) -> Result<Self, QueryError> {
+        let local = conn.local_connection().await?;
+        Ok(Self::new(local.kind, local.pool))
     }
 
     /// Create the schema of the underlying metadata store.
     pub async fn create_schema(&self) -> Result<(), QueryError> {
-        let query_builder = Self::get_query_builder(&self.opts);
+        let query_builder = DbConnection::get_query_builder(&self.kind);
         let tables = schema::tables();
         let mut conn = self
             .pool
@@ -50,13 +44,6 @@ impl MetaService {
                 .map_err(QueryError::ExecuteFailed)?;
         }
         Ok(())
-    }
-
-    fn get_query_builder(opts: &AnyConnectOptions) -> &dyn SchemaBuilder {
-        match opts.kind() {
-            AnyKind::Postgres => &PostgresQueryBuilder,
-            AnyKind::Sqlite => &SqliteQueryBuilder,
-        }
     }
 
     /// Load the type system from metadata store.

@@ -1,22 +1,19 @@
 // SPDX-FileCopyrightText: © 2021 ChiselStrike <info@chiselstrike.com>
 
-use crate::query::QueryError;
+use crate::query::{DbConnection, Kind, QueryError};
 use crate::types::{ObjectType, Type};
 use anyhow::Result;
 use futures::stream;
 use futures::stream::BoxStream;
 use futures::stream::Stream;
 use itertools::Itertools;
-use sea_query::{
-    Alias, ColumnDef, Expr, PostgresQueryBuilder, Query, SchemaBuilder, SqliteQueryBuilder, Table,
-};
-use sqlx::any::{Any, AnyConnectOptions, AnyKind, AnyPool, AnyPoolOptions, AnyRow};
+use sea_query::{Alias, ColumnDef, Expr, PostgresQueryBuilder, Query, SqliteQueryBuilder, Table};
+use sqlx::any::{Any, AnyPool, AnyRow};
 use sqlx::error::Error;
 use sqlx::{Executor, Row};
 use std::cell::RefCell;
 use std::marker::PhantomPinned;
 use std::pin::Pin;
-use std::str::FromStr;
 use std::task::{Context, Poll};
 
 pub struct QueryResults<'a> {
@@ -53,30 +50,20 @@ impl Stream for QueryResults<'_> {
 ///
 /// The query engine provides a way to persist objects and retrieve them from
 /// a backing store for ChiselStrike endpoints.
+#[derive(Clone)]
 pub struct QueryEngine {
-    opts: AnyConnectOptions,
+    kind: Kind,
     pool: AnyPool,
 }
 
 impl QueryEngine {
-    pub fn new(opts: AnyConnectOptions, pool: AnyPool) -> Self {
-        Self { opts, pool }
+    fn new(kind: Kind, pool: AnyPool) -> Self {
+        Self { kind, pool }
     }
 
-    pub async fn connect(uri: &str) -> Result<Self, QueryError> {
-        let opts = AnyConnectOptions::from_str(uri).map_err(QueryError::ConnectionFailed)?;
-        let pool = AnyPoolOptions::new()
-            .connect(uri)
-            .await
-            .map_err(QueryError::ConnectionFailed)?;
-        Ok(QueryEngine::new(opts, pool))
-    }
-
-    fn get_query_builder(opts: &AnyConnectOptions) -> &dyn SchemaBuilder {
-        match opts.kind() {
-            AnyKind::Postgres => &PostgresQueryBuilder,
-            AnyKind::Sqlite => &SqliteQueryBuilder,
-        }
+    pub async fn local_connection(conn: &DbConnection) -> Result<Self, QueryError> {
+        let local = conn.local_connection().await?;
+        Ok(Self::new(local.kind, local.pool))
     }
 
     pub async fn create_table(&self, ty: ObjectType) -> Result<(), QueryError> {
@@ -105,7 +92,7 @@ impl QueryEngine {
             };
             create_table.col(&mut column_def);
         }
-        let create_table = create_table.build_any(Self::get_query_builder(&self.opts));
+        let create_table = create_table.build_any(DbConnection::get_query_builder(&self.kind));
 
         let mut transaction = self
             .pool
@@ -173,9 +160,9 @@ impl QueryEngine {
             .cond_where(col_filter)
             .to_owned();
 
-        let query_str = match self.opts.kind() {
-            AnyKind::Postgres => query.to_string(PostgresQueryBuilder),
-            AnyKind::Sqlite => query.to_string(SqliteQueryBuilder),
+        let query_str = match self.kind {
+            Kind::Postgres => query.to_string(PostgresQueryBuilder),
+            Kind::Sqlite => query.to_string(SqliteQueryBuilder),
         };
         Ok(QueryResults::new(query_str, &self.pool))
     }

@@ -2,7 +2,7 @@
 
 use crate::api::ApiService;
 use crate::deno::init_deno;
-use crate::query::{MetaService, QueryEngine};
+use crate::query::{DbConnection, MetaService, QueryEngine};
 use crate::rpc::RpcService;
 use crate::runtime;
 use crate::runtime::Runtime;
@@ -79,8 +79,11 @@ async fn run(state: SharedState) -> Result<()> {
     // one thread, so this is fine.
     init_deno(state.inspect_brk).await?;
 
-    let meta = MetaService::connect(&state.metadata_db_uri).await?;
-    let query_engine = QueryEngine::connect(&state.data_db_uri).await?;
+    let meta_conn = DbConnection::connect(&state.metadata_db_uri).await?;
+    let meta = MetaService::local_connection(&meta_conn).await?;
+
+    let data_conn = DbConnection::connect(&state.data_db_uri).await?;
+    let query_engine = QueryEngine::local_connection(&data_conn).await?;
     meta.create_schema().await?;
     let ts = meta.load_type_system().await?;
 
