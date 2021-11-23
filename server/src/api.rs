@@ -9,6 +9,7 @@ use hyper::body::HttpBody;
 use hyper::header::HeaderValue;
 use hyper::service::{make_service_fn, service_fn};
 use hyper::{HeaderMap, Request, Response, Server, StatusCode};
+use socket2::{Domain, Protocol, Socket, Type};
 use std::convert::Infallible;
 use std::io::Cursor;
 use std::net::SocketAddr;
@@ -180,7 +181,7 @@ pub fn spawn(
     api: Arc<Mutex<ApiService>>,
     addr: SocketAddr,
     shutdown: impl core::future::Future<Output = ()> + 'static,
-) -> tokio::task::JoinHandle<Result<(), hyper::Error>> {
+) -> Result<tokio::task::JoinHandle<Result<(), hyper::Error>>> {
     let make_svc = make_service_fn(move |_conn| {
         let api = api.clone();
         async move {
@@ -193,10 +194,24 @@ pub fn spawn(
             }))
         }
     });
-    let server = Server::bind(&addr).executor(LocalExec).serve(make_svc);
-    tokio::task::spawn_local(async move {
+
+    let domain = if addr.is_ipv6() {
+        Domain::ipv6()
+    } else {
+        Domain::ipv4()
+    };
+    let sk = Socket::new(domain, Type::stream(), Some(Protocol::tcp()))?;
+    let addr = socket2::SockAddr::from(addr);
+    sk.set_reuse_port(true)?;
+    sk.bind(&addr)?;
+    sk.listen(1024)?;
+
+    let server = Server::from_tcp(sk.into_tcp_listener())?
+        .executor(LocalExec)
+        .serve(make_svc);
+    Ok(tokio::task::spawn_local(async move {
         let ret = server.with_graceful_shutdown(shutdown).await;
         info!("hyper shutdown");
         ret
-    })
+    }))
 }
