@@ -5,6 +5,7 @@ use crate::policies::{LabelPolicies, Policy};
 use crate::query::QueryError;
 use crate::runtime;
 use crate::types::{Field, ObjectType, TypeSystem, TypeSystemError};
+use async_mutex::Mutex;
 use chisel::chisel_rpc_server::{ChiselRpc, ChiselRpcServer};
 use chisel::{
     AddTypeRequest, AddTypeResponse, EndPointCreationRequest, EndPointCreationResponse,
@@ -17,7 +18,6 @@ use futures::FutureExt;
 use log::debug;
 use std::net::SocketAddr;
 use std::sync::Arc;
-use tokio::sync::Mutex;
 use tonic::{transport::Server, Request, Response, Status};
 use yaml_rust::YamlLoader;
 
