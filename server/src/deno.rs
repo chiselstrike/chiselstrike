@@ -56,7 +56,10 @@ use v8;
 use url::Url;
 
 struct VersionedHandler {
-    func: v8::Global<v8::Function>,
+    // This is None when there is a failure loading the module. In
+    // that case we still need the version to be set so that it is
+    // possible to change the endpoint.
+    func: Option<v8::Global<v8::Function>>,
     version: u64,
 }
 
@@ -618,7 +621,7 @@ async fn run_js_aux(
     mut req: Request<hyper::Body>,
 ) -> Result<Response<Body>> {
     let service = &mut *d.borrow_mut();
-    let request_handler = service.handlers.get(&path).unwrap().func.clone();
+    let request_handler = service.handlers.get(&path).unwrap().func.clone().unwrap();
 
     let worker = &mut service.worker;
     let runtime = &mut worker.js_runtime;
@@ -691,7 +694,7 @@ async fn get_endpoint(
     runtime: &mut JsRuntime,
     path: String,
     code: &VersionedCode,
-) -> Result<VersionedHandler> {
+) -> Result<v8::Global<v8::Function>> {
     // Modules are never unloaded, so we need to create an unique
     // path. This will not be a problem once we publish the entire app
     // at once, since then we can create a new isolate for it.
@@ -712,11 +715,7 @@ async fn get_endpoint(
         .to_object(scope)
         .ok_or(Error::NotAResponse)?;
     let request_handler: v8::Local<v8::Function> = get_member(module, scope, "default")?;
-    let ret = VersionedHandler {
-        func: v8::Global::new(scope, request_handler),
-        version: code.version,
-    };
-    Ok(ret)
+    Ok(v8::Global::new(scope, request_handler))
 }
 
 async fn define_endpoint_aux(
@@ -725,10 +724,22 @@ async fn define_endpoint_aux(
     code: String,
 ) -> Result<()> {
     let service = &mut *d.borrow_mut();
-    let entry = service.handlers.entry(path.clone());
+    let mut entry = service.handlers.entry(path.clone());
     let version = match &entry {
         Entry::Vacant(_) => 0,
         Entry::Occupied(o) => o.get().version + 1,
+    };
+    let dummy = VersionedHandler {
+        func: None,
+        version,
+    };
+    let entry = match entry {
+        Entry::Vacant(v) => v.insert(dummy),
+        Entry::Occupied(ref mut o) => {
+            let o = o.get_mut();
+            *o = dummy;
+            o
+        }
     };
     let code = VersionedCode { code, version };
     let e = get_endpoint(
@@ -738,12 +749,7 @@ async fn define_endpoint_aux(
         &code,
     )
     .await?;
-    match entry {
-        Entry::Vacant(v) => {
-            v.insert(e);
-        }
-        Entry::Occupied(mut o) => *o.get_mut() = e,
-    }
+    entry.func = Some(e);
     Ok(())
 }
 
