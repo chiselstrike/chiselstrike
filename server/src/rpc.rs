@@ -6,6 +6,7 @@ use crate::policies::{LabelPolicies, Policy};
 use crate::query::QueryError;
 use crate::query::{MetaService, QueryEngine};
 use crate::runtime;
+use crate::server::CommandTrait;
 use crate::server::CoordinatorChannel;
 use crate::types::{Field, ObjectType, TypeSystem, TypeSystemError};
 use anyhow::Result;
@@ -20,9 +21,7 @@ use chisel::{
 use convert_case::{Case, Casing};
 use futures::FutureExt;
 use log::debug;
-use std::future::Future;
 use std::net::SocketAddr;
-use std::pin::Pin;
 use std::sync::Arc;
 use tonic::{transport::Server, Request, Response, Status};
 use yaml_rust::YamlLoader;
@@ -66,12 +65,10 @@ impl GlobalRpcState {
 
     async fn send_command<F>(&self, closure: Box<F>) -> Result<()>
     where
-        F: FnOnce() -> Pin<Box<dyn Future<Output = Result<()>>>> + 'static + Send + Clone,
+        F: Clone + CommandTrait,
     {
         for cmd in &self.commands {
-            // Send fails only if the channel is closed, so unwrap is ok.
-            cmd.tx.send(closure.clone()).await.unwrap();
-            cmd.rx.recv().await.unwrap()?;
+            cmd.send(closure.clone()).await?;
         }
         Ok(())
     }

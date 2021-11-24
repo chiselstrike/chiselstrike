@@ -45,7 +45,14 @@ pub enum DoRepeat {
     No,
 }
 
-pub type Command = Box<dyn (FnOnce() -> LocalBoxFuture<'static, Result<()>>) + Send>;
+pub trait CommandTrait: (FnOnce() -> LocalBoxFuture<'static, Result<()>>) + Send + 'static {}
+
+impl<T> CommandTrait for T where
+    T: (FnOnce() -> LocalBoxFuture<'static, Result<()>>) + Send + 'static
+{
+}
+
+pub type Command = Box<dyn CommandTrait>;
 pub type CommandResult = Result<()>;
 
 #[derive(Clone)]
@@ -123,6 +130,14 @@ pub struct ExecutorChannel {
 pub struct CoordinatorChannel {
     pub tx: async_channel::Sender<Command>,
     pub rx: async_channel::Receiver<CommandResult>,
+}
+
+impl CoordinatorChannel {
+    pub async fn send(&self, cmd: Command) -> CommandResult {
+        // Send fails only if the channel is closed, so unwrap is ok.
+        self.tx.send(cmd).await.unwrap();
+        self.rx.recv().await.unwrap()
+    }
 }
 
 pub async fn run_shared_state(
