@@ -1,0 +1,54 @@
+# SPDX-FileCopyrightText: © 2021 ChiselStrike <info@chiselstrike.com>
+
+# RUN: sh -e @file
+
+cat << EOF > "$TEMPDIR/endpoints/test.js"
+// Intentionally invalid, there is no default export
+export async function chisel(req) {
+    return new Response("foo\n");
+}
+EOF
+
+cd "$TEMPDIR"
+
+set +e
+$CHISEL apply 2>&1
+set -e
+
+# CHECK:  Error: status: Internal, message: "expected type `v8::data::Function`, got `v8::data::Value`"
+
+$CURL -o - $CHISELD_HOST/test
+
+# CHECK: HTTP/1.1 404 Not Found
+
+cat << EOF > "$TEMPDIR/endpoints/test.js"
+// Now it is OK
+export default async function chisel(req) {
+    return new Response("foo\n");
+}
+EOF
+
+$CHISEL apply
+
+# CHECK: End point defined: /test
+
+$CURL -o - $CHISELD_HOST/test
+
+# CHECK: HTTP/1.1 200 OK
+# CHECK: foo
+
+cat << EOF > "$TEMPDIR/endpoints/test.js"
+// Intentionally invalid, there is no default export
+export async function chisel(req) {
+    return new Response("foo\n");
+}
+EOF
+
+set +e
+$CHISEL apply 2>&1
+set -e
+
+# CHECK:  Error: status: Internal, message: "expected type `v8::data::Function`, got `v8::data::Value`"
+
+$CURL -o - $CHISELD_HOST/test
+# CHECK: HTTP/1.1 404 Not Found

@@ -233,8 +233,9 @@ impl ChiselRpc for RpcService {
         let path = format!("/{}", request.path);
         let code = request.code;
 
-        // FIXME: Convert the error
-        self.create_js_endpoint(&path, code).await.unwrap();
+        self.create_js_endpoint(&path, code)
+            .await
+            .map_err(|e| Status::internal(format!("{}", e)))?;
 
         let response = EndPointCreationResponse { message: path };
         Ok(Response::new(response))
