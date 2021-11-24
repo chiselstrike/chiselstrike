@@ -1,8 +1,10 @@
 // SPDX-FileCopyrightText: © 2021 ChiselStrike <info@chiselstrike.com>
 
+use crate::api::RoutePaths;
 use crate::deno;
 use crate::policies::{LabelPolicies, Policy};
 use crate::query::QueryError;
+use crate::query::{MetaService, QueryEngine};
 use crate::runtime;
 use crate::server::Command;
 use crate::server::CommandResult;
@@ -20,7 +22,9 @@ use convert_case::{Case, Casing};
 use futures::FutureExt;
 use itertools::zip;
 use log::debug;
+use std::future::Future;
 use std::net::SocketAddr;
+use std::pin::Pin;
 use std::sync::Arc;
 use tonic::{transport::Server, Request, Response, Status};
 use yaml_rust::YamlLoader;
@@ -39,22 +43,49 @@ pub mod chisel {
 // Policies and endpoints are stateless so we don't need a global copy.
 pub struct GlobalRpcState {
     type_system: TypeSystem,
+    meta: MetaService,
+    query_engine: QueryEngine,
+    routes: RoutePaths, // For globally keeping track of routes
     command_txs: Vec<async_channel::Sender<Command>>,
     result_rxs: Vec<async_channel::Receiver<CommandResult>>,
 }
 
 impl GlobalRpcState {
-    pub fn new(
-        type_system: TypeSystem,
+    pub async fn new(
+        meta: MetaService,
+        query_engine: QueryEngine,
         command_txs: Vec<async_channel::Sender<Command>>,
         result_rxs: Vec<async_channel::Receiver<CommandResult>>,
-    ) -> Self {
-        Self {
+    ) -> anyhow::Result<Self> {
+        let type_system = meta.load_type_system().await?;
+
+        Ok(Self {
             type_system,
+            meta,
+            query_engine,
             command_txs,
             result_rxs,
-        }
+            routes: RoutePaths::default(),
+        })
     }
+
+    async fn send_command<F>(&self, closure: Box<F>) -> Result<()>
+    where
+        F: FnOnce() -> Pin<Box<dyn Future<Output = Result<()>>>> + 'static + Send + Clone,
+    {
+        for (tx, rx) in zip(&self.command_txs, &self.result_rxs) {
+            // Send fails only if the channel is closed, so unwrap is ok.
+            tx.send(closure.clone()).await.unwrap();
+            rx.recv().await.unwrap()?;
+        }
+        Ok(())
+    }
+}
+
+macro_rules! send_command {
+    ( $code:block ) => {{
+        Box::new({ move || async move { $code }.boxed_local() })
+    }};
 }
 
 /// RPC service for Chisel server.
@@ -72,26 +103,24 @@ impl RpcService {
     }
 
     async fn create_js_endpoint(&self, path: &str, code: String) -> Result<()> {
-        let state = self.state.lock().await;
-        let closure = {
-            let path = path.to_string();
-            move || deno::define_endpoint(path, code).boxed_local()
-        };
-        let closure = Box::new(closure);
-
-        for (tx, rx) in zip(&state.command_txs, &state.result_rxs) {
-            // Send fails only if the channel is closed, so unwrap is ok.
-            tx.send(closure.clone()).await.unwrap();
-            rx.recv().await.unwrap()?;
-        }
-        let func = {
+        let func = Box::new({
             let path = path.to_owned();
             move |req| deno::run_js(path.clone(), req).boxed_local()
-        };
+        });
 
-        let runtime = &mut runtime::get().await;
-        runtime.api.lock().await.add_route(path, Box::new(func));
-        Ok(())
+        let mut state = self.state.lock().await;
+        state.routes.add_route(path, func.clone());
+
+        let path = path.to_string();
+        let cmd = send_command!({
+            deno::define_endpoint(path.clone(), code).await?;
+
+            let runtime = &mut runtime::get().await;
+            runtime.api.lock().await.add_route(&path, func);
+            Ok(())
+        });
+
+        state.send_command(cmd).await
     }
 }
 
@@ -126,16 +155,13 @@ impl ChiselRpc for RpcService {
         request: Request<AddTypeRequest>,
     ) -> Result<Response<AddTypeResponse>, Status> {
         let mut state = self.state.lock().await;
-        let type_system = &mut state.type_system;
-
-        let runtime = &mut runtime::get().await;
 
         let type_def = request.into_inner();
         let name = type_def.name;
         let snake_case_name = name.to_case(Case::Snake);
         let mut fields = Vec::new();
         for field in type_def.field_defs {
-            let ty = type_system.lookup_type(&field.field_type)?;
+            let ty = state.type_system.lookup_type(&field.field_type)?;
             fields.push(Field {
                 name: field.name.clone(),
                 type_: ty,
@@ -147,21 +173,30 @@ impl ChiselRpc for RpcService {
             fields,
             backing_table: snake_case_name.clone(),
         };
-        match type_system.add_type(ty.to_owned()) {
+        match state.type_system.add_type(ty.to_owned()) {
             Ok(_) => {
                 // FIXME: Consistency between metadata and backing store updates.
-                let meta = &runtime.meta;
+                let meta = &state.meta;
                 meta.insert(ty.clone()).await?;
-                let query_engine = &runtime.query_engine;
+
+                let query_engine = &state.query_engine;
                 query_engine.create_table(ty).await?;
             }
             Err(TypeSystemError::TypeAlreadyExists) => {
-                type_system.replace_type(ty)?;
+                state.type_system.replace_type(ty)?;
             }
             Err(e) => return Err(e.into()),
         }
 
-        runtime.type_system.update(type_system);
+        let type_system = state.type_system.clone();
+
+        let cmd = send_command!({
+            let runtime = &mut runtime::get().await;
+            runtime.type_system.update(&type_system);
+            Ok(())
+        });
+        state.send_command(cmd).await.unwrap();
+
         let response = chisel::AddTypeResponse { message: name };
         Ok(Response::new(response))
     }
@@ -217,14 +252,22 @@ impl ChiselRpc for RpcService {
         &self,
         request: Request<EndPointRemoveRequest>,
     ) -> Result<Response<EndPointRemoveResponse>, Status> {
+        let mut state = self.state.lock().await;
+
         let request = request.into_inner();
 
         let regex = regex::Regex::new(&request.path.unwrap_or_else(|| ".*".into()))
             .map_err(|x| Status::internal(format!("invalid regex: {}", x)))?;
 
-        let runtime = &mut runtime::get().await;
-        let removed = runtime.api.lock().await.remove_routes(regex) as i32;
+        let removed = state.routes.remove_routes(regex.clone()) as i32;
 
+        let cmd = send_command!({
+            let runtime = &mut runtime::get().await;
+            runtime.api.lock().await.remove_routes(regex);
+            Ok(())
+        });
+
+        state.send_command(cmd).await.unwrap();
         let response = EndPointRemoveResponse { removed };
         Ok(Response::new(response))
     }
@@ -241,6 +284,8 @@ impl ChiselRpc for RpcService {
         &self,
         request: tonic::Request<PolicyUpdateRequest>,
     ) -> Result<tonic::Response<PolicyUpdateResponse>, tonic::Status> {
+        let state = self.state.lock().await;
+
         let request = request.into_inner();
 
         let docs = YamlLoader::load_from_str(&request.policy_config)
@@ -288,7 +333,11 @@ impl ChiselRpc for RpcService {
             }
         }
 
-        runtime::get().await.policies = policies;
+        let cmd = send_command!({
+            runtime::get().await.policies = policies;
+            Ok(())
+        });
+        state.send_command(cmd).await.unwrap();
 
         // FIXME: return number of effective changes? Probably depends on how we implement
         // terraform-like workflow (x added, y removed, z modified)

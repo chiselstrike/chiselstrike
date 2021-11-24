@@ -110,7 +110,7 @@ async fn run(
 
     let api_task = crate::api::spawn(api_service, state.api_listen_addr, async move {
         state.signal_rx.recv().await.ok();
-    });
+    })?;
     state.readiness_tx.send(()).await?;
 
     api_task.await??;
@@ -126,24 +126,32 @@ pub async fn run_shared_state(
     Vec<async_channel::Receiver<Command>>,
     Vec<async_channel::Sender<CommandResult>>,
 )> {
-    assert_eq!(
-        opt.executor_threads, 1,
-        "For now, only one executor thread supported"
-    );
-
     let meta_conn = DbConnection::connect(&opt.metadata_db_uri).await?;
+    let data_db = DbConnection::connect(&opt.data_db_uri).await?;
+
     let meta = MetaService::local_connection(&meta_conn).await?;
+    let query_engine = QueryEngine::local_connection(&data_db).await?;
 
     meta.create_schema().await?;
-    let ts = meta.load_type_system().await?;
-    let (command_tx, command_rx) = async_channel::bounded(1);
-    let command_tx = vec![command_tx];
-    let command_rx = vec![command_rx];
 
-    let (result_tx, result_rx) = async_channel::bounded(1);
-    let result_tx = vec![result_tx];
-    let result_rx = vec![result_rx];
-    let state = Arc::new(Mutex::new(GlobalRpcState::new(ts, command_tx, result_rx)));
+    let mut command_tx = vec![];
+    let mut command_rx = vec![];
+    let mut result_tx = vec![];
+    let mut result_rx = vec![];
+
+    for _ in 0..opt.executor_threads {
+        let (ctx, crx) = async_channel::bounded(1);
+        command_tx.push(ctx);
+        command_rx.push(crx);
+
+        let (rtx, rrx) = async_channel::bounded(1);
+        result_tx.push(rtx);
+        result_rx.push(rrx);
+    }
+
+    let state = Arc::new(Mutex::new(
+        GlobalRpcState::new(meta, query_engine, command_tx, result_rx).await?,
+    ));
 
     let rpc = RpcService::new(state);
 
@@ -191,7 +199,7 @@ pub async fn run_shared_state(
         api_listen_addr: opt.api_listen_addr,
         inspect_brk: opt.inspect_brk,
         executor_threads: opt.executor_threads,
-        data_db: DbConnection::connect(&opt.data_db_uri).await?,
+        data_db,
         metadata_db: meta_conn,
     };
 

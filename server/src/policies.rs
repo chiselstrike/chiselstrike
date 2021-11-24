@@ -3,6 +3,7 @@
 use serde_json::{json, Value};
 use std::collections::HashMap;
 
+#[derive(Clone)]
 pub struct Policy {
     /// How this policy transforms values read from storage.
     pub transform: fn(Value) -> Value,

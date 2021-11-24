@@ -3641,6 +3641,7 @@ dependencies = [
  "reqwest",
  "sea-query",
  "serde_json",
+ "socket2 0.3.19",
  "sqlx",
  "structopt",
  "swc",

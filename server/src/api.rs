@@ -9,6 +9,7 @@ use hyper::body::HttpBody;
 use hyper::header::HeaderValue;
 use hyper::service::{make_service_fn, service_fn};
 use hyper::{HeaderMap, Request, Response, Server, StatusCode};
+use socket2::{Domain, Protocol, Socket, Type};
 use std::convert::Infallible;
 use std::io::Cursor;
 use std::net::SocketAddr;
@@ -66,9 +67,8 @@ type RouteFn = Box<
     dyn Fn(Request<hyper::Body>) -> LocalBoxFuture<'static, Result<Response<Body>>> + Send + Sync,
 >;
 
-/// API service for Chisel server.
 #[derive(Default)]
-pub struct ApiService {
+pub struct RoutePaths {
     // Kept reverse sorted so that if an entry is a prefix of another,
     // it comes later. This makes it easy to find which entry shares
     // the longest prefix with a request.
@@ -79,13 +79,7 @@ pub struct ApiService {
     paths: Vec<(PathBuf, RouteFn)>,
 }
 
-impl ApiService {
-    pub fn new() -> Self {
-        Self {
-            paths: Vec::default(),
-        }
-    }
-
+impl RoutePaths {
     fn longest_prefix(&self, request: &str) -> Option<&RouteFn> {
         let request: &Path = request.as_ref();
         for p in &self.paths {
@@ -119,6 +113,34 @@ impl ApiService {
             !path.is_match(&s)
         });
         before - self.paths.len()
+    }
+}
+
+/// API service for Chisel server.
+#[derive(Default)]
+pub struct ApiService {
+    paths: RoutePaths,
+}
+
+impl ApiService {
+    pub fn new() -> Self {
+        Self {
+            paths: RoutePaths::default(),
+        }
+    }
+
+    fn longest_prefix(&self, request: &str) -> Option<&RouteFn> {
+        self.paths.longest_prefix(request)
+    }
+
+    pub fn add_route(&mut self, path: &str, route_fn: RouteFn) {
+        self.paths.add_route(path, route_fn)
+    }
+
+    /// Remove all routes that match this regular expression, and return
+    /// the amount of routes removed.
+    pub fn remove_routes(&mut self, path: regex::Regex) -> usize {
+        self.paths.remove_routes(path)
     }
 
     pub async fn route(
@@ -159,7 +181,7 @@ pub fn spawn(
     api: Arc<Mutex<ApiService>>,
     addr: SocketAddr,
     shutdown: impl core::future::Future<Output = ()> + 'static,
-) -> tokio::task::JoinHandle<Result<(), hyper::Error>> {
+) -> Result<tokio::task::JoinHandle<Result<(), hyper::Error>>> {
     let make_svc = make_service_fn(move |_conn| {
         let api = api.clone();
         async move {
@@ -172,10 +194,24 @@ pub fn spawn(
             }))
         }
     });
-    let server = Server::bind(&addr).executor(LocalExec).serve(make_svc);
-    tokio::task::spawn_local(async move {
+
+    let domain = if addr.is_ipv6() {
+        Domain::ipv6()
+    } else {
+        Domain::ipv4()
+    };
+    let sk = Socket::new(domain, Type::stream(), Some(Protocol::tcp()))?;
+    let addr = socket2::SockAddr::from(addr);
+    sk.set_reuse_port(true)?;
+    sk.bind(&addr)?;
+    sk.listen(1024)?;
+
+    let server = Server::from_tcp(sk.into_tcp_listener())?
+        .executor(LocalExec)
+        .serve(make_svc);
+    Ok(tokio::task::spawn_local(async move {
         let ret = server.with_graceful_shutdown(shutdown).await;
         info!("hyper shutdown");
         ret
-    })
+    }))
 }
