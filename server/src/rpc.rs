@@ -6,8 +6,7 @@ use crate::policies::{LabelPolicies, Policy};
 use crate::query::QueryError;
 use crate::query::{MetaService, QueryEngine};
 use crate::runtime;
-use crate::server::Command;
-use crate::server::CommandResult;
+use crate::server::CoordinatorChannel;
 use crate::types::{Field, ObjectType, TypeSystem, TypeSystemError};
 use anyhow::Result;
 use async_mutex::Mutex;
@@ -20,7 +19,6 @@ use chisel::{
 };
 use convert_case::{Case, Casing};
 use futures::FutureExt;
-use itertools::zip;
 use log::debug;
 use std::future::Future;
 use std::net::SocketAddr;
@@ -46,16 +44,14 @@ pub struct GlobalRpcState {
     meta: MetaService,
     query_engine: QueryEngine,
     routes: RoutePaths, // For globally keeping track of routes
-    command_txs: Vec<async_channel::Sender<Command>>,
-    result_rxs: Vec<async_channel::Receiver<CommandResult>>,
+    commands: Vec<CoordinatorChannel>,
 }
 
 impl GlobalRpcState {
     pub async fn new(
         meta: MetaService,
         query_engine: QueryEngine,
-        command_txs: Vec<async_channel::Sender<Command>>,
-        result_rxs: Vec<async_channel::Receiver<CommandResult>>,
+        commands: Vec<CoordinatorChannel>,
     ) -> anyhow::Result<Self> {
         let type_system = meta.load_type_system().await?;
 
@@ -63,8 +59,7 @@ impl GlobalRpcState {
             type_system,
             meta,
             query_engine,
-            command_txs,
-            result_rxs,
+            commands,
             routes: RoutePaths::default(),
         })
     }
@@ -73,10 +68,10 @@ impl GlobalRpcState {
     where
         F: FnOnce() -> Pin<Box<dyn Future<Output = Result<()>>>> + 'static + Send + Clone,
     {
-        for (tx, rx) in zip(&self.command_txs, &self.result_rxs) {
+        for cmd in &self.commands {
             // Send fails only if the channel is closed, so unwrap is ok.
-            tx.send(closure.clone()).await.unwrap();
-            rx.recv().await.unwrap()?;
+            cmd.tx.send(closure.clone()).await.unwrap();
+            cmd.rx.recv().await.unwrap()?;
         }
         Ok(())
     }
