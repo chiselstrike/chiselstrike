@@ -77,11 +77,7 @@ impl SharedTasks {
     }
 }
 
-async fn run(
-    state: SharedState,
-    command_rx: async_channel::Receiver<Command>,
-    result_tx: async_channel::Sender<CommandResult>,
-) -> Result<()> {
+async fn run(state: SharedState, mut cmd: ExecutorChannel) -> Result<()> {
     let api_service = Arc::new(Mutex::new(ApiService::new()));
 
     // FIXME: We have to create one per thread. For now we only have
@@ -101,10 +97,9 @@ async fn run(
     runtime::set(rt);
 
     let command_task = tokio::task::spawn_local(async move {
-        let mut stream = command_rx;
-        while let Some(item) = stream.next().await {
+        while let Some(item) = cmd.rx.next().await {
             let res = item().await;
-            result_tx.send(res).await.unwrap();
+            cmd.tx.send(res).await.unwrap();
         }
     });
 
@@ -118,14 +113,21 @@ async fn run(
     Ok(())
 }
 
+// Receives commands, returns results
+pub struct ExecutorChannel {
+    pub rx: async_channel::Receiver<Command>,
+    pub tx: async_channel::Sender<CommandResult>,
+}
+
+// Sends commands, receives results.
+pub struct CoordinatorChannel {
+    pub tx: async_channel::Sender<Command>,
+    pub rx: async_channel::Receiver<CommandResult>,
+}
+
 pub async fn run_shared_state(
     opt: Opt,
-) -> Result<(
-    SharedTasks,
-    SharedState,
-    Vec<async_channel::Receiver<Command>>,
-    Vec<async_channel::Sender<CommandResult>>,
-)> {
+) -> Result<(SharedTasks, SharedState, Vec<ExecutorChannel>)> {
     let meta_conn = DbConnection::connect(&opt.metadata_db_uri).await?;
     let data_db = DbConnection::connect(&opt.data_db_uri).await?;
 
@@ -134,23 +136,18 @@ pub async fn run_shared_state(
 
     meta.create_schema().await?;
 
-    let mut command_tx = vec![];
-    let mut command_rx = vec![];
-    let mut result_tx = vec![];
-    let mut result_rx = vec![];
+    let mut commands = vec![];
+    let mut commands2 = vec![];
 
     for _ in 0..opt.executor_threads {
         let (ctx, crx) = async_channel::bounded(1);
-        command_tx.push(ctx);
-        command_rx.push(crx);
-
         let (rtx, rrx) = async_channel::bounded(1);
-        result_tx.push(rtx);
-        result_rx.push(rrx);
+        commands.push(ExecutorChannel { tx: rtx, rx: crx });
+        commands2.push(CoordinatorChannel { tx: ctx, rx: rrx });
     }
 
     let state = Arc::new(Mutex::new(
-        GlobalRpcState::new(meta, query_engine, command_tx, result_rx).await?,
+        GlobalRpcState::new(meta, query_engine, commands2).await?,
     ));
 
     let rpc = RpcService::new(state);
@@ -204,15 +201,10 @@ pub async fn run_shared_state(
     };
 
     let tasks = SharedTasks { rpc_task, sig_task };
-
-    Ok((tasks, state, command_rx, result_tx))
+    Ok((tasks, state, commands))
 }
 
-pub async fn run_on_new_localset(
-    state: SharedState,
-    command_rx: async_channel::Receiver<Command>,
-    result_tx: async_channel::Sender<CommandResult>,
-) -> Result<()> {
+pub async fn run_on_new_localset(state: SharedState, command: ExecutorChannel) -> Result<()> {
     let local = tokio::task::LocalSet::new();
-    local.run_until(run(state, command_rx, result_tx)).await
+    local.run_until(run(state, command)).await
 }
