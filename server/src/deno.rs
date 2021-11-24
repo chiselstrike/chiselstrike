@@ -725,33 +725,24 @@ async fn define_endpoint_aux(
     code: String,
 ) -> Result<()> {
     let service = &mut *d.borrow_mut();
-    match service.handlers.entry(path.clone()) {
+    let entry = service.handlers.entry(path.clone());
+    let version = match &entry {
+        Entry::Vacant(_) => 0,
+        Entry::Occupied(o) => o.get().version + 1,
+    };
+    let code = VersionedCode { code, version };
+    let e = get_endpoint(
+        &service.module_loader,
+        &mut service.worker.js_runtime,
+        path,
+        &code,
+    )
+    .await?;
+    match entry {
         Entry::Vacant(v) => {
-            let code = VersionedCode { code, version: 0 };
-            let e = get_endpoint(
-                &service.module_loader,
-                &mut service.worker.js_runtime,
-                path,
-                &code,
-            )
-            .await?;
             v.insert(e);
         }
-        Entry::Occupied(mut o) => {
-            let o = o.get_mut();
-            let code = VersionedCode {
-                code,
-                version: o.version + 1,
-            };
-            let e = get_endpoint(
-                &service.module_loader,
-                &mut service.worker.js_runtime,
-                path,
-                &code,
-            )
-            .await?;
-            *o = e;
-        }
+        Entry::Occupied(mut o) => *o.get_mut() = e,
     }
     Ok(())
 }
