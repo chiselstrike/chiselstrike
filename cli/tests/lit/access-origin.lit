@@ -12,7 +12,9 @@ cat << EOF > "$TEMPDIR/endpoints/bar.js"
 export default async function chisel(req) {
     return new Response("bar", {
         headers: [
-            ["access-control-allow-origin", "https://chiselstrike.com"]
+            ["access-control-allow-origin", "https://chiselstrike.com"],
+            ["access-control-allow-methods", "get"],
+            ["access-control-allow-headers", "foo"]
         ]
     });
 }
@@ -28,6 +30,8 @@ $CURL -o - $CHISELD_HOST/foo
 
 # CHECK: HTTP/1.1 200 OK
 # CHECK: access-control-allow-origin: *
+# CHECK: access-control-allow-methods: POST, PUT, GET, OPTIONS
+# CHECK: access-control-allow-headers: Content-Type
 # CHECK: foo
 
 echo
@@ -35,5 +39,7 @@ echo
 $CURL -o - $CHISELD_HOST/bar
 
 # CHECK: HTTP/1.1 200 OK
+# CHECK: access-control-allow-headers: foo
+# CHECK: access-control-allow-methods: get
 # CHECK: access-control-allow-origin: https://chiselstrike.com
 # CHECK: bar

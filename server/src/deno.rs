@@ -669,6 +669,10 @@ async fn run_js_aux(
     let headers = builder.headers_mut().ok_or(Error::NotAResponse)?;
     let entry = headers.entry("Access-Control-Allow-Origin");
     entry.or_insert(HeaderValue::from_static("*"));
+    let entry = headers.entry("Access-Control-Allow-Methods");
+    entry.or_insert(HeaderValue::from_static("POST, PUT, GET, OPTIONS"));
+    let entry = headers.entry("Access-Control-Allow-Headers");
+    entry.or_insert(HeaderValue::from_static("Content-Type"));
 
     let body = builder.body(Body::Stream(Box::pin(stream)))?;
     Ok(body)
