@@ -8,6 +8,8 @@ use crate::runtime;
 use crate::runtime::Runtime;
 use anyhow::Result;
 use async_mutex::Mutex;
+use futures::future::LocalBoxFuture;
+use futures::StreamExt;
 use std::net::SocketAddr;
 use std::panic;
 use std::sync::Arc;
@@ -43,6 +45,9 @@ pub enum DoRepeat {
     No,
 }
 
+pub type Command = Box<dyn (FnOnce() -> LocalBoxFuture<'static, Result<()>>) + Send>;
+pub type CommandResult = Result<()>;
+
 #[derive(Clone)]
 pub struct SharedState {
     signal_rx: async_channel::Receiver<()>,
@@ -72,7 +77,11 @@ impl SharedTasks {
     }
 }
 
-async fn run(state: SharedState) -> Result<()> {
+async fn run(
+    state: SharedState,
+    command_rx: async_channel::Receiver<Command>,
+    result_tx: async_channel::Sender<CommandResult>,
+) -> Result<()> {
     let api_service = Arc::new(Mutex::new(ApiService::new()));
 
     // FIXME: We have to create one per thread. For now we only have
@@ -91,16 +100,32 @@ async fn run(state: SharedState) -> Result<()> {
     );
     runtime::set(rt);
 
+    let command_task = tokio::task::spawn_local(async move {
+        let mut stream = command_rx;
+        while let Some(item) = stream.next().await {
+            let res = item().await;
+            result_tx.send(res).await.unwrap();
+        }
+    });
+
     let api_task = crate::api::spawn(api_service, state.api_listen_addr, async move {
         state.signal_rx.recv().await.ok();
     });
     state.readiness_tx.send(()).await?;
 
     api_task.await??;
+    command_task.await?;
     Ok(())
 }
 
-pub async fn run_shared_state(opt: Opt) -> Result<(SharedTasks, SharedState)> {
+pub async fn run_shared_state(
+    opt: Opt,
+) -> Result<(
+    SharedTasks,
+    SharedState,
+    Vec<async_channel::Receiver<Command>>,
+    Vec<async_channel::Sender<CommandResult>>,
+)> {
     assert_eq!(
         opt.executor_threads, 1,
         "For now, only one executor thread supported"
@@ -111,7 +136,14 @@ pub async fn run_shared_state(opt: Opt) -> Result<(SharedTasks, SharedState)> {
 
     meta.create_schema().await?;
     let ts = meta.load_type_system().await?;
-    let state = Arc::new(Mutex::new(GlobalRpcState::new(ts)));
+    let (command_tx, command_rx) = async_channel::bounded(1);
+    let command_tx = vec![command_tx];
+    let command_rx = vec![command_rx];
+
+    let (result_tx, result_rx) = async_channel::bounded(1);
+    let result_tx = vec![result_tx];
+    let result_rx = vec![result_rx];
+    let state = Arc::new(Mutex::new(GlobalRpcState::new(ts, command_tx, result_rx)));
 
     let rpc = RpcService::new(state);
 
@@ -165,10 +197,14 @@ pub async fn run_shared_state(opt: Opt) -> Result<(SharedTasks, SharedState)> {
 
     let tasks = SharedTasks { rpc_task, sig_task };
 
-    Ok((tasks, state))
+    Ok((tasks, state, command_rx, result_tx))
 }
 
-pub async fn run_on_new_localset(state: SharedState) -> Result<()> {
+pub async fn run_on_new_localset(
+    state: SharedState,
+    command_rx: async_channel::Receiver<Command>,
+    result_tx: async_channel::Sender<CommandResult>,
+) -> Result<()> {
     let local = tokio::task::LocalSet::new();
-    local.run_until(run(state)).await
+    local.run_until(run(state, command_rx, result_tx)).await
 }

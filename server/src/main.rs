@@ -19,18 +19,21 @@ async fn main() -> Result<()> {
     pretty_env_logger::init();
 
     let args: Vec<CString> = env::args().map(|x| CString::new(x).unwrap()).collect();
-    let (tasks, shared) = server::run_shared_state(server::Opt::from_args()).await?;
+    let (tasks, shared, mut command_rxs, mut result_txs) =
+        server::run_shared_state(server::Opt::from_args()).await?;
     let exe = env::current_exe()?.into_os_string().into_string().unwrap();
 
     for id in 0..shared.executor_threads() {
         debug!("Starting executor {}", id);
+        let command_rx = command_rxs.pop().unwrap();
+        let result_tx = result_txs.pop().unwrap();
         executors.push(std::thread::spawn(enclose! { (shared) move || {
             tokio::runtime::Builder::new_current_thread()
                 .enable_all()
                 .build()
                 .unwrap()
                 .block_on(async {
-                    server::run_on_new_localset(shared).await
+                    server::run_on_new_localset(shared, command_rx, result_tx).await
                 }).unwrap();
         }}));
     }
