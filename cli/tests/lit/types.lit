@@ -4,9 +4,9 @@
 
 cd "$TEMPDIR"
 
-cat << EOF > "$TEMPDIR/types/types.graphql"
-type Foo { a: String }
-type Bar { a: String }
+cat << EOF > "$TEMPDIR/types/types.ts"
+class Foo { a?: string; }
+class Bar { a: string = "default"; }
 EOF
 $CHISEL apply
 
@@ -17,17 +17,26 @@ $CHISEL restart
 $CHISEL type export
 
 # CHECK: class Bar {
-# CHECK:   [[^ *a: String]]
+# CHECK:   [[^ *a: string = "default"]]
 # CHECK: }
 # CHECK: class Foo {
-# CHECK:   [[^ *a: String]]
+# CHECK:   [[^ *a\?: string]]
 # CHECK: }
 
-cat << EOF > "$TEMPDIR/types/types.graphql"
-type Zed { a: String, a: String }
+cat << EOF > "$TEMPDIR/types/types.ts"
+class Zed { a: string; a: string; }
 EOF
 set +e
 $CHISEL apply 2>&1
 set -e
 
 # CHECK: UNIQUE constraint failed: field_names.field_name
+#
+cat << EOF > "$TEMPDIR/types/types.ts"
+class Bad { a: SomeType; }
+EOF
+set +e
+$CHISEL apply 2>&1
+set -e
+
+# CHECK: field a in class Bad neither a basic type, nor refers to a type defined in this context

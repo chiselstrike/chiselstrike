@@ -4,12 +4,11 @@ use crate::chisel::StatusResponse;
 use anyhow::{anyhow, Context, Result};
 use chisel::chisel_rpc_client::ChiselRpcClient;
 use chisel::{
-    AddTypeRequest, EndPointCreationRequest, EndPointRemoveRequest, FieldDefinition,
-    PolicyUpdateRequest, RestartRequest, StatusRequest, TypeExportRequest,
+    EndPointCreationRequest, EndPointRemoveRequest, PolicyUpdateRequest, RestartRequest,
+    StatusRequest, TypeExportRequest,
 };
 use futures::channel::mpsc::channel;
 use futures::{SinkExt, StreamExt};
-use graphql_parser::schema::{parse_schema, Definition, TypeDefinition};
 use notify::{Event, RecommendedWatcher, RecursiveMode, Watcher};
 use regex::Regex;
 use serde_derive::Deserialize;
@@ -21,6 +20,7 @@ use std::thread;
 use std::time::Duration;
 use structopt::StructOpt;
 use tonic::transport::Channel;
+mod ts;
 
 // Timeout when waiting for connection or server status.
 const TIMEOUT: Duration = Duration::from_secs(10);
@@ -183,40 +183,17 @@ fn read_dir<P: AsRef<Path>>(dir: P) -> Result<fs::ReadDir, anyhow::Error> {
 
 async fn import_types<P>(
     client: &mut ChiselRpcClient<tonic::transport::Channel>,
-    filename: P,
+    filename: &[P],
 ) -> Result<()>
 where
     P: AsRef<Path>,
 {
-    let schema = read_to_string(filename)?;
-    let type_system = parse_schema::<String>(&schema)?;
-    for def in &type_system.definitions {
-        match def {
-            Definition::TypeDefinition(TypeDefinition::Object(obj_def)) => {
-                let mut field_defs = Vec::default();
-                for field_def in &obj_def.fields {
-                    field_defs.push(FieldDefinition {
-                        name: field_def.name.to_owned(),
-                        field_type: format!("{}", field_def.field_type.to_owned()),
-                        labels: field_def
-                            .directives
-                            .iter()
-                            .map(|d| d.name.clone())
-                            .collect(),
-                    });
-                }
-                let request = tonic::Request::new(AddTypeRequest {
-                    name: obj_def.name.to_owned(),
-                    field_defs,
-                });
-                let response = client.add_type(request).await?.into_inner();
-                println!("Type defined: {}", response.message);
-            }
-            def => {
-                println!("Ignoring type definition: {:?}", def);
-            }
-        }
+    for t in crate::ts::parse_types(filename)?.into_iter() {
+        let request = tonic::Request::new(t);
+        let response = client.add_type(request).await?.into_inner();
+        println!("Type defined: {}", response.message);
     }
+
     Ok(())
 }
 
@@ -313,10 +290,8 @@ async fn apply(server_url: String) -> Result<()> {
 
     let mut client = ChiselRpcClient::connect(server_url).await?;
 
-    for entry in types {
-        // FIXME: will fail the second time until we implement type evolution
-        import_types(&mut client, entry).await?;
-    }
+    // FIXME: will fail the second time until we implement type evolution
+    import_types(&mut client, &types).await?;
 
     let request = tonic::Request::new(EndPointRemoveRequest { path: None });
     client.remove_end_point(request).await?;
@@ -407,14 +382,19 @@ async fn main() -> Result<()> {
                     println!("class {} {{", def.name);
                     for field in def.field_defs {
                         println!(
-                            "  {}: {}{}",
-                            field.name,
-                            field.field_type,
+                            "  {} {}{}: {}{};",
                             field
                                 .labels
                                 .iter()
                                 .map(|x| format!(" @{}", x))
-                                .collect::<String>()
+                                .collect::<String>(),
+                            field.name,
+                            if field.is_optional { "?" } else { "" },
+                            field.field_type,
+                            field
+                                .default_value
+                                .map(|d| format!(" = {}", d))
+                                .unwrap_or_else(|| "".into()),
                         );
                     }
                     println!("}}");

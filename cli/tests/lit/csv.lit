@@ -2,7 +2,7 @@
 
 # RUN: sh -e @file
 
-cp examples/person.graphql "$TEMPDIR/types"
+cp examples/person.ts "$TEMPDIR/types"
 cp examples/csv.js examples/find.js "$TEMPDIR/endpoints"
 
 cd "$TEMPDIR"

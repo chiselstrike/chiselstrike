@@ -2,11 +2,11 @@
 
 # RUN: sh -e @file
 
-echo 'type TestLabels {foo: String @a @b}' > "$TEMPDIR/types/types.graphql"
+echo 'class TestLabels {@a @b foo: string; }' > "$TEMPDIR/types/types.ts"
 
 cd "$TEMPDIR"
 $CHISEL apply
 
 $CHISEL type export
 
-# CHECK: foo: String @a @b
+# CHECK: @a @b foo: string;

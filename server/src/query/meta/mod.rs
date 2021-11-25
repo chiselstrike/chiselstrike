@@ -73,7 +73,7 @@ impl MetaService {
         ts: &TypeSystem,
         type_id: i32,
     ) -> Result<Vec<Field>, QueryError> {
-        let query = sqlx::query("SELECT fields.field_id AS field_id, field_names.field_name AS field_name, fields.field_type AS field_type FROM field_names INNER JOIN fields WHERE fields.type_id = $1 AND field_names.field_id = fields.field_id;");
+        let query = sqlx::query("SELECT fields.field_id AS field_id, field_names.field_name AS field_name, fields.field_type AS field_type, fields.default_value as default_value, fields.is_optional as is_optional FROM field_names INNER JOIN fields WHERE fields.type_id = $1 AND field_names.field_id = fields.field_id;");
         let query = query.bind(type_id);
         let rows = query
             .fetch_all(&self.pool)
@@ -85,6 +85,8 @@ impl MetaService {
             let field_name = field_name.split_once('.').unwrap().1;
             let field_type: &str = row.get("field_type");
             let field_id: i32 = row.get("field_id");
+            let field_def: Option<String> = row.get("default_value");
+            let is_optional: bool = row.get("is_optional");
             let ty = ts.lookup_type(field_type)?;
             let labels_query =
                 sqlx::query("SELECT label_name FROM field_labels WHERE field_id = $1");
@@ -100,6 +102,8 @@ impl MetaService {
                 name: field_name.to_string(),
                 type_: ty,
                 labels,
+                default: field_def,
+                is_optional,
             });
         }
         Ok(fields)

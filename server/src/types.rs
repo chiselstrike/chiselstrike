@@ -81,10 +81,10 @@ impl TypeSystem {
 
     pub fn lookup_type(&self, type_name: &str) -> Result<Type, TypeSystemError> {
         match type_name {
-            "String" => Ok(Type::String),
-            "Int" => Ok(Type::Int),
-            "Float" => Ok(Type::Float),
-            "Boolean" => Ok(Type::Boolean),
+            "string" => Ok(Type::String),
+            "bigint" => Ok(Type::Int),
+            "number" => Ok(Type::Float),
+            "boolean" => Ok(Type::Boolean),
             type_name => match self.types.get(type_name) {
                 Some(ty) => Ok(Type::Object(ty.to_owned())),
                 None => Err(TypeSystemError::NoSuchType(type_name.to_owned())),
@@ -111,10 +111,10 @@ pub enum Type {
 impl Type {
     pub fn name(&self) -> &str {
         match self {
-            Type::Float => "Float",
-            Type::Int => "Int",
-            Type::String => "String",
-            Type::Boolean => "Boolean",
+            Type::Float => "number",
+            Type::Int => "bigint",
+            Type::String => "string",
+            Type::Boolean => "boolean",
             Type::Object(ty) => &ty.name,
         }
     }
@@ -154,4 +154,6 @@ pub struct Field {
     pub name: String,
     pub type_: Type,
     pub labels: Vec<String>,
+    pub default: Option<String>,
+    pub is_optional: bool,
 }

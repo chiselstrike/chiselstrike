@@ -158,6 +158,8 @@ impl ChiselRpc for RpcService {
                 name: field.name.clone(),
                 type_: ty,
                 labels: field.labels,
+                default: field.default_value,
+                is_optional: field.is_optional,
             });
         }
         let ty = ObjectType {
@@ -213,6 +215,8 @@ impl ChiselRpc for RpcService {
                     name: field.name.to_owned(),
                     field_type: field.type_.name().to_string(),
                     labels: field.labels.clone(),
+                    default_value: field.default.clone(),
+                    is_optional: field.is_optional,
                 });
             }
             let type_def = chisel::TypeDefinition {
