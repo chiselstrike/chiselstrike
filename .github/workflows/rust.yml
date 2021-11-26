@@ -64,6 +64,18 @@ jobs:
           command: build
           args: --verbose
 
+    - name: Build cli in isolation
+      uses: actions-rs/cargo@v1
+      with:
+          command: build
+          args: --verbose -p cli
+
+    - name: Build server in isolation
+      uses: actions-rs/cargo@v1
+      with:
+          command: build
+          args: --verbose -p server
+
     - name: run unit tests
       uses: actions-rs/cargo@v1
       with:
