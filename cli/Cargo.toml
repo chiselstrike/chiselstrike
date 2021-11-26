@@ -6,26 +6,26 @@ edition = "2021"
 
 [dependencies]
 anyhow = "1.0"
+futures = "0.3.17"
 graphql-parser = "0.3.0"
-structopt = "0.3.23"
-tonic = "0.5.2"
+notify = "5.0.0-pre.12"
 prost = "0.8.0"
+regex = "1.5.4"
+serde = "1.0.130"
+serde_derive = "1.0.130"
+structopt = "0.3.23"
 tokio = { version = "1.11.0", features = ["rt-multi-thread", "net"] }
 toml = "0.5.8"
-serde_derive = "1.0.130"
-serde = "1.0.130"
-regex = "1.5.4"
-notify = "5.0.0-pre.12"
-futures = "0.3.17"
+tonic = "0.5.2"
 
 [build-dependencies]
 tonic-build = "0.5.2"
 
 [dev-dependencies]
+futures = "0.3.17"
 lit = "1.0.3"
 ntest = "0.7.3"
 server = { path = "../server" }
-futures = "0.3.17"
 
 [[bin]]
 name = "chisel"

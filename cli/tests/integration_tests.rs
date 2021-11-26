@@ -2,26 +2,15 @@
 
 extern crate lit;
 
+mod common;
+
 #[cfg(test)]
 mod tests {
+    use crate::common::bin_dir;
+    use crate::common::repo_dir;
     use ntest::timeout;
     use std::env;
-    use std::path::PathBuf;
     use std::process::Command;
-
-    fn bin_dir() -> PathBuf {
-        let mut path = env::current_exe().unwrap();
-        path.pop();
-        path.pop();
-        path
-    }
-
-    fn repo_dir() -> PathBuf {
-        let mut path = bin_dir();
-        path.pop();
-        path.pop();
-        path
-    }
 
     fn chisel() -> String {
         bin_dir().join("chisel").to_str().unwrap().to_string()

@@ -15,8 +15,7 @@ deno_runtime = "0.33.0"
 deno_web = "0.56.0"
 enclose = "1.1"
 futures = "0.3.17"
-socket2 = { version = "0.3.18", features = ["unix", "reuseport"] }
-hyper = { git = "https://github.com/hyperium/hyper", rev = "1d553e52c6953ea3b039f5c3f89d35cb56e2436a", features = ["server", "tcp", "http1"]}
+hyper = { git = "https://github.com/hyperium/hyper", rev = "1d553e52c6953ea3b039f5c3f89d35cb56e2436a", features = ["server", "tcp", "http1"] }
 itertools = "0.10.1"
 log = "0.4.14"
 nix = "0.22.2"
@@ -27,6 +26,7 @@ regex = "1"
 reqwest = "0.11.6"
 sea-query = { version = "0.17.1", features = [ "thread-safe" ] }
 serde_json = "1.0.68"
+socket2 = { version = "0.3.18", features = ["unix", "reuseport"] }
 sqlx = { version = "0.5.7", features = [ "any", "postgres", "sqlite", "runtime-tokio-native-tls" ] }
 structopt = "0.3.23"
 swc = "0.32"
