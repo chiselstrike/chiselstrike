@@ -33,6 +33,8 @@ swc = "0.32"
 swc_common = "0.14.6"
 swc_ecma_codegen = "0.80.0"
 swc_ecma_parser = "0.78.2"
+swc_ecma_transforms_typescript = "0.61.2"
+swc_ecma_visit = "0.44.0"
 swc_node_base = "0.5.1"
 thiserror = "1.0"
 tokio = { version = "1.11.0", features = ["rt"] }
