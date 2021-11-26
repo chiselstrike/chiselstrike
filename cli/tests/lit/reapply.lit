@@ -79,7 +79,7 @@ EOF
 $CHISEL apply 2>&1 || echo # (swallow the apply abort)
 # CHECK: unsafe to replace type: Foo
 
-## Reordering fields is not OK.  TODO : perhaps it should be?
+## Reordering fields is OK.
 cat << EOF > "$TEMPDIR/types/foo.ts"
 class Foo {
   b: number;
@@ -87,7 +87,7 @@ class Foo {
 }
 EOF
 $CHISEL apply 2>&1 || echo # (swallow the apply abort)
-# CHECK: unsafe to replace type: Foo
+# CHECK: Type defined: Foo
 
 ## Removing fields is not OK for now.
 cat << EOF > "$TEMPDIR/types/foo.ts"

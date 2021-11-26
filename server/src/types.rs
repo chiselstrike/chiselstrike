@@ -135,13 +135,17 @@ impl ObjectType {
     fn is_safe_replacement_for(&self, another_type: &Type) -> bool {
         match another_type {
             Type::Object(another_type) => {
+                let mut fields = self.fields.to_vec();
+                fields.sort_by(|f, k| f.name.cmp(&k.name));
+                let mut newfields = another_type.fields.to_vec();
+                newfields.sort_by(|f, k| f.name.cmp(&k.name));
+
                 self.name == another_type.name
                     && self.backing_table == another_type.backing_table
-                    && self.fields.len() == another_type.fields.len()
-                    && self
-                        .fields
+                    && fields.len() == newfields.len()
+                    && fields
                         .iter()
-                        .zip(&another_type.fields)
+                        .zip(&newfields)
                         .all(|(f1, f2)| f1.name == f2.name && f1.type_ == f2.type_)
             }
             _ => false, // We cannot replace an elemental type.
