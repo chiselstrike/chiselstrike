@@ -40,6 +40,7 @@ mod tests {
             config.add_search_path("tests/lit");
             config.add_extension("lit");
             config.constants.insert("chisel".to_owned(), chisel());
+            config.truncate_output_context_to_number_of_lines = Some(80);
             let mut path = repo.clone();
             path.push("cli/tests/test-wrapper.sh");
             config.shell = path.to_str().unwrap().to_string();
