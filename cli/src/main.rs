@@ -428,7 +428,8 @@ async fn main() -> Result<()> {
                 .await?
                 .into_inner();
             println!("{}", if response.ok { "success" } else { "failure" });
-            wait(server_url).await?;
+            wait(server_url.clone()).await?;
+            apply(server_url).await?;
         }
         Command::Wait => {
             wait(server_url).await?;
