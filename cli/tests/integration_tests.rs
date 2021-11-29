@@ -8,9 +8,9 @@ mod common;
 mod tests {
     use crate::common::bin_dir;
     use crate::common::repo_dir;
+    use crate::common::run;
     use ntest::timeout;
     use std::env;
-    use std::process::Command;
 
     fn chisel() -> String {
         bin_dir().join("chisel").to_str().unwrap().to_string()
@@ -25,12 +25,7 @@ mod tests {
         if bd.ends_with("release") {
             args.push("--release");
         }
-        let status = Command::new("cargo")
-            .args(args)
-            .current_dir(repo.clone())
-            .status()
-            .unwrap();
-        assert!(status.success());
+        run("cargo", args);
         let chiseld = bd.join("chiseld").to_str().unwrap().to_string();
         env::set_var("CHISELD", chiseld);
         env::set_var("CHISEL", chisel());
