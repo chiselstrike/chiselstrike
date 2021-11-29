@@ -5,7 +5,7 @@
 cat << EOF > "$TEMPDIR/endpoints/pad.js"
 import indent from 'https://deno.land/x/text_indent@v0.1.0/mod.ts';
 
-export default async function chisel(req) {
+export default async function chisel(req: Request) {
     return new Response("test" + indent("foo\n", 4));
 }
 EOF

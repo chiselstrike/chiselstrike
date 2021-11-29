@@ -111,6 +111,7 @@ struct ModuleLoader {
 const DUMMY_PREFIX: &str = "file://$chisel$";
 
 fn wrap(specifier: &ModuleSpecifier, code: String) -> Result<ModuleSource> {
+    let code = compile_ts_code(code);
     Ok(ModuleSource {
         code,
         module_url_specified: specifier.to_string(),
@@ -120,7 +121,6 @@ fn wrap(specifier: &ModuleSpecifier, code: String) -> Result<ModuleSource> {
 
 async fn load_code(specifier: ModuleSpecifier) -> Result<ModuleSource> {
     let code = reqwest::get(specifier.clone()).await?.text().await?;
-    let code = compile_ts_code(code);
     wrap(&specifier, code)
 }
 
