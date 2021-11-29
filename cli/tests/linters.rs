@@ -7,6 +7,12 @@ mod tests {
     use crate::common::run;
 
     #[test]
+    fn eslint() {
+        run("npm", ["install"]);
+        run("npx", ["eslint", ".", "--ext", ".ts"]);
+    }
+
+    #[test]
     fn deno_checks() {
         run("cargo", ["install", "deno", "--bin", "deno"]);
         run("deno", ["lint", "--config", "deno.json"]);
