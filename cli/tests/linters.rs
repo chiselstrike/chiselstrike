@@ -7,6 +7,13 @@ mod tests {
     use crate::common::run;
 
     #[test]
+    fn deno_checks() {
+        run("cargo", ["install", "deno", "--bin", "deno"]);
+        run("deno", ["lint", "--config", "deno.json"]);
+        run("deno", ["fmt", "--config", "deno.json", "--check"]);
+    }
+
+    #[test]
     fn sorted_dependencies() {
         run(
             "cargo",

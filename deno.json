@@ -1,0 +1,20 @@
+{
+    "fmt": {
+        "files": {
+            "include": ["cli", "server", "deno.json"],
+            "exclude": ["cli/examples", "cli/docs", "server/docs"]
+        },
+        "options": {
+            "indentWidth": 4
+        }
+    },
+    "lint": {
+        "files": {
+            "include": ["cli", "server"],
+            "exclude": ["cli/examples"]
+        },
+        "rules": {
+            "tags": ["recommended"]
+        }
+    }
+}

@@ -2,13 +2,13 @@
 
 import { Table, table } from "./api.ts";
 
-var Chisel = {}
+const Chisel = {};
 
-Chisel.api = {}
+Chisel.api = {};
 Chisel.api.Table = Table;
 Chisel.api.table = table;
 
-Chisel.buildReadableStreamForBody = function(rid) {
+Chisel.buildReadableStreamForBody = function (rid) {
     return new ReadableStream({
         async pull(controller) {
             const chunk = await Deno.core.opAsync("chisel_read_body", rid);
@@ -21,20 +21,23 @@ Chisel.buildReadableStreamForBody = function(rid) {
         },
         cancel() {
             Deno.core.opSync("op_close", rid);
-        }
+        },
     });
-}
+};
 
-Chisel.store = async function(type_name, content) {
-    await Deno.core.opAsync("chisel_store", {name: type_name, value: content});
-}
+Chisel.store = async function (typeName, content) {
+    await Deno.core.opAsync("chisel_store", { name: typeName, value: content });
+};
 
-function create_result_iterator(rid) {
+function createResultIterator(rid) {
     return {
         [Symbol.asyncIterator]() {
             return {
                 async next() {
-                    const value = await Deno.core.opAsync("chisel_query_next", rid);
+                    const value = await Deno.core.opAsync(
+                        "chisel_query_next",
+                        rid,
+                    );
                     if (value) {
                         return { value: value, done: false };
                     } else {
@@ -45,36 +48,35 @@ function create_result_iterator(rid) {
                 return() {
                     Deno.core.opSync("op_close", rid);
                     return { done: true };
-                }
-            }
-        }
-    }
+                },
+            };
+        },
+    };
 }
 
-Chisel.find_all = async function(type_name) {
+Chisel.find_all = async function (typeName) {
     const rid = await Deno.core.opAsync("chisel_query_create", {
-        type_name: type_name
+        type_name: typeName,
     });
-    return create_result_iterator(rid);
-}
+    return createResultIterator(rid);
+};
 
-Chisel.find_all_by = async function(type_name, field_name, value) {
+Chisel.find_all_by = async function (typeName, fieldName, value) {
     const rid = await Deno.core.opAsync("chisel_query_create", {
-        type_name: type_name,
-        field_name: field_name,
-        value: value
+        type_name: typeName,
+        field_name: fieldName,
+        value: value,
     });
-    return create_result_iterator(rid);
-}
+    return createResultIterator(rid);
+};
 
-
-Chisel.json = function(body, status = 200) {
+Chisel.json = function (body, status = 200) {
     return new Response(JSON.stringify(body), {
         status: status,
         headers: [
-            ["content-type", "application/json"]
-        ]
-    })
-}
+            ["content-type", "application/json"],
+        ],
+    });
+};
 
 globalThis.Chisel = Chisel;
