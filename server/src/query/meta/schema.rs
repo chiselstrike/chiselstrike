@@ -24,6 +24,8 @@ enum Fields {
     FieldId,
     FieldType,
     TypeId,
+    DefaultValue,
+    IsOptional,
 }
 
 #[derive(Iden)]
@@ -74,6 +76,8 @@ pub fn tables() -> Vec<TableCreateStatement> {
                 .primary_key(),
         )
         .col(ColumnDef::new(Fields::FieldType).text())
+        .col(ColumnDef::new(Fields::DefaultValue).text())
+        .col(ColumnDef::new(Fields::IsOptional).boolean())
         .col(ColumnDef::new(TypeNames::TypeId).integer())
         .foreign_key(
             ForeignKey::create()

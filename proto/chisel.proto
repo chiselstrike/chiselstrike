@@ -28,6 +28,8 @@ message FieldDefinition {
   string name = 1;
   string field_type = 2;
   repeated string labels = 3;
+  bool is_optional = 4;
+  optional string default_value = 5;
 }
 
 message TypeExportRequest {

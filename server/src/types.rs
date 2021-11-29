@@ -81,10 +81,10 @@ impl TypeSystem {
 
     pub fn lookup_type(&self, type_name: &str) -> Result<Type, TypeSystemError> {
         match type_name {
-            "String" => Ok(Type::String),
-            "Int" => Ok(Type::Int),
-            "Float" => Ok(Type::Float),
-            "Boolean" => Ok(Type::Boolean),
+            "string" => Ok(Type::String),
+            "bigint" => Ok(Type::Int),
+            "number" => Ok(Type::Float),
+            "boolean" => Ok(Type::Boolean),
             type_name => match self.types.get(type_name) {
                 Some(ty) => Ok(Type::Object(ty.to_owned())),
                 None => Err(TypeSystemError::NoSuchType(type_name.to_owned())),
@@ -111,10 +111,10 @@ pub enum Type {
 impl Type {
     pub fn name(&self) -> &str {
         match self {
-            Type::Float => "Float",
-            Type::Int => "Int",
-            Type::String => "String",
-            Type::Boolean => "Boolean",
+            Type::Float => "number",
+            Type::Int => "bigint",
+            Type::String => "string",
+            Type::Boolean => "boolean",
             Type::Object(ty) => &ty.name,
         }
     }
@@ -135,13 +135,17 @@ impl ObjectType {
     fn is_safe_replacement_for(&self, another_type: &Type) -> bool {
         match another_type {
             Type::Object(another_type) => {
+                let mut fields = self.fields.to_vec();
+                fields.sort_by(|f, k| f.name.cmp(&k.name));
+                let mut newfields = another_type.fields.to_vec();
+                newfields.sort_by(|f, k| f.name.cmp(&k.name));
+
                 self.name == another_type.name
                     && self.backing_table == another_type.backing_table
-                    && self.fields.len() == another_type.fields.len()
-                    && self
-                        .fields
+                    && fields.len() == newfields.len()
+                    && fields
                         .iter()
-                        .zip(&another_type.fields)
+                        .zip(&newfields)
                         .all(|(f1, f2)| f1.name == f2.name && f1.type_ == f2.type_)
             }
             _ => false, // We cannot replace an elemental type.
@@ -154,4 +158,6 @@ pub struct Field {
     pub name: String,
     pub type_: Type,
     pub labels: Vec<String>,
+    pub default: Option<String>,
+    pub is_optional: bool,
 }

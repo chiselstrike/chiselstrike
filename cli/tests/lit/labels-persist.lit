@@ -3,14 +3,14 @@
 # RUN: sh -e @file
 
 cat << EOF > "$TEMPDIR/types/types.graphql"
-  type TestLabelsPersist1 {
-    one: String @a @b
-    two: String @a
+  class TestLabelsPersist1 {
+    @a @b one: string;
+    @a two: string;
   }
 
-  type TestLabelsPersist2 {
-    three: String @c @b
-    four: String @a
+  class TestLabelsPersist2 {
+    @c @b three: string;
+    @a four: string;
   }
 EOF
 
@@ -21,7 +21,7 @@ $CHISEL restart
 
 $CHISEL type export
 
-# CHECK: one: String @a @b
-# CHECK: two: String @a
-# CHECK: three: String @c @b
-# CHECK: four: String @a
+# CHECK: @a @b one: string;
+# CHECK: @a two: string;
+# CHECK: @c @b three: string;
+# CHECK: @a four: string;
