@@ -386,9 +386,6 @@ async fn create_deno(inspect_brk: bool) -> Result<DenoService> {
     // FIXME: Include this js in the snapshop
     let code = std::str::from_utf8(include_bytes!("chisel.js"))?.to_string();
 
-    // This will break the tests because the relative paths will be different and I don't
-    // have the time to do it properly :(
-    // let code = _compile_ts_file(std::path::Path::new("server/src/chisel.js"));
     d.module_loader
         .code_map
         .borrow_mut()
