@@ -47,10 +47,12 @@ use std::task::{Context, Poll};
 use swc_common::sync::Lrc;
 use swc_common::{
     errors::{emitter, Handler},
+    source_map::FileName,
     SourceMap,
 };
 use swc_ecma_codegen::{text_writer::JsWriter, Emitter};
 use swc_ecma_parser::{lexer::Lexer, Parser, StringInput, Syntax};
+use swc_ecma_visit::FoldWith;
 use v8;
 
 use url::Url;
@@ -118,6 +120,7 @@ fn wrap(specifier: &ModuleSpecifier, code: String) -> Result<ModuleSource> {
 
 async fn load_code(specifier: ModuleSpecifier) -> Result<ModuleSource> {
     let code = reqwest::get(specifier.clone()).await?.text().await?;
+    let code = compile_ts_code(code);
     wrap(&specifier, code)
 }
 
@@ -313,7 +316,11 @@ async fn op_chisel_query_next(
     }
 }
 
-fn _compile_ts_file(file_path: &std::path::Path) -> String {
+// FIXME: This should not be here. The client should download and
+// compile modules, the server should not get code out of the
+// internet.
+// FIXME: This should produce an error when failing to compile.
+fn compile_ts_code(code: String) -> String {
     let cm: Lrc<SourceMap> = Default::default();
     let emitter = Box::new(emitter::EmitterWriter::new(
         Box::new(std::io::stdout()),
@@ -323,8 +330,8 @@ fn _compile_ts_file(file_path: &std::path::Path) -> String {
     ));
     let handler = Handler::with_emitter(true, false, emitter);
 
-    let fm = cm.load_file(file_path).expect("failed to load chisel.js");
-
+    // FIXME: We probably need a name for better error messages.
+    let fm = cm.new_source_file(FileName::Anon, code);
     let lexer = Lexer::new(
         Syntax::Typescript(Default::default()),
         Default::default(),
@@ -345,6 +352,9 @@ fn _compile_ts_file(file_path: &std::path::Path) -> String {
             e.into_diagnostic(&handler).emit()
         })
         .unwrap();
+
+    // Remove typescript types
+    let module = module.fold_with(&mut swc_ecma_transforms_typescript::strip());
 
     let mut buf = vec![];
     {
