@@ -1,6 +1,13 @@
 // SPDX-FileCopyrightText: © 2021 ChiselStrike <info@chiselstrike.com>
 
+import { Table, table } from "./api.ts";
+
 var Chisel = {}
+
+Chisel.api = {}
+Chisel.api.Table = Table;
+Chisel.api.table = table;
+
 Chisel.buildReadableStreamForBody = function(rid) {
     return new ReadableStream({
         async pull(controller) {
