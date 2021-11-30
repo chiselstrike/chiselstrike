@@ -4,7 +4,7 @@ use crate::chisel::StatusResponse;
 use anyhow::{anyhow, Context, Result};
 use chisel::chisel_rpc_client::ChiselRpcClient;
 use chisel::{
-    EndPointCreationRequest, EndPointRemoveRequest, PolicyUpdateRequest, RestartRequest,
+    ChiselApplyRequest, EndPointCreationRequest, PolicyUpdateRequest, RestartRequest,
     StatusRequest, TypeExportRequest,
 };
 use futures::channel::mpsc::channel;
@@ -181,37 +181,6 @@ fn read_dir<P: AsRef<Path>>(dir: P) -> Result<fs::ReadDir, anyhow::Error> {
     fs::read_dir(dir.as_ref()).with_context(|| format!("Could not open {}", dir.as_ref().display()))
 }
 
-async fn import_types<P>(
-    client: &mut ChiselRpcClient<tonic::transport::Channel>,
-    filename: &[P],
-) -> Result<()>
-where
-    P: AsRef<Path>,
-{
-    for t in crate::ts::parse_types(filename)?.into_iter() {
-        let request = tonic::Request::new(t);
-        let response = client.add_type(request).await?.into_inner();
-        println!("Type defined: {}", response.message);
-    }
-
-    Ok(())
-}
-
-async fn create_endpoint<P>(
-    client: &mut ChiselRpcClient<tonic::transport::Channel>,
-    path: String,
-    filename: P,
-) -> Result<()>
-where
-    P: AsRef<Path>,
-{
-    let code = read_to_string(&filename)?;
-    let request = tonic::Request::new(EndPointCreationRequest { path, code });
-    let response = client.create_end_point(request).await?.into_inner();
-    println!("End point defined: {}", response.message);
-    Ok(())
-}
-
 // Retry calling 'f(a)' until it succeeds. This uses an exponential
 // backoff and gives up once the timeout has passed. On failure 'f'
 // must return an 'A' that we feed to the next retry.  (This can be
@@ -290,27 +259,49 @@ async fn apply(server_url: String) -> Result<()> {
 
     let mut client = ChiselRpcClient::connect(server_url).await?;
 
-    // FIXME: will fail the second time until we implement type evolution
-    import_types(&mut client, &types).await?;
+    let mut types_req = vec![];
+    let mut endpoints_req = vec![];
+    let mut policy_req = vec![];
 
-    let request = tonic::Request::new(EndPointRemoveRequest { path: None });
-    client.remove_end_point(request).await?;
-
-    for entry in endpoints {
-        create_endpoint(&mut client, entry.name, entry.file_path).await?;
+    for t in crate::ts::parse_types(&types)?.into_iter() {
+        types_req.push(t);
     }
 
-    for entry in policies {
-        let policystr = read_to_string(entry)?;
-
-        let response = client
-            .policy_update(tonic::Request::new(PolicyUpdateRequest {
-                policy_config: policystr,
-            }))
-            .await?
-            .into_inner();
-        println!("Policy applied: {}", response.message);
+    for f in endpoints.iter() {
+        let code = read_to_string(&f.file_path)?;
+        endpoints_req.push(EndPointCreationRequest {
+            path: f.name.clone(),
+            code,
+        });
     }
+
+    for p in policies {
+        policy_req.push(PolicyUpdateRequest {
+            policy_config: read_to_string(p)?,
+        });
+    }
+
+    let msg = client
+        .apply(tonic::Request::new(ChiselApplyRequest {
+            types: types_req,
+            endpoints: endpoints_req,
+            policies: policy_req,
+        }))
+        .await?
+        .into_inner();
+
+    for ty in msg.types {
+        println!("Type defined: {}", ty);
+    }
+
+    for end in msg.endpoints {
+        println!("End point defined: {}", end);
+    }
+
+    for lbl in msg.labels {
+        println!("Policy defined for label {}", lbl);
+    }
+
     Ok(())
 }
 
