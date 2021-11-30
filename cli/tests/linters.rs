@@ -4,55 +4,41 @@ mod common;
 
 #[cfg(test)]
 mod tests {
-    use crate::common::repo_dir;
-    use std::process::Command;
+    use crate::common::run;
 
     #[test]
     fn sorted_dependencies() {
-        let repo = repo_dir();
-        let status = Command::new("cargo")
-            .args([
+        run(
+            "cargo",
+            [
                 "install",
                 "--version",
                 "1.0.5",
                 "cargo-sort",
                 "--bin",
                 "cargo-sort",
-            ])
-            .current_dir(repo.clone())
-            .status()
-            .unwrap();
-        assert!(status.success());
-        let status = Command::new("cargo")
-            .args(["sort", "-w", "-c"])
-            .current_dir(repo)
-            .status()
-            .unwrap();
-        assert!(status.success());
+            ],
+        );
+        run("cargo", ["sort", "-w", "-c"]);
     }
 
     #[test]
     fn check_formating() {
-        let status = Command::new("cargo")
-            .args(["fmt", "--all", "--", "--check"])
-            .status()
-            .unwrap();
-        assert!(status.success());
+        run("cargo", ["fmt", "--all", "--", "--check"]);
     }
 
     #[test]
     fn check_clippy() {
-        let status = Command::new("cargo")
-            .args([
+        run(
+            "cargo",
+            [
                 "clippy",
                 "--all-targets",
                 "--all-features",
                 "--",
                 "-D",
                 "warnings",
-            ])
-            .status()
-            .unwrap();
-        assert!(status.success());
+            ],
+        );
     }
 }
