@@ -4,6 +4,6 @@
 //
 // curl localhost:8080/hello
 
-export default async function chisel(req) {
-    return Chisel.json("hello, world!")
+export default function chisel(_req) {
+    return Chisel.json("hello, world!");
 }
