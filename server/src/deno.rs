@@ -253,7 +253,7 @@ struct QueryStreamResource {
     ty: ObjectType,
 }
 
-impl<'a> Resource for QueryStreamResource {}
+impl Resource for QueryStreamResource {}
 
 async fn op_chisel_query_create(
     op_state: Rc<RefCell<OpState>>,
