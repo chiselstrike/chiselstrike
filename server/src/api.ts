@@ -41,49 +41,6 @@ class Join extends Base {
 // We will add | Filter | Join | ...
 type Inner = BackingStore | Join;
 
-function sqlImpl(table: Inner, aliasCount: { v: number }): string {
-    switch (table.kind) {
-        case "BackingStore":
-            return `SELECT ${table.columns} FROM ${table.name}`;
-        case "Join": {
-            // FIXME: Optimize the case of table.left or table.right being just
-            // a BackingStore with all fields. The database probably doesn't
-            // care, but will make the logs cleaner.
-            const lsql = sqlImpl(table.left, aliasCount);
-            const rsql = sqlImpl(table.right, aliasCount);
-
-            const leftAlias = `A${aliasCount.v}`;
-            const rightAlias = `A${aliasCount.v + 1}`;
-            aliasCount.v += 2;
-
-            const leftSet = new Set(table.left.columns);
-            const rightSet = new Set(table.right.columns);
-            const joinColumns = [];
-            const onColumns = [];
-            for (const c of table.columns) {
-                if (leftSet.has(c) && rightSet.has(c)) {
-                    joinColumns.push(`${leftAlias}.${c}`);
-                    onColumns.push(`${leftAlias}.${c} = ${rightAlias}.${c}`);
-                } else {
-                    joinColumns.push(c);
-                }
-            }
-
-            const on = onColumns.length === 0
-                ? "TRUE"
-                : onColumns.join(" AND ");
-            // Funny way to write it, but works on PostgreSQL and sqlite.
-            const join =
-                `(${lsql}) AS ${leftAlias} JOIN (${rsql}) AS ${rightAlias}`;
-            return `SELECT ${joinColumns} FROM ${join} ON ${on}`;
-        }
-    }
-}
-
-function sql(table: Inner): string {
-    return sqlImpl(table, { v: 0 });
-}
-
 function unique<T>(a: T[]) {
     return [...new Set(a)];
 }
@@ -106,14 +63,6 @@ export class Table<T> {
         const columns = unique(this.inner.columns.concat(right.inner.columns));
         const i = new Join(columns, this.inner, right.inner);
         return new Table<T & U>(i);
-    }
-
-    // FIXME: This is not the final interface. Depending on the DB we
-    // will to be able to execute all queries with a single SQL
-    // statement. We should have a query function on a connection that
-    // takes a table and returns an iterator over the rows.
-    sql() {
-        return sql(this.inner);
     }
 
     // FIXME: This is not the final API, we should return an iterator,

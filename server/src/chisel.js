@@ -70,6 +70,14 @@ Chisel.find_all_by = async function (typeName, fieldName, value) {
     return createResultIterator(rid);
 };
 
+Chisel.query = async function (foo) {
+    const rid = await Deno.core.opAsync(
+        "chisel_relational_query_create",
+        foo.inner,
+    );
+    return await Deno.core.opAsync("chisel_relational_query_sql", rid);
+};
+
 Chisel.json = function (body, status = 200) {
     return new Response(JSON.stringify(body), {
         status: status,
