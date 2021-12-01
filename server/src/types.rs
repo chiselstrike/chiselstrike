@@ -20,7 +20,7 @@ pub struct TypeSystem {
 }
 
 impl TypeSystem {
-    pub fn new() -> Self {
+    pub(crate) fn new() -> Self {
         TypeSystem {
             types: HashMap::default(),
         }
@@ -35,7 +35,7 @@ impl TypeSystem {
     /// # Errors
     ///
     /// If type `ty` already exists in the type system, the function returns `TypeSystemError`.
-    pub fn add_type(&mut self, ty: ObjectType) -> Result<(), TypeSystemError> {
+    pub(crate) fn add_type(&mut self, ty: ObjectType) -> Result<(), TypeSystemError> {
         if self.lookup_type(&ty.name).is_ok() {
             return Err(TypeSystemError::TypeAlreadyExists);
         }
@@ -43,15 +43,7 @@ impl TypeSystem {
         Ok(())
     }
 
-    pub fn remove_type(&mut self, type_name: &str) -> Result<(), TypeSystemError> {
-        if !self.types.contains_key(type_name) {
-            return Err(TypeSystemError::NoSuchType(type_name.to_owned()));
-        }
-        self.types.remove(type_name);
-        Ok(())
-    }
-
-    pub fn replace_type(&mut self, new_type: ObjectType) -> Result<(), TypeSystemError> {
+    pub(crate) fn replace_type(&mut self, new_type: ObjectType) -> Result<(), TypeSystemError> {
         let old_type = self.lookup_type(&new_type.name)?;
         if new_type.is_safe_replacement_for(&old_type) {
             self.types.remove(&new_type.name);
@@ -71,7 +63,10 @@ impl TypeSystem {
     /// # Errors
     ///
     /// If the looked up type does not exists or is a built-in type, the function returns a `TypeSystemError`.
-    pub fn lookup_object_type(&self, type_name: &str) -> Result<ObjectType, TypeSystemError> {
+    pub(crate) fn lookup_object_type(
+        &self,
+        type_name: &str,
+    ) -> Result<ObjectType, TypeSystemError> {
         match self.lookup_type(type_name) {
             Ok(Type::Object(ty)) => Ok(ty),
             Ok(_) => Err(TypeSystemError::ObjectTypeRequired(type_name.to_string())),
@@ -79,7 +74,7 @@ impl TypeSystem {
         }
     }
 
-    pub fn lookup_type(&self, type_name: &str) -> Result<Type, TypeSystemError> {
+    pub(crate) fn lookup_type(&self, type_name: &str) -> Result<Type, TypeSystemError> {
         match type_name {
             "string" => Ok(Type::String),
             "bigint" => Ok(Type::Int),
@@ -93,7 +88,7 @@ impl TypeSystem {
     }
 
     /// Update the current TypeSystem object from another instance
-    pub fn update(&mut self, other: &TypeSystem) {
+    pub(crate) fn update(&mut self, other: &TypeSystem) {
         self.types.clear();
         self.types = other.types.clone();
     }
@@ -109,7 +104,7 @@ pub enum Type {
 }
 
 impl Type {
-    pub fn name(&self) -> &str {
+    pub(crate) fn name(&self) -> &str {
         match self {
             Type::Float => "number",
             Type::Int => "bigint",
@@ -123,11 +118,11 @@ impl Type {
 #[derive(Clone, Debug, PartialEq)]
 pub struct ObjectType {
     /// Name of this type.
-    pub name: String,
+    pub(crate) name: String,
     /// Fields of this type.
-    pub fields: Vec<Field>,
+    pub(crate) fields: Vec<Field>,
     /// Name of the backing table for this type.
-    pub backing_table: String,
+    pub(crate) backing_table: String,
 }
 
 impl ObjectType {
@@ -154,10 +149,10 @@ impl ObjectType {
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub struct Field {
-    pub name: String,
-    pub type_: Type,
-    pub labels: Vec<String>,
-    pub default: Option<String>,
-    pub is_optional: bool,
+pub(crate) struct Field {
+    pub(crate) name: String,
+    pub(crate) type_: Type,
+    pub(crate) labels: Vec<String>,
+    pub(crate) default: Option<String>,
+    pub(crate) is_optional: bool,
 }
