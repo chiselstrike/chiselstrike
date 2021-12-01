@@ -6,6 +6,21 @@ mod common;
 mod tests {
     use crate::common::run;
 
+    fn cargo_install(version: &'static str, pkg: &'static str, bin: &'static str) {
+        run(
+            "cargo",
+            [
+                "install",
+                "--version",
+                version,
+                pkg,
+                "--bin",
+                bin,
+                "--locked",
+            ],
+        );
+    }
+
     #[test]
     fn eslint() {
         run("npm", ["install"]);
@@ -13,26 +28,15 @@ mod tests {
     }
 
     #[test]
-    #[ignore] // TODO: Un-ignore when the `Unknown TLS backend` bug is fixed.
     fn deno_checks() {
-        run("cargo", ["install", "deno", "--bin", "deno"]);
+        cargo_install("1.16.3", "deno", "deno");
         run("deno", ["lint", "--config", "deno.json"]);
         run("deno", ["fmt", "--config", "deno.json", "--check"]);
     }
 
     #[test]
     fn sorted_dependencies() {
-        run(
-            "cargo",
-            [
-                "install",
-                "--version",
-                "1.0.5",
-                "cargo-sort",
-                "--bin",
-                "cargo-sort",
-            ],
-        );
+        cargo_install("1.0.5", "cargo-sort", "cargo-sort");
         run("cargo", ["sort", "-w", "-c"]);
     }
 
