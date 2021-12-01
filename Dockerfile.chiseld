@@ -1,4 +1,6 @@
 FROM ubuntu:20.04
 
+RUN apt update
+RUN DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends libssl1.1
 COPY target/release/chiseld /usr/local/bin/chiseld
 CMD /usr/local/bin/chiseld
