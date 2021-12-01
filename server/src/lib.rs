@@ -8,6 +8,7 @@ extern crate swc_ecma_parser;
 extern crate swc_node_base;
 
 pub(crate) mod api;
+pub(crate) mod auth;
 pub(crate) mod db;
 pub(crate) mod deno;
 pub(crate) mod policies;
