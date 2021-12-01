@@ -13,6 +13,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore] // TODO: Un-ignore when the `Unknown TLS backend` bug is fixed.
     fn deno_checks() {
         run("cargo", ["install", "deno", "--bin", "deno"]);
         run("deno", ["lint", "--config", "deno.json"]);
