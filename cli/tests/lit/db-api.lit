@@ -2,26 +2,58 @@
 
 # RUN: sh -e @file
 
-cat << EOF > "$TEMPDIR/endpoints/pad.js"
-type AuthorT = {
-    id: number;
-    name: string;
-    other: number;
+cp examples/person.ts "$TEMPDIR/types"
+cp examples/store.js "$TEMPDIR/endpoints"
+
+cat << EOF > "$TEMPDIR/endpoints/query.js"
+type Person = {
+  first_name: string;
+  last_name: string;
+//  age: bigint;
+//  human: boolean;
+//  height: number;
 };
-const authors = Chisel.api.table<AuthorT>("authors", ["id", "name", "other"]);
+const persons = Chisel.api.table<Author>("person", ["first_name", "last_name"]);
 
 export default async function chisel(req: Request) {
-    const query = await Chisel.query(authors);
-    return new Response(query);
+    let ret = "";
+    const query = await Chisel.query(persons);
+    for await (let row of query) {
+        ret += row.first_name + " " + row.last_name + "\n";
+    }
+    return new Response(ret);
 }
 EOF
 
 cd "$TEMPDIR"
 $CHISEL apply
 
-# CHECK: End point defined: /pad
+# CHECK: Type defined: Person
+# CHECK: End point defined: /query
+# CHECK: End point defined: /store
 
-$CURL -o - $CHISELD_HOST/pad
+$CURL --data '{
+    "first_name":"Glauber",
+    "last_name":"Costa",
+    "age": 666,
+    "human": true,
+    "height": 10.01
+}' -o - $CHISELD_HOST/store
+
+# CHECK: ok
+
+$CURL --data '{
+    "first_name":"Jan",
+    "last_name":"Plhak",
+    "age": -666,
+    "human": true,
+    "height": 10.02
+}' -o - $CHISELD_HOST/store
+
+# CHECK: ok
+
+$CURL -o - $CHISELD_HOST/query
 
 # CHECK: HTTP/1.1 200 OK
-# CHECK: SELECT id,name,other FROM authors
+# CHECK: Glauber Costa
+# CHECK: Jan Plhak
