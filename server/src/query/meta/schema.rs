@@ -8,7 +8,7 @@ use sea_query::{ColumnDef, ForeignKey, ForeignKeyAction, Iden, Table, TableCreat
 enum Types {
     Table,
     TypeId,
-    BackingTable,
+    ApiVersion,
 }
 
 #[derive(Iden)]
@@ -52,7 +52,7 @@ pub fn tables() -> Vec<TableCreateStatement> {
                 .auto_increment()
                 .primary_key(),
         )
-        .col(ColumnDef::new(Types::BackingTable).text().unique_key())
+        .col(ColumnDef::new(Types::ApiVersion).text())
         .to_owned();
     let type_names = Table::create()
         .table(TypeNames::Table)

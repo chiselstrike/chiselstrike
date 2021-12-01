@@ -68,7 +68,7 @@ impl QueryEngine {
 
     pub async fn create_table(&self, ty: ObjectType) -> Result<(), QueryError> {
         let mut create_table = Table::create()
-            .table(Alias::new(&ty.backing_table))
+            .table(Alias::new(ty.backing_table()))
             .if_not_exists()
             .col(
                 ColumnDef::new(Alias::new("id"))
@@ -115,7 +115,7 @@ impl QueryEngine {
         &self,
         ty: &ObjectType,
     ) -> Result<impl stream::Stream<Item = Result<AnyRow, Error>>, QueryError> {
-        let query_str = format!("SELECT * FROM {}", ty.backing_table);
+        let query_str = format!("SELECT * FROM {}", ty.backing_table());
         Ok(QueryResults::new(query_str, &self.pool))
     }
 
@@ -156,7 +156,7 @@ impl QueryEngine {
             query.column(Alias::new(&field.name));
         }
         let query = query
-            .from(Alias::new(&ty.backing_table))
+            .from(Alias::new(ty.backing_table()))
             .cond_where(col_filter)
             .to_owned();
 
@@ -174,7 +174,7 @@ impl QueryEngine {
     ) -> Result<(), QueryError> {
         let insert_query = std::format!(
             "INSERT INTO {} ({}) VALUES ({})",
-            &ty.backing_table,
+            &ty.backing_table(),
             ty.fields.iter().map(|f| &f.name).join(", "),
             (0..ty.fields.len())
                 .map(|i| std::format!("${}", i + 1))

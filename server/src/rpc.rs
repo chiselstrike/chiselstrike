@@ -16,7 +16,6 @@ use chisel::{
     ChiselApplyRequest, ChiselApplyResponse, RestartRequest, RestartResponse, StatusRequest,
     StatusResponse, TypeExportRequest, TypeExportResponse,
 };
-use convert_case::{Case, Casing};
 use futures::FutureExt;
 use log::debug;
 use std::net::SocketAddr;
@@ -125,6 +124,7 @@ impl ChiselRpc for RpcService {
     ) -> Result<Response<ChiselApplyResponse>, Status> {
         let mut state = self.state.lock().await;
         let apply_request = request.into_inner();
+        let version = &apply_request.version;
 
         let mut type_names = vec![];
         let mut endpoint_routes = vec![];
@@ -133,11 +133,10 @@ impl ChiselRpc for RpcService {
         for type_def in apply_request.types {
             let name = type_def.name;
             type_names.push(name.clone());
-            let snake_case_name = name.to_case(Case::Snake);
 
             let mut fields = Vec::new();
             for field in type_def.field_defs {
-                let ty = state.type_system.lookup_type(&field.field_type)?;
+                let ty = state.type_system.lookup_type(&field.field_type, version)?;
                 fields.push(Field {
                     name: field.name.clone(),
                     type_: ty,
@@ -146,11 +145,7 @@ impl ChiselRpc for RpcService {
                     is_optional: field.is_optional,
                 });
             }
-            let ty = ObjectType {
-                name: name.to_owned(),
-                fields,
-                backing_table: snake_case_name.clone(),
-            };
+            let ty = ObjectType::new(name, fields, version);
 
             match state.type_system.add_type(ty.to_owned()) {
                 Ok(_) => {
@@ -168,11 +163,22 @@ impl ChiselRpc for RpcService {
             }
         }
 
-        let regex = regex::Regex::new(".*").unwrap();
+        // FIXME: temporary, should always have a version, but we need to persist endpoints first.
+        let regex = if version.is_empty() {
+            regex::Regex::new(".*").unwrap()
+        } else {
+            regex::Regex::new(&format!("/{}/.*", version)).unwrap()
+        };
         state.routes.remove_routes(regex.clone());
 
         for endpoint in &apply_request.endpoints {
-            let path = format!("/{}", endpoint.path).to_owned();
+            // FIXME: temporary, should always have a version, but we need to persist endpoints
+            // first
+            let path = if version.is_empty() {
+                format!("/{}", endpoint.path).to_owned()
+            } else {
+                format!("/{}/{}", version, endpoint.path).to_owned()
+            };
 
             let func = Box::new({
                 let path = path.clone();
@@ -266,31 +272,31 @@ impl ChiselRpc for RpcService {
         &self,
         _request: tonic::Request<TypeExportRequest>,
     ) -> Result<tonic::Response<TypeExportResponse>, tonic::Status> {
+        // FIXME: Soon to be replaced by chisel describe, only working so far with
+        // non-versioned endpoints to keep tests working
         let state = self.state.lock().await;
         let type_system = &state.type_system;
 
         let mut type_defs = vec![];
         use itertools::Itertools;
-        for ty in type_system
-            .types
-            .values()
-            .sorted_by(|x, y| x.name.cmp(&y.name))
-        {
-            let mut field_defs = vec![];
-            for field in &ty.fields {
-                field_defs.push(chisel::FieldDefinition {
-                    name: field.name.to_owned(),
-                    field_type: field.type_.name().to_string(),
-                    labels: field.labels.clone(),
-                    default_value: field.default.clone(),
-                    is_optional: field.is_optional,
-                });
+        for (_version, ts) in type_system.types.iter() {
+            for ty in ts.values().sorted_by(|x, y| x.name.cmp(&y.name)) {
+                let mut field_defs = vec![];
+                for field in &ty.fields {
+                    field_defs.push(chisel::FieldDefinition {
+                        name: field.name.to_owned(),
+                        field_type: field.type_.name().to_string(),
+                        labels: field.labels.clone(),
+                        default_value: field.default.clone(),
+                        is_optional: field.is_optional,
+                    });
+                }
+                let type_def = chisel::TypeDefinition {
+                    name: ty.name.to_string(),
+                    field_defs,
+                };
+                type_defs.push(type_def);
             }
-            let type_def = chisel::TypeDefinition {
-                name: ty.name.to_string(),
-                field_defs,
-            };
-            type_defs.push(type_def);
         }
 
         let response = chisel::TypeExportResponse { type_defs };

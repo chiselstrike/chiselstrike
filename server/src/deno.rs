@@ -237,9 +237,13 @@ async fn op_chisel_store(
     content: serde_json::Value,
     _: (),
 ) -> Result<()> {
+    let api_version = CURRENT_REQUEST_PATH.with(|p| p.borrow().api_version().to_string());
+
     let type_name = content["name"].as_str().ok_or(Error::TypeName)?;
     let runtime = &mut runtime::get().await;
-    let ty = runtime.type_system.lookup_object_type(type_name)?;
+    let ty = runtime
+        .type_system
+        .lookup_object_type(type_name, &api_version)?;
     runtime
         .query_engine
         .add_row(&ty, &content["value"])
@@ -274,11 +278,16 @@ async fn op_chisel_query_create(
         ),
     };
 
+    let (api_version, route) = CURRENT_REQUEST_PATH.with(|p| {
+        let x = p.borrow();
+        (x.api_version().to_string(), x.path().to_string())
+    });
+
     let mut policies = FieldPolicies::default();
     let runtime = &mut runtime::get().await;
     let ts = &runtime.type_system;
-    let ty = ts.lookup_object_type(type_name)?;
-    CURRENT_REQUEST_PATH.with(|p| runtime.get_policies(&ty, &mut policies, &p.borrow()));
+    let ty = ts.lookup_object_type(type_name, &api_version)?;
+    runtime.get_policies(&ty, &mut policies, &route);
 
     let query_engine = &mut runtime.query_engine;
     let stream: Pin<Box<dyn Stream<Item = _>>> = match field_name {
@@ -569,14 +578,45 @@ impl Resource for BodyResource {
     }
 }
 
+#[derive(Default, Clone)]
+struct RequestPath {
+    api_version: String,
+    path: String,
+}
+
+impl RequestPath {
+    fn api_version(&self) -> &str {
+        &self.api_version
+    }
+
+    fn path(&self) -> &str {
+        &self.path
+    }
+}
+
 thread_local! {
-    static CURRENT_REQUEST_PATH : RefCell<String> = RefCell::new("".into());
+    static CURRENT_REQUEST_PATH : RefCell<RequestPath> = RefCell::new(Default::default());
 }
 
 fn set_current_path(current_path: String) {
+    // FIXME: version should be mandatory, but we have to persist endpoints first
+    let r = regex::Regex::new("/(?P<version>[^/]+*)/(?P<path>.*)").unwrap();
+    let rp = {
+        match r.captures(&current_path) {
+            Some(caps) => RequestPath {
+                api_version: caps.name("version").unwrap().as_str().to_string(),
+                path: caps.name("path").unwrap().as_str().to_string(),
+            },
+            None => RequestPath {
+                api_version: "".into(),
+                path: current_path.clone(),
+            },
+        }
+    };
+
     CURRENT_REQUEST_PATH.with(|path| {
         let mut borrow = path.borrow_mut();
-        *borrow = current_path.clone();
+        *borrow = rp;
     });
 }
 

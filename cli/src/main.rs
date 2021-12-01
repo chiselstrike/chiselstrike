@@ -153,7 +153,12 @@ enum Command {
     },
     Restart,
     Wait,
-    Apply,
+    Apply {
+        // FIXME: Should not have a default, maybe? But some commands right now won't work without
+        // it.
+        #[structopt(long, default_value = "")]
+        version: String,
+    },
 }
 
 #[derive(StructOpt, Debug)]
@@ -251,7 +256,7 @@ fn read_manifest() -> Result<Manifest> {
     })
 }
 
-async fn apply(server_url: String) -> Result<()> {
+async fn apply(server_url: String, version: String) -> Result<()> {
     let manifest = read_manifest()?;
     let types = manifest.types()?;
     let endpoints = manifest.endpoints()?;
@@ -286,6 +291,7 @@ async fn apply(server_url: String) -> Result<()> {
             types: types_req,
             endpoints: endpoints_req,
             policies: policy_req,
+            version,
         }))
         .await?
         .into_inner();
@@ -327,7 +333,7 @@ async fn main() -> Result<()> {
             cmd.push("chiseld");
             let mut server = std::process::Command::new(cmd).spawn()?;
             wait(server_url.clone()).await?;
-            apply(server_url.clone()).await?;
+            apply(server_url.clone(), "".into()).await?;
             let (mut tx, mut rx) = channel(1);
             let mut apply_watcher =
                 RecommendedWatcher::new(move |res: Result<Event, notify::Error>| {
@@ -350,7 +356,7 @@ async fn main() -> Result<()> {
                 match res {
                     Ok(event) => {
                         if event.kind.is_modify() {
-                            apply(server_url.clone()).await?;
+                            apply(server_url.clone(), "".into()).await?;
                         }
                     }
                     Err(e) => println!("watch error: {:?}", e),
@@ -400,13 +406,13 @@ async fn main() -> Result<()> {
                 .into_inner();
             println!("{}", if response.ok { "success" } else { "failure" });
             wait(server_url.clone()).await?;
-            apply(server_url).await?;
+            apply(server_url, "".into()).await?;
         }
         Command::Wait => {
             wait(server_url).await?;
         }
-        Command::Apply => {
-            apply(server_url.clone()).await?;
+        Command::Apply { version } => {
+            apply(server_url.clone(), version).await?;
         }
     }
     Ok(())
