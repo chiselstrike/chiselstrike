@@ -13,10 +13,8 @@ use anyhow::Result;
 use async_mutex::Mutex;
 use chisel::chisel_rpc_server::{ChiselRpc, ChiselRpcServer};
 use chisel::{
-    AddTypeRequest, AddTypeResponse, EndPointCreationRequest, EndPointCreationResponse,
-    EndPointRemoveRequest, EndPointRemoveResponse, PolicyUpdateRequest, PolicyUpdateResponse,
-    RestartRequest, RestartResponse, StatusRequest, StatusResponse, TypeExportRequest,
-    TypeExportResponse,
+    ChiselApplyRequest, ChiselApplyResponse, RestartRequest, RestartResponse, StatusRequest,
+    StatusResponse, TypeExportRequest, TypeExportResponse,
 };
 use convert_case::{Case, Casing};
 use futures::FutureExt;
@@ -93,27 +91,6 @@ impl RpcService {
     pub fn new(state: Arc<Mutex<GlobalRpcState>>) -> Self {
         Self { state }
     }
-
-    async fn create_js_endpoint(&self, path: &str, code: String) -> Result<()> {
-        let func = Box::new({
-            let path = path.to_owned();
-            move |req| deno::run_js(path.clone(), req).boxed_local()
-        });
-
-        let mut state = self.state.lock().await;
-        state.routes.add_route(path, func.clone());
-
-        let path = path.to_string();
-        let cmd = send_command!({
-            deno::define_endpoint(path.clone(), code).await?;
-
-            let runtime = &mut runtime::get().await;
-            runtime.api.lock().await.add_route(&path, func);
-            Ok(())
-        });
-
-        state.send_command(cmd).await
-    }
 }
 
 impl From<QueryError> for Status {
@@ -141,58 +118,148 @@ impl ChiselRpc for RpcService {
         Ok(Response::new(response))
     }
 
-    /// Add a type.
-    async fn add_type(
+    /// Apply a new version of ChiselStrike
+    async fn apply(
         &self,
-        request: Request<AddTypeRequest>,
-    ) -> Result<Response<AddTypeResponse>, Status> {
+        request: Request<ChiselApplyRequest>,
+    ) -> Result<Response<ChiselApplyResponse>, Status> {
         let mut state = self.state.lock().await;
+        let apply_request = request.into_inner();
 
-        let type_def = request.into_inner();
-        let name = type_def.name;
-        let snake_case_name = name.to_case(Case::Snake);
-        let mut fields = Vec::new();
-        for field in type_def.field_defs {
-            let ty = state.type_system.lookup_type(&field.field_type)?;
-            fields.push(Field {
-                name: field.name.clone(),
-                type_: ty,
-                labels: field.labels,
-                default: field.default_value,
-                is_optional: field.is_optional,
+        let mut type_names = vec![];
+        let mut endpoint_routes = vec![];
+        let mut labels = vec![];
+
+        for type_def in apply_request.types {
+            let name = type_def.name;
+            type_names.push(name.clone());
+            let snake_case_name = name.to_case(Case::Snake);
+
+            let mut fields = Vec::new();
+            for field in type_def.field_defs {
+                let ty = state.type_system.lookup_type(&field.field_type)?;
+                fields.push(Field {
+                    name: field.name.clone(),
+                    type_: ty,
+                    labels: field.labels,
+                    default: field.default_value,
+                    is_optional: field.is_optional,
+                });
+            }
+            let ty = ObjectType {
+                name: name.to_owned(),
+                fields,
+                backing_table: snake_case_name.clone(),
+            };
+
+            match state.type_system.add_type(ty.to_owned()) {
+                Ok(_) => {
+                    // FIXME: Consistency between metadata and backing store updates.
+                    let meta = &state.meta;
+                    meta.insert(ty.clone()).await?;
+
+                    let query_engine = &state.query_engine;
+                    query_engine.create_table(ty).await?;
+                }
+                Err(TypeSystemError::TypeAlreadyExists) => {
+                    state.type_system.replace_type(ty)?;
+                }
+                Err(e) => return Err(e.into()),
+            }
+        }
+
+        let regex = regex::Regex::new(".*").unwrap();
+        state.routes.remove_routes(regex.clone());
+
+        for endpoint in &apply_request.endpoints {
+            let path = format!("/{}", endpoint.path).to_owned();
+
+            let func = Box::new({
+                let path = path.clone();
+                move |req| deno::run_js(path.clone(), req).boxed_local()
             });
-        }
-        let ty = ObjectType {
-            name: name.to_owned(),
-            fields,
-            backing_table: snake_case_name.clone(),
-        };
-        match state.type_system.add_type(ty.to_owned()) {
-            Ok(_) => {
-                // FIXME: Consistency between metadata and backing store updates.
-                let meta = &state.meta;
-                meta.insert(ty.clone()).await?;
-
-                let query_engine = &state.query_engine;
-                query_engine.create_table(ty).await?;
-            }
-            Err(TypeSystemError::TypeAlreadyExists) => {
-                state.type_system.replace_type(ty)?;
-            }
-            Err(e) => return Err(e.into()),
+            endpoint_routes.push((path.clone(), func.clone(), endpoint.code.clone()));
+            state.routes.add_route(&path, func);
         }
 
+        // FIXME: only transform implemented
+        let mut policies = LabelPolicies::default();
+
+        for policy in apply_request.policies {
+            let docs = YamlLoader::load_from_str(&policy.policy_config)
+                .map_err(|err| Status::internal(format!("{}", err)))?;
+
+            for config in docs.iter() {
+                for label in config["labels"].as_vec().get_or_insert(&[].into()).iter() {
+                    let name = label["name"].as_str().ok_or_else(|| {
+                        Status::internal(format!(
+                            "couldn't parse yaml: label without a name: {:?}",
+                            label
+                        ))
+                    })?;
+
+                    labels.push(name.to_owned());
+                    debug!("Applying policy for label {:?}", name);
+
+                    match label["transform"].as_str() {
+                        Some("anonymize") => {
+                            let pattern = label["except_uri"].as_str().unwrap_or("^$"); // ^$ never matches; each path has at least a '/' in it.
+                            policies.insert(
+                                name.to_owned(),
+                                Policy {
+                                    transform: crate::policies::anonymize,
+                                    except_uri: regex::Regex::new(pattern).map_err(|e| {
+                                        Status::internal(format!(
+                                            "error '{}' parsing regular expression '{}'",
+                                            e, pattern
+                                        ))
+                                    })?,
+                                },
+                            );
+                            Ok(())
+                        }
+                        Some(x) => Err(Status::internal(format!(
+                            "unknown transform: {} for label {}",
+                            x, name
+                        ))),
+                        None => Ok(()),
+                    }?;
+                }
+                for _endpoint in config["endpoints"].as_vec().iter() {
+                    log::info!("endpoint behavior not yet implemented");
+                }
+            }
+        }
+
+        let endpoints = endpoint_routes.clone();
         let type_system = state.type_system.clone();
 
         let cmd = send_command!({
             let runtime = &mut runtime::get().await;
             runtime.type_system.update(&type_system);
+            runtime.policies = policies;
+
+            let mut api = runtime.api.lock().await;
+            api.remove_routes(regex);
+
+            for (path, func, code) in endpoints {
+                deno::define_endpoint(path.clone(), code).await?;
+                api.add_route(&path, func);
+            }
             Ok(())
         });
-        state.send_command(cmd).await.unwrap();
+        state
+            .send_command(cmd)
+            .await
+            .map_err(|e| Status::internal(format!("{}", e)))?;
 
-        let response = chisel::AddTypeResponse { message: name };
-        Ok(Response::new(response))
+        // FIXME: return number of effective changes? Probably depends on how we implement
+        // terraform-like workflow (x added, y removed, z modified)
+        Ok(Response::new(ChiselApplyResponse {
+            types: type_names,
+            endpoints: endpoint_routes.iter().map(|x| x.0.clone()).collect(),
+            labels,
+        }))
     }
 
     async fn export_types(
@@ -225,47 +292,8 @@ impl ChiselRpc for RpcService {
             };
             type_defs.push(type_def);
         }
+
         let response = chisel::TypeExportResponse { type_defs };
-        Ok(Response::new(response))
-    }
-
-    async fn create_end_point(
-        &self,
-        request: tonic::Request<EndPointCreationRequest>,
-    ) -> Result<tonic::Response<EndPointCreationResponse>, tonic::Status> {
-        let request = request.into_inner();
-        let path = format!("/{}", request.path);
-        let code = request.code;
-
-        self.create_js_endpoint(&path, code)
-            .await
-            .map_err(|e| Status::internal(format!("{}", e)))?;
-
-        let response = EndPointCreationResponse { message: path };
-        Ok(Response::new(response))
-    }
-
-    async fn remove_end_point(
-        &self,
-        request: Request<EndPointRemoveRequest>,
-    ) -> Result<Response<EndPointRemoveResponse>, Status> {
-        let mut state = self.state.lock().await;
-
-        let request = request.into_inner();
-
-        let regex = regex::Regex::new(&request.path.unwrap_or_else(|| ".*".into()))
-            .map_err(|x| Status::internal(format!("invalid regex: {}", x)))?;
-
-        let removed = state.routes.remove_routes(regex.clone()) as i32;
-
-        let cmd = send_command!({
-            let runtime = &mut runtime::get().await;
-            runtime.api.lock().await.remove_routes(regex);
-            Ok(())
-        });
-
-        state.send_command(cmd).await.unwrap();
-        let response = EndPointRemoveResponse { removed };
         Ok(Response::new(response))
     }
 
@@ -275,72 +303,6 @@ impl ChiselRpc for RpcService {
     ) -> Result<tonic::Response<RestartResponse>, tonic::Status> {
         let ok = nix::sys::signal::raise(nix::sys::signal::Signal::SIGHUP).is_ok();
         Ok(Response::new(RestartResponse { ok }))
-    }
-
-    async fn policy_update(
-        &self,
-        request: tonic::Request<PolicyUpdateRequest>,
-    ) -> Result<tonic::Response<PolicyUpdateResponse>, tonic::Status> {
-        let state = self.state.lock().await;
-
-        let request = request.into_inner();
-
-        let docs = YamlLoader::load_from_str(&request.policy_config)
-            .map_err(|err| Status::internal(format!("{}", err)))?;
-
-        // FIXME: only transform implemented
-        let mut policies = LabelPolicies::default();
-
-        for config in docs.iter() {
-            for label in config["labels"].as_vec().get_or_insert(&[].into()).iter() {
-                let name = label["name"].as_str().ok_or_else(|| {
-                    Status::internal(format!(
-                        "couldn't parse yaml: label without a name: {:?}",
-                        label
-                    ))
-                })?;
-                debug!("Applying policy for label {:?}", name);
-
-                match label["transform"].as_str() {
-                    Some("anonymize") => {
-                        let pattern = label["except_uri"].as_str().unwrap_or("^$"); // ^$ never matches; each path has at least a '/' in it.
-                        policies.insert(
-                            name.to_owned(),
-                            Policy {
-                                transform: crate::policies::anonymize,
-                                except_uri: regex::Regex::new(pattern).map_err(|e| {
-                                    Status::internal(format!(
-                                        "error '{}' parsing regular expression '{}'",
-                                        e, pattern
-                                    ))
-                                })?,
-                            },
-                        );
-                        Ok(())
-                    }
-                    Some(x) => Err(Status::internal(format!(
-                        "unknown transform: {} for label {}",
-                        x, name
-                    ))),
-                    None => Ok(()),
-                }?;
-            }
-            for _endpoint in config["endpoints"].as_vec().iter() {
-                log::info!("endpoint behavior not yet implemented");
-            }
-        }
-
-        let cmd = send_command!({
-            runtime::get().await.policies = policies;
-            Ok(())
-        });
-        state.send_command(cmd).await.unwrap();
-
-        // FIXME: return number of effective changes? Probably depends on how we implement
-        // terraform-like workflow (x added, y removed, z modified)
-        Ok(Response::new(PolicyUpdateResponse {
-            message: "ok".to_owned(),
-        }))
     }
 }
 
