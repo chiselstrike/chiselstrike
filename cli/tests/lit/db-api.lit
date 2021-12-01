@@ -11,7 +11,8 @@ type AuthorT = {
 const authors = Chisel.api.table<AuthorT>("authors", ["id", "name", "other"]);
 
 export default async function chisel(req: Request) {
-    return new Response(authors.sql());
+    const query = await Chisel.query(authors);
+    return new Response(query);
 }
 EOF
 

@@ -8,6 +8,7 @@ extern crate swc_ecma_parser;
 extern crate swc_node_base;
 
 pub mod api;
+pub mod db;
 pub mod deno;
 pub mod policies;
 pub mod query;

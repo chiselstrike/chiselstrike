@@ -1,6 +1,7 @@
 // SPDX-FileCopyrightText: © 2021 ChiselStrike <info@chiselstrike.com>
 
 use crate::api::Body;
+use crate::db::{convert, sql};
 use crate::policies::FieldPolicies;
 use crate::runtime;
 use crate::types::ObjectType;
@@ -295,6 +296,48 @@ async fn op_chisel_query_create(
     Ok(rid)
 }
 
+struct QueryStreamResource2 {
+    query: String,
+}
+
+impl Resource for QueryStreamResource2 {}
+
+async fn op_chisel_relational_query_create(
+    op_state: Rc<RefCell<OpState>>,
+    relation: serde_json::Value,
+    _: (),
+) -> Result<ResourceId> {
+    // FIXME: It is silly do create a serde_json::Value just to
+    // convert it to something else. The difficulty with decoding
+    // directly is that we need to implement visit_map to read the
+    // kind field to see what we should deserialize. We can only look
+    // once at each K,V pair, so we have to keep the V as
+    // serde_v8::value, which means we need a scope to then
+    // deserialize those. There is a scope is the decoder, but there
+    // is no way to access it from here. We would have to replace
+    // op_chisel_query_create2 with a closure that has an
+    // Rc<DenoService>.
+    let relation = convert(&relation);
+    let query = sql(&relation?);
+    let resource = QueryStreamResource2 { query };
+    let rid = op_state.borrow_mut().resource_table.add(resource);
+    Ok(rid)
+}
+
+// FIXME: This is not the final interface. Depending on the DB we
+// will to be able to execute all queries with a single SQL
+// statement. We should have a query function on a connection that
+// takes a table and returns an iterator over the rows.
+async fn op_chisel_relational_query_sql(
+    op_state: Rc<RefCell<OpState>>,
+    query_stream_rid: ResourceId,
+    _: (),
+) -> Result<String> {
+    let resource: Rc<QueryStreamResource2> =
+        op_state.borrow().resource_table.get(query_stream_rid)?;
+    Ok(resource.query.clone())
+}
+
 async fn op_chisel_query_next(
     state: Rc<RefCell<OpState>>,
     query_stream_rid: ResourceId,
@@ -385,6 +428,14 @@ async fn create_deno(inspect_brk: bool) -> Result<DenoService> {
     runtime.register_op("chisel_read_body", op_async(op_chisel_read_body));
     runtime.register_op("chisel_store", op_async(op_chisel_store));
     runtime.register_op("chisel_query_create", op_async(op_chisel_query_create));
+    runtime.register_op(
+        "chisel_relational_query_create",
+        op_async(op_chisel_relational_query_create),
+    );
+    runtime.register_op(
+        "chisel_relational_query_sql",
+        op_async(op_chisel_relational_query_sql),
+    );
     runtime.register_op("chisel_query_next", op_async(op_chisel_query_next));
     runtime.sync_ops_cache();
 
