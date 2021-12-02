@@ -19,14 +19,24 @@ fn redirect(link: &str) -> Response<Body> {
 }
 
 fn handle_callback(
-    _req: Request<hyper::Body>,
+    req: Request<hyper::Body>,
 ) -> Pin<Box<dyn Future<Output = Result<Response<Body>, anyhow::Error>>>> {
     // TODO: Grab state out of the request, validate it, and grab the referrer URL out of it.
-    async {
+    async move {
+        let username = req
+            .uri()
+            .query()
+            .unwrap_or("user=NOUSER1")
+            .strip_prefix("user=")
+            .unwrap_or("NOUSER2");
         Ok(redirect(&format!(
             // TODO: redirect to the URL from state.
             "http://localhost:3000/profile?chiselstrike_token={}",
-            runtime::get().await.meta.new_session_token().await?
+            runtime::get()
+                .await
+                .meta
+                .new_session_token(&urldecode::decode(username.into()))
+                .await?
         )))
     }
     .boxed_local()

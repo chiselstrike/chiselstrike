@@ -173,10 +173,12 @@ impl MetaService {
         Ok(())
     }
 
-    pub async fn new_session_token(&self) -> Result<String, QueryError> {
+    pub(crate) async fn new_session_token(&self, username: &str) -> Result<String, QueryError> {
         let token = Uuid::new_v4().to_string();
-        let insert = // TODO: Get the username from the URL parameter.
-            sqlx::query("INSERT INTO sessions(token, username) VALUES($1, 'xyz')").bind(&token);
+        // TODO: Expire tokens.
+        let insert = sqlx::query("INSERT INTO sessions(token, username) VALUES($1, $2)")
+            .bind(&token)
+            .bind(username);
         let mut transaction = self
             .pool
             .begin()
@@ -193,7 +195,7 @@ impl MetaService {
         Ok(token)
     }
 
-    pub async fn get_username(&self, token: &str) -> Result<String, QueryError> {
+    pub(crate) async fn get_username(&self, token: &str) -> Result<String, QueryError> {
         let row = sqlx::query("SELECT username FROM sessions WHERE token=$1")
             .bind(token)
             .fetch_all(&self.pool)
