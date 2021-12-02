@@ -1,6 +1,7 @@
 // SPDX-FileCopyrightText: © 2021 ChiselStrike <info@chiselstrike.com>
 
 use crate::api::{ApiService, Body};
+use crate::runtime;
 use futures::Future;
 use hyper::{header, Request, Response, StatusCode};
 use std::pin::Pin;
@@ -18,13 +19,14 @@ fn handle_callback(
     _req: Request<hyper::Body>,
 ) -> Pin<Box<dyn Future<Output = Result<Response<Body>, anyhow::Error>>>> {
     // TODO: Grab state out of the request, validate it, and grab the referrer URL out of it.
-    let token = "12345"; // TODO: Generate a unique token for each session.
     use futures::FutureExt;
-    // TODO: redirect to the URL from state.
-    std::future::ready(Ok(redirect(&format!(
-        "http://localhost:3000/profile?chiselstrike_token={}",
-        token
-    ))))
+    async {
+        Ok(redirect(&format!(
+            // TODO: redirect to the URL from state.
+            "http://localhost:3000/profile?chiselstrike_token={}",
+            runtime::get().await.meta.new_session_token().await
+        )))
+    }
     .boxed_local()
 }
 

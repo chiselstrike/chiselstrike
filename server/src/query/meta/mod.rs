@@ -171,4 +171,8 @@ impl MetaService {
         }
         Ok(())
     }
+
+    pub async fn new_session_token(&self) -> String {
+        "12345".into() // TODO: Generate a unique token for each session.
+    }
 }
