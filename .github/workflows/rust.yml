@@ -67,8 +67,12 @@ jobs:
     - name: set up cargo cache
       uses: actions/cache@v2
       with:
-            path: ~/.cargo/bin/
-            key: ${{ runner.os }}-cargo
+            path: |
+                ~/.cargo/bin/
+                ~/.cargo/.crates2.json
+                ~/.cargo/.crates.toml
+                ~/.cargo/.package-cache
+            key: ${{ runner.os }}-cargo-v2
 
     - name: Build debug mode binaries
       uses: actions-rs/cargo@v1
