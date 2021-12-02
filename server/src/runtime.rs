@@ -2,38 +2,40 @@
 
 use crate::api::ApiService;
 use crate::policies::{FieldPolicies, LabelPolicies};
-use crate::query::{MetaService, QueryEngine};
+use crate::query::QueryEngine;
 use crate::types::{ObjectType, TypeSystem};
 use async_mutex::{Mutex, MutexGuardArc};
 use once_cell::sync::OnceCell;
 use std::sync::Arc;
 
-pub struct Runtime {
-    pub api: Arc<Mutex<ApiService>>,
-    pub query_engine: QueryEngine,
-    pub meta: MetaService,
-    pub type_system: TypeSystem,
-    pub policies: LabelPolicies,
+pub(crate) struct Runtime {
+    pub(crate) api: Arc<Mutex<ApiService>>,
+    pub(crate) query_engine: QueryEngine,
+    pub(crate) type_system: TypeSystem,
+    pub(crate) policies: LabelPolicies,
 }
 
 impl Runtime {
-    pub fn new(
+    pub(crate) fn new(
         api: Arc<Mutex<ApiService>>,
         query_engine: QueryEngine,
-        meta: MetaService,
         type_system: TypeSystem,
     ) -> Self {
         Self {
             api,
             query_engine,
-            meta,
             type_system,
             policies: LabelPolicies::default(),
         }
     }
 
     /// Adds the current policies of ty to policies.
-    pub fn get_policies(&self, ty: &ObjectType, policies: &mut FieldPolicies, current_path: &str) {
+    pub(crate) fn get_policies(
+        &self,
+        ty: &ObjectType,
+        policies: &mut FieldPolicies,
+        current_path: &str,
+    ) {
         for fld in &ty.fields {
             for lbl in &fld.labels {
                 if let Some(p) = self.policies.get(lbl) {
@@ -48,7 +50,7 @@ impl Runtime {
 
 thread_local!(static RUNTIME: OnceCell<Arc<Mutex<Runtime>>> = OnceCell::new());
 
-pub fn set(rt: Runtime) {
+pub(crate) fn set(rt: Runtime) {
     RUNTIME.with(|x| {
         x.set(Arc::new(Mutex::new(rt)))
             .map_err(|_| ())
@@ -56,7 +58,7 @@ pub fn set(rt: Runtime) {
     })
 }
 
-pub async fn get() -> MutexGuardArc<Runtime> {
+pub(crate) async fn get() -> MutexGuardArc<Runtime> {
     let x = RUNTIME.with(|x| x.get().expect("Runtime is not yet initialized.").clone());
     x.lock_arc().await
 }

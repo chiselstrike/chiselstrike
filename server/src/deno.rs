@@ -153,7 +153,7 @@ impl deno_core::ModuleLoader for ModuleLoader {
 }
 
 impl DenoService {
-    pub fn new(inspect_brk: bool) -> Self {
+    pub(crate) fn new(inspect_brk: bool) -> Self {
         let create_web_worker_cb = Arc::new(|_| {
             todo!("Web workers are not supported");
         });
@@ -459,7 +459,7 @@ async fn create_deno(inspect_brk: bool) -> Result<DenoService> {
     Ok(d)
 }
 
-pub async fn init_deno(inspect_brk: bool) -> Result<()> {
+pub(crate) async fn init_deno(inspect_brk: bool) -> Result<()> {
     let service = Rc::new(RefCell::new(create_deno(inspect_brk).await?));
     DENO.with(|d| {
         d.set(service)
@@ -750,7 +750,7 @@ async fn run_js_aux(
     Ok(body)
 }
 
-pub async fn run_js(path: String, req: Request<hyper::Body>) -> Result<Response<Body>> {
+pub(crate) async fn run_js(path: String, req: Request<hyper::Body>) -> Result<Response<Body>> {
     DENO.with(|d| {
         let d = d.get().expect("Deno is not not yet initialized");
         run_js_aux(d.clone(), path, req)
@@ -822,7 +822,7 @@ async fn define_endpoint_aux(
     Ok(())
 }
 
-pub async fn define_endpoint(path: String, code: String) -> Result<()> {
+pub(crate) async fn define_endpoint(path: String, code: String) -> Result<()> {
     DENO.with(|d| {
         let d = d.get().expect("Deno is not not yet initialized");
         define_endpoint_aux(d.clone(), path, code)
