@@ -24,6 +24,8 @@ pub(crate) enum QueryError {
     IncompatibleData(String, String),
     #[error["feature `{0}` is not implemented"]]
     NotImplemented(String),
+    #[error["token '{0}' not found"]]
+    TokenNotFound(String),
 }
 
 pub(crate) use dbconn::DbConnection;

@@ -192,4 +192,16 @@ impl MetaService {
             .map_err(QueryError::ExecuteFailed)?;
         Ok(token)
     }
+
+    pub async fn get_username(&self, token: &str) -> Result<String, QueryError> {
+        let row = sqlx::query("SELECT username FROM sessions WHERE token=$1")
+            .bind(token)
+            .fetch_all(&self.pool)
+            .await
+            .map_err(QueryError::FetchFailed)?
+            .pop()
+            .ok_or_else(|| QueryError::TokenNotFound(token.into()))?;
+        let username: &str = row.get("username");
+        Ok(username.into())
+    }
 }
