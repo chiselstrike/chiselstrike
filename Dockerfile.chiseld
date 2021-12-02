@@ -1,6 +1,22 @@
 FROM ubuntu:20.04
 
-RUN apt update
-RUN DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends libssl1.1
+#Create the defaults, override using -e in docker/podman run
+ENV API_PORT=8080
+ENV DATA_DB_URI="sqlite://chiseld-data.db?mode=rwc"
+ENV EXECUTOR_THREADS=1
+ENV METADATA_DB_URI="sqlite://chiseld.db?mode=rwc"
+ENV RPC_PORT=50051
+
+ARG DEBIAN_FRONTEND=noninteractive
+RUN apt update && \
+  apt-get install -y --no-install-recommends libssl1.1
+
 COPY target/release/chiseld /usr/local/bin/chiseld
-CMD /usr/local/bin/chiseld
+
+EXPOSE $API_PORT $RPC_PORT
+CMD /usr/local/bin/chiseld \
+  --api-listen-addr 127.0.0.1:$API_PORT \
+  --data-db-uri $DATA_DB_URI \
+  --executor-threads $EXECUTOR_THREADS \
+  --metadata-db-uri $METADATA_DB_URI \
+  --rpc-listen-addr 127.0.0.1:$RPC_PORT 

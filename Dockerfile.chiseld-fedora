@@ -1,0 +1,15 @@
+FROM fedora:latest
+
+#Some sane defaults
+ENV API_PORT=8080
+ENV DATA_DB_URI="sqlite://chiseld-data.db?mode=rwc"
+ENV EXECUTOR_THREADS=1
+ENV METADATA_DB_URI="sqlite://chiseld.db?mode=rwc"
+ENV RPC_PORT=50051
+
+RUN yum -y update && \
+  yum -y install openssl openssl-libs
+
+COPY target/release/chiseld /usr/local/bin/chiseld
+EXPOSE $API_PORT $RPC_PORT
+CMD  /usr/local/bin/chiseld -a 127.0.0.1:$API_PORT -d $DATA_DB_URI -e $EXECUTOR_THREADS -m $METADATA_DB_URI -r 127.0.0.1:$RPC_PORT
