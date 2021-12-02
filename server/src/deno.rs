@@ -247,9 +247,10 @@ async fn op_chisel_store(
         .map_err(|e| e.into())
 }
 
+type DbStream = RefCell<Pin<Box<dyn stream::Stream<Item = Result<AnyRow, sqlx::Error>>>>>;
+
 struct QueryStreamResource {
-    #[allow(clippy::type_complexity)]
-    stream: RefCell<Pin<Box<dyn stream::Stream<Item = Result<AnyRow, sqlx::Error>>>>>,
+    stream: DbStream,
     policies: FieldPolicies,
     ty: ObjectType,
 }
