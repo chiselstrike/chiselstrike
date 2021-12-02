@@ -24,7 +24,7 @@ fn handle_callback(
         Ok(redirect(&format!(
             // TODO: redirect to the URL from state.
             "http://localhost:3000/profile?chiselstrike_token={}",
-            runtime::get().await.meta.new_session_token().await
+            runtime::get().await.meta.new_session_token().await?
         )))
     }
     .boxed_local()

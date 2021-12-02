@@ -3629,6 +3629,7 @@ dependencies = [
  "tonic",
  "tonic-build",
  "url",
+ "uuid",
  "v8",
  "yaml-rust",
 ]

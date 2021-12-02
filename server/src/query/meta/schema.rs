@@ -42,6 +42,13 @@ enum FieldLabels {
     FieldId,
 }
 
+#[derive(Iden)]
+enum Sessions {
+    Table,
+    Token,
+    Username,
+}
+
 pub(crate) fn tables() -> Vec<TableCreateStatement> {
     let types = Table::create()
         .table(Types::Table)
@@ -110,5 +117,18 @@ pub(crate) fn tables() -> Vec<TableCreateStatement> {
                 .on_delete(ForeignKeyAction::Cascade),
         )
         .to_owned();
-    vec![types, type_names, fields, type_fields, field_labels]
+    let sessions = Table::create()
+        .table(Sessions::Table)
+        .if_not_exists()
+        .col(ColumnDef::new(Sessions::Token).uuid().primary_key())
+        .col(ColumnDef::new(Sessions::Username).text())
+        .to_owned();
+    vec![
+        types,
+        type_names,
+        fields,
+        type_fields,
+        field_labels,
+        sessions,
+    ]
 }

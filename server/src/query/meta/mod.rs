@@ -7,6 +7,7 @@ use crate::types::{Field, ObjectType, TypeSystem};
 use sqlx::any::{Any, AnyPool};
 use sqlx::{Executor, Row, Transaction};
 use std::sync::Arc;
+use uuid::Uuid;
 
 /// Meta service.
 ///
@@ -172,7 +173,23 @@ impl MetaService {
         Ok(())
     }
 
-    pub async fn new_session_token(&self) -> String {
-        "12345".into() // TODO: Generate a unique token for each session.
+    pub async fn new_session_token(&self) -> Result<String, QueryError> {
+        let token = Uuid::new_v4().to_string();
+        let insert = // TODO: Get the username from the URL parameter.
+            sqlx::query("INSERT INTO sessions(token, username) VALUES($1, 'xyz')").bind(&token);
+        let mut transaction = self
+            .pool
+            .begin()
+            .await
+            .map_err(QueryError::ConnectionFailed)?;
+        transaction
+            .execute(insert)
+            .await
+            .map_err(QueryError::ExecuteFailed)?;
+        transaction
+            .commit()
+            .await
+            .map_err(QueryError::ExecuteFailed)?;
+        Ok(token)
     }
 }
