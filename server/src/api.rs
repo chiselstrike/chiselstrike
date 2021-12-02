@@ -21,7 +21,7 @@ use std::task::{Context, Poll};
 
 type JsStream = Pin<Box<dyn Stream<Item = Result<Box<[u8]>>>>>;
 
-pub enum Body {
+pub(crate) enum Body {
     Const(Option<Box<[u8]>>),
     Stream(JsStream),
 }
@@ -68,7 +68,7 @@ type RouteFn = Box<
 >;
 
 #[derive(Default)]
-pub struct RoutePaths {
+pub(crate) struct RoutePaths {
     // Kept reverse sorted so that if an entry is a prefix of another,
     // it comes later. This makes it easy to find which entry shares
     // the longest prefix with a request.
@@ -90,7 +90,7 @@ impl RoutePaths {
         None
     }
 
-    pub fn add_route(&mut self, path: &str, route_fn: RouteFn) {
+    pub(crate) fn add_route(&mut self, path: &str, route_fn: RouteFn) {
         let path: PathBuf = path.into();
         let pos = self.paths.binary_search_by(|p| path.cmp(&p.0));
         let elem = (path, route_fn);
@@ -106,7 +106,7 @@ impl RoutePaths {
 
     /// Remove all routes that match this regular expression, and return
     /// the amount of routes removed.
-    pub fn remove_routes(&mut self, path: regex::Regex) -> usize {
+    pub(crate) fn remove_routes(&mut self, path: regex::Regex) -> usize {
         let before = self.paths.len();
         self.paths.retain(|x| {
             let s = x.0.clone().into_os_string().into_string().unwrap();
@@ -118,12 +118,12 @@ impl RoutePaths {
 
 /// API service for Chisel server.
 #[derive(Default)]
-pub struct ApiService {
+pub(crate) struct ApiService {
     paths: RoutePaths,
 }
 
 impl ApiService {
-    pub fn new() -> Self {
+    pub(crate) fn new() -> Self {
         Self {
             paths: RoutePaths::default(),
         }
@@ -133,17 +133,17 @@ impl ApiService {
         self.paths.longest_prefix(request)
     }
 
-    pub fn add_route(&mut self, path: &str, route_fn: RouteFn) {
+    pub(crate) fn add_route(&mut self, path: &str, route_fn: RouteFn) {
         self.paths.add_route(path, route_fn)
     }
 
     /// Remove all routes that match this regular expression, and return
     /// the amount of routes removed.
-    pub fn remove_routes(&mut self, path: regex::Regex) -> usize {
+    pub(crate) fn remove_routes(&mut self, path: regex::Regex) -> usize {
         self.paths.remove_routes(path)
     }
 
-    pub async fn route(
+    pub(crate) async fn route(
         &mut self,
         req: Request<hyper::Body>,
     ) -> hyper::http::Result<Response<Body>> {
@@ -177,7 +177,7 @@ where
     }
 }
 
-pub fn spawn(
+pub(crate) fn spawn(
     api: Arc<Mutex<ApiService>>,
     addr: SocketAddr,
     shutdown: impl core::future::Future<Output = ()> + 'static,

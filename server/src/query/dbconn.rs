@@ -35,13 +35,13 @@ impl From<AnyKind> for Kind {
 
 #[derive(Debug, Clone)]
 pub struct DbConnection {
-    pub kind: Kind,
-    pub pool: AnyPool,
-    pub conn_uri: String,
+    pub(crate) kind: Kind,
+    pub(crate) pool: AnyPool,
+    pub(crate) conn_uri: String,
 }
 
 impl DbConnection {
-    pub async fn connect(uri: &str) -> Result<Self, QueryError> {
+    pub(crate) async fn connect(uri: &str) -> Result<Self, QueryError> {
         let opts = AnyConnectOptions::from_str(uri).map_err(QueryError::ConnectionFailed)?;
         let pool = AnyPoolOptions::new()
             .connect(uri)
@@ -56,14 +56,14 @@ impl DbConnection {
         })
     }
 
-    pub async fn local_connection(&self) -> Result<Self, QueryError> {
+    pub(crate) async fn local_connection(&self) -> Result<Self, QueryError> {
         match self.kind {
             Kind::Postgres => Self::connect(&self.conn_uri).await,
             Kind::Sqlite => Ok(self.clone()),
         }
     }
 
-    pub fn get_query_builder(kind: &Kind) -> &dyn SchemaBuilder {
+    pub(crate) fn get_query_builder(kind: &Kind) -> &dyn SchemaBuilder {
         match kind {
             Kind::Postgres => &PostgresQueryBuilder,
             Kind::Sqlite => &SqliteQueryBuilder,

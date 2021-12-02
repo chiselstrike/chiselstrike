@@ -9,7 +9,7 @@ enum Inner {
 }
 
 #[derive(Debug)]
-pub struct Relation {
+pub(crate) struct Relation {
     columns: Vec<String>,
     inner: Inner,
 }
@@ -43,7 +43,7 @@ fn convert_join(val: &serde_json::Value) -> Result<Relation> {
     })
 }
 
-pub fn convert(val: &serde_json::Value) -> Result<Relation> {
+pub(crate) fn convert(val: &serde_json::Value) -> Result<Relation> {
     let kind = val["kind"].as_str().ok_or_else(|| anyhow!("foo"))?;
     match kind {
         "BackingStore" => convert_backing_store(val),
@@ -96,7 +96,7 @@ fn sql_impl(rel: &Relation, alias_count: &mut u32) -> String {
     }
 }
 
-pub fn sql(rel: &Relation) -> String {
+pub(crate) fn sql(rel: &Relation) -> String {
     let mut v = 0;
     sql_impl(rel, &mut v)
 }

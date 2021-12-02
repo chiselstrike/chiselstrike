@@ -98,7 +98,6 @@ async fn run(state: SharedState, mut cmd: ExecutorChannel) -> Result<()> {
     let rt = Runtime::new(
         api_service.clone(),
         QueryEngine::local_connection(&state.data_db).await?,
-        meta,
         ts,
     );
     runtime::set(rt);
