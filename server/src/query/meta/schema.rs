@@ -42,7 +42,7 @@ enum FieldLabels {
     FieldId,
 }
 
-pub fn tables() -> Vec<TableCreateStatement> {
+pub(crate) fn tables() -> Vec<TableCreateStatement> {
     let types = Table::create()
         .table(Types::Table)
         .if_not_exists()

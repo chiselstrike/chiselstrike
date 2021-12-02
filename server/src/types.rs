@@ -3,7 +3,7 @@
 use std::collections::HashMap;
 
 #[derive(thiserror::Error, Debug)]
-pub enum TypeSystemError {
+pub(crate) enum TypeSystemError {
     #[error["type already exists"]]
     TypeAlreadyExists,
     #[error["no such type: {0}"]]
@@ -15,8 +15,8 @@ pub enum TypeSystemError {
 }
 
 #[derive(Debug, Default, Clone)]
-pub struct TypeSystem {
-    pub types: HashMap<String, ObjectType>,
+pub(crate) struct TypeSystem {
+    pub(crate) types: HashMap<String, ObjectType>,
 }
 
 impl TypeSystem {
@@ -95,7 +95,7 @@ impl TypeSystem {
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub enum Type {
+pub(crate) enum Type {
     String,
     Int,
     Float,
@@ -116,7 +116,7 @@ impl Type {
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub struct ObjectType {
+pub(crate) struct ObjectType {
     /// Name of this type.
     pub(crate) name: String,
     /// Fields of this type.

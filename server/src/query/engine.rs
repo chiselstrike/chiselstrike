@@ -16,14 +16,14 @@ use std::marker::PhantomPinned;
 use std::pin::Pin;
 use std::task::{Context, Poll};
 
-pub struct QueryResults<'a> {
+pub(crate) struct QueryResults<'a> {
     raw_query: String,
     stream: RefCell<Option<BoxStream<'a, Result<AnyRow, Error>>>>,
     _marker: PhantomPinned, // QueryStream cannot be moved
 }
 
 impl<'a> QueryResults<'a> {
-    pub fn new(raw_query: String, pool: &AnyPool) -> Pin<Box<Self>> {
+    pub(crate) fn new(raw_query: String, pool: &AnyPool) -> Pin<Box<Self>> {
         let ret = Box::pin(QueryResults {
             raw_query,
             stream: RefCell::new(None),
@@ -51,7 +51,7 @@ impl Stream for QueryResults<'_> {
 /// The query engine provides a way to persist objects and retrieve them from
 /// a backing store for ChiselStrike endpoints.
 #[derive(Clone)]
-pub struct QueryEngine {
+pub(crate) struct QueryEngine {
     kind: Kind,
     pool: AnyPool,
 }
@@ -61,12 +61,12 @@ impl QueryEngine {
         Self { kind, pool }
     }
 
-    pub async fn local_connection(conn: &DbConnection) -> Result<Self, QueryError> {
+    pub(crate) async fn local_connection(conn: &DbConnection) -> Result<Self, QueryError> {
         let local = conn.local_connection().await?;
         Ok(Self::new(local.kind, local.pool))
     }
 
-    pub async fn create_table(&self, ty: ObjectType) -> Result<(), QueryError> {
+    pub(crate) async fn create_table(&self, ty: ObjectType) -> Result<(), QueryError> {
         let mut create_table = Table::create()
             .table(Alias::new(&ty.backing_table))
             .if_not_exists()
@@ -111,7 +111,7 @@ impl QueryEngine {
         Ok(())
     }
 
-    pub fn find_all(
+    pub(crate) fn find_all(
         &self,
         ty: &ObjectType,
     ) -> Result<impl stream::Stream<Item = Result<AnyRow, Error>>, QueryError> {
@@ -119,7 +119,7 @@ impl QueryEngine {
         Ok(QueryResults::new(query_str, &self.pool))
     }
 
-    pub fn find_all_by(
+    pub(crate) fn find_all_by(
         &self,
         ty: &ObjectType,
         field_name: &str,
@@ -167,7 +167,7 @@ impl QueryEngine {
         Ok(QueryResults::new(query_str, &self.pool))
     }
 
-    pub async fn add_row(
+    pub(crate) async fn add_row(
         &self,
         ty: &ObjectType,
         ty_value: &serde_json::Value,
@@ -225,7 +225,7 @@ impl QueryEngine {
     }
 }
 
-pub fn row_to_json(ty: &ObjectType, row: &AnyRow) -> Result<serde_json::Value, QueryError> {
+pub(crate) fn row_to_json(ty: &ObjectType, row: &AnyRow) -> Result<serde_json::Value, QueryError> {
     let mut v = serde_json::json!({});
     for field in &ty.fields {
         macro_rules! try_setting_field {
