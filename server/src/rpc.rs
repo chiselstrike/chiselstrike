@@ -3,7 +3,6 @@
 use crate::api::RoutePaths;
 use crate::deno;
 use crate::policies::{LabelPolicies, Policy};
-use crate::query::QueryError;
 use crate::query::{MetaService, QueryEngine};
 use crate::runtime;
 use crate::server::CommandTrait;
@@ -91,38 +90,12 @@ impl RpcService {
     pub(crate) fn new(state: Arc<Mutex<GlobalRpcState>>) -> Self {
         Self { state }
     }
-}
-
-impl From<QueryError> for Status {
-    fn from(err: QueryError) -> Self {
-        Status::internal(format!("{}", err))
-    }
-}
-
-impl From<TypeSystemError> for Status {
-    fn from(err: TypeSystemError) -> Self {
-        Status::internal(format!("{}", err))
-    }
-}
-
-#[tonic::async_trait]
-impl ChiselRpc for RpcService {
-    /// Get Chisel server status.
-    async fn get_status(
-        &self,
-        _request: Request<StatusRequest>,
-    ) -> Result<Response<StatusResponse>, Status> {
-        let response = chisel::StatusResponse {
-            message: "OK".to_string(),
-        };
-        Ok(Response::new(response))
-    }
 
     /// Apply a new version of ChiselStrike
-    async fn apply(
+    async fn apply_aux(
         &self,
         request: Request<ChiselApplyRequest>,
-    ) -> Result<Response<ChiselApplyResponse>, Status> {
+    ) -> anyhow::Result<Response<ChiselApplyResponse>> {
         let mut state = self.state.lock().await;
         let apply_request = request.into_inner();
 
@@ -164,7 +137,7 @@ impl ChiselRpc for RpcService {
                 Err(TypeSystemError::TypeAlreadyExists) => {
                     state.type_system.replace_type(ty)?;
                 }
-                Err(e) => return Err(e.into()),
+                Err(e) => anyhow::bail!(e),
             }
         }
 
@@ -186,16 +159,11 @@ impl ChiselRpc for RpcService {
         let mut policies = LabelPolicies::default();
 
         for policy in apply_request.policies {
-            let docs = YamlLoader::load_from_str(&policy.policy_config)
-                .map_err(|err| Status::internal(format!("{}", err)))?;
-
+            let docs = YamlLoader::load_from_str(&policy.policy_config)?;
             for config in docs.iter() {
                 for label in config["labels"].as_vec().get_or_insert(&[].into()).iter() {
                     let name = label["name"].as_str().ok_or_else(|| {
-                        Status::internal(format!(
-                            "couldn't parse yaml: label without a name: {:?}",
-                            label
-                        ))
+                        anyhow::anyhow!("couldn't parse yaml: label without a name: {:?}", label)
                     })?;
 
                     labels.push(name.to_owned());
@@ -208,22 +176,15 @@ impl ChiselRpc for RpcService {
                                 name.to_owned(),
                                 Policy {
                                     transform: crate::policies::anonymize,
-                                    except_uri: regex::Regex::new(pattern).map_err(|e| {
-                                        Status::internal(format!(
-                                            "error '{}' parsing regular expression '{}'",
-                                            e, pattern
-                                        ))
-                                    })?,
+                                    except_uri: regex::Regex::new(pattern)?,
                                 },
                             );
-                            Ok(())
                         }
-                        Some(x) => Err(Status::internal(format!(
-                            "unknown transform: {} for label {}",
-                            x, name
-                        ))),
-                        None => Ok(()),
-                    }?;
+                        Some(x) => {
+                            anyhow::bail!("unknown transform: {} for label {}", x, name);
+                        }
+                        None => {}
+                    };
                 }
                 for _endpoint in config["endpoints"].as_vec().iter() {
                     log::info!("endpoint behavior not yet implemented");
@@ -248,10 +209,7 @@ impl ChiselRpc for RpcService {
             }
             Ok(())
         });
-        state
-            .send_command(cmd)
-            .await
-            .map_err(|e| Status::internal(format!("{}", e)))?;
+        state.send_command(cmd).await?;
 
         // FIXME: return number of effective changes? Probably depends on how we implement
         // terraform-like workflow (x added, y removed, z modified)
@@ -260,6 +218,30 @@ impl ChiselRpc for RpcService {
             endpoints: endpoint_routes.iter().map(|x| x.0.clone()).collect(),
             labels,
         }))
+    }
+}
+
+#[tonic::async_trait]
+impl ChiselRpc for RpcService {
+    /// Get Chisel server status.
+    async fn get_status(
+        &self,
+        _request: Request<StatusRequest>,
+    ) -> Result<Response<StatusResponse>, Status> {
+        let response = chisel::StatusResponse {
+            message: "OK".to_string(),
+        };
+        Ok(Response::new(response))
+    }
+
+    /// Apply a new version of ChiselStrike
+    async fn apply(
+        &self,
+        request: Request<ChiselApplyRequest>,
+    ) -> Result<Response<ChiselApplyResponse>, Status> {
+        self.apply_aux(request)
+            .await
+            .map_err(|e| Status::internal(format!("{}", e)))
     }
 
     async fn export_types(

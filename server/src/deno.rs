@@ -5,7 +5,7 @@ use crate::db::{convert, sql};
 use crate::policies::FieldPolicies;
 use crate::runtime;
 use crate::types::ObjectType;
-use anyhow::Result;
+use anyhow::{anyhow, Result};
 use deno_broadcast_channel::InMemoryBroadcastChannel;
 use deno_core::error::AnyError;
 use deno_core::op_async;
@@ -95,12 +95,6 @@ struct DenoService {
 enum Error {
     #[error["Endpoint didn't produce a response"]]
     NotAResponse,
-    #[error["Type name error; the .name key must have a string value"]]
-    TypeName,
-    #[error["Json field type error; field `{0}` should be of type `{1}`"]]
-    JsonField(String, String),
-    #[error["Query execution error `{0}`"]]
-    Query(#[from] crate::query::QueryError),
 }
 
 struct ModuleLoader {
@@ -235,14 +229,12 @@ async fn op_chisel_store(
     content: serde_json::Value,
     _: (),
 ) -> Result<()> {
-    let type_name = content["name"].as_str().ok_or(Error::TypeName)?;
+    let type_name = content["name"]
+        .as_str()
+        .ok_or_else(|| anyhow!("Type name error; the .name key must have a string value"))?;
     let runtime = &mut runtime::get().await;
     let ty = runtime.type_system.lookup_object_type(type_name)?;
-    runtime
-        .query_engine
-        .add_row(&ty, &content["value"])
-        .await
-        .map_err(|e| e.into())
+    runtime.query_engine.add_row(&ty, &content["value"]).await
 }
 
 type DbStream = RefCell<Pin<Box<dyn stream::Stream<Item = Result<AnyRow, sqlx::Error>>>>>;
@@ -260,7 +252,13 @@ async fn op_chisel_query_create(
     content: serde_json::Value,
     _: (),
 ) -> Result<ResourceId, AnyError> {
-    let json_error = |field: &str, ty_: &str| Error::JsonField(field.to_string(), ty_.to_string());
+    let json_error = |field: &str, ty_: &str| {
+        anyhow!(
+            "Json field type error; field `{}` should be of type `{}`",
+            field.to_string(),
+            ty_.to_string()
+        )
+    };
     let type_name = content["type_name"]
         .as_str()
         .ok_or_else(|| json_error("type_name", "string"))?;

@@ -61,12 +61,12 @@ impl QueryEngine {
         Self { kind, pool }
     }
 
-    pub(crate) async fn local_connection(conn: &DbConnection) -> Result<Self, QueryError> {
+    pub(crate) async fn local_connection(conn: &DbConnection) -> anyhow::Result<Self> {
         let local = conn.local_connection().await?;
         Ok(Self::new(local.kind, local.pool))
     }
 
-    pub(crate) async fn create_table(&self, ty: &ObjectType) -> Result<(), QueryError> {
+    pub(crate) async fn create_table(&self, ty: &ObjectType) -> anyhow::Result<()> {
         let mut create_table = Table::create()
             .table(Alias::new(&ty.backing_table))
             .if_not_exists()
@@ -85,7 +85,7 @@ impl QueryEngine {
                 Type::Float => column_def.double(),
                 Type::Boolean => column_def.boolean(),
                 Type::Object(_) => {
-                    return Err(QueryError::NotImplemented(
+                    anyhow::bail!(QueryError::NotImplemented(
                         "support for type Object".to_owned(),
                     ));
                 }
@@ -114,7 +114,7 @@ impl QueryEngine {
     pub(crate) fn find_all(
         &self,
         ty: &ObjectType,
-    ) -> Result<impl stream::Stream<Item = Result<AnyRow, Error>>, QueryError> {
+    ) -> anyhow::Result<impl stream::Stream<Item = Result<AnyRow, Error>>> {
         let query_str = format!("SELECT * FROM {}", ty.backing_table);
         Ok(QueryResults::new(query_str, &self.pool))
     }
@@ -124,7 +124,7 @@ impl QueryEngine {
         ty: &ObjectType,
         field_name: &str,
         value_json: &serde_json::Value,
-    ) -> Result<impl stream::Stream<Item = Result<AnyRow, Error>>, QueryError> {
+    ) -> anyhow::Result<impl stream::Stream<Item = Result<AnyRow, Error>>> {
         let key_field = ty
             .fields
             .iter()
@@ -145,7 +145,7 @@ impl QueryEngine {
             Type::Float => make_column_filter!(as_f64),
             Type::Boolean => make_column_filter!(as_bool),
             Type::Object(_) => {
-                return Err(QueryError::NotImplemented(
+                anyhow::bail!(QueryError::NotImplemented(
                     "support for type Object".to_owned(),
                 ));
             }
@@ -171,7 +171,7 @@ impl QueryEngine {
         &self,
         ty: &ObjectType,
         ty_value: &serde_json::Value,
-    ) -> Result<(), QueryError> {
+    ) -> anyhow::Result<()> {
         let insert_query = std::format!(
             "INSERT INTO {} ({}) VALUES ({})",
             &ty.backing_table,
@@ -201,7 +201,7 @@ impl QueryEngine {
                 Type::Float => bind_json_value!(as_f64),
                 Type::Boolean => bind_json_value!(as_bool),
                 Type::Object(_) => {
-                    return Err(QueryError::NotImplemented(
+                    anyhow::bail!(QueryError::NotImplemented(
                         "support for type Object".to_owned(),
                     ));
                 }
@@ -225,7 +225,7 @@ impl QueryEngine {
     }
 }
 
-pub(crate) fn row_to_json(ty: &ObjectType, row: &AnyRow) -> Result<serde_json::Value, QueryError> {
+pub(crate) fn row_to_json(ty: &ObjectType, row: &AnyRow) -> anyhow::Result<serde_json::Value> {
     let mut v = serde_json::json!({});
     for field in &ty.fields {
         macro_rules! try_setting_field {
@@ -243,7 +243,7 @@ pub(crate) fn row_to_json(ty: &ObjectType, row: &AnyRow) -> Result<serde_json::V
             Type::Float => try_setting_field!(f64),
             Type::Boolean => try_setting_field!(bool),
             Type::Object(_) => {
-                return Err(QueryError::NotImplemented(
+                anyhow::bail!(QueryError::NotImplemented(
                     "support for type Object".to_owned(),
                 ));
             }
