@@ -1,17 +1,18 @@
 import Link from 'next/link'
+import { getChiselStrikeClient } from "../lib/chiselstrike";
+import { withSessionSsr } from "../lib/withSession";
 
-export async function getServerSideProps(context) {
-    const user = context.query.user || null;
-    return {
-        props: { user },
-    }
-}
+export const getServerSideProps = withSessionSsr(
+    async function getServerSideProps(context) {
+        const chisel = await getChiselStrikeClient(context.req.session, context.query);
+        return { props: { user: chisel.user, link: chisel.loginLink } };
+    },
+);
 
-export default function Profile({ user }) {
+export default function Profile({ user, link }) {
     if (user)
-        return <p>Profile for user {user}</p>;
+        return <p>Profile for user {user}.  <Link href='/api/logout'>Log out</Link></p>;
     else {
-        const link = `https://github.com/login/oauth/authorize?scope=read:user&client_id=${process.env.NEXT_PUBLIC_GHCLID}`;
         return <p>We don't know you.  Please <Link href={link}>log in</Link>.</p>
     }
 }

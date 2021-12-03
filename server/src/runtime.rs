@@ -2,7 +2,7 @@
 
 use crate::api::ApiService;
 use crate::policies::{FieldPolicies, LabelPolicies};
-use crate::query::QueryEngine;
+use crate::query::{MetaService, QueryEngine};
 use crate::types::{ObjectType, TypeSystem};
 use async_mutex::{Mutex, MutexGuardArc};
 use once_cell::sync::OnceCell;
@@ -11,6 +11,7 @@ use std::sync::Arc;
 pub(crate) struct Runtime {
     pub(crate) api: Arc<Mutex<ApiService>>,
     pub(crate) query_engine: QueryEngine,
+    pub(crate) meta: MetaService,
     pub(crate) type_system: TypeSystem,
     pub(crate) policies: LabelPolicies,
 }
@@ -19,11 +20,13 @@ impl Runtime {
     pub(crate) fn new(
         api: Arc<Mutex<ApiService>>,
         query_engine: QueryEngine,
+        meta: MetaService,
         type_system: TypeSystem,
     ) -> Self {
         Self {
             api,
             query_engine,
+            meta,
             type_system,
             policies: LabelPolicies::default(),
         }

@@ -85,7 +85,9 @@ impl SharedTasks {
 }
 
 async fn run(state: SharedState, mut cmd: ExecutorChannel) -> Result<()> {
-    let api_service = Arc::new(Mutex::new(ApiService::new()));
+    let mut api_service = ApiService::new();
+    crate::auth::init(&mut api_service);
+    let api_service = Arc::new(Mutex::new(api_service));
 
     // FIXME: We have to create one per thread. For now we only have
     // one thread, so this is fine.
@@ -98,6 +100,7 @@ async fn run(state: SharedState, mut cmd: ExecutorChannel) -> Result<()> {
     let rt = Runtime::new(
         api_service.clone(),
         QueryEngine::local_connection(&state.data_db).await?,
+        meta,
         ts,
     );
     runtime::set(rt);
