@@ -6,6 +6,7 @@ use crate::query::{DbConnection, Kind, QueryError};
 use crate::types::{Field, ObjectType, TypeSystem};
 use sqlx::any::{Any, AnyPool};
 use sqlx::{Executor, Row, Transaction};
+use std::sync::Arc;
 
 /// Meta service.
 ///
@@ -59,11 +60,11 @@ impl MetaService {
             let backing_table: &str = row.get("backing_table");
             let type_name: &str = row.get("type_name");
             let fields = self.load_type_fields(&ts, type_id).await?;
-            ts.add_type(ObjectType {
+            ts.add_type(Arc::new(ObjectType {
                 name: type_name.to_string(),
                 fields,
                 backing_table: backing_table.to_string(),
-            })?;
+            }))?;
         }
         Ok(ts)
     }
@@ -109,7 +110,7 @@ impl MetaService {
         Ok(fields)
     }
 
-    pub(crate) async fn insert(&self, ty: ObjectType) -> Result<(), QueryError> {
+    pub(crate) async fn insert(&self, ty: Arc<ObjectType>) -> Result<(), QueryError> {
         let mut transaction = self
             .pool
             .begin()

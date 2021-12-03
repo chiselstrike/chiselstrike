@@ -250,7 +250,7 @@ type DbStream = RefCell<Pin<Box<dyn stream::Stream<Item = Result<AnyRow, sqlx::E
 struct QueryStreamResource {
     stream: DbStream,
     policies: FieldPolicies,
-    ty: ObjectType,
+    ty: Arc<ObjectType>,
 }
 
 impl Resource for QueryStreamResource {}

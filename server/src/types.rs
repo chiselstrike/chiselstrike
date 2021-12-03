@@ -1,6 +1,7 @@
 // SPDX-FileCopyrightText: © 2021 ChiselStrike <info@chiselstrike.com>
 
 use std::collections::HashMap;
+use std::sync::Arc;
 
 #[derive(thiserror::Error, Debug)]
 pub(crate) enum TypeSystemError {
@@ -16,7 +17,7 @@ pub(crate) enum TypeSystemError {
 
 #[derive(Debug, Default, Clone)]
 pub(crate) struct TypeSystem {
-    pub(crate) types: HashMap<String, ObjectType>,
+    pub(crate) types: HashMap<String, Arc<ObjectType>>,
 }
 
 impl TypeSystem {
@@ -35,7 +36,7 @@ impl TypeSystem {
     /// # Errors
     ///
     /// If type `ty` already exists in the type system, the function returns `TypeSystemError`.
-    pub(crate) fn add_type(&mut self, ty: ObjectType) -> Result<(), TypeSystemError> {
+    pub(crate) fn add_type(&mut self, ty: Arc<ObjectType>) -> Result<(), TypeSystemError> {
         if self.lookup_type(&ty.name).is_ok() {
             return Err(TypeSystemError::TypeAlreadyExists);
         }
@@ -43,14 +44,17 @@ impl TypeSystem {
         Ok(())
     }
 
-    pub(crate) fn replace_type(&mut self, new_type: ObjectType) -> Result<(), TypeSystemError> {
+    pub(crate) fn replace_type(
+        &mut self,
+        new_type: Arc<ObjectType>,
+    ) -> Result<(), TypeSystemError> {
         let old_type = self.lookup_type(&new_type.name)?;
         if new_type.is_safe_replacement_for(&old_type) {
             self.types.remove(&new_type.name);
             self.types.insert(new_type.name.clone(), new_type);
             Ok(())
         } else {
-            Err(TypeSystemError::UnsafeReplacement(new_type.name))
+            Err(TypeSystemError::UnsafeReplacement(new_type.name.clone()))
         }
     }
 
@@ -66,7 +70,7 @@ impl TypeSystem {
     pub(crate) fn lookup_object_type(
         &self,
         type_name: &str,
-    ) -> Result<ObjectType, TypeSystemError> {
+    ) -> Result<Arc<ObjectType>, TypeSystemError> {
         match self.lookup_type(type_name) {
             Ok(Type::Object(ty)) => Ok(ty),
             Ok(_) => Err(TypeSystemError::ObjectTypeRequired(type_name.to_string())),
@@ -100,7 +104,7 @@ pub(crate) enum Type {
     Int,
     Float,
     Boolean,
-    Object(ObjectType),
+    Object(Arc<ObjectType>),
 }
 
 impl Type {
@@ -115,7 +119,7 @@ impl Type {
     }
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Debug)]
 pub(crate) struct ObjectType {
     /// Name of this type.
     pub(crate) name: String,
@@ -123,6 +127,12 @@ pub(crate) struct ObjectType {
     pub(crate) fields: Vec<Field>,
     /// Name of the backing table for this type.
     pub(crate) backing_table: String,
+}
+
+impl PartialEq for ObjectType {
+    fn eq(&self, another: &Self) -> bool {
+        self.name == another.name && self.backing_table == another.backing_table
+    }
 }
 
 impl ObjectType {

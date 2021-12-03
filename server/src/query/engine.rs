@@ -66,7 +66,7 @@ impl QueryEngine {
         Ok(Self::new(local.kind, local.pool))
     }
 
-    pub(crate) async fn create_table(&self, ty: ObjectType) -> Result<(), QueryError> {
+    pub(crate) async fn create_table(&self, ty: &ObjectType) -> Result<(), QueryError> {
         let mut create_table = Table::create()
             .table(Alias::new(&ty.backing_table))
             .if_not_exists()
@@ -77,7 +77,7 @@ impl QueryEngine {
                     .primary_key(),
             )
             .to_owned();
-        for field in ty.fields {
+        for field in &ty.fields {
             let mut column_def = ColumnDef::new(Alias::new(&field.name));
             match field.type_ {
                 Type::String => column_def.text(),
