@@ -41,7 +41,7 @@ struct Manifest {
     policies: Vec<String>,
 }
 
-fn dir_to_paths(dir: &Path, paths: &mut Vec<PathBuf>) -> Result<(), anyhow::Error> {
+fn dir_to_paths(dir: &Path, paths: &mut Vec<PathBuf>) -> anyhow::Result<()> {
     for dentry in read_dir(dir)? {
         let dentry = dentry?;
         let path = dentry.path();
@@ -69,11 +69,11 @@ impl Manifest {
         }
     }
 
-    pub fn types(&self) -> Result<Vec<PathBuf>, anyhow::Error> {
+    pub fn types(&self) -> anyhow::Result<Vec<PathBuf>> {
         Self::dirs_to_paths(&self.types)
     }
 
-    pub fn endpoints(&self) -> Result<Vec<Endpoint>, anyhow::Error> {
+    pub fn endpoints(&self) -> anyhow::Result<Vec<Endpoint>> {
         let mut ret = vec![];
         for dir in &self.endpoints {
             let mut paths = vec![];
@@ -101,11 +101,11 @@ impl Manifest {
         Ok(ret)
     }
 
-    pub fn policies(&self) -> Result<Vec<PathBuf>, anyhow::Error> {
+    pub fn policies(&self) -> anyhow::Result<Vec<PathBuf>> {
         Self::dirs_to_paths(&self.policies)
     }
 
-    fn dirs_to_paths(dirs: &[String]) -> Result<Vec<PathBuf>, anyhow::Error> {
+    fn dirs_to_paths(dirs: &[String]) -> anyhow::Result<Vec<PathBuf>> {
         let mut paths = vec![];
         for dir in dirs {
             dir_to_paths(Path::new(dir), &mut paths)?
@@ -177,7 +177,7 @@ fn read_to_string<P: AsRef<Path>>(filename: P) -> Result<String, std::io::Error>
     }
 }
 
-fn read_dir<P: AsRef<Path>>(dir: P) -> Result<fs::ReadDir, anyhow::Error> {
+fn read_dir<P: AsRef<Path>>(dir: P) -> anyhow::Result<fs::ReadDir> {
     fs::read_dir(dir.as_ref()).with_context(|| format!("Could not open {}", dir.as_ref().display()))
 }
 
@@ -199,7 +199,7 @@ where
             Err(e) => {
                 a = e;
                 if total > timeout {
-                    return Err(anyhow!("Timeout"));
+                    anyhow::bail!("Timeout");
                 }
                 thread::sleep(wait_time);
                 total += wait_time;

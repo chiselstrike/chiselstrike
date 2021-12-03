@@ -23,13 +23,13 @@ impl MetaService {
         Self { kind, pool }
     }
 
-    pub(crate) async fn local_connection(conn: &DbConnection) -> Result<Self, QueryError> {
+    pub(crate) async fn local_connection(conn: &DbConnection) -> anyhow::Result<Self> {
         let local = conn.local_connection().await?;
         Ok(Self::new(local.kind, local.pool))
     }
 
     /// Create the schema of the underlying metadata store.
-    pub(crate) async fn create_schema(&self) -> Result<(), QueryError> {
+    pub(crate) async fn create_schema(&self) -> anyhow::Result<()> {
         let query_builder = DbConnection::get_query_builder(&self.kind);
         let tables = schema::tables();
         let mut conn = self
@@ -48,7 +48,7 @@ impl MetaService {
     }
 
     /// Load the type system from metadata store.
-    pub(crate) async fn load_type_system<'r>(&self) -> Result<TypeSystem, QueryError> {
+    pub(crate) async fn load_type_system<'r>(&self) -> anyhow::Result<TypeSystem> {
         let query = sqlx::query("SELECT types.type_id AS type_id, types.backing_table AS backing_table, type_names.name AS type_name FROM types INNER JOIN type_names WHERE types.type_id = type_names.type_id");
         let rows = query
             .fetch_all(&self.pool)
@@ -69,11 +69,7 @@ impl MetaService {
         Ok(ts)
     }
 
-    async fn load_type_fields(
-        &self,
-        ts: &TypeSystem,
-        type_id: i32,
-    ) -> Result<Vec<Field>, QueryError> {
+    async fn load_type_fields(&self, ts: &TypeSystem, type_id: i32) -> anyhow::Result<Vec<Field>> {
         let query = sqlx::query("SELECT fields.field_id AS field_id, field_names.field_name AS field_name, fields.field_type AS field_type, fields.default_value as default_value, fields.is_optional as is_optional FROM field_names INNER JOIN fields WHERE fields.type_id = $1 AND field_names.field_id = fields.field_id;");
         let query = query.bind(type_id);
         let rows = query
@@ -110,7 +106,7 @@ impl MetaService {
         Ok(fields)
     }
 
-    pub(crate) async fn insert(&self, ty: Arc<ObjectType>) -> Result<(), QueryError> {
+    pub(crate) async fn insert(&self, ty: Arc<ObjectType>) -> anyhow::Result<()> {
         let mut transaction = self
             .pool
             .begin()
@@ -128,7 +124,7 @@ impl MetaService {
         &self,
         ty: &ObjectType,
         transaction: &mut Transaction<'_, Any>,
-    ) -> Result<(), QueryError> {
+    ) -> anyhow::Result<()> {
         let add_type = sqlx::query("INSERT INTO types (backing_table) VALUES ($1) RETURNING *");
         let add_type_name = sqlx::query("INSERT INTO type_names (type_id, name) VALUES ($1, $2)");
 
