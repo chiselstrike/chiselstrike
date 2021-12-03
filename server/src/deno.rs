@@ -315,7 +315,7 @@ async fn op_chisel_relational_query_create(
     // is no way to access it from here. We would have to replace
     // op_chisel_query_create2 with a closure that has an
     // Rc<DenoService>.
-    let relation = convert(&relation)?;
+    let relation = convert(&relation).await?;
     let runtime = &mut runtime::get().await;
     let query_engine = &mut runtime.query_engine;
     let stream = Box::pin(query_engine.query_relation(&relation)?);
@@ -857,11 +857,10 @@ fn define_type_aux(d: Rc<RefCell<DenoService>>, ty: &ObjectType) -> Result<()> {
     }
 
     let columns = v8::Array::new_with_elements(scope, &fields).into();
-    let backing_table = v8::String::new(scope, &ty.backing_table).unwrap().into();
-    let table = try_into_or(table_func.call(scope, api.into(), &[backing_table, columns]))?;
+    let name = v8::String::new(scope, &ty.name).unwrap();
+    let table = try_into_or(table_func.call(scope, api.into(), &[name.into(), columns]))?;
 
-    let key = v8::String::new(scope, &ty.name).unwrap();
-    collections.set(scope, key.into(), table).unwrap();
+    collections.set(scope, name.into(), table).unwrap();
     Ok(())
 }
 
