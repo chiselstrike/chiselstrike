@@ -54,6 +54,31 @@ function createResultIterator(rid) {
     };
 }
 
+function createResultIterator2(rid) {
+    return {
+        [Symbol.asyncIterator]() {
+            return {
+                async next() {
+                    const value = await Deno.core.opAsync(
+                        "chisel_relational_query_next",
+                        rid,
+                    );
+                    if (value) {
+                        return { value: value, done: false };
+                    } else {
+                        Deno.core.opSync("op_close", rid);
+                        return { done: true };
+                    }
+                },
+                return() {
+                    Deno.core.opSync("op_close", rid);
+                    return { done: true };
+                },
+            };
+        },
+    };
+}
+
 Chisel.find_all = async function (typeName) {
     const rid = await Deno.core.opAsync("chisel_query_create", {
         type_name: typeName,
@@ -75,7 +100,7 @@ Chisel.query = async function (foo) {
         "chisel_relational_query_create",
         foo.inner,
     );
-    return await Deno.core.opAsync("chisel_relational_query_sql", rid);
+    return createResultIterator2(rid);
 };
 
 Chisel.json = function (body, status = 200) {

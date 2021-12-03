@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: © 2021 ChiselStrike <info@chiselstrike.com>
 
 use crate::api::Body;
-use crate::db::{convert, sql};
+use crate::db::convert;
 use crate::policies::FieldPolicies;
 use crate::runtime;
 use crate::types::ObjectType;
@@ -294,7 +294,7 @@ async fn op_chisel_query_create(
 }
 
 struct QueryStreamResource2 {
-    query: String,
+    stream: DbStream,
 }
 
 impl Resource for QueryStreamResource2 {}
@@ -314,25 +314,15 @@ async fn op_chisel_relational_query_create(
     // is no way to access it from here. We would have to replace
     // op_chisel_query_create2 with a closure that has an
     // Rc<DenoService>.
-    let relation = convert(&relation);
-    let query = sql(&relation?);
-    let resource = QueryStreamResource2 { query };
+    let relation = convert(&relation)?;
+    let runtime = &mut runtime::get().await;
+    let query_engine = &mut runtime.query_engine;
+    let stream = Box::pin(query_engine.query_relation(&relation)?);
+    let resource = QueryStreamResource2 {
+        stream: RefCell::new(stream),
+    };
     let rid = op_state.borrow_mut().resource_table.add(resource);
     Ok(rid)
-}
-
-// FIXME: This is not the final interface. Depending on the DB we
-// will to be able to execute all queries with a single SQL
-// statement. We should have a query function on a connection that
-// takes a table and returns an iterator over the rows.
-async fn op_chisel_relational_query_sql(
-    op_state: Rc<RefCell<OpState>>,
-    query_stream_rid: ResourceId,
-    _: (),
-) -> Result<String> {
-    let resource: Rc<QueryStreamResource2> =
-        op_state.borrow().resource_table.get(query_stream_rid)?;
-    Ok(resource.query.clone())
 }
 
 async fn op_chisel_query_next(
@@ -350,6 +340,24 @@ async fn op_chisel_query_next(
         for (field, xform) in &resource.policies {
             v[field] = xform(v[field].take());
         }
+        Ok(Some(v))
+    } else {
+        Ok(None)
+    }
+}
+
+async fn op_chisel_relational_query_next(
+    state: Rc<RefCell<OpState>>,
+    query_stream_rid: ResourceId,
+    _: (),
+) -> Result<Option<serde_json::Value>> {
+    let resource: Rc<QueryStreamResource2> = state.borrow().resource_table.get(query_stream_rid)?;
+    let mut stream = resource.stream.borrow_mut();
+    use futures::stream::StreamExt;
+
+    if let Some(row) = stream.next().await {
+        let row = row.unwrap();
+        let v = crate::query::engine::relational_row_to_json(&row)?;
         Ok(Some(v))
     } else {
         Ok(None)
@@ -429,11 +437,11 @@ async fn create_deno(inspect_brk: bool) -> Result<DenoService> {
         "chisel_relational_query_create",
         op_async(op_chisel_relational_query_create),
     );
-    runtime.register_op(
-        "chisel_relational_query_sql",
-        op_async(op_chisel_relational_query_sql),
-    );
     runtime.register_op("chisel_query_next", op_async(op_chisel_query_next));
+    runtime.register_op(
+        "chisel_relational_query_next",
+        op_async(op_chisel_relational_query_next),
+    );
     runtime.sync_ops_cache();
 
     // FIXME: Include these files in the snapshop

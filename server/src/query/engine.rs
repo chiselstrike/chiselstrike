@@ -1,5 +1,6 @@
 // SPDX-FileCopyrightText: © 2021 ChiselStrike <info@chiselstrike.com>
 
+use crate::db::{sql, Relation};
 use crate::query::{DbConnection, Kind, QueryError};
 use crate::types::{ObjectType, Type};
 use anyhow::Result;
@@ -8,8 +9,10 @@ use futures::stream::BoxStream;
 use futures::stream::Stream;
 use itertools::Itertools;
 use sea_query::{Alias, ColumnDef, Expr, PostgresQueryBuilder, Query, SqliteQueryBuilder, Table};
+use serde_json::json;
 use sqlx::any::{Any, AnyPool, AnyRow};
 use sqlx::error::Error;
+use sqlx::Column;
 use sqlx::{Executor, Row};
 use std::cell::RefCell;
 use std::marker::PhantomPinned;
@@ -109,6 +112,14 @@ impl QueryEngine {
             .await
             .map_err(QueryError::ExecuteFailed)?;
         Ok(())
+    }
+
+    pub(crate) fn query_relation(
+        &self,
+        rel: &Relation,
+    ) -> Result<impl stream::Stream<Item = Result<AnyRow, Error>>, QueryError> {
+        let query_str = sql(rel);
+        Ok(QueryResults::new(query_str, &self.pool))
     }
 
     pub(crate) fn find_all(
@@ -223,6 +234,16 @@ impl QueryEngine {
             .map_err(QueryError::ExecuteFailed)?;
         Ok(())
     }
+}
+
+pub(crate) fn relational_row_to_json(row: &AnyRow) -> anyhow::Result<serde_json::Value> {
+    let mut ret = json!({});
+    for c in row.columns() {
+        let i = c.ordinal();
+        let val = row.get::<&str, _>(i);
+        ret[c.name()] = json!(val);
+    }
+    Ok(ret)
 }
 
 pub(crate) fn row_to_json(ty: &ObjectType, row: &AnyRow) -> anyhow::Result<serde_json::Value> {
