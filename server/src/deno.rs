@@ -644,9 +644,9 @@ fn get_result_aux(
         let rid = op_state.borrow_mut().resource_table.add(resource);
         let rid = v8::Integer::new_from_unsigned(scope, rid).into();
 
-        let chisel: v8::Local<v8::Object> = get_member(global_proxy, scope, "Chisel").unwrap();
+        let chisel: v8::Local<v8::Object> = get_member(global_proxy, scope, "Chisel")?;
         let build: v8::Local<v8::Function> =
-            get_member(chisel, scope, "buildReadableStreamForBody").unwrap();
+            get_member(chisel, scope, "buildReadableStreamForBody")?;
         let body = build.call(scope, chisel.into(), &[rid]).unwrap();
         let body_key = v8::String::new(scope, "body")
             .ok_or(Error::NotAResponse)?
@@ -695,9 +695,7 @@ async fn run_js_aux(
 ) -> Result<Response<Body>> {
     let service = &mut *d.borrow_mut();
     let request_handler = service.handlers.get(&path).unwrap().func.clone().unwrap();
-
-    let worker = &mut service.worker;
-    let runtime = &mut worker.js_runtime;
+    let runtime = &mut service.worker.js_runtime;
 
     if service.inspector.is_some() {
         runtime
