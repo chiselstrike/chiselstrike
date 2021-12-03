@@ -55,9 +55,6 @@ jobs:
           override: true
           components: rustfmt, clippy
 
-    - name: Install protoc
-      run: sudo apt-get install protobuf-compiler
-
     - name: set up cache
       uses: Swatinem/rust-cache@v1
       with:
