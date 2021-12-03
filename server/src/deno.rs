@@ -752,12 +752,18 @@ async fn run_js_aux(
     Ok(body)
 }
 
-pub(crate) async fn run_js(path: String, req: Request<hyper::Body>) -> Result<Response<Body>> {
+fn with_deno<T, F>(f: F) -> T
+where
+    F: FnOnce(Rc<RefCell<DenoService>>) -> T,
+{
     DENO.with(|d| {
         let d = d.get().expect("Deno is not not yet initialized");
-        run_js_aux(d.clone(), path, req)
+        f(d.clone())
     })
-    .await
+}
+
+pub(crate) async fn run_js(path: String, req: Request<hyper::Body>) -> Result<Response<Body>> {
+    with_deno(|d| run_js_aux(d, path, req)).await
 }
 
 async fn get_endpoint(
@@ -825,9 +831,5 @@ async fn define_endpoint_aux(
 }
 
 pub(crate) async fn define_endpoint(path: String, code: String) -> Result<()> {
-    DENO.with(|d| {
-        let d = d.get().expect("Deno is not not yet initialized");
-        define_endpoint_aux(d.clone(), path, code)
-    })
-    .await
+    with_deno(|d| define_endpoint_aux(d, path, code)).await
 }
