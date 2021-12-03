@@ -18,6 +18,14 @@ fn redirect(link: &str) -> Response<Body> {
         .unwrap()
 }
 
+fn bad_request(msg: String) -> Response<Body> {
+    let bd: Body = (msg + "\n").into();
+    Response::builder()
+        .status(StatusCode::BAD_REQUEST)
+        .body(bd)
+        .unwrap()
+}
+
 fn handle_callback(
     req: Request<hyper::Body>,
 ) -> Pin<Box<dyn Future<Output = Result<Response<Body>, anyhow::Error>>>> {
@@ -25,15 +33,17 @@ fn handle_callback(
     async move {
         let params = req.uri().query();
         if params.is_none() {
-            return Err(anyhow!("Callback error: parameter missing"));
+            return Ok(bad_request("Callback error: parameter missing".into()));
         }
         let username = params.unwrap().strip_prefix("user=");
         if username.is_none() {
-            return Err(anyhow!("Callback error: parameter value missing"));
+            return Ok(bad_request(
+                "Callback error: parameter value missing".into(),
+            ));
         }
         let username = username.unwrap();
         if username.is_empty() {
-            return Err(anyhow!("Callback error: parameter value empty"));
+            return Ok(bad_request("Callback error: parameter value empty".into()));
         }
         Ok(redirect(&format!(
             // TODO: redirect to the URL from state.
