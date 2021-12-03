@@ -67,7 +67,7 @@ fn get_field_type(handler: &Handler, x: &Option<TsTypeAnn>) -> Result<String> {
 
 fn lit_to_string(handler: &Handler, x: &Lit) -> Result<String> {
     match x {
-        Lit::Str(x) => Ok(format!("\"{}\"", x.value)),
+        Lit::Str(x) => Ok(x.value.to_string()),
         Lit::Bool(x) => Ok(x.value.to_string()),
         Lit::Num(x) => Ok(x.value.to_string()),
         Lit::BigInt(x) => Ok(x.value.to_string()),
