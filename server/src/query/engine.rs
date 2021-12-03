@@ -13,6 +13,7 @@ use serde_json::json;
 use sqlx::any::{Any, AnyPool, AnyRow};
 use sqlx::error::Error;
 use sqlx::Column;
+use sqlx::TypeInfo;
 use sqlx::{Executor, Row};
 use std::cell::RefCell;
 use std::marker::PhantomPinned;
@@ -239,9 +240,27 @@ impl QueryEngine {
 pub(crate) fn relational_row_to_json(row: &AnyRow) -> anyhow::Result<serde_json::Value> {
     let mut ret = json!({});
     for c in row.columns() {
+        let ty = c.type_info();
         let i = c.ordinal();
-        let val = row.get::<&str, _>(i);
-        ret[c.name()] = json!(val);
+        // FIXME: consider ty.is_null() too
+        let val = match ty.name() {
+            "TEXT" => {
+                let val = row.get::<&str, _>(i);
+                json!(val)
+            }
+            "INTEGER" => {
+                let val = row.get::<i64, _>(i);
+                json!(val)
+            }
+            "REAL" => {
+                let val = row.get::<f64, _>(i);
+                json!(val)
+            }
+            v => {
+                anyhow::bail!("Support for type {} not implemented", v);
+            }
+        };
+        ret[c.name()] = val;
     }
     Ok(ret)
 }

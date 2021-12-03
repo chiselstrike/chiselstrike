@@ -9,17 +9,17 @@ cat << EOF > "$TEMPDIR/endpoints/query.js"
 type Person = {
   first_name: string;
   last_name: string;
-//  age: bigint;
-//  human: boolean;
-//  height: number;
+  age: bigint;
+  human: boolean;
+  height: number;
 };
-const persons = Chisel.api.table<Author>("person", ["first_name", "last_name"]);
+const persons = Chisel.api.table<Author>("person", ["first_name", "last_name", "age", "human", "height"]);
 
 export default async function chisel(req: Request) {
     let ret = "";
     const query = await Chisel.query(persons);
     for await (let row of query) {
-        ret += row.first_name + " " + row.last_name + "\n";
+        ret += row.first_name + " " + row.last_name + " " + row.age + " " + row.human + " " + row.height + "\n";
     }
     return new Response(ret);
 }
@@ -55,5 +55,5 @@ $CURL --data '{
 $CURL -o - $CHISELD_HOST/query
 
 # CHECK: HTTP/1.1 200 OK
-# CHECK: Glauber Costa
-# CHECK: Jan Plhak
+# CHECK: Glauber Costa 666 1 10.01
+# CHECK: Jan Plhak -666 1 10.02
