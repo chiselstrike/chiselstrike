@@ -3,11 +3,11 @@
 use crate::types::TypeSystemError;
 
 mod dbconn;
-pub mod engine;
-pub mod meta;
+pub(crate) mod engine;
+pub(crate) mod meta;
 
 #[derive(thiserror::Error, Debug)]
-pub enum QueryError {
+pub(crate) enum QueryError {
     #[error["connection failed `{0}`"]]
     ConnectionFailed(#[source] sqlx::Error),
     #[error["execution failed: `{0}`"]]
@@ -26,7 +26,7 @@ pub enum QueryError {
     NotImplemented(String),
 }
 
-pub use dbconn::DbConnection;
-pub use dbconn::Kind;
-pub use engine::QueryEngine;
-pub use meta::MetaService;
+pub(crate) use dbconn::DbConnection;
+pub(crate) use dbconn::Kind;
+pub(crate) use engine::QueryEngine;
+pub(crate) use meta::MetaService;

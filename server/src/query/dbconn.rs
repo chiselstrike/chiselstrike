@@ -10,7 +10,7 @@ use std::str::FromStr;
 // in their cdb40b1f8e5f, but that was not released yet. So temporarily wrap
 // around ours. When they release we can remove this.
 #[derive(Debug, Copy, Clone)]
-pub enum Kind {
+pub(crate) enum Kind {
     Postgres,
     Sqlite,
 }
@@ -34,7 +34,7 @@ impl From<AnyKind> for Kind {
 }
 
 #[derive(Debug, Clone)]
-pub struct DbConnection {
+pub(crate) struct DbConnection {
     pub(crate) kind: Kind,
     pub(crate) pool: AnyPool,
     pub(crate) conn_uri: String,

@@ -24,7 +24,7 @@ use std::sync::Arc;
 use tonic::{transport::Server, Request, Response, Status};
 use yaml_rust::YamlLoader;
 
-pub mod chisel {
+pub(crate) mod chisel {
     tonic::include_proto!("chisel");
 }
 
@@ -36,7 +36,7 @@ pub mod chisel {
 // types (especially because they may error out in different ways due to ordering).
 //
 // Policies and endpoints are stateless so we don't need a global copy.
-pub struct GlobalRpcState {
+pub(crate) struct GlobalRpcState {
     type_system: TypeSystem,
     meta: MetaService,
     query_engine: QueryEngine,
@@ -45,7 +45,7 @@ pub struct GlobalRpcState {
 }
 
 impl GlobalRpcState {
-    pub async fn new(
+    pub(crate) async fn new(
         meta: MetaService,
         query_engine: QueryEngine,
         commands: Vec<CoordinatorChannel>,
@@ -83,12 +83,12 @@ macro_rules! send_command {
 /// The RPC service provides a Protobuf-based interface for Chisel control
 /// plane. For example, the service has RPC calls for managing types and
 /// endpoints. The user-generated data plane endpoints are serviced with REST.
-pub struct RpcService {
+pub(crate) struct RpcService {
     state: Arc<Mutex<GlobalRpcState>>,
 }
 
 impl RpcService {
-    pub fn new(state: Arc<Mutex<GlobalRpcState>>) -> Self {
+    pub(crate) fn new(state: Arc<Mutex<GlobalRpcState>>) -> Self {
         Self { state }
     }
 }
@@ -306,7 +306,7 @@ impl ChiselRpc for RpcService {
     }
 }
 
-pub fn spawn(
+pub(crate) fn spawn(
     rpc: RpcService,
     addr: SocketAddr,
     start_wait: impl core::future::Future<Output = ()> + Send + 'static,

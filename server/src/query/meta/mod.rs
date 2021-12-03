@@ -1,4 +1,4 @@
-pub mod schema;
+pub(crate) mod schema;
 
 // SPDX-FileCopyrightText: © 2021 ChiselStrike <info@chiselstrike.com>
 
@@ -12,23 +12,23 @@ use sqlx::{Executor, Row, Transaction};
 /// The meta service is responsible for managing metadata such as object
 /// types and labels persistently.
 #[derive(Debug)]
-pub struct MetaService {
+pub(crate) struct MetaService {
     kind: Kind,
     pool: AnyPool,
 }
 
 impl MetaService {
-    pub fn new(kind: Kind, pool: AnyPool) -> Self {
+    pub(crate) fn new(kind: Kind, pool: AnyPool) -> Self {
         Self { kind, pool }
     }
 
-    pub async fn local_connection(conn: &DbConnection) -> Result<Self, QueryError> {
+    pub(crate) async fn local_connection(conn: &DbConnection) -> Result<Self, QueryError> {
         let local = conn.local_connection().await?;
         Ok(Self::new(local.kind, local.pool))
     }
 
     /// Create the schema of the underlying metadata store.
-    pub async fn create_schema(&self) -> Result<(), QueryError> {
+    pub(crate) async fn create_schema(&self) -> Result<(), QueryError> {
         let query_builder = DbConnection::get_query_builder(&self.kind);
         let tables = schema::tables();
         let mut conn = self
@@ -47,7 +47,7 @@ impl MetaService {
     }
 
     /// Load the type system from metadata store.
-    pub async fn load_type_system<'r>(&self) -> Result<TypeSystem, QueryError> {
+    pub(crate) async fn load_type_system<'r>(&self) -> Result<TypeSystem, QueryError> {
         let query = sqlx::query("SELECT types.type_id AS type_id, types.backing_table AS backing_table, type_names.name AS type_name FROM types INNER JOIN type_names WHERE types.type_id = type_names.type_id");
         let rows = query
             .fetch_all(&self.pool)
@@ -109,7 +109,7 @@ impl MetaService {
         Ok(fields)
     }
 
-    pub async fn insert(&self, ty: ObjectType) -> Result<(), QueryError> {
+    pub(crate) async fn insert(&self, ty: ObjectType) -> Result<(), QueryError> {
         let mut transaction = self
             .pool
             .begin()
@@ -168,27 +168,6 @@ impl MetaService {
                     .map_err(QueryError::ExecuteFailed)?;
             }
         }
-        Ok(())
-    }
-
-    pub async fn remove(&self, type_name: &str) -> Result<(), QueryError> {
-        let delete_type = sqlx::query(
-            "DELETE FROM types WHERE type_id = (SELECT type_id FROM type_names WHERE name = $1)",
-        );
-        let mut transaction = self
-            .pool
-            .begin()
-            .await
-            .map_err(QueryError::ConnectionFailed)?;
-        let delete_type = delete_type.bind(type_name);
-        transaction
-            .execute(delete_type)
-            .await
-            .map_err(QueryError::ExecuteFailed)?;
-        transaction
-            .commit()
-            .await
-            .map_err(QueryError::ExecuteFailed)?;
         Ok(())
     }
 }

@@ -33,7 +33,6 @@ use hyper::header::HeaderValue;
 use hyper::Method;
 use hyper::{Request, Response, StatusCode};
 use once_cell::unsync::OnceCell;
-use serde_json;
 use sqlx::any::AnyRow;
 use std::cell::RefCell;
 use std::collections::hash_map::Entry;
@@ -54,7 +53,6 @@ use swc_common::{
 use swc_ecma_codegen::{text_writer::JsWriter, Emitter};
 use swc_ecma_parser::{lexer::Lexer, Parser, StringInput, Syntax};
 use swc_ecma_visit::FoldWith;
-use v8;
 
 use url::Url;
 
