@@ -17,8 +17,8 @@ const persons = Chisel.api.table<Author>("person", ["first_name", "last_name", "
 
 export default async function chisel(req: Request) {
     let ret = "";
-    const query = await Chisel.query(persons);
-    for await (let row of query) {
+    const rows = await persons.rows();
+    for await (let row of rows) {
         ret += row.first_name + " " + row.last_name + " " + row.age + " " + row.human + " " + row.height + "\n";
     }
     return new Response(ret);
