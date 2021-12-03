@@ -5,7 +5,7 @@ use crate::db::convert;
 use crate::policies::FieldPolicies;
 use crate::runtime;
 use crate::runtime::Runtime;
-use crate::types::{ObjectType, Type};
+use crate::types::ObjectType;
 use anyhow::{anyhow, Result};
 use deno_broadcast_channel::InMemoryBroadcastChannel;
 use deno_core::error::AnyError;
@@ -239,6 +239,7 @@ async fn op_chisel_store(
 }
 
 type DbStream = RefCell<Pin<Box<dyn stream::Stream<Item = anyhow::Result<AnyRow>>>>>;
+type DbStream2 = RefCell<Pin<Box<dyn stream::Stream<Item = anyhow::Result<serde_json::Value>>>>>;
 
 struct QueryStreamResource {
     stream: DbStream,
@@ -303,8 +304,7 @@ async fn op_chisel_query_create(
 }
 
 struct QueryStreamResource2 {
-    stream: DbStream,
-    columns: Vec<(String, Type)>,
+    stream: DbStream2,
 }
 
 impl Resource for QueryStreamResource2 {}
@@ -330,7 +330,6 @@ async fn op_chisel_relational_query_create(
     let stream = Box::pin(query_engine.query_relation(&relation));
     let resource = QueryStreamResource2 {
         stream: RefCell::new(stream),
-        columns: relation.columns,
     };
     let rid = op_state.borrow_mut().resource_table.add(resource);
     Ok(rid)
@@ -367,8 +366,7 @@ async fn op_chisel_relational_query_next(
     use futures::stream::StreamExt;
 
     if let Some(row) = stream.next().await {
-        let v = crate::query::engine::relational_row_to_json(&resource.columns, &row?)?;
-        Ok(Some(v))
+        Ok(Some(row?))
     } else {
         Ok(None)
     }

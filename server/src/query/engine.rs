@@ -18,7 +18,8 @@ use std::marker::PhantomPinned;
 use std::pin::Pin;
 use std::task::{Context, Poll};
 
-type SqlStream = BoxStream<'static, anyhow::Result<AnyRow>>;
+pub(crate) type SqlStream = BoxStream<'static, anyhow::Result<AnyRow>>;
+pub(crate) type SqlStream2 = BoxStream<'static, anyhow::Result<serde_json::Value>>;
 
 pub(crate) struct QueryResults {
     raw_query: String,
@@ -140,9 +141,8 @@ impl QueryEngine {
         Ok(())
     }
 
-    pub(crate) fn query_relation(&self, rel: &Relation) -> SqlStream {
-        let query_str = sql(rel);
-        QueryResults::new(query_str, &self.pool)
+    pub(crate) fn query_relation(&self, rel: &Relation) -> SqlStream2 {
+        sql(&self.pool, rel)
     }
 
     pub(crate) fn find_all(&self, ty: &ObjectType) -> SqlStream {
