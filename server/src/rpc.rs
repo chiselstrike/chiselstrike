@@ -133,6 +133,9 @@ impl RpcService {
 
                     let query_engine = &state.query_engine;
                     query_engine.create_table(&ty).await?;
+
+                    let cmd = send_command!({ deno::define_type(&ty) });
+                    state.send_command(cmd).await?;
                 }
                 Err(TypeSystemError::TypeAlreadyExists) => {
                     state.type_system.replace_type(ty)?;

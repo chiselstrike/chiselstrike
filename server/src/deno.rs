@@ -833,3 +833,33 @@ async fn define_endpoint_aux(
 pub(crate) async fn define_endpoint(path: String, code: String) -> Result<()> {
     with_deno(|d| define_endpoint_aux(d, path, code)).await
 }
+
+fn define_type_aux(d: Rc<RefCell<DenoService>>, ty: &ObjectType) -> Result<()> {
+    let service = &mut *d.borrow_mut();
+    let runtime = &mut service.worker.js_runtime;
+    let global_context = runtime.global_context();
+    let scope = &mut runtime.handle_scope();
+    let global_proxy = global_context.open(scope).global(scope);
+    let chisel: v8::Local<v8::Object> = get_member(global_proxy, scope, "Chisel").unwrap();
+    let types: v8::Local<v8::Object> = get_member(chisel, scope, "types")?;
+    let api: v8::Local<v8::Object> = get_member(chisel, scope, "api")?;
+    let table_func: v8::Local<v8::Function> = get_member(api, scope, "table")?;
+
+    let mut fields = vec![];
+    for f in &ty.fields {
+        let f = v8::String::new(scope, &f.name).unwrap().into();
+        fields.push(f);
+    }
+
+    let columns = v8::Array::new_with_elements(scope, &fields).into();
+    let backing_table = v8::String::new(scope, &ty.backing_table).unwrap().into();
+    let table = try_into_or(table_func.call(scope, api.into(), &[backing_table, columns]))?;
+
+    let key = v8::String::new(scope, &ty.name).unwrap();
+    types.set(scope, key.into(), table).unwrap();
+    Ok(())
+}
+
+pub(crate) fn define_type(ty: &ObjectType) -> Result<()> {
+    with_deno(|d| define_type_aux(d, ty))
+}
