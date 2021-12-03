@@ -1,0 +1,17 @@
+# SPDX-FileCopyrightText: © 2021 ChiselStrike <info@chiselstrike.com>
+
+# RUN: sh -e @file
+
+cat << EOF > "$TEMPDIR/endpoints/error.ts"
+export default async function chisel(req) {
+    return new Response("foo" "bar");
+}
+EOF
+
+cd "$TEMPDIR"
+
+set +e
+$CHISEL apply 2>&1
+set -e
+
+# CHECK: Error: status: Internal, message: "Uncaught TypeError: Parse failed"

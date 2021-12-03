@@ -104,7 +104,7 @@ struct ModuleLoader {
 const DUMMY_PREFIX: &str = "file://$chisel$";
 
 fn wrap(specifier: &ModuleSpecifier, code: String) -> Result<ModuleSource> {
-    let code = compile_ts_code(code);
+    let code = compile_ts_code(code)?;
     Ok(ModuleSource {
         code,
         module_url_specified: specifier.to_string(),
@@ -368,7 +368,7 @@ async fn op_chisel_relational_query_next(
 // compile modules, the server should not get code out of the
 // internet.
 // FIXME: This should produce an error when failing to compile.
-fn compile_ts_code(code: String) -> String {
+fn compile_ts_code(code: String) -> Result<String> {
     let cm: Lrc<SourceMap> = Default::default();
     let emitter = Box::new(emitter::EmitterWriter::new(
         Box::new(std::io::stdout()),
@@ -393,13 +393,13 @@ fn compile_ts_code(code: String) -> String {
         e.into_diagnostic(&handler).emit();
     }
 
-    let module = parser
-        .parse_typescript_module()
-        .map_err(|e| {
-            // Unrecoverable fatal error occurred
-            e.into_diagnostic(&handler).emit()
-        })
-        .unwrap();
+    let module = parser.parse_typescript_module().map_err(|e| {
+        // Unrecoverable fatal error occurred
+        // FIXME: This prints a good error in the server and returns a
+        // bad one to the client.
+        e.into_diagnostic(&handler).emit();
+        anyhow!("Parse failed")
+    })?;
 
     // Remove typescript types
     let module = module.fold_with(&mut swc_ecma_transforms_typescript::strip());
@@ -416,12 +416,12 @@ fn compile_ts_code(code: String) -> String {
         };
         emitter.emit_module(&module).unwrap();
     }
-    String::from_utf8_lossy(&buf).to_string()
+    Ok(String::from_utf8_lossy(&buf).to_string())
 }
 
 fn compile_ts_code_as_bytes(code: &[u8]) -> Result<String> {
     let code = std::str::from_utf8(code)?.to_string();
-    Ok(compile_ts_code(code))
+    compile_ts_code(code)
 }
 
 async fn create_deno(inspect_brk: bool) -> Result<DenoService> {
