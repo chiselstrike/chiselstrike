@@ -23,12 +23,18 @@ fn handle_callback(
 ) -> Pin<Box<dyn Future<Output = Result<Response<Body>, anyhow::Error>>>> {
     // TODO: Grab state out of the request, validate it, and grab the referrer URL out of it.
     async move {
-        let username = req
-            .uri()
-            .query()
-            .unwrap_or("user=NOUSER1")
-            .strip_prefix("user=")
-            .unwrap_or("NOUSER2");
+        let params = req.uri().query();
+        if params.is_none() {
+            return Err(anyhow!("Callback error: parameter missing"));
+        }
+        let username = params.unwrap().strip_prefix("user=");
+        if username.is_none() {
+            return Err(anyhow!("Callback error: parameter value missing"));
+        }
+        let username = username.unwrap();
+        if username.is_empty() {
+            return Err(anyhow!("Callback error: parameter value empty"));
+        }
         Ok(redirect(&format!(
             // TODO: redirect to the URL from state.
             "http://localhost:3000/profile?chiselstrike_token={}",

@@ -5,3 +5,23 @@
 $CURL $CHISELD_HOST/__chiselstrike/auth/callback?user=a
 # CHECK: HTTP/1.1 307 Temporary Redirect
 # CHECK: location: http://localhost:3000/profile?chiselstrike_token=
+
+$CURL $CHISELD_HOST/__chiselstrike/auth/callback
+# CHECK: HTTP/1.1 500 Internal Server Error
+# CHECK: Callback error: parameter missing
+
+$CURL $CHISELD_HOST/__chiselstrike/auth/callback/
+# CHECK: HTTP/1.1 500 Internal Server Error
+# CHECK: Callback error: parameter missing
+
+$CURL $CHISELD_HOST/__chiselstrike/auth/callback/foo
+# CHECK: HTTP/1.1 500 Internal Server Error
+# CHECK: Callback error: parameter missing
+
+$CURL $CHISELD_HOST/__chiselstrike/auth/callback?user=
+# CHECK: HTTP/1.1 500 Internal Server Error
+# CHECK: Callback error: parameter value empty
+
+$CURL $CHISELD_HOST/__chiselstrike/auth/callback?username=
+# CHECK: HTTP/1.1 500 Internal Server Error
+# CHECK: Callback error: parameter value missing
