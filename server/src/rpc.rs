@@ -146,20 +146,20 @@ impl ChiselRpc for RpcService {
                     is_optional: field.is_optional,
                 });
             }
-            let ty = ObjectType {
+            let ty = Arc::new(ObjectType {
                 name: name.to_owned(),
                 fields,
                 backing_table: snake_case_name.clone(),
-            };
+            });
 
-            match state.type_system.add_type(ty.to_owned()) {
+            match state.type_system.add_type(ty.clone()) {
                 Ok(_) => {
                     // FIXME: Consistency between metadata and backing store updates.
                     let meta = &state.meta;
                     meta.insert(ty.clone()).await?;
 
                     let query_engine = &state.query_engine;
-                    query_engine.create_table(ty).await?;
+                    query_engine.create_table(&ty).await?;
                 }
                 Err(TypeSystemError::TypeAlreadyExists) => {
                     state.type_system.replace_type(ty)?;
