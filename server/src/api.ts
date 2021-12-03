@@ -65,16 +65,8 @@ export class Table<T> {
         return new Table<T & U>(i);
     }
 
-    // FIXME: This is not the final API, we should return an iterator,
-    // not an array.
     rows() {
-        const ret: Record<string, unknown> = {};
-        for (const c of this.inner.columns) {
-            ret[c] = 42;
-        }
-        // FIXME: The type assertion is wrong, this is here just to
-        // test the types.
-        return [ret] as T[];
+        return Chisel.query(this);
     }
 }
 
