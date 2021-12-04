@@ -7,13 +7,13 @@ use anyhow::Result;
 use futures::stream;
 use futures::stream::BoxStream;
 use futures::stream::Stream;
+use itertools::zip;
 use itertools::Itertools;
 use sea_query::{Alias, ColumnDef, Expr, PostgresQueryBuilder, Query, SqliteQueryBuilder, Table};
 use serde_json::json;
 use sqlx::any::{Any, AnyPool, AnyRow};
 use sqlx::error::Error;
 use sqlx::Column;
-use sqlx::TypeInfo;
 use sqlx::{Executor, Row};
 use std::cell::RefCell;
 use std::marker::PhantomPinned;
@@ -262,30 +262,28 @@ impl QueryEngine {
     }
 }
 
-pub(crate) fn relational_row_to_json(row: &AnyRow) -> anyhow::Result<serde_json::Value> {
+pub(crate) fn relational_row_to_json(
+    relation: &Relation,
+    row: &AnyRow,
+) -> anyhow::Result<serde_json::Value> {
     let mut ret = json!({});
-    for c in row.columns() {
-        let ty = c.type_info();
-        let i = c.ordinal();
-        // FIXME: consider ty.is_null() too
-        let val = match ty.name() {
-            "TEXT" => {
-                let val = row.get::<&str, _>(i);
+    for (query_column, result_column) in zip(&relation.columns, row.columns()) {
+        let i = result_column.ordinal();
+        // FIXME: consider result_column.type_info().is_null() too
+        macro_rules! to_json {
+            ($value_type:ty) => {{
+                let val = row.get::<$value_type, _>(i);
                 json!(val)
-            }
-            "INTEGER" => {
-                let val = row.get::<i64, _>(i);
-                json!(val)
-            }
-            "REAL" => {
-                let val = row.get::<f64, _>(i);
-                json!(val)
-            }
-            v => {
-                anyhow::bail!("Support for type {} not implemented", v);
-            }
+            }};
+        }
+        let val = match query_column.1 {
+            Type::Float => to_json!(f64),
+            Type::Int => to_json!(i64),
+            Type::String => to_json!(&str),
+            Type::Boolean => to_json!(bool),
+            Type::Object(_) => unreachable!("A column cannot be a Type::Object"),
         };
-        ret[c.name()] = val;
+        ret[result_column.name()] = val;
     }
     Ok(ret)
 }

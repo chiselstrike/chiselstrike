@@ -46,5 +46,5 @@ $CURL --data '{
 $CURL -o - $CHISELD_HOST/query
 
 # CHECK: HTTP/1.1 200 OK
-# CHECK: Glauber Costa 666 1 10.01
-# CHECK: Jan Plhak -666 1 10.02
+# CHECK: Glauber Costa 666 true 10.01
+# CHECK: Jan Plhak -666 true 10.02
