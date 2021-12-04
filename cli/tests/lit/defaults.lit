@@ -1,0 +1,43 @@
+# SPDX-FileCopyrightText: © 2021 ChiselStrike <info@chiselstrike.com>
+
+# RUN: sh -e @file
+
+cat << EOF > "$TEMPDIR/types/types.ts"
+class Foo {
+	a: string = "dfl1";
+	b: number = 0.0;
+	c: boolean = false;
+	d: bigint = 2;
+	e: string = "dfl2";
+}
+EOF
+
+cat << EOF > "$TEMPDIR/endpoints/default.ts"
+export default async function chisel(req) {
+    await Chisel.store('Foo', { "e": "value" });
+    return new Response('ok\n');
+}
+EOF
+
+cat << EOF > "$TEMPDIR/endpoints/read.ts"
+export default async function chisel(req) {
+    let response = "";
+    let foo = await Chisel.find_all("Foo");
+    for await (let f of foo) {
+        let fields = [f.a, f.b, f.c, f.d, f.e];
+        response += fields.join(" ");
+        response += " ";
+    }
+    return new Response(response);
+}
+EOF
+
+cd "$TEMPDIR"
+$CHISEL apply
+
+$CURL -o - $CHISELD_HOST/default
+# CHECK: HTTP/1.1 200 OK
+
+$CURL -o - $CHISELD_HOST/read
+# CHECK: HTTP/1.1 200 OK
+# CHECK: dfl1 0 false 2 value

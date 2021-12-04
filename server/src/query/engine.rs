@@ -195,23 +195,48 @@ impl QueryEngine {
 
         let mut insert_query = sqlx::query(&insert_query);
         for field in &ty.fields {
-            macro_rules! bind_json_value {
-                ($as_type:ident) => {{
-                    let value_json = ty_value.get(&field.name).ok_or_else(|| {
-                        QueryError::IncompatibleData(field.name.to_owned(), ty.name.to_owned())
-                    })?;
-                    let value = value_json.$as_type().ok_or_else(|| {
-                        QueryError::IncompatibleData(field.name.to_owned(), ty.name.to_owned())
+            macro_rules! bind_default_json_value {
+                (str, $value:expr) => {{
+                    insert_query = insert_query.bind($value);
+                }};
+                ($fallback:ident, $value:expr) => {{
+                    let value: $fallback = $value.as_str().parse().map_err(|_| {
+                        QueryError::IncompatibleData(field.name.to_owned(), $value.clone())
                     })?;
                     insert_query = insert_query.bind(value);
                 }};
             }
 
+            macro_rules! bind_json_value {
+                ($as_type:ident, $fallback:ident ) => {{
+                    match ty_value.get(&field.name) {
+                        Some(value_json) => {
+                            let value = value_json.$as_type().ok_or_else(|| {
+                                QueryError::IncompatibleData(
+                                    field.name.to_owned(),
+                                    ty.name.to_owned(),
+                                )
+                            })?;
+                            insert_query = insert_query.bind(value);
+                        }
+                        None => {
+                            let value = field.default.clone().ok_or_else(|| {
+                                QueryError::IncompatibleData(
+                                    field.name.to_owned(),
+                                    ty.name.to_owned(),
+                                )
+                            })?;
+                            bind_default_json_value!($fallback, value);
+                        }
+                    }
+                }};
+            }
+
             match field.type_ {
-                Type::String => bind_json_value!(as_str),
-                Type::Int => bind_json_value!(as_i64),
-                Type::Float => bind_json_value!(as_f64),
-                Type::Boolean => bind_json_value!(as_bool),
+                Type::String => bind_json_value!(as_str, str),
+                Type::Int => bind_json_value!(as_i64, i64),
+                Type::Float => bind_json_value!(as_f64, f64),
+                Type::Boolean => bind_json_value!(as_bool, bool),
                 Type::Object(_) => {
                     anyhow::bail!(QueryError::NotImplemented(
                         "support for type Object".to_owned(),

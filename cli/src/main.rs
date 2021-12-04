@@ -384,7 +384,11 @@ async fn main() -> Result<()> {
                             field.field_type,
                             field
                                 .default_value
-                                .map(|d| format!(" = {}", d))
+                                .map(|d| if field.field_type == "string" {
+                                    format!(" = \"{}\"", d)
+                                } else {
+                                    format!(" = {}", d)
+                                })
                                 .unwrap_or_else(|| "".into()),
                         );
                     }
