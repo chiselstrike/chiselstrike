@@ -295,10 +295,9 @@ pub(crate) fn row_to_json(ty: &ObjectType, row: &AnyRow) -> anyhow::Result<serde
     for field in &ty.fields {
         macro_rules! try_setting_field {
             ($value_type:ty) => {{
-                let str_val = row
-                    .try_get::<$value_type, _>(&*field.name)
-                    .map_err(QueryError::ParsingFailed)?;
-                v[&field.name] = serde_json::json!(str_val);
+                if let Ok(str_val) = row.try_get::<$value_type, _>(&*field.name) {
+                    v[&field.name] = serde_json::json!(str_val);
+                }
             }};
         }
 

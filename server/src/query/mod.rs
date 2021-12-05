@@ -14,8 +14,6 @@ pub(crate) enum QueryError {
     ExecuteFailed(#[source] sqlx::Error),
     #[error["fetch failed `{0}`"]]
     FetchFailed(#[source] sqlx::Error),
-    #[error["row parsing failed `{0}`"]]
-    ParsingFailed(#[source] sqlx::Error),
     #[error["type system error `{0}`"]]
     TypeError(#[from] TypeSystemError),
     #[error["type `{0}` has no field `{1}`"]]
