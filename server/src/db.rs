@@ -1,6 +1,8 @@
 // SPDX-FileCopyrightText: © 2021 ChiselStrike <info@chiselstrike.com>
 
+use crate::types::Type;
 use anyhow::{anyhow, Result};
+use itertools::Itertools;
 
 #[derive(Debug)]
 enum Inner {
@@ -10,16 +12,33 @@ enum Inner {
 
 #[derive(Debug)]
 pub(crate) struct Relation {
-    columns: Vec<String>,
+    // FIXME: This can't be a Type::Object, we should probably split the enum
+    pub(crate) columns: Vec<(String, Type)>,
     inner: Inner,
 }
 
-fn get_columns(val: &serde_json::Value) -> Result<Vec<String>> {
+fn get_columns(val: &serde_json::Value) -> Result<Vec<(String, Type)>> {
     let columns = val["columns"].as_array().ok_or_else(|| anyhow!("foo"))?;
     let mut ret = vec![];
     for c in columns {
-        let c = c.as_str().ok_or_else(|| anyhow!("foo"))?;
-        ret.push(c.to_string());
+        let c = c
+            .as_array()
+            .ok_or_else(|| anyhow!("colums should be arrays"))?;
+        anyhow::ensure!(c.len() == 2, "colums should have a name and a type");
+        let name = c[0]
+            .as_str()
+            .ok_or_else(|| anyhow!("name should be a string"))?;
+        let type_ = c[1]
+            .as_str()
+            .ok_or_else(|| anyhow!("type should be a string"))?;
+        let type_ = match type_ {
+            "number" => Type::Float,
+            "bigint" => Type::Int,
+            "string" => Type::String,
+            "boolean" => Type::Boolean,
+            v => anyhow::bail!("Invalid type {}", v),
+        };
+        ret.push((name.to_string(), type_));
     }
     Ok(ret)
 }
@@ -55,7 +74,8 @@ pub(crate) fn convert(val: &serde_json::Value) -> Result<Relation> {
 fn sql_impl(rel: &Relation, alias_count: &mut u32) -> String {
     match &rel.inner {
         Inner::BackingStore(name) => {
-            let col_str = rel.columns.join(",");
+            let mut names = rel.columns.iter().map(|c| &c.0);
+            let col_str = names.join(",");
             format!("SELECT {} FROM {}", col_str, name)
         }
         Inner::Join(left, right) => {
@@ -73,10 +93,13 @@ fn sql_impl(rel: &Relation, alias_count: &mut u32) -> String {
             let mut on_columns = vec![];
             for c in &rel.columns {
                 if left.columns.contains(c) && right.columns.contains(c) {
-                    join_columns.push(format!("${}.${}", left_alias, c));
-                    on_columns.push(format!("{}.${} = ${}.${}", left_alias, c, right_alias, c));
+                    join_columns.push(format!("${}.${}", left_alias, c.0));
+                    on_columns.push(format!(
+                        "{}.${} = ${}.${}",
+                        left_alias, c.0, right_alias, c.0
+                    ));
                 } else {
-                    join_columns.push(c.clone());
+                    join_columns.push(c.0.clone());
                 }
             }
 

@@ -12,15 +12,17 @@
 //
 // Where Table<T>::Attribute represents attribute (field) of type (table) T.
 
+type column = [string, string]; // name and type
+
 class Base {
-    constructor(public columns: string[]) {}
+    constructor(public columns: column[]) {}
 }
 
 // This represents a selection of some columns of a table in a DB.
 class BackingStore extends Base {
     // The kind member is use to implement fully covered switch statements.
     readonly kind = "BackingStore";
-    constructor(public columns: string[], public name: string) {
+    constructor(public columns: column[], public name: string) {
         super(columns);
     }
 }
@@ -30,7 +32,7 @@ class BackingStore extends Base {
 class Join extends Base {
     readonly kind = "Join";
     constructor(
-        public columns: string[],
+        public columns: column[],
         public left: Inner,
         public right: Inner,
     ) {
@@ -41,14 +43,11 @@ class Join extends Base {
 // We will add | Filter | Join | ...
 type Inner = BackingStore | Join;
 
-function unique<T>(a: T[]) {
-    return [...new Set(a)];
-}
-
 export class Table<T> {
     constructor(private inner: Inner) {}
     select<C extends (keyof T)[]>(...columns: C): Table<Pick<T, C[number]>> {
-        const cs = columns as string[];
+        const names = columns as string[];
+        const cs = this.inner.columns.filter((c) => names.includes(c[0]));
         switch (this.inner.kind) {
             case "BackingStore":
                 return table(this.inner.name, cs);
@@ -60,7 +59,15 @@ export class Table<T> {
     }
 
     join<U>(right: Table<U>) {
-        const columns = unique(this.inner.columns.concat(right.inner.columns));
+        const s = new Set();
+        const columns = [];
+        for (const c of this.inner.columns.concat(right.inner.columns)) {
+            if (s.has(c[0])) {
+                continue;
+            }
+            s.add(c[0]);
+            columns.push(c);
+        }
         const i = new Join(columns, this.inner, right.inner);
         return new Table<T & U>(i);
     }
@@ -74,7 +81,7 @@ export class Table<T> {
 // way in typescript to reflect on T to get the keys as strings. This
 // makes constructing tables a bit annoying, but that is probably fine
 // as we will create the table objects, no the chiselstrike users.
-export function table<T>(name: string, columns: string[]) {
+export function table<T>(name: string, columns: column[]) {
     const b = new BackingStore(columns, name);
     return new Table<T>(b);
 }

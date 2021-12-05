@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: © 2021 ChiselStrike <info@chiselstrike.com>
 
 use crate::api::Body;
-use crate::db::convert;
+use crate::db::{convert, Relation};
 use crate::policies::FieldPolicies;
 use crate::runtime;
 use crate::types::ObjectType;
@@ -295,6 +295,7 @@ async fn op_chisel_query_create(
 
 struct QueryStreamResource2 {
     stream: DbStream,
+    relation: Relation,
 }
 
 impl Resource for QueryStreamResource2 {}
@@ -320,6 +321,7 @@ async fn op_chisel_relational_query_create(
     let stream = Box::pin(query_engine.query_relation(&relation)?);
     let resource = QueryStreamResource2 {
         stream: RefCell::new(stream),
+        relation,
     };
     let rid = op_state.borrow_mut().resource_table.add(resource);
     Ok(rid)
@@ -357,7 +359,7 @@ async fn op_chisel_relational_query_next(
 
     if let Some(row) = stream.next().await {
         let row = row.unwrap();
-        let v = crate::query::engine::relational_row_to_json(&row)?;
+        let v = crate::query::engine::relational_row_to_json(&resource.relation, &row)?;
         Ok(Some(v))
     } else {
         Ok(None)
@@ -847,8 +849,11 @@ fn define_type_aux(d: Rc<RefCell<DenoService>>, ty: &ObjectType) -> Result<()> {
 
     let mut fields = vec![];
     for f in &ty.fields {
-        let f = v8::String::new(scope, &f.name).unwrap().into();
-        fields.push(f);
+        let name = v8::String::new(scope, &f.name).unwrap().into();
+        let ty_name = f.type_.name();
+        let ty_name = v8::String::new(scope, ty_name).unwrap().into();
+        let tuple = v8::Array::new_with_elements(scope, &[name, ty_name]).into();
+        fields.push(tuple);
     }
 
     let columns = v8::Array::new_with_elements(scope, &fields).into();
