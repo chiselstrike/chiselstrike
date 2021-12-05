@@ -15,7 +15,7 @@ set +e
 $CHISEL apply 2>&1
 set -e
 
-# CHECK:  Error: status: Internal, message: "expected type `v8::data::Function`, got `v8::data::Value`"
+# CHECK:  Error: expected type `v8::data::Function`, got `v8::data::Value`
 
 $CURL -o - $CHISELD_HOST/test
 
@@ -48,7 +48,7 @@ set +e
 $CHISEL apply 2>&1
 set -e
 
-# CHECK:  Error: status: Internal, message: "expected type `v8::data::Function`, got `v8::data::Value`"
+# CHECK:  Error: expected type `v8::data::Function`, got `v8::data::Value`
 
 $CURL -o - $CHISELD_HOST/test
 # CHECK: HTTP/1.1 404 Not Found

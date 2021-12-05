@@ -251,6 +251,13 @@ fn read_manifest() -> Result<Manifest> {
     })
 }
 
+macro_rules! execute {
+    ( $cmd:expr ) => {{
+        $cmd.map_err(|x| anyhow!(x.message().to_owned()))?
+            .into_inner()
+    }};
+}
+
 async fn apply(server_url: String) -> Result<()> {
     let manifest = read_manifest()?;
     let types = manifest.types()?;
@@ -281,14 +288,15 @@ async fn apply(server_url: String) -> Result<()> {
         });
     }
 
-    let msg = client
-        .apply(tonic::Request::new(ChiselApplyRequest {
-            types: types_req,
-            endpoints: endpoints_req,
-            policies: policy_req,
-        }))
-        .await?
-        .into_inner();
+    let msg = execute!(
+        client
+            .apply(tonic::Request::new(ChiselApplyRequest {
+                types: types_req,
+                endpoints: endpoints_req,
+                policies: policy_req,
+            }))
+            .await
+    );
 
     for ty in msg.types {
         println!("Type defined: {}", ty);
@@ -361,14 +369,15 @@ async fn main() -> Result<()> {
         Command::Status => {
             let mut client = ChiselRpcClient::connect(server_url).await?;
             let request = tonic::Request::new(StatusRequest {});
-            let response = client.get_status(request).await?.into_inner();
+            let response = execute!(client.get_status(request).await);
             println!("Server status is {}", response.message);
         }
         Command::Type { cmd } => match cmd {
             TypeCommand::Export => {
                 let mut client = ChiselRpcClient::connect(server_url).await?;
                 let request = tonic::Request::new(TypeExportRequest {});
-                let response = client.export_types(request).await?.into_inner();
+                let response = execute!(client.export_types(request).await);
+
                 for def in response.type_defs {
                     println!("class {} {{", def.name);
                     for field in def.field_defs {
@@ -398,10 +407,7 @@ async fn main() -> Result<()> {
         },
         Command::Restart => {
             let mut client = ChiselRpcClient::connect(server_url.clone()).await?;
-            let response = client
-                .restart(tonic::Request::new(RestartRequest {}))
-                .await?
-                .into_inner();
+            let response = execute!(client.restart(tonic::Request::new(RestartRequest {})).await);
             println!("{}", if response.ok { "success" } else { "failure" });
             wait(server_url.clone()).await?;
             apply(server_url).await?;

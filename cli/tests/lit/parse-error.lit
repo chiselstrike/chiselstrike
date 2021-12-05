@@ -14,4 +14,4 @@ set +e
 $CHISEL apply 2>&1
 set -e
 
-# CHECK: Error: status: Internal, message: "Uncaught TypeError: Parse failed"
+# CHECK: Error: Uncaught TypeError: Parse failed
