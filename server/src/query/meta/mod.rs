@@ -197,11 +197,26 @@ impl MetaService {
             .await
             .map_err(QueryError::ExecuteFailed)?;
         for field in &ty.fields {
-            let add_field =
-                sqlx::query("INSERT INTO fields (field_type, type_id) VALUES ($1, $2) RETURNING *");
+            let add_field = match &field.default {
+                None => {
+                    let query = sqlx::query("INSERT INTO fields (field_type, type_id, is_optional) VALUES ($1, $2, $3) RETURNING *");
+                    query
+                        .bind(field.type_.name())
+                        .bind(id)
+                        .bind(field.is_optional)
+                }
+                Some(value) => {
+                    let query = sqlx::query("INSERT INTO fields (field_type, type_id, default_value, is_optional) VALUES ($1, $2, $3, $4) RETURNING *");
+                    query
+                        .bind(field.type_.name())
+                        .bind(id)
+                        .bind(value.to_owned())
+                        .bind(field.is_optional)
+                }
+            };
             let add_field_name =
                 sqlx::query("INSERT INTO field_names (field_name, field_id) VALUES ($1, $2)");
-            let add_field = add_field.bind(field.type_.name()).bind(id);
+
             let row = transaction
                 .fetch_one(add_field)
                 .await
