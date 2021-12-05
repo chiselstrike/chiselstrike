@@ -76,24 +76,36 @@ pub(crate) struct RoutePaths {
     // Both insertions and search are O(n) and could be O(request path
     // size) with a tree, but that is probably OK with a normal number
     // of endpoints.
-    paths: Vec<(PathBuf, RouteFn)>,
+    paths: Vec<(PathBuf, String, RouteFn)>,
 }
 
 impl RoutePaths {
-    fn longest_prefix(&self, request: &str) -> Option<&RouteFn> {
-        let request: &Path = request.as_ref();
+    fn longest_prefix<S: AsRef<Path>>(&self, request: S) -> Option<&RouteFn> {
+        let request = request.as_ref();
         for p in &self.paths {
             if request.starts_with(&p.0) {
-                return Some(&p.1);
+                return Some(&p.2);
             }
         }
         None
     }
 
-    pub(crate) fn add_route(&mut self, path: &str, route_fn: RouteFn) {
-        let path: PathBuf = path.into();
+    /// Adds a route.
+    ///
+    /// Params:
+    ///
+    ///  * path: The path for the route, including any leading /
+    ///  * code: A String containing the raw code of the endpoint, before any compilation.
+    ///  * route_fn: the actual function to be executed, likely some call to deno.
+    pub(crate) fn add_route<S: AsRef<str>, C: ToString>(
+        &mut self,
+        path: S,
+        code: C,
+        route_fn: RouteFn,
+    ) {
+        let path: PathBuf = path.as_ref().into();
         let pos = self.paths.binary_search_by(|p| path.cmp(&p.0));
-        let elem = (path, route_fn);
+        let elem = (path, code.to_string(), route_fn);
         match pos {
             Ok(pos) => {
                 self.paths[pos] = elem;
@@ -102,6 +114,10 @@ impl RoutePaths {
                 self.paths.insert(pos, elem);
             }
         }
+    }
+
+    pub(crate) fn route_data(&self) -> impl Iterator<Item = (&Path, &str)> {
+        self.paths.iter().map(|x| (x.0.as_path(), x.1.as_str()))
     }
 
     /// Remove all routes that match this regular expression, and return
@@ -123,18 +139,21 @@ pub(crate) struct ApiService {
 }
 
 impl ApiService {
-    pub(crate) fn new() -> Self {
-        Self {
-            paths: RoutePaths::default(),
-        }
+    pub(crate) fn new(paths: RoutePaths) -> Self {
+        Self { paths }
     }
 
-    fn longest_prefix(&self, request: &str) -> Option<&RouteFn> {
+    fn longest_prefix<S: AsRef<Path>>(&self, request: S) -> Option<&RouteFn> {
         self.paths.longest_prefix(request)
     }
 
-    pub(crate) fn add_route(&mut self, path: &str, route_fn: RouteFn) {
-        self.paths.add_route(path, route_fn)
+    pub(crate) fn add_route<S: AsRef<str>, C: ToString>(
+        &mut self,
+        path: S,
+        code: C,
+        route_fn: RouteFn,
+    ) {
+        self.paths.add_route(path, code, route_fn)
     }
 
     /// Remove all routes that match this regular expression, and return

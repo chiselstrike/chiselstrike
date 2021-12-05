@@ -2,8 +2,11 @@ pub(crate) mod schema;
 
 // SPDX-FileCopyrightText: © 2021 ChiselStrike <info@chiselstrike.com>
 
+use crate::api::RoutePaths;
+use crate::deno;
 use crate::query::{DbConnection, Kind, QueryError};
 use crate::types::{Field, ObjectType, TypeSystem};
+use futures::FutureExt;
 use sqlx::any::{Any, AnyPool};
 use sqlx::{Executor, Row, Transaction};
 use std::sync::Arc;
@@ -45,6 +48,59 @@ impl MetaService {
                 .await
                 .map_err(QueryError::ExecuteFailed)?;
         }
+        Ok(())
+    }
+
+    /// Load the existing endpoints from from metadata store.
+    pub(crate) async fn load_endpoints<'r>(&self) -> anyhow::Result<RoutePaths> {
+        let query = sqlx::query("SELECT path, code FROM endpoints");
+        let rows = query
+            .fetch_all(&self.pool)
+            .await
+            .map_err(QueryError::FetchFailed)?;
+
+        let mut routes = RoutePaths::default();
+        for row in rows {
+            let path: &str = row.get("path");
+            let code: &str = row.get("code");
+            debug!("Loading endpoint {}", path);
+
+            let func = Box::new({
+                let path = path.to_string();
+                move |req| deno::run_js(path.clone(), req).boxed_local()
+            });
+            routes.add_route(path, code, func);
+        }
+        Ok(routes)
+    }
+
+    pub(crate) async fn persist_endpoints(&self, routes: &RoutePaths) -> anyhow::Result<()> {
+        let mut transaction = self
+            .pool
+            .begin()
+            .await
+            .map_err(QueryError::ConnectionFailed)?;
+
+        let drop = sqlx::query("DELETE from endpoints");
+        transaction
+            .execute(drop)
+            .await
+            .map_err(QueryError::ExecuteFailed)?;
+
+        for (path, code) in routes.route_data() {
+            let new_route = sqlx::query("INSERT INTO endpoints (path, code) VALUES ($1, $2)")
+                .bind(path.to_str())
+                .bind(code);
+
+            transaction
+                .execute(new_route)
+                .await
+                .map_err(QueryError::ExecuteFailed)?;
+        }
+        transaction
+            .commit()
+            .await
+            .map_err(QueryError::ExecuteFailed)?;
         Ok(())
     }
 

@@ -50,13 +50,14 @@ impl GlobalRpcState {
         commands: Vec<CoordinatorChannel>,
     ) -> anyhow::Result<Self> {
         let type_system = meta.load_type_system().await?;
+        let routes = meta.load_endpoints().await?;
 
         Ok(Self {
             type_system,
             meta,
             query_engine,
             commands,
-            routes: RoutePaths::default(),
+            routes,
         })
     }
 
@@ -155,8 +156,10 @@ impl RpcService {
                 move |req| deno::run_js(path.clone(), req).boxed_local()
             });
             endpoint_routes.push((path.clone(), func.clone(), endpoint.code.clone()));
-            state.routes.add_route(&path, func);
+            state.routes.add_route(&path, &endpoint.code, func);
         }
+
+        state.meta.persist_endpoints(&state.routes).await?;
 
         // FIXME: only transform implemented
         let mut policies = LabelPolicies::default();
@@ -208,8 +211,8 @@ impl RpcService {
             crate::auth::init(&mut *api);
 
             for (path, func, code) in endpoints {
-                deno::define_endpoint(path.clone(), code).await?;
-                api.add_route(&path, func);
+                deno::define_endpoint(path.clone(), code.clone()).await?;
+                api.add_route(&path, code, func);
             }
             Ok(())
         });
