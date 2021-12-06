@@ -8,7 +8,8 @@ cp examples/store.js "$TEMPDIR/endpoints"
 cat << EOF > "$TEMPDIR/endpoints/query.js"
 export default async function chisel(req: Request) {
     let ret = "";
-    const rows = await Chisel.types.Person.select("first_name", "last_name", "age", "human", "height").rows();
+    const costas = Chisel.types.Person.filter({"last_name": "Costa"});
+    const rows = await costas.select("first_name", "last_name", "age", "human", "height").rows();
     for await (let row of rows) {
         ret += row.first_name + " " + row.last_name + " " + row.age + " " + row.human + " " + row.height + "\n";
     }
@@ -47,4 +48,3 @@ $CURL -o - $CHISELD_HOST/query
 
 # CHECK: HTTP/1.1 200 OK
 # CHECK: Glauber Costa 666 true 10.01
-# CHECK: Jan Plhak -666 true 10.02
