@@ -1,5 +1,6 @@
 import Head from 'next/head'
 import Image from 'next/image'
+import Link from 'next/link'
 import styles from '../styles/Home.module.css'
 import React, {useEffect} from "react";
 import { chiselFetch, getChiselStrikeClient } from "../lib/chiselstrike";
@@ -50,8 +51,13 @@ export default function Home({ chisel }) {
     setState(defaultState)
   }
 
+  const greeting = chisel.user ?
+        <p>Hello, {chisel.user}. Click <Link href='/api/logout'>here</Link> to log out.</p> :
+        <p>Hello, anonymous. Click <Link href={chisel.loginLink}>here</Link> to log in.</p>;
+
   return (
     <div>
+      { greeting }
       <form onSubmit={submitPerson}>
         <label>
           First name: 
