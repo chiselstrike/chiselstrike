@@ -2,18 +2,25 @@ import Head from 'next/head'
 import Image from 'next/image'
 import styles from '../styles/Home.module.css'
 import React, {useEffect} from "react";
+import { chiselFetch, getChiselStrikeClient } from "../lib/chiselstrike";
+import { withSessionSsr } from "../lib/withSession";
 
-export default function Home() {
+export const getServerSideProps = withSessionSsr(
+    async function getServerSideProps(context) {
+        const chisel = await getChiselStrikeClient(context.req.session, context.query);
+        return { props: { chisel } };
+    },
+);
+
+export default function Home({ chisel }) {
   const [peopleData, setPeopleData] = React.useState([])
 
-  function fetch_people() {
-    fetch('/api/get_all_people', {
+  async function fetch_people() {
+    const res = await chiselFetch(chisel, 'api/get_all_people', {
       method: 'GET',
-    }).then((res) => {
-      res.json().then((jsonData) => {
-        setPeopleData(jsonData)
-      })
-    })
+    });
+    const jsonData = await res.json();
+    setPeopleData(jsonData)
   }
   useEffect(fetch_people, [])
   const defaultState = {
@@ -30,18 +37,17 @@ export default function Home() {
     });
   }
 
-  const submitPerson = event => {
+  const submitPerson = async (event) => {
     event.preventDefault() // don't redirect the page
-    fetch('/api/import_person', {
+    await chiselFetch(chisel, 'api/import_person', {
       method: 'PUT',
       headers: {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify(state),
-    }).then(() => {
-      fetch_people()
-      setState(defaultState)
-    })
+    });
+    await fetch_people();
+    setState(defaultState)
   }
 
   return (

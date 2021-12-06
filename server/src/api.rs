@@ -148,6 +148,21 @@ impl ApiService {
         req: Request<hyper::Body>,
     ) -> hyper::http::Result<Response<Body>> {
         if let Some(route_fn) = self.longest_prefix(req.uri().path()) {
+            if let Some(token) = req.headers().get("ChiselStrikeToken") {
+                let token = token.to_str();
+                if token.is_err()
+                    || crate::runtime::get()
+                        .await
+                        .meta
+                        .get_username(token.unwrap())
+                        .await
+                        .is_err()
+                {
+                    return Response::builder()
+                        .status(StatusCode::FORBIDDEN)
+                        .body("Token not recognized\n".to_string().into());
+                }
+            }
             return match route_fn(req).await {
                 Ok(val) => Ok(val),
                 Err(err) => Response::builder()
