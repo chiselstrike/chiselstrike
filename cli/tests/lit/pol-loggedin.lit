@@ -1,0 +1,31 @@
+# SPDX-FileCopyrightText: © 2021 ChiselStrike <info@chiselstrike.com>
+
+# RUN: sh -e @file
+
+cp examples/person.ts "$TEMPDIR/types"
+cp examples/find.js "$TEMPDIR/endpoints"
+
+cd "$TEMPDIR"
+$CHISEL apply
+# CHECK: Type defined: Person
+# CHECK: End point defined: /find
+
+$CURL $CHISELD_HOST/find
+# CHECK: HTTP/1.1 200 OK
+
+cat << EOF > "$TEMPDIR/policies/pol.yaml"
+endpoints:
+  - name: find
+    must_login: true
+EOF
+$CHISEL apply
+
+$CURL $CHISELD_HOST/find
+# CHECK: HTTP/1.1 403 Forbidden
+
+token=`$CURL -s $CHISELD_HOST/__chiselstrike/auth/callback?user=a|sed -ne "s/.*chiselstrike_token=//" -e "s/<.*//p"`
+$CURL -H "ChiselStrikeToken:$token" $CHISELD_HOST/find
+# CHECK: HTTP/1.1 200 OK
+
+$CURL -H "ChiselStrikeToken:invalid_token" $CHISELD_HOST/find
+# CHECK: HTTP/1.1 403 Forbidden
