@@ -22,7 +22,7 @@ class Base {
 class BackingStore extends Base {
     // The kind member is use to implement fully covered switch statements.
     readonly kind = "BackingStore";
-    constructor(public columns: column[], public name: string) {
+    constructor(columns: column[], public name: string) {
         super(columns);
     }
 }
@@ -32,7 +32,7 @@ class BackingStore extends Base {
 class Join extends Base {
     readonly kind = "Join";
     constructor(
-        public columns: column[],
+        columns: column[],
         public left: Inner,
         public right: Inner,
     ) {
@@ -45,7 +45,7 @@ type Inner = BackingStore | Join;
 
 export class Table<T> {
     constructor(private inner: Inner) {}
-    select<C extends (keyof T)[]>(...columns: C): Table<Pick<T, C[number]>> {
+    select(...columns: (keyof T)[]): Table<Pick<T, (keyof T)>> {
         const names = columns as string[];
         const cs = this.inner.columns.filter((c) => names.includes(c[0]));
         switch (this.inner.kind) {
