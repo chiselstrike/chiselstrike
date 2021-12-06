@@ -75,6 +75,10 @@ fn lookup_user(
 }
 
 pub(crate) fn init(api: &mut ApiService) {
-    api.add_route("/__chiselstrike/auth/callback", Box::new(handle_callback));
-    api.add_route(USERPATH, Box::new(lookup_user));
+    api.add_route(
+        "/__chiselstrike/auth/callback",
+        "",
+        Box::new(handle_callback),
+    );
+    api.add_route(USERPATH, "", Box::new(lookup_user));
 }

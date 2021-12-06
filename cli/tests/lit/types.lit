@@ -24,10 +24,17 @@ $CHISEL type export
 # CHECK: }
 
 cat << EOF > "$TEMPDIR/types/types.ts"
-class Zed { a: string; a: string; }
+class Bar { a: string = "default"; }
 EOF
 set +e
 $CHISEL apply 2>&1
+# CHECK: Trying to remove types from type file. This will delete the underlying data associated with this type. To proceed, apply again with --allow-type-deletion
+
+cat << EOF > "$TEMPDIR/types/types.ts"
+class Zed { a: string; a: string; }
+EOF
+set +e
+$CHISEL apply --allow-type-deletion 2>&1
 set -e
 
 # CHECK: UNIQUE constraint failed: field_names.field_name
@@ -36,7 +43,7 @@ cat << EOF > "$TEMPDIR/types/types.ts"
 class Bad { a: SomeType; }
 EOF
 set +e
-$CHISEL apply 2>&1
+$CHISEL apply --allow-type-deletion 2>&1
 set -e
 
 # CHECK: field a in class Bad neither a basic type, nor refers to a type defined in this context

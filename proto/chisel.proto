@@ -58,6 +58,7 @@ message ChiselApplyRequest {
    repeated AddTypeRequest types = 1;
    repeated EndPointCreationRequest endpoints = 2;
    repeated PolicyUpdateRequest policies = 3;
+   bool allow_type_deletion = 4;
 }
 
 message ChiselApplyResponse {

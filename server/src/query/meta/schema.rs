@@ -43,6 +43,13 @@ enum FieldLabels {
 }
 
 #[derive(Iden)]
+enum Endpoints {
+    Table,
+    Path,
+    Code,
+}
+
+#[derive(Iden)]
 enum Sessions {
     Table,
     Token,
@@ -117,6 +124,13 @@ pub(crate) fn tables() -> Vec<TableCreateStatement> {
                 .on_delete(ForeignKeyAction::Cascade),
         )
         .to_owned();
+    let endpoints = Table::create()
+        .table(Endpoints::Table)
+        .if_not_exists()
+        .col(ColumnDef::new(Endpoints::Path).text().unique_key())
+        .col(ColumnDef::new(Endpoints::Code).text())
+        .to_owned();
+
     let sessions = Table::create()
         .table(Sessions::Table)
         .if_not_exists()
@@ -129,6 +143,7 @@ pub(crate) fn tables() -> Vec<TableCreateStatement> {
         fields,
         type_fields,
         field_labels,
+        endpoints,
         sessions,
     ]
 }

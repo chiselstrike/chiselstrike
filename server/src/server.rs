@@ -1,6 +1,7 @@
 // SPDX-FileCopyrightText: © 2021 ChiselStrike <info@chiselstrike.com>
 
 use crate::api::ApiService;
+use crate::deno;
 use crate::deno::init_deno;
 use crate::query::{DbConnection, MetaService, QueryEngine};
 use crate::rpc::{GlobalRpcState, RpcService};
@@ -85,17 +86,21 @@ impl SharedTasks {
 }
 
 async fn run(state: SharedState, mut cmd: ExecutorChannel) -> Result<()> {
-    let mut api_service = ApiService::new();
-    crate::auth::init(&mut api_service);
-    let api_service = Arc::new(Mutex::new(api_service));
-
     // FIXME: We have to create one per thread. For now we only have
     // one thread, so this is fine.
     init_deno(state.inspect_brk).await?;
 
     let meta = MetaService::local_connection(&state.metadata_db).await?;
-
     let ts = meta.load_type_system().await?;
+    let routes = meta.load_endpoints().await?;
+
+    for (path, code) in routes.route_data() {
+        deno::define_endpoint(path.to_str().unwrap().to_string(), code.to_string()).await?;
+    }
+
+    let mut api_service = ApiService::new(routes);
+    crate::auth::init(&mut api_service);
+    let api_service = Arc::new(Mutex::new(api_service));
 
     let rt = Runtime::new(
         api_service.clone(),

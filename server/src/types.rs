@@ -1,18 +1,20 @@
 // SPDX-FileCopyrightText: © 2021 ChiselStrike <info@chiselstrike.com>
 
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::sync::Arc;
 
 #[derive(thiserror::Error, Debug)]
 pub(crate) enum TypeSystemError {
     #[error["type already exists"]]
-    TypeAlreadyExists,
+    TypeAlreadyExists(Arc<ObjectType>),
     #[error["no such type: {0}"]]
     NoSuchType(String),
     #[error["object type expected, got `{0}` instead"]]
     ObjectTypeRequired(String),
     #[error["unsafe to replace type: {0}"]]
     UnsafeReplacement(String),
+    #[error["Error while trying to manipulate types: {0}"]]
+    InternalServerError(String),
 }
 
 #[derive(Debug, Default, Clone)]
@@ -37,25 +39,92 @@ impl TypeSystem {
     ///
     /// If type `ty` already exists in the type system, the function returns `TypeSystemError`.
     pub(crate) fn add_type(&mut self, ty: Arc<ObjectType>) -> Result<(), TypeSystemError> {
-        if self.lookup_type(&ty.name).is_ok() {
-            return Err(TypeSystemError::TypeAlreadyExists);
-        }
+        match self.lookup_object_type(&ty.name) {
+            Ok(old) => Err(TypeSystemError::TypeAlreadyExists(old)),
+            Err(TypeSystemError::NoSuchType(_)) => Ok(()),
+            Err(x) => Err(x),
+        }?;
         self.types.insert(ty.name.to_owned(), ty);
         Ok(())
     }
 
     pub(crate) fn replace_type(
         &mut self,
+        old_type: &ObjectType,
         new_type: Arc<ObjectType>,
-    ) -> Result<(), TypeSystemError> {
-        let old_type = self.lookup_type(&new_type.name)?;
-        if new_type.is_safe_replacement_for(&old_type) {
-            self.types.remove(&new_type.name);
-            self.types.insert(new_type.name.clone(), new_type);
-            Ok(())
-        } else {
-            Err(TypeSystemError::UnsafeReplacement(new_type.name.clone()))
+    ) -> Result<ObjectDelta, TypeSystemError> {
+        if old_type.name != new_type.name || old_type.backing_table != new_type.backing_table {
+            return Err(TypeSystemError::UnsafeReplacement(new_type.name.clone()));
         }
+
+        let mut old_fields = FieldMap::from(&*old_type);
+        let new_fields = FieldMap::from(&*new_type);
+
+        let mut added_fields = Vec::new();
+        let mut removed_fields = Vec::new();
+        let mut updated_fields = Vec::new();
+
+        for (name, field) in new_fields.map.iter() {
+            match old_fields.map.remove(name) {
+                None => {
+                    if field.default.is_none() {
+                        return Err(TypeSystemError::UnsafeReplacement(new_type.name.clone()));
+                    }
+                    added_fields.push(field.to_owned().clone());
+                }
+                Some(old) => {
+                    if field.type_ != old.type_ {
+                        return Err(TypeSystemError::UnsafeReplacement(new_type.name.clone()));
+                    }
+
+                    let attrs = if field.default != old.default
+                        || field.type_ != old.type_
+                        || field.is_optional != old.is_optional
+                    {
+                        Some(FieldAttrDelta {
+                            type_: field.type_.clone(),
+                            default: field.default.clone(),
+                            is_optional: field.is_optional,
+                        })
+                    } else {
+                        None
+                    };
+
+                    let mut old_labels = old.labels.clone();
+                    old_labels.sort();
+
+                    let mut new_labels = field.labels.clone();
+                    new_labels.sort();
+
+                    let labels = if old_labels != new_labels {
+                        Some(new_labels)
+                    } else {
+                        None
+                    };
+
+                    let id = old.id.ok_or_else(|| {
+                        TypeSystemError::InternalServerError(
+                            "logical error! updating field without id".to_string(),
+                        )
+                    })?;
+                    updated_fields.push(FieldDelta { id, attrs, labels });
+                }
+            }
+        }
+
+        // only allow the removal of fields that previously had a default value
+        for (_, field) in old_fields.map.into_iter() {
+            if field.default.is_none() {
+                return Err(TypeSystemError::UnsafeReplacement(new_type.name.clone()));
+            }
+            removed_fields.push(field.to_owned().clone());
+        }
+
+        Ok(ObjectDelta {
+            added_fields,
+            removed_fields,
+            updated_fields,
+        })
     }
 
     /// Looks up an object type with name `type_name`.
@@ -121,6 +190,7 @@ impl Type {
 
 #[derive(Debug)]
 pub(crate) struct ObjectType {
+    pub(crate) id: Option<i32>,
     /// Name of this type.
     pub(crate) name: String,
     /// Fields of this type.
@@ -135,34 +205,47 @@ impl PartialEq for ObjectType {
     }
 }
 
-impl ObjectType {
-    /// True iff self can replace another type in the type system without any changes to the backing table.
-    fn is_safe_replacement_for(&self, another_type: &Type) -> bool {
-        match another_type {
-            Type::Object(another_type) => {
-                let mut fields = self.fields.to_vec();
-                fields.sort_by(|f, k| f.name.cmp(&k.name));
-                let mut newfields = another_type.fields.to_vec();
-                newfields.sort_by(|f, k| f.name.cmp(&k.name));
+struct FieldMap<'a> {
+    map: BTreeMap<&'a str, &'a Field>,
+}
 
-                self.name == another_type.name
-                    && self.backing_table == another_type.backing_table
-                    && fields.len() == newfields.len()
-                    && fields
-                        .iter()
-                        .zip(&newfields)
-                        .all(|(f1, f2)| f1.name == f2.name && f1.type_ == f2.type_)
-            }
-            _ => false, // We cannot replace an elemental type.
+impl<'a> From<&'a ObjectType> for FieldMap<'a> {
+    fn from(ty: &'a ObjectType) -> Self {
+        let mut map = BTreeMap::new();
+        for field in ty.fields.iter() {
+            map.insert(field.name.as_str(), field);
         }
+        Self { map }
     }
 }
 
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) struct Field {
+    pub(crate) id: Option<i32>,
     pub(crate) name: String,
     pub(crate) type_: Type,
     pub(crate) labels: Vec<String>,
     pub(crate) default: Option<String>,
     pub(crate) is_optional: bool,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) struct FieldAttrDelta {
+    pub(crate) type_: Type,
+    pub(crate) default: Option<String>,
+    pub(crate) is_optional: bool,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) struct FieldDelta {
+    pub(crate) id: i32,
+    pub(crate) attrs: Option<FieldAttrDelta>,
+    pub(crate) labels: Option<Vec<String>>,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) struct ObjectDelta {
+    pub(crate) added_fields: Vec<Field>,
+    pub(crate) removed_fields: Vec<Field>,
+    pub(crate) updated_fields: Vec<FieldDelta>,
 }

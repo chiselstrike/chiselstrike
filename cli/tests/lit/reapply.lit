@@ -37,20 +37,10 @@ EOF
 $CHISEL apply
 # CHECK: Type defined: Foo
 
-# Removing default values is OK.
-cat << EOF > "$TEMPDIR/types/foo.ts"
-class Foo {
-  a: string;
-  @L1 b: number;
-}
-EOF
-$CHISEL apply
-# CHECK: Type defined: Foo
-
 ## Two compatible definitions in different files are rejected.
 cat << EOF > "$TEMPDIR/types/fooNoteADifferentFilenameHere.ts"
 class Foo {
-  a: string;
+  a: string = "foo";
   b: number;
 }
 EOF
@@ -61,7 +51,7 @@ rm "$TEMPDIR/types/fooNoteADifferentFilenameHere.ts"
 ## Changing b's type is not OK.
 cat << EOF > "$TEMPDIR/types/foo.ts"
 class Foo {
-  a: string;
+  a: string = "foo";
   b: string;
 }
 EOF
@@ -71,7 +61,7 @@ $CHISEL apply 2>&1 || echo # (swallow the apply abort)
 ## Adding a field is not OK.
 cat << EOF > "$TEMPDIR/types/foo.ts"
 class Foo {
-  a: string;
+  a: string = "foo";
   b: number; 
   c: bigint; 
 }
@@ -83,22 +73,41 @@ $CHISEL apply 2>&1 || echo # (swallow the apply abort)
 cat << EOF > "$TEMPDIR/types/foo.ts"
 class Foo {
   b: number;
-  a: string;
+  a: string = "foo";
 }
 EOF
 $CHISEL apply 2>&1 || echo # (swallow the apply abort)
 # CHECK: Type defined: Foo
 
-## Removing fields is not OK for now.
+## Removing fields is OK if they previously had a default
 cat << EOF > "$TEMPDIR/types/foo.ts"
 class Foo {
-  a: string;
+  b: number;
 }
 EOF
 $CHISEL apply 2>&1 || echo # (swallow the apply abort)
-# CHECK: unsafe to replace type: Foo
+# CHECK: Type defined: Foo
 
 ## Redefining elemental types is not OK.
 echo 'class number { a: number}' > "$TEMPDIR/types/foo.ts"
+$CHISEL apply --allow-type-deletion 2>&1 || echo # (swallow the apply abort)
+# CHECK: object type expected, got `number` instead
+
+### Removing fields is not OK if they didn't have a default
+cat << EOF > "$TEMPDIR/types/foo.ts"
+class Bar {
+  a: number;
+  b: number;
+}
+EOF
+$CHISEL apply --allow-type-deletion 2>&1 || echo # (swallow the apply abort)
+# CHECK: Type defined: Bar
+#
+cat << EOF > "$TEMPDIR/types/foo.ts"
+class Bar {
+  b: number;
+}
+EOF
 $CHISEL apply 2>&1 || echo # (swallow the apply abort)
-# CHECK: unsafe to replace type: number
+# CHECK: unsafe to replace type: Bar
+
