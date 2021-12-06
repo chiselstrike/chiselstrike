@@ -8,6 +8,7 @@ use itertools::Itertools;
 enum Inner {
     BackingStore(String),
     Join(Box<Relation>, Box<Relation>),
+    Filter(Box<Relation>, Vec<String>),
 }
 
 #[derive(Debug)]
@@ -62,21 +63,52 @@ fn convert_join(val: &serde_json::Value) -> Result<Relation> {
     })
 }
 
+fn convert_filter(val: &serde_json::Value) -> Result<Relation> {
+    let columns = get_columns(val)?;
+    let inner = Box::new(convert(&val["inner"])?);
+    let restrictions = val["restrictions"]
+        .as_object()
+        .ok_or_else(|| anyhow!("Missing restrictions in filter"))?;
+    let mut restriction_strs = vec![];
+    for (k, v) in restrictions.iter() {
+        // FIXME: Support non-strings
+        let v = v
+            .as_str()
+            .ok_or_else(|| anyhow!("Restriction is not a string"))?;
+        restriction_strs.push(format!("{}='{}'", k, v));
+    }
+    Ok(Relation {
+        columns,
+        inner: Inner::Filter(inner, restriction_strs),
+    })
+}
+
 pub(crate) fn convert(val: &serde_json::Value) -> Result<Relation> {
     let kind = val["kind"].as_str().ok_or_else(|| anyhow!("foo"))?;
     match kind {
         "BackingStore" => convert_backing_store(val),
         "Join" => convert_join(val),
-        _ => Err(anyhow!("bar")),
+        "Filter" => convert_filter(val),
+        _ => Err(anyhow!("Unexpected relation kind")),
     }
 }
 
 fn sql_impl(rel: &Relation, alias_count: &mut u32) -> String {
+    let mut names = rel.columns.iter().map(|c| &c.0);
+    let col_str = names.join(",");
     match &rel.inner {
         Inner::BackingStore(name) => {
-            let mut names = rel.columns.iter().map(|c| &c.0);
-            let col_str = names.join(",");
             format!("SELECT {} FROM {}", col_str, name)
+        }
+        Inner::Filter(inner, restrictions) => {
+            let inner_sql = sql_impl(inner, alias_count);
+            let inner_alias = format!("A{}", *alias_count);
+            *alias_count += 1;
+            let restrictions = restrictions.join(",");
+            format!(
+                "SELECT {} FROM ({}) AS {} WHERE {}",
+                col_str, inner_sql, inner_alias, restrictions
+            )
         }
         Inner::Join(left, right) => {
             // FIXME: Optimize the case of table.left or table.right being just

@@ -40,8 +40,18 @@ class Join extends Base {
     }
 }
 
-// We will add | Filter | Join | ...
-type Inner = BackingStore | Join;
+class Filter extends Base {
+    readonly kind = "Filter";
+    constructor(
+        columns: column[],
+        public restrictions: Record<string, unknown>,
+        public inner: Inner,
+    ) {
+        super(columns);
+    }
+}
+
+type Inner = BackingStore | Join | Filter;
 
 export class Table<T> {
     constructor(private inner: Inner) {}
@@ -55,7 +65,20 @@ export class Table<T> {
                 const i = new Join(cs, this.inner.left, this.inner.right);
                 return new Table(i);
             }
+            case "Filter": {
+                const i = new Filter(
+                    cs,
+                    this.inner.restrictions,
+                    this.inner.inner,
+                );
+                return new Table(i);
+            }
         }
+    }
+
+    filter(restrictions: Partial<T>): Table<T> {
+        const i = new Filter(this.inner.columns, restrictions, this.inner);
+        return new Table(i);
     }
 
     join<U>(right: Table<U>) {
