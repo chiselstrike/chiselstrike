@@ -1,0 +1,23 @@
+# SPDX-FileCopyrightText: © 2021 ChiselStrike <info@chiselstrike.com>
+
+# RUN: sh -e @file
+
+token=`$CURL -s $CHISELD_HOST/__chiselstrike/auth/callback?user=a|sed -ne "s/.*chiselstrike_token=//" -e "s/<.*//p"`
+
+cd "$TEMPDIR"
+cat << EOF > endpoints/foo.js
+export default async function my_req_func(req) {
+    return new Response("succeeded\n");
+}
+EOF
+$CHISEL apply
+
+$CURL $CHISELD_HOST/foo
+# CHECK: succeeded
+
+$CURL -H "ChiselStrikeToken:abcd" $CHISELD_HOST/foo
+# CHECK: 403 Forbidden
+
+echo "$token"
+$CURL -H "ChiselStrikeToken:$token" $CHISELD_HOST/foo
+# CHECK: succeeded
