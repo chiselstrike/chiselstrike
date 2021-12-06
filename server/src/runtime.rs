@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: © 2021 ChiselStrike <info@chiselstrike.com>
 
 use crate::api::ApiService;
-use crate::policies::{FieldPolicies, LabelPolicies};
+use crate::policies::{FieldPolicies, Policies};
 use crate::query::{MetaService, QueryEngine};
 use crate::types::{ObjectType, TypeSystem};
 use async_mutex::{Mutex, MutexGuardArc};
@@ -13,7 +13,7 @@ pub(crate) struct Runtime {
     pub(crate) query_engine: QueryEngine,
     pub(crate) meta: MetaService,
     pub(crate) type_system: TypeSystem,
-    pub(crate) policies: LabelPolicies,
+    pub(crate) policies: Policies,
 }
 
 impl Runtime {
@@ -28,7 +28,7 @@ impl Runtime {
             query_engine,
             meta,
             type_system,
-            policies: LabelPolicies::default(),
+            policies: Policies::new(),
         }
     }
 
@@ -41,7 +41,7 @@ impl Runtime {
     ) {
         for fld in &ty.fields {
             for lbl in &fld.labels {
-                if let Some(p) = self.policies.get(lbl) {
+                if let Some(p) = self.policies.labels.get(lbl) {
                     if !p.except_uri.is_match(current_path) {
                         policies.insert(fld.name.clone(), p.transform);
                     }

@@ -2,7 +2,7 @@
 
 use crate::api::RoutePaths;
 use crate::deno;
-use crate::policies::{LabelPolicies, Policy};
+use crate::policies::{Policies, Policy};
 use crate::query::{MetaService, QueryEngine};
 use crate::runtime;
 use crate::server::CommandTrait;
@@ -212,8 +212,7 @@ impl RpcService {
 
         state.meta.persist_endpoints(&state.routes).await?;
 
-        // FIXME: only transform implemented
-        let mut policies = LabelPolicies::default();
+        let mut policies = Policies::new();
 
         for policy in apply_request.policies {
             let docs = YamlLoader::load_from_str(&policy.policy_config)?;
@@ -229,7 +228,7 @@ impl RpcService {
                     match label["transform"].as_str() {
                         Some("anonymize") => {
                             let pattern = label["except_uri"].as_str().unwrap_or("^$"); // ^$ never matches; each path has at least a '/' in it.
-                            policies.insert(
+                            policies.labels.insert(
                                 name.to_owned(),
                                 Policy {
                                     transform: crate::policies::anonymize,
@@ -243,8 +242,16 @@ impl RpcService {
                         None => {}
                     };
                 }
-                for _endpoint in config["endpoints"].as_vec().iter() {
-                    log::info!("endpoint behavior not yet implemented");
+                for endpoint in config["endpoints"]
+                    .as_vec()
+                    .get_or_insert(&[].into())
+                    .iter()
+                {
+                    if let Some(true) = endpoint["must_login"].as_bool() {
+                        if let Some(name) = endpoint["name"].as_str() {
+                            policies.authorize.insert(name.into());
+                        }
+                    }
                 }
             }
         }
