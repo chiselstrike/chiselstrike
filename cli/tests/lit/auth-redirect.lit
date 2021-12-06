@@ -25,3 +25,9 @@ $CURL $CHISELD_HOST/__chiselstrike/auth/callback?user=
 $CURL $CHISELD_HOST/__chiselstrike/auth/callback?username=
 # CHECK: HTTP/1.1 400 Bad Request
 # CHECK: Callback error: parameter value missing
+
+# Reproduces #311
+$CHISEL apply
+$CURL $CHISELD_HOST/__chiselstrike/auth/callback?user=a
+# CHECK: HTTP/1.1 307 Temporary Redirect
+# CHECK: location: http://localhost:3000/profile?chiselstrike_token=

@@ -205,6 +205,7 @@ impl RpcService {
 
             let mut api = runtime.api.lock().await;
             api.remove_routes(regex);
+            crate::auth::init(&mut *api);
 
             for (path, func, code) in endpoints {
                 deno::define_endpoint(path.clone(), code).await?;
