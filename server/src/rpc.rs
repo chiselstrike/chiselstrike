@@ -18,6 +18,7 @@ use chisel::{
 use convert_case::{Case, Casing};
 use futures::FutureExt;
 use log::debug;
+use std::collections::BTreeSet;
 use std::net::SocketAddr;
 use std::sync::Arc;
 use tonic::{transport::Server, Request, Response, Status};
@@ -100,19 +101,42 @@ impl RpcService {
         let mut state = self.state.lock().await;
         let apply_request = request.into_inner();
 
-        let mut type_names = vec![];
+        let mut type_names = BTreeSet::new();
+        let mut type_names_user_order = vec![];
         let mut endpoint_routes = vec![];
         let mut labels = vec![];
 
+        for tdef in apply_request.types.iter() {
+            type_names.insert(tdef.name.clone());
+            type_names_user_order.push(tdef.name.clone());
+        }
+
+        let mut to_remove = vec![];
+        let mut to_insert = vec![];
+        let mut to_update = vec![];
+
+        for (existing, removed) in state.type_system.types.iter() {
+            if type_names.get(existing).is_none() {
+                to_remove.push(removed.clone());
+            }
+        }
+
+        if !to_remove.is_empty() && !apply_request.allow_type_deletion {
+            anyhow::bail!("Trying to remove types from type file. This will delete the underlying data associated with this type. To proceed, apply again with --allow-type-deletion");
+        }
+
+        // No changes are made to the type system in this loop. We re-read the database after we
+        // apply the changes, and this way we don't have to deal with the case of succeding to
+        // apply a type, but failing the next
         for type_def in apply_request.types {
             let name = type_def.name;
-            type_names.push(name.clone());
             let snake_case_name = name.to_case(Case::Snake);
 
             let mut fields = Vec::new();
             for field in type_def.field_defs {
                 let ty = state.type_system.lookup_type(&field.field_type)?;
                 fields.push(Field {
+                    id: None,
                     name: field.name.clone(),
                     type_: ty,
                     labels: field.labels,
@@ -121,28 +145,55 @@ impl RpcService {
                 });
             }
             let ty = Arc::new(ObjectType {
+                id: None,
                 name: name.to_owned(),
                 fields,
                 backing_table: snake_case_name.clone(),
             });
 
-            match state.type_system.add_type(ty.clone()) {
-                Ok(_) => {
-                    // FIXME: Consistency between metadata and backing store updates.
-                    let meta = &state.meta;
-                    meta.insert(ty.clone()).await?;
-
-                    let query_engine = &state.query_engine;
-                    query_engine.create_table(&ty).await?;
-
-                    let cmd = send_command!({ deno::define_type(&ty) });
-                    state.send_command(cmd).await?;
+            match state.type_system.lookup_object_type(&name) {
+                Ok(old_type) => {
+                    let delta = state.type_system.replace_type(&old_type, ty)?;
+                    to_update.push((old_type.clone(), delta));
                 }
-                Err(TypeSystemError::TypeAlreadyExists) => {
-                    state.type_system.replace_type(ty)?;
+                Err(TypeSystemError::NoSuchType(_)) => {
+                    to_insert.push(ty.clone());
                 }
                 Err(e) => anyhow::bail!(e),
             }
+        }
+
+        let meta = &state.meta;
+        let mut transaction = meta.start_transaction().await?;
+
+        for ty in to_insert.iter() {
+            // FIXME: Consistency between metadata and backing store updates.
+            meta.insert_type(&mut transaction, ty).await?;
+        }
+
+        for (old, delta) in to_update.into_iter() {
+            meta.update_type(&mut transaction, &old, delta).await?;
+        }
+
+        for ty in to_remove.iter() {
+            meta.remove_type(&mut transaction, ty).await?;
+        }
+        MetaService::commit_transaction(transaction).await?;
+
+        // Reload the type system so that we have new ids
+        state.type_system = meta.load_type_system().await?;
+
+        // Update the data database after all the metdata is up2date.
+        // We will not get a single transaction because in the general case those things
+        // could be in totally different databases. However, some foreign relations would force
+        // us to update some subset of them together. FIXME: revisit this when we support relations
+        let query_engine = &state.query_engine;
+        for ty in to_insert.into_iter() {
+            query_engine.create_table(&ty).await?;
+        }
+
+        for ty in to_remove.into_iter() {
+            query_engine.drop_table(&ty).await?;
         }
 
         let regex = regex::Regex::new(".*").unwrap();
@@ -204,6 +255,11 @@ impl RpcService {
         let cmd = send_command!({
             let runtime = &mut runtime::get().await;
             runtime.type_system.update(&type_system);
+
+            // FIXME: remove all existing types from deno first. How?
+            for (_, ty) in runtime.type_system.types.iter() {
+                deno::define_type(ty)?;
+            }
             runtime.policies = policies;
 
             let mut api = runtime.api.lock().await;
@@ -221,7 +277,7 @@ impl RpcService {
         // FIXME: return number of effective changes? Probably depends on how we implement
         // terraform-like workflow (x added, y removed, z modified)
         Ok(Response::new(ChiselApplyResponse {
-            types: type_names,
+            types: type_names_user_order,
             endpoints: endpoint_routes.iter().map(|x| x.0.clone()).collect(),
             labels,
         }))

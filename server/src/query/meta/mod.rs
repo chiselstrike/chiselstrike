@@ -5,7 +5,8 @@ pub(crate) mod schema;
 use crate::api::RoutePaths;
 use crate::deno;
 use crate::query::{DbConnection, Kind, QueryError};
-use crate::types::{Field, ObjectType, TypeSystem};
+use crate::types::{Field, FieldDelta, ObjectDelta, ObjectType, TypeSystem};
+use anyhow::anyhow;
 use futures::FutureExt;
 use sqlx::any::{Any, AnyPool};
 use sqlx::{Executor, Row, Transaction};
@@ -20,6 +21,138 @@ use uuid::Uuid;
 pub(crate) struct MetaService {
     kind: Kind,
     pool: AnyPool,
+}
+
+async fn update_field_query(
+    transaction: &mut Transaction<'_, Any>,
+    delta: &FieldDelta,
+) -> anyhow::Result<()> {
+    let field_id = delta.id;
+
+    if let Some(field) = &delta.attrs {
+        let default_stmt = if field.default.is_none() {
+            ""
+        } else {
+            ", default_value = $4"
+        };
+
+        let querystr = format!(
+            "UPDATE fields SET field_type = $1, is_optional = $2 {} WHERE field_id = $3",
+            default_stmt
+        );
+        let mut query = sqlx::query(&querystr);
+
+        query = query
+            .bind(field.type_.name())
+            .bind(field.is_optional)
+            .bind(field_id);
+
+        if let Some(value) = &field.default {
+            query = query.bind(value.to_owned());
+        }
+
+        transaction
+            .execute(query)
+            .await
+            .map_err(QueryError::ExecuteFailed)?;
+    }
+
+    if let Some(labels) = &delta.labels {
+        let flush = sqlx::query("DELETE FROM field_labels where field_id = $1");
+        transaction
+            .execute(flush.bind(field_id))
+            .await
+            .map_err(QueryError::ExecuteFailed)?;
+
+        for label in labels.iter() {
+            let q = sqlx::query("INSERT INTO field_labels (label_name, field_id) VALUES ($1, $2)");
+            transaction
+                .execute(q.bind(label).bind(field_id))
+                .await
+                .map_err(QueryError::ExecuteFailed)?;
+        }
+    }
+    Ok(())
+}
+
+async fn remove_field_query(
+    transaction: &mut Transaction<'_, Any>,
+    field: &Field,
+) -> anyhow::Result<()> {
+    let field_id = field
+        .id
+        .ok_or_else(|| anyhow!("logical error. Trying to delete field without id"))?;
+
+    let query = sqlx::query("DELETE FROM fields WHERE field_id = $1");
+    transaction
+        .execute(query.bind(field_id))
+        .await
+        .map_err(QueryError::ExecuteFailed)?;
+
+    let query = sqlx::query("DELETE from field_names WHERE field_id = $1");
+    transaction
+        .execute(query.bind(field_id))
+        .await
+        .map_err(QueryError::ExecuteFailed)?;
+
+    let query = sqlx::query("DELETE from field_labels WHERE field_id = $1");
+    transaction
+        .execute(query.bind(field_id))
+        .await
+        .map_err(QueryError::ExecuteFailed)?;
+
+    Ok(())
+}
+
+async fn insert_field_query(
+    transaction: &mut Transaction<'_, Any>,
+    ty: &ObjectType,
+    recently_added_type_id: Option<i32>,
+    field: &Field,
+) -> anyhow::Result<()> {
+    let type_id = ty.id.xor(recently_added_type_id).ok_or_else(|| anyhow!("logical error. Seems like a type is at the same type pre-existing and recently added??"))?;
+
+    let add_field = match &field.default {
+        None => {
+            let query = sqlx::query("INSERT INTO fields (field_type, type_id, is_optional) VALUES ($1, $2, $3) RETURNING *");
+            query
+                .bind(field.type_.name())
+                .bind(type_id)
+                .bind(field.is_optional)
+        }
+        Some(value) => {
+            let query = sqlx::query("INSERT INTO fields (field_type, type_id, default_value, is_optional) VALUES ($1, $2, $3, $4) RETURNING *");
+            query
+                .bind(field.type_.name())
+                .bind(type_id)
+                .bind(value.to_owned())
+                .bind(field.is_optional)
+        }
+    };
+    let add_field_name =
+        sqlx::query("INSERT INTO field_names (field_name, field_id) VALUES ($1, $2)");
+
+    let row = transaction
+        .fetch_one(add_field)
+        .await
+        .map_err(QueryError::ExecuteFailed)?;
+
+    let field_id: i32 = row.get("field_id");
+    let full_name = ty.name.clone() + "." + &field.name;
+    let add_field_name = add_field_name.bind(full_name).bind(field_id);
+    transaction
+        .execute(add_field_name)
+        .await
+        .map_err(QueryError::ExecuteFailed)?;
+
+    for label in &field.labels {
+        let q = sqlx::query("INSERT INTO field_labels (label_name, field_id) VALUES ($1, $2)");
+        transaction
+            .execute(q.bind(label).bind(field_id))
+            .await
+            .map_err(QueryError::ExecuteFailed)?;
+    }
+    Ok(())
 }
 
 impl MetaService {
@@ -118,6 +251,7 @@ impl MetaService {
             let type_name: &str = row.get("type_name");
             let fields = self.load_type_fields(&ts, type_id).await?;
             ts.add_type(Arc::new(ObjectType {
+                id: Some(type_id),
                 name: type_name.to_string(),
                 fields,
                 backing_table: backing_table.to_string(),
@@ -153,6 +287,7 @@ impl MetaService {
                 .map(|r| r.get("label_name"))
                 .collect::<Vec<String>>();
             fields.push(Field {
+                id: Some(field_id),
                 name: field_name.to_string(),
                 type_: ty,
                 labels,
@@ -163,24 +298,77 @@ impl MetaService {
         Ok(fields)
     }
 
-    pub(crate) async fn insert(&self, ty: Arc<ObjectType>) -> anyhow::Result<()> {
-        let mut transaction = self
-            .pool
-            .begin()
-            .await
-            .map_err(QueryError::ConnectionFailed)?;
-        self.insert_type(&ty, &mut transaction).await?;
+    pub(crate) async fn remove_type(
+        &self,
+        transaction: &mut Transaction<'_, Any>,
+        ty: &ObjectType,
+    ) -> anyhow::Result<()> {
+        let type_id = ty
+            .id
+            .ok_or_else(|| anyhow!("logical error. Trying to delete type without id"))?;
+
+        for field in &ty.fields {
+            remove_field_query(transaction, field).await?;
+        }
+
+        let del_type = sqlx::query("DELETE FROM types WHERE type_id = $1");
+        let del_type_name = sqlx::query("DELETE FROM type_names WHERE type_id = $1");
+
         transaction
-            .commit()
+            .execute(del_type.bind(type_id))
             .await
             .map_err(QueryError::ExecuteFailed)?;
+
+        transaction
+            .execute(del_type_name.bind(type_id))
+            .await
+            .map_err(QueryError::ExecuteFailed)?;
+
         Ok(())
     }
 
-    async fn insert_type(
+    pub(crate) async fn update_type(
         &self,
-        ty: &ObjectType,
         transaction: &mut Transaction<'_, Any>,
+        ty: &ObjectType,
+        delta: ObjectDelta,
+    ) -> anyhow::Result<()> {
+        for field in delta.added_fields.iter() {
+            insert_field_query(transaction, ty, None, field).await?;
+        }
+
+        for field in delta.removed_fields.iter() {
+            remove_field_query(transaction, field).await?;
+        }
+
+        for field in delta.updated_fields.iter() {
+            update_field_query(transaction, field).await?;
+        }
+        Ok(())
+    }
+
+    pub(crate) async fn start_transaction(&self) -> anyhow::Result<Transaction<'_, Any>> {
+        Ok(self
+            .pool
+            .begin()
+            .await
+            .map_err(QueryError::ConnectionFailed)?)
+    }
+
+    pub(crate) async fn commit_transaction(
+        transaction: Transaction<'_, Any>,
+    ) -> anyhow::Result<()> {
+        transaction
+            .commit()
+            .await
+            .map_err(QueryError::ConnectionFailed)?;
+        Ok(())
+    }
+
+    pub(crate) async fn insert_type(
+        &self,
+        transaction: &mut Transaction<'_, Any>,
+        ty: &ObjectType,
     ) -> anyhow::Result<()> {
         let add_type = sqlx::query("INSERT INTO types (backing_table) VALUES ($1) RETURNING *");
         let add_type_name = sqlx::query("INSERT INTO type_names (type_id, name) VALUES ($1, $2)");
@@ -197,45 +385,7 @@ impl MetaService {
             .await
             .map_err(QueryError::ExecuteFailed)?;
         for field in &ty.fields {
-            let add_field = match &field.default {
-                None => {
-                    let query = sqlx::query("INSERT INTO fields (field_type, type_id, is_optional) VALUES ($1, $2, $3) RETURNING *");
-                    query
-                        .bind(field.type_.name())
-                        .bind(id)
-                        .bind(field.is_optional)
-                }
-                Some(value) => {
-                    let query = sqlx::query("INSERT INTO fields (field_type, type_id, default_value, is_optional) VALUES ($1, $2, $3, $4) RETURNING *");
-                    query
-                        .bind(field.type_.name())
-                        .bind(id)
-                        .bind(value.to_owned())
-                        .bind(field.is_optional)
-                }
-            };
-            let add_field_name =
-                sqlx::query("INSERT INTO field_names (field_name, field_id) VALUES ($1, $2)");
-
-            let row = transaction
-                .fetch_one(add_field)
-                .await
-                .map_err(QueryError::ExecuteFailed)?;
-            let field_id: i32 = row.get("field_id");
-            let full_name = ty.name.clone() + "." + &field.name;
-            let add_field_name = add_field_name.bind(full_name).bind(field_id);
-            transaction
-                .execute(add_field_name)
-                .await
-                .map_err(QueryError::ExecuteFailed)?;
-            for label in &field.labels {
-                let q =
-                    sqlx::query("INSERT INTO field_labels (label_name, field_id) VALUES ($1, $2)");
-                transaction
-                    .execute(q.bind(label).bind(field_id))
-                    .await
-                    .map_err(QueryError::ExecuteFailed)?;
-            }
+            insert_field_query(transaction, ty, Some(id), field).await?;
         }
         Ok(())
     }

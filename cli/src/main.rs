@@ -41,6 +41,29 @@ struct Manifest {
     policies: Vec<String>,
 }
 
+enum AllowTypeDeletion {
+    No,
+    Yes,
+}
+
+impl From<AllowTypeDeletion> for bool {
+    fn from(v: AllowTypeDeletion) -> Self {
+        match v {
+            AllowTypeDeletion::No => false,
+            AllowTypeDeletion::Yes => true,
+        }
+    }
+}
+
+impl From<bool> for AllowTypeDeletion {
+    fn from(v: bool) -> Self {
+        match v {
+            false => AllowTypeDeletion::No,
+            true => AllowTypeDeletion::Yes,
+        }
+    }
+}
+
 fn dir_to_paths(dir: &Path, paths: &mut Vec<PathBuf>) -> anyhow::Result<()> {
     for dentry in read_dir(dir)? {
         let dentry = dentry?;
@@ -153,7 +176,10 @@ enum Command {
     },
     Restart,
     Wait,
-    Apply,
+    Apply {
+        #[structopt(long)]
+        allow_type_deletion: bool,
+    },
 }
 
 #[derive(StructOpt, Debug)]
@@ -258,7 +284,7 @@ macro_rules! execute {
     }};
 }
 
-async fn apply(server_url: String) -> Result<()> {
+async fn apply(server_url: String, allow_type_deletion: AllowTypeDeletion) -> Result<()> {
     let manifest = read_manifest()?;
     let types = manifest.types()?;
     let endpoints = manifest.endpoints()?;
@@ -294,6 +320,7 @@ async fn apply(server_url: String) -> Result<()> {
                 types: types_req,
                 endpoints: endpoints_req,
                 policies: policy_req,
+                allow_type_deletion: allow_type_deletion.into(),
             }))
             .await
     );
@@ -335,7 +362,7 @@ async fn main() -> Result<()> {
             cmd.push("chiseld");
             let mut server = std::process::Command::new(cmd).spawn()?;
             wait(server_url.clone()).await?;
-            apply(server_url.clone()).await?;
+            apply(server_url.clone(), AllowTypeDeletion::No).await?;
             let (mut tx, mut rx) = channel(1);
             let mut apply_watcher =
                 RecommendedWatcher::new(move |res: Result<Event, notify::Error>| {
@@ -358,7 +385,7 @@ async fn main() -> Result<()> {
                 match res {
                     Ok(event) => {
                         if event.kind.is_modify() {
-                            apply(server_url.clone()).await?;
+                            apply(server_url.clone(), AllowTypeDeletion::No).await?;
                         }
                     }
                     Err(e) => println!("watch error: {:?}", e),
@@ -414,8 +441,10 @@ async fn main() -> Result<()> {
         Command::Wait => {
             wait(server_url).await?;
         }
-        Command::Apply => {
-            apply(server_url.clone()).await?;
+        Command::Apply {
+            allow_type_deletion,
+        } => {
+            apply(server_url.clone(), allow_type_deletion.into()).await?;
         }
     }
     Ok(())

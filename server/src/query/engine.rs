@@ -70,6 +70,30 @@ impl QueryEngine {
         Ok(Self::new(local.kind, local.pool))
     }
 
+    pub(crate) async fn drop_table(&self, ty: &ObjectType) -> anyhow::Result<()> {
+        let drop_table = Table::drop()
+            .table(Alias::new(&ty.backing_table))
+            .to_owned();
+        let drop_table = drop_table.build_any(DbConnection::get_query_builder(&self.kind));
+        let drop_table = sqlx::query(&drop_table);
+
+        let mut transaction = self
+            .pool
+            .begin()
+            .await
+            .map_err(QueryError::ConnectionFailed)?;
+
+        transaction
+            .execute(drop_table)
+            .await
+            .map_err(QueryError::ExecuteFailed)?;
+        transaction
+            .commit()
+            .await
+            .map_err(QueryError::ExecuteFailed)?;
+        Ok(())
+    }
+
     pub(crate) async fn create_table(&self, ty: &ObjectType) -> anyhow::Result<()> {
         let mut create_table = Table::create()
             .table(Alias::new(&ty.backing_table))
