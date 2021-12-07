@@ -1,12 +1,15 @@
 // SPDX-FileCopyrightText: © 2021 ChiselStrike <info@chiselstrike.com>
 
-use crate::types::Type;
+use crate::runtime;
+use crate::types::{ObjectType, Type};
 use anyhow::{anyhow, Result};
+use async_recursion::async_recursion;
 use itertools::Itertools;
+use std::sync::Arc;
 
 #[derive(Debug)]
 enum Inner {
-    BackingStore(String),
+    BackingStore(Arc<ObjectType>),
     Join(Box<Relation>, Box<Relation>),
     Filter(Box<Relation>, Vec<String>),
 }
@@ -44,28 +47,33 @@ fn get_columns(val: &serde_json::Value) -> Result<Vec<(String, Type)>> {
     Ok(ret)
 }
 
-fn convert_backing_store(val: &serde_json::Value) -> Result<Relation> {
+async fn convert_backing_store(val: &serde_json::Value) -> Result<Relation> {
     let name = val["name"].as_str().ok_or_else(|| anyhow!("foo"))?;
     let columns = get_columns(val)?;
+    let runtime = &mut runtime::get().await;
+    let ts = &runtime.type_system;
+    let ty = ts.lookup_object_type(name)?;
     Ok(Relation {
         columns,
-        inner: Inner::BackingStore(name.to_string()),
+        inner: Inner::BackingStore(ty),
     })
 }
 
-fn convert_join(val: &serde_json::Value) -> Result<Relation> {
+#[async_recursion(?Send)]
+async fn convert_join(val: &serde_json::Value) -> Result<Relation> {
     let columns = get_columns(val)?;
-    let left = Box::new(convert(&val["left"])?);
-    let right = Box::new(convert(&val["right"])?);
+    let left = Box::new(convert(&val["left"]).await?);
+    let right = Box::new(convert(&val["right"]).await?);
     Ok(Relation {
         columns,
         inner: Inner::Join(left, right),
     })
 }
 
-fn convert_filter(val: &serde_json::Value) -> Result<Relation> {
+#[async_recursion(?Send)]
+async fn convert_filter(val: &serde_json::Value) -> Result<Relation> {
     let columns = get_columns(val)?;
-    let inner = Box::new(convert(&val["inner"])?);
+    let inner = Box::new(convert(&val["inner"]).await?);
     let restrictions = val["restrictions"]
         .as_object()
         .ok_or_else(|| anyhow!("Missing restrictions in filter"))?;
@@ -83,12 +91,12 @@ fn convert_filter(val: &serde_json::Value) -> Result<Relation> {
     })
 }
 
-pub(crate) fn convert(val: &serde_json::Value) -> Result<Relation> {
+pub(crate) async fn convert(val: &serde_json::Value) -> Result<Relation> {
     let kind = val["kind"].as_str().ok_or_else(|| anyhow!("foo"))?;
     match kind {
-        "BackingStore" => convert_backing_store(val),
-        "Join" => convert_join(val),
-        "Filter" => convert_filter(val),
+        "BackingStore" => convert_backing_store(val).await,
+        "Join" => convert_join(val).await,
+        "Filter" => convert_filter(val).await,
         _ => Err(anyhow!("Unexpected relation kind")),
     }
 }
@@ -97,8 +105,8 @@ fn sql_impl(rel: &Relation, alias_count: &mut u32) -> String {
     let mut names = rel.columns.iter().map(|c| &c.0);
     let col_str = names.join(",");
     match &rel.inner {
-        Inner::BackingStore(name) => {
-            format!("SELECT {} FROM {}", col_str, name)
+        Inner::BackingStore(ty) => {
+            format!("SELECT {} FROM {}", col_str, ty.backing_table)
         }
         Inner::Filter(inner, restrictions) => {
             let inner_sql = sql_impl(inner, alias_count);
