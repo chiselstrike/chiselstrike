@@ -4,7 +4,7 @@ import { Table, table } from "./api.ts";
 
 const Chisel = {};
 
-Chisel.types = {};
+Chisel.collections = {};
 
 Chisel.api = {};
 Chisel.api.Table = Table;
