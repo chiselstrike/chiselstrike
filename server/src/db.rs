@@ -104,7 +104,7 @@ fn sql_impl(rel: &Relation, alias_count: &mut u32) -> String {
             let inner_sql = sql_impl(inner, alias_count);
             let inner_alias = format!("A{}", *alias_count);
             *alias_count += 1;
-            let restrictions = restrictions.join(",");
+            let restrictions = restrictions.join(" AND ");
             format!(
                 "SELECT {} FROM ({}) AS {} WHERE {}",
                 col_str, inner_sql, inner_alias, restrictions
