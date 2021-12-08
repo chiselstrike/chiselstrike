@@ -238,7 +238,7 @@ async fn op_chisel_store(
     runtime.query_engine.add_row(&ty, &content["value"]).await
 }
 
-type DbStream = RefCell<Pin<Box<dyn stream::Stream<Item = Result<AnyRow, sqlx::Error>>>>>;
+type DbStream = RefCell<Pin<Box<dyn stream::Stream<Item = anyhow::Result<AnyRow>>>>>;
 
 struct QueryStreamResource {
     stream: DbStream,
@@ -287,7 +287,7 @@ async fn op_chisel_query_create(
     let policies = get_policies(runtime, &ty).await?;
 
     let query_engine = &mut runtime.query_engine;
-    let stream: Pin<Box<dyn Stream<Item = _>>> = match field_name {
+    let stream = match field_name {
         None => Box::pin(query_engine.find_all(&ty)?),
         Some(field_name) => {
             Box::pin(query_engine.find_all_by(&ty, field_name, &content["value"])?)
