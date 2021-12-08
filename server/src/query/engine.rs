@@ -4,7 +4,6 @@ use crate::db::{sql, Relation};
 use crate::query::{DbConnection, Kind, QueryError};
 use crate::types::{ObjectType, Type};
 use anyhow::Result;
-use futures::stream;
 use futures::stream::BoxStream;
 use futures::stream::Stream;
 use itertools::zip;
@@ -20,10 +19,12 @@ use std::marker::PhantomPinned;
 use std::pin::Pin;
 use std::task::{Context, Poll};
 
+type SqlStream = BoxStream<'static, Result<AnyRow, sqlx::error::Error>>;
+
 pub(crate) struct QueryResults {
     raw_query: String,
     // The streams we use in here only depend on the lifetime of raw_query.
-    stream: RefCell<Option<BoxStream<'static, Result<AnyRow, Error>>>>,
+    stream: RefCell<Option<SqlStream>>,
     _marker: PhantomPinned, // QueryStream cannot be moved
 }
 
@@ -140,18 +141,12 @@ impl QueryEngine {
         Ok(())
     }
 
-    pub(crate) fn query_relation(
-        &self,
-        rel: &Relation,
-    ) -> Result<impl stream::Stream<Item = Result<AnyRow, Error>>, QueryError> {
+    pub(crate) fn query_relation(&self, rel: &Relation) -> anyhow::Result<SqlStream> {
         let query_str = sql(rel);
         Ok(QueryResults::new(query_str, &self.pool))
     }
 
-    pub(crate) fn find_all(
-        &self,
-        ty: &ObjectType,
-    ) -> anyhow::Result<impl stream::Stream<Item = Result<AnyRow, Error>>> {
+    pub(crate) fn find_all(&self, ty: &ObjectType) -> anyhow::Result<SqlStream> {
         let query_str = format!("SELECT * FROM {}", ty.backing_table);
         Ok(QueryResults::new(query_str, &self.pool))
     }
@@ -161,7 +156,7 @@ impl QueryEngine {
         ty: &ObjectType,
         field_name: &str,
         value_json: &serde_json::Value,
-    ) -> anyhow::Result<impl stream::Stream<Item = Result<AnyRow, Error>>> {
+    ) -> anyhow::Result<SqlStream> {
         let key_field = ty
             .fields
             .iter()
