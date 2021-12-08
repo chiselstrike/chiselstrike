@@ -50,8 +50,8 @@ impl TypeSystem {
         Ok(())
     }
 
-    pub(crate) fn replace_type(
-        &mut self,
+    /// Generate an [`ObjectDelta`] with the necessary information to evolve a specific type.
+    pub(crate) fn generate_type_delta(
         old_type: &ObjectType,
         new_type: Arc<ObjectType>,
     ) -> Result<ObjectDelta, TypeSystemError> {
