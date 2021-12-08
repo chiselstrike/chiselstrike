@@ -1,7 +1,9 @@
 // SPDX-FileCopyrightText: © 2021 ChiselStrike <info@chiselstrike.com>
 
+use derive_new::new;
 use std::collections::{BTreeMap, HashMap};
 use std::sync::Arc;
+use uuid::Uuid;
 
 #[derive(thiserror::Error, Debug)]
 pub(crate) enum TypeSystemError {
@@ -53,7 +55,7 @@ impl TypeSystem {
         old_type: &ObjectType,
         new_type: Arc<ObjectType>,
     ) -> Result<ObjectDelta, TypeSystemError> {
-        if old_type.name != new_type.name || old_type.backing_table != new_type.backing_table {
+        if *old_type != *new_type {
             return Err(TypeSystemError::UnsafeReplacement(new_type.name.clone()));
         }
 
@@ -188,20 +190,126 @@ impl Type {
     }
 }
 
+/// Uniquely describes a representation of a type.
+///
+/// This is passed as a parameter to [`ObjectType`]'s constructor
+/// identifying a type.
+///
+/// This exists as a trait because types that are created in memory
+/// behave slightly differently than types that are persisted to the database.
+///
+/// For example:
+///  * Types that are created in memory don't yet have an ID, since the type ID is assigned at
+///    insert time.
+///  * Types that are created in memory can pick any string they want for the backing table, but
+///    once that is persisted we need to keep referring to that table.
+///
+/// There are two implementations provided: one used for reading types back from the datastore
+/// (mandatory IDs, backing table, etc), and one from generating types in memory.
+///
+/// There are two situations where types are generated in memory:
+///  * Type lookups, to make sure a user-proposed type is compatible with an existing type
+///  * Type creation, where a type fails the lookup above (does not exist) and then has to
+///    be created.
+///
+/// In the first, an ID is never needed. In the second, an ID is needed once the type is about
+/// to be used. To avoid dealing with mutexes, internal mutability, and synchronization, we just
+/// reload the type system after changes are made to the database.
+///
+/// This may become a problem if a user has many types, but it is simple, robust, and elegant.
+pub(crate) trait ObjectDescriptor {
+    fn name(&self) -> String;
+    fn id(&self) -> Option<i32>;
+    fn backing_table(&self) -> String;
+}
+
+#[derive(new)]
+pub(crate) struct ExistingObject<'a> {
+    name: &'a str,
+    backing_table: &'a str,
+    id: i32,
+}
+
+impl<'a> ObjectDescriptor for ExistingObject<'a> {
+    fn name(&self) -> String {
+        self.name.to_owned()
+    }
+
+    fn id(&self) -> Option<i32> {
+        Some(self.id)
+    }
+
+    fn backing_table(&self) -> String {
+        self.backing_table.to_owned()
+    }
+}
+
+pub(crate) struct NewObject<'a> {
+    name: &'a str,
+    backing_table: String, // store at object creation time so consecutive calls to backing_table() return the same value
+}
+
+impl<'a> NewObject<'a> {
+    pub(crate) fn new(name: &'a str) -> Self {
+        let mut buf = Uuid::encode_buffer();
+        let uuid = Uuid::new_v4();
+        let backing_table = format!("ty_{}_{}", name, uuid.to_simple().encode_upper(&mut buf));
+
+        Self {
+            name,
+            backing_table,
+        }
+    }
+}
+
+impl<'a> ObjectDescriptor for NewObject<'a> {
+    fn name(&self) -> String {
+        self.name.to_owned()
+    }
+
+    fn id(&self) -> Option<i32> {
+        None
+    }
+
+    fn backing_table(&self) -> String {
+        self.backing_table.clone()
+    }
+}
+
 #[derive(Debug)]
 pub(crate) struct ObjectType {
     pub(crate) id: Option<i32>,
     /// Name of this type.
-    pub(crate) name: String,
+    name: String,
     /// Fields of this type.
     pub(crate) fields: Vec<Field>,
     /// Name of the backing table for this type.
-    pub(crate) backing_table: String,
+    backing_table: String,
+}
+
+impl ObjectType {
+    pub(crate) fn new<D: ObjectDescriptor>(desc: D, fields: Vec<Field>) -> Self {
+        let backing_table = desc.backing_table();
+        Self {
+            id: desc.id(),
+            name: desc.name(),
+            backing_table,
+            fields,
+        }
+    }
+
+    pub(crate) fn backing_table(&self) -> &str {
+        &self.backing_table
+    }
+
+    pub(crate) fn name(&self) -> &str {
+        &self.name
+    }
 }
 
 impl PartialEq for ObjectType {
     fn eq(&self, another: &Self) -> bool {
-        self.name == another.name && self.backing_table == another.backing_table
+        self.name == another.name
     }
 }
 

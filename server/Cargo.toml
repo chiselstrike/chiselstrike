@@ -9,11 +9,11 @@ anyhow = { version = "1.0.45", features = ["backtrace"] }
 async-channel = "1.6.1"
 async-mutex = "1.4.0"
 async-recursion = "0.3.2"
-convert_case = "0.4.0"
 deno_broadcast_channel = "0.19.0"
 deno_core = "0.107.0"
 deno_runtime = "0.33.0"
 deno_web = "0.56.0"
+derive-new = "0.5.9"
 enclose = "1.1"
 futures = "0.3.17"
 hyper = { git = "https://github.com/hyperium/hyper", rev = "1d553e52c6953ea3b039f5c3f89d35cb56e2436a", features = ["server", "tcp", "http1"] }

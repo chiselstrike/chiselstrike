@@ -7,7 +7,7 @@ use crate::query::{MetaService, QueryEngine};
 use crate::runtime;
 use crate::server::CommandTrait;
 use crate::server::CoordinatorChannel;
-use crate::types::{Field, ObjectType, TypeSystem, TypeSystemError};
+use crate::types::{Field, NewObject, ObjectType, TypeSystem, TypeSystemError};
 use anyhow::Result;
 use async_mutex::Mutex;
 use chisel::chisel_rpc_server::{ChiselRpc, ChiselRpcServer};
@@ -15,7 +15,6 @@ use chisel::{
     ChiselApplyRequest, ChiselApplyResponse, RestartRequest, RestartResponse, StatusRequest,
     StatusResponse, TypeExportRequest, TypeExportResponse,
 };
-use convert_case::{Case, Casing};
 use futures::FutureExt;
 use log::debug;
 use std::collections::BTreeSet;
@@ -130,7 +129,6 @@ impl RpcService {
         // apply a type, but failing the next
         for type_def in apply_request.types {
             let name = type_def.name;
-            let snake_case_name = name.to_case(Case::Snake);
 
             let mut fields = Vec::new();
             for field in type_def.field_defs {
@@ -144,12 +142,7 @@ impl RpcService {
                     is_optional: field.is_optional,
                 });
             }
-            let ty = Arc::new(ObjectType {
-                id: None,
-                name: name.to_owned(),
-                fields,
-                backing_table: snake_case_name.clone(),
-            });
+            let ty = Arc::new(ObjectType::new(NewObject::new(&name), fields));
 
             match state.type_system.lookup_object_type(&name) {
                 Ok(old_type) => {
@@ -326,7 +319,7 @@ impl ChiselRpc for RpcService {
         for ty in type_system
             .types
             .values()
-            .sorted_by(|x, y| x.name.cmp(&y.name))
+            .sorted_by(|x, y| x.name().cmp(y.name()))
         {
             let mut field_defs = vec![];
             for field in &ty.fields {
@@ -339,7 +332,7 @@ impl ChiselRpc for RpcService {
                 });
             }
             let type_def = chisel::TypeDefinition {
-                name: ty.name.to_string(),
+                name: ty.name().to_string(),
                 field_defs,
             };
             type_defs.push(type_def);
