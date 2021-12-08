@@ -1,11 +1,11 @@
 // SPDX-FileCopyrightText: © 2021 ChiselStrike <info@chiselstrike.com>
 
 use crate::api::Body;
-use crate::db::{convert, Relation};
+use crate::db::convert;
 use crate::policies::FieldPolicies;
 use crate::runtime;
 use crate::runtime::Runtime;
-use crate::types::ObjectType;
+use crate::types::{ObjectType, Type};
 use anyhow::{anyhow, Result};
 use deno_broadcast_channel::InMemoryBroadcastChannel;
 use deno_core::error::AnyError;
@@ -304,7 +304,7 @@ async fn op_chisel_query_create(
 
 struct QueryStreamResource2 {
     stream: DbStream,
-    relation: Relation,
+    columns: Vec<(String, Type)>,
 }
 
 impl Resource for QueryStreamResource2 {}
@@ -330,7 +330,7 @@ async fn op_chisel_relational_query_create(
     let stream = Box::pin(query_engine.query_relation(&relation)?);
     let resource = QueryStreamResource2 {
         stream: RefCell::new(stream),
-        relation,
+        columns: relation.columns,
     };
     let rid = op_state.borrow_mut().resource_table.add(resource);
     Ok(rid)
@@ -368,7 +368,7 @@ async fn op_chisel_relational_query_next(
 
     if let Some(row) = stream.next().await {
         let row = row.unwrap();
-        let v = crate::query::engine::relational_row_to_json(&resource.relation, &row)?;
+        let v = crate::query::engine::relational_row_to_json(&resource.columns, &row)?;
         Ok(Some(v))
     } else {
         Ok(None)

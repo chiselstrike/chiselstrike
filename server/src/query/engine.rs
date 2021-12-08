@@ -285,11 +285,11 @@ impl QueryEngine {
 }
 
 pub(crate) fn relational_row_to_json(
-    relation: &Relation,
+    columns: &[(String, Type)],
     row: &AnyRow,
 ) -> anyhow::Result<serde_json::Value> {
     let mut ret = json!({});
-    for (query_column, result_column) in zip(&relation.columns, row.columns()) {
+    for (query_column, result_column) in zip(columns, row.columns()) {
         let i = result_column.ordinal();
         // FIXME: consider result_column.type_info().is_null() too
         macro_rules! to_json {
