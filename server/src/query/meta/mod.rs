@@ -5,7 +5,9 @@ pub(crate) mod schema;
 use crate::api::RoutePaths;
 use crate::deno;
 use crate::query::{DbConnection, Kind, QueryError};
-use crate::types::{ExistingObject, Field, FieldDelta, ObjectDelta, ObjectType, TypeSystem};
+use crate::types::{
+    ExistingField, ExistingObject, Field, FieldDelta, ObjectDelta, ObjectType, TypeSystem,
+};
 use anyhow::anyhow;
 use futures::FutureExt;
 use sqlx::any::{Any, AnyPool};
@@ -138,7 +140,7 @@ async fn insert_field_query(
         .map_err(QueryError::ExecuteFailed)?;
 
     let field_id: i32 = row.get("field_id");
-    let full_name = ty.name().to_owned() + "." + &field.name;
+    let full_name = field.persisted_name(ty);
     let add_field_name = add_field_name.bind(full_name).bind(field_id);
     transaction
         .execute(add_field_name)
@@ -268,12 +270,13 @@ impl MetaService {
         let mut fields = Vec::new();
         for row in rows {
             let field_name: &str = row.get("field_name");
-            let field_name = field_name.split_once('.').unwrap().1;
-            let field_type: &str = row.get("field_type");
             let field_id: i32 = row.get("field_id");
+            let field_type: &str = row.get("field_type");
+            let desc = ExistingField::new(ts, field_name, field_id, field_type)?;
+
             let field_def: Option<String> = row.get("default_value");
             let is_optional: bool = row.get("is_optional");
-            let ty = ts.lookup_type(field_type)?;
+
             let labels_query =
                 sqlx::query("SELECT label_name FROM field_labels WHERE field_id = $1");
             let labels = labels_query
@@ -284,14 +287,8 @@ impl MetaService {
                 .iter()
                 .map(|r| r.get("label_name"))
                 .collect::<Vec<String>>();
-            fields.push(Field {
-                id: Some(field_id),
-                name: field_name.to_string(),
-                type_: ty,
-                labels,
-                default: field_def,
-                is_optional,
-            });
+
+            fields.push(Field::new(desc, labels, field_def, is_optional));
         }
         Ok(fields)
     }

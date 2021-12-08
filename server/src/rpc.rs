@@ -7,7 +7,7 @@ use crate::query::{MetaService, QueryEngine};
 use crate::runtime;
 use crate::server::CommandTrait;
 use crate::server::CoordinatorChannel;
-use crate::types::{Field, NewObject, ObjectType, TypeSystem, TypeSystemError};
+use crate::types::{Field, NewField, NewObject, ObjectType, TypeSystem, TypeSystemError};
 use anyhow::Result;
 use async_mutex::Mutex;
 use chisel::chisel_rpc_server::{ChiselRpc, ChiselRpcServer};
@@ -132,16 +132,15 @@ impl RpcService {
 
             let mut fields = Vec::new();
             for field in type_def.field_defs {
-                let ty = state.type_system.lookup_type(&field.field_type)?;
-                fields.push(Field {
-                    id: None,
-                    name: field.name.clone(),
-                    type_: ty,
-                    labels: field.labels,
-                    default: field.default_value,
-                    is_optional: field.is_optional,
-                });
+                let desc = NewField::new(&state.type_system, &field.name, &field.field_type)?;
+                fields.push(Field::new(
+                    desc,
+                    field.labels,
+                    field.default_value,
+                    field.is_optional,
+                ));
             }
+
             let ty = Arc::new(ObjectType::new(NewObject::new(&name), fields));
 
             match state.type_system.lookup_object_type(&name) {
