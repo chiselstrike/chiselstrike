@@ -101,61 +101,78 @@ pub(crate) async fn convert(val: &serde_json::Value) -> Result<Relation> {
     }
 }
 
-fn sql_impl(rel: &Relation, alias_count: &mut u32) -> String {
+fn column_list(rel: &Relation) -> String {
     let mut names = rel.columns.iter().map(|c| &c.0);
-    let col_str = names.join(",");
+    names.join(",")
+}
+
+fn sql_backing_store(rel: &Relation, ty: &Arc<ObjectType>) -> String {
+    format!("SELECT {} FROM {}", column_list(rel), ty.backing_table)
+}
+
+fn sql_filter(
+    rel: &Relation,
+    alias_count: &mut u32,
+    inner: &Relation,
+    restrictions: &[String],
+) -> String {
+    let inner_sql = sql_impl(inner, alias_count);
+    let inner_alias = format!("A{}", *alias_count);
+    *alias_count += 1;
+    let restrictions = restrictions.join(" AND ");
+    format!(
+        "SELECT {} FROM ({}) AS {} WHERE {}",
+        column_list(rel),
+        inner_sql,
+        inner_alias,
+        restrictions
+    )
+}
+
+fn sql_join(rel: &Relation, alias_count: &mut u32, left: &Relation, right: &Relation) -> String {
+    // FIXME: Optimize the case of table.left or table.right being just
+    // a BackingStore with all fields. The database probably doesn't
+    // care, but will make the logs cleaner.
+    let lsql = sql_impl(left, alias_count);
+    let rsql = sql_impl(right, alias_count);
+
+    let left_alias = format!("A{}", *alias_count);
+    let right_alias = format!("A{}", *alias_count + 1);
+    *alias_count += 2;
+
+    let mut join_columns = vec![];
+    let mut on_columns = vec![];
+    for c in &rel.columns {
+        if left.columns.contains(c) && right.columns.contains(c) {
+            join_columns.push(format!("${}.${}", left_alias, c.0));
+            on_columns.push(format!(
+                "{}.${} = ${}.${}",
+                left_alias, c.0, right_alias, c.0
+            ));
+        } else {
+            join_columns.push(c.0.clone());
+        }
+    }
+
+    let on = if on_columns.is_empty() {
+        "TRUE".to_string()
+    } else {
+        on_columns.join(" AND ")
+    };
+    // Funny way to write it, but works on PostgreSQL and sqlite.
+    let join = format!(
+        "({}) AS {} JOIN ({}) AS {}",
+        lsql, left_alias, rsql, right_alias
+    );
+    let join_columns_str = join_columns.join(",");
+    return format!("SELECT {} FROM {} ON {}", join_columns_str, join, on);
+}
+
+fn sql_impl(rel: &Relation, alias_count: &mut u32) -> String {
     match &rel.inner {
-        Inner::BackingStore(ty) => {
-            format!("SELECT {} FROM {}", col_str, ty.backing_table)
-        }
-        Inner::Filter(inner, restrictions) => {
-            let inner_sql = sql_impl(inner, alias_count);
-            let inner_alias = format!("A{}", *alias_count);
-            *alias_count += 1;
-            let restrictions = restrictions.join(" AND ");
-            format!(
-                "SELECT {} FROM ({}) AS {} WHERE {}",
-                col_str, inner_sql, inner_alias, restrictions
-            )
-        }
-        Inner::Join(left, right) => {
-            // FIXME: Optimize the case of table.left or table.right being just
-            // a BackingStore with all fields. The database probably doesn't
-            // care, but will make the logs cleaner.
-            let lsql = sql_impl(left, alias_count);
-            let rsql = sql_impl(right, alias_count);
-
-            let left_alias = format!("A{}", *alias_count);
-            let right_alias = format!("A{}", *alias_count + 1);
-            *alias_count += 2;
-
-            let mut join_columns = vec![];
-            let mut on_columns = vec![];
-            for c in &rel.columns {
-                if left.columns.contains(c) && right.columns.contains(c) {
-                    join_columns.push(format!("${}.${}", left_alias, c.0));
-                    on_columns.push(format!(
-                        "{}.${} = ${}.${}",
-                        left_alias, c.0, right_alias, c.0
-                    ));
-                } else {
-                    join_columns.push(c.0.clone());
-                }
-            }
-
-            let on = if on_columns.is_empty() {
-                "TRUE".to_string()
-            } else {
-                on_columns.join(" AND ")
-            };
-            // Funny way to write it, but works on PostgreSQL and sqlite.
-            let join = format!(
-                "({}) AS {} JOIN ({}) AS {}",
-                lsql, left_alias, rsql, right_alias
-            );
-            let join_columns_str = join_columns.join(",");
-            return format!("SELECT {} FROM {} ON {}", join_columns_str, join, on);
-        }
+        Inner::BackingStore(ty) => sql_backing_store(rel, ty),
+        Inner::Filter(inner, restrictions) => sql_filter(rel, alias_count, inner, restrictions),
+        Inner::Join(left, right) => sql_join(rel, alias_count, left, right),
     }
 }
 
