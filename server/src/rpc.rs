@@ -263,7 +263,7 @@ impl RpcService {
             let runtime = &mut runtime::get().await;
             runtime.type_system.update(&type_system);
 
-            // FIXME: remove all existing types from deno first. How?
+            deno::flush_types()?;
             for (_, ty) in runtime.type_system.types.iter() {
                 deno::define_type(ty)?;
             }

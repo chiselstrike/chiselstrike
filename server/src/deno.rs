@@ -867,3 +867,19 @@ fn define_type_aux(d: Rc<RefCell<DenoService>>, ty: &ObjectType) -> Result<()> {
 pub(crate) fn define_type(ty: &ObjectType) -> Result<()> {
     with_deno(|d| define_type_aux(d, ty))
 }
+
+pub(crate) fn flush_types() -> Result<()> {
+    with_deno(|d| {
+        let service = &mut *d.borrow_mut();
+        let runtime = &mut service.worker.js_runtime;
+        let global_context = runtime.global_context();
+        let scope = &mut runtime.handle_scope();
+        let global_proxy = global_context.open(scope).global(scope);
+        let chisel: v8::Local<v8::Object> = get_member(global_proxy, scope, "Chisel").unwrap();
+
+        let collections = v8::String::new(scope, "collections").unwrap().into();
+        let empty = v8::Object::new(scope);
+        chisel.set(scope, collections, empty.into());
+        Ok(())
+    })
+}
