@@ -146,7 +146,7 @@ impl RpcService {
 
             match state.type_system.lookup_object_type(&name) {
                 Ok(old_type) => {
-                    let delta = state.type_system.replace_type(&old_type, ty)?;
+                    let delta = TypeSystem::generate_type_delta(&old_type, ty)?;
                     to_update.push((old_type.clone(), delta));
                 }
                 Err(TypeSystemError::NoSuchType(_)) => {
