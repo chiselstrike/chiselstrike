@@ -4,6 +4,7 @@ use crate::api::Body;
 use crate::db::{convert, Relation};
 use crate::policies::FieldPolicies;
 use crate::runtime;
+use crate::runtime::Runtime;
 use crate::types::ObjectType;
 use anyhow::{anyhow, Result};
 use deno_broadcast_channel::InMemoryBroadcastChannel;
@@ -247,6 +248,15 @@ struct QueryStreamResource {
 
 impl Resource for QueryStreamResource {}
 
+pub(crate) async fn get_policies(
+    runtime: &Runtime,
+    ty: &ObjectType,
+) -> anyhow::Result<FieldPolicies> {
+    let mut policies = FieldPolicies::default();
+    CURRENT_REQUEST_PATH.with(|p| runtime.get_policies(ty, &mut policies, &p.borrow()));
+    Ok(policies)
+}
+
 async fn op_chisel_query_create(
     op_state: Rc<RefCell<OpState>>,
     content: serde_json::Value,
@@ -271,11 +281,10 @@ async fn op_chisel_query_create(
         ),
     };
 
-    let mut policies = FieldPolicies::default();
     let runtime = &mut runtime::get().await;
     let ts = &runtime.type_system;
     let ty = ts.lookup_object_type(type_name)?;
-    CURRENT_REQUEST_PATH.with(|p| runtime.get_policies(&ty, &mut policies, &p.borrow()));
+    let policies = get_policies(runtime, &ty).await?;
 
     let query_engine = &mut runtime.query_engine;
     let stream: Pin<Box<dyn Stream<Item = _>>> = match field_name {

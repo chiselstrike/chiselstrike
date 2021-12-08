@@ -1,15 +1,16 @@
 // SPDX-FileCopyrightText: © 2021 ChiselStrike <info@chiselstrike.com>
 
+use crate::deno::get_policies;
+use crate::policies::FieldPolicies;
 use crate::runtime;
-use crate::types::{ObjectType, Type};
+use crate::types::Type;
 use anyhow::{anyhow, Result};
 use async_recursion::async_recursion;
 use itertools::Itertools;
-use std::sync::Arc;
 
 #[derive(Debug)]
 enum Inner {
-    BackingStore(Arc<ObjectType>),
+    BackingStore(String, FieldPolicies),
     Join(Box<Relation>, Box<Relation>),
     Filter(Box<Relation>, Vec<String>),
 }
@@ -53,9 +54,11 @@ async fn convert_backing_store(val: &serde_json::Value) -> Result<Relation> {
     let runtime = &mut runtime::get().await;
     let ts = &runtime.type_system;
     let ty = ts.lookup_object_type(name)?;
+    let policies = get_policies(runtime, &ty).await?;
+
     Ok(Relation {
         columns,
-        inner: Inner::BackingStore(ty),
+        inner: Inner::BackingStore(ty.backing_table().to_string(), policies),
     })
 }
 
@@ -106,8 +109,8 @@ fn column_list(rel: &Relation) -> String {
     names.join(",")
 }
 
-fn sql_backing_store(rel: &Relation, ty: &Arc<ObjectType>) -> String {
-    format!("SELECT {} FROM {}", column_list(rel), ty.backing_table())
+fn sql_backing_store(rel: &Relation, name: &str, _policies: &FieldPolicies) -> String {
+    format!("SELECT {} FROM {}", column_list(rel), name)
 }
 
 fn sql_filter(
@@ -170,7 +173,7 @@ fn sql_join(rel: &Relation, alias_count: &mut u32, left: &Relation, right: &Rela
 
 fn sql_impl(rel: &Relation, alias_count: &mut u32) -> String {
     match &rel.inner {
-        Inner::BackingStore(ty) => sql_backing_store(rel, ty),
+        Inner::BackingStore(name, policies) => sql_backing_store(rel, name, policies),
         Inner::Filter(inner, restrictions) => sql_filter(rel, alias_count, inner, restrictions),
         Inner::Join(left, right) => sql_join(rel, alias_count, left, right),
     }
