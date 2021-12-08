@@ -107,7 +107,7 @@ fn column_list(rel: &Relation) -> String {
 }
 
 fn sql_backing_store(rel: &Relation, ty: &Arc<ObjectType>) -> String {
-    format!("SELECT {} FROM {}", column_list(rel), ty.backing_table)
+    format!("SELECT {} FROM {}", column_list(rel), ty.backing_table())
 }
 
 fn sql_filter(

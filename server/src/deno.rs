@@ -857,7 +857,7 @@ fn define_type_aux(d: Rc<RefCell<DenoService>>, ty: &ObjectType) -> Result<()> {
     }
 
     let columns = v8::Array::new_with_elements(scope, &fields).into();
-    let name = v8::String::new(scope, &ty.name).unwrap();
+    let name = v8::String::new(scope, ty.name()).unwrap();
     let table = try_into_or(table_func.call(scope, api.into(), &[name.into(), columns]))?;
 
     collections.set(scope, name.into(), table).unwrap();

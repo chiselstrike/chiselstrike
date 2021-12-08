@@ -74,7 +74,7 @@ impl QueryEngine {
 
     pub(crate) async fn drop_table(&self, ty: &ObjectType) -> anyhow::Result<()> {
         let drop_table = Table::drop()
-            .table(Alias::new(&ty.backing_table))
+            .table(Alias::new(ty.backing_table()))
             .to_owned();
         let drop_table = drop_table.build_any(DbConnection::get_query_builder(&self.kind));
         let drop_table = sqlx::query(&drop_table);
@@ -98,7 +98,7 @@ impl QueryEngine {
 
     pub(crate) async fn create_table(&self, ty: &ObjectType) -> anyhow::Result<()> {
         let mut create_table = Table::create()
-            .table(Alias::new(&ty.backing_table))
+            .table(Alias::new(ty.backing_table()))
             .if_not_exists()
             .col(
                 ColumnDef::new(Alias::new("id"))
@@ -147,7 +147,7 @@ impl QueryEngine {
     }
 
     pub(crate) fn find_all(&self, ty: &ObjectType) -> anyhow::Result<SqlStream> {
-        let query_str = format!("SELECT * FROM {}", ty.backing_table);
+        let query_str = format!("SELECT * FROM {}", ty.backing_table());
         Ok(QueryResults::new(query_str, &self.pool))
     }
 
@@ -161,12 +161,14 @@ impl QueryEngine {
             .fields
             .iter()
             .find(|&f| f.name == field_name)
-            .ok_or_else(|| QueryError::UnknownField(ty.name.clone(), field_name.to_string()))?;
+            .ok_or_else(|| {
+                QueryError::UnknownField(ty.name().to_owned(), field_name.to_string())
+            })?;
 
         macro_rules! make_column_filter {
             ($as_type:ident) => {{
                 let value = value_json.$as_type().ok_or_else(|| {
-                    QueryError::IncompatibleData(key_field.name.to_owned(), ty.name.to_owned())
+                    QueryError::IncompatibleData(key_field.name.to_owned(), ty.name().to_owned())
                 })?;
                 Expr::col(Alias::new(field_name)).eq(value)
             }};
@@ -188,7 +190,7 @@ impl QueryEngine {
             query.column(Alias::new(&field.name));
         }
         let query = query
-            .from(Alias::new(&ty.backing_table))
+            .from(Alias::new(ty.backing_table()))
             .cond_where(col_filter)
             .to_owned();
 
@@ -206,7 +208,7 @@ impl QueryEngine {
     ) -> anyhow::Result<()> {
         let insert_query = std::format!(
             "INSERT INTO {} ({}) VALUES ({})",
-            &ty.backing_table,
+            &ty.backing_table(),
             ty.fields.iter().map(|f| &f.name).join(", "),
             (0..ty.fields.len())
                 .map(|i| std::format!("${}", i + 1))
@@ -234,7 +236,7 @@ impl QueryEngine {
                             let value = value_json.$as_type().ok_or_else(|| {
                                 QueryError::IncompatibleData(
                                     field.name.to_owned(),
-                                    ty.name.to_owned(),
+                                    ty.name().to_owned(),
                                 )
                             })?;
                             insert_query = insert_query.bind(value);
@@ -243,7 +245,7 @@ impl QueryEngine {
                             let value = field.default.clone().ok_or_else(|| {
                                 QueryError::IncompatibleData(
                                     field.name.to_owned(),
-                                    ty.name.to_owned(),
+                                    ty.name().to_owned(),
                                 )
                             })?;
                             bind_default_json_value!($fallback, value);

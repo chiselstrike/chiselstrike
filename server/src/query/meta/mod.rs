@@ -5,7 +5,7 @@ pub(crate) mod schema;
 use crate::api::RoutePaths;
 use crate::deno;
 use crate::query::{DbConnection, Kind, QueryError};
-use crate::types::{Field, FieldDelta, ObjectDelta, ObjectType, TypeSystem};
+use crate::types::{ExistingObject, Field, FieldDelta, ObjectDelta, ObjectType, TypeSystem};
 use anyhow::anyhow;
 use futures::FutureExt;
 use sqlx::any::{Any, AnyPool};
@@ -138,7 +138,7 @@ async fn insert_field_query(
         .map_err(QueryError::ExecuteFailed)?;
 
     let field_id: i32 = row.get("field_id");
-    let full_name = ty.name.clone() + "." + &field.name;
+    let full_name = ty.name().to_owned() + "." + &field.name;
     let add_field_name = add_field_name.bind(full_name).bind(field_id);
     transaction
         .execute(add_field_name)
@@ -249,13 +249,11 @@ impl MetaService {
             let type_id: i32 = row.get("type_id");
             let backing_table: &str = row.get("backing_table");
             let type_name: &str = row.get("type_name");
+            let desc = ExistingObject::new(type_name, backing_table, type_id);
+
             let fields = self.load_type_fields(&ts, type_id).await?;
-            ts.add_type(Arc::new(ObjectType {
-                id: Some(type_id),
-                name: type_name.to_string(),
-                fields,
-                backing_table: backing_table.to_string(),
-            }))?;
+            let ty = ObjectType::new(desc, fields);
+            ts.add_type(Arc::new(ty))?;
         }
         Ok(ts)
     }
@@ -373,13 +371,13 @@ impl MetaService {
         let add_type = sqlx::query("INSERT INTO types (backing_table) VALUES ($1) RETURNING *");
         let add_type_name = sqlx::query("INSERT INTO type_names (type_id, name) VALUES ($1, $2)");
 
-        let add_type = add_type.bind(ty.backing_table.clone());
+        let add_type = add_type.bind(ty.backing_table().to_owned());
         let row = transaction
             .fetch_one(add_type)
             .await
             .map_err(QueryError::ExecuteFailed)?;
         let id: i32 = row.get("type_id");
-        let add_type_name = add_type_name.bind(id).bind(ty.name.clone());
+        let add_type_name = add_type_name.bind(id).bind(ty.name().to_owned());
         transaction
             .execute(add_type_name)
             .await

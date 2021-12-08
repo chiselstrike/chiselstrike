@@ -970,6 +970,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "derive-new"
+version = "0.5.9"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3418329ca0ad70234b9735dc4ceed10af4df60eff9c8e7b06cb5e520d92c3535"
+dependencies = [
+ "proc-macro2 1.0.30",
+ "quote 1.0.10",
+ "syn 1.0.80",
+]
+
+[[package]]
 name = "derive_more"
 version = "0.99.16"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3334,11 +3345,11 @@ dependencies = [
  "async-channel",
  "async-mutex",
  "async-recursion",
- "convert_case",
  "deno_broadcast_channel",
  "deno_core",
  "deno_runtime",
  "deno_web",
+ "derive-new",
  "enclose",
  "futures",
  "hyper 0.14.13 (git+https://github.com/hyperium/hyper?rev=1d553e52c6953ea3b039f5c3f89d35cb56e2436a)",
