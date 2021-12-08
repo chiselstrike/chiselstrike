@@ -20,13 +20,14 @@ use std::marker::PhantomPinned;
 use std::pin::Pin;
 use std::task::{Context, Poll};
 
-pub(crate) struct QueryResults<'a> {
+pub(crate) struct QueryResults {
     raw_query: String,
-    stream: RefCell<Option<BoxStream<'a, Result<AnyRow, Error>>>>,
+    // The streams we use in here only depend on the lifetime of raw_query.
+    stream: RefCell<Option<BoxStream<'static, Result<AnyRow, Error>>>>,
     _marker: PhantomPinned, // QueryStream cannot be moved
 }
 
-impl<'a> QueryResults<'a> {
+impl QueryResults {
     pub(crate) fn new(raw_query: String, pool: &AnyPool) -> Pin<Box<Self>> {
         let ret = Box::pin(QueryResults {
             raw_query,
@@ -41,7 +42,7 @@ impl<'a> QueryResults<'a> {
     }
 }
 
-impl Stream for QueryResults<'_> {
+impl Stream for QueryResults {
     type Item = Result<AnyRow, Error>;
 
     fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
