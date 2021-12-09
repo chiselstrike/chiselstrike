@@ -239,9 +239,11 @@ impl RpcService {
                     .get_or_insert(&[].into())
                     .iter()
                 {
-                    if let Some(true) = endpoint["must_login"].as_bool() {
-                        if let Some(name) = endpoint["name"].as_str() {
-                            policies.authorize.insert(name.into());
+                    if let Some(path) = endpoint["path"].as_str() {
+                        if let Some(users) = endpoint["users"].as_str() {
+                            policies
+                                .user_authorization
+                                .add(path, regex::Regex::new(users)?)?;
                         }
                     }
                 }
