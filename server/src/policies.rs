@@ -3,6 +3,7 @@
 use serde_json::{json, Value};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
+use yaml_rust::YamlLoader;
 
 #[derive(Clone)]
 pub(crate) struct Policy {
@@ -55,18 +56,59 @@ impl UserAuthorization {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Default)]
 pub(crate) struct Policies {
     pub(crate) labels: LabelPolicies,
     pub(crate) user_authorization: UserAuthorization,
 }
 
 impl Policies {
-    pub(crate) fn new() -> Self {
-        Self {
-            labels: LabelPolicies::default(),
-            user_authorization: UserAuthorization::default(),
+    pub(crate) fn from_yaml<S: AsRef<str>>(config: S) -> anyhow::Result<Self> {
+        let mut policies = Self::default();
+        let mut labels = vec![];
+
+        let docs = YamlLoader::load_from_str(config.as_ref())?;
+        for config in docs.iter() {
+            for label in config["labels"].as_vec().get_or_insert(&[].into()).iter() {
+                let name = label["name"].as_str().ok_or_else(|| {
+                    anyhow::anyhow!("couldn't parse yaml: label without a name: {:?}", label)
+                })?;
+
+                labels.push(name.to_owned());
+                debug!("Applying policy for label {:?}", name);
+
+                match label["transform"].as_str() {
+                    Some("anonymize") => {
+                        let pattern = label["except_uri"].as_str().unwrap_or("^$"); // ^$ never matches; each path has at least a '/' in it.
+                        policies.labels.insert(
+                            name.to_owned(),
+                            Policy {
+                                transform: crate::policies::anonymize,
+                                except_uri: regex::Regex::new(pattern)?,
+                            },
+                        );
+                    }
+                    Some(x) => {
+                        anyhow::bail!("unknown transform: {} for label {}", x, name);
+                    }
+                    None => {}
+                };
+            }
+            for endpoint in config["endpoints"]
+                .as_vec()
+                .get_or_insert(&[].into())
+                .iter()
+            {
+                if let Some(path) = endpoint["path"].as_str() {
+                    if let Some(users) = endpoint["users"].as_str() {
+                        policies
+                            .user_authorization
+                            .add(path, regex::Regex::new(users)?)?;
+                    }
+                }
+            }
         }
+        Ok(policies)
     }
 }
 

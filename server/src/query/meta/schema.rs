@@ -50,6 +50,13 @@ enum Endpoints {
 }
 
 #[derive(Iden)]
+enum Policies {
+    Table,
+    Version,
+    PolicyStr,
+}
+
+#[derive(Iden)]
 enum Sessions {
     Table,
     Token,
@@ -137,6 +144,14 @@ pub(crate) fn tables() -> Vec<TableCreateStatement> {
         .col(ColumnDef::new(Sessions::Token).uuid().primary_key())
         .col(ColumnDef::new(Sessions::Username).text())
         .to_owned();
+
+    let policies = Table::create()
+        .table(Policies::Table)
+        .if_not_exists()
+        .col(ColumnDef::new(Policies::Version).text().unique_key())
+        .col(ColumnDef::new(Policies::PolicyStr).text())
+        .to_owned();
+
     vec![
         types,
         type_names,
@@ -145,5 +160,6 @@ pub(crate) fn tables() -> Vec<TableCreateStatement> {
         field_labels,
         endpoints,
         sessions,
+        policies,
     ]
 }
