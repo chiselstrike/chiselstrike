@@ -288,7 +288,7 @@ async fn op_chisel_query_create(
 
     let query_engine = &mut runtime.query_engine;
     let stream = match field_name {
-        None => Box::pin(query_engine.find_all(&ty)?),
+        None => Box::pin(query_engine.find_all(&ty)),
         Some(field_name) => {
             Box::pin(query_engine.find_all_by(&ty, field_name, &content["value"])?)
         }
@@ -327,7 +327,7 @@ async fn op_chisel_relational_query_create(
     let relation = convert(&relation).await?;
     let runtime = &mut runtime::get().await;
     let query_engine = &mut runtime.query_engine;
-    let stream = Box::pin(query_engine.query_relation(&relation)?);
+    let stream = Box::pin(query_engine.query_relation(&relation));
     let resource = QueryStreamResource2 {
         stream: RefCell::new(stream),
         columns: relation.columns,

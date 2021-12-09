@@ -140,14 +140,14 @@ impl QueryEngine {
         Ok(())
     }
 
-    pub(crate) fn query_relation(&self, rel: &Relation) -> anyhow::Result<SqlStream> {
+    pub(crate) fn query_relation(&self, rel: &Relation) -> SqlStream {
         let query_str = sql(rel);
-        Ok(QueryResults::new(query_str, &self.pool))
+        QueryResults::new(query_str, &self.pool)
     }
 
-    pub(crate) fn find_all(&self, ty: &ObjectType) -> anyhow::Result<SqlStream> {
+    pub(crate) fn find_all(&self, ty: &ObjectType) -> SqlStream {
         let query_str = format!("SELECT * FROM {}", ty.backing_table());
-        Ok(QueryResults::new(query_str, &self.pool))
+        QueryResults::new(query_str, &self.pool)
     }
 
     pub(crate) fn find_all_by(
