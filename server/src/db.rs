@@ -74,6 +74,11 @@ async fn convert_join(val: &serde_json::Value) -> Result<Relation> {
     })
 }
 
+// FIXME: We should use prepared statements instead
+fn escape_string(s: &str) -> String {
+    format!("{}", format_sql_query::QuotedData(s))
+}
+
 #[async_recursion(?Send)]
 async fn convert_filter(val: &serde_json::Value) -> Result<Relation> {
     let columns = get_columns(val)?;
@@ -87,7 +92,7 @@ async fn convert_filter(val: &serde_json::Value) -> Result<Relation> {
             Value::Null => anyhow::bail!("Null restriction"),
             Value::Bool(v) => format!("{}", v),
             Value::Number(v) => format!("{}", v),
-            Value::String(v) => format!("'{}'", v),
+            Value::String(v) => escape_string(v),
             Value::Array(v) => anyhow::bail!("Array restriction {:?}", v),
             Value::Object(v) => anyhow::bail!("Object restriction {:?}", v),
         };

@@ -1,0 +1,39 @@
+# SPDX-FileCopyrightText: © 2021 ChiselStrike <info@chiselstrike.com>
+
+# RUN: sh -e @file
+
+cp examples/person.ts "$TEMPDIR/types"
+cp examples/store.js "$TEMPDIR/endpoints"
+
+cat << EOF > "$TEMPDIR/endpoints/query.js"
+export default async function chisel(req: Request) {
+    const filtered = Chisel.collections.Person.filter({first_name: "Bob'"});
+    const rows = await filtered.rows();
+    let ret = "";
+    for await (let row of rows) {
+        ret += row.first_name + " " + row.last_name + "\n";
+    }
+    return new Response(ret);
+}
+EOF
+
+cd "$TEMPDIR"
+$CHISEL apply
+
+# CHECK: Type defined: Person
+# CHECK: End point defined: /query
+# CHECK: End point defined: /store
+
+$CURL --data '{
+    "first_name":"Bob'\''",
+    "last_name":"Tables",
+    "age": 666,
+    "human": true,
+    "height": 10.01
+}' -o - $CHISELD_HOST/store
+
+# CHECK: ok
+
+$CURL -o - $CHISELD_HOST/query
+
+# CHECK:  Bob' Tables
