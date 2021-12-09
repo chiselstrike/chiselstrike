@@ -1,5 +1,12 @@
 // SPDX-FileCopyrightText: © 2021 ChiselStrike <info@chiselstrike.com>
 
-// RUN: @chisel status
+$CHISEL status
 
-// CHECK: Server status is OK
+# CHECK: Server status is OK
+
+$CURL -o - $CHISELD_LOCALHOST/status
+# CHECK: ok
+$CURL -o - $CHISELD_LOCALHOST/readiness
+# CHECK: ready
+$CURL -o - $CHISELD_LOCALHOST/liveness
+# CHECK: alive
