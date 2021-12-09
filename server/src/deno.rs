@@ -367,8 +367,7 @@ async fn op_chisel_relational_query_next(
     use futures::stream::StreamExt;
 
     if let Some(row) = stream.next().await {
-        let row = row.unwrap();
-        let v = crate::query::engine::relational_row_to_json(&resource.columns, &row)?;
+        let v = crate::query::engine::relational_row_to_json(&resource.columns, &row?)?;
         Ok(Some(v))
     } else {
         Ok(None)
