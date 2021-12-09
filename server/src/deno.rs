@@ -34,7 +34,6 @@ use hyper::header::HeaderValue;
 use hyper::Method;
 use hyper::{Request, Response, StatusCode};
 use once_cell::unsync::OnceCell;
-use sqlx::any::AnyRow;
 use std::cell::RefCell;
 use std::collections::hash_map::Entry;
 use std::collections::HashMap;
@@ -238,16 +237,7 @@ async fn op_chisel_store(
     runtime.query_engine.add_row(&ty, &content["value"]).await
 }
 
-type DbStream = RefCell<Pin<Box<dyn stream::Stream<Item = anyhow::Result<AnyRow>>>>>;
 type DbStream2 = RefCell<Pin<Box<dyn stream::Stream<Item = anyhow::Result<serde_json::Value>>>>>;
-
-struct QueryStreamResource {
-    stream: DbStream,
-    policies: FieldPolicies,
-    ty: Arc<ObjectType>,
-}
-
-impl Resource for QueryStreamResource {}
 
 pub(crate) async fn get_policies(
     runtime: &Runtime,
@@ -256,51 +246,6 @@ pub(crate) async fn get_policies(
     let mut policies = FieldPolicies::default();
     CURRENT_REQUEST_PATH.with(|p| runtime.get_policies(ty, &mut policies, &p.borrow()));
     Ok(policies)
-}
-
-async fn op_chisel_query_create(
-    op_state: Rc<RefCell<OpState>>,
-    content: serde_json::Value,
-    _: (),
-) -> Result<ResourceId, AnyError> {
-    let json_error = |field: &str, ty_: &str| {
-        anyhow!(
-            "Json field type error; field `{}` should be of type `{}`",
-            field.to_string(),
-            ty_.to_string()
-        )
-    };
-    let type_name = content["type_name"]
-        .as_str()
-        .ok_or_else(|| json_error("type_name", "string"))?;
-    let field_name = match content.get("field_name") {
-        None => None,
-        Some(value) => Some(
-            value
-                .as_str()
-                .ok_or_else(|| json_error("field_name", "string"))?,
-        ),
-    };
-
-    let runtime = &mut runtime::get().await;
-    let ts = &runtime.type_system;
-    let ty = ts.lookup_object_type(type_name)?;
-    let policies = get_policies(runtime, &ty).await?;
-
-    let query_engine = &mut runtime.query_engine;
-    let stream = match field_name {
-        None => Box::pin(query_engine.find_all(&ty)),
-        Some(field_name) => {
-            Box::pin(query_engine.find_all_by(&ty, field_name, &content["value"])?)
-        }
-    };
-    let resource = QueryStreamResource {
-        stream: RefCell::new(stream),
-        policies,
-        ty,
-    };
-    let rid = op_state.borrow_mut().resource_table.add(resource);
-    Ok(rid)
 }
 
 struct QueryStreamResource2 {
@@ -333,27 +278,6 @@ async fn op_chisel_relational_query_create(
     };
     let rid = op_state.borrow_mut().resource_table.add(resource);
     Ok(rid)
-}
-
-async fn op_chisel_query_next(
-    state: Rc<RefCell<OpState>>,
-    query_stream_rid: ResourceId,
-    _: (),
-) -> Result<Option<serde_json::Value>> {
-    let resource: Rc<QueryStreamResource> = state.borrow().resource_table.get(query_stream_rid)?;
-    let mut stream = resource.stream.borrow_mut();
-    use futures::stream::StreamExt;
-
-    if let Some(row) = stream.next().await {
-        let row = row.unwrap();
-        let mut v = crate::query::engine::row_to_json(&resource.ty, &row)?;
-        for (field, xform) in &resource.policies {
-            v[field] = xform(v[field].take());
-        }
-        Ok(Some(v))
-    } else {
-        Ok(None)
-    }
 }
 
 async fn op_chisel_relational_query_next(
@@ -440,12 +364,10 @@ async fn create_deno(inspect_brk: bool) -> Result<DenoService> {
     // FIXME: Turn this into a deno extension
     runtime.register_op("chisel_read_body", op_async(op_chisel_read_body));
     runtime.register_op("chisel_store", op_async(op_chisel_store));
-    runtime.register_op("chisel_query_create", op_async(op_chisel_query_create));
     runtime.register_op(
         "chisel_relational_query_create",
         op_async(op_chisel_relational_query_create),
     );
-    runtime.register_op("chisel_query_next", op_async(op_chisel_query_next));
     runtime.register_op(
         "chisel_relational_query_next",
         op_async(op_chisel_relational_query_next),

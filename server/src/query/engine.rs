@@ -8,7 +8,7 @@ use futures::stream::Stream;
 use futures::StreamExt;
 use itertools::zip;
 use itertools::Itertools;
-use sea_query::{Alias, ColumnDef, Expr, PostgresQueryBuilder, Query, SqliteQueryBuilder, Table};
+use sea_query::{Alias, ColumnDef, Table};
 use serde_json::json;
 use sqlx::any::{Any, AnyPool, AnyRow};
 use sqlx::Column;
@@ -145,61 +145,6 @@ impl QueryEngine {
         sql(&self.pool, rel)
     }
 
-    pub(crate) fn find_all(&self, ty: &ObjectType) -> SqlStream {
-        let query_str = format!("SELECT * FROM {}", ty.backing_table());
-        QueryResults::new(query_str, &self.pool)
-    }
-
-    pub(crate) fn find_all_by(
-        &self,
-        ty: &ObjectType,
-        field_name: &str,
-        value_json: &serde_json::Value,
-    ) -> anyhow::Result<SqlStream> {
-        let key_field = ty
-            .fields
-            .iter()
-            .find(|&f| f.name == field_name)
-            .ok_or_else(|| {
-                QueryError::UnknownField(ty.name().to_owned(), field_name.to_string())
-            })?;
-
-        macro_rules! make_column_filter {
-            ($as_type:ident) => {{
-                let value = value_json.$as_type().ok_or_else(|| {
-                    QueryError::IncompatibleData(key_field.name.to_owned(), ty.name().to_owned())
-                })?;
-                Expr::col(Alias::new(field_name)).eq(value)
-            }};
-        }
-        let col_filter = match key_field.type_ {
-            Type::String => make_column_filter!(as_str),
-            Type::Int => make_column_filter!(as_i64),
-            Type::Float => make_column_filter!(as_f64),
-            Type::Boolean => make_column_filter!(as_bool),
-            Type::Object(_) => {
-                anyhow::bail!(QueryError::NotImplemented(
-                    "support for type Object".to_owned(),
-                ));
-            }
-        };
-
-        let mut query = Query::select();
-        for field in &ty.fields {
-            query.column(Alias::new(&field.name));
-        }
-        let query = query
-            .from(Alias::new(ty.backing_table()))
-            .cond_where(col_filter)
-            .to_owned();
-
-        let query_str = match self.kind {
-            Kind::Postgres => query.to_string(PostgresQueryBuilder),
-            Kind::Sqlite => query.to_string(SqliteQueryBuilder),
-        };
-        Ok(QueryResults::new(query_str, &self.pool))
-    }
-
     pub(crate) async fn add_row(
         &self,
         ty: &ObjectType,
@@ -307,31 +252,4 @@ pub(crate) fn relational_row_to_json(
         ret[result_column.name()] = val;
     }
     Ok(ret)
-}
-
-pub(crate) fn row_to_json(ty: &ObjectType, row: &AnyRow) -> anyhow::Result<serde_json::Value> {
-    let mut v = serde_json::json!({});
-    for field in &ty.fields {
-        macro_rules! try_setting_field {
-            ($value_type:ty) => {{
-                let str_val = row
-                    .try_get::<$value_type, _>(&*field.name)
-                    .map_err(QueryError::ParsingFailed)?;
-                v[&field.name] = serde_json::json!(str_val);
-            }};
-        }
-
-        match field.type_ {
-            Type::String => try_setting_field!(&str),
-            Type::Int => try_setting_field!(i32),
-            Type::Float => try_setting_field!(f64),
-            Type::Boolean => try_setting_field!(bool),
-            Type::Object(_) => {
-                anyhow::bail!(QueryError::NotImplemented(
-                    "support for type Object".to_owned(),
-                ));
-            }
-        }
-    }
-    Ok(v)
 }
