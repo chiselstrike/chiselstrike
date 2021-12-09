@@ -237,7 +237,7 @@ async fn op_chisel_store(
     runtime.query_engine.add_row(&ty, &content["value"]).await
 }
 
-type DbStream2 = RefCell<Pin<Box<dyn stream::Stream<Item = anyhow::Result<serde_json::Value>>>>>;
+type DbStream = RefCell<Pin<Box<dyn stream::Stream<Item = anyhow::Result<serde_json::Value>>>>>;
 
 pub(crate) async fn get_policies(
     runtime: &Runtime,
@@ -248,11 +248,11 @@ pub(crate) async fn get_policies(
     Ok(policies)
 }
 
-struct QueryStreamResource2 {
-    stream: DbStream2,
+struct QueryStreamResource {
+    stream: DbStream,
 }
 
-impl Resource for QueryStreamResource2 {}
+impl Resource for QueryStreamResource {}
 
 async fn op_chisel_relational_query_create(
     op_state: Rc<RefCell<OpState>>,
@@ -267,13 +267,13 @@ async fn op_chisel_relational_query_create(
     // serde_v8::value, which means we need a scope to then
     // deserialize those. There is a scope is the decoder, but there
     // is no way to access it from here. We would have to replace
-    // op_chisel_query_create2 with a closure that has an
+    // op_chisel_relational_query_create with a closure that has an
     // Rc<DenoService>.
     let relation = convert(&relation).await?;
     let runtime = &mut runtime::get().await;
     let query_engine = &mut runtime.query_engine;
     let stream = Box::pin(query_engine.query_relation(&relation));
-    let resource = QueryStreamResource2 {
+    let resource = QueryStreamResource {
         stream: RefCell::new(stream),
     };
     let rid = op_state.borrow_mut().resource_table.add(resource);
@@ -285,7 +285,7 @@ async fn op_chisel_relational_query_next(
     query_stream_rid: ResourceId,
     _: (),
 ) -> Result<Option<serde_json::Value>> {
-    let resource: Rc<QueryStreamResource2> = state.borrow().resource_table.get(query_stream_rid)?;
+    let resource: Rc<QueryStreamResource> = state.borrow().resource_table.get(query_stream_rid)?;
     let mut stream = resource.stream.borrow_mut();
     use futures::stream::StreamExt;
 

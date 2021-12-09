@@ -4,8 +4,8 @@ use crate::deno::get_policies;
 use crate::policies::FieldPolicies;
 use crate::query::engine;
 use crate::query::engine::QueryResults;
+use crate::query::engine::RawSqlStream;
 use crate::query::engine::SqlStream;
-use crate::query::engine::SqlStream2;
 use crate::runtime;
 use crate::types::Type;
 use anyhow::{anyhow, Result};
@@ -130,11 +130,11 @@ fn column_list(rel: &Relation) -> String {
 
 enum Query {
     Sql(String),
-    Stream(SqlStream2),
+    Stream(SqlStream),
 }
 
 struct PolicyApplyingStream {
-    inner: SqlStream,
+    inner: RawSqlStream,
     policies: FieldPolicies,
     columns: Vec<(String, Type)>,
 }
@@ -269,7 +269,7 @@ fn sql_impl(pool: &AnyPool, rel: &Relation, alias_count: &mut u32) -> Query {
     }
 }
 
-pub(crate) fn sql(pool: &AnyPool, rel: &Relation) -> SqlStream2 {
+pub(crate) fn sql(pool: &AnyPool, rel: &Relation) -> SqlStream {
     let mut v = 0;
     match sql_impl(pool, rel, &mut v) {
         Query::Sql(s) => {

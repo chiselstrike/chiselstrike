@@ -31,7 +31,7 @@ Chisel.store = async function (typeName, content) {
     await Deno.core.opAsync("chisel_store", { name: typeName, value: content });
 };
 
-function createResultIterator2(rid) {
+function createResultIterator(rid) {
     return {
         [Symbol.asyncIterator]() {
             return {
@@ -61,7 +61,7 @@ Chisel.query = async function (foo) {
         "chisel_relational_query_create",
         foo.inner,
     );
-    return createResultIterator2(rid);
+    return createResultIterator(rid);
 };
 
 Chisel.json = function (body, status = 200) {

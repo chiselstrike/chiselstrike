@@ -18,13 +18,16 @@ use std::marker::PhantomPinned;
 use std::pin::Pin;
 use std::task::{Context, Poll};
 
-pub(crate) type SqlStream = BoxStream<'static, anyhow::Result<AnyRow>>;
-pub(crate) type SqlStream2 = BoxStream<'static, anyhow::Result<serde_json::Value>>;
+// Results directly out of the database
+pub(crate) type RawSqlStream = BoxStream<'static, anyhow::Result<AnyRow>>;
+
+// Results with policies applied
+pub(crate) type SqlStream = BoxStream<'static, anyhow::Result<serde_json::Value>>;
 
 pub(crate) struct QueryResults {
     raw_query: String,
     // The streams we use in here only depend on the lifetime of raw_query.
-    stream: RefCell<Option<SqlStream>>,
+    stream: RefCell<Option<RawSqlStream>>,
     _marker: PhantomPinned, // QueryStream cannot be moved
 }
 
@@ -141,7 +144,7 @@ impl QueryEngine {
         Ok(())
     }
 
-    pub(crate) fn query_relation(&self, rel: &Relation) -> SqlStream2 {
+    pub(crate) fn query_relation(&self, rel: &Relation) -> SqlStream {
         sql(&self.pool, rel)
     }
 
