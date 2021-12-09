@@ -327,6 +327,85 @@ impl<'a> From<&'a ObjectType> for FieldMap<'a> {
     }
 }
 
+/// Uniquely describes a representation of a field.
+///
+/// See the [`ObjectDescriptor`] trait for details.
+/// Situations where a new versus existing field are created are similar.
+pub(crate) trait FieldDescriptor {
+    fn name(&self) -> String;
+    fn id(&self) -> Option<i32>;
+    fn ty(&self) -> Type;
+}
+
+pub(crate) struct ExistingField {
+    name: String,
+    ty_: Type,
+    id: i32,
+}
+
+impl ExistingField {
+    pub(crate) fn new(
+        ts: &TypeSystem,
+        name: &str,
+        id: i32,
+        field_type: &str,
+    ) -> anyhow::Result<Self> {
+        let split: Vec<&str> = name.split('.').collect();
+        anyhow::ensure!(split.len() == 2, "Expected version and type information as part of the field name. Got {}. Database corrupted?", name);
+        let name = split[1];
+
+        Ok(Self {
+            ty_: ts.lookup_type(field_type)?,
+            name: name.to_owned(),
+            id,
+        })
+    }
+}
+
+impl FieldDescriptor for ExistingField {
+    fn name(&self) -> String {
+        self.name.clone()
+    }
+
+    fn id(&self) -> Option<i32> {
+        Some(self.id)
+    }
+
+    fn ty(&self) -> Type {
+        self.ty_.clone()
+    }
+}
+
+pub(crate) struct NewField<'a> {
+    name: &'a str,
+    ty_: Type,
+}
+
+impl<'a> NewField<'a> {
+    pub(crate) fn new(
+        type_system: &TypeSystem,
+        name: &'a str,
+        type_name: &str,
+    ) -> anyhow::Result<Self> {
+        let ty_ = type_system.lookup_type(type_name)?;
+        Ok(Self { name, ty_ })
+    }
+}
+
+impl<'a> FieldDescriptor for NewField<'a> {
+    fn name(&self) -> String {
+        self.name.to_owned()
+    }
+
+    fn id(&self) -> Option<i32> {
+        None
+    }
+
+    fn ty(&self) -> Type {
+        self.ty_.clone()
+    }
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) struct Field {
     pub(crate) id: Option<i32>,
@@ -335,6 +414,28 @@ pub(crate) struct Field {
     pub(crate) labels: Vec<String>,
     pub(crate) default: Option<String>,
     pub(crate) is_optional: bool,
+}
+
+impl Field {
+    pub(crate) fn new<D: FieldDescriptor>(
+        desc: D,
+        labels: Vec<String>,
+        default: Option<String>,
+        is_optional: bool,
+    ) -> Self {
+        Self {
+            id: desc.id(),
+            name: desc.name(),
+            type_: desc.ty(),
+            labels,
+            default,
+            is_optional,
+        }
+    }
+
+    pub(crate) fn persisted_name(&self, parent_type_name: &ObjectType) -> String {
+        format!("{}.{}", parent_type_name.name(), self.name)
+    }
 }
 
 #[derive(Clone, Debug, PartialEq)]
