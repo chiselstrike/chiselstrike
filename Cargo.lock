@@ -1253,6 +1253,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "format-sql-query"
+version = "0.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0b1b61cc2d6fb938b6af82382a7c3fdc5580de4ea25c97a34d8f8ca29bc1a794"
+dependencies = [
+ "itertools 0.8.2",
+]
+
+[[package]]
 name = "from_variant"
 version = "0.1.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1854,6 +1863,15 @@ dependencies = [
  "proc-macro2 1.0.30",
  "quote 1.0.10",
  "syn 1.0.80",
+]
+
+[[package]]
+name = "itertools"
+version = "0.8.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f56a2d0bc861f9165be4eb3442afd3c236d8a98afd426f65d92324ae1091a484"
+dependencies = [
+ "either",
 ]
 
 [[package]]
@@ -3351,6 +3369,7 @@ dependencies = [
  "deno_web",
  "derive-new",
  "enclose",
+ "format-sql-query",
  "futures",
  "hyper 0.14.13 (git+https://github.com/hyperium/hyper?rev=1d553e52c6953ea3b039f5c3f89d35cb56e2436a)",
  "itertools 0.10.1",
