@@ -24,26 +24,24 @@ pub(crate) type RawSqlStream = BoxStream<'static, anyhow::Result<AnyRow>>;
 // Results with policies applied
 pub(crate) type SqlStream = BoxStream<'static, anyhow::Result<serde_json::Value>>;
 
-pub(crate) struct QueryResults {
+struct QueryResults {
     raw_query: String,
     // The streams we use in here only depend on the lifetime of raw_query.
     stream: RefCell<Option<RawSqlStream>>,
     _marker: PhantomPinned, // QueryStream cannot be moved
 }
 
-impl QueryResults {
-    pub(crate) fn new(raw_query: String, pool: &AnyPool) -> Pin<Box<Self>> {
-        let ret = Box::pin(QueryResults {
-            raw_query,
-            stream: RefCell::new(None),
-            _marker: PhantomPinned,
-        });
-        let ptr: *const String = &ret.raw_query;
-        let query = sqlx::query::<Any>(unsafe { &*ptr });
-        let stream = query.fetch(pool).map(|i| i.map_err(anyhow::Error::new));
-        ret.stream.replace(Some(Box::pin(stream)));
-        ret
-    }
+pub(crate) fn new_query_results(raw_query: String, pool: &AnyPool) -> RawSqlStream {
+    let ret = Box::pin(QueryResults {
+        raw_query,
+        stream: RefCell::new(None),
+        _marker: PhantomPinned,
+    });
+    let ptr: *const String = &ret.raw_query;
+    let query = sqlx::query::<Any>(unsafe { &*ptr });
+    let stream = query.fetch(pool).map(|i| i.map_err(anyhow::Error::new));
+    ret.stream.replace(Some(Box::pin(stream)));
+    ret
 }
 
 impl Stream for QueryResults {
