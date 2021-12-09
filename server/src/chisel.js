@@ -37,31 +37,6 @@ function createResultIterator(rid) {
             return {
                 async next() {
                     const value = await Deno.core.opAsync(
-                        "chisel_query_next",
-                        rid,
-                    );
-                    if (value) {
-                        return { value: value, done: false };
-                    } else {
-                        Deno.core.opSync("op_close", rid);
-                        return { done: true };
-                    }
-                },
-                return() {
-                    Deno.core.opSync("op_close", rid);
-                    return { done: true };
-                },
-            };
-        },
-    };
-}
-
-function createResultIterator2(rid) {
-    return {
-        [Symbol.asyncIterator]() {
-            return {
-                async next() {
-                    const value = await Deno.core.opAsync(
                         "chisel_relational_query_next",
                         rid,
                     );
@@ -81,28 +56,12 @@ function createResultIterator2(rid) {
     };
 }
 
-Chisel.find_all = async function (typeName) {
-    const rid = await Deno.core.opAsync("chisel_query_create", {
-        type_name: typeName,
-    });
-    return createResultIterator(rid);
-};
-
-Chisel.find_all_by = async function (typeName, fieldName, value) {
-    const rid = await Deno.core.opAsync("chisel_query_create", {
-        type_name: typeName,
-        field_name: fieldName,
-        value: value,
-    });
-    return createResultIterator(rid);
-};
-
 Chisel.query = async function (foo) {
     const rid = await Deno.core.opAsync(
         "chisel_relational_query_create",
         foo.inner,
     );
-    return createResultIterator2(rid);
+    return createResultIterator(rid);
 };
 
 Chisel.json = function (body, status = 200) {

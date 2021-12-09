@@ -7,7 +7,7 @@ function makeResponse(status, msg) {
 export default async function chisel(req) {
     if (req.method == 'GET') {
         try {
-            let images = await Chisel.find_all("Image");
+            let images = await Chisel.collections.Image.rows();
             let resp_json = [];
             for await (let img of images) {
                 resp_json.push({
