@@ -15,8 +15,8 @@ COPY target/release/chiseld /usr/local/bin/chiseld
 
 EXPOSE $API_PORT $RPC_PORT
 CMD /usr/local/bin/chiseld \
-  --api-listen-addr 127.0.0.1:$API_PORT \
+  --api-listen-addr 0.0.0.0:$API_PORT \
   --data-db-uri $DATA_DB_URI \
   --executor-threads $EXECUTOR_THREADS \
   --metadata-db-uri $METADATA_DB_URI \
-  --rpc-listen-addr 127.0.0.1:$RPC_PORT 
+  --rpc-listen-addr 0.0.0.0:$RPC_PORT 

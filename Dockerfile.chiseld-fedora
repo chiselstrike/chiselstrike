@@ -12,4 +12,9 @@ RUN yum -y update && \
 
 COPY target/release/chiseld /usr/local/bin/chiseld
 EXPOSE $API_PORT $RPC_PORT
-CMD  /usr/local/bin/chiseld -a 127.0.0.1:$API_PORT -d $DATA_DB_URI -e $EXECUTOR_THREADS -m $METADATA_DB_URI -r 127.0.0.1:$RPC_PORT
+CMD  /usr/local/bin/chiseld \ 
+  -a 0.0.0.0:$API_PORT \
+  -d $DATA_DB_URI \
+  -e $EXECUTOR_THREADS \
+  -m $METADATA_DB_URI \
+  -r 0.0.0.0:$RPC_PORT
