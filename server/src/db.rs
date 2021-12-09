@@ -87,11 +87,11 @@ async fn convert_filter(val: &serde_json::Value) -> Result<Relation> {
             Value::Null => anyhow::bail!("Null restriction"),
             Value::Bool(v) => format!("{}", v),
             Value::Number(v) => format!("{}", v),
-            Value::String(v) => v.clone(),
+            Value::String(v) => format!("'{}'", v),
             Value::Array(v) => anyhow::bail!("Array restriction {:?}", v),
             Value::Object(v) => anyhow::bail!("Object restriction {:?}", v),
         };
-        restriction_strs.push(format!("{}='{}'", k, v));
+        restriction_strs.push(format!("{}={}", k, v));
     }
     Ok(Relation {
         columns,
