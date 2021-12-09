@@ -4,6 +4,7 @@ pub(crate) mod schema;
 
 use crate::api::RoutePaths;
 use crate::deno;
+use crate::policies::Policies;
 use crate::query::{DbConnection, Kind, QueryError};
 use crate::types::{
     ExistingField, ExistingObject, Field, FieldDelta, ObjectDelta, ObjectType, TypeSystem,
@@ -358,6 +359,45 @@ impl MetaService {
             .await
             .map_err(QueryError::ConnectionFailed)?;
         Ok(())
+    }
+
+    /// Persist a specific policy version.
+    ///
+    /// We don't have a method that persist all policies, for all versions, because
+    /// versions are applied independently
+    pub(crate) async fn persist_policy_version(
+        &self,
+        transaction: &mut Transaction<'_, Any>,
+        version: &str,
+        policy: &str,
+    ) -> anyhow::Result<()> {
+        let add_policy = sqlx::query("INSERT INTO policies (policy_str, version) VALUES ($1, $2) ON CONFLICT(version) DO UPDATE SET policy_str = $1 WHERE version = $2");
+        transaction
+            .execute(add_policy.bind(policy.to_owned()).bind(version.to_owned()))
+            .await
+            .map_err(QueryError::ExecuteFailed)?;
+        Ok(())
+    }
+
+    /// Loads all policies, for all versions.
+    ///
+    /// Useful on startup, when we have to populate our in-memory state from the meta database.
+    pub(crate) async fn load_policies(&self) -> anyhow::Result<Policies> {
+        let get_policy = sqlx::query("SELECT version, policy_str FROM policies");
+
+        let rows = get_policy
+            .fetch_all(&self.pool)
+            .await
+            .map_err(QueryError::FetchFailed)?;
+
+        if let Some(row) = rows.into_iter().next() {
+            let version: &str = row.get("version");
+            let yaml: &str = row.get("policy_str");
+
+            anyhow::ensure!(version == "dev", "only one version supported for now");
+            return Policies::from_yaml(yaml);
+        }
+        Ok(Policies::default())
     }
 
     pub(crate) async fn insert_type(

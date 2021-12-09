@@ -2,7 +2,7 @@
 
 use crate::api::RoutePaths;
 use crate::deno;
-use crate::policies::{Policies, Policy};
+use crate::policies::Policies;
 use crate::query::{MetaService, QueryEngine};
 use crate::runtime;
 use crate::server::CommandTrait;
@@ -16,12 +16,10 @@ use chisel::{
     StatusResponse, TypeExportRequest, TypeExportResponse,
 };
 use futures::FutureExt;
-use log::debug;
 use std::collections::BTreeSet;
 use std::net::SocketAddr;
 use std::sync::Arc;
 use tonic::{transport::Server, Request, Response, Status};
-use yaml_rust::YamlLoader;
 
 pub(crate) mod chisel {
     tonic::include_proto!("chisel");
@@ -41,6 +39,7 @@ pub(crate) struct GlobalRpcState {
     query_engine: QueryEngine,
     routes: RoutePaths, // For globally keeping track of routes
     commands: Vec<CoordinatorChannel>,
+    policies: Policies,
 }
 
 impl GlobalRpcState {
@@ -51,6 +50,7 @@ impl GlobalRpcState {
     ) -> anyhow::Result<Self> {
         let type_system = meta.load_type_system().await?;
         let routes = meta.load_endpoints().await?;
+        let policies = meta.load_policies().await?;
 
         Ok(Self {
             type_system,
@@ -58,6 +58,7 @@ impl GlobalRpcState {
             query_engine,
             commands,
             routes,
+            policies,
         })
     }
 
@@ -103,7 +104,6 @@ impl RpcService {
         let mut type_names = BTreeSet::new();
         let mut type_names_user_order = vec![];
         let mut endpoint_routes = vec![];
-        let mut labels = vec![];
 
         for tdef in apply_request.types.iter() {
             type_names.insert(tdef.name.clone());
@@ -119,6 +119,18 @@ impl RpcService {
                 to_remove.push(removed.clone());
             }
         }
+
+        anyhow::ensure!(
+            apply_request.policies.len() <= 1,
+            "Currently only one policy file supported"
+        );
+
+        let policy_str = apply_request
+            .policies
+            .get(0)
+            .map(|x| x.policy_config.as_ref())
+            .unwrap_or("");
+        let policies = Policies::from_yaml(policy_str)?;
 
         if !to_remove.is_empty() && !apply_request.allow_type_deletion {
             anyhow::bail!("Trying to remove types from type file. This will delete the underlying data associated with this type. To proceed, apply again with --allow-type-deletion");
@@ -158,6 +170,9 @@ impl RpcService {
         let meta = &state.meta;
         let mut transaction = meta.start_transaction().await?;
 
+        meta.persist_policy_version(&mut transaction, "dev", policy_str)
+            .await?;
+
         for ty in to_insert.iter() {
             // FIXME: Consistency between metadata and backing store updates.
             meta.insert_type(&mut transaction, ty).await?;
@@ -170,10 +185,15 @@ impl RpcService {
         for ty in to_remove.iter() {
             meta.remove_type(&mut transaction, ty).await?;
         }
+
         MetaService::commit_transaction(transaction).await?;
 
+        let labels: Vec<String> = policies.labels.keys().map(|x| x.to_owned()).collect();
+        let type_system = meta.load_type_system().await?;
+
         // Reload the type system so that we have new ids
-        state.type_system = meta.load_type_system().await?;
+        state.type_system = type_system;
+        state.policies = policies;
 
         // Update the data database after all the metdata is up2date.
         // We will not get a single transaction because in the general case those things
@@ -204,54 +224,9 @@ impl RpcService {
 
         state.meta.persist_endpoints(&state.routes).await?;
 
-        let mut policies = Policies::new();
-
-        for policy in apply_request.policies {
-            let docs = YamlLoader::load_from_str(&policy.policy_config)?;
-            for config in docs.iter() {
-                for label in config["labels"].as_vec().get_or_insert(&[].into()).iter() {
-                    let name = label["name"].as_str().ok_or_else(|| {
-                        anyhow::anyhow!("couldn't parse yaml: label without a name: {:?}", label)
-                    })?;
-
-                    labels.push(name.to_owned());
-                    debug!("Applying policy for label {:?}", name);
-
-                    match label["transform"].as_str() {
-                        Some("anonymize") => {
-                            let pattern = label["except_uri"].as_str().unwrap_or("^$"); // ^$ never matches; each path has at least a '/' in it.
-                            policies.labels.insert(
-                                name.to_owned(),
-                                Policy {
-                                    transform: crate::policies::anonymize,
-                                    except_uri: regex::Regex::new(pattern)?,
-                                },
-                            );
-                        }
-                        Some(x) => {
-                            anyhow::bail!("unknown transform: {} for label {}", x, name);
-                        }
-                        None => {}
-                    };
-                }
-                for endpoint in config["endpoints"]
-                    .as_vec()
-                    .get_or_insert(&[].into())
-                    .iter()
-                {
-                    if let Some(path) = endpoint["path"].as_str() {
-                        if let Some(users) = endpoint["users"].as_str() {
-                            policies
-                                .user_authorization
-                                .add(path, regex::Regex::new(users)?)?;
-                        }
-                    }
-                }
-            }
-        }
-
         let endpoints = endpoint_routes.clone();
         let type_system = state.type_system.clone();
+        let policies = state.policies.clone();
 
         let cmd = send_command!({
             let runtime = &mut runtime::get().await;
