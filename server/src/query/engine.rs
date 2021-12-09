@@ -3,15 +3,14 @@
 use crate::db::{sql, Relation};
 use crate::query::{DbConnection, Kind, QueryError};
 use crate::types::{ObjectType, Type};
-use anyhow::Result;
 use futures::stream::BoxStream;
 use futures::stream::Stream;
+use futures::StreamExt;
 use itertools::zip;
 use itertools::Itertools;
 use sea_query::{Alias, ColumnDef, Expr, PostgresQueryBuilder, Query, SqliteQueryBuilder, Table};
 use serde_json::json;
 use sqlx::any::{Any, AnyPool, AnyRow};
-use sqlx::error::Error;
 use sqlx::Column;
 use sqlx::{Executor, Row};
 use std::cell::RefCell;
@@ -19,7 +18,7 @@ use std::marker::PhantomPinned;
 use std::pin::Pin;
 use std::task::{Context, Poll};
 
-type SqlStream = BoxStream<'static, Result<AnyRow, sqlx::error::Error>>;
+type SqlStream = BoxStream<'static, anyhow::Result<AnyRow>>;
 
 pub(crate) struct QueryResults {
     raw_query: String,
@@ -37,14 +36,14 @@ impl QueryResults {
         });
         let ptr: *const String = &ret.raw_query;
         let query = sqlx::query::<Any>(unsafe { &*ptr });
-        let stream = query.fetch(pool);
-        ret.stream.replace(Some(stream));
+        let stream = query.fetch(pool).map(|i| i.map_err(anyhow::Error::new));
+        ret.stream.replace(Some(Box::pin(stream)));
         ret
     }
 }
 
 impl Stream for QueryResults {
-    type Item = Result<AnyRow, Error>;
+    type Item = anyhow::Result<AnyRow>;
 
     fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
         let mut borrow = self.stream.borrow_mut();
