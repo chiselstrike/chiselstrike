@@ -167,31 +167,33 @@ impl ApiService {
         req: Request<hyper::Body>,
     ) -> hyper::http::Result<Response<Body>> {
         if let Some(route_fn) = self.longest_prefix(req.uri().path()) {
-            match req.headers().get("ChiselStrikeToken") {
+            let username = match req.headers().get("ChiselStrikeToken") {
                 Some(token) => {
                     let token = token.to_str();
-                    if token.is_err()
-                        || crate::runtime::get()
-                            .await
-                            .meta
-                            .get_username(token.unwrap())
-                            .await
-                            .is_err()
-                    {
+                    if token.is_err() {
                         return Response::builder()
                             .status(StatusCode::FORBIDDEN)
                             .body("Token not recognized\n".to_string().into());
                     }
+                    crate::runtime::get()
+                        .await
+                        .meta
+                        .get_username(token.unwrap())
+                        .await
+                        .ok()
                 }
-                None => {
-                    // TODO: DRY crate::runtime::get() and make the tests not block/timeout when I do. :)
-                    let authorize = &crate::runtime::get().await.policies.authorize;
-                    if authorize.contains(req.uri().path().strip_prefix('/').unwrap_or("")) {
-                        return Response::builder()
-                            .status(StatusCode::FORBIDDEN)
-                            .body("Must be logged in\n".to_string().into());
-                    }
-                }
+                None => None,
+            };
+            // TODO: DRY crate::runtime::get() and make the tests not block/timeout when I do. :)
+            if !crate::runtime::get()
+                .await
+                .policies
+                .user_authorization
+                .is_allowed(username, req.uri().path())
+            {
+                return Response::builder()
+                    .status(StatusCode::FORBIDDEN)
+                    .body("Unauthorized user\n".to_string().into());
             }
             return match route_fn(req).await {
                 Ok(val) => Ok(val),
