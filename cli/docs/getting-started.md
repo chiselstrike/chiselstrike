@@ -79,7 +79,7 @@ The next endpoint we will create is a `/find-all-people` endpoint that returns a
 cat << EOF | chisel end-point create find-all-people -
 async function chisel(req) {
     let response = "";
-    let people = await Chisel.find_all("Person");
+    let people = await Chisel.collections.Person.rows();
     for await (let person of people) {
         response += person.first_name + " " + person.last_name;
         response += " ";
