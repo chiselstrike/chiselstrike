@@ -25,12 +25,6 @@ pub(crate) struct TypeSystem {
 }
 
 impl TypeSystem {
-    pub(crate) fn new() -> Self {
-        TypeSystem {
-            types: HashMap::default(),
-        }
-    }
-
     /// Adds an object type to the type system.
     ///
     /// # Arguments
