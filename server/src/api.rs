@@ -174,7 +174,6 @@ impl ApiService {
                 }
                 None => None,
             };
-            // TODO: DRY crate::runtime::get() and make the tests not block/timeout when I do. :)
             if !crate::runtime::get()
                 .await
                 .policies
