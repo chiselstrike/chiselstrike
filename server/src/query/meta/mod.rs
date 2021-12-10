@@ -247,7 +247,7 @@ impl MetaService {
             .fetch_all(&self.pool)
             .await
             .map_err(QueryError::FetchFailed)?;
-        let mut ts = TypeSystem::new();
+        let mut ts = TypeSystem::default();
         for row in rows {
             let type_id: i32 = row.get("type_id");
             let backing_table: &str = row.get("backing_table");
