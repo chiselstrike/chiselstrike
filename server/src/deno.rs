@@ -1,6 +1,6 @@
 // SPDX-FileCopyrightText: © 2021 ChiselStrike <info@chiselstrike.com>
 
-use crate::api::Body;
+use crate::api::{Body, RequestPath};
 use crate::db::convert;
 use crate::policies::FieldPolicies;
 use crate::runtime;
@@ -233,7 +233,12 @@ async fn op_chisel_store(
         .as_str()
         .ok_or_else(|| anyhow!("Type name error; the .name key must have a string value"))?;
     let runtime = &mut runtime::get().await;
-    let ty = runtime.type_system.lookup_object_type(type_name)?;
+    let api_version = current_api_version();
+
+    let ty = runtime
+        .type_system
+        .lookup_object_type(type_name, &api_version)?;
+
     runtime.query_engine.add_row(&ty, &content["value"]).await
 }
 
@@ -244,7 +249,7 @@ pub(crate) async fn get_policies(
     ty: &ObjectType,
 ) -> anyhow::Result<FieldPolicies> {
     let mut policies = FieldPolicies::default();
-    CURRENT_REQUEST_PATH.with(|p| runtime.get_policies(ty, &mut policies, &p.borrow()));
+    CURRENT_REQUEST_PATH.with(|p| runtime.get_policies(ty, &mut policies, p.borrow().path()));
     Ok(policies)
 }
 
@@ -505,13 +510,22 @@ impl Resource for BodyResource {
 }
 
 thread_local! {
-    static CURRENT_REQUEST_PATH : RefCell<String> = RefCell::new("".into());
+    static CURRENT_REQUEST_PATH : RefCell<RequestPath> = RefCell::new(Default::default());
+}
+
+pub(crate) fn current_api_version() -> String {
+    CURRENT_REQUEST_PATH.with(|p| {
+        let x = p.borrow();
+        x.api_version().to_string()
+    })
 }
 
 fn set_current_path(current_path: String) {
+    let rp = RequestPath::try_from(current_path.as_ref()).unwrap();
+
     CURRENT_REQUEST_PATH.with(|path| {
         let mut borrow = path.borrow_mut();
-        *borrow = current_path.clone();
+        *borrow = rp;
     });
 }
 

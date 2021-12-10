@@ -21,8 +21,8 @@ cd "$TEMPDIR"
 $CHISEL apply
 
 # CHECK: Type defined: Person
-# CHECK: End point defined: /query
-# CHECK: End point defined: /store
+# CHECK: End point defined: /dev/query
+# CHECK: End point defined: /dev/store
 
 $CURL --data '{
     "first_name":"Bob'\''",
@@ -30,10 +30,10 @@ $CURL --data '{
     "age": 666,
     "human": true,
     "height": 10.01
-}' -o - $CHISELD_HOST/store
+}' -o - $CHISELD_HOST/dev/store
 
 # CHECK: ok
 
-$CURL -o - $CHISELD_HOST/query
+$CURL -o - $CHISELD_HOST/dev/query
 
 # CHECK:  Bob' Tables

@@ -15,9 +15,9 @@ EOF
 cd "$TEMPDIR"
 $CHISEL apply
 
-# CHECK: End point defined: /test1
+# CHECK: End point defined: /dev/test1
 
-$CURL -o - $CHISELD_HOST/test1
+$CURL -o - $CHISELD_HOST/dev/test1
 # CHECK: HTTP/1.1 200 OK
 # CHECK: test OK
 
@@ -34,9 +34,9 @@ export default async function chisel(req) {
 EOF
 $CHISEL apply
 
-# CHECK: End point defined: /test2
+# CHECK: End point defined: /dev/test2
 
-$CURL -o - $CHISELD_HOST/test2
+$CURL -o - $CHISELD_HOST/dev/test2
 
 # CHECK: HTTP/1.1 500 Internal Server Error
 # CHECK: foo is not defined

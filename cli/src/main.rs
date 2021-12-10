@@ -4,8 +4,8 @@ use crate::chisel::StatusResponse;
 use anyhow::{anyhow, Context, Result};
 use chisel::chisel_rpc_client::ChiselRpcClient;
 use chisel::{
-    ChiselApplyRequest, EndPointCreationRequest, PolicyUpdateRequest, RestartRequest,
-    StatusRequest, TypeExportRequest,
+    ChiselApplyRequest, ChiselDeleteRequest, EndPointCreationRequest, PolicyUpdateRequest,
+    RestartRequest, StatusRequest, TypeExportRequest,
 };
 use futures::channel::mpsc::channel;
 use futures::{SinkExt, StreamExt};
@@ -82,6 +82,11 @@ fn dir_to_paths(dir: &Path, paths: &mut Vec<PathBuf>) -> anyhow::Result<()> {
     Ok(())
 }
 
+fn parse_version(version: &str) -> anyhow::Result<String> {
+    anyhow::ensure!(!version.is_empty(), "version name can't be empty");
+    Ok(version.to_string())
+}
+
 #[derive(PartialOrd, PartialEq, Eq, Ord)]
 struct Endpoint {
     name: String,
@@ -143,6 +148,8 @@ impl Manifest {
     }
 }
 
+static DEFAULT_API_VERSION: &str = "dev";
+
 #[derive(StructOpt, Debug)]
 #[structopt(name = "chisel")]
 struct Opt {
@@ -170,6 +177,12 @@ enum Command {
     Apply {
         #[structopt(long)]
         allow_type_deletion: bool,
+        #[structopt(long, default_value = DEFAULT_API_VERSION, parse(try_from_str=parse_version))]
+        version: String,
+    },
+    Delete {
+        #[structopt(long, default_value = DEFAULT_API_VERSION, parse(try_from_str=parse_version))]
+        version: String,
     },
 }
 
@@ -278,7 +291,26 @@ macro_rules! execute {
     }};
 }
 
-async fn apply(server_url: String, allow_type_deletion: AllowTypeDeletion) -> Result<()> {
+async fn delete<S: ToString>(server_url: String, version: S) -> Result<()> {
+    let version = version.to_string();
+    let mut client = ChiselRpcClient::connect(server_url).await?;
+
+    let msg = execute!(
+        client
+            .delete(tonic::Request::new(ChiselDeleteRequest { version }))
+            .await
+    );
+    println!("{}", msg.result);
+    Ok(())
+}
+
+async fn apply<S: ToString>(
+    server_url: String,
+    version: S,
+    allow_type_deletion: AllowTypeDeletion,
+) -> Result<()> {
+    let version = version.to_string();
+
     let manifest = read_manifest()?;
     let types = manifest.types()?;
     let endpoints = manifest.endpoints()?;
@@ -315,6 +347,7 @@ async fn apply(server_url: String, allow_type_deletion: AllowTypeDeletion) -> Re
                 endpoints: endpoints_req,
                 policies: policy_req,
                 allow_type_deletion: allow_type_deletion.into(),
+                version,
             }))
             .await
     );
@@ -356,7 +389,12 @@ async fn main() -> Result<()> {
             cmd.push("chiseld");
             let mut server = std::process::Command::new(cmd).spawn()?;
             wait(server_url.clone()).await?;
-            apply(server_url.clone(), AllowTypeDeletion::No).await?;
+            apply(
+                server_url.clone(),
+                DEFAULT_API_VERSION,
+                AllowTypeDeletion::No,
+            )
+            .await?;
             let (mut tx, mut rx) = channel(1);
             let mut apply_watcher =
                 RecommendedWatcher::new(move |res: Result<Event, notify::Error>| {
@@ -379,7 +417,12 @@ async fn main() -> Result<()> {
                 match res {
                     Ok(event) => {
                         if event.kind.is_modify() {
-                            apply(server_url.clone(), AllowTypeDeletion::No).await?;
+                            apply(
+                                server_url.clone(),
+                                DEFAULT_API_VERSION,
+                                AllowTypeDeletion::No,
+                            )
+                            .await?;
                         }
                     }
                     Err(e) => println!("watch error: {:?}", e),
@@ -399,28 +442,32 @@ async fn main() -> Result<()> {
                 let request = tonic::Request::new(TypeExportRequest {});
                 let response = execute!(client.export_types(request).await);
 
-                for def in response.type_defs {
-                    println!("class {} {{", def.name);
-                    for field in def.field_defs {
-                        println!(
-                            "  {} {}{}: {}{};",
-                            field
-                                .labels
-                                .iter()
-                                .map(|x| format!(" @{}", x))
-                                .collect::<String>(),
-                            field.name,
-                            if field.is_optional { "?" } else { "" },
-                            field.field_type,
-                            field
-                                .default_value
-                                .map(|d| if field.field_type == "string" {
-                                    format!(" = \"{}\"", d)
-                                } else {
-                                    format!(" = {}", d)
-                                })
-                                .unwrap_or_else(|| "".into()),
-                        );
+                for version_def in response.version_defs {
+                    println!("Version: {} {{", version_def.version);
+                    for def in version_def.type_defs {
+                        println!("  class {} {{", def.name);
+                        for field in def.field_defs {
+                            println!(
+                                "    {} {}{}: {}{};",
+                                field
+                                    .labels
+                                    .iter()
+                                    .map(|x| format!(" @{}", x))
+                                    .collect::<String>(),
+                                field.name,
+                                if field.is_optional { "?" } else { "" },
+                                field.field_type,
+                                field
+                                    .default_value
+                                    .map(|d| if field.field_type == "string" {
+                                        format!(" = \"{}\"", d)
+                                    } else {
+                                        format!(" = {}", d)
+                                    })
+                                    .unwrap_or_else(|| "".into()),
+                            );
+                        }
+                        println!("  }}");
                     }
                     println!("}}");
                 }
@@ -437,8 +484,12 @@ async fn main() -> Result<()> {
         }
         Command::Apply {
             allow_type_deletion,
+            version,
         } => {
-            apply(server_url.clone(), allow_type_deletion.into()).await?;
+            apply(server_url.clone(), version, allow_type_deletion.into()).await?;
+        }
+        Command::Delete { version } => {
+            delete(server_url.clone(), version).await?;
         }
     }
     Ok(())

@@ -10,8 +10,8 @@ cd "$TEMPDIR"
 $CHISEL apply
 
 # CHECK: Type defined: Person
-# CHECK: End point defined: /find
-# CHECK: End point defined: /ins
+# CHECK: End point defined: /dev/find
+# CHECK: End point defined: /dev/ins
 
 $CURL --data '{
     "first_name":"hello", 
@@ -19,11 +19,11 @@ $CURL --data '{
     "age": 2147483647, 
     "human": false, 
     "height": 12742333
-}' -o - $CHISELD_HOST/ins
+}' -o - $CHISELD_HOST/dev/ins
 
 # CHECK: ok
 
-$CURL -o - $CHISELD_HOST/find
+$CURL -o - $CHISELD_HOST/dev/find
 
 # CHECK: HTTP/1.1 200 OK
 # CHECK: hello world 2147483647 false 12742333
@@ -35,7 +35,7 @@ labels:
 EOF
 $CHISEL apply
 
-$CURL -o - $CHISELD_HOST/find
+$CURL -o - $CHISELD_HOST/dev/find
 
 # CHECK: HTTP/1.1 200 OK
 # CHECK: hello xxxxx
@@ -61,7 +61,7 @@ labels:
 EOF
 $CHISEL apply
 
-$CURL -o - $CHISELD_HOST/find
+$CURL -o - $CHISELD_HOST/dev/find
 
 # CHECK: HTTP/1.1 200 OK
 # CHECK: xxxxx xxxxx
@@ -74,7 +74,7 @@ labels:
 EOF
 $CHISEL apply
 
-$CURL -o - $CHISELD_HOST/find
+$CURL -o - $CHISELD_HOST/dev/find
 # CHECK: HTTP/1.1 200 OK
 # CHECK: hello world
 
@@ -86,7 +86,7 @@ labels:
 EOF
 $CHISEL apply
 
-$CURL -o - $CHISELD_HOST/find
+$CURL -o - $CHISELD_HOST/dev/find
 # CHECK: HTTP/1.1 200 OK
 # CHECK: hello world
 
@@ -98,6 +98,6 @@ labels:
 EOF
 $CHISEL apply
 
-$CURL -o - $CHISELD_HOST/find
+$CURL -o - $CHISELD_HOST/dev/find
 # CHECK: HTTP/1.1 200 OK
 # CHECK: xxxxx xxxxx

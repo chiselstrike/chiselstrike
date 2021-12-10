@@ -2,7 +2,7 @@
 
 use crate::api::RoutePaths;
 use crate::deno;
-use crate::policies::Policies;
+use crate::policies::{Policies, VersionPolicy};
 use crate::query::{MetaService, QueryEngine};
 use crate::runtime;
 use crate::server::CommandTrait;
@@ -12,8 +12,9 @@ use anyhow::Result;
 use async_mutex::Mutex;
 use chisel::chisel_rpc_server::{ChiselRpc, ChiselRpcServer};
 use chisel::{
-    ChiselApplyRequest, ChiselApplyResponse, RestartRequest, RestartResponse, StatusRequest,
-    StatusResponse, TypeExportRequest, TypeExportResponse,
+    ChiselApplyRequest, ChiselApplyResponse, ChiselDeleteRequest, ChiselDeleteResponse,
+    RestartRequest, RestartResponse, StatusRequest, StatusResponse, TypeExportRequest,
+    TypeExportResponse,
 };
 use futures::FutureExt;
 use std::collections::BTreeSet;
@@ -93,6 +94,67 @@ impl RpcService {
         Self { state }
     }
 
+    /// Delete a new version of ChiselStrike
+    async fn delete_aux(
+        &self,
+        request: Request<ChiselDeleteRequest>,
+    ) -> anyhow::Result<Response<ChiselDeleteResponse>> {
+        let mut state = self.state.lock().await;
+        let apply_request = request.into_inner();
+        let api_version = apply_request.version;
+
+        anyhow::ensure!(
+            "__chiselstrike" != &api_version,
+            "__chiselstrike is a reserved version name"
+        );
+
+        let type_system = state.type_system.get_version(&api_version)?;
+        let to_remove: Vec<&Arc<ObjectType>> = type_system.types.iter().map(|x| x.1).collect();
+
+        let meta = &state.meta;
+        let mut transaction = meta.start_transaction().await?;
+
+        meta.delete_policy_version(&mut transaction, &api_version)
+            .await?;
+
+        for ty in to_remove.iter() {
+            meta.remove_type(&mut transaction, ty).await?;
+        }
+
+        MetaService::commit_transaction(transaction).await?;
+
+        let query_engine = &state.query_engine;
+        for ty in to_remove.into_iter() {
+            query_engine.drop_table(ty).await?;
+        }
+
+        let regex = regex::Regex::new(&format!("/{}/.*", api_version)).unwrap();
+        state.routes.remove_routes(regex.clone());
+        state.type_system.versions.remove(&api_version);
+        state.policies.versions.remove(&api_version);
+
+        let version = api_version.clone();
+
+        let cmd = send_command!({
+            let runtime = &mut runtime::get().await;
+            let type_system = &mut runtime.type_system;
+
+            type_system.versions.remove(&version);
+            type_system.refresh_types()?;
+
+            runtime.policies.versions.remove(&version);
+
+            let mut api = runtime.api.lock().await;
+            api.remove_routes(regex);
+            Ok(())
+        });
+        state.send_command(cmd).await?;
+
+        Ok(Response::new(ChiselDeleteResponse {
+            result: format!("deleted {}", api_version),
+        }))
+    }
+
     /// Apply a new version of ChiselStrike
     async fn apply_aux(
         &self,
@@ -100,6 +162,12 @@ impl RpcService {
     ) -> anyhow::Result<Response<ChiselApplyResponse>> {
         let mut state = self.state.lock().await;
         let apply_request = request.into_inner();
+        let api_version = apply_request.version;
+
+        anyhow::ensure!(
+            "__chiselstrike" != &api_version,
+            "__chiselstrike is a reserved version name"
+        );
 
         let mut type_names = BTreeSet::new();
         let mut type_names_user_order = vec![];
@@ -114,7 +182,9 @@ impl RpcService {
         let mut to_insert = vec![];
         let mut to_update = vec![];
 
-        for (existing, removed) in state.type_system.types.iter() {
+        let type_system = state.type_system.get_version_mut(&api_version);
+
+        for (existing, removed) in type_system.types.iter() {
             if type_names.get(existing).is_none() {
                 to_remove.push(removed.clone());
             }
@@ -130,7 +200,8 @@ impl RpcService {
             .get(0)
             .map(|x| x.policy_config.as_ref())
             .unwrap_or("");
-        let policies = Policies::from_yaml(policy_str)?;
+
+        let policy = VersionPolicy::from_yaml(policy_str)?;
 
         if !to_remove.is_empty() && !apply_request.allow_type_deletion {
             anyhow::bail!("Trying to remove types from type file. This will delete the underlying data associated with this type. To proceed, apply again with --allow-type-deletion");
@@ -144,7 +215,8 @@ impl RpcService {
 
             let mut fields = Vec::new();
             for field in type_def.field_defs {
-                let desc = NewField::new(&state.type_system, &field.name, &field.field_type)?;
+                let desc =
+                    NewField::new(type_system, &field.name, &field.field_type, &api_version)?;
                 fields.push(Field::new(
                     desc,
                     field.labels,
@@ -153,14 +225,17 @@ impl RpcService {
                 ));
             }
 
-            let ty = Arc::new(ObjectType::new(NewObject::new(&name), fields));
+            let ty = Arc::new(ObjectType::new(
+                NewObject::new(&name, &api_version),
+                fields,
+            )?);
 
-            match state.type_system.lookup_object_type(&name) {
+            match type_system.lookup_object_type(&name) {
                 Ok(old_type) => {
                     let delta = TypeSystem::generate_type_delta(&old_type, ty)?;
                     to_update.push((old_type.clone(), delta));
                 }
-                Err(TypeSystemError::NoSuchType(_)) => {
+                Err(TypeSystemError::NoSuchType(_) | TypeSystemError::NoSuchVersion(_)) => {
                     to_insert.push(ty.clone());
                 }
                 Err(e) => anyhow::bail!(e),
@@ -170,7 +245,7 @@ impl RpcService {
         let meta = &state.meta;
         let mut transaction = meta.start_transaction().await?;
 
-        meta.persist_policy_version(&mut transaction, "dev", policy_str)
+        meta.persist_policy_version(&mut transaction, &api_version, policy_str)
             .await?;
 
         for ty in to_insert.iter() {
@@ -188,12 +263,15 @@ impl RpcService {
 
         MetaService::commit_transaction(transaction).await?;
 
-        let labels: Vec<String> = policies.labels.keys().map(|x| x.to_owned()).collect();
+        let labels: Vec<String> = policy.labels.keys().map(|x| x.to_owned()).collect();
         let type_system = meta.load_type_system().await?;
 
         // Reload the type system so that we have new ids
         state.type_system = type_system;
-        state.policies = policies;
+        state
+            .policies
+            .versions
+            .insert(api_version.to_owned(), policy.clone());
 
         // Update the data database after all the metdata is up2date.
         // We will not get a single transaction because in the general case those things
@@ -208,11 +286,11 @@ impl RpcService {
             query_engine.drop_table(&ty).await?;
         }
 
-        let regex = regex::Regex::new(".*").unwrap();
+        let regex = regex::Regex::new(&format!("/{}/.*", api_version)).unwrap();
         state.routes.remove_routes(regex.clone());
 
         for endpoint in &apply_request.endpoints {
-            let path = format!("/{}", endpoint.path).to_owned();
+            let path = format!("/{}/{}", api_version, endpoint.path).to_owned();
 
             let func = Box::new({
                 let path = path.clone();
@@ -225,22 +303,22 @@ impl RpcService {
         state.meta.persist_endpoints(&state.routes).await?;
 
         let endpoints = endpoint_routes.clone();
-        let type_system = state.type_system.clone();
-        let policies = state.policies.clone();
+        let types_global = state.type_system.clone();
 
         let cmd = send_command!({
             let runtime = &mut runtime::get().await;
-            runtime.type_system.update(&type_system);
+            let type_system = &mut runtime.type_system;
 
-            deno::flush_types()?;
-            for (_, ty) in runtime.type_system.types.iter() {
-                deno::define_type(ty)?;
-            }
-            runtime.policies = policies;
+            type_system.update(&types_global);
+
+            type_system.refresh_types()?;
+            runtime
+                .policies
+                .versions
+                .insert(api_version.to_owned(), policy.clone());
 
             let mut api = runtime.api.lock().await;
             api.remove_routes(regex);
-            crate::auth::init(&mut *api);
 
             for (path, func, code) in endpoints {
                 deno::define_endpoint(path.clone(), code.clone()).await?;
@@ -283,38 +361,54 @@ impl ChiselRpc for RpcService {
             .map_err(|e| Status::internal(format!("{}", e)))
     }
 
+    /// Delete a version of ChiselStrike
+    async fn delete(
+        &self,
+        request: Request<ChiselDeleteRequest>,
+    ) -> Result<Response<ChiselDeleteResponse>, Status> {
+        self.delete_aux(request)
+            .await
+            .map_err(|e| Status::internal(format!("{}", e)))
+    }
+
     async fn export_types(
         &self,
         _request: tonic::Request<TypeExportRequest>,
     ) -> Result<tonic::Response<TypeExportResponse>, tonic::Status> {
         let state = self.state.lock().await;
-        let type_system = &state.type_system;
 
-        let mut type_defs = vec![];
-        use itertools::Itertools;
-        for ty in type_system
-            .types
-            .values()
-            .sorted_by(|x, y| x.name().cmp(y.name()))
-        {
-            let mut field_defs = vec![];
-            for field in &ty.fields {
-                field_defs.push(chisel::FieldDefinition {
-                    name: field.name.to_owned(),
-                    field_type: field.type_.name().to_string(),
-                    labels: field.labels.clone(),
-                    default_value: field.default.clone(),
-                    is_optional: field.is_optional,
-                });
+        let mut version_defs = vec![];
+        for (api_version, version_types) in state.type_system.versions.iter() {
+            let mut type_defs = vec![];
+            use itertools::Itertools;
+            for ty in version_types
+                .types
+                .values()
+                .sorted_by(|x, y| x.name().cmp(y.name()))
+            {
+                let mut field_defs = vec![];
+                for field in &ty.fields {
+                    field_defs.push(chisel::FieldDefinition {
+                        name: field.name.to_owned(),
+                        field_type: field.type_.name().to_string(),
+                        labels: field.labels.clone(),
+                        default_value: field.default.clone(),
+                        is_optional: field.is_optional,
+                    });
+                }
+                let type_def = chisel::TypeDefinition {
+                    name: ty.name().to_string(),
+                    field_defs,
+                };
+                type_defs.push(type_def);
             }
-            let type_def = chisel::TypeDefinition {
-                name: ty.name().to_string(),
-                field_defs,
-            };
-            type_defs.push(type_def);
+            version_defs.push(chisel::VersionDefinition {
+                version: api_version.to_string(),
+                type_defs,
+            });
         }
 
-        let response = chisel::TypeExportResponse { type_defs };
+        let response = chisel::TypeExportResponse { version_defs };
         Ok(Response::new(response))
     }
 

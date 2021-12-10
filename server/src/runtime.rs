@@ -26,11 +26,13 @@ impl Runtime {
         policies: &mut FieldPolicies,
         current_path: &str,
     ) {
-        for fld in &ty.fields {
-            for lbl in &fld.labels {
-                if let Some(p) = self.policies.labels.get(lbl) {
-                    if !p.except_uri.is_match(current_path) {
-                        policies.insert(fld.name.clone(), p.transform);
+        if let Some(version) = self.policies.versions.get(&ty.api_version) {
+            for fld in &ty.fields {
+                for lbl in &fld.labels {
+                    if let Some(p) = version.labels.get(lbl) {
+                        if !p.except_uri.is_match(current_path) {
+                            policies.insert(fld.name.clone(), p.transform);
+                        }
                     }
                 }
             }

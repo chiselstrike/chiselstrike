@@ -37,9 +37,9 @@ EOF
 cd "$TEMPDIR"
 $CHISEL apply
 
-# CHECK: End point defined: /echo
+# CHECK: End point defined: /dev/echo
 
-$CURL --data foobar -o - $CHISELD_HOST/echo
+$CURL --data foobar -o - $CHISELD_HOST/dev/echo
 
 # CHECK: HTTP/1.1 200 OK
 # CHECK: content-type: text/plain;charset=UTF-8
@@ -48,7 +48,7 @@ $CURL --data foobar -o - $CHISELD_HOST/echo
 
 # CHECK: {
 # CHECK:     "method": "POST",
-# CHECK:     "url": "http://chiselstrike.com/echo",
+# CHECK:     "url": "http://chiselstrike.com/dev/echo",
 # CHECK:     "headers": {
 # CHECK:         "accept": "*/*",
 # CHECK:         "content-length": "6",
@@ -65,7 +65,7 @@ $CURL --data foobar -o - $CHISELD_HOST/echo
 echo
 # Adding the 100-continue header causes curl to wait, which is a good
 # way to test pending futures on the deno side.
-$CURL -H 'Expect: 100-continue' --data foobar -o - $CHISELD_HOST/echo
+$CURL -H 'Expect: 100-continue' --data foobar -o - $CHISELD_HOST/dev/echo
 
 # CHECK: HTTP/1.1 200 OK
 # CHECK: content-type: text/plain;charset=UTF-8
@@ -74,7 +74,7 @@ $CURL -H 'Expect: 100-continue' --data foobar -o - $CHISELD_HOST/echo
 
 # CHECK: {
 # CHECK:     "method": "POST",
-# CHECK:     "url": "http://chiselstrike.com/echo",
+# CHECK:     "url": "http://chiselstrike.com/dev/echo",
 # CHECK:     "headers": {
 # CHECK:         "accept": "*/*",
 # CHECK:         "content-length": "6",

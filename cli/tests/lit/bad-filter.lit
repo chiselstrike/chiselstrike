@@ -20,9 +20,9 @@ cd "$TEMPDIR"
 $CHISEL apply
 
 # CHECK: Type defined: Person
-# CHECK: End point defined: /query
+# CHECK: End point defined: /dev/query
 
-$CURL -o - $CHISELD_HOST/query
+$CURL -o - $CHISELD_HOST/dev/query
 
 # CHECK: HTTP/1.1 500 Internal Server Error
 # CHECK: Uncaught Error: error returned from database: no such column: foo

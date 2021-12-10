@@ -24,36 +24,36 @@ export default async function chisel(req) {
 EOF
 
 $CHISEL apply
-# CHECK: End point defined: /end
-# CHECK: End point defined: /endpo
-# CHECK: End point defined: /endpoint
+# CHECK: End point defined: /dev/end
+# CHECK: End point defined: /dev/endpo
+# CHECK: End point defined: /dev/endpoint
 
-$CURL -o - $CHISELD_HOST/end
+$CURL -o - $CHISELD_HOST/dev/end
 # CHECK: HTTP/1.1 200 OK
-$CURL -o - $CHISELD_HOST/endpo
+$CURL -o - $CHISELD_HOST/dev/endpo
 # CHECK: HTTP/1.1 200 OK
-$CURL -o - $CHISELD_HOST/endpoint
+$CURL -o - $CHISELD_HOST/dev/endpoint
 # CHECK: HTTP/1.1 200 OK
 
 rm ./endpoints/end.js
 
 $CHISEL apply
 
-$CURL -o - $CHISELD_HOST/end
+$CURL -o - $CHISELD_HOST/dev/end
 # CHECK: HTTP/1.1 404 Not Found
-$CURL -o - $CHISELD_HOST/endpo
+$CURL -o - $CHISELD_HOST/dev/endpo
 # CHECK: HTTP/1.1 200 OK
-$CURL -o - $CHISELD_HOST/endpoint
+$CURL -o - $CHISELD_HOST/dev/endpoint
 # CHECK: HTTP/1.1 200 OK
 
 rm ./endpoints/endpoint.js
 
 $CHISEL apply
 
-$CURL -o - $CHISELD_HOST/end
+$CURL -o - $CHISELD_HOST/dev/end
 # CHECK: HTTP/1.1 404 Not Found
-$CURL -o - $CHISELD_HOST/endpoint
+$CURL -o - $CHISELD_HOST/dev/endpoint
 # CHECK: HTTP/1.1 404 Not Found
-$CURL -o - $CHISELD_HOST/endpo
+$CURL -o - $CHISELD_HOST/dev/endpo
 # CHECK: HTTP/1.1 200 OK
 

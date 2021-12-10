@@ -35,9 +35,9 @@ EOF
 cd "$TEMPDIR"
 $CHISEL apply
 
-$CURL -o - $CHISELD_HOST/default
+$CURL -o - $CHISELD_HOST/dev/default
 # CHECK: HTTP/1.1 200 OK
 
-$CURL -o - $CHISELD_HOST/read
+$CURL -o - $CHISELD_HOST/dev/read
 # CHECK: HTTP/1.1 200 OK
 # CHECK: dfl1 0 false 2 value

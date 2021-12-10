@@ -19,6 +19,11 @@ message AddTypeResponse {
   string message = 1;
 }
 
+message VersionDefinition {
+  string version = 1;
+  repeated TypeDefinition type_defs = 2;
+}
+
 message TypeDefinition {
   string name = 1;
   repeated FieldDefinition field_defs = 2;
@@ -36,7 +41,7 @@ message TypeExportRequest {
 }
 
 message TypeExportResponse {
-  repeated TypeDefinition type_defs = 1;
+  repeated VersionDefinition version_defs = 1;
 }
 
 message EndPointCreationRequest {
@@ -59,6 +64,7 @@ message ChiselApplyRequest {
    repeated EndPointCreationRequest endpoints = 2;
    repeated PolicyUpdateRequest policies = 3;
    bool allow_type_deletion = 4;
+   string version = 5;
 }
 
 message ChiselApplyResponse {
@@ -67,9 +73,18 @@ message ChiselApplyResponse {
    repeated string labels = 3;
 }
 
+message ChiselDeleteRequest {
+   string version = 1;
+}
+
+message ChiselDeleteResponse {
+   string result = 1;
+}
+
 service ChiselRpc {
   rpc GetStatus (StatusRequest) returns (StatusResponse);
   rpc Apply(ChiselApplyRequest) returns (ChiselApplyResponse);
+  rpc Delete(ChiselDeleteRequest) returns (ChiselDeleteResponse);
   rpc ExportTypes (TypeExportRequest) returns (TypeExportResponse);
   rpc Restart (RestartRequest) returns (RestartResponse);
 }

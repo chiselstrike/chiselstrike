@@ -10,8 +10,8 @@ cd "$TEMPDIR"
 $CHISEL apply
 
 # CHECK: Type defined: Person
-# CHECK: End point defined: /find_by
-# CHECK: End point defined: /ins
+# CHECK: End point defined: /dev/find_by
+# CHECK: End point defined: /dev/ins
 
 $CURL --data '{
     "first_name":"Glauber", 
@@ -19,7 +19,7 @@ $CURL --data '{
     "age": 666, 
     "human": true, 
     "height": 10.01
-}' -o - $CHISELD_HOST/ins
+}' -o - $CHISELD_HOST/dev/ins
 
 $CURL --data '{
     "first_name":"Jan", 
@@ -27,14 +27,14 @@ $CURL --data '{
     "age": -666, 
     "human": true, 
     "height": 10.02
-}' -o - $CHISELD_HOST/ins
+}' -o - $CHISELD_HOST/dev/ins
 
 # CHECK: ok
 
 $CURL --data '{
     "field_name":"first_name",
     "value":"Jan"
-}' -o - $CHISELD_HOST/find_by
+}' -o - $CHISELD_HOST/dev/find_by
 
 # CHECK: HTTP/1.1 200 OK
 # CHECK: Jan Plhak -666 true 10.02
@@ -42,7 +42,7 @@ $CURL --data '{
 $CURL --data '{
     "field_name":"last_name",
     "value":"Costa"
-}' -o - $CHISELD_HOST/find_by
+}' -o - $CHISELD_HOST/dev/find_by
 
 # CHECK: HTTP/1.1 200 OK
 # CHECK: Glauber Costa 666 true 10.01
@@ -50,7 +50,7 @@ $CURL --data '{
 $CURL --data '{
     "field_name":"last_name",
     "value":"bagr"
-}' -o - $CHISELD_HOST/find_by
+}' -o - $CHISELD_HOST/dev/find_by
 
 # CHECK: HTTP/1.1 200 OK
 # CHECK: 
@@ -58,7 +58,7 @@ $CURL --data '{
 $CURL --data '{
     "field_name":"age",
     "value":-666
-}' -o - $CHISELD_HOST/find_by
+}' -o - $CHISELD_HOST/dev/find_by
 
 # CHECK: HTTP/1.1 200 OK
 # CHECK: Jan Plhak -666 true 10.02
@@ -66,7 +66,7 @@ $CURL --data '{
 $CURL --data '{
     "field_name":"human",
     "value":true
-}' -o - $CHISELD_HOST/find_by
+}' -o - $CHISELD_HOST/dev/find_by
 
 # CHECK: HTTP/1.1 200 OK
 # CHECK: Glauber Costa 666 true 10.01 Jan Plhak -666 true 10.02
@@ -74,20 +74,20 @@ $CURL --data '{
 $CURL --data '{
     "field_name":"height",
     "value":10.01
-}' -o - $CHISELD_HOST/find_by
+}' -o - $CHISELD_HOST/dev/find_by
 
 # CHECK: HTTP/1.1 200 OK
 # CHECK: Glauber Costa 666 true 10.01
 
 $CURL --data '{
     "field_name":"height"
-}' -o - $CHISELD_HOST/find_by
+}' -o - $CHISELD_HOST/dev/find_by
 
 # CHECK: HTTP/1.1 500 Internal Server Error
 
 $CURL --data '{
     "field_name":"misspelled_field_name"
     "value":10.01
-}' -o - $CHISELD_HOST/find_by
+}' -o - $CHISELD_HOST/dev/find_by
 
 # CHECK: HTTP/1.1 500 Internal Server Error

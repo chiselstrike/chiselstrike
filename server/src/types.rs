@@ -11,6 +11,8 @@ pub(crate) enum TypeSystemError {
     TypeAlreadyExists(Arc<ObjectType>),
     #[error["no such type: {0}"]]
     NoSuchType(String),
+    #[error["no such API version: {0}"]]
+    NoSuchVersion(String),
     #[error["object type expected, got `{0}` instead"]]
     ObjectTypeRequired(String),
     #[error["unsafe to replace type: {0}"]]
@@ -19,12 +21,73 @@ pub(crate) enum TypeSystemError {
     InternalServerError(String),
 }
 
-#[derive(Debug, Default, Clone)]
-pub(crate) struct TypeSystem {
+#[derive(Debug, Default, Clone, new)]
+pub(crate) struct VersionTypes {
+    #[new(default)]
     pub(crate) types: HashMap<String, Arc<ObjectType>>,
 }
 
+#[derive(Debug, Default, Clone, new)]
+pub(crate) struct TypeSystem {
+    #[new(default)]
+    pub(crate) versions: HashMap<String, VersionTypes>,
+}
+
+impl VersionTypes {
+    pub(crate) fn lookup_object_type(
+        &self,
+        type_name: &str,
+    ) -> Result<Arc<ObjectType>, TypeSystemError> {
+        match self.lookup_type(type_name) {
+            Ok(Type::Object(ty)) => Ok(ty),
+            Ok(_) => Err(TypeSystemError::ObjectTypeRequired(type_name.to_string())),
+            Err(e) => Err(e),
+        }
+    }
+
+    pub(crate) fn lookup_type(&self, type_name: &str) -> Result<Type, TypeSystemError> {
+        match type_name {
+            "string" => Ok(Type::String),
+            "bigint" => Ok(Type::Int),
+            "number" => Ok(Type::Float),
+            "boolean" => Ok(Type::Boolean),
+            type_name => match self.types.get(type_name) {
+                Some(ty) => Ok(Type::Object(ty.to_owned())),
+                None => Err(TypeSystemError::NoSuchType(type_name.to_owned())),
+            },
+        }
+    }
+
+    fn add_type(&mut self, ty: Arc<ObjectType>) -> Result<(), TypeSystemError> {
+        match self.lookup_object_type(&ty.name) {
+            Ok(old) => Err(TypeSystemError::TypeAlreadyExists(old)),
+            Err(TypeSystemError::NoSuchType(_)) => Ok(()),
+            Err(x) => Err(x),
+        }?;
+        self.types.insert(ty.name.to_owned(), ty);
+        Ok(())
+    }
+}
+
 impl TypeSystem {
+    /// Returns a mutable reference to all types from a specific version.
+    ///
+    /// If there are no types for this version, the version is created.
+    pub(crate) fn get_version_mut(&mut self, api_version: &str) -> &mut VersionTypes {
+        self.versions
+            .entry(api_version.to_string())
+            .or_insert_with(VersionTypes::default)
+    }
+
+    /// Returns a read-only reference to all types from a specific version.
+    ///
+    /// If there are no types for this version, an error is returned
+    pub(crate) fn get_version(&self, api_version: &str) -> Result<&VersionTypes, TypeSystemError> {
+        self.versions
+            .get(api_version)
+            .ok_or_else(|| TypeSystemError::NoSuchVersion(api_version.to_owned()))
+    }
+
     /// Adds an object type to the type system.
     ///
     /// # Arguments
@@ -35,13 +98,8 @@ impl TypeSystem {
     ///
     /// If type `ty` already exists in the type system, the function returns `TypeSystemError`.
     pub(crate) fn add_type(&mut self, ty: Arc<ObjectType>) -> Result<(), TypeSystemError> {
-        match self.lookup_object_type(&ty.name) {
-            Ok(old) => Err(TypeSystemError::TypeAlreadyExists(old)),
-            Err(TypeSystemError::NoSuchType(_)) => Ok(()),
-            Err(x) => Err(x),
-        }?;
-        self.types.insert(ty.name.to_owned(), ty);
-        Ok(())
+        let version = self.get_version_mut(&ty.api_version);
+        version.add_type(ty)
     }
 
     /// Generate an [`ObjectDelta`] with the necessary information to evolve a specific type.
@@ -123,11 +181,12 @@ impl TypeSystem {
         })
     }
 
-    /// Looks up an object type with name `type_name`.
+    /// Looks up an object type with name `type_name` across API versions
     ///
     /// # Arguments
     ///
     /// * `type_name` name of object type to look up.
+    /// * `version` the API version this objects belongs to
     ///
     /// # Errors
     ///
@@ -135,31 +194,63 @@ impl TypeSystem {
     pub(crate) fn lookup_object_type(
         &self,
         type_name: &str,
+        api_version: &str,
     ) -> Result<Arc<ObjectType>, TypeSystemError> {
-        match self.lookup_type(type_name) {
+        match self.lookup_type(type_name, api_version) {
             Ok(Type::Object(ty)) => Ok(ty),
             Ok(_) => Err(TypeSystemError::ObjectTypeRequired(type_name.to_string())),
             Err(e) => Err(e),
         }
     }
 
-    pub(crate) fn lookup_type(&self, type_name: &str) -> Result<Type, TypeSystemError> {
+    /// Looks up a type with name `type_name` across API versions
+    ///
+    /// # Arguments
+    ///
+    /// * `type_name` name of object type to look up.
+    /// * `version` the API version this objects belongs to
+    ///
+    /// # Errors
+    ///
+    /// If the looked up type does not exists or is a built-in type, the function returns a `TypeSystemError`.
+    pub(crate) fn lookup_type(
+        &self,
+        type_name: &str,
+        api_version: &str,
+    ) -> Result<Type, TypeSystemError> {
+        // Note that the base types exist and are the same in all versions, so we have to look them
+        // up separately, before we call get_version, which will error out if the version doesn't
+        // exist.
         match type_name {
             "string" => Ok(Type::String),
             "bigint" => Ok(Type::Int),
             "number" => Ok(Type::Float),
             "boolean" => Ok(Type::Boolean),
-            type_name => match self.types.get(type_name) {
-                Some(ty) => Ok(Type::Object(ty.to_owned())),
-                None => Err(TypeSystemError::NoSuchType(type_name.to_owned())),
-            },
+            _ => {
+                let version = self.get_version(api_version)?;
+                version.lookup_type(type_name)
+            }
         }
     }
 
-    /// Update the current TypeSystem object from another instance
     pub(crate) fn update(&mut self, other: &TypeSystem) {
-        self.types.clear();
-        self.types = other.types.clone();
+        self.versions.clear();
+        self.versions = other.versions.clone();
+    }
+
+    /// Makes sure the types in this `TypeSystem` are available
+    /// for usage in deno
+    pub(crate) fn refresh_types(&self) -> anyhow::Result<()> {
+        crate::deno::flush_types()?;
+        // FIXME: flush_types just destroyed all versions, so we have to
+        // reapply the other versions. Ideally we would have an implementation
+        // of this that only refreshes a single version
+        for (_, version) in self.versions.iter() {
+            for (_, ty) in version.types.iter() {
+                crate::deno::define_type(ty)?;
+            }
+        }
+        Ok(())
     }
 }
 
@@ -215,13 +306,35 @@ pub(crate) trait ObjectDescriptor {
     fn name(&self) -> String;
     fn id(&self) -> Option<i32>;
     fn backing_table(&self) -> String;
+    fn api_version(&self) -> String;
 }
 
-#[derive(new)]
 pub(crate) struct ExistingObject<'a> {
-    name: &'a str,
+    name: String,
+    api_version: String,
     backing_table: &'a str,
     id: i32,
+}
+
+impl<'a> ExistingObject<'a> {
+    pub(crate) fn new(name: &str, backing_table: &'a str, id: i32) -> anyhow::Result<Self> {
+        let split: Vec<&str> = name.split('.').collect();
+
+        anyhow::ensure!(
+            split.len() == 2,
+            "Expected version information as part of the type name. Got {}. Database corrupted?",
+            name
+        );
+        let api_version = split[0].to_owned();
+        let name = split[1].to_owned();
+
+        Ok(Self {
+            name,
+            backing_table,
+            api_version,
+            id,
+        })
+    }
 }
 
 impl<'a> ObjectDescriptor for ExistingObject<'a> {
@@ -236,21 +349,27 @@ impl<'a> ObjectDescriptor for ExistingObject<'a> {
     fn backing_table(&self) -> String {
         self.backing_table.to_owned()
     }
+
+    fn api_version(&self) -> String {
+        self.api_version.to_owned()
+    }
 }
 
 pub(crate) struct NewObject<'a> {
     name: &'a str,
     backing_table: String, // store at object creation time so consecutive calls to backing_table() return the same value
+    api_version: &'a str,
 }
 
 impl<'a> NewObject<'a> {
-    pub(crate) fn new(name: &'a str) -> Self {
+    pub(crate) fn new(name: &'a str, api_version: &'a str) -> Self {
         let mut buf = Uuid::encode_buffer();
         let uuid = Uuid::new_v4();
         let backing_table = format!("ty_{}_{}", name, uuid.to_simple().encode_upper(&mut buf));
 
         Self {
             name,
+            api_version,
             backing_table,
         }
     }
@@ -268,6 +387,10 @@ impl<'a> ObjectDescriptor for NewObject<'a> {
     fn backing_table(&self) -> String {
         self.backing_table.clone()
     }
+
+    fn api_version(&self) -> String {
+        self.api_version.to_owned()
+    }
 }
 
 #[derive(Debug)]
@@ -279,17 +402,30 @@ pub(crate) struct ObjectType {
     pub(crate) fields: Vec<Field>,
     /// Name of the backing table for this type.
     backing_table: String,
+
+    pub(crate) api_version: String,
 }
 
 impl ObjectType {
-    pub(crate) fn new<D: ObjectDescriptor>(desc: D, fields: Vec<Field>) -> Self {
+    pub(crate) fn new<D: ObjectDescriptor>(desc: D, fields: Vec<Field>) -> anyhow::Result<Self> {
         let backing_table = desc.backing_table();
-        Self {
+        let api_version = desc.api_version();
+
+        for field in fields.iter() {
+            anyhow::ensure!(
+                api_version == field.api_version,
+                "API version of fields don't match: Got {} and {}",
+                api_version,
+                field.api_version
+            );
+        }
+        Ok(Self {
             id: desc.id(),
             name: desc.name(),
+            api_version,
             backing_table,
             fields,
-        }
+        })
     }
 
     pub(crate) fn backing_table(&self) -> &str {
@@ -299,11 +435,15 @@ impl ObjectType {
     pub(crate) fn name(&self) -> &str {
         &self.name
     }
+
+    pub(crate) fn persisted_name(&self) -> String {
+        format!("{}.{}", self.api_version, self.name)
+    }
 }
 
 impl PartialEq for ObjectType {
     fn eq(&self, another: &Self) -> bool {
-        self.name == another.name
+        self.name == another.name && self.api_version == another.api_version
     }
 }
 
@@ -329,12 +469,14 @@ pub(crate) trait FieldDescriptor {
     fn name(&self) -> String;
     fn id(&self) -> Option<i32>;
     fn ty(&self) -> Type;
+    fn api_version(&self) -> String;
 }
 
 pub(crate) struct ExistingField {
     name: String,
     ty_: Type,
     id: i32,
+    version: String,
 }
 
 impl ExistingField {
@@ -345,13 +487,15 @@ impl ExistingField {
         field_type: &str,
     ) -> anyhow::Result<Self> {
         let split: Vec<&str> = name.split('.').collect();
-        anyhow::ensure!(split.len() == 2, "Expected version and type information as part of the field name. Got {}. Database corrupted?", name);
-        let name = split[1];
+        anyhow::ensure!(split.len() == 3, "Expected version and type information as part of the field name. Got {}. Database corrupted?", name);
+        let name = split[2].to_owned();
+        let version = split[0].to_owned();
 
         Ok(Self {
-            ty_: ts.lookup_type(field_type)?,
-            name: name.to_owned(),
+            ty_: ts.lookup_type(field_type, &version)?,
+            name,
             id,
+            version,
         })
     }
 }
@@ -368,21 +512,27 @@ impl FieldDescriptor for ExistingField {
     fn ty(&self) -> Type {
         self.ty_.clone()
     }
+
+    fn api_version(&self) -> String {
+        self.version.to_owned()
+    }
 }
 
 pub(crate) struct NewField<'a> {
     name: &'a str,
     ty_: Type,
+    version: &'a str,
 }
 
 impl<'a> NewField<'a> {
     pub(crate) fn new(
-        type_system: &TypeSystem,
+        versions: &VersionTypes,
         name: &'a str,
         type_name: &str,
+        version: &'a str,
     ) -> anyhow::Result<Self> {
-        let ty_ = type_system.lookup_type(type_name)?;
-        Ok(Self { name, ty_ })
+        let ty_ = versions.lookup_type(type_name)?;
+        Ok(Self { name, ty_, version })
     }
 }
 
@@ -398,6 +548,10 @@ impl<'a> FieldDescriptor for NewField<'a> {
     fn ty(&self) -> Type {
         self.ty_.clone()
     }
+
+    fn api_version(&self) -> String {
+        self.version.to_owned()
+    }
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -408,6 +562,7 @@ pub(crate) struct Field {
     pub(crate) labels: Vec<String>,
     pub(crate) default: Option<String>,
     pub(crate) is_optional: bool,
+    api_version: String,
 }
 
 impl Field {
@@ -421,6 +576,7 @@ impl Field {
             id: desc.id(),
             name: desc.name(),
             type_: desc.ty(),
+            api_version: desc.api_version(),
             labels,
             default,
             is_optional,
@@ -428,7 +584,12 @@ impl Field {
     }
 
     pub(crate) fn persisted_name(&self, parent_type_name: &ObjectType) -> String {
-        format!("{}.{}", parent_type_name.name(), self.name)
+        format!(
+            "{}.{}.{}",
+            self.api_version,
+            parent_type_name.name(),
+            self.name
+        )
     }
 }
 

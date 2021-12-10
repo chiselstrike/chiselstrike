@@ -252,10 +252,10 @@ impl MetaService {
             let type_id: i32 = row.get("type_id");
             let backing_table: &str = row.get("backing_table");
             let type_name: &str = row.get("type_name");
-            let desc = ExistingObject::new(type_name, backing_table, type_id);
-
+            let desc = ExistingObject::new(type_name, backing_table, type_id)?;
             let fields = self.load_type_fields(&ts, type_id).await?;
-            let ty = ObjectType::new(desc, fields);
+
+            let ty = ObjectType::new(desc, fields)?;
             ts.add_type(Arc::new(ty))?;
         }
         Ok(ts)
@@ -379,6 +379,19 @@ impl MetaService {
         Ok(())
     }
 
+    pub(crate) async fn delete_policy_version(
+        &self,
+        transaction: &mut Transaction<'_, Any>,
+        version: &str,
+    ) -> anyhow::Result<()> {
+        let add_policy = sqlx::query("DELETE from policies WHERE version = $1");
+        transaction
+            .execute(add_policy.bind(version.to_owned()))
+            .await
+            .map_err(QueryError::ExecuteFailed)?;
+        Ok(())
+    }
+
     /// Loads all policies, for all versions.
     ///
     /// Useful on startup, when we have to populate our in-memory state from the meta database.
@@ -390,14 +403,14 @@ impl MetaService {
             .await
             .map_err(QueryError::FetchFailed)?;
 
-        if let Some(row) = rows.into_iter().next() {
+        let mut policies = Policies::default();
+        for row in rows {
             let version: &str = row.get("version");
             let yaml: &str = row.get("policy_str");
 
-            anyhow::ensure!(version == "dev", "only one version supported for now");
-            return Policies::from_yaml(yaml);
+            policies.add_from_yaml(version, yaml)?;
         }
-        Ok(Policies::default())
+        Ok(policies)
     }
 
     pub(crate) async fn insert_type(
@@ -413,8 +426,9 @@ impl MetaService {
             .fetch_one(add_type)
             .await
             .map_err(QueryError::ExecuteFailed)?;
+
         let id: i32 = row.get("type_id");
-        let add_type_name = add_type_name.bind(id).bind(ty.name().to_owned());
+        let add_type_name = add_type_name.bind(id).bind(ty.persisted_name());
         transaction
             .execute(add_type_name)
             .await

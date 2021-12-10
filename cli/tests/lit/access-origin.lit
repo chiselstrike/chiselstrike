@@ -23,10 +23,10 @@ EOF
 cd "$TEMPDIR"
 $CHISEL apply
 
-# CHECK: End point defined: /bar
-# CHECK: End point defined: /foo
+# CHECK: End point defined: /dev/bar
+# CHECK: End point defined: /dev/foo
 
-$CURL -o - $CHISELD_HOST/foo
+$CURL -o - $CHISELD_HOST/dev/foo
 
 # CHECK: HTTP/1.1 200 OK
 # CHECK: access-control-allow-origin: *
@@ -36,7 +36,7 @@ $CURL -o - $CHISELD_HOST/foo
 
 echo
 
-$CURL -o - $CHISELD_HOST/bar
+$CURL -o - $CHISELD_HOST/dev/bar
 
 # CHECK: HTTP/1.1 200 OK
 # CHECK: access-control-allow-headers: foo
