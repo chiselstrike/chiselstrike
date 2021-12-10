@@ -10,8 +10,8 @@ cd "$TEMPDIR"
 $CHISEL apply
 
 # CHECK: Type defined: Person
-# CHECK: End point defined: /find
-# CHECK: End point defined: /ins
+# CHECK: End point defined: /dev/find
+# CHECK: End point defined: /dev/ins
 
 $CURL --data '{
     "first_name":"Glauber", 
@@ -19,11 +19,11 @@ $CURL --data '{
     "age": 666, 
     "human": true, 
     "height": 10.01
-}' -o - $CHISELD_HOST/ins
+}' -o - $CHISELD_HOST/dev/ins
 
 # CHECK: ok
 
-$CURL -o - $CHISELD_HOST/find
+$CURL -o - $CHISELD_HOST/dev/find
 
 # CHECK: HTTP/1.1 200 OK
 # CHECK: Glauber Costa 666 true 10.01

@@ -1,5 +1,6 @@
 // SPDX-FileCopyrightText: © 2021 ChiselStrike <info@chiselstrike.com>
 
+use crate::deno::current_api_version;
 use crate::deno::get_policies;
 use crate::policies::FieldPolicies;
 use crate::query::engine;
@@ -63,7 +64,8 @@ async fn convert_backing_store(val: &serde_json::Value) -> Result<Relation> {
     let columns = get_columns(val)?;
     let runtime = &mut runtime::get().await;
     let ts = &runtime.type_system;
-    let ty = ts.lookup_object_type(name)?;
+    let api_version = current_api_version();
+    let ty = ts.lookup_object_type(name, &api_version)?;
     let policies = get_policies(runtime, &ty).await?;
 
     Ok(Relation {

@@ -38,10 +38,10 @@ EOF
 cd "$TEMPDIR"
 $CHISEL apply
 
-# CHECK: End point defined: /test1
-# CHECK: End point defined: /test2
+# CHECK: End point defined: /dev/test1
+# CHECK: End point defined: /dev/test2
 
-$CURL --data foobar -o - $CHISELD_HOST/test1
+$CURL --data foobar -o - $CHISELD_HOST/dev/test1
 
 echo
 
@@ -49,7 +49,7 @@ echo
 # CHECK: test1 is ok
 
 
-$CURL --data foobar -o - $CHISELD_HOST/test2
+$CURL --data foobar -o - $CHISELD_HOST/dev/test2
 
 # CHECK: HTTP/1.1 200 OK
 # CHECK: test2 is ok

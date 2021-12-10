@@ -17,7 +17,7 @@ set -e
 
 # CHECK:  Error: expected type `v8::data::Function`, got `v8::data::Value`
 
-$CURL -o - $CHISELD_HOST/test
+$CURL -o - $CHISELD_HOST/dev/test
 
 # CHECK: HTTP/1.1 404 Not Found
 
@@ -30,9 +30,9 @@ EOF
 
 $CHISEL apply
 
-# CHECK: End point defined: /test
+# CHECK: End point defined: /dev/test
 
-$CURL -o - $CHISELD_HOST/test
+$CURL -o - $CHISELD_HOST/dev/test
 
 # CHECK: HTTP/1.1 200 OK
 # CHECK: foo
@@ -50,5 +50,5 @@ set -e
 
 # CHECK:  Error: expected type `v8::data::Function`, got `v8::data::Value`
 
-$CURL -o - $CHISELD_HOST/test
+$CURL -o - $CHISELD_HOST/dev/test
 # CHECK: HTTP/1.1 404 Not Found

@@ -13,6 +13,7 @@ use hyper::{HeaderMap, Request, Response, Server, StatusCode};
 use socket2::{Domain, Protocol, Socket, Type};
 use std::collections::BTreeMap;
 use std::convert::Infallible;
+use std::convert::TryFrom;
 use std::io::Cursor;
 use std::net::SocketAddr;
 use std::path::Path;
@@ -116,6 +117,42 @@ impl RoutePaths {
     }
 }
 
+#[derive(Default, Clone, Debug)]
+pub(crate) struct RequestPath {
+    api_version: String,
+    path: String,
+}
+
+impl RequestPath {
+    pub(crate) fn api_version(&self) -> &str {
+        &self.api_version
+    }
+
+    pub(crate) fn path(&self) -> &str {
+        &self.path
+    }
+}
+
+thread_local! {
+    static RP_REGEX: regex::Regex =
+        regex::Regex::new("/(?P<version>[^/]+)(?P<path>/.+)").unwrap();
+}
+
+impl TryFrom<&str> for RequestPath {
+    type Error = ();
+
+    fn try_from(value: &str) -> Result<Self, Self::Error> {
+        let (api_version, path) = RP_REGEX.with(|rp| {
+            let caps = rp.captures(value).ok_or(())?;
+            let api_version = caps.name("version").ok_or(())?.as_str().to_string();
+            let path = caps.name("path").ok_or(())?.as_str().to_string();
+            Ok((api_version, path))
+        })?;
+
+        Ok(RequestPath { api_version, path })
+    }
+}
+
 /// API service for Chisel server.
 #[derive(Default)]
 pub(crate) struct ApiService {
@@ -152,6 +189,13 @@ impl ApiService {
         req: Request<hyper::Body>,
     ) -> hyper::http::Result<Response<Body>> {
         if let Some(route_fn) = self.find_route_fn(req.uri().path()) {
+            if req.uri().path().starts_with("/__chiselstrike") {
+                return match route_fn(req).await {
+                    Ok(val) => Ok(val),
+                    Err(err) => Self::internal_error(err),
+                };
+            }
+
             let username = match req.headers().get("ChiselStrikeToken") {
                 Some(token) => {
                     let token = token.to_str();
@@ -169,21 +213,33 @@ impl ApiService {
                 }
                 None => None,
             };
-            if !crate::runtime::get()
-                .await
-                .policies
-                .user_authorization
-                .is_allowed(username, req.uri().path().as_ref())
-            {
+            let rp = match RequestPath::try_from(req.uri().path()) {
+                Ok(rp) => rp,
+                Err(_) => return ApiService::not_found(),
+            };
+            let is_allowed = {
+                let runtime = crate::runtime::get().await;
+                match runtime.policies.versions.get(rp.api_version()) {
+                    None => {
+                        return Self::internal_error(anyhow::anyhow!(
+                            "found a route, but no version object for {}",
+                            req.uri().path()
+                        ))
+                    }
+                    Some(x) => x
+                        .user_authorization
+                        .is_allowed(username, rp.path().as_ref()),
+                }
+            };
+
+            if !is_allowed {
                 return Response::builder()
                     .status(StatusCode::FORBIDDEN)
                     .body("Unauthorized user\n".to_string().into());
             }
             return match route_fn(req).await {
                 Ok(val) => Ok(val),
-                Err(err) => Response::builder()
-                    .status(StatusCode::INTERNAL_SERVER_ERROR)
-                    .body(format!("{:?}\n", err).into()),
+                Err(err) => Self::internal_error(err),
             };
         }
         ApiService::not_found()
@@ -193,6 +249,12 @@ impl ApiService {
         Response::builder()
             .status(StatusCode::NOT_FOUND)
             .body(Body::default())
+    }
+
+    fn internal_error(err: anyhow::Error) -> hyper::http::Result<Response<Body>> {
+        Response::builder()
+            .status(StatusCode::INTERNAL_SERVER_ERROR)
+            .body(format!("{:?}\n", err).into())
     }
 }
 

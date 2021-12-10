@@ -9,8 +9,8 @@ cd "$TEMPDIR"
 $CHISEL apply
 
 # CHECK: Type defined: Person
-# CHECK: End point defined: /csv
-# CHECK: End point defined: /find
+# CHECK: End point defined: /dev/csv
+# CHECK: End point defined: /dev/find
 
 $CURL --data '
 adam,smith
@@ -18,11 +18,11 @@ amanda,dodger
 bob,bliss
 terry,stone
 jill,lasalle
-' $CHISELD_HOST/csv
+' $CHISELD_HOST/dev/csv
 
 # CHECK: ok
 
-$CURL -o - $CHISELD_HOST/find
+$CURL -o - $CHISELD_HOST/dev/find
 
 # CHECK: HTTP/1.1 200 OK
 # CHECK: adam smith 100 true 5 amanda dodger 100 true 5 bob bliss 100 true 5 terry stone 100 true 5 jill lasalle 100 true 5

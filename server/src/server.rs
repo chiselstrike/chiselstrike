@@ -95,9 +95,8 @@ async fn run(state: SharedState, mut cmd: ExecutorChannel) -> Result<()> {
 
     let meta = MetaService::local_connection(&state.metadata_db).await?;
     let ts = meta.load_type_system().await?;
-    for (_, ty) in ts.types.iter() {
-        deno::define_type(ty)?;
-    }
+
+    ts.refresh_types()?;
 
     let routes = meta.load_endpoints().await?;
     let policies = meta.load_policies().await?;

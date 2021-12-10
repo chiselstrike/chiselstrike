@@ -9,6 +9,7 @@ enum Types {
     Table,
     TypeId,
     BackingTable,
+    ApiVersion,
 }
 
 #[derive(Iden)]
@@ -74,6 +75,7 @@ pub(crate) fn tables() -> Vec<TableCreateStatement> {
                 .primary_key(),
         )
         .col(ColumnDef::new(Types::BackingTable).text().unique_key())
+        .col(ColumnDef::new(Types::ApiVersion).text().unique_key())
         .to_owned();
     let type_names = Table::create()
         .table(TypeNames::Table)
