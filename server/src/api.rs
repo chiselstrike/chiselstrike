@@ -10,9 +10,11 @@ use hyper::header::HeaderValue;
 use hyper::service::{make_service_fn, service_fn};
 use hyper::{HeaderMap, Request, Response, Server, StatusCode};
 use socket2::{Domain, Protocol, Socket, Type};
+use std::collections::BTreeMap;
 use std::convert::Infallible;
 use std::io::Cursor;
 use std::net::SocketAddr;
+use std::ops::Bound;
 use std::path::Path;
 use std::path::PathBuf;
 use std::pin::Pin;
@@ -69,22 +71,19 @@ type RouteFn = Box<
 
 #[derive(Default)]
 pub(crate) struct RoutePaths {
-    // Kept reverse sorted so that if an entry is a prefix of another,
-    // it comes later. This makes it easy to find which entry shares
-    // the longest prefix with a request.
-    //
-    // Both insertions and search are O(n) and could be O(request path
-    // size) with a tree, but that is probably OK with a normal number
-    // of endpoints.
-    paths: Vec<(PathBuf, String, RouteFn)>,
+    paths: BTreeMap<PathBuf, (String, RouteFn)>,
 }
 
 impl RoutePaths {
     fn longest_prefix<S: AsRef<Path>>(&self, request: S) -> Option<&RouteFn> {
         let request = request.as_ref();
-        for p in &self.paths {
-            if request.starts_with(&p.0) {
-                return Some(&p.2);
+        let prefix: PathBuf = request.iter().take(2).collect();
+        let range = self
+            .paths
+            .range::<Path, _>((Bound::Included(prefix.as_ref()), Bound::Included(request)));
+        for (k, v) in range.rev() {
+            if request.starts_with(k) {
+                return Some(&v.1);
             }
         }
         None
@@ -104,28 +103,19 @@ impl RoutePaths {
         route_fn: RouteFn,
     ) {
         let path: PathBuf = path.as_ref().into();
-        let pos = self.paths.binary_search_by(|p| path.cmp(&p.0));
-        let elem = (path, code.to_string(), route_fn);
-        match pos {
-            Ok(pos) => {
-                self.paths[pos] = elem;
-            }
-            Err(pos) => {
-                self.paths.insert(pos, elem);
-            }
-        }
+        self.paths.insert(path, (code.to_string(), route_fn));
     }
 
     pub(crate) fn route_data(&self) -> impl Iterator<Item = (&Path, &str)> {
-        self.paths.iter().map(|x| (x.0.as_path(), x.1.as_str()))
+        self.paths.iter().map(|(k, v)| (k.as_path(), v.0.as_str()))
     }
 
     /// Remove all routes that match this regular expression, and return
     /// the amount of routes removed.
     pub(crate) fn remove_routes(&mut self, path: regex::Regex) -> usize {
         let before = self.paths.len();
-        self.paths.retain(|x| {
-            let s = x.0.clone().into_os_string().into_string().unwrap();
+        self.paths.retain(|k, _| {
+            let s = k.clone().into_os_string().into_string().unwrap();
             !path.is_match(&s)
         });
         before - self.paths.len()
