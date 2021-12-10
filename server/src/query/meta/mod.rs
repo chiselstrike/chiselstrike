@@ -9,9 +9,10 @@ use crate::query::{DbConnection, Kind, QueryError};
 use crate::types::{
     ExistingField, ExistingObject, Field, FieldDelta, ObjectDelta, ObjectType, TypeSystem,
 };
-use anyhow::anyhow;
+use anyhow::{anyhow, Context};
 use futures::FutureExt;
 use sqlx::any::{Any, AnyPool};
+use sqlx::Execute;
 use sqlx::{Executor, Row, Transaction};
 use std::sync::Arc;
 use uuid::Uuid;
@@ -24,6 +25,43 @@ use uuid::Uuid;
 pub(crate) struct MetaService {
     kind: Kind,
     pool: AnyPool,
+}
+
+// sqlx:error doesn't include the final query string in the error message
+// Use the macros below so we know exactly where is the issue coming from
+macro_rules! execute {
+    ( $transaction:expr, $query:expr ) => {{
+        let query = { $query };
+        let sql = query.sql();
+        $transaction
+            .execute(query)
+            .await
+            .map_err(QueryError::ExecuteFailed)
+            .with_context(|| format!("query {}", sql))
+    }};
+}
+
+macro_rules! fetch_one {
+    ( $transaction:expr, $query:expr ) => {{
+        let query = { $query };
+        let sql = query.sql();
+        $transaction
+            .fetch_one(query)
+            .await
+            .with_context(|| format!("query {}", sql))
+    }};
+}
+
+macro_rules! fetch_all {
+    ( $pool:expr, $query:expr ) => {{
+        let query = { $query };
+        let sql = query.sql();
+        query
+            .fetch_all($pool)
+            .await
+            .map_err(QueryError::FetchFailed)
+            .with_context(|| format!("query {}", sql))
+    }};
 }
 
 async fn update_field_query(
@@ -54,25 +92,16 @@ async fn update_field_query(
             query = query.bind(value.to_owned());
         }
 
-        transaction
-            .execute(query)
-            .await
-            .map_err(QueryError::ExecuteFailed)?;
+        execute!(transaction, query)?;
     }
 
     if let Some(labels) = &delta.labels {
         let flush = sqlx::query("DELETE FROM field_labels where field_id = $1");
-        transaction
-            .execute(flush.bind(field_id))
-            .await
-            .map_err(QueryError::ExecuteFailed)?;
+        execute!(transaction, flush.bind(field_id))?;
 
         for label in labels.iter() {
             let q = sqlx::query("INSERT INTO field_labels (label_name, field_id) VALUES ($1, $2)");
-            transaction
-                .execute(q.bind(label).bind(field_id))
-                .await
-                .map_err(QueryError::ExecuteFailed)?;
+            execute!(transaction, q.bind(label).bind(field_id))?;
         }
     }
     Ok(())
@@ -87,22 +116,13 @@ async fn remove_field_query(
         .ok_or_else(|| anyhow!("logical error. Trying to delete field without id"))?;
 
     let query = sqlx::query("DELETE FROM fields WHERE field_id = $1");
-    transaction
-        .execute(query.bind(field_id))
-        .await
-        .map_err(QueryError::ExecuteFailed)?;
+    execute!(transaction, query.bind(field_id))?;
 
     let query = sqlx::query("DELETE from field_names WHERE field_id = $1");
-    transaction
-        .execute(query.bind(field_id))
-        .await
-        .map_err(QueryError::ExecuteFailed)?;
+    execute!(transaction, query.bind(field_id))?;
 
     let query = sqlx::query("DELETE from field_labels WHERE field_id = $1");
-    transaction
-        .execute(query.bind(field_id))
-        .await
-        .map_err(QueryError::ExecuteFailed)?;
+    execute!(transaction, query.bind(field_id))?;
 
     Ok(())
 }
@@ -135,25 +155,16 @@ async fn insert_field_query(
     let add_field_name =
         sqlx::query("INSERT INTO field_names (field_name, field_id) VALUES ($1, $2)");
 
-    let row = transaction
-        .fetch_one(add_field)
-        .await
-        .map_err(QueryError::ExecuteFailed)?;
+    let row = fetch_one!(transaction, add_field)?;
 
     let field_id: i32 = row.get("field_id");
     let full_name = field.persisted_name(ty);
     let add_field_name = add_field_name.bind(full_name).bind(field_id);
-    transaction
-        .execute(add_field_name)
-        .await
-        .map_err(QueryError::ExecuteFailed)?;
+    execute!(transaction, add_field_name)?;
 
     for label in &field.labels {
         let q = sqlx::query("INSERT INTO field_labels (label_name, field_id) VALUES ($1, $2)");
-        transaction
-            .execute(q.bind(label).bind(field_id))
-            .await
-            .map_err(QueryError::ExecuteFailed)?;
+        execute!(transaction, q.bind(label).bind(field_id))?;
     }
     Ok(())
 }
@@ -190,10 +201,7 @@ impl MetaService {
     /// Load the existing endpoints from from metadata store.
     pub(crate) async fn load_endpoints<'r>(&self) -> anyhow::Result<RoutePaths> {
         let query = sqlx::query("SELECT path, code FROM endpoints");
-        let rows = query
-            .fetch_all(&self.pool)
-            .await
-            .map_err(QueryError::FetchFailed)?;
+        let rows = fetch_all!(&self.pool, query)?;
 
         let mut routes = RoutePaths::default();
         for row in rows {
@@ -218,20 +226,14 @@ impl MetaService {
             .map_err(QueryError::ConnectionFailed)?;
 
         let drop = sqlx::query("DELETE from endpoints");
-        transaction
-            .execute(drop)
-            .await
-            .map_err(QueryError::ExecuteFailed)?;
+        execute!(transaction, drop)?;
 
         for (path, code) in routes.route_data() {
             let new_route = sqlx::query("INSERT INTO endpoints (path, code) VALUES ($1, $2)")
                 .bind(path.to_str())
                 .bind(code);
 
-            transaction
-                .execute(new_route)
-                .await
-                .map_err(QueryError::ExecuteFailed)?;
+            execute!(transaction, new_route)?;
         }
         transaction
             .commit()
@@ -243,10 +245,8 @@ impl MetaService {
     /// Load the type system from metadata store.
     pub(crate) async fn load_type_system<'r>(&self) -> anyhow::Result<TypeSystem> {
         let query = sqlx::query("SELECT types.type_id AS type_id, types.backing_table AS backing_table, type_names.name AS type_name FROM types INNER JOIN type_names WHERE types.type_id = type_names.type_id");
-        let rows = query
-            .fetch_all(&self.pool)
-            .await
-            .map_err(QueryError::FetchFailed)?;
+        let rows = fetch_all!(&self.pool, query)?;
+
         let mut ts = TypeSystem::new();
         for row in rows {
             let type_id: i32 = row.get("type_id");
@@ -264,10 +264,8 @@ impl MetaService {
     async fn load_type_fields(&self, ts: &TypeSystem, type_id: i32) -> anyhow::Result<Vec<Field>> {
         let query = sqlx::query("SELECT fields.field_id AS field_id, field_names.field_name AS field_name, fields.field_type AS field_type, fields.default_value as default_value, fields.is_optional as is_optional FROM field_names INNER JOIN fields WHERE fields.type_id = $1 AND field_names.field_id = fields.field_id;");
         let query = query.bind(type_id);
-        let rows = query
-            .fetch_all(&self.pool)
-            .await
-            .map_err(QueryError::FetchFailed)?;
+        let rows = fetch_all!(&self.pool, query)?;
+
         let mut fields = Vec::new();
         for row in rows {
             let field_name: &str = row.get("field_name");
@@ -280,11 +278,7 @@ impl MetaService {
 
             let labels_query =
                 sqlx::query("SELECT label_name FROM field_labels WHERE field_id = $1");
-            let labels = labels_query
-                .bind(field_id)
-                .fetch_all(&self.pool)
-                .await
-                .map_err(QueryError::FetchFailed)?
+            let labels = fetch_all!(&self.pool, labels_query.bind(field_id))?
                 .iter()
                 .map(|r| r.get("label_name"))
                 .collect::<Vec<String>>();
@@ -310,15 +304,8 @@ impl MetaService {
         let del_type = sqlx::query("DELETE FROM types WHERE type_id = $1");
         let del_type_name = sqlx::query("DELETE FROM type_names WHERE type_id = $1");
 
-        transaction
-            .execute(del_type.bind(type_id))
-            .await
-            .map_err(QueryError::ExecuteFailed)?;
-
-        transaction
-            .execute(del_type_name.bind(type_id))
-            .await
-            .map_err(QueryError::ExecuteFailed)?;
+        execute!(transaction, del_type.bind(type_id))?;
+        execute!(transaction, del_type_name.bind(type_id))?;
 
         Ok(())
     }
@@ -372,10 +359,10 @@ impl MetaService {
         policy: &str,
     ) -> anyhow::Result<()> {
         let add_policy = sqlx::query("INSERT INTO policies (policy_str, version) VALUES ($1, $2) ON CONFLICT(version) DO UPDATE SET policy_str = $1 WHERE version = $2");
-        transaction
-            .execute(add_policy.bind(policy.to_owned()).bind(version.to_owned()))
-            .await
-            .map_err(QueryError::ExecuteFailed)?;
+        execute!(
+            transaction,
+            add_policy.bind(policy.to_owned()).bind(version.to_owned())
+        )?;
         Ok(())
     }
 
@@ -385,10 +372,7 @@ impl MetaService {
     pub(crate) async fn load_policies(&self) -> anyhow::Result<Policies> {
         let get_policy = sqlx::query("SELECT version, policy_str FROM policies");
 
-        let rows = get_policy
-            .fetch_all(&self.pool)
-            .await
-            .map_err(QueryError::FetchFailed)?;
+        let rows = fetch_all!(&self.pool, get_policy)?;
 
         if let Some(row) = rows.into_iter().next() {
             let version: &str = row.get("version");
@@ -409,23 +393,18 @@ impl MetaService {
         let add_type_name = sqlx::query("INSERT INTO type_names (type_id, name) VALUES ($1, $2)");
 
         let add_type = add_type.bind(ty.backing_table().to_owned());
-        let row = transaction
-            .fetch_one(add_type)
-            .await
-            .map_err(QueryError::ExecuteFailed)?;
+        let row = fetch_one!(transaction, add_type)?;
+
         let id: i32 = row.get("type_id");
         let add_type_name = add_type_name.bind(id).bind(ty.name().to_owned());
-        transaction
-            .execute(add_type_name)
-            .await
-            .map_err(QueryError::ExecuteFailed)?;
+        execute!(transaction, add_type_name)?;
         for field in &ty.fields {
             insert_field_query(transaction, ty, Some(id), field).await?;
         }
         Ok(())
     }
 
-    pub(crate) async fn new_session_token(&self, username: &str) -> Result<String, QueryError> {
+    pub(crate) async fn new_session_token(&self, username: &str) -> anyhow::Result<String> {
         let token = Uuid::new_v4().to_string();
         // TODO: Expire tokens.
         let insert = sqlx::query("INSERT INTO sessions(token, username) VALUES($1, $2)")
@@ -436,10 +415,9 @@ impl MetaService {
             .begin()
             .await
             .map_err(QueryError::ConnectionFailed)?;
-        transaction
-            .execute(insert)
-            .await
-            .map_err(QueryError::ExecuteFailed)?;
+
+        execute!(transaction, insert)?;
+
         transaction
             .commit()
             .await
@@ -447,12 +425,9 @@ impl MetaService {
         Ok(token)
     }
 
-    pub(crate) async fn get_username(&self, token: &str) -> Result<String, QueryError> {
-        let row = sqlx::query("SELECT username FROM sessions WHERE token=$1")
-            .bind(token)
-            .fetch_all(&self.pool)
-            .await
-            .map_err(QueryError::FetchFailed)?
+    pub(crate) async fn get_username(&self, token: &str) -> anyhow::Result<String> {
+        let query = sqlx::query("SELECT username FROM sessions WHERE token=$1").bind(token);
+        let row = fetch_all!(&self.pool, query)?
             .pop()
             .ok_or_else(|| QueryError::TokenNotFound(token.into()))?;
         let username: &str = row.get("username");
