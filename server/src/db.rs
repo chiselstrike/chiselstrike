@@ -3,7 +3,7 @@
 use crate::deno::get_policies;
 use crate::policies::FieldPolicies;
 use crate::query::engine;
-use crate::query::engine::QueryResults;
+use crate::query::engine::new_query_results;
 use crate::query::engine::RawSqlStream;
 use crate::query::engine::SqlStream;
 use crate::runtime;
@@ -170,7 +170,7 @@ fn sql_backing_store(
     if policies.is_empty() {
         return Query::Sql(query);
     }
-    let stream = QueryResults::new(query, pool);
+    let stream = new_query_results(query, pool);
     let pstream = Box::pin(PolicyApplyingStream {
         inner: stream,
         policies: policies.clone(),
@@ -273,7 +273,7 @@ pub(crate) fn sql(pool: &AnyPool, rel: &Relation) -> SqlStream {
     let mut v = 0;
     match sql_impl(pool, rel, &mut v) {
         Query::Sql(s) => {
-            let inner = QueryResults::new(s, pool);
+            let inner = new_query_results(s, pool);
             Box::pin(PolicyApplyingStream {
                 inner,
                 policies: FieldPolicies::new(),
