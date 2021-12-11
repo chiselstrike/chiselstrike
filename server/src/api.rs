@@ -1,5 +1,6 @@
 // SPDX-FileCopyrightText: © 2021 ChiselStrike <info@chiselstrike.com>
 
+use crate::collection_utils::longest_prefix;
 use anyhow::{Error, Result};
 use async_mutex::Mutex;
 use futures::future::LocalBoxFuture;
@@ -14,7 +15,6 @@ use std::collections::BTreeMap;
 use std::convert::Infallible;
 use std::io::Cursor;
 use std::net::SocketAddr;
-use std::ops::Bound;
 use std::path::Path;
 use std::path::PathBuf;
 use std::pin::Pin;
@@ -75,17 +75,12 @@ pub(crate) struct RoutePaths {
 }
 
 impl RoutePaths {
-    fn longest_prefix<S: AsRef<Path>>(&self, request: S) -> Option<&RouteFn> {
-        let request = request.as_ref();
-        let prefix: PathBuf = request.iter().take(2).collect();
-        let range = (Bound::Included(prefix.as_ref()), Bound::Included(request));
-        let range = self.paths.range::<Path, _>(range);
-        for (k, v) in range.rev() {
-            if request.starts_with(k) {
-                return Some(&v.1);
-            }
+    /// Finds the right RouteFn for this request.
+    fn find_route_fn<S: AsRef<Path>>(&self, request: S) -> Option<&RouteFn> {
+        match longest_prefix(request.as_ref(), &self.paths) {
+            None => None,
+            Some((_, f)) => Some(&f.1),
         }
-        None
     }
 
     /// Adds a route.
@@ -132,8 +127,9 @@ impl ApiService {
         Self { paths }
     }
 
-    fn longest_prefix<S: AsRef<Path>>(&self, request: S) -> Option<&RouteFn> {
-        self.paths.longest_prefix(request)
+    /// Finds the right RouteFn for this request.
+    fn find_route_fn<S: AsRef<Path>>(&self, request: S) -> Option<&RouteFn> {
+        self.paths.find_route_fn(request)
     }
 
     pub(crate) fn add_route<S: AsRef<str>, C: ToString>(
@@ -155,7 +151,7 @@ impl ApiService {
         &mut self,
         req: Request<hyper::Body>,
     ) -> hyper::http::Result<Response<Body>> {
-        if let Some(route_fn) = self.longest_prefix(req.uri().path()) {
+        if let Some(route_fn) = self.find_route_fn(req.uri().path()) {
             let username = match req.headers().get("ChiselStrikeToken") {
                 Some(token) => {
                     let token = token.to_str();

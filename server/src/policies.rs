@@ -1,8 +1,8 @@
 // SPDX-FileCopyrightText: © 2021 ChiselStrike <info@chiselstrike.com>
 
+use crate::collection_utils::longest_prefix;
 use serde_json::{json, Value};
 use std::collections::{BTreeMap, HashMap};
-use std::ops::Bound;
 use std::path::{Path, PathBuf};
 use yaml_rust::YamlLoader;
 
@@ -31,17 +31,13 @@ pub(crate) struct UserAuthorization {
 impl UserAuthorization {
     /// Is this username allowed to execute the endpoint at this path?
     pub fn is_allowed(&self, username: Option<String>, path: &Path) -> bool {
-        let path_range = (Bound::Unbounded, Bound::Included(path));
-        let map_range = self.paths.range::<Path, _>(path_range);
-        for (p, u) in map_range.rev() {
-            if path.starts_with(p) {
-                return match username {
-                    None => false, // Must be logged in if path specified a regex.
-                    Some(username) => u.is_match(&username),
-                };
-            }
+        match longest_prefix(path, &self.paths) {
+            None => true,
+            Some((_, u)) => match username {
+                None => false, // Must be logged in if path specified a regex.
+                Some(username) => u.is_match(&username),
+            },
         }
-        true
     }
 
     /// Authorizes users matching a regex to execute any endpoint under this path.  Longer paths override existing
