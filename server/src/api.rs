@@ -177,7 +177,7 @@ impl ApiService {
                 .await
                 .policies
                 .user_authorization
-                .is_allowed(username, req.uri().path().into())
+                .is_allowed(username, req.uri().path().as_ref())
             {
                 return Response::builder()
                     .status(StatusCode::FORBIDDEN)

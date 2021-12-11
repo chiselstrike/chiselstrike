@@ -2,7 +2,8 @@
 
 use serde_json::{json, Value};
 use std::collections::{BTreeMap, HashMap};
-use std::path::PathBuf;
+use std::ops::Bound;
+use std::path::{Path, PathBuf};
 use yaml_rust::YamlLoader;
 
 #[derive(Clone)]
@@ -29,8 +30,10 @@ pub(crate) struct UserAuthorization {
 
 impl UserAuthorization {
     /// Is this username allowed to execute the endpoint at this path?
-    pub fn is_allowed(&self, username: Option<String>, path: PathBuf) -> bool {
-        for (p, u) in self.paths.range(..=path.clone()).rev() {
+    pub fn is_allowed(&self, username: Option<String>, path: &Path) -> bool {
+        let path_range = (Bound::Unbounded, Bound::Included(path));
+        let map_range = self.paths.range::<Path, _>(path_range);
+        for (p, u) in map_range.rev() {
             if path.starts_with(p) {
                 return username.is_some() && u.is_match(&username.unwrap());
             }
