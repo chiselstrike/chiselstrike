@@ -35,7 +35,10 @@ impl UserAuthorization {
         let map_range = self.paths.range::<Path, _>(path_range);
         for (p, u) in map_range.rev() {
             if path.starts_with(p) {
-                return username.is_some() && u.is_match(&username.unwrap());
+                return match username {
+                    None => false, // Must be logged in if path specified a regex.
+                    Some(username) => u.is_match(&username),
+                };
             }
         }
         true
