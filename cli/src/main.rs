@@ -10,7 +10,6 @@ use chisel::{
 use futures::channel::mpsc::channel;
 use futures::{SinkExt, StreamExt};
 use notify::{Event, RecommendedWatcher, RecursiveMode, Watcher};
-use regex::Regex;
 use serde_derive::Deserialize;
 use std::fs;
 use std::future::Future;
@@ -70,7 +69,13 @@ fn dir_to_paths(dir: &Path, paths: &mut Vec<PathBuf>) -> anyhow::Result<()> {
         let path = dentry.path();
         if dentry.file_type()?.is_dir() {
             dir_to_paths(&path, paths)?;
-        } else if !ignore_path(&path) {
+        } else if !dentry
+            .file_name()
+            .to_str()
+            .map_or(false, |x| x.starts_with('.'))
+        {
+            // files with names that can't be converted wtih to_str() or that start with . are
+            // ignored
             paths.push(path);
         }
     }
@@ -138,20 +143,6 @@ impl Manifest {
     }
 }
 
-/// Return true if path should be ignored.
-///
-/// This function rejects paths that are known to be temporary files.
-fn ignore_path(path: &Path) -> bool {
-    let patterns = vec![".*~", ".*.swp"];
-    for pat in patterns {
-        let re = Regex::new(pat).unwrap();
-        if re.is_match(path.to_str().unwrap()) {
-            return true;
-        }
-    }
-    false
-}
-
 #[derive(StructOpt, Debug)]
 #[structopt(name = "chisel")]
 struct Opt {
@@ -193,13 +184,16 @@ pub mod chisel {
 }
 
 /// Opens and reads an entire file (or stdin, if filename is "-")
-fn read_to_string<P: AsRef<Path>>(filename: P) -> Result<String, std::io::Error> {
+fn read_to_string<P: AsRef<Path>>(filename: P) -> anyhow::Result<String> {
     if filename.as_ref() == Path::new("-") {
         let mut s = "".to_string();
-        stdin().read_to_string(&mut s)?;
+        stdin()
+            .read_to_string(&mut s)
+            .with_context(|| "while reading stdin".to_string())?;
         Ok(s)
     } else {
         fs::read_to_string(filename.as_ref())
+            .with_context(|| format!("while reading {}", filename.as_ref().display()))
     }
 }
 
