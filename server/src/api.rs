@@ -78,9 +78,8 @@ impl RoutePaths {
     fn longest_prefix<S: AsRef<Path>>(&self, request: S) -> Option<&RouteFn> {
         let request = request.as_ref();
         let prefix: PathBuf = request.iter().take(2).collect();
-        let range = self
-            .paths
-            .range::<Path, _>((Bound::Included(prefix.as_ref()), Bound::Included(request)));
+        let range = (Bound::Included(prefix.as_ref()), Bound::Included(request));
+        let range = self.paths.range::<Path, _>(range);
         for (k, v) in range.rev() {
             if request.starts_with(k) {
                 return Some(&v.1);
