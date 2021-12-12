@@ -1,7 +1,8 @@
 // SPDX-FileCopyrightText: © 2021 ChiselStrike <info@chiselstrike.com>
 
+use crate::collection_utils::longest_prefix;
 use serde_json::{json, Value};
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::path::{Path, PathBuf};
 use yaml_rust::YamlLoader;
 
@@ -24,35 +25,28 @@ pub(crate) type FieldPolicies = HashMap<String, fn(Value) -> Value>;
 pub(crate) struct UserAuthorization {
     /// A user is authorized to access a path if the username matches the regex for the longest path prefix present
     /// here.
-    paths: Vec<(PathBuf, regex::Regex)>, // Reverse-sorted.
+    paths: BTreeMap<PathBuf, regex::Regex>,
 }
 
 impl UserAuthorization {
     /// Is this username allowed to execute the endpoint at this path?
-    pub fn is_allowed<S: AsRef<Path>>(&self, username: Option<String>, path: S) -> bool {
-        let path = path.as_ref();
-        for p in &self.paths {
-            if path.starts_with(&p.0) {
-                return match username {
-                    None => false, // Must be logged in if path specified a regex.
-                    Some(username) => p.1.is_match(&username),
-                };
-            }
+    pub fn is_allowed(&self, username: Option<String>, path: &Path) -> bool {
+        match longest_prefix(path, &self.paths) {
+            None => true,
+            Some((_, u)) => match username {
+                None => false, // Must be logged in if path specified a regex.
+                Some(username) => u.is_match(&username),
+            },
         }
-        true
     }
 
     /// Authorizes users matching a regex to execute any endpoint under this path.  Longer paths override existing
     /// prefixes.  Error if this same path has already been added.
     pub fn add(&mut self, path: &str, users: regex::Regex) -> Result<(), anyhow::Error> {
-        let path: PathBuf = path.into();
-        match self.paths.binary_search_by(|p| path.cmp(&p.0)) {
-            Ok(_) => anyhow::bail!("Repeated path in user authorization: {:?}", path),
-            Err(pos) => {
-                self.paths.insert(pos, (path, users));
-                Ok(())
-            }
+        if self.paths.insert(path.into(), users).is_some() {
+            anyhow::bail!("Repeated path in user authorization: {:?}", path);
         }
+        Ok(())
     }
 }
 

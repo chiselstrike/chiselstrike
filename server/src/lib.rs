@@ -5,6 +5,7 @@ extern crate log;
 
 pub(crate) mod api;
 pub(crate) mod auth;
+pub(crate) mod collection_utils;
 pub(crate) mod db;
 pub(crate) mod deno;
 pub(crate) mod internal;

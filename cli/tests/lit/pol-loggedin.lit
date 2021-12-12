@@ -52,3 +52,13 @@ $CURL -H "ChiselStrikeToken:$token_al" $CHISELD_HOST/a/b/c/findc2
 # CHECK: HTTP/1.1 200 OK
 $CURL -H "ChiselStrikeToken:$token_als" $CHISELD_HOST/a/b/c/findc2
 # CHECK: HTTP/1.1 200 OK
+
+cat << EOF > "$TEMPDIR/policies/pol.yaml"
+endpoints:
+  - path: /find
+    users: .*
+  - path: /find
+    users: ^als$
+EOF
+$CHISEL apply 2>&1 || echo # (swallow the apply abort)
+# CHECK: Error: Repeated path in user authorization: "/find"
