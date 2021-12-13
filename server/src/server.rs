@@ -131,6 +131,8 @@ async fn run(state: SharedState, mut cmd: ExecutorChannel) -> Result<()> {
     })?;
     state.readiness_tx.send(()).await?;
 
+    info!("ChiselStrike is ready 🚀 - URL: {} ", state.api_listen_addr);
+
     api_task.await??;
     command_task.await?;
     Ok(())
@@ -220,7 +222,13 @@ pub async fn run_shared_state(
     };
 
     let rpc_task = crate::rpc::spawn(rpc, opt.rpc_listen_addr, start_wait, shutdown);
+    debug!("RPC is ready. URL: {}", opt.rpc_listen_addr);
+
     crate::internal::init(opt.internal_routes_listen_addr);
+    debug!(
+        "Internal HTTP server is ready. URL: {}",
+        opt.internal_routes_listen_addr
+    );
 
     let state = SharedState {
         signal_rx: rx,
