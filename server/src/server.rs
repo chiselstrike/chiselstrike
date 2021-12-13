@@ -27,7 +27,7 @@ pub struct Opt {
     #[structopt(short, long, default_value = "127.0.0.1:50051")]
     rpc_listen_addr: SocketAddr,
     /// Internal routes (for k8s) listen address
-    #[structopt(short, long, default_value = "127.0.0.1:3000")]
+    #[structopt(short, long, default_value = "127.0.0.1:9090")]
     internal_routes_listen_addr: SocketAddr,
     /// Metadata database URI.
     #[structopt(short, long, default_value = "sqlite://chiseld.db?mode=rwc")]
