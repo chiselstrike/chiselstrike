@@ -6,17 +6,23 @@ extern crate log;
 use anyhow::Result;
 use chisel_server::server;
 use enclose::enclose;
+use env_logger::Env;
+use log::LevelFilter;
 use nix::unistd::execv;
 use server::DoRepeat;
 use std::env;
 use std::ffi::CString;
+use std::io::Write;
 use structopt::StructOpt;
 
 #[tokio::main]
 async fn main() -> Result<()> {
     let mut executors = vec![];
 
-    pretty_env_logger::init();
+    env_logger::Builder::from_env(Env::default().default_filter_or("info"))
+        .format(|buf, record| writeln!(buf, "{} - {}", record.level(), record.args()))
+        .filter_module("sqlx::query", LevelFilter::Warn)
+        .init();
 
     let args: Vec<CString> = env::args().map(|x| CString::new(x).unwrap()).collect();
     let (tasks, shared, mut commands) = server::run_shared_state(server::Opt::from_args()).await?;
