@@ -16,7 +16,7 @@ use structopt::StructOpt;
 async fn main() -> Result<()> {
     let mut executors = vec![];
 
-    pretty_env_logger::init();
+    env_logger::init();
 
     let args: Vec<CString> = env::args().map(|x| CString::new(x).unwrap()).collect();
     let (tasks, shared, mut commands) = server::run_shared_state(server::Opt::from_args()).await?;
