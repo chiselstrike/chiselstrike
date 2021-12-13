@@ -12,6 +12,7 @@ use nix::unistd::execv;
 use server::DoRepeat;
 use std::env;
 use std::ffi::CString;
+use std::io::Write;
 use structopt::StructOpt;
 
 #[tokio::main]
@@ -19,6 +20,7 @@ async fn main() -> Result<()> {
     let mut executors = vec![];
 
     env_logger::Builder::from_env(Env::default().default_filter_or("info"))
+        .format(|buf, record| writeln!(buf, "{} - {}", record.level(), record.args()))
         .filter_module("sqlx::query", LevelFilter::Warn)
         .init();
 
