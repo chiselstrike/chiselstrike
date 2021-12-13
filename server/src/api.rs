@@ -104,15 +104,8 @@ impl RoutePaths {
         self.paths.iter().map(|(k, v)| (k.as_path(), v.0.as_str()))
     }
 
-    /// Remove all routes that match this regular expression, and return
-    /// the amount of routes removed.
-    pub(crate) fn remove_routes(&mut self, path: regex::Regex) -> usize {
-        let before = self.paths.len();
-        self.paths.retain(|k, _| {
-            let s = k.clone().into_os_string().into_string().unwrap();
-            !path.is_match(&s)
-        });
-        before - self.paths.len()
+    pub(crate) fn remove_routes(&mut self) {
+        self.paths.clear();
     }
 }
 
@@ -141,10 +134,8 @@ impl ApiService {
         self.paths.add_route(path, code, route_fn)
     }
 
-    /// Remove all routes that match this regular expression, and return
-    /// the amount of routes removed.
-    pub(crate) fn remove_routes(&mut self, path: regex::Regex) -> usize {
-        self.paths.remove_routes(path)
+    pub(crate) fn remove_routes(&mut self) {
+        self.paths.remove_routes()
     }
 
     pub(crate) async fn route(

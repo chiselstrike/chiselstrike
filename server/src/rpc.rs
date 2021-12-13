@@ -208,8 +208,7 @@ impl RpcService {
             query_engine.drop_table(&ty).await?;
         }
 
-        let regex = regex::Regex::new(".*").unwrap();
-        state.routes.remove_routes(regex.clone());
+        state.routes.remove_routes();
 
         for endpoint in &apply_request.endpoints {
             let path = format!("/{}", endpoint.path).to_owned();
@@ -239,7 +238,7 @@ impl RpcService {
             runtime.policies = policies;
 
             let mut api = runtime.api.lock().await;
-            api.remove_routes(regex);
+            api.remove_routes();
             crate::auth::init(&mut *api);
 
             for (path, func, code) in endpoints {
