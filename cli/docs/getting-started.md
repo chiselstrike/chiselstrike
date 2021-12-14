@@ -1,18 +1,62 @@
 # Getting Started
 
-## Server startup
+## Creating a project
 
-To get started, the first thing we need is a `chiseld` server running.
+To create a new ChiselStrike project, first create a directory:
 
-To start up the server, run:
-
-```
-chiseld
+```console
+% mkdir -p hello && cd hello
 ```
 
-And now you have the ChiselStrike server listening to HTTP port 8080 on localhost.
+Then run the `chisel init` command:
 
-Next, we will define some types in the ChiselStrike type system.
+```console
+% chisel init
+Initialized ChiselStrike project in hello-world
+```
+
+## Starting the server
+
+Once you have a project set up, the next step is to start the ChiselStrike
+server in development mode with the `chisel dev` command:
+
+```console
+% chisel dev
+INFO - ChiselStrike is ready 🚀 - URL: http://127.0.0.1:8080
+End point defined: /dev/hello
+```
+
+The ChiselStrike server is now listening to URL `http://127.0.0.1:8080` with an
+endpoint mounted at `/dev/hello`.
+
+You can access the endpoint with `curl`, for example:
+
+```
+% curl http://127.0.0.1:8080/dev/hello
+"hello, world!"%
+```
+
+## Endpoints
+
+Endpoints are a way to define your application business logic with TypeScript.
+
+To define a new endpoint, you need to create a file with your endpoint code in
+the `endpoints` directory.
+
+For example, create the file `endpoints/endpoint.ts` with the following
+contents:
+
+```typescript
+export default async function chisel(req) {
+    return new Response('hello, endpoint');
+}
+```
+
+If you have `chisel dev` running in the background, the new endpoint is picked
+up automatically, and you can access it at
+`http://127.0.0.1:8080/dev/endpoint`. If you are not using `chisel dev`, you
+need to run the `chisel apply` command for the new endpoint to become
+visible.
 
 ## Types 
 
