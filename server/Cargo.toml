@@ -18,7 +18,7 @@ enclose = "1.1"
 env_logger = "0.9.0"
 format-sql-query = "0.4.0"
 futures = "0.3.17"
-hyper = { git = "https://github.com/hyperium/hyper", rev = "1d553e52c6953ea3b039f5c3f89d35cb56e2436a", features = ["server", "tcp", "http1"] }
+hyper = { version = "0.14.16", features = ["server", "tcp", "http1"] }
 itertools = "0.10.1"
 log = "0.4.14"
 nix = "0.22.2"

@@ -788,7 +788,7 @@ dependencies = [
  "bytes",
  "deno_core",
  "deno_websocket",
- "hyper 0.14.13 (registry+https://github.com/rust-lang/crates.io-index)",
+ "hyper",
  "ring",
  "serde",
  "tokio",
@@ -839,7 +839,7 @@ dependencies = [
  "fs3",
  "fwdansi",
  "http",
- "hyper 0.14.13 (registry+https://github.com/rust-lang/crates.io-index)",
+ "hyper",
  "lazy_static",
  "libc",
  "log",
@@ -940,7 +940,7 @@ dependencies = [
  "deno_core",
  "deno_tls",
  "http",
- "hyper 0.14.13 (registry+https://github.com/rust-lang/crates.io-index)",
+ "hyper",
  "serde",
  "tokio",
  "tokio-rustls",
@@ -1529,9 +1529,9 @@ dependencies = [
 
 [[package]]
 name = "h2"
-version = "0.3.6"
+version = "0.3.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6c06815895acec637cd6ed6e9662c935b866d20a106f8361892893a7d9234964"
+checksum = "8f072413d126e57991455e0a922b31e4c8ba7c2ffbebf6b78b4f8521397d65cd"
 dependencies = [
  "bytes",
  "fnv",
@@ -1670,9 +1670,9 @@ checksum = "9a3a5bfb195931eeb336b2a7b4d761daec841b97f947d34394601737a7bba5e4"
 
 [[package]]
 name = "hyper"
-version = "0.14.13"
+version = "0.14.16"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "15d1cfb9e4f68655fa04c01f59edb405b6074a0f7118ea881e5026e4a1cd8593"
+checksum = "b7ec3e62bdc98a2f0393a5048e4c30ef659440ea6e0e572965103e72bd836f55"
 dependencies = [
  "bytes",
  "futures-channel",
@@ -1693,35 +1693,13 @@ dependencies = [
 ]
 
 [[package]]
-name = "hyper"
-version = "0.14.13"
-source = "git+https://github.com/hyperium/hyper?rev=1d553e52c6953ea3b039f5c3f89d35cb56e2436a#1d553e52c6953ea3b039f5c3f89d35cb56e2436a"
-dependencies = [
- "bytes",
- "futures-channel",
- "futures-core",
- "futures-util",
- "http",
- "http-body",
- "httparse",
- "httpdate",
- "itoa",
- "pin-project-lite",
- "socket2 0.4.2",
- "tokio",
- "tower-service",
- "tracing",
- "want",
-]
-
-[[package]]
 name = "hyper-rustls"
 version = "0.22.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5f9f7a97316d44c0af9b0301e65010573a853a9fc97046d7331d7f6bc0fd5a64"
 dependencies = [
  "futures-util",
- "hyper 0.14.13 (registry+https://github.com/rust-lang/crates.io-index)",
+ "hyper",
  "log",
  "rustls",
  "tokio",
@@ -1735,7 +1713,7 @@ version = "0.4.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "bbb958482e8c7be4bc3cf272a766a2b0bf1a6755e7a6ae777f017a31d11b13b1"
 dependencies = [
- "hyper 0.14.13 (registry+https://github.com/rust-lang/crates.io-index)",
+ "hyper",
  "pin-project-lite",
  "tokio",
  "tokio-io-timeout",
@@ -1748,7 +1726,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d6183ddfa99b85da61a140bea0efc93fdf56ceaa041b37d553518030827f9905"
 dependencies = [
  "bytes",
- "hyper 0.14.13 (registry+https://github.com/rust-lang/crates.io-index)",
+ "hyper",
  "native-tls",
  "tokio",
  "tokio-native-tls",
@@ -2989,7 +2967,7 @@ dependencies = [
  "futures-util",
  "http",
  "http-body",
- "hyper 0.14.13 (registry+https://github.com/rust-lang/crates.io-index)",
+ "hyper",
  "hyper-rustls",
  "hyper-tls",
  "ipnet",
@@ -3359,7 +3337,7 @@ dependencies = [
  "env_logger",
  "format-sql-query",
  "futures",
- "hyper 0.14.13 (git+https://github.com/hyperium/hyper?rev=1d553e52c6953ea3b039f5c3f89d35cb56e2436a)",
+ "hyper",
  "itertools 0.10.1",
  "log",
  "nix",
@@ -4227,7 +4205,7 @@ dependencies = [
  "h2",
  "http",
  "http-body",
- "hyper 0.14.13 (registry+https://github.com/rust-lang/crates.io-index)",
+ "hyper",
  "hyper-timeout",
  "percent-encoding",
  "pin-project",
