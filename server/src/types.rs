@@ -15,8 +15,8 @@ pub(crate) enum TypeSystemError {
     NoSuchVersion(String),
     #[error["object type expected, got `{0}` instead"]]
     ObjectTypeRequired(String),
-    #[error["unsafe to replace type: {0}"]]
-    UnsafeReplacement(String),
+    #[error["unsafe to replace type: {0}. Reason: {1}"]]
+    UnsafeReplacement(String, String),
     #[error["Error while trying to manipulate types: {0}"]]
     InternalServerError(String),
 }
@@ -108,7 +108,13 @@ impl TypeSystem {
         new_type: Arc<ObjectType>,
     ) -> Result<ObjectDelta, TypeSystemError> {
         if *old_type != *new_type {
-            return Err(TypeSystemError::UnsafeReplacement(new_type.name.clone()));
+            return Err(TypeSystemError::UnsafeReplacement(
+                new_type.name.clone(),
+                format!(
+                    "Types don't match. This is an internal ChiselStrike error. Types: {:?} / {:?}",
+                    *old_type, &*new_type
+                ),
+            ));
         }
 
         let mut old_fields = FieldMap::from(&*old_type);
@@ -122,13 +128,23 @@ impl TypeSystem {
             match old_fields.map.remove(name) {
                 None => {
                     if field.default.is_none() {
-                        return Err(TypeSystemError::UnsafeReplacement(new_type.name.clone()));
+                        return Err(TypeSystemError::UnsafeReplacement(new_type.name.clone(), format!("Trying to add a new field ({}) without a default value. Consider adding a default value to make the types compatible", field.name)));
                     }
                     added_fields.push(field.to_owned().clone());
                 }
                 Some(old) => {
                     if field.type_ != old.type_ {
-                        return Err(TypeSystemError::UnsafeReplacement(new_type.name.clone()));
+                        // FIXME: it should be almost always possible to evolve things into
+                        // strings.
+                        return Err(TypeSystemError::UnsafeReplacement(
+                            new_type.name.clone(),
+                            format!(
+                                "changing types from {} into {} for field {}. Incompatible change",
+                                old.type_.name(),
+                                field.type_.name(),
+                                field.name
+                            ),
+                        ));
                     }
 
                     let attrs = if field.default != old.default
@@ -169,7 +185,13 @@ impl TypeSystem {
         // only allow the removal of fields that previously had a default value
         for (_, field) in old_fields.map.into_iter() {
             if field.default.is_none() {
-                return Err(TypeSystemError::UnsafeReplacement(new_type.name.clone()));
+                return Err(TypeSystemError::UnsafeReplacement(
+                    new_type.name.clone(),
+                    format!(
+                        "field {} doesn't have a default value, so it is unsafe to remove",
+                        field.name
+                    ),
+                ));
             }
             removed_fields.push(field.to_owned().clone());
         }
