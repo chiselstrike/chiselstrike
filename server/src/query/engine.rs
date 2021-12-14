@@ -143,7 +143,7 @@ impl QueryEngine {
         Ok(())
     }
 
-    pub(crate) fn query_relation(&self, rel: &Relation) -> SqlStream {
+    pub(crate) fn query_relation(&self, rel: Relation) -> SqlStream {
         sql(&self.pool, rel)
     }
 

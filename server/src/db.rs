@@ -124,8 +124,8 @@ pub(crate) fn convert(val: &serde_json::Value) -> Result<Relation> {
     }
 }
 
-fn column_list(rel: &Relation) -> String {
-    let mut names = rel.columns.iter().map(|c| &c.0);
+fn column_list(columns: &[(String, Type)]) -> String {
+    let mut names = columns.iter().map(|c| &c.0);
     names.join(",")
 }
 
@@ -163,29 +163,29 @@ impl Stream for PolicyApplyingStream {
 
 fn sql_backing_store(
     pool: &AnyPool,
-    rel: &Relation,
-    name: &str,
-    policies: &FieldPolicies,
+    columns: Vec<(String, Type)>,
+    name: String,
+    policies: FieldPolicies,
 ) -> Query {
-    let query = format!("SELECT {} FROM {}", column_list(rel), name);
+    let query = format!("SELECT {} FROM {}", column_list(&columns), name);
     if policies.is_empty() {
         return Query::Sql(query);
     }
     let stream = new_query_results(query, pool);
     let pstream = Box::pin(PolicyApplyingStream {
         inner: stream,
-        policies: policies.clone(),
-        columns: rel.columns.clone(),
+        policies,
+        columns,
     });
     Query::Stream(pstream)
 }
 
 fn sql_filter(
     pool: &AnyPool,
-    rel: &Relation,
+    columns: &[(String, Type)],
     alias_count: &mut u32,
-    inner: &Relation,
-    restrictions: &[String],
+    inner: Relation,
+    restrictions: Vec<String>,
 ) -> Query {
     let inner_sql = sql_impl(pool, inner, alias_count);
     let inner_sql = match inner_sql {
@@ -197,7 +197,7 @@ fn sql_filter(
     let restrictions = restrictions.join(" AND ");
     Query::Sql(format!(
         "SELECT {} FROM ({}) AS {} WHERE {}",
-        column_list(rel),
+        column_list(columns),
         inner_sql,
         inner_alias,
         restrictions
@@ -206,11 +206,29 @@ fn sql_filter(
 
 fn sql_join(
     pool: &AnyPool,
-    rel: &Relation,
+    columns: &[(String, Type)],
     alias_count: &mut u32,
-    left: &Relation,
-    right: &Relation,
+    left: Relation,
+    right: Relation,
 ) -> Query {
+    let left_alias = format!("A{}", *alias_count);
+    let right_alias = format!("A{}", *alias_count + 1);
+    *alias_count += 2;
+
+    let mut join_columns = vec![];
+    let mut on_columns = vec![];
+    for c in columns {
+        if left.columns.contains(c) && right.columns.contains(c) {
+            join_columns.push(format!("${}.${}", left_alias, c.0));
+            on_columns.push(format!(
+                "{}.${} = ${}.${}",
+                left_alias, c.0, right_alias, c.0
+            ));
+        } else {
+            join_columns.push(c.0.clone());
+        }
+    }
+
     // FIXME: Optimize the case of table.left or table.right being just
     // a BackingStore with all fields. The database probably doesn't
     // care, but will make the logs cleaner.
@@ -224,24 +242,6 @@ fn sql_join(
         Query::Sql(s) => s,
         Query::Stream(_) => unimplemented!(),
     };
-
-    let left_alias = format!("A{}", *alias_count);
-    let right_alias = format!("A{}", *alias_count + 1);
-    *alias_count += 2;
-
-    let mut join_columns = vec![];
-    let mut on_columns = vec![];
-    for c in &rel.columns {
-        if left.columns.contains(c) && right.columns.contains(c) {
-            join_columns.push(format!("${}.${}", left_alias, c.0));
-            on_columns.push(format!(
-                "{}.${} = ${}.${}",
-                left_alias, c.0, right_alias, c.0
-            ));
-        } else {
-            join_columns.push(c.0.clone());
-        }
-    }
 
     let on = if on_columns.is_empty() {
         "TRUE".to_string()
@@ -260,25 +260,26 @@ fn sql_join(
     ))
 }
 
-fn sql_impl(pool: &AnyPool, rel: &Relation, alias_count: &mut u32) -> Query {
-    match &rel.inner {
-        Inner::BackingStore(name, policies) => sql_backing_store(pool, rel, name, policies),
+fn sql_impl(pool: &AnyPool, rel: Relation, alias_count: &mut u32) -> Query {
+    match rel.inner {
+        Inner::BackingStore(name, policies) => sql_backing_store(pool, rel.columns, name, policies),
         Inner::Filter(inner, restrictions) => {
-            sql_filter(pool, rel, alias_count, inner, restrictions)
+            sql_filter(pool, &rel.columns, alias_count, *inner, restrictions)
         }
-        Inner::Join(left, right) => sql_join(pool, rel, alias_count, left, right),
+        Inner::Join(left, right) => sql_join(pool, &rel.columns, alias_count, *left, *right),
     }
 }
 
-pub(crate) fn sql(pool: &AnyPool, rel: &Relation) -> SqlStream {
+pub(crate) fn sql(pool: &AnyPool, rel: Relation) -> SqlStream {
     let mut v = 0;
+    let columns = rel.columns.clone();
     match sql_impl(pool, rel, &mut v) {
         Query::Sql(s) => {
             let inner = new_query_results(s, pool);
             Box::pin(PolicyApplyingStream {
                 inner,
                 policies: FieldPolicies::new(),
-                columns: rel.columns.clone(),
+                columns,
             })
         }
         Query::Stream(s) => s,
