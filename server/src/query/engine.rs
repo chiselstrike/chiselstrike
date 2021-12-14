@@ -2,7 +2,7 @@
 
 use crate::db::{sql, Relation};
 use crate::query::{DbConnection, Kind, QueryError};
-use crate::types::{ObjectType, Type};
+use crate::types::{Field, ObjectDelta, ObjectType, Type};
 use futures::stream::BoxStream;
 use futures::stream::Stream;
 use futures::StreamExt;
@@ -12,6 +12,7 @@ use sea_query::{Alias, ColumnDef, Table};
 use serde_json::json;
 use sqlx::any::{Any, AnyPool, AnyRow};
 use sqlx::Column;
+use sqlx::Transaction;
 use sqlx::{Executor, Row};
 use std::cell::RefCell;
 use std::marker::PhantomPinned;
@@ -54,6 +55,26 @@ impl Stream for QueryResults {
     }
 }
 
+impl TryFrom<&Field> for ColumnDef {
+    type Error = anyhow::Error;
+    fn try_from(field: &Field) -> anyhow::Result<Self> {
+        let mut column_def = ColumnDef::new(Alias::new(&field.name));
+        match field.type_ {
+            Type::String => column_def.text(),
+            Type::Int => column_def.integer(),
+            Type::Float => column_def.double(),
+            Type::Boolean => column_def.boolean(),
+            Type::Object(_) => {
+                anyhow::bail!(QueryError::NotImplemented(
+                    "support for type Object".to_owned(),
+                ));
+            }
+        };
+
+        Ok(column_def)
+    }
+}
+
 /// Query engine.
 ///
 /// The query engine provides a way to persist objects and retrieve them from
@@ -74,23 +95,35 @@ impl QueryEngine {
         Ok(Self::new(local.kind, local.pool))
     }
 
-    pub(crate) async fn drop_table(&self, ty: &ObjectType) -> anyhow::Result<()> {
+    pub(crate) async fn drop_table(
+        &self,
+        transaction: &mut Transaction<'_, Any>,
+        ty: &ObjectType,
+    ) -> anyhow::Result<()> {
         let drop_table = Table::drop()
             .table(Alias::new(ty.backing_table()))
             .to_owned();
         let drop_table = drop_table.build_any(DbConnection::get_query_builder(&self.kind));
         let drop_table = sqlx::query(&drop_table);
 
-        let mut transaction = self
-            .pool
-            .begin()
-            .await
-            .map_err(QueryError::ConnectionFailed)?;
-
         transaction
             .execute(drop_table)
             .await
             .map_err(QueryError::ExecuteFailed)?;
+        Ok(())
+    }
+
+    pub(crate) async fn start_transaction(&self) -> anyhow::Result<Transaction<'_, Any>> {
+        Ok(self
+            .pool
+            .begin()
+            .await
+            .map_err(QueryError::ConnectionFailed)?)
+    }
+
+    pub(crate) async fn commit_transaction(
+        transaction: Transaction<'_, Any>,
+    ) -> anyhow::Result<()> {
         transaction
             .commit()
             .await
@@ -98,7 +131,11 @@ impl QueryEngine {
         Ok(())
     }
 
-    pub(crate) async fn create_table(&self, ty: &ObjectType) -> anyhow::Result<()> {
+    pub(crate) async fn create_table(
+        &self,
+        transaction: &mut Transaction<'_, Any>,
+        ty: &ObjectType,
+    ) -> anyhow::Result<()> {
         let mut create_table = Table::create()
             .table(Alias::new(ty.backing_table()))
             .if_not_exists()
@@ -110,34 +147,71 @@ impl QueryEngine {
             )
             .to_owned();
         for field in &ty.fields {
-            let mut column_def = ColumnDef::new(Alias::new(&field.name));
-            match field.type_ {
-                Type::String => column_def.text(),
-                Type::Int => column_def.integer(),
-                Type::Float => column_def.double(),
-                Type::Boolean => column_def.boolean(),
-                Type::Object(_) => {
-                    anyhow::bail!(QueryError::NotImplemented(
-                        "support for type Object".to_owned(),
-                    ));
-                }
-            };
+            let mut column_def = ColumnDef::try_from(field)?;
             create_table.col(&mut column_def);
         }
         let create_table = create_table.build_any(DbConnection::get_query_builder(&self.kind));
 
-        let mut transaction = self
-            .pool
-            .begin()
-            .await
-            .map_err(QueryError::ConnectionFailed)?;
         let create_table = sqlx::query(&create_table);
         transaction
             .execute(create_table)
             .await
             .map_err(QueryError::ExecuteFailed)?;
+        Ok(())
+    }
+
+    pub(crate) async fn alter_table(
+        &self,
+        transaction: &mut Transaction<'_, Any>,
+        old_ty: &ObjectType,
+        delta: ObjectDelta,
+    ) -> anyhow::Result<()> {
+        let mut table = Table::alter()
+            .table(Alias::new(old_ty.backing_table()))
+            .to_owned();
+
+        let mut needs_alter = false;
+        for field in delta.added_fields.iter() {
+            needs_alter = true;
+            let mut column_def = ColumnDef::try_from(field)?;
+            table.add_column(&mut column_def);
+        }
+
+        for field in delta.removed_fields.iter() {
+            needs_alter = true;
+            table.drop_column(Alias::new(&field.name));
+        }
+        // We don't loop over the modified part of the delta: SQLite doesn't support modify columns
+        // at all, but that is fine since the currently supported field modifications are handled
+        // by ChiselStrike directly and require no modifications to the tables.
+        //
+        // There are modifications that we can accept on application side (like changing defaults),
+        // since we always write with defaults. For all others, we should error out way before we
+        // get here.
+
+        if !needs_alter {
+            return Ok(());
+        }
+
+        // alter table is problematic on SQLite (https://sqlite.org/lang_altertable.html)
+        //
+        // However there are some modifications that are safe (like adding a column or removing a
+        // non-foreign-key column), but sqlx doesn't even generate the statement for them.
+        //
+        // So we fake being Postgres. Our ALTERs should be well-behaved, but we then need to make
+        // sure we're not doing any kind of operation that are listed among the problematic ones.
+        //
+        // In particular, we can't use defaults, which is fine since we can handle that on
+        // chiselstrike's side.
+        //
+        // FIXME: When we start generating indexes or using foreign keys, we'll have to make sure
+        // that those are still safe. Adding columns is always safe, but removals may not be if
+        // they are used in relations or indexes (see the document above)
+        let table = table.build_any(DbConnection::get_query_builder(&Kind::Postgres));
+
+        let table = sqlx::query(&table);
         transaction
-            .commit()
+            .execute(table)
             .await
             .map_err(QueryError::ExecuteFailed)?;
         Ok(())
