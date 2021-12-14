@@ -248,6 +248,7 @@ async fn wait(server_url: String) -> Result<tonic::Response<StatusResponse>> {
     .await
 }
 
+const MANIFEST_FILE: &str = "Chisel.toml";
 const TYPES_DIR: &str = "./types";
 const ENDPOINTS_DIR: &str = "./endpoints";
 const POLICIES_DIR: &str = "./policies";
@@ -260,8 +261,15 @@ fn if_is_dir(path: &str) -> Vec<String> {
     ret
 }
 
+fn project_exists() -> bool {
+    Path::new(MANIFEST_FILE).exists()
+        || Path::new(TYPES_DIR).exists()
+        || Path::new(ENDPOINTS_DIR).exists()
+        || Path::new(POLICIES_DIR).exists()
+}
+
 fn read_manifest() -> Result<Manifest> {
-    Ok(match read_to_string("Chisel.toml") {
+    Ok(match read_to_string(MANIFEST_FILE) {
         Ok(manifest) => toml::from_str(&manifest)?,
         _ => {
             let types = if_is_dir(TYPES_DIR);
@@ -341,6 +349,9 @@ async fn main() -> Result<()> {
     let server_url = opt.rpc_addr;
     match opt.cmd {
         Command::Init => {
+            if project_exists() {
+                anyhow::bail!("You cannot run `chisel init` on an existing ChiselStrike project");
+            }
             fs::create_dir(TYPES_DIR)?;
             fs::create_dir(ENDPOINTS_DIR)?;
             fs::create_dir(POLICIES_DIR)?;
