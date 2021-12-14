@@ -60,7 +60,7 @@ fn get_columns(val: &serde_json::Value) -> Result<Vec<(String, Type)>> {
     Ok(ret)
 }
 
-async fn convert_backing_store(val: &serde_json::Value) -> Result<Relation> {
+fn convert_backing_store(val: &serde_json::Value) -> Result<Relation> {
     let name = val["name"].as_str().ok_or_else(|| anyhow!("foo"))?;
     let columns = get_columns(val)?;
     let runtime = runtime::get();
@@ -120,7 +120,7 @@ async fn convert_filter(val: &serde_json::Value) -> Result<Relation> {
 pub(crate) async fn convert(val: &serde_json::Value) -> Result<Relation> {
     let kind = val["kind"].as_str().ok_or_else(|| anyhow!("foo"))?;
     match kind {
-        "BackingStore" => convert_backing_store(val).await,
+        "BackingStore" => convert_backing_store(val),
         "Join" => convert_join(val).await,
         "Filter" => convert_filter(val).await,
         _ => Err(anyhow!("Unexpected relation kind")),
