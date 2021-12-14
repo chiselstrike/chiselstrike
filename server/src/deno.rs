@@ -3,6 +3,7 @@
 use crate::api::{Body, RequestPath};
 use crate::db::convert;
 use crate::policies::FieldPolicies;
+use crate::query::engine::SqlStream;
 use crate::runtime;
 use crate::runtime::Runtime;
 use crate::types::ObjectType;
@@ -26,7 +27,6 @@ use deno_runtime::permissions::Permissions;
 use deno_runtime::worker::{MainWorker, WorkerOptions};
 use deno_runtime::BootstrapOptions;
 use deno_web::BlobStore;
-use futures::stream;
 use futures::stream::{try_unfold, Stream};
 use futures::FutureExt;
 use hyper::body::HttpBody;
@@ -242,7 +242,7 @@ async fn op_chisel_store(
     runtime.query_engine.add_row(&ty, &content["value"]).await
 }
 
-type DbStream = RefCell<Pin<Box<dyn stream::Stream<Item = anyhow::Result<serde_json::Value>>>>>;
+type DbStream = RefCell<SqlStream>;
 
 pub(crate) async fn get_policies(
     runtime: &Runtime,
