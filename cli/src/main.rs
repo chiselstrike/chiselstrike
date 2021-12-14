@@ -11,6 +11,7 @@ use futures::channel::mpsc::channel;
 use futures::{SinkExt, StreamExt};
 use notify::{Event, RecommendedWatcher, RecursiveMode, Watcher};
 use serde_derive::Deserialize;
+use std::env;
 use std::fs;
 use std::future::Future;
 use std::io::{stdin, Read};
@@ -345,6 +346,8 @@ async fn main() -> Result<()> {
             fs::create_dir(POLICIES_DIR)?;
             let endpoints = std::str::from_utf8(include_bytes!("template/hello.js"))?.to_string();
             fs::write(format!("{}/hello.js", ENDPOINTS_DIR), endpoints)?;
+            let cwd = env::current_dir()?;
+            println!("Initialized ChiselStrike project in {}", cwd.display());
         }
         Command::Dev => {
             let manifest = read_manifest()?;
