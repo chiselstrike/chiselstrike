@@ -1,6 +1,6 @@
 // SPDX-FileCopyrightText: © 2021 ChiselStrike <info@chiselstrike.com>
 
-use crate::collection_utils::longest_prefix;
+use crate::prefix_map::PrefixMap;
 use anyhow::{Error, Result};
 use async_mutex::Mutex;
 use futures::future::LocalBoxFuture;
@@ -11,7 +11,6 @@ use hyper::header::HeaderValue;
 use hyper::service::{make_service_fn, service_fn};
 use hyper::{HeaderMap, Request, Response, Server, StatusCode};
 use socket2::{Domain, Protocol, Socket, Type};
-use std::collections::BTreeMap;
 use std::convert::Infallible;
 use std::convert::TryFrom;
 use std::io::Cursor;
@@ -72,13 +71,13 @@ type RouteFn = Box<
 
 #[derive(Default)]
 pub(crate) struct RoutePaths {
-    paths: BTreeMap<PathBuf, (String, RouteFn)>,
+    paths: PrefixMap<(String, RouteFn)>,
 }
 
 impl RoutePaths {
     /// Finds the right RouteFn for this request.
     fn find_route_fn<S: AsRef<Path>>(&self, request: S) -> Option<&RouteFn> {
-        match longest_prefix(request.as_ref(), &self.paths) {
+        match self.paths.longest_prefix(request.as_ref()) {
             None => None,
             Some((_, f)) => Some(&f.1),
         }
@@ -102,7 +101,7 @@ impl RoutePaths {
     }
 
     pub(crate) fn route_data(&self) -> impl Iterator<Item = (&Path, &str)> {
-        self.paths.iter().map(|(k, v)| (k.as_path(), v.0.as_str()))
+        self.paths.iter().map(|(k, v)| (k, v.0.as_str()))
     }
 
     /// Remove all routes that match this regular expression, and return
