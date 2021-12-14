@@ -246,10 +246,7 @@ async fn op_chisel_store(
 
 type DbStream = RefCell<SqlStream>;
 
-pub(crate) async fn get_policies(
-    runtime: &Runtime,
-    ty: &ObjectType,
-) -> anyhow::Result<FieldPolicies> {
+pub(crate) fn get_policies(runtime: &Runtime, ty: &ObjectType) -> anyhow::Result<FieldPolicies> {
     let mut policies = FieldPolicies::default();
     CURRENT_REQUEST_PATH.with(|p| runtime.get_policies(ty, &mut policies, p.borrow().path()));
     Ok(policies)

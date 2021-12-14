@@ -68,7 +68,7 @@ async fn convert_backing_store(val: &serde_json::Value) -> Result<Relation> {
     let ts = &runtime.type_system;
     let api_version = current_api_version();
     let ty = ts.lookup_object_type(name, &api_version)?;
-    let policies = get_policies(&runtime, &ty).await?;
+    let policies = get_policies(&runtime, &ty)?;
 
     Ok(Relation {
         columns,
