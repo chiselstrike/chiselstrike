@@ -5,6 +5,7 @@ use crate::deno::get_policies;
 use crate::policies::FieldPolicies;
 use crate::query::engine;
 use crate::query::engine::new_query_results;
+use crate::query::engine::JsonObject;
 use crate::query::engine::RawSqlStream;
 use crate::query::engine::SqlStream;
 use crate::runtime;
@@ -142,7 +143,7 @@ struct PolicyApplyingStream {
 }
 
 impl Stream for PolicyApplyingStream {
-    type Item = anyhow::Result<serde_json::Value>;
+    type Item = anyhow::Result<JsonObject>;
     fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
         let columns = self.columns.clone();
         let policies = self.policies.clone();
