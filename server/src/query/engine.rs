@@ -2,6 +2,7 @@
 
 use crate::db::{sql, Relation};
 use crate::query::{DbConnection, Kind, QueryError};
+use crate::rpc::chisel::field_definition::IdMarker;
 use crate::types::{Field, ObjectDelta, ObjectType, Type};
 use futures::stream::BoxStream;
 use futures::stream::Stream;
@@ -68,6 +69,13 @@ impl TryFrom<&Field> for ColumnDef {
                     "support for type Object".to_owned(),
                 ));
             }
+        };
+
+        match field.id_marker {
+            IdMarker::None => &mut column_def,
+            IdMarker::Unique => column_def.unique_key(),
+            IdMarker::Uuid => column_def.unique_key().primary_key().not_null(),
+            IdMarker::AutoIncrement => column_def.auto_increment().primary_key().not_null(),
         };
 
         Ok(column_def)
@@ -138,17 +146,24 @@ impl QueryEngine {
         let mut create_table = Table::create()
             .table(Alias::new(ty.backing_table()))
             .if_not_exists()
-            .col(
+            .to_owned();
+
+        let mut has_id = false;
+        for field in &ty.fields {
+            let mut column_def = ColumnDef::try_from(field)?;
+            create_table.col(&mut column_def);
+            has_id |= field.has_non_null_id();
+        }
+
+        if !has_id {
+            create_table.col(
                 ColumnDef::new(Alias::new("id"))
                     .integer()
                     .auto_increment()
                     .primary_key(),
-            )
-            .to_owned();
-        for field in &ty.fields {
-            let mut column_def = ColumnDef::try_from(field)?;
-            create_table.col(&mut column_def);
+            );
         }
+
         let create_table = create_table.build_any(DbConnection::get_query_builder(&self.kind));
 
         let create_table = sqlx::query(&create_table);
@@ -214,17 +229,18 @@ impl QueryEngine {
         ty: &ObjectType,
         ty_value: &serde_json::Value,
     ) -> anyhow::Result<()> {
+        let fields = ty.non_auto_increment_fields();
         let insert_query = std::format!(
             "INSERT INTO {} ({}) VALUES ({})",
             &ty.backing_table(),
-            ty.fields.iter().map(|f| &f.name).join(", "),
-            (0..ty.fields.len())
+            fields.iter().map(|f| &f.name).join(", "),
+            (0..fields.len())
                 .map(|i| std::format!("${}", i + 1))
                 .join(", ")
         );
 
         let mut insert_query = sqlx::query(&insert_query);
-        for field in &ty.fields {
+        for field in fields.iter() {
             macro_rules! bind_default_json_value {
                 (str, $value:expr) => {{
                     insert_query = insert_query.bind($value);
@@ -250,7 +266,7 @@ impl QueryEngine {
                             insert_query = insert_query.bind(value);
                         }
                         None => {
-                            let value = field.default.clone().ok_or_else(|| {
+                            let value = field.generate().ok_or_else(|| {
                                 QueryError::IncompatibleData(
                                     field.name.to_owned(),
                                     ty.name().to_owned(),

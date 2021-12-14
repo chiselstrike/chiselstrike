@@ -12,9 +12,9 @@ use anyhow::Result;
 use async_mutex::Mutex;
 use chisel::chisel_rpc_server::{ChiselRpc, ChiselRpcServer};
 use chisel::{
-    ChiselApplyRequest, ChiselApplyResponse, ChiselDeleteRequest, ChiselDeleteResponse,
-    RestartRequest, RestartResponse, StatusRequest, StatusResponse, TypeExportRequest,
-    TypeExportResponse,
+    field_definition::IdMarker, ChiselApplyRequest, ChiselApplyResponse, ChiselDeleteRequest,
+    ChiselDeleteResponse, RestartRequest, RestartResponse, StatusRequest, StatusResponse,
+    TypeExportRequest, TypeExportResponse,
 };
 use futures::FutureExt;
 use std::collections::BTreeSet;
@@ -78,6 +78,20 @@ macro_rules! send_command {
     ( $code:block ) => {{
         Box::new({ move || async move { $code }.boxed_local() })
     }};
+}
+
+impl TryFrom<i32> for IdMarker {
+    type Error = anyhow::Error;
+
+    fn try_from(val: i32) -> Result<IdMarker> {
+        match val {
+            0 => Ok(IdMarker::None),
+            1 => Ok(IdMarker::Unique),
+            2 => Ok(IdMarker::Uuid),
+            3 => Ok(IdMarker::AutoIncrement),
+            _ => Err(anyhow::anyhow!("invalid value {} for IdMarker")),
+        }
+    }
 }
 
 /// RPC service for Chisel server.
@@ -217,8 +231,14 @@ impl RpcService {
 
             let mut fields = Vec::new();
             for field in type_def.field_defs {
-                let desc =
-                    NewField::new(type_system, &field.name, &field.field_type, &api_version)?;
+                let id_marker = IdMarker::try_from(field.id_marker)?;
+                let desc = NewField::new(
+                    type_system,
+                    &field.name,
+                    &field.field_type,
+                    id_marker,
+                    &api_version,
+                )?;
                 fields.push(Field::new(
                     desc,
                     field.labels,
@@ -405,6 +425,7 @@ impl ChiselRpc for RpcService {
                         labels: field.labels.clone(),
                         default_value: field.default.clone(),
                         is_optional: field.is_optional,
+                        id_marker: field.id_marker.into(),
                     });
                 }
                 let type_def = chisel::TypeDefinition {

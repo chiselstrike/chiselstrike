@@ -23,5 +23,5 @@ $CHISEL type export
 
 # CHECK: @a @b one: string;
 # CHECK: @a two: string;
-# CHECK: @c @b three: string;
+# CHECK: @b @c three: string;
 # CHECK: @a four: string;

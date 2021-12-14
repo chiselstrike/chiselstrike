@@ -1,4 +1,4 @@
-use crate::chisel::{AddTypeRequest, FieldDefinition};
+use crate::chisel::{field_definition::IdMarker, AddTypeRequest, FieldDefinition};
 use anyhow::{anyhow, bail, Result};
 use std::collections::BTreeSet;
 use std::path::Path;
@@ -8,8 +8,8 @@ use swc_common::{
     SourceMap, Spanned,
 };
 use swc_ecma_ast::{
-    ClassMember, Decl, Decorator, Expr, Ident, Lit, Stmt, TsEntityName, TsKeywordTypeKind, TsType,
-    TsTypeAnn,
+    ClassMember, ClassProp, Decl, Decorator, Expr, Ident, Lit, Stmt, TsEntityName,
+    TsKeywordTypeKind, TsType, TsTypeAnn,
 };
 use swc_ecma_parser::{lexer::Lexer, Parser, StringInput, Syntax, TsConfig};
 
@@ -101,12 +101,42 @@ fn get_field_value(handler: &Handler, x: &Option<Box<Expr>>) -> Result<Option<(S
     }
 }
 
-fn get_type_decorators(handler: &Handler, x: &[Decorator]) -> Result<Vec<String>> {
-    let mut output = vec![];
+fn get_type_decorators(handler: &Handler, x: &[Decorator]) -> Result<BTreeSet<String>> {
+    let mut output = BTreeSet::new();
     for dec in x.iter() {
-        output.push(get_ident_string(handler, &dec.expr)?);
+        output.insert(get_ident_string(handler, &dec.expr)?);
     }
     Ok(output)
+}
+
+fn validate_id(marker: &IdMarker, ty: &str, field_name: &str) -> Result<()> {
+    if *marker != IdMarker::Uuid
+        && *marker != IdMarker::AutoIncrement
+        && field_name.to_lowercase() == "id"
+    {
+        anyhow::bail!("You are creating a field named id, but not adding an id decorator (@id, or @uuid). Add a decorator or rename the field");
+    }
+
+    if *marker != IdMarker::None {
+        anyhow::ensure!(
+            ty != "number",
+            "the type number cannot be used with an ID decorator"
+        );
+
+        anyhow::ensure!(
+            ty != "boolean",
+            "the type boolean cannot be used with an ID decorator"
+        );
+
+        if *marker == IdMarker::Uuid {
+            anyhow::ensure!(ty == "string", "only string can be marked as Uuid");
+        }
+
+        if *marker == IdMarker::AutoIncrement {
+            anyhow::ensure!(ty == "bigint", "ids have to be bigint");
+        }
+    }
+    Ok(())
 }
 
 fn validate_type_vec(type_vec: &[AddTypeRequest], valid_types: &BTreeSet<String>) -> Result<()> {
@@ -128,6 +158,50 @@ fn validate_type_vec(type_vec: &[AddTypeRequest], valid_types: &BTreeSet<String>
         }
     }
     Ok(())
+}
+
+impl From<&str> for IdMarker {
+    fn from(val: &str) -> Self {
+        match val {
+            "unique" => IdMarker::Unique,
+            "uuid" => IdMarker::Uuid,
+            "id" => IdMarker::AutoIncrement,
+            _ => unreachable!(),
+        }
+    }
+}
+
+fn parse_class_prop(x: &ClassProp, handler: &Handler) -> Result<FieldDefinition> {
+    let (default_value, field_type) = match get_field_value(handler, &x.value)? {
+        None => (None, get_field_type(handler, &x.type_ann)?),
+        Some((val, t)) => (Some(val), t),
+    };
+    let (field_name, is_optional) = get_field_info(handler, &x.key)?;
+
+    let mut labels = get_type_decorators(handler, &x.decorators)?;
+    let mut ids = vec![];
+    for id_type in ["unique", "uuid", "id"].into_iter() {
+        if labels.remove(id_type) {
+            ids.push(id_type);
+        }
+    }
+    let id_marker = if ids.is_empty() {
+        IdMarker::None
+    } else if ids.len() == 1 {
+        IdMarker::from(ids[0])
+    } else {
+        bail!("Impossible condition! Ids array was constructed explicitly, but seems corrupted");
+    };
+    validate_id(&id_marker, &field_type, &field_name)?;
+
+    Ok(FieldDefinition {
+        name: field_name,
+        is_optional,
+        default_value,
+        field_type,
+        labels: labels.iter().cloned().collect(),
+        id_marker: id_marker.into(),
+    })
 }
 
 fn parse_one_file<P: AsRef<Path>>(
@@ -186,29 +260,31 @@ fn parse_one_file<P: AsRef<Path>>(
                     bail!("Type {} defined twice", name);
                 }
 
+                let mut ids = 0;
                 for member in &x.class.body {
                     match member {
-                        ClassMember::ClassProp(x) => {
-                            let (default_value, field_type) =
-                                match get_field_value(&handler, &x.value)? {
-                                    None => (None, get_field_type(&handler, &x.type_ann)?),
-                                    Some((val, t)) => (Some(val), t),
-                                };
-                            let (field_name, is_optional) = get_field_info(&handler, &x.key)?;
-
-                            field_defs.push(FieldDefinition {
-                                name: field_name,
-                                is_optional,
-                                default_value,
-                                field_type,
-                                labels: get_type_decorators(&handler, &x.decorators)?,
-                            });
-                        }
+                        ClassMember::ClassProp(x) => match parse_class_prop(x, &handler) {
+                            Err(err) => {
+                                handler
+                                    .span_err(x.span(), &format!("While parsing class {}", name));
+                                bail!("{}", err);
+                            }
+                            Ok(fd) => {
+                                if fd.id_marker == IdMarker::AutoIncrement as i32 {
+                                    ids += 1;
+                                }
+                                field_defs.push(fd);
+                            }
+                        },
                         z => {
                             handler.span_err(z.span(), "Only property definitions (with optional decorators) allowed in the types file");
                             bail!("invalid type file {}", filename.as_ref().display());
                         }
                     }
+                }
+                if ids > 1 {
+                    handler.span_err(x.span(), &format!("While parsing class {}", name));
+                    bail!("Only one @id supported per class");
                 }
 
                 type_vec.push(AddTypeRequest { name, field_defs });

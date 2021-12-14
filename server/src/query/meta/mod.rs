@@ -6,6 +6,7 @@ use crate::api::RoutePaths;
 use crate::deno;
 use crate::policies::Policies;
 use crate::query::{DbConnection, Kind, QueryError};
+use crate::rpc::chisel::field_definition::IdMarker;
 use crate::types::{
     ExistingField, ExistingObject, Field, FieldDelta, ObjectDelta, ObjectType, TypeSystem,
 };
@@ -117,19 +118,21 @@ async fn insert_field_query(
 
     let add_field = match &field.default {
         None => {
-            let query = sqlx::query("INSERT INTO fields (field_type, type_id, is_optional) VALUES ($1, $2, $3) RETURNING *");
+            let query = sqlx::query("INSERT INTO fields (field_type, type_id, is_optional, id_marker) VALUES ($1, $2, $3, $4) RETURNING *");
             query
                 .bind(field.type_.name())
                 .bind(type_id)
                 .bind(field.is_optional)
+                .bind(field.id_marker as i32)
         }
         Some(value) => {
-            let query = sqlx::query("INSERT INTO fields (field_type, type_id, default_value, is_optional) VALUES ($1, $2, $3, $4) RETURNING *");
+            let query = sqlx::query("INSERT INTO fields (field_type, type_id, default_value, is_optional, id_marker) VALUES ($1, $2, $3, $4, $5) RETURNING *");
             query
                 .bind(field.type_.name())
                 .bind(type_id)
                 .bind(value.to_owned())
                 .bind(field.is_optional)
+                .bind(field.id_marker as i32)
         }
     };
     let add_field_name =
@@ -262,7 +265,7 @@ impl MetaService {
     }
 
     async fn load_type_fields(&self, ts: &TypeSystem, type_id: i32) -> anyhow::Result<Vec<Field>> {
-        let query = sqlx::query("SELECT fields.field_id AS field_id, field_names.field_name AS field_name, fields.field_type AS field_type, fields.default_value as default_value, fields.is_optional as is_optional FROM field_names INNER JOIN fields ON fields.type_id = $1 AND field_names.field_id = fields.field_id;");
+        let query = sqlx::query("SELECT fields.field_id AS field_id, field_names.field_name AS field_name, fields.field_type AS field_type, fields.default_value as default_value, fields.is_optional as is_optional, fields.id_marker as id_marker FROM field_names INNER JOIN fields ON fields.type_id = $1 AND field_names.field_id = fields.field_id;");
         let query = query.bind(type_id);
         let rows = query
             .fetch_all(&self.pool)
@@ -273,7 +276,9 @@ impl MetaService {
             let field_name: &str = row.get("field_name");
             let field_id: i32 = row.get("field_id");
             let field_type: &str = row.get("field_type");
-            let desc = ExistingField::new(ts, field_name, field_id, field_type)?;
+            let id_marker: i32 = row.get("id_marker");
+            let id_marker = IdMarker::try_from(id_marker)?;
+            let desc = ExistingField::new(ts, field_name, field_id, id_marker, field_type)?;
 
             let field_def: Option<String> = row.get("default_value");
             let is_optional: bool = row.get("is_optional");

@@ -1,5 +1,6 @@
 // SPDX-FileCopyrightText: © 2021 ChiselStrike <info@chiselstrike.com>
 
+use crate::rpc::chisel::field_definition::IdMarker;
 use derive_new::new;
 use std::collections::{BTreeMap, HashMap};
 use std::sync::Arc;
@@ -133,6 +134,12 @@ impl TypeSystem {
                     added_fields.push(field.to_owned().clone());
                 }
                 Some(old) => {
+                    if field.id_marker != old.id_marker {
+                        return Err(TypeSystemError::UnsafeReplacement(
+                            new_type.name.clone(),
+                            format!("Changing id status for field {} is not allowed", field.name),
+                        ));
+                    }
                     if field.type_ != old.type_ {
                         // FIXME: it should be almost always possible to evolve things into
                         // strings.
@@ -461,6 +468,13 @@ impl ObjectType {
     pub(crate) fn persisted_name(&self) -> String {
         format!("{}.{}", self.api_version, self.name)
     }
+
+    pub(crate) fn non_auto_increment_fields(&self) -> Vec<&Field> {
+        self.fields
+            .iter()
+            .filter(|x| x.id_marker != IdMarker::AutoIncrement)
+            .collect()
+    }
 }
 
 impl PartialEq for ObjectType {
@@ -492,12 +506,14 @@ pub(crate) trait FieldDescriptor {
     fn id(&self) -> Option<i32>;
     fn ty(&self) -> Type;
     fn api_version(&self) -> String;
+    fn id_marker(&self) -> IdMarker;
 }
 
 pub(crate) struct ExistingField {
     name: String,
     ty_: Type,
     id: i32,
+    id_marker: IdMarker,
     version: String,
 }
 
@@ -506,6 +522,7 @@ impl ExistingField {
         ts: &TypeSystem,
         name: &str,
         id: i32,
+        id_marker: IdMarker,
         field_type: &str,
     ) -> anyhow::Result<Self> {
         let split: Vec<&str> = name.split('.').collect();
@@ -517,6 +534,7 @@ impl ExistingField {
             ty_: ts.lookup_type(field_type, &version)?,
             name,
             id,
+            id_marker,
             version,
         })
     }
@@ -538,11 +556,16 @@ impl FieldDescriptor for ExistingField {
     fn api_version(&self) -> String {
         self.version.to_owned()
     }
+
+    fn id_marker(&self) -> IdMarker {
+        self.id_marker
+    }
 }
 
 pub(crate) struct NewField<'a> {
     name: &'a str,
     ty_: Type,
+    id_marker: IdMarker,
     version: &'a str,
 }
 
@@ -551,10 +574,16 @@ impl<'a> NewField<'a> {
         versions: &VersionTypes,
         name: &'a str,
         type_name: &str,
+        id_marker: IdMarker,
         version: &'a str,
     ) -> anyhow::Result<Self> {
         let ty_ = versions.lookup_type(type_name)?;
-        Ok(Self { name, ty_, version })
+        Ok(Self {
+            name,
+            ty_,
+            id_marker,
+            version,
+        })
     }
 }
 
@@ -574,6 +603,10 @@ impl<'a> FieldDescriptor for NewField<'a> {
     fn api_version(&self) -> String {
         self.version.to_owned()
     }
+
+    fn id_marker(&self) -> IdMarker {
+        self.id_marker
+    }
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -584,6 +617,7 @@ pub(crate) struct Field {
     pub(crate) labels: Vec<String>,
     pub(crate) default: Option<String>,
     pub(crate) is_optional: bool,
+    pub(crate) id_marker: IdMarker,
     api_version: String,
 }
 
@@ -599,6 +633,7 @@ impl Field {
             name: desc.name(),
             type_: desc.ty(),
             api_version: desc.api_version(),
+            id_marker: desc.id_marker(),
             labels,
             default,
             is_optional,
@@ -612,6 +647,29 @@ impl Field {
             parent_type_name.name(),
             self.name
         )
+    }
+
+    /// Generate a value for this field in case the query didn't provide one.
+    /// For fields that are UUIDs, generate one randomly. For things that have
+    /// a default, return the default
+    pub(crate) fn generate(&self) -> Option<String> {
+        match self.id_marker {
+            IdMarker::Uuid => {
+                let uuid = Uuid::new_v4();
+                match self.type_.name() {
+                    "string" => {
+                        let mut buffer = Uuid::encode_buffer();
+                        Some(uuid.to_hyphenated().encode_lower(&mut buffer).to_string())
+                    }
+                    _ => None,
+                }
+            }
+            _ => self.default.clone(),
+        }
+    }
+
+    pub(crate) fn has_non_null_id(&self) -> bool {
+        self.id_marker == IdMarker::AutoIncrement || self.id_marker == IdMarker::Uuid
     }
 }
 

@@ -1,0 +1,63 @@
+# SPDX-FileCopyrightText: © 2021 ChiselStrike <info@chiselstrike.com>
+
+# RUN: sh -e @file
+
+cd "$TEMPDIR"
+cat << EOF > "$TEMPDIR/types/types.ts"
+class Valid {
+  @unique a: string;
+}
+EOF
+$CHISEL apply --version v0 2>&1 || echo
+# CHECK: Type defined: Valid
+
+cat << EOF > "$TEMPDIR/types/types.ts"
+class Valid {
+  @unique a: string;
+  @unique b: string;
+}
+EOF
+$CHISEL apply --version v1 2>&1 || echo
+# CHECK: Type defined: Valid
+
+cat << EOF > "$TEMPDIR/types/types.ts"
+class Valid {
+  @unique a: bigint;
+}
+EOF
+$CHISEL apply --version v2 2>&1 || echo
+# CHECK: Type defined: Valid
+
+cat << EOF > "$TEMPDIR/types/types.ts"
+class Valid {
+  @uuid a: string;
+}
+EOF
+$CHISEL apply --version v3 2>&1 || echo
+# CHECK: Type defined: Valid
+
+cat << EOF > "$TEMPDIR/types/types.ts"
+class Invalid {
+  @id a: string;
+}
+EOF
+$CHISEL apply --version v4 2>&1 || echo
+# CHECK: error:
+
+cat << EOF > "$TEMPDIR/types/types.ts"
+class Invalid {
+  @id a: bigint;
+  @id b: bigint;
+}
+EOF
+$CHISEL apply --version v5 2>&1 || echo
+# CHECK: error:
+
+cat << EOF > "$TEMPDIR/types/types.ts"
+class Valid {
+  @id a: bigint;
+}
+EOF
+$CHISEL apply --version v6 2>&1 || echo
+# CHECK: Type defined: Valid
+

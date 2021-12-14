@@ -35,6 +35,13 @@ message FieldDefinition {
   repeated string labels = 3;
   bool is_optional = 4;
   optional string default_value = 5;
+  enum IdMarker {
+     NONE = 0;
+     UNIQUE = 1;
+     UUID = 2;
+     AUTO_INCREMENT = 3;
+  }
+  IdMarker id_marker = 6;
 }
 
 message TypeExportRequest {
