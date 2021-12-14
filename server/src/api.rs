@@ -242,7 +242,7 @@ pub(crate) fn spawn(
         .serve(make_svc);
     Ok(tokio::task::spawn_local(async move {
         let ret = server.with_graceful_shutdown(shutdown).await;
-        info!("hyper shutdown");
+        debug!("hyper shutdown");
         ret
     }))
 }

@@ -131,7 +131,10 @@ async fn run(state: SharedState, mut cmd: ExecutorChannel) -> Result<()> {
     })?;
     state.readiness_tx.send(()).await?;
 
-    info!("ChiselStrike is ready 🚀 - URL: {} ", state.api_listen_addr);
+    info!(
+        "ChiselStrike is ready 🚀 - URL: http://{} ",
+        state.api_listen_addr
+    );
 
     api_task.await??;
     command_task.await?;
@@ -198,11 +201,11 @@ pub async fn run_shared_state(
     let sig_task = tokio::task::spawn(async move {
         use futures::FutureExt;
         let res = futures::select! {
-            _ = sigterm.recv().fuse() => { info!("Got SIGTERM"); DoRepeat::No },
-            _ = sigint.recv().fuse() => { info!("Got SIGINT"); DoRepeat::No },
-            _ = sighup.recv().fuse() => { info!("Got SIGHUP"); DoRepeat::Yes },
+            _ = sigterm.recv().fuse() => { debug!("Got SIGTERM"); DoRepeat::No },
+            _ = sigint.recv().fuse() => { debug!("Got SIGINT"); DoRepeat::No },
+            _ = sighup.recv().fuse() => { debug!("Got SIGHUP"); DoRepeat::Yes },
         };
-        info!("Got signal");
+        debug!("Got signal");
         tx.send(()).await?;
         Ok(res)
     });
