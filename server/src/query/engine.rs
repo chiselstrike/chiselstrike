@@ -2,7 +2,7 @@
 
 use crate::db::{sql, Relation};
 use crate::query::{DbConnection, Kind, QueryError};
-use crate::types::{ObjectType, Type};
+use crate::types::{Field, ObjectDelta, ObjectType, Type};
 use futures::stream::BoxStream;
 use futures::stream::Stream;
 use futures::StreamExt;
@@ -12,6 +12,7 @@ use sea_query::{Alias, ColumnDef, Table};
 use serde_json::json;
 use sqlx::any::{Any, AnyPool, AnyRow};
 use sqlx::Column;
+use sqlx::Transaction;
 use sqlx::{Executor, Row};
 use std::cell::RefCell;
 use std::marker::PhantomPinned;
@@ -53,6 +54,26 @@ impl Stream for QueryResults {
     }
 }
 
+impl TryFrom<&Field> for ColumnDef {
+    type Error = anyhow::Error;
+    fn try_from(field: &Field) -> anyhow::Result<Self> {
+        let mut column_def = ColumnDef::new(Alias::new(&field.name));
+        match field.type_ {
+            Type::String => column_def.text(),
+            Type::Int => column_def.integer(),
+            Type::Float => column_def.double(),
+            Type::Boolean => column_def.boolean(),
+            Type::Object(_) => {
+                anyhow::bail!(QueryError::NotImplemented(
+                    "support for type Object".to_owned(),
+                ));
+            }
+        };
+
+        Ok(column_def)
+    }
+}
+
 /// Query engine.
 ///
 /// The query engine provides a way to persist objects and retrieve them from
@@ -73,31 +94,47 @@ impl QueryEngine {
         Ok(Self::new(local.kind, local.pool))
     }
 
-    pub(crate) async fn drop_table(&self, ty: &ObjectType) -> anyhow::Result<()> {
+    pub(crate) async fn drop_table(
+        &self,
+        transaction: &mut Transaction<'_, Any>,
+        ty: &ObjectType,
+    ) -> anyhow::Result<()> {
         let drop_table = Table::drop()
             .table(Alias::new(ty.backing_table()))
             .to_owned();
         let drop_table = drop_table.build_any(DbConnection::get_query_builder(&self.kind));
         let drop_table = sqlx::query(&drop_table);
 
-        let mut transaction = self
-            .pool
-            .begin()
-            .await
-            .map_err(QueryError::ConnectionFailed)?;
-
         transaction
             .execute(drop_table)
-            .await
-            .map_err(QueryError::ExecuteFailed)?;
-        transaction
-            .commit()
             .await
             .map_err(QueryError::ExecuteFailed)?;
         Ok(())
     }
 
-    pub(crate) async fn create_table(&self, ty: &ObjectType) -> anyhow::Result<()> {
+    pub(crate) async fn start_transaction(&self) -> anyhow::Result<Transaction<'_, Any>> {
+        Ok(self
+            .pool
+            .begin()
+            .await
+            .map_err(QueryError::ConnectionFailed)?)
+    }
+
+    pub(crate) async fn commit_transaction(
+        transaction: Transaction<'_, Any>,
+    ) -> anyhow::Result<()> {
+        transaction
+            .commit()
+            .await
+            .map_err(QueryError::ConnectionFailed)?;
+        Ok(())
+    }
+
+    pub(crate) async fn create_table(
+        &self,
+        transaction: &mut Transaction<'_, Any>,
+        ty: &ObjectType,
+    ) -> anyhow::Result<()> {
         let mut create_table = Table::create()
             .table(Alias::new(ty.backing_table()))
             .if_not_exists()
@@ -109,34 +146,60 @@ impl QueryEngine {
             )
             .to_owned();
         for field in &ty.fields {
-            let mut column_def = ColumnDef::new(Alias::new(&field.name));
-            match field.type_ {
-                Type::String => column_def.text(),
-                Type::Int => column_def.integer(),
-                Type::Float => column_def.double(),
-                Type::Boolean => column_def.boolean(),
-                Type::Object(_) => {
-                    anyhow::bail!(QueryError::NotImplemented(
-                        "support for type Object".to_owned(),
-                    ));
-                }
-            };
+            let mut column_def = ColumnDef::try_from(field)?;
             create_table.col(&mut column_def);
         }
         let create_table = create_table.build_any(DbConnection::get_query_builder(&self.kind));
 
-        let mut transaction = self
-            .pool
-            .begin()
-            .await
-            .map_err(QueryError::ConnectionFailed)?;
         let create_table = sqlx::query(&create_table);
         transaction
             .execute(create_table)
             .await
             .map_err(QueryError::ExecuteFailed)?;
+        Ok(())
+    }
+
+    pub(crate) async fn alter_table(
+        &self,
+        transaction: &mut Transaction<'_, Any>,
+        old_ty: &ObjectType,
+        delta: ObjectDelta,
+    ) -> anyhow::Result<()> {
+        let mut table = Table::alter()
+            .table(Alias::new(old_ty.backing_table()))
+            .to_owned();
+
+        let mut modified = 0;
+        for field in delta.added_fields.iter() {
+            modified += 1;
+            let mut column_def = ColumnDef::try_from(field)?;
+            table.add_column(&mut column_def);
+        }
+
+        for field in delta.removed_fields.iter() {
+            modified += 1;
+            table.drop_column(Alias::new(&field.name));
+        }
+
+        // SQLite doesn't support modify columns at all, so we just ignore those, and will handle
+        // any kind of modification on the application side. It also could be that we got
+        // here, but didn't really modify anything at the table level
+        if modified == 0 {
+            return Ok(());
+        }
+
+        // alter table is problematic on SQLite (https://sqlite.org/lang_altertable.html)
+        //
+        // So we fake being Postgres. Our ALTERs should be well-behaved, but we then need to make
+        // sure we're not doing any kind of operation that are listed among the problematic ones.
+        //
+        // In particular, we can't use defaults, which is fine since we can handle that on
+        // chiselstrike's side.
+        let table = table.build_any(DbConnection::get_query_builder(&Kind::Postgres));
+
+        let table = sqlx::query(&table);
         transaction
-            .commit()
+            .execute(table)
             .await
             .map_err(QueryError::ExecuteFailed)?;
         Ok(())

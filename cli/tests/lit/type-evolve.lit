@@ -1,0 +1,69 @@
+# SPDX-FileCopyrightText: © 2021 ChiselStrike <info@chiselstrike.com>
+
+# RUN: sh -e @file
+
+cd "$TEMPDIR"
+cat << EOF > "$TEMPDIR/types/types.ts"
+class Evolving { a: string; }
+EOF
+set +e
+$CHISEL apply 2>&1
+set -e
+# CHECK: Type defined: Evolving
+
+cat << EOF > "$TEMPDIR/types/types.ts"
+class Evolving { a: string; b: string = "with_default"; }
+EOF
+set +e
+$CHISEL apply 2>&1
+set -e
+# CHECK: Type defined: Evolving
+
+cat << EOF > "$TEMPDIR/endpoints/store.ts"
+export default async function chisel(req) {
+   await Chisel.store('Evolving', { "a": "A", "b": "B" });
+   return new Response('ok\n');
+}
+EOF
+
+cat << EOF > "$TEMPDIR/endpoints/find.ts"
+export default async function chisel(req) {
+   let evolve = await Chisel.collections.Evolving.rows();
+   let response = "";
+   for await (let ev of evolve) {
+        let fields = [ev.a, ev.b];
+        response += fields.join(" ");
+        response += " ";
+   }
+   response += "\n";
+   return new Response(response);
+}
+EOF
+
+set +e
+$CHISEL apply 2>&1
+set -e
+# CHECK: Type defined: Evolving
+# CHECK: End point defined: /dev/find
+# CHECK: End point defined: /dev/store
+
+$CURL -X POST -o - $CHISELD_HOST/dev/store
+# CHECK: HTTP/1.1 200 OK
+
+$CHISEL restart
+
+$CURL -X POST -o - $CHISELD_HOST/dev/find
+# CHECK: HTTP/1.1 200 OK
+# CHECK: A B
+
+cat << EOF > "$TEMPDIR/types/types.ts"
+class Evolving { a: string; }
+EOF
+set +e
+$CHISEL apply 2>&1
+set -e
+# CHECK: Type defined: Evolving
+
+$CURL -X POST -o - $CHISELD_HOST/dev/find
+# CHECK: HTTP/1.1 200 OK
+# CHECK: A
