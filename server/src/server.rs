@@ -131,7 +131,10 @@ async fn run(state: SharedState, mut cmd: ExecutorChannel) -> Result<()> {
     })?;
     state.readiness_tx.send(()).await?;
 
-    info!("ChiselStrike is ready 🚀 - URL: {} ", state.api_listen_addr);
+    info!(
+        "ChiselStrike is ready 🚀 - URL: http://{} ",
+        state.api_listen_addr
+    );
 
     api_task.await??;
     command_task.await?;
