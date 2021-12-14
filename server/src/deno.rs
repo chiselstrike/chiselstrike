@@ -273,7 +273,7 @@ async fn op_chisel_relational_query_create(
     // is no way to access it from here. We would have to replace
     // op_chisel_relational_query_create with a closure that has an
     // Rc<DenoService>.
-    let relation = convert(&relation).await?;
+    let relation = convert(&relation)?;
     let runtime = runtime::get();
     let mut runtime = runtime.borrow_mut();
     let query_engine = &mut runtime.query_engine;
