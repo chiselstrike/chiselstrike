@@ -3,6 +3,7 @@
 use crate::api::{Body, RequestPath};
 use crate::db::convert;
 use crate::policies::FieldPolicies;
+use crate::query::engine::JsonObject;
 use crate::query::engine::SqlStream;
 use crate::runtime;
 use crate::runtime::Runtime;
@@ -289,7 +290,7 @@ async fn op_chisel_relational_query_next(
     state: Rc<RefCell<OpState>>,
     query_stream_rid: ResourceId,
     _: (),
-) -> Result<Option<serde_json::Value>> {
+) -> Result<Option<JsonObject>> {
     let resource: Rc<QueryStreamResource> = state.borrow().resource_table.get(query_stream_rid)?;
     let mut stream = resource.stream.borrow_mut();
     use futures::stream::StreamExt;

@@ -22,7 +22,8 @@ use std::task::{Context, Poll};
 pub(crate) type RawSqlStream = BoxStream<'static, anyhow::Result<AnyRow>>;
 
 // Results with policies applied
-pub(crate) type SqlStream = BoxStream<'static, anyhow::Result<serde_json::Value>>;
+pub(crate) type JsonObject = serde_json::Map<String, serde_json::Value>;
+pub(crate) type SqlStream = BoxStream<'static, anyhow::Result<JsonObject>>;
 
 struct QueryResults {
     raw_query: String,
@@ -232,8 +233,8 @@ impl QueryEngine {
 pub(crate) fn relational_row_to_json(
     columns: &[(String, Type)],
     row: &AnyRow,
-) -> anyhow::Result<serde_json::Value> {
-    let mut ret = json!({});
+) -> anyhow::Result<JsonObject> {
+    let mut ret = JsonObject::default();
     for (query_column, result_column) in zip(columns, row.columns()) {
         let i = result_column.ordinal();
         // FIXME: consider result_column.type_info().is_null() too
@@ -250,7 +251,7 @@ pub(crate) fn relational_row_to_json(
             Type::Boolean => to_json!(bool),
             Type::Object(_) => unreachable!("A column cannot be a Type::Object"),
         };
-        ret[result_column.name()] = val;
+        ret.insert(result_column.name().to_string(), val);
     }
     Ok(ret)
 }
