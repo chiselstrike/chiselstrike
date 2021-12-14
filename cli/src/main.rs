@@ -329,8 +329,6 @@ async fn apply<S: ToString>(
     let endpoints = manifest.endpoints()?;
     let policies = manifest.policies()?;
 
-    let mut client = ChiselRpcClient::connect(server_url).await?;
-
     let mut types_req = vec![];
     let mut endpoints_req = vec![];
     let mut policy_req = vec![];
@@ -353,6 +351,7 @@ async fn apply<S: ToString>(
         });
     }
 
+    let mut client = ChiselRpcClient::connect(server_url).await?;
     let msg = execute!(
         client
             .apply(tonic::Request::new(ChiselApplyRequest {
