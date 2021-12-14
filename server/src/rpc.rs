@@ -340,7 +340,7 @@ pub(crate) fn spawn(
             .add_service(ChiselRpcServer::new(rpc))
             .serve_with_shutdown(addr, shutdown)
             .await;
-        info!("Tonic shutdown");
+        debug!("Tonic shutdown");
         ret?;
         Ok(())
     })
