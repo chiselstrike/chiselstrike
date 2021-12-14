@@ -34,11 +34,11 @@ const TIMEOUT: Duration = Duration::from_secs(10);
 #[derive(Deserialize)]
 struct Manifest {
     /// Vector of directories to scan for type definitions.
-    types: Vec<String>,
+    types_dirs: Vec<String>,
     /// Vector of directories to scan for endpoint definitions.
-    endpoints: Vec<String>,
+    endpoints_dirs: Vec<String>,
     /// Vector of directories to scan for policy definitions.
-    policies: Vec<String>,
+    policies_dirs: Vec<String>,
 }
 
 enum AllowTypeDeletion {
@@ -90,21 +90,25 @@ struct Endpoint {
 }
 
 impl Manifest {
-    pub fn new(types: Vec<String>, endpoints: Vec<String>, policies: Vec<String>) -> Self {
+    pub fn new(
+        types_dirs: Vec<String>,
+        endpoints_dirs: Vec<String>,
+        policies_dirs: Vec<String>,
+    ) -> Self {
         Manifest {
-            types,
-            endpoints,
-            policies,
+            types_dirs,
+            endpoints_dirs,
+            policies_dirs,
         }
     }
 
     pub fn types(&self) -> anyhow::Result<Vec<PathBuf>> {
-        Self::dirs_to_paths(&self.types)
+        Self::dirs_to_paths(&self.types_dirs)
     }
 
     pub fn endpoints(&self) -> anyhow::Result<Vec<Endpoint>> {
         let mut ret = vec![];
-        for dir in &self.endpoints {
+        for dir in &self.endpoints_dirs {
             let mut paths = vec![];
             let dir = Path::new(dir);
             dir_to_paths(dir, &mut paths)?;
@@ -131,7 +135,7 @@ impl Manifest {
     }
 
     pub fn policies(&self) -> anyhow::Result<Vec<PathBuf>> {
-        Self::dirs_to_paths(&self.policies)
+        Self::dirs_to_paths(&self.policies_dirs)
     }
 
     fn dirs_to_paths(dirs: &[String]) -> anyhow::Result<Vec<PathBuf>> {
@@ -362,9 +366,6 @@ async fn main() -> Result<()> {
         }
         Command::Dev => {
             let manifest = read_manifest()?;
-            let types = manifest.types()?;
-            let endpoints = manifest.endpoints()?;
-            let policies = manifest.policies()?;
             let mut cmd = std::env::current_exe()?;
             cmd.pop();
             cmd.push("chiseld");
@@ -380,14 +381,17 @@ async fn main() -> Result<()> {
                 })?;
             let watcher_config = notify::Config::OngoingEvents(Some(Duration::from_secs(1)));
             apply_watcher.configure(watcher_config)?;
-            for ty in types {
-                apply_watcher.watch(&ty, RecursiveMode::NonRecursive)?;
+            for types_dir in &manifest.types_dirs {
+                let types_dir = Path::new(types_dir);
+                apply_watcher.watch(types_dir, RecursiveMode::Recursive)?;
             }
-            for endpoint in endpoints {
-                apply_watcher.watch(&endpoint.file_path, RecursiveMode::NonRecursive)?;
+            for endpoints_dir in &manifest.endpoints_dirs {
+                let endpoints_dir = Path::new(endpoints_dir);
+                apply_watcher.watch(endpoints_dir, RecursiveMode::Recursive)?;
             }
-            for policy in policies {
-                apply_watcher.watch(&policy, RecursiveMode::NonRecursive)?;
+            for policies_dir in &manifest.policies_dirs {
+                let policies_dir = Path::new(policies_dir);
+                apply_watcher.watch(policies_dir, RecursiveMode::Recursive)?;
             }
             while let Some(res) = rx.next().await {
                 match res {
