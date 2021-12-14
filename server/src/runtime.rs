@@ -4,9 +4,11 @@ use crate::api::ApiService;
 use crate::policies::{FieldPolicies, Policies};
 use crate::query::{MetaService, QueryEngine};
 use crate::types::{ObjectType, TypeSystem};
-use async_mutex::{Mutex, MutexGuardArc};
+use async_mutex::Mutex;
 use derive_new::new;
 use once_cell::sync::OnceCell;
+use std::cell::RefCell;
+use std::rc::Rc;
 use std::sync::Arc;
 
 #[derive(new)]
@@ -40,17 +42,16 @@ impl Runtime {
     }
 }
 
-thread_local!(static RUNTIME: OnceCell<Arc<Mutex<Runtime>>> = OnceCell::new());
+thread_local!(static RUNTIME: OnceCell<Rc<RefCell<Runtime>>> = OnceCell::new());
 
 pub(crate) fn set(rt: Runtime) {
     RUNTIME.with(|x| {
-        x.set(Arc::new(Mutex::new(rt)))
+        x.set(Rc::new(RefCell::new(rt)))
             .map_err(|_| ())
             .expect("Runtime is already initialized.");
     })
 }
 
-pub(crate) async fn get() -> MutexGuardArc<Runtime> {
-    let x = RUNTIME.with(|x| x.get().expect("Runtime is not yet initialized.").clone());
-    x.lock_arc().await
+pub(crate) fn get() -> Rc<RefCell<Runtime>> {
+    RUNTIME.with(|x| x.get().expect("Runtime is not yet initialized.").clone())
 }

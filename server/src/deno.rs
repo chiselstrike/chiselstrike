@@ -233,7 +233,8 @@ async fn op_chisel_store(
     let type_name = content["name"]
         .as_str()
         .ok_or_else(|| anyhow!("Type name error; the .name key must have a string value"))?;
-    let runtime = &mut runtime::get().await;
+    let runtime = runtime::get();
+    let runtime = runtime.borrow_mut();
     let api_version = current_api_version();
 
     let ty = runtime
@@ -276,7 +277,8 @@ async fn op_chisel_relational_query_create(
     // op_chisel_relational_query_create with a closure that has an
     // Rc<DenoService>.
     let relation = convert(&relation).await?;
-    let runtime = &mut runtime::get().await;
+    let runtime = runtime::get();
+    let mut runtime = runtime.borrow_mut();
     let query_engine = &mut runtime.query_engine;
     let stream = Box::pin(query_engine.query_relation(&relation));
     let resource = QueryStreamResource {
