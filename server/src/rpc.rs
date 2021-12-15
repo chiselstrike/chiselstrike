@@ -13,8 +13,8 @@ use async_mutex::Mutex;
 use chisel::chisel_rpc_server::{ChiselRpc, ChiselRpcServer};
 use chisel::{
     ChiselApplyRequest, ChiselApplyResponse, ChiselDeleteRequest, ChiselDeleteResponse,
-    RestartRequest, RestartResponse, StatusRequest, StatusResponse, TypeExportRequest,
-    TypeExportResponse,
+    DescribeRequest, DescribeResponse, RestartRequest, RestartResponse, StatusRequest,
+    StatusResponse,
 };
 use futures::FutureExt;
 use std::collections::BTreeSet;
@@ -382,10 +382,10 @@ impl ChiselRpc for RpcService {
             .map_err(|e| Status::internal(format!("{}", e)))
     }
 
-    async fn export_types(
+    async fn describe(
         &self,
-        _request: tonic::Request<TypeExportRequest>,
-    ) -> Result<tonic::Response<TypeExportResponse>, tonic::Status> {
+        _request: tonic::Request<DescribeRequest>,
+    ) -> Result<tonic::Response<DescribeResponse>, tonic::Status> {
         let state = self.state.lock().await;
 
         let mut version_defs = vec![];
@@ -419,7 +419,7 @@ impl ChiselRpc for RpcService {
             });
         }
 
-        let response = chisel::TypeExportResponse { version_defs };
+        let response = chisel::DescribeResponse { version_defs };
         Ok(Response::new(response))
     }
 

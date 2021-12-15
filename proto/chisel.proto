@@ -37,10 +37,10 @@ message FieldDefinition {
   optional string default_value = 5;
 }
 
-message TypeExportRequest {
+message DescribeRequest {
 }
 
-message TypeExportResponse {
+message DescribeResponse {
   repeated VersionDefinition version_defs = 1;
 }
 
@@ -85,6 +85,6 @@ service ChiselRpc {
   rpc GetStatus (StatusRequest) returns (StatusResponse);
   rpc Apply(ChiselApplyRequest) returns (ChiselApplyResponse);
   rpc Delete(ChiselDeleteRequest) returns (ChiselDeleteResponse);
-  rpc ExportTypes (TypeExportRequest) returns (TypeExportResponse);
+  rpc Describe (DescribeRequest) returns (DescribeResponse);
   rpc Restart (RestartRequest) returns (RestartResponse);
 }

@@ -4,8 +4,8 @@ use crate::chisel::StatusResponse;
 use anyhow::{anyhow, Context, Result};
 use chisel::chisel_rpc_client::ChiselRpcClient;
 use chisel::{
-    ChiselApplyRequest, ChiselDeleteRequest, EndPointCreationRequest, PolicyUpdateRequest,
-    RestartRequest, StatusRequest, TypeExportRequest,
+    ChiselApplyRequest, ChiselDeleteRequest, DescribeRequest, EndPointCreationRequest,
+    PolicyUpdateRequest, RestartRequest, StatusRequest,
 };
 use futures::channel::mpsc::channel;
 use futures::{SinkExt, StreamExt};
@@ -390,8 +390,8 @@ async fn main() -> Result<()> {
         }
         Command::Describe => {
             let mut client = ChiselRpcClient::connect(server_url).await?;
-            let request = tonic::Request::new(TypeExportRequest {});
-            let response = execute!(client.export_types(request).await);
+            let request = tonic::Request::new(DescribeRequest {});
+            let response = execute!(client.describe(request).await);
 
             for version_def in response.version_defs {
                 println!("Version: {} {{", version_def.version);
