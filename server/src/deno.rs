@@ -11,7 +11,6 @@ use crate::types::ObjectType;
 use anyhow::{anyhow, Result};
 use deno_broadcast_channel::InMemoryBroadcastChannel;
 use deno_core::error::AnyError;
-use deno_core::op_async;
 use deno_core::CancelFuture;
 use deno_core::CancelHandle;
 use deno_core::JsRuntime;
@@ -23,6 +22,7 @@ use deno_core::RcRef;
 use deno_core::Resource;
 use deno_core::ResourceId;
 use deno_core::ZeroCopyBuf;
+use deno_core::{op_async, op_sync};
 use deno_runtime::inspector_server::InspectorServer;
 use deno_runtime::permissions::Permissions;
 use deno_runtime::worker::{MainWorker, WorkerOptions};
@@ -233,7 +233,8 @@ async fn op_chisel_store(
     let type_name = content["name"]
         .as_str()
         .ok_or_else(|| anyhow!("Type name error; the .name key must have a string value"))?;
-    let runtime = &mut runtime::get().await;
+    let runtime = runtime::get();
+    let runtime = runtime.borrow_mut();
     let api_version = current_api_version();
 
     let ty = runtime
@@ -245,10 +246,7 @@ async fn op_chisel_store(
 
 type DbStream = RefCell<SqlStream>;
 
-pub(crate) async fn get_policies(
-    runtime: &Runtime,
-    ty: &ObjectType,
-) -> anyhow::Result<FieldPolicies> {
+pub(crate) fn get_policies(runtime: &Runtime, ty: &ObjectType) -> anyhow::Result<FieldPolicies> {
     let mut policies = FieldPolicies::default();
     CURRENT_REQUEST_PATH.with(|p| runtime.get_policies(ty, &mut policies, p.borrow().path()));
     Ok(policies)
@@ -260,8 +258,8 @@ struct QueryStreamResource {
 
 impl Resource for QueryStreamResource {}
 
-async fn op_chisel_relational_query_create(
-    op_state: Rc<RefCell<OpState>>,
+fn op_chisel_relational_query_create(
+    op_state: &mut OpState,
     relation: serde_json::Value,
     _: (),
 ) -> Result<ResourceId> {
@@ -275,14 +273,15 @@ async fn op_chisel_relational_query_create(
     // is no way to access it from here. We would have to replace
     // op_chisel_relational_query_create with a closure that has an
     // Rc<DenoService>.
-    let relation = convert(&relation).await?;
-    let runtime = &mut runtime::get().await;
+    let relation = convert(&relation)?;
+    let runtime = runtime::get();
+    let mut runtime = runtime.borrow_mut();
     let query_engine = &mut runtime.query_engine;
     let stream = Box::pin(query_engine.query_relation(&relation));
     let resource = QueryStreamResource {
         stream: RefCell::new(stream),
     };
-    let rid = op_state.borrow_mut().resource_table.add(resource);
+    let rid = op_state.resource_table.add(resource);
     Ok(rid)
 }
 
@@ -372,7 +371,7 @@ async fn create_deno(inspect_brk: bool) -> Result<DenoService> {
     runtime.register_op("chisel_store", op_async(op_chisel_store));
     runtime.register_op(
         "chisel_relational_query_create",
-        op_async(op_chisel_relational_query_create),
+        op_sync(op_chisel_relational_query_create),
     );
     runtime.register_op(
         "chisel_relational_query_next",

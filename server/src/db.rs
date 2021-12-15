@@ -11,7 +11,6 @@ use crate::query::engine::SqlStream;
 use crate::runtime;
 use crate::types::Type;
 use anyhow::{anyhow, Result};
-use async_recursion::async_recursion;
 use futures::Stream;
 use itertools::Itertools;
 use serde_json::value::Value;
@@ -60,14 +59,15 @@ fn get_columns(val: &serde_json::Value) -> Result<Vec<(String, Type)>> {
     Ok(ret)
 }
 
-async fn convert_backing_store(val: &serde_json::Value) -> Result<Relation> {
+fn convert_backing_store(val: &serde_json::Value) -> Result<Relation> {
     let name = val["name"].as_str().ok_or_else(|| anyhow!("foo"))?;
     let columns = get_columns(val)?;
-    let runtime = &mut runtime::get().await;
+    let runtime = runtime::get();
+    let runtime = runtime.borrow_mut();
     let ts = &runtime.type_system;
     let api_version = current_api_version();
     let ty = ts.lookup_object_type(name, &api_version)?;
-    let policies = get_policies(runtime, &ty).await?;
+    let policies = get_policies(&runtime, &ty)?;
 
     Ok(Relation {
         columns,
@@ -75,11 +75,10 @@ async fn convert_backing_store(val: &serde_json::Value) -> Result<Relation> {
     })
 }
 
-#[async_recursion(?Send)]
-async fn convert_join(val: &serde_json::Value) -> Result<Relation> {
+fn convert_join(val: &serde_json::Value) -> Result<Relation> {
     let columns = get_columns(val)?;
-    let left = Box::new(convert(&val["left"]).await?);
-    let right = Box::new(convert(&val["right"]).await?);
+    let left = Box::new(convert(&val["left"])?);
+    let right = Box::new(convert(&val["right"])?);
     Ok(Relation {
         columns,
         inner: Inner::Join(left, right),
@@ -91,10 +90,9 @@ fn escape_string(s: &str) -> String {
     format!("{}", format_sql_query::QuotedData(s))
 }
 
-#[async_recursion(?Send)]
-async fn convert_filter(val: &serde_json::Value) -> Result<Relation> {
+fn convert_filter(val: &serde_json::Value) -> Result<Relation> {
     let columns = get_columns(val)?;
-    let inner = Box::new(convert(&val["inner"]).await?);
+    let inner = Box::new(convert(&val["inner"])?);
     let restrictions = val["restrictions"]
         .as_object()
         .ok_or_else(|| anyhow!("Missing restrictions in filter"))?;
@@ -116,12 +114,12 @@ async fn convert_filter(val: &serde_json::Value) -> Result<Relation> {
     })
 }
 
-pub(crate) async fn convert(val: &serde_json::Value) -> Result<Relation> {
+pub(crate) fn convert(val: &serde_json::Value) -> Result<Relation> {
     let kind = val["kind"].as_str().ok_or_else(|| anyhow!("foo"))?;
     match kind {
-        "BackingStore" => convert_backing_store(val).await,
-        "Join" => convert_join(val).await,
-        "Filter" => convert_filter(val).await,
+        "BackingStore" => convert_backing_store(val),
+        "Join" => convert_join(val),
+        "Filter" => convert_filter(val),
         _ => Err(anyhow!("Unexpected relation kind")),
     }
 }

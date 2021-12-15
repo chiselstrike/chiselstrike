@@ -205,7 +205,7 @@ impl ApiService {
                             .body("Token not recognized\n".to_string().into());
                     }
                     crate::runtime::get()
-                        .await
+                        .borrow_mut()
                         .meta
                         .get_username(token.unwrap())
                         .await
@@ -218,7 +218,8 @@ impl ApiService {
                 Err(_) => return ApiService::not_found(),
             };
             let is_allowed = {
-                let runtime = crate::runtime::get().await;
+                let runtime = crate::runtime::get();
+                let runtime = runtime.borrow_mut();
                 match runtime.policies.versions.get(rp.api_version()) {
                     None => {
                         return Self::internal_error(anyhow::anyhow!(

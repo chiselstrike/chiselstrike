@@ -45,11 +45,12 @@ fn handle_callback(
         if username.is_empty() {
             return Ok(bad_request("Callback error: parameter value empty".into()));
         }
+        let runtime = runtime::get();
         Ok(redirect(&format!(
             // TODO: redirect to the URL from state.
             "http://localhost:3000/profile?chiselstrike_token={}",
-            runtime::get()
-                .await
+            runtime
+                .borrow_mut()
                 .meta
                 .new_session_token(&urldecode::decode(username.into()))
                 .await?
@@ -67,7 +68,8 @@ fn lookup_user(
             .path()
             .strip_prefix(USERPATH)
             .ok_or_else(|| anyhow!("lookup_user on wrong URL"))?;
-        let bd: Body = runtime::get().await.meta.get_username(token).await?.into();
+        let runtime = runtime::get();
+        let bd: Body = runtime.borrow_mut().meta.get_username(token).await?.into();
         let resp = Response::builder().status(StatusCode::OK).body(bd).unwrap();
         Ok(resp)
     }

@@ -171,17 +171,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "async-recursion"
-version = "0.3.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d7d78656ba01f1b93024b7c3a0467f1608e4be67d725749fdcd7d2c7678fd7a2"
-dependencies = [
- "proc-macro2 1.0.33",
- "quote 1.0.10",
- "syn 1.0.65",
-]
-
-[[package]]
 name = "async-stream"
 version = "0.3.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3315,7 +3304,6 @@ dependencies = [
  "anyhow",
  "async-channel",
  "async-mutex",
- "async-recursion",
  "deno_broadcast_channel",
  "deno_core",
  "deno_runtime",

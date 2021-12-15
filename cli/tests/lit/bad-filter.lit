@@ -7,7 +7,7 @@ cp examples/person.ts "$TEMPDIR/types"
 cat << EOF > "$TEMPDIR/endpoints/query.js"
 export default async function chisel(req: Request) {
     const filtered = Chisel.collections.Person.filter({"foo": "bar"});
-    const rows = await filtered.rows();
+    const rows = filtered.rows();
     let ret = "";
     for await (let row of rows) {
         ret += row.first_name + " " + row.last_name + "\n";
