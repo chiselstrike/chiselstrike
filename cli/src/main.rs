@@ -395,9 +395,9 @@ async fn main() -> Result<()> {
 
             for version_def in response.version_defs {
                 println!("Version: {} {{", version_def.version);
-                for def in version_def.type_defs {
+                for def in &version_def.type_defs {
                     println!("  class {} {{", def.name);
-                    for field in def.field_defs {
+                    for field in &def.field_defs {
                         println!(
                             "    {} {}{}: {}{};",
                             field
@@ -410,6 +410,7 @@ async fn main() -> Result<()> {
                             field.field_type,
                             field
                                 .default_value
+                                .as_ref()
                                 .map(|d| if field.field_type == "string" {
                                     format!(" = \"{}\"", d)
                                 } else {
@@ -419,6 +420,9 @@ async fn main() -> Result<()> {
                         );
                     }
                     println!("  }}");
+                }
+                for def in &version_def.endpoint_defs {
+                    println!("  Endpoint: {}", def.path);
                 }
                 println!("}}");
             }

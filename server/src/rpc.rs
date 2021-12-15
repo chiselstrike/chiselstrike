@@ -413,9 +413,16 @@ impl ChiselRpc for RpcService {
                 };
                 type_defs.push(type_def);
             }
+            let mut endpoint_defs = vec![];
+            for (path, _) in state.routes.route_data() {
+                endpoint_defs.push(chisel::EndpointDefinition {
+                    path: path.display().to_string(),
+                });
+            }
             version_defs.push(chisel::VersionDefinition {
                 version: api_version.to_string(),
                 type_defs,
+                endpoint_defs,
             });
         }
 

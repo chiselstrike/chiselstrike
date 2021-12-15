@@ -22,6 +22,7 @@ message AddTypeResponse {
 message VersionDefinition {
   string version = 1;
   repeated TypeDefinition type_defs = 2;
+  repeated EndpointDefinition endpoint_defs = 3;
 }
 
 message TypeDefinition {
@@ -35,6 +36,10 @@ message FieldDefinition {
   repeated string labels = 3;
   bool is_optional = 4;
   optional string default_value = 5;
+}
+
+message EndpointDefinition {
+  string path = 1;
 }
 
 message DescribeRequest {

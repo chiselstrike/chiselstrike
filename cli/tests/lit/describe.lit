@@ -1,0 +1,32 @@
+# SPDX-FileCopyrightText: © 2021 ChiselStrike <info@chiselstrike.com>
+
+# RUN: sh -e @file
+
+cd "$TEMPDIR"
+
+cat << EOF > "$TEMPDIR/types/types.ts"
+class Foo { a: string; }
+class Bar { b: string; }
+EOF
+
+cat << EOF > "$TEMPDIR/endpoints/hello.ts"
+export default async function chisel(req) {
+    return new Response('ok');
+}
+EOF
+
+$CHISEL apply
+
+# CHECK: Type defined: Foo
+# CHECK: Type defined: Bar
+# CHECK: End point defined: /dev/hello
+
+$CHISEL describe
+
+# CHECK: class Bar {
+# CHECK:   [[^ *b: string]]
+# CHECK: }
+# CHECK: class Foo {
+# CHECK:   [[^ *a: string]]
+# CHECK: }
+# CHECK: Endpoint: /dev/hello
