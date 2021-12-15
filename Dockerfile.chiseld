@@ -2,18 +2,28 @@ FROM ubuntu:20.04
 
 #Create the defaults, override using -e in docker/podman run
 ENV API_PORT=8080
-ENV DATA_DB_URI="sqlite://chiseld-data.db?mode=rwc"
+ENV DATA_DB_URI="sqlite:///home/chiseld/chiseld-data.db?mode=rwc"
 ENV EXECUTOR_THREADS=1
-ENV METADATA_DB_URI="sqlite://chiseld.db?mode=rwc"
+ENV METADATA_DB_URI="sqlite:///home/chiseld/chiseld.db?mode=rwc"
 ENV RPC_PORT=50051
 
 ARG DEBIAN_FRONTEND=noninteractive
 RUN apt update && \
   apt-get install -y --no-install-recommends libssl1.1
 
+RUN \
+  groupadd -g 1999 -r chiseld && useradd -r -u 1999 -g chiseld -d /home/chiseld -G chiseld -m -s /bin/bash chiseld && \
+  sed -i /etc/sudoers -re 's/^%sudo.*/%sudo ALL=(ALL:ALL) NOPASSWD: ALL/g' && \
+  sed -i /etc/sudoers -re 's/^root.*/root ALL=(ALL:ALL) NOPASSWD: ALL/g' && \
+  sed -i /etc/sudoers -re 's/^#includedir.*/## **Removed the include directive** ##"/g' && \
+  echo "chiseld ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers && \
+  echo "Customized the sudoers file for passwordless access to the chiseld user!" && \
+  echo "chiseld user:";  su - chiseld -c id 
+
 COPY target/release/chiseld /usr/local/bin/chiseld
 
 EXPOSE $API_PORT $RPC_PORT
+
 CMD /usr/local/bin/chiseld \
   --api-listen-addr 0.0.0.0:$API_PORT \
   --data-db-uri $DATA_DB_URI \
