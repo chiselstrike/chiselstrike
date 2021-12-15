@@ -11,7 +11,6 @@ use crate::types::ObjectType;
 use anyhow::{anyhow, Result};
 use deno_broadcast_channel::InMemoryBroadcastChannel;
 use deno_core::error::AnyError;
-use deno_core::op_async;
 use deno_core::CancelFuture;
 use deno_core::CancelHandle;
 use deno_core::JsRuntime;
@@ -23,6 +22,7 @@ use deno_core::RcRef;
 use deno_core::Resource;
 use deno_core::ResourceId;
 use deno_core::ZeroCopyBuf;
+use deno_core::{op_async, op_sync};
 use deno_runtime::inspector_server::InspectorServer;
 use deno_runtime::permissions::Permissions;
 use deno_runtime::worker::{MainWorker, WorkerOptions};
@@ -258,8 +258,8 @@ struct QueryStreamResource {
 
 impl Resource for QueryStreamResource {}
 
-async fn op_chisel_relational_query_create(
-    op_state: Rc<RefCell<OpState>>,
+fn op_chisel_relational_query_create(
+    op_state: &mut OpState,
     relation: serde_json::Value,
     _: (),
 ) -> Result<ResourceId> {
@@ -281,7 +281,7 @@ async fn op_chisel_relational_query_create(
     let resource = QueryStreamResource {
         stream: RefCell::new(stream),
     };
-    let rid = op_state.borrow_mut().resource_table.add(resource);
+    let rid = op_state.resource_table.add(resource);
     Ok(rid)
 }
 
@@ -371,7 +371,7 @@ async fn create_deno(inspect_brk: bool) -> Result<DenoService> {
     runtime.register_op("chisel_store", op_async(op_chisel_store));
     runtime.register_op(
         "chisel_relational_query_create",
-        op_async(op_chisel_relational_query_create),
+        op_sync(op_chisel_relational_query_create),
     );
     runtime.register_op(
         "chisel_relational_query_next",

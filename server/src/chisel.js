@@ -56,10 +56,10 @@ function createResultIterator(rid) {
     };
 }
 
-Chisel.query = async function (foo) {
-    const rid = await Deno.core.opAsync(
+Chisel.query = async function (relation) {
+    const rid = await Deno.core.opSync(
         "chisel_relational_query_create",
-        foo.inner,
+        relation.inner,
     );
     return createResultIterator(rid);
 };
