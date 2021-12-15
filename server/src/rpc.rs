@@ -138,8 +138,7 @@ impl RpcService {
         let version = api_version.clone();
 
         let cmd = send_command!({
-            let runtime = runtime::get();
-            let mut runtime = runtime.borrow_mut();
+            let mut runtime = runtime::get();
             let type_system = &mut runtime.type_system;
 
             type_system.versions.remove(&version);
@@ -318,8 +317,7 @@ impl RpcService {
         let types_global = state.type_system.clone();
 
         let cmd = send_command!({
-            let runtime = runtime::get();
-            let mut runtime = runtime.borrow_mut();
+            let mut runtime = runtime::get();
             let type_system = &mut runtime.type_system;
 
             type_system.update(&types_global);

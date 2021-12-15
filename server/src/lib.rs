@@ -11,6 +11,7 @@ pub(crate) mod deno;
 pub(crate) mod internal;
 pub(crate) mod policies;
 pub(crate) mod query;
+pub(crate) mod rcmut;
 pub(crate) mod rpc;
 pub(crate) mod runtime;
 pub mod server;

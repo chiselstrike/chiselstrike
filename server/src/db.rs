@@ -63,7 +63,6 @@ fn convert_backing_store(val: &serde_json::Value) -> Result<Relation> {
     let name = val["name"].as_str().ok_or_else(|| anyhow!("foo"))?;
     let columns = get_columns(val)?;
     let runtime = runtime::get();
-    let runtime = runtime.borrow_mut();
     let ts = &runtime.type_system;
     let api_version = current_api_version();
     let ty = ts.lookup_object_type(name, &api_version)?;

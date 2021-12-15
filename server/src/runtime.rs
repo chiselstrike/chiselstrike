@@ -3,6 +3,7 @@
 use crate::api::ApiService;
 use crate::policies::{FieldPolicies, Policies};
 use crate::query::{MetaService, QueryEngine};
+use crate::rcmut::RcMut;
 use crate::types::{ObjectType, TypeSystem};
 use async_mutex::Mutex;
 use derive_new::new;
@@ -52,6 +53,9 @@ pub(crate) fn set(rt: Runtime) {
     })
 }
 
-pub(crate) fn get() -> Rc<RefCell<Runtime>> {
-    RUNTIME.with(|x| x.get().expect("Runtime is not yet initialized.").clone())
+pub(crate) fn get() -> RcMut<Runtime> {
+    RUNTIME.with(|x| {
+        let rc = x.get().expect("Runtime is not yet initialized.").clone();
+        RcMut::new(rc)
+    })
 }
