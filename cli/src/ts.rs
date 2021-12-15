@@ -8,8 +8,8 @@ use swc_common::{
     SourceMap, Spanned,
 };
 use swc_ecma_ast::{
-    ClassMember, Decl, Decorator, Expr, Ident, Lit, Stmt, TsEntityName, TsKeywordTypeKind, TsType,
-    TsTypeAnn,
+    ClassMember, ClassProp, Decl, Decorator, Expr, Ident, Lit, Stmt, TsEntityName,
+    TsKeywordTypeKind, TsType, TsTypeAnn,
 };
 use swc_ecma_parser::{lexer::Lexer, Parser, StringInput, Syntax, TsConfig};
 
@@ -130,6 +130,24 @@ fn validate_type_vec(type_vec: &[AddTypeRequest], valid_types: &BTreeSet<String>
     Ok(())
 }
 
+fn parse_class_prop(x: &ClassProp, handler: &Handler) -> Result<FieldDefinition> {
+    let (default_value, field_type) = match get_field_value(handler, &x.value)? {
+        None => (None, get_field_type(handler, &x.type_ann)?),
+        Some((val, t)) => (Some(val), t),
+    };
+    let (field_name, is_optional) = get_field_info(handler, &x.key)?;
+
+    let labels = get_type_decorators(handler, &x.decorators)?;
+
+    Ok(FieldDefinition {
+        name: field_name,
+        is_optional,
+        default_value,
+        field_type,
+        labels,
+    })
+}
+
 fn parse_one_file<P: AsRef<Path>>(
     filename: &P,
     type_vec: &mut Vec<AddTypeRequest>,
@@ -188,22 +206,16 @@ fn parse_one_file<P: AsRef<Path>>(
 
                 for member in &x.class.body {
                     match member {
-                        ClassMember::ClassProp(x) => {
-                            let (default_value, field_type) =
-                                match get_field_value(&handler, &x.value)? {
-                                    None => (None, get_field_type(&handler, &x.type_ann)?),
-                                    Some((val, t)) => (Some(val), t),
-                                };
-                            let (field_name, is_optional) = get_field_info(&handler, &x.key)?;
-
-                            field_defs.push(FieldDefinition {
-                                name: field_name,
-                                is_optional,
-                                default_value,
-                                field_type,
-                                labels: get_type_decorators(&handler, &x.decorators)?,
-                            });
-                        }
+                        ClassMember::ClassProp(x) => match parse_class_prop(x, &handler) {
+                            Err(err) => {
+                                handler
+                                    .span_err(x.span(), &format!("While parsing class {}", name));
+                                bail!("{}", err);
+                            }
+                            Ok(fd) => {
+                                field_defs.push(fd);
+                            }
+                        },
                         z => {
                             handler.span_err(z.span(), "Only property definitions (with optional decorators) allowed in the types file");
                             bail!("invalid type file {}", filename.as_ref().display());

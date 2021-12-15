@@ -47,3 +47,15 @@ $CHISEL apply --allow-type-deletion 2>&1
 set -e
 
 # CHECK: field a in class Bad neither a basic type, nor refers to a type defined in this context
+
+cat << EOF > "$TEMPDIR/types/types.ts"
+class Malformed { name: string(); }
+EOF
+$CHISEL apply --allow-type-deletion 2>&1 || echo
+# CHECK: 1 | class Malformed { name: string(); }
+
+cat << EOF > "$TEMPDIR/types/types.ts"
+class Malformed { name; }
+EOF
+$CHISEL apply --allow-type-deletion 2>&1 || echo
+# CHECK: 1 | class Malformed { name; }
