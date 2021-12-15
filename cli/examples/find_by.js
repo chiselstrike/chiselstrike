@@ -3,7 +3,7 @@ export default async function chisel(req) {
     let req_json = await req.json();
     let response = "";
     let filter_obj = {[req_json.field_name]: req_json.value};
-    let people = await Chisel.collections.Person.filter(filter_obj).rows();
+    let people = Chisel.collections.Person.filter(filter_obj).rows();
     for await (let person of people) {
         let fields = [person.first_name, person.last_name, person.age, person.human, person.height];
         response += fields.join(" ");
