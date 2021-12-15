@@ -42,6 +42,6 @@ You can create an ChiselStrike endpoint with the following command:
 chisel end-point create hello hello.js
 ```
 
-## `chisel type export`
+## `chisel describe`
 
-The `chisel type export` command exports the whole type system as TypeScript classes.
+The `chisel describe` command displays the current state of the running ChiselStrike server: types, endpoints, and policies.

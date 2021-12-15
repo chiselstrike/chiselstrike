@@ -14,7 +14,7 @@ $CHISEL apply
 # CHECK: Type defined: Bar
 
 $CHISEL restart
-$CHISEL type export
+$CHISEL describe
 
 # CHECK: class Bar {
 # CHECK:   [[^ *a: string = "default"]]

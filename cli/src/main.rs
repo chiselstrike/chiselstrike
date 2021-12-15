@@ -169,14 +169,12 @@ struct Opt {
 enum Command {
     /// Initialize a new ChiselStrike project.
     Init,
+    /// Describe the endpoints, types, and policies.
+    Describe,
     /// Start a ChiselStrike server for local development.
     Dev,
     /// Shows information about ChiselStrike server status.
     Status,
-    Type {
-        #[structopt(subcommand)]
-        cmd: TypeCommand,
-    },
     Restart,
     Wait,
     Apply {
@@ -189,12 +187,6 @@ enum Command {
         #[structopt(long, default_value = DEFAULT_API_VERSION, parse(try_from_str=parse_version))]
         version: String,
     },
-}
-
-#[derive(StructOpt, Debug)]
-enum TypeCommand {
-    /// Export the type system.
-    Export,
 }
 
 pub mod chisel {
@@ -396,6 +388,41 @@ async fn main() -> Result<()> {
             let cwd = env::current_dir()?;
             println!("Initialized ChiselStrike project in {}", cwd.display());
         }
+        Command::Describe => {
+            let mut client = ChiselRpcClient::connect(server_url).await?;
+            let request = tonic::Request::new(TypeExportRequest {});
+            let response = execute!(client.export_types(request).await);
+
+            for version_def in response.version_defs {
+                println!("Version: {} {{", version_def.version);
+                for def in version_def.type_defs {
+                    println!("  class {} {{", def.name);
+                    for field in def.field_defs {
+                        println!(
+                            "    {} {}{}: {}{};",
+                            field
+                                .labels
+                                .iter()
+                                .map(|x| format!(" @{}", x))
+                                .collect::<String>(),
+                            field.name,
+                            if field.is_optional { "?" } else { "" },
+                            field.field_type,
+                            field
+                                .default_value
+                                .map(|d| if field.field_type == "string" {
+                                    format!(" = \"{}\"", d)
+                                } else {
+                                    format!(" = {}", d)
+                                })
+                                .unwrap_or_else(|| "".into()),
+                        );
+                    }
+                    println!("  }}");
+                }
+                println!("}}");
+            }
+        }
         Command::Dev => {
             let manifest = read_manifest()?;
             let mut cmd = std::env::current_exe()?;
@@ -455,43 +482,6 @@ async fn main() -> Result<()> {
             let response = execute!(client.get_status(request).await);
             println!("Server status is {}", response.message);
         }
-        Command::Type { cmd } => match cmd {
-            TypeCommand::Export => {
-                let mut client = ChiselRpcClient::connect(server_url).await?;
-                let request = tonic::Request::new(TypeExportRequest {});
-                let response = execute!(client.export_types(request).await);
-
-                for version_def in response.version_defs {
-                    println!("Version: {} {{", version_def.version);
-                    for def in version_def.type_defs {
-                        println!("  class {} {{", def.name);
-                        for field in def.field_defs {
-                            println!(
-                                "    {} {}{}: {}{};",
-                                field
-                                    .labels
-                                    .iter()
-                                    .map(|x| format!(" @{}", x))
-                                    .collect::<String>(),
-                                field.name,
-                                if field.is_optional { "?" } else { "" },
-                                field.field_type,
-                                field
-                                    .default_value
-                                    .map(|d| if field.field_type == "string" {
-                                        format!(" = \"{}\"", d)
-                                    } else {
-                                        format!(" = {}", d)
-                                    })
-                                    .unwrap_or_else(|| "".into()),
-                            );
-                        }
-                        println!("  }}");
-                    }
-                    println!("}}");
-                }
-            }
-        },
         Command::Restart => {
             let mut client = ChiselRpcClient::connect(server_url.clone()).await?;
             let response = execute!(client.restart(tonic::Request::new(RestartRequest {})).await);

@@ -7,6 +7,6 @@ echo 'class TestLabels {@a @b foo: string; }' > "$TEMPDIR/types/types.ts"
 cd "$TEMPDIR"
 $CHISEL apply
 
-$CHISEL type export
+$CHISEL describe
 
 # CHECK: @a @b foo: string;

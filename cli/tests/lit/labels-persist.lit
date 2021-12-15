@@ -19,7 +19,7 @@ $CHISEL apply
 
 $CHISEL restart
 
-$CHISEL type export
+$CHISEL describe
 
 # CHECK: @a @b one: string;
 # CHECK: @a two: string;
