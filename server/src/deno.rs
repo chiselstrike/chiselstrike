@@ -277,7 +277,7 @@ fn op_chisel_relational_query_create(
     let runtime = runtime::get();
     let mut runtime = runtime.borrow_mut();
     let query_engine = &mut runtime.query_engine;
-    let stream = Box::pin(query_engine.query_relation(&relation));
+    let stream = Box::pin(query_engine.query_relation(relation));
     let resource = QueryStreamResource {
         stream: RefCell::new(stream),
     };
