@@ -124,9 +124,11 @@ impl RpcService {
         MetaService::commit_transaction(transaction).await?;
 
         let query_engine = &state.query_engine;
+        let mut transaction = query_engine.start_transaction().await?;
         for ty in to_remove.into_iter() {
-            query_engine.drop_table(ty).await?;
+            query_engine.drop_table(&mut transaction, ty).await?;
         }
+        QueryEngine::commit_transaction(transaction).await?;
 
         let regex = regex::Regex::new(&format!("/{}/.*", api_version)).unwrap();
         state.routes.remove_routes(regex.clone());
@@ -254,8 +256,9 @@ impl RpcService {
             meta.insert_type(&mut transaction, ty).await?;
         }
 
-        for (old, delta) in to_update.into_iter() {
-            meta.update_type(&mut transaction, &old, delta).await?;
+        for (old, delta) in to_update.iter() {
+            meta.update_type(&mut transaction, old, delta.clone())
+                .await?;
         }
 
         for ty in to_remove.iter() {
@@ -279,13 +282,21 @@ impl RpcService {
         // could be in totally different databases. However, some foreign relations would force
         // us to update some subset of them together. FIXME: revisit this when we support relations
         let query_engine = &state.query_engine;
+        let mut transaction = query_engine.start_transaction().await?;
         for ty in to_insert.into_iter() {
-            query_engine.create_table(&ty).await?;
+            query_engine.create_table(&mut transaction, &ty).await?;
         }
 
         for ty in to_remove.into_iter() {
-            query_engine.drop_table(&ty).await?;
+            query_engine.drop_table(&mut transaction, &ty).await?;
         }
+
+        for (old, delta) in to_update.into_iter() {
+            query_engine
+                .alter_table(&mut transaction, &old, delta)
+                .await?;
+        }
+        QueryEngine::commit_transaction(transaction).await?;
 
         let regex = regex::Regex::new(&format!("/{}/.*", api_version)).unwrap();
         state.routes.remove_routes(regex.clone());
