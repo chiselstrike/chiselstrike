@@ -12,8 +12,11 @@ use crate::runtime;
 use crate::types::Type;
 use anyhow::{anyhow, Result};
 use futures::future;
+use futures::stream;
+use futures::FutureExt;
 use futures::Stream;
 use futures::StreamExt;
+use futures::TryStreamExt;
 use itertools::Itertools;
 use serde_json::value::Value;
 use sqlx::AnyPool;
@@ -237,6 +240,46 @@ fn filter_stream(stream: SqlStream, restrictions: Vec<Restriction>) -> Query {
     Query::Stream(Box::pin(stream))
 }
 
+async fn join_stream_aux(
+    columns: Vec<(String, Type)>,
+    left: SqlStream,
+    right: SqlStream,
+) -> Result<Vec<JsonObject>> {
+    // FIXME: Try to not discard the part of a stream before we get to an error
+    let left: Vec<JsonObject> = left.try_collect().await?;
+    let right: Vec<JsonObject> = right.try_collect().await?;
+
+    // FIXME: Don't create a full N*M vector upfront
+    let mut ret = vec![];
+    for l_row in left {
+        for r_row in &right {
+            let mut row = JsonObject::new();
+            for c in &columns {
+                let v = if let Some(v) = l_row.get(&c.0) {
+                    v.clone()
+                } else {
+                    r_row.get(&c.0).unwrap().clone()
+                };
+                row.insert(c.0.clone(), v);
+            }
+            ret.push(row);
+        }
+    }
+    Ok(ret)
+}
+
+fn join_stream(columns: &[(String, Type)], left: SqlStream, right: SqlStream) -> Query {
+    let columns = columns.to_vec();
+    let fut = async {
+        let vec = match join_stream_aux(columns, left, right).await {
+            Ok(v) => v.into_iter().map(Ok).collect(),
+            Err(e) => vec![Err(e)],
+        };
+        stream::iter(vec)
+    };
+    Query::Stream(Box::pin(fut.flatten_stream()))
+}
+
 fn sql_filter(
     pool: &AnyPool,
     columns: &[(String, Type)],
@@ -274,6 +317,15 @@ fn sql_filter(
     ))
 }
 
+fn to_stream(pool: &AnyPool, s: String, columns: Vec<(String, Type)>) -> SqlStream {
+    let inner = new_query_results(s, pool);
+    Box::pin(PolicyApplyingStream {
+        inner,
+        policies: FieldPolicies::new(),
+        columns,
+    })
+}
+
 fn sql_join(
     pool: &AnyPool,
     columns: &[(String, Type)],
@@ -296,18 +348,22 @@ fn sql_join(
         }
     }
 
+    let left_columns = left.columns.clone();
+    let right_columns = right.columns.clone();
     // FIXME: Optimize the case of table.left or table.right being just
     // a BackingStore with all fields. The database probably doesn't
     // care, but will make the logs cleaner.
     let lsql = sql_impl(pool, left, alias_count);
-    let lsql = match lsql {
-        Query::Sql(s) => s,
-        Query::Stream(_) => unimplemented!(),
-    };
     let rsql = sql_impl(pool, right, alias_count);
-    let rsql = match rsql {
-        Query::Sql(s) => s,
-        Query::Stream(_) => unimplemented!(),
+    let (lsql, rsql) = match (lsql, rsql) {
+        (Query::Sql(l), Query::Sql(r)) => (l, r),
+        (Query::Stream(l), Query::Sql(r)) => {
+            return join_stream(columns, l, to_stream(pool, r, right_columns))
+        }
+        (Query::Sql(l), Query::Stream(r)) => {
+            return join_stream(columns, to_stream(pool, l, left_columns), r)
+        }
+        (Query::Stream(l), Query::Stream(r)) => return join_stream(columns, l, r),
     };
 
     let on = if on_columns.is_empty() {
@@ -341,14 +397,7 @@ pub(crate) fn sql(pool: &AnyPool, rel: Relation) -> SqlStream {
     let mut v = 0;
     let columns = rel.columns.clone();
     match sql_impl(pool, rel, &mut v) {
-        Query::Sql(s) => {
-            let inner = new_query_results(s, pool);
-            Box::pin(PolicyApplyingStream {
-                inner,
-                policies: FieldPolicies::new(),
-                columns,
-            })
-        }
+        Query::Sql(s) => to_stream(pool, s, columns),
         Query::Stream(s) => s,
     }
 }
