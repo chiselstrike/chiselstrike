@@ -22,6 +22,8 @@ pub(crate) enum QueryError {
     NotImplemented(String),
     #[error["token '{0}' not found"]]
     TokenNotFound(String),
+    #[error["invalid ID '{0}'"]]
+    InvalidId(String),
 }
 
 pub(crate) use dbconn::DbConnection;

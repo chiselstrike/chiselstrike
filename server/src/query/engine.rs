@@ -17,6 +17,7 @@ use std::cell::RefCell;
 use std::marker::PhantomPinned;
 use std::pin::Pin;
 use std::task::{Context, Poll};
+use uuid::Uuid;
 
 // Results directly out of the database
 pub(crate) type RawSqlStream = BoxStream<'static, anyhow::Result<AnyRow>>;
@@ -221,23 +222,45 @@ impl QueryEngine {
         ty: &ObjectType,
         ty_value: &serde_json::Value,
     ) -> anyhow::Result<()> {
-
         let mut field_binds = String::new();
         let mut field_names = String::new();
+        let mut id_name = String::new();
+        let mut update_binds = String::new();
+        let mut id_bind = String::new();
 
         for (i, f) in ty.all_fields().enumerate() {
-            field_binds.push_str(&std::format!("${},", i + 1));
+            let bind = std::format!("${}", i + 1);
+            field_binds.push_str(&bind);
+            field_binds.push(',');
+
             field_names.push_str(&f.name);
-            field_names.push(",");
+            field_names.push(',');
+            if f.type_ == Type::Id {
+                if let Some(idstr) = ty_value.get(&f.name) {
+                    let idstr = idstr
+                        .as_str()
+                        .ok_or_else(|| QueryError::InvalidId("not a string".into()))?;
+                    Uuid::parse_str(idstr).map_err(|_| QueryError::InvalidId(idstr.into()))?;
+                }
+                anyhow::ensure!(id_bind.is_empty(), "More than one ID??");
+                id_name = f.name.to_string();
+                id_bind = bind.clone();
+            }
+            update_binds.push_str(&std::format!("{} = {},", &f.name, &bind));
         }
         field_binds.pop();
         field_names.pop();
+        update_binds.pop();
 
         let insert_query = std::format!(
-            "INSERT INTO {} ({}) VALUES ({})",
+            "INSERT INTO {} ({}) VALUES ({}) ON CONFLICT ({}) DO UPDATE SET {} WHERE {} = {}",
             &ty.backing_table(),
             field_names,
-            field_binds
+            field_binds,
+            id_name,
+            update_binds,
+            id_name,
+            id_bind
         );
 
         let mut insert_query = sqlx::query(&insert_query);
