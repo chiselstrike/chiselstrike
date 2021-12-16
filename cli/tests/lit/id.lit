@@ -1,0 +1,79 @@
+# SPDX-FileCopyrightText: © 2021 ChiselStrike <info@chiselstrike.com>
+
+# RUN: sh -e @file
+
+cd "$TEMPDIR"
+
+cat << EOF > "$TEMPDIR/types/types.ts"
+class Person { name: string; }
+EOF
+
+cat << EOF > "$TEMPDIR/endpoints/bad_id.ts"
+export default async function chisel(req: Request) {
+    const filtered = await Chisel.store("Person", {"id": "badid", "name": "Glauber"});
+    return new Response("Ok");
+}
+EOF
+
+cat << EOF > "$TEMPDIR/endpoints/store_with_id.ts"
+export default async function chisel(req: Request) {
+    const filtered = await Chisel.store("Person", {"id": "6b9ebbff-46b4-4759-9dbd-850cdcb10c92", "name": "Glauber"});
+    return new Response("Ok");
+}
+EOF
+
+cat << EOF > "$TEMPDIR/endpoints/store_no_id.ts"
+export default async function chisel(req: Request) {
+    const filtered = await Chisel.store("Person", {"name": "Glauber"});
+    return new Response("Ok");
+}
+EOF
+
+cat << EOF > "$TEMPDIR/endpoints/update_by_id.ts"
+export default async function chisel(req: Request) {
+    const filtered = await Chisel.store("Person", {"id": "6b9ebbff-46b4-4759-9dbd-850cdcb10c92", "name": "not-Glauber"});
+    return new Response("Ok");
+}
+EOF
+
+cat << EOF > "$TEMPDIR/endpoints/count_glaubers.ts"
+export default async function chisel(req: Request) {
+    let count = 0;
+    const rows = Person.findMany({"name":  "Glauber"});
+    for await (let row of rows) {
+        count += 1
+    }
+    return new Response(count);
+}
+EOF
+
+$CHISEL apply
+
+# CHECK: Type defined: Person
+# CHECK: End point defined: /dev/bad_id
+# CHECK: End point defined: /dev/count_glaubers
+# CHECK: End point defined: /dev/store_no_id
+# CHECK: End point defined: /dev/store_with_id
+# CHECK: End point defined: /dev/update_by_id
+
+$CURL $CHISELD_HOST/dev/bad_id  2>&1 || echo
+# CHECK: invalid ID 'badid'
+
+$CURL -X POST $CHISELD_HOST/dev/store_with_id
+# CHECK: Ok
+
+$CURL $CHISELD_HOST/dev/count_glaubers
+# CHECK: 1
+
+$CURL -X POST $CHISELD_HOST/dev/store_no_id
+# CHECK: Ok
+
+$CURL $CHISELD_HOST/dev/count_glaubers
+# CHECK: 2
+
+$CURL -X PUT $CHISELD_HOST/dev/update_by_id
+# CHECK: Ok
+
+$CURL $CHISELD_HOST/dev/count_glaubers
+# CHECK: 1
+
