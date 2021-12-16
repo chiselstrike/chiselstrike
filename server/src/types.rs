@@ -421,7 +421,7 @@ pub(crate) struct ObjectType {
     /// Name of this type.
     name: String,
     /// Fields of this type.
-    pub(crate) fields: Vec<Field>,
+    fields: Vec<Field>,
     /// Name of the backing table for this type.
     backing_table: String,
 
@@ -448,6 +448,14 @@ impl ObjectType {
             backing_table,
             fields,
         })
+    }
+
+    pub(crate) fn user_fields(&self) -> impl Iterator<Item = &Field> {
+        self.fields.iter()
+    }
+
+    pub(crate) fn all_fields(&self) -> impl Iterator<Item = &Field> {
+        self.fields.iter()
     }
 
     pub(crate) fn backing_table(&self) -> &str {

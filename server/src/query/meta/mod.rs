@@ -303,7 +303,7 @@ impl MetaService {
             .id
             .ok_or_else(|| anyhow!("logical error. Trying to delete type without id"))?;
 
-        for field in &ty.fields {
+        for field in ty.user_fields() {
             remove_field_query(transaction, field).await?;
         }
 
@@ -433,7 +433,7 @@ impl MetaService {
             .execute(add_type_name)
             .await
             .map_err(QueryError::ExecuteFailed)?;
-        for field in &ty.fields {
+        for field in ty.user_fields() {
             insert_field_query(transaction, ty, Some(id), field).await?;
         }
         Ok(())

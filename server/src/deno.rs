@@ -789,7 +789,7 @@ pub(crate) fn define_type(ty: &ObjectType) -> Result<()> {
     let table_func: v8::Local<v8::Function> = get_member(api, scope, "table")?;
 
     let mut fields = vec![];
-    for f in &ty.fields {
+    for f in ty.all_fields() {
         let name = v8::String::new(scope, &f.name).unwrap().into();
         let ty_name = f.type_.name();
         let ty_name = v8::String::new(scope, ty_name).unwrap().into();

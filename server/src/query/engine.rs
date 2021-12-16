@@ -7,7 +7,6 @@ use futures::stream::BoxStream;
 use futures::stream::Stream;
 use futures::StreamExt;
 use itertools::zip;
-use itertools::Itertools;
 use sea_query::{Alias, ColumnDef, Table};
 use serde_json::json;
 use sqlx::any::{Any, AnyPool, AnyRow};
@@ -146,7 +145,7 @@ impl QueryEngine {
                     .primary_key(),
             )
             .to_owned();
-        for field in &ty.fields {
+        for field in ty.user_fields() {
             let mut column_def = ColumnDef::try_from(field)?;
             create_table.col(&mut column_def);
         }
@@ -226,17 +225,27 @@ impl QueryEngine {
         ty: &ObjectType,
         ty_value: &serde_json::Value,
     ) -> anyhow::Result<()> {
+
+        let mut field_binds = String::new();
+        let mut field_names = String::new();
+
+        for (i, f) in ty.all_fields().enumerate() {
+            field_binds.push_str(&std::format!("${},", i + 1));
+            field_names.push_str(&f.name);
+            field_names.push_str(",");
+        }
+        field_binds.pop();
+        field_names.pop();
+
         let insert_query = std::format!(
             "INSERT INTO {} ({}) VALUES ({})",
             &ty.backing_table(),
-            ty.fields.iter().map(|f| &f.name).join(", "),
-            (0..ty.fields.len())
-                .map(|i| std::format!("${}", i + 1))
-                .join(", ")
+            field_names,
+            field_binds
         );
 
         let mut insert_query = sqlx::query(&insert_query);
-        for field in &ty.fields {
+        for field in ty.all_fields() {
             macro_rules! bind_default_json_value {
                 (str, $value:expr) => {{
                     insert_query = insert_query.bind($value);
