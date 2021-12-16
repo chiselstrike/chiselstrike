@@ -408,7 +408,8 @@ async fn main() -> Result<()> {
                 DEFAULT_API_VERSION,
                 AllowTypeDeletion::No,
             )
-            .await?;
+            .await
+            .ok();
             let (mut tx, mut rx) = channel(1);
             let mut apply_watcher =
                 RecommendedWatcher::new(move |res: Result<Event, notify::Error>| {
@@ -439,7 +440,8 @@ async fn main() -> Result<()> {
                                 DEFAULT_API_VERSION,
                                 AllowTypeDeletion::No,
                             )
-                            .await?;
+                            .await
+                            .ok();
                         }
                     }
                     Err(e) => println!("watch error: {:?}", e),
