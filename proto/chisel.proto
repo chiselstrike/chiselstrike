@@ -23,6 +23,7 @@ message VersionDefinition {
   string version = 1;
   repeated TypeDefinition type_defs = 2;
   repeated EndpointDefinition endpoint_defs = 3;
+  repeated LabelPolicyDefinition label_policy_defs = 4;
 }
 
 message TypeDefinition {
@@ -40,6 +41,10 @@ message FieldDefinition {
 
 message EndpointDefinition {
   string path = 1;
+}
+
+message LabelPolicyDefinition {
+  string label = 1;
 }
 
 message DescribeRequest {

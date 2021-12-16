@@ -15,6 +15,12 @@ export default async function chisel(req) {
 }
 EOF
 
+cat << EOF > "$TEMPDIR/policies/policies.yml"
+labels:
+  - name: pii
+    transform: anonymize
+EOF
+
 $CHISEL apply
 
 # CHECK: Type defined: Foo
@@ -30,3 +36,4 @@ $CHISEL describe
 # CHECK:   [[^ *a: string]]
 # CHECK: }
 # CHECK: Endpoint: /dev/hello
+# CHECK: Label policy: pii

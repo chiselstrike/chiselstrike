@@ -424,6 +424,9 @@ async fn main() -> Result<()> {
                 for def in &version_def.endpoint_defs {
                     println!("  Endpoint: {}", def.path);
                 }
+                for def in &version_def.label_policy_defs {
+                    println!("  Label policy: {}", def.label);
+                }
                 println!("}}");
             }
         }
