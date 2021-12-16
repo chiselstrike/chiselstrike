@@ -162,8 +162,23 @@ impl RpcService {
         &self,
         request: Request<ChiselApplyRequest>,
     ) -> anyhow::Result<Response<ChiselApplyResponse>> {
-        let mut state = self.state.lock().await;
         let apply_request = request.into_inner();
+        let mut state = self.state.lock().await;
+
+        // Do this before any permanent changes to any of the databases. Otherwise
+        // we end up with bad code commited to the meta database and will fail to load
+        // chiseld next time, as it tries to replenish the endpoints
+        for endpoint in &apply_request.endpoints {
+            let code = endpoint.code.clone();
+            let cmd = send_command!({
+                deno::define_endpoint("/__chiselstrike/rpc_errormsg".into(), code).await?;
+                Ok(())
+            });
+            if let Err(err) = state.send_command(cmd).await {
+                anyhow::bail!("parsing endpoint {}:\n{}", endpoint.path, err);
+            }
+        }
+
         let api_version = apply_request.version;
 
         anyhow::ensure!(
