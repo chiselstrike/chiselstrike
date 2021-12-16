@@ -22,6 +22,8 @@ message AddTypeResponse {
 message VersionDefinition {
   string version = 1;
   repeated TypeDefinition type_defs = 2;
+  repeated EndpointDefinition endpoint_defs = 3;
+  repeated LabelPolicyDefinition label_policy_defs = 4;
 }
 
 message TypeDefinition {
@@ -37,10 +39,18 @@ message FieldDefinition {
   optional string default_value = 5;
 }
 
-message TypeExportRequest {
+message EndpointDefinition {
+  string path = 1;
 }
 
-message TypeExportResponse {
+message LabelPolicyDefinition {
+  string label = 1;
+}
+
+message DescribeRequest {
+}
+
+message DescribeResponse {
   repeated VersionDefinition version_defs = 1;
 }
 
@@ -85,6 +95,6 @@ service ChiselRpc {
   rpc GetStatus (StatusRequest) returns (StatusResponse);
   rpc Apply(ChiselApplyRequest) returns (ChiselApplyResponse);
   rpc Delete(ChiselDeleteRequest) returns (ChiselDeleteResponse);
-  rpc ExportTypes (TypeExportRequest) returns (TypeExportResponse);
+  rpc Describe (DescribeRequest) returns (DescribeResponse);
   rpc Restart (RestartRequest) returns (RestartResponse);
 }

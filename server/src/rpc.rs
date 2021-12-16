@@ -13,8 +13,8 @@ use async_mutex::Mutex;
 use chisel::chisel_rpc_server::{ChiselRpc, ChiselRpcServer};
 use chisel::{
     ChiselApplyRequest, ChiselApplyResponse, ChiselDeleteRequest, ChiselDeleteResponse,
-    RestartRequest, RestartResponse, StatusRequest, StatusResponse, TypeExportRequest,
-    TypeExportResponse,
+    DescribeRequest, DescribeResponse, RestartRequest, RestartResponse, StatusRequest,
+    StatusResponse,
 };
 use futures::FutureExt;
 use std::collections::BTreeSet;
@@ -382,14 +382,18 @@ impl ChiselRpc for RpcService {
             .map_err(|e| Status::internal(format!("{}", e)))
     }
 
-    async fn export_types(
+    async fn describe(
         &self,
-        _request: tonic::Request<TypeExportRequest>,
-    ) -> Result<tonic::Response<TypeExportResponse>, tonic::Status> {
+        _request: tonic::Request<DescribeRequest>,
+    ) -> Result<tonic::Response<DescribeResponse>, tonic::Status> {
         let state = self.state.lock().await;
 
+        // FIXME: Versions should be in `state`, not in inside type system and policies.
+        let versions = state.type_system.versions.keys();
         let mut version_defs = vec![];
-        for (api_version, version_types) in state.type_system.versions.iter() {
+        for api_version in versions {
+            // FIXME: don't unwrap.
+            let version_types = state.type_system.versions.get(api_version).unwrap();
             let mut type_defs = vec![];
             use itertools::Itertools;
             for ty in version_types
@@ -413,13 +417,29 @@ impl ChiselRpc for RpcService {
                 };
                 type_defs.push(type_def);
             }
+            let mut endpoint_defs = vec![];
+            for (path, _) in state.routes.route_data() {
+                endpoint_defs.push(chisel::EndpointDefinition {
+                    path: path.display().to_string(),
+                });
+            }
+            // FIXME don't unrwap
+            let policies = state.policies.versions.get(api_version).unwrap();
+            let mut label_policy_defs = vec![];
+            for label in policies.labels.keys() {
+                label_policy_defs.push(chisel::LabelPolicyDefinition {
+                    label: label.clone(),
+                });
+            }
             version_defs.push(chisel::VersionDefinition {
                 version: api_version.to_string(),
                 type_defs,
+                endpoint_defs,
+                label_policy_defs,
             });
         }
 
-        let response = chisel::TypeExportResponse { version_defs };
+        let response = chisel::DescribeResponse { version_defs };
         Ok(Response::new(response))
     }
 
