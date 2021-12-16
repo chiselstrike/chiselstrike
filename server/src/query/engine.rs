@@ -61,6 +61,7 @@ impl TryFrom<&Field> for ColumnDef {
         match field.type_ {
             Type::String => column_def.text(),
             Type::Int => column_def.integer(),
+            Type::Id => column_def.text().unique_key().primary_key(),
             Type::Float => column_def.double(),
             Type::Boolean => column_def.boolean(),
             Type::Object(_) => {
@@ -138,14 +139,9 @@ impl QueryEngine {
         let mut create_table = Table::create()
             .table(Alias::new(ty.backing_table()))
             .if_not_exists()
-            .col(
-                ColumnDef::new(Alias::new("id"))
-                    .integer()
-                    .auto_increment()
-                    .primary_key(),
-            )
             .to_owned();
-        for field in ty.user_fields() {
+
+        for field in ty.all_fields() {
             let mut column_def = ColumnDef::try_from(field)?;
             create_table.col(&mut column_def);
         }
@@ -232,7 +228,7 @@ impl QueryEngine {
         for (i, f) in ty.all_fields().enumerate() {
             field_binds.push_str(&std::format!("${},", i + 1));
             field_names.push_str(&f.name);
-            field_names.push_str(",");
+            field_names.push(",");
         }
         field_binds.pop();
         field_names.pop();
@@ -286,6 +282,7 @@ impl QueryEngine {
             match field.type_ {
                 Type::String => bind_json_value!(as_str, str),
                 Type::Int => bind_json_value!(as_i64, i64),
+                Type::Id => bind_json_value!(as_str, str),
                 Type::Float => bind_json_value!(as_f64, f64),
                 Type::Boolean => bind_json_value!(as_bool, bool),
                 Type::Object(_) => {
@@ -331,6 +328,7 @@ pub(crate) fn relational_row_to_json(
             Type::Float => to_json!(f64),
             Type::Int => to_json!(i64),
             Type::String => to_json!(&str),
+            Type::Id => to_json!(&str),
             Type::Boolean => to_json!(bool),
             Type::Object(_) => unreachable!("A column cannot be a Type::Object"),
         };

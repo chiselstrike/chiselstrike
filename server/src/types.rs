@@ -282,6 +282,7 @@ pub(crate) enum Type {
     Int,
     Float,
     Boolean,
+    Id,
     Object(Arc<ObjectType>),
 }
 
@@ -290,6 +291,7 @@ impl Type {
         match self {
             Type::Float => "number",
             Type::Int => "bigint",
+            Type::Id => "string",
             Type::String => "string",
             Type::Boolean => "boolean",
             Type::Object(ty) => &ty.name,
@@ -417,11 +419,14 @@ impl<'a> ObjectDescriptor for NewObject<'a> {
 
 #[derive(Debug)]
 pub(crate) struct ObjectType {
-    pub(crate) id: Option<i32>,
+    /// id of this object in the meta-database. Will be None for objects that are not persisted yet
+    pub(crate) meta_id: Option<i32>,
     /// Name of this type.
     name: String,
     /// Fields of this type.
     fields: Vec<Field>,
+    /// user-visible ID of this object.
+    chisel_id: Field,
     /// Name of the backing table for this type.
     backing_table: String,
 
@@ -441,12 +446,22 @@ impl ObjectType {
                 field.api_version
             );
         }
+        let chisel_id = Field {
+            id: None,
+            name: "id".to_string(),
+            type_: Type::Id,
+            labels: Vec::default(),
+            default: None,
+            is_optional: false,
+            api_version: "__chiselstrike".into(),
+        };
         Ok(Self {
-            id: desc.id(),
+            meta_id: desc.id(),
             name: desc.name(),
             api_version,
             backing_table,
             fields,
+            chisel_id,
         })
     }
 
@@ -455,7 +470,7 @@ impl ObjectType {
     }
 
     pub(crate) fn all_fields(&self) -> impl Iterator<Item = &Field> {
-        self.fields.iter()
+        std::iter::once(&self.chisel_id).chain(self.fields.iter())
     }
 
     pub(crate) fn backing_table(&self) -> &str {
@@ -614,7 +629,10 @@ impl Field {
     }
 
     pub(crate) fn generate_value(&self) -> Option<String> {
-        self.default.clone()
+        match self.type_ {
+            Type::Id => Some(Uuid::new_v4().to_string()),
+            _ => self.default.clone(),
+        }
     }
 
     pub(crate) fn persisted_name(&self, parent_type_name: &ObjectType) -> String {
