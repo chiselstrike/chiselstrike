@@ -289,11 +289,8 @@ fn sql_join(
     let mut on_columns = vec![];
     for c in columns {
         if left.columns.contains(c) && right.columns.contains(c) {
-            join_columns.push(format!("${}.${}", left_alias, c.0));
-            on_columns.push(format!(
-                "{}.${} = ${}.${}",
-                left_alias, c.0, right_alias, c.0
-            ));
+            join_columns.push(format!("{}.{}", left_alias, c.0));
+            on_columns.push(format!("{}.{} = {}.{}", left_alias, c.0, right_alias, c.0));
         } else {
             join_columns.push(c.0.clone());
         }
