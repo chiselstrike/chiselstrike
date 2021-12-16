@@ -95,8 +95,30 @@ export class Table<T> {
         return new Table<T & U>(i);
     }
 
-    rows() {
-        return Chisel.query(this);
+    [Symbol.asyncIterator]() {
+        const rid = Deno.core.opSync(
+            "chisel_relational_query_create",
+            this.inner,
+        );
+
+        return {
+            async next() {
+                const value = await Deno.core.opAsync(
+                    "chisel_relational_query_next",
+                    rid,
+                );
+                if (value) {
+                    return { value: value, done: false };
+                } else {
+                    Deno.core.opSync("op_close", rid);
+                    return { done: true };
+                }
+            },
+            return() {
+                Deno.core.opSync("op_close", rid);
+                return { done: true };
+            },
+        };
     }
 }
 
