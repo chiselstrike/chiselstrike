@@ -24,9 +24,8 @@ EOF
 
 cat << EOF > "$TEMPDIR/endpoints/find.ts"
 export default async function chisel(req) {
-   let evolve = Evolving.rows();
    let response = "tst ";
-   for await (let ev of evolve) {
+   for await (let ev of Evolving) {
         let fields = [ev.a, ev.b];
         response += fields.join(" ");
         response += " ";

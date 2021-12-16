@@ -14,7 +14,7 @@ cat << EOF > "$TEMPDIR/endpoints/query.js"
 export default async function chisel(req: Request) {
     let ret = "[";
     const glaubers = Person.findMany({"first_name": "Glauber"});
-    const rows = glaubers.select("first_name", "last_name").rows();
+    const rows = glaubers.select("first_name", "last_name");
     for await (let row of rows) {
         ret += "(" + row.first_name + " " + row.last_name + ") ";
     }

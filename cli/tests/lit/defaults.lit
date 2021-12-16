@@ -22,8 +22,7 @@ EOF
 cat << EOF > "$TEMPDIR/endpoints/read.ts"
 export default async function chisel(req) {
     let response = "";
-    let foo = Foo.rows();
-    for await (let f of foo) {
+    for await (let f of Foo) {
         let fields = [f.a, f.b, f.c, f.d, f.e];
         response += fields.join(" ");
         response += " ";
