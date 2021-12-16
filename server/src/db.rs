@@ -11,19 +11,37 @@ use crate::query::engine::SqlStream;
 use crate::runtime;
 use crate::types::Type;
 use anyhow::{anyhow, Result};
+use futures::future;
 use futures::Stream;
+use futures::StreamExt;
 use itertools::Itertools;
 use serde_json::value::Value;
 use sqlx::AnyPool;
+use std::collections::HashMap;
 use std::pin::Pin;
 use std::task::Context;
 use std::task::Poll;
 
 #[derive(Debug)]
+enum SqlValue {
+    Bool(bool),
+    U64(u64),
+    I64(i64),
+    F64(f64),
+    String(String),
+}
+
+#[derive(Debug)]
+struct Restriction {
+    k: String,
+    v: SqlValue,
+}
+
+#[derive(Debug)]
 enum Inner {
     BackingStore(String, FieldPolicies),
     Join(Box<Relation>, Box<Relation>),
-    Filter(Box<Relation>, Vec<String>),
+    Filter(Box<Relation>, Vec<Restriction>),
 }
 
 #[derive(Debug)]
@@ -95,21 +113,29 @@ fn convert_filter(val: &serde_json::Value) -> Result<Relation> {
     let restrictions = val["restrictions"]
         .as_object()
         .ok_or_else(|| anyhow!("Missing restrictions in filter"))?;
-    let mut restriction_strs = vec![];
+    let mut sql_restrictions = vec![];
     for (k, v) in restrictions.iter() {
         let v = match v {
             Value::Null => anyhow::bail!("Null restriction"),
-            Value::Bool(v) => format!("{}", v),
-            Value::Number(v) => format!("{}", v),
-            Value::String(v) => escape_string(v),
+            Value::Bool(v) => SqlValue::Bool(*v),
+            Value::Number(v) => {
+                if let Some(v) = v.as_u64() {
+                    SqlValue::U64(v)
+                } else if let Some(v) = v.as_i64() {
+                    SqlValue::I64(v)
+                } else {
+                    SqlValue::F64(v.as_f64().unwrap())
+                }
+            }
+            Value::String(v) => SqlValue::String(v.clone()),
             Value::Array(v) => anyhow::bail!("Array restriction {:?}", v),
             Value::Object(v) => anyhow::bail!("Object restriction {:?}", v),
         };
-        restriction_strs.push(format!("{}={}", k, v));
+        sql_restrictions.push(Restriction { k: k.clone(), v });
     }
     Ok(Relation {
         columns,
-        inner: Inner::Filter(inner, restriction_strs),
+        inner: Inner::Filter(inner, sql_restrictions),
     })
 }
 
@@ -179,21 +205,66 @@ fn sql_backing_store(
     Query::Stream(pstream)
 }
 
+fn filter_stream_item(
+    o: &anyhow::Result<JsonObject>,
+    restrictions: &HashMap<String, SqlValue>,
+) -> bool {
+    let o = match o {
+        Ok(o) => o,
+        Err(_) => return true,
+    };
+    for (k, v) in o.iter() {
+        if let Some(v2) = restrictions.get(k) {
+            let eq = match v2 {
+                SqlValue::Bool(v2) => v == v2,
+                SqlValue::U64(v2) => v == v2,
+                SqlValue::I64(v2) => v == v2,
+                SqlValue::F64(v2) => v == v2,
+                SqlValue::String(v2) => v == v2,
+            };
+            if !eq {
+                return false;
+            }
+        }
+    }
+    true
+}
+
+fn filter_stream(stream: SqlStream, restrictions: Vec<Restriction>) -> Query {
+    let restrictions: HashMap<String, SqlValue> =
+        restrictions.into_iter().map(|r| (r.k, r.v)).collect();
+    let stream = stream.filter(move |o| future::ready(filter_stream_item(o, &restrictions)));
+    Query::Stream(Box::pin(stream))
+}
+
 fn sql_filter(
     pool: &AnyPool,
     columns: &[(String, Type)],
     alias_count: &mut u32,
     inner: Relation,
-    restrictions: Vec<String>,
+    restrictions: Vec<Restriction>,
 ) -> Query {
     let inner_sql = sql_impl(pool, inner, alias_count);
     let inner_sql = match inner_sql {
         Query::Sql(s) => s,
-        Query::Stream(_) => unimplemented!(),
+        Query::Stream(s) => return filter_stream(s, restrictions),
     };
     let inner_alias = format!("A{}", *alias_count);
     *alias_count += 1;
-    let restrictions = restrictions.join(" AND ");
+
+    let restrictions = restrictions
+        .iter()
+        .map(|rest| {
+            let str_v = match &rest.v {
+                SqlValue::Bool(v) => format!("{}", v),
+                SqlValue::U64(v) => format!("{}", v),
+                SqlValue::I64(v) => format!("{}", v),
+                SqlValue::F64(v) => format!("{}", v),
+                SqlValue::String(v) => escape_string(v),
+            };
+            format!("{}={}", rest.k, str_v)
+        })
+        .join(" AND ");
     Query::Sql(format!(
         "SELECT {} FROM ({}) AS {} WHERE {}",
         column_list(columns),
