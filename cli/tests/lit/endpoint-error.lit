@@ -15,7 +15,8 @@ set +e
 $CHISEL apply 2>&1
 set -e
 
-# CHECK:  Error: expected type `v8::data::Function`, got `v8::data::Value`
+# CHECK: Error: parsing endpoint test
+# CHECK: expected type `v8::data::Function`, got `v8::data::Value`
 
 $CURL -o - $CHISELD_HOST/dev/test
 
@@ -36,19 +37,3 @@ $CURL -o - $CHISELD_HOST/dev/test
 
 # CHECK: HTTP/1.1 200 OK
 # CHECK: foo
-
-cat << EOF > "$TEMPDIR/endpoints/test.js"
-// Intentionally invalid, there is no default export
-export async function chisel(req) {
-    return new Response("foo\n");
-}
-EOF
-
-set +e
-$CHISEL apply 2>&1
-set -e
-
-# CHECK:  Error: expected type `v8::data::Function`, got `v8::data::Value`
-
-$CURL -o - $CHISELD_HOST/dev/test
-# CHECK: HTTP/1.1 404 Not Found

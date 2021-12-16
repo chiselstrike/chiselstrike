@@ -89,8 +89,6 @@ impl SharedTasks {
 }
 
 async fn run(state: SharedState, mut cmd: ExecutorChannel) -> Result<()> {
-    // FIXME: We have to create one per thread. For now we only have
-    // one thread, so this is fine.
     init_deno(state.inspect_brk).await?;
 
     let meta = MetaService::local_connection(&state.metadata_db).await?;

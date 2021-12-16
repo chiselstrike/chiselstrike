@@ -305,9 +305,39 @@ async fn op_chisel_relational_query_next(
 // internet.
 // FIXME: This should produce an error when failing to compile.
 fn compile_ts_code(code: String) -> Result<String> {
+    #[derive(Clone)]
+    struct ErrorBuffer {
+        inner: Arc<std::sync::Mutex<Vec<u8>>>,
+    }
+
+    impl ErrorBuffer {
+        fn new() -> Self {
+            Self {
+                inner: Arc::new(std::sync::Mutex::new(vec![])),
+            }
+        }
+
+        fn get(&self) -> String {
+            String::from_utf8_lossy(&self.inner.lock().unwrap().clone()).to_string()
+        }
+    }
+
+    impl std::io::Write for ErrorBuffer {
+        fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+            let mut v = self.inner.lock().unwrap();
+            v.extend_from_slice(buf);
+            Ok(buf.len())
+        }
+        fn flush(&mut self) -> std::io::Result<()> {
+            Ok(())
+        }
+    }
+
+    let err_buf = ErrorBuffer::new();
+
     let cm: Lrc<SourceMap> = Default::default();
     let emitter = Box::new(emitter::EmitterWriter::new(
-        Box::new(std::io::stdout()),
+        Box::new(err_buf.clone()),
         Some(cm.clone()),
         false,
         true,
@@ -331,10 +361,8 @@ fn compile_ts_code(code: String) -> Result<String> {
 
     let module = parser.parse_typescript_module().map_err(|e| {
         // Unrecoverable fatal error occurred
-        // FIXME: This prints a good error in the server and returns a
-        // bad one to the client.
         e.into_diagnostic(&handler).emit();
-        anyhow!("Parse failed")
+        anyhow!("Parse failed: {}", err_buf.get())
     })?;
 
     // Remove typescript types

@@ -13,5 +13,7 @@ cd "$TEMPDIR"
 set +e
 $CHISEL apply 2>&1
 set -e
+# CHECK: Error: parsing endpoint error:
+# CHECK: TypeError: Parse failed: error: Expected ',', got 'string literal (bar)'
+# CHECK: 2 |     return new Response("foo" "bar");
 
-# CHECK: Error: Uncaught TypeError: Parse failed
