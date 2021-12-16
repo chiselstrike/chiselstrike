@@ -2,7 +2,7 @@
 // which can be replaced by simple Attribute compare logic):
 //
 // select(Table<T>, Table<T>::Attribute attributes...) -> Table<attributes...>
-// filter(Table<T>, fn(T)->bool) -> Table<T>
+// findMany(Table<T>, fn(T)->bool) -> Table<T>
 // sort(Table<T>, fn(T)->Sortable) -> Table<T>
 // take(Table<T>, int) -> Table<T>  (takes first n rows)
 // join(Table<T>, Table<U>, Table<T>::Attribute, Table<U>::Attribute) -> Table<Composite<T, U>> (Joins tables T and U, based on their columns Table<T>::Attribute and Table<U>::Attribute)
@@ -76,7 +76,7 @@ export class Table<T> {
         }
     }
 
-    filter(restrictions: Partial<T>): Table<T> {
+    findMany(restrictions: Partial<T>): Table<T> {
         const i = new Filter(this.inner.columns, restrictions, this.inner);
         return new Table(i);
     }
