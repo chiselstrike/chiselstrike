@@ -613,6 +613,10 @@ impl Field {
         }
     }
 
+    pub(crate) fn generate_value(&self) -> Option<String> {
+        self.default.clone()
+    }
+
     pub(crate) fn persisted_name(&self, parent_type_name: &ObjectType) -> String {
         format!(
             "{}.{}.{}",

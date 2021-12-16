@@ -271,7 +271,7 @@ impl QueryEngine {
                             insert_query = insert_query.bind(value);
                         }
                         None => {
-                            let value = field.default.clone().ok_or_else(|| {
+                            let value = field.generate_value().ok_or_else(|| {
                                 QueryError::IncompatibleData(
                                     field.name.to_owned(),
                                     ty.name().to_owned(),
