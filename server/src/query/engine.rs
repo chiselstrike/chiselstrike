@@ -7,7 +7,6 @@ use futures::stream::BoxStream;
 use futures::stream::Stream;
 use futures::StreamExt;
 use itertools::zip;
-use itertools::Itertools;
 use sea_query::{Alias, ColumnDef, Table};
 use serde_json::json;
 use sqlx::any::{Any, AnyPool, AnyRow};
@@ -18,6 +17,7 @@ use std::cell::RefCell;
 use std::marker::PhantomPinned;
 use std::pin::Pin;
 use std::task::{Context, Poll};
+use uuid::Uuid;
 
 // Results directly out of the database
 pub(crate) type RawSqlStream = BoxStream<'static, anyhow::Result<AnyRow>>;
@@ -62,6 +62,7 @@ impl TryFrom<&Field> for ColumnDef {
         match field.type_ {
             Type::String => column_def.text(),
             Type::Int => column_def.integer(),
+            Type::Id => column_def.text().unique_key().primary_key(),
             Type::Float => column_def.double(),
             Type::Boolean => column_def.boolean(),
             Type::Object(_) => {
@@ -139,14 +140,9 @@ impl QueryEngine {
         let mut create_table = Table::create()
             .table(Alias::new(ty.backing_table()))
             .if_not_exists()
-            .col(
-                ColumnDef::new(Alias::new("id"))
-                    .integer()
-                    .auto_increment()
-                    .primary_key(),
-            )
             .to_owned();
-        for field in &ty.fields {
+
+        for field in ty.all_fields() {
             let mut column_def = ColumnDef::try_from(field)?;
             create_table.col(&mut column_def);
         }
@@ -226,17 +222,49 @@ impl QueryEngine {
         ty: &ObjectType,
         ty_value: &serde_json::Value,
     ) -> anyhow::Result<()> {
+        let mut field_binds = String::new();
+        let mut field_names = String::new();
+        let mut id_name = String::new();
+        let mut update_binds = String::new();
+        let mut id_bind = String::new();
+
+        for (i, f) in ty.all_fields().enumerate() {
+            let bind = std::format!("${}", i + 1);
+            field_binds.push_str(&bind);
+            field_binds.push(',');
+
+            field_names.push_str(&f.name);
+            field_names.push(',');
+            if f.type_ == Type::Id {
+                if let Some(idstr) = ty_value.get(&f.name) {
+                    let idstr = idstr
+                        .as_str()
+                        .ok_or_else(|| QueryError::InvalidId("not a string".into()))?;
+                    Uuid::parse_str(idstr).map_err(|_| QueryError::InvalidId(idstr.into()))?;
+                }
+                anyhow::ensure!(id_bind.is_empty(), "More than one ID??");
+                id_name = f.name.to_string();
+                id_bind = bind.clone();
+            }
+            update_binds.push_str(&std::format!("{} = {},", &f.name, &bind));
+        }
+        field_binds.pop();
+        field_names.pop();
+        update_binds.pop();
+
         let insert_query = std::format!(
-            "INSERT INTO {} ({}) VALUES ({})",
+            "INSERT INTO {} ({}) VALUES ({}) ON CONFLICT ({}) DO UPDATE SET {} WHERE {} = {}",
             &ty.backing_table(),
-            ty.fields.iter().map(|f| &f.name).join(", "),
-            (0..ty.fields.len())
-                .map(|i| std::format!("${}", i + 1))
-                .join(", ")
+            field_names,
+            field_binds,
+            id_name,
+            update_binds,
+            id_name,
+            id_bind
         );
 
         let mut insert_query = sqlx::query(&insert_query);
-        for field in &ty.fields {
+        for field in ty.all_fields() {
             macro_rules! bind_default_json_value {
                 (str, $value:expr) => {{
                     insert_query = insert_query.bind($value);
@@ -262,7 +290,7 @@ impl QueryEngine {
                             insert_query = insert_query.bind(value);
                         }
                         None => {
-                            let value = field.default.clone().ok_or_else(|| {
+                            let value = field.generate_value().ok_or_else(|| {
                                 QueryError::IncompatibleData(
                                     field.name.to_owned(),
                                     ty.name().to_owned(),
@@ -277,6 +305,7 @@ impl QueryEngine {
             match field.type_ {
                 Type::String => bind_json_value!(as_str, str),
                 Type::Int => bind_json_value!(as_i64, i64),
+                Type::Id => bind_json_value!(as_str, str),
                 Type::Float => bind_json_value!(as_f64, f64),
                 Type::Boolean => bind_json_value!(as_bool, bool),
                 Type::Object(_) => {
@@ -322,6 +351,7 @@ pub(crate) fn relational_row_to_json(
             Type::Float => to_json!(f64),
             Type::Int => to_json!(i64),
             Type::String => to_json!(&str),
+            Type::Id => to_json!(&str),
             Type::Boolean => to_json!(bool),
             Type::Object(_) => unreachable!("A column cannot be a Type::Object"),
         };

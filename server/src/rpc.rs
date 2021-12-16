@@ -402,7 +402,7 @@ impl ChiselRpc for RpcService {
                 .sorted_by(|x, y| x.name().cmp(y.name()))
             {
                 let mut field_defs = vec![];
-                for field in &ty.fields {
+                for field in ty.user_fields() {
                     field_defs.push(chisel::FieldDefinition {
                         name: field.name.to_owned(),
                         field_type: field.type_.name().to_string(),

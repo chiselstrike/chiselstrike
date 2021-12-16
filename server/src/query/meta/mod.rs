@@ -113,7 +113,7 @@ async fn insert_field_query(
     recently_added_type_id: Option<i32>,
     field: &Field,
 ) -> anyhow::Result<()> {
-    let type_id = ty.id.xor(recently_added_type_id).ok_or_else(|| anyhow!("logical error. Seems like a type is at the same type pre-existing and recently added??"))?;
+    let type_id = ty.meta_id.xor(recently_added_type_id).ok_or_else(|| anyhow!("logical error. Seems like a type is at the same type pre-existing and recently added??"))?;
 
     let add_field = match &field.default {
         None => {
@@ -300,10 +300,10 @@ impl MetaService {
         ty: &ObjectType,
     ) -> anyhow::Result<()> {
         let type_id = ty
-            .id
+            .meta_id
             .ok_or_else(|| anyhow!("logical error. Trying to delete type without id"))?;
 
-        for field in &ty.fields {
+        for field in ty.user_fields() {
             remove_field_query(transaction, field).await?;
         }
 
@@ -433,7 +433,7 @@ impl MetaService {
             .execute(add_type_name)
             .await
             .map_err(QueryError::ExecuteFailed)?;
-        for field in &ty.fields {
+        for field in ty.user_fields() {
             insert_field_query(transaction, ty, Some(id), field).await?;
         }
         Ok(())

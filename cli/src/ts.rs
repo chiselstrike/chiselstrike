@@ -130,12 +130,14 @@ fn validate_type_vec(type_vec: &[AddTypeRequest], valid_types: &BTreeSet<String>
     Ok(())
 }
 
-fn parse_class_prop(x: &ClassProp, handler: &Handler) -> Result<FieldDefinition> {
+fn parse_class_prop(x: &ClassProp, class_name: &str, handler: &Handler) -> Result<FieldDefinition> {
     let (default_value, field_type) = match get_field_value(handler, &x.value)? {
         None => (None, get_field_type(handler, &x.type_ann)?),
         Some((val, t)) => (Some(val), t),
     };
     let (field_name, is_optional) = get_field_info(handler, &x.key)?;
+
+    anyhow::ensure!(field_name != "id", "Creating a field with the name `id` is not supported. 😟\nBut don't worry! ChiselStrike creates an id field automatically, and you can access it in your endpoints as {}.id 🤩", class_name);
 
     let labels = get_type_decorators(handler, &x.decorators)?;
 
@@ -206,7 +208,7 @@ fn parse_one_file<P: AsRef<Path>>(
 
                 for member in &x.class.body {
                     match member {
-                        ClassMember::ClassProp(x) => match parse_class_prop(x, &handler) {
+                        ClassMember::ClassProp(x) => match parse_class_prop(x, &name, &handler) {
                             Err(err) => {
                                 handler
                                     .span_err(x.span(), &format!("While parsing class {}", name));

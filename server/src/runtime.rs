@@ -30,7 +30,7 @@ impl Runtime {
         current_path: &str,
     ) {
         if let Some(version) = self.policies.versions.get(&ty.api_version) {
-            for fld in &ty.fields {
+            for fld in ty.user_fields() {
                 for lbl in &fld.labels {
                     if let Some(p) = version.labels.get(lbl) {
                         if !p.except_uri.is_match(current_path) {
