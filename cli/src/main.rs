@@ -34,11 +34,11 @@ const TIMEOUT: Duration = Duration::from_secs(10);
 #[derive(Deserialize)]
 struct Manifest {
     /// Vector of directories to scan for type definitions.
-    types_dirs: Vec<String>,
+    types: Vec<String>,
     /// Vector of directories to scan for endpoint definitions.
-    endpoints_dirs: Vec<String>,
+    endpoints: Vec<String>,
     /// Vector of directories to scan for policy definitions.
-    policies_dirs: Vec<String>,
+    policies: Vec<String>,
 }
 
 enum AllowTypeDeletion {
@@ -95,25 +95,21 @@ struct Endpoint {
 }
 
 impl Manifest {
-    pub fn new(
-        types_dirs: Vec<String>,
-        endpoints_dirs: Vec<String>,
-        policies_dirs: Vec<String>,
-    ) -> Self {
+    pub fn new(types: Vec<String>, endpoints: Vec<String>, policies: Vec<String>) -> Self {
         Manifest {
-            types_dirs,
-            endpoints_dirs,
-            policies_dirs,
+            types,
+            endpoints,
+            policies,
         }
     }
 
     pub fn types(&self) -> anyhow::Result<Vec<PathBuf>> {
-        Self::dirs_to_paths(&self.types_dirs)
+        Self::dirs_to_paths(&self.types)
     }
 
     pub fn endpoints(&self) -> anyhow::Result<Vec<Endpoint>> {
         let mut ret = vec![];
-        for dir in &self.endpoints_dirs {
+        for dir in &self.endpoints {
             let mut paths = vec![];
             let dir = Path::new(dir);
             dir_to_paths(dir, &mut paths)?;
@@ -140,7 +136,7 @@ impl Manifest {
     }
 
     pub fn policies(&self) -> anyhow::Result<Vec<PathBuf>> {
-        Self::dirs_to_paths(&self.policies_dirs)
+        Self::dirs_to_paths(&self.policies)
     }
 
     fn dirs_to_paths(dirs: &[String]) -> anyhow::Result<Vec<PathBuf>> {
@@ -419,15 +415,15 @@ async fn main() -> Result<()> {
                 })?;
             let watcher_config = notify::Config::OngoingEvents(Some(Duration::from_secs(1)));
             apply_watcher.configure(watcher_config)?;
-            for types_dir in &manifest.types_dirs {
+            for types_dir in &manifest.types {
                 let types_dir = Path::new(types_dir);
                 apply_watcher.watch(types_dir, RecursiveMode::Recursive)?;
             }
-            for endpoints_dir in &manifest.endpoints_dirs {
+            for endpoints_dir in &manifest.endpoints {
                 let endpoints_dir = Path::new(endpoints_dir);
                 apply_watcher.watch(endpoints_dir, RecursiveMode::Recursive)?;
             }
-            for policies_dir in &manifest.policies_dirs {
+            for policies_dir in &manifest.policies {
                 let policies_dir = Path::new(policies_dir);
                 apply_watcher.watch(policies_dir, RecursiveMode::Recursive)?;
             }
