@@ -5,6 +5,7 @@ use crate::db::convert;
 use crate::policies::FieldPolicies;
 use crate::query::engine::JsonObject;
 use crate::query::engine::SqlStream;
+use crate::rcmut::RcMut;
 use crate::runtime;
 use crate::runtime::Runtime;
 use crate::types::ObjectType;
@@ -234,7 +235,6 @@ async fn op_chisel_store(
         .as_str()
         .ok_or_else(|| anyhow!("Type name error; the .name key must have a string value"))?;
     let runtime = runtime::get();
-    let runtime = runtime.borrow_mut();
     let api_version = current_api_version();
 
     let ty = runtime
@@ -274,8 +274,7 @@ fn op_chisel_relational_query_create(
     // op_chisel_relational_query_create with a closure that has an
     // Rc<DenoService>.
     let relation = convert(&relation)?;
-    let runtime = runtime::get();
-    let mut runtime = runtime.borrow_mut();
+    let mut runtime = runtime::get();
     let query_engine = &mut runtime.query_engine;
     let stream = Box::pin(query_engine.query_relation(relation));
     let resource = QueryStreamResource {
@@ -440,10 +439,9 @@ where
 async fn get_read_future(
     reader: v8::Global<v8::Value>,
     read: v8::Global<v8::Function>,
-    service: Rc<RefCell<DenoService>>,
 ) -> Result<Option<(Box<[u8]>, ())>> {
-    let mut borrow = service.borrow_mut();
-    let runtime = &mut borrow.worker.js_runtime;
+    let mut service = get();
+    let runtime = &mut service.worker.js_runtime;
     let js_promise = {
         let scope = &mut runtime.handle_scope();
         let reader = v8::Local::new(scope, reader.clone());
@@ -476,7 +474,6 @@ async fn get_read_future(
 fn get_read_stream(
     runtime: &mut JsRuntime,
     global_response: v8::Global<v8::Value>,
-    service: Rc<RefCell<DenoService>>,
 ) -> Result<impl Stream<Item = Result<Box<[u8]>>>> {
     let scope = &mut runtime.handle_scope();
     let response = global_response
@@ -492,9 +489,7 @@ fn get_read_stream(
     let reader: v8::Global<v8::Value> = v8::Global::new(scope, reader);
     let read = v8::Global::new(scope, read);
 
-    let stream = try_unfold((), move |_| {
-        get_read_future(reader.clone(), read.clone(), service.clone())
-    });
+    let stream = try_unfold((), move |_| get_read_future(reader.clone(), read.clone()));
     Ok(stream)
 }
 
@@ -632,12 +627,9 @@ async fn get_result(
     .await
 }
 
-async fn run_js_aux(
-    d: Rc<RefCell<DenoService>>,
-    path: String,
-    mut req: Request<hyper::Body>,
-) -> Result<Response<Body>> {
-    let service = &mut *d.borrow_mut();
+pub(crate) async fn run_js(path: String, mut req: Request<hyper::Body>) -> Result<Response<Body>> {
+    let mut service = get();
+    let service: &mut DenoService = &mut service;
     let request_handler = service.handlers.get(&path).unwrap().func.clone().unwrap();
     let runtime = &mut service.worker.js_runtime;
 
@@ -649,7 +641,7 @@ async fn run_js_aux(
 
     let result = get_result(runtime, request_handler, &mut req, path).await?;
 
-    let stream = get_read_stream(runtime, result.clone(), d.clone())?;
+    let stream = get_read_stream(runtime, result.clone())?;
     let scope = &mut runtime.handle_scope();
     let response = result
         .open(scope)
@@ -696,18 +688,11 @@ async fn run_js_aux(
     Ok(body)
 }
 
-fn with_deno<T, F>(f: F) -> T
-where
-    F: FnOnce(Rc<RefCell<DenoService>>) -> T,
-{
-    DENO.with(|d| {
-        let d = d.get().expect("Deno is not not yet initialized");
-        f(d.clone())
+fn get() -> RcMut<DenoService> {
+    DENO.with(|x| {
+        let rc = x.get().expect("Runtime is not yet initialized.").clone();
+        RcMut::new(rc)
     })
-}
-
-pub(crate) async fn run_js(path: String, req: Request<hyper::Body>) -> Result<Response<Body>> {
-    with_deno(|d| run_js_aux(d, path, req)).await
 }
 
 async fn get_endpoint(
@@ -739,12 +724,9 @@ async fn get_endpoint(
     Ok(v8::Global::new(scope, request_handler))
 }
 
-async fn define_endpoint_aux(
-    d: Rc<RefCell<DenoService>>,
-    path: String,
-    code: String,
-) -> Result<()> {
-    let service = &mut *d.borrow_mut();
+pub(crate) async fn define_endpoint(path: String, code: String) -> Result<()> {
+    let mut service = get();
+    let service: &mut DenoService = &mut service;
     let mut entry = service.handlers.entry(path.clone());
     let version = match &entry {
         Entry::Vacant(_) => 0,
@@ -774,12 +756,8 @@ async fn define_endpoint_aux(
     Ok(())
 }
 
-pub(crate) async fn define_endpoint(path: String, code: String) -> Result<()> {
-    with_deno(|d| define_endpoint_aux(d, path, code)).await
-}
-
-fn define_type_aux(d: Rc<RefCell<DenoService>>, ty: &ObjectType) -> Result<()> {
-    let service = &mut *d.borrow_mut();
+pub(crate) fn define_type(ty: &ObjectType) -> Result<()> {
+    let mut service = get();
     let runtime = &mut service.worker.js_runtime;
     let global_context = runtime.global_context();
     let scope = &mut runtime.handle_scope();
@@ -806,22 +784,16 @@ fn define_type_aux(d: Rc<RefCell<DenoService>>, ty: &ObjectType) -> Result<()> {
     Ok(())
 }
 
-pub(crate) fn define_type(ty: &ObjectType) -> Result<()> {
-    with_deno(|d| define_type_aux(d, ty))
-}
-
 pub(crate) fn flush_types() -> Result<()> {
-    with_deno(|d| {
-        let service = &mut *d.borrow_mut();
-        let runtime = &mut service.worker.js_runtime;
-        let global_context = runtime.global_context();
-        let scope = &mut runtime.handle_scope();
-        let global_proxy = global_context.open(scope).global(scope);
-        let chisel: v8::Local<v8::Object> = get_member(global_proxy, scope, "Chisel").unwrap();
+    let mut service = get();
+    let runtime = &mut service.worker.js_runtime;
+    let global_context = runtime.global_context();
+    let scope = &mut runtime.handle_scope();
+    let global_proxy = global_context.open(scope).global(scope);
+    let chisel: v8::Local<v8::Object> = get_member(global_proxy, scope, "Chisel").unwrap();
 
-        let collections = v8::String::new(scope, "collections").unwrap().into();
-        let empty = v8::Object::new(scope);
-        chisel.set(scope, collections, empty.into());
-        Ok(())
-    })
+    let collections = v8::String::new(scope, "collections").unwrap().into();
+    let empty = v8::Object::new(scope);
+    chisel.set(scope, collections, empty.into());
+    Ok(())
 }
