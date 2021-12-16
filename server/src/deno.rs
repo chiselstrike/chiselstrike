@@ -628,8 +628,30 @@ async fn get_result(
 }
 
 pub(crate) async fn run_js(path: String, mut req: Request<hyper::Body>) -> Result<Response<Body>> {
+    // The rust borrow checker can track fields independently, but
+    // only in very simple cases. For example,
+    //
+    //   let mut f = (1, 2);
+    //   let g = &mut f.0;
+    //   foo(g, f.1);
+    //
+    // compiles, but the following doesn't
+    //
+    //   let mut f = (1, 2);
+    //   let g = &mut (&mut f).0;
+    //   foo(g, f.1);
+    //
+    // The use of two service variables is to help the borrow checker
+    // by accessing both fields via the same variable. In the above
+    // example it would be
+    //
+    //   let mut f = (1, 2);
+    //   let f = &mut f;
+    //   let g = &mut f.0;
+    //   foo(g, f.1);
     let mut service = get();
     let service: &mut DenoService = &mut service;
+
     let request_handler = service.handlers.get(&path).unwrap().func.clone().unwrap();
     let runtime = &mut service.worker.js_runtime;
 
