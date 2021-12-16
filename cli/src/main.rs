@@ -11,6 +11,7 @@ use futures::channel::mpsc::channel;
 use futures::{SinkExt, StreamExt};
 use notify::{Event, RecommendedWatcher, RecursiveMode, Watcher};
 use serde_derive::Deserialize;
+use std::collections::BTreeMap;
 use std::env;
 use std::fs;
 use std::future::Future;
@@ -73,7 +74,7 @@ fn dir_to_paths(dir: &Path, paths: &mut Vec<PathBuf>) -> anyhow::Result<()> {
         } else if !dentry
             .file_name()
             .to_str()
-            .map_or(false, |x| x.starts_with('.'))
+            .map_or(false, |x| x.starts_with('.') || x.ends_with('~'))
         {
             // files with names that can't be converted wtih to_str() or that start with . are
             // ignored
@@ -113,17 +114,20 @@ impl Manifest {
             let mut paths = vec![];
             let dir = Path::new(dir);
             dir_to_paths(dir, &mut paths)?;
+            let mut routes = BTreeMap::new();
             for file_path in paths {
-                // FIXME: We should probably require a .ts or .js
-                // extension. We should also error out if we have both
-                // foo.js and foo.ts.
-                //
                 // file_stem returns None only if there is no file name.
                 let stem = file_path.file_stem().unwrap();
                 // parent returns None only for the root.
                 let mut parent = file_path.parent().unwrap().to_path_buf();
                 parent.push(stem);
+
                 let name = parent.strip_prefix(&dir)?;
+
+                if let Some(old) = routes.insert(name.to_owned(), file_path.to_owned()) {
+                    anyhow::bail!("Cannot add both {} {} as routes. ChiselStrike uses filesystem-based routing, so we don't know what to do. Sorry! 🥺", old.display(), file_path.display());
+                }
+
                 let name = name
                     .to_str()
                     .ok_or_else(|| anyhow!("filename is not utf8 {:?}", name))?
