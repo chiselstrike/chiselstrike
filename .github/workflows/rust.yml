@@ -86,10 +86,3 @@ jobs:
       uses: actions-rs/cargo@v1
       with:
           command: test
-
-    - name: build integration tests image
-      run: docker build -f Dockerfile.test --build-arg BASEIMG=${{ steps.findimg.outputs.img_name }} -t integration ./
-
-    - name: run docker based integration test
-      run: docker run integration
-
