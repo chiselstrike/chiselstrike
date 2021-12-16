@@ -168,6 +168,8 @@ impl RpcService {
         // Do this before any permanent changes to any of the databases. Otherwise
         // we end up with bad code commited to the meta database and will fail to load
         // chiseld next time, as it tries to replenish the endpoints
+        //
+        // FIXME: avoid creating the errormsg endpoint and just parse the code
         for endpoint in &apply_request.endpoints {
             let code = endpoint.code.clone();
             let cmd = send_command!({
