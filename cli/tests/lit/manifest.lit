@@ -1,0 +1,12 @@
+# SPDX-FileCopyrightText: © 2021 ChiselStrike <info@chiselstrike.com>
+
+# RUN: sh -e @file
+
+cat << EOF > "$TEMPDIR/Chisel.toml"
+types = ["types"]
+endpoints = ["endpoints"]
+policies = ["policies"]
+EOF
+
+cd "$TEMPDIR"
+$CHISEL apply
