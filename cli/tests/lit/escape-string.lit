@@ -7,7 +7,7 @@ cp examples/store.js "$TEMPDIR/endpoints"
 
 cat << EOF > "$TEMPDIR/endpoints/query.js"
 export default async function chisel(req: Request) {
-    const filtered = Chisel.collections.Person.filter({first_name: "Bob'"});
+    const filtered = Person.filter({first_name: "Bob'"});
     const rows = filtered.rows();
     let ret = "";
     for await (let row of rows) {

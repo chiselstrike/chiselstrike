@@ -763,7 +763,6 @@ pub(crate) fn define_type(ty: &ObjectType) -> Result<()> {
     let scope = &mut runtime.handle_scope();
     let global_proxy = global_context.open(scope).global(scope);
     let chisel: v8::Local<v8::Object> = get_member(global_proxy, scope, "Chisel").unwrap();
-    let collections: v8::Local<v8::Object> = get_member(chisel, scope, "collections")?;
     let api: v8::Local<v8::Object> = get_member(chisel, scope, "api")?;
     let table_func: v8::Local<v8::Function> = get_member(api, scope, "table")?;
 
@@ -780,7 +779,7 @@ pub(crate) fn define_type(ty: &ObjectType) -> Result<()> {
     let name = v8::String::new(scope, ty.name()).unwrap();
     let table = try_into_or(table_func.call(scope, api.into(), &[name.into(), columns]))?;
 
-    collections.set(scope, name.into(), table).unwrap();
+    global_proxy.set(scope, name.into(), table).unwrap();
     Ok(())
 }
 
