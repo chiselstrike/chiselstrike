@@ -7,6 +7,12 @@ use std::ops::Deref;
 use std::ops::DerefMut;
 use std::rc::Rc;
 
+// This is an easier to user variant of an Rc<RefCell<T>>. Like RefMut
+// it dereferences to &T, but like Rc, it keeps the value alive. Don't
+// save this across yield points since it will block other calls to
+// borrow_mut(). This is OK for the expected use case of thread-local
+// variables, since it is easy to get a fresh copy from the variable
+// instead of saving the RcMut.
 pub(crate) struct RcMut<T: 'static> {
     rc: Rc<RefCell<T>>,
     refmut: MaybeUninit<RefMut<'static, T>>,
