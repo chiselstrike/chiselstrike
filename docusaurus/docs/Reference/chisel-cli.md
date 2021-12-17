@@ -131,6 +131,16 @@ $ chisel wait
 
 * [`status`](#chisel-status)
 
+## Manifest files
+
+The CLI parses an optional manifest file `Chisel.toml`, which has the following format:
+
+```toml
+types = ["types"]
+endpoints = ["endpoints"]
+policies = ["policies"]
+```
+
 ## Server
 
 The `chiseld` program is the ChiselStrike server daemon. For development purposes, you don't need to interact with it.
@@ -159,12 +169,3 @@ The metadata database URI to connect to.
 
 The RPC listen address of the server. This is the address that the ChiselStrike CLI connects to to interact with the server.
 
-## Manifest files
-
-The CLI parses an optional manifest file `Chisel.toml`, which has the following format:
-
-```toml
-types = ["types"]
-endpoints = ["endpoints"]
-policies = ["policies"]
-```
