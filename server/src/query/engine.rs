@@ -220,7 +220,7 @@ impl QueryEngine {
     pub(crate) async fn add_row(
         &self,
         ty: &ObjectType,
-        ty_value: &serde_json::Value,
+        ty_value: &JsonObject,
     ) -> anyhow::Result<()> {
         let mut field_binds = String::new();
         let mut field_names = String::new();
