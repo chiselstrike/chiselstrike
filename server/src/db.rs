@@ -9,7 +9,7 @@ use crate::query::engine::JsonObject;
 use crate::query::engine::RawSqlStream;
 use crate::query::engine::SqlStream;
 use crate::runtime;
-use crate::types::Type;
+use crate::types::{ObjectType, Type, VersionTypes};
 use anyhow::{anyhow, Result};
 use futures::future;
 use futures::stream;
@@ -78,6 +78,23 @@ fn get_columns(val: &serde_json::Value) -> Result<Vec<(String, Type)>> {
         ret.push((name.to_string(), type_));
     }
     Ok(ret)
+}
+
+// Used from within the internal migration code, so no need to convert things to <-> from json.
+pub(crate) async fn backing_store_from_type(
+    tv: &VersionTypes,
+    ty: &ObjectType,
+) -> Result<Relation> {
+    let mut columns = vec![];
+    for field in ty.all_fields() {
+        let field_type = tv.lookup_type(field.type_.name())?;
+        columns.push((field.name.clone(), field_type));
+    }
+
+    Ok(Relation {
+        columns,
+        inner: Inner::BackingStore(ty.backing_table().to_string(), FieldPolicies::default()),
+    })
 }
 
 fn convert_backing_store(val: &serde_json::Value) -> Result<Relation> {

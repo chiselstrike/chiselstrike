@@ -91,9 +91,19 @@ message ChiselDeleteResponse {
    string result = 1;
 }
 
+message PopulateRequest {
+    string to_version = 1;
+    string from_version = 2;
+}
+
+message PopulateResponse {
+    string msg = 1;
+}
+
 service ChiselRpc {
   rpc GetStatus (StatusRequest) returns (StatusResponse);
   rpc Apply(ChiselApplyRequest) returns (ChiselApplyResponse);
+  rpc Populate(PopulateRequest) returns (PopulateResponse);
   rpc Delete(ChiselDeleteRequest) returns (ChiselDeleteResponse);
   rpc Describe (DescribeRequest) returns (DescribeResponse);
   rpc Restart (RestartRequest) returns (RestartResponse);

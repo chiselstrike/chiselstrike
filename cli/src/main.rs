@@ -5,7 +5,7 @@ use anyhow::{anyhow, Context, Result};
 use chisel::chisel_rpc_client::ChiselRpcClient;
 use chisel::{
     ChiselApplyRequest, ChiselDeleteRequest, DescribeRequest, EndPointCreationRequest,
-    PolicyUpdateRequest, RestartRequest, StatusRequest,
+    PolicyUpdateRequest, PopulateRequest, RestartRequest, StatusRequest,
 };
 use futures::channel::mpsc::channel;
 use futures::{SinkExt, StreamExt};
@@ -197,6 +197,12 @@ enum Command {
     Delete {
         #[structopt(long, default_value = DEFAULT_API_VERSION, parse(try_from_str=parse_version))]
         version: String,
+    },
+    Populate {
+        #[structopt(long)]
+        version: String,
+        #[structopt(long)]
+        from: String,
     },
 }
 
@@ -462,6 +468,21 @@ async fn apply_from_dev(server_url: String) {
     }
 }
 
+async fn populate(server_url: String, to_version: String, from_version: String) -> Result<()> {
+    let mut client = ChiselRpcClient::connect(server_url).await?;
+
+    let msg = execute!(
+        client
+            .populate(tonic::Request::new(PopulateRequest {
+                to_version,
+                from_version,
+            }))
+            .await
+    );
+    println!("{}", msg.msg);
+    Ok(())
+}
+
 #[tokio::main]
 async fn main() -> Result<()> {
     let opt = Opt::from_args();
@@ -604,6 +625,9 @@ async fn main() -> Result<()> {
         }
         Command::Delete { version } => {
             delete(server_url, version).await?;
+        }
+        Command::Populate { version, from } => {
+            populate(server_url, version, from).await?;
         }
     }
     Ok(())

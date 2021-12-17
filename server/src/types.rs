@@ -1,6 +1,10 @@
 // SPDX-FileCopyrightText: © 2021 ChiselStrike <info@chiselstrike.com>
 
+use crate::db::backing_store_from_type;
+use crate::query::QueryEngine;
+use anyhow::Context;
 use derive_new::new;
+use futures::StreamExt;
 use std::collections::{BTreeMap, HashMap};
 use std::sync::Arc;
 use uuid::Uuid;
@@ -274,6 +278,54 @@ impl TypeSystem {
         }
         Ok(())
     }
+
+    pub(crate) async fn populate_types<T: AsRef<str>, F: AsRef<str>>(
+        &self,
+        engine: &QueryEngine,
+        api_version_to: T,
+        api_version_from: F,
+    ) -> anyhow::Result<()> {
+        let to = match self.versions.get(api_version_to.as_ref()) {
+            Some(x) => Ok(x),
+            None => Err(TypeSystemError::NoSuchVersion(
+                api_version_to.as_ref().to_owned(),
+            )),
+        }?;
+
+        let from = match self.versions.get(api_version_from.as_ref()) {
+            Some(x) => Ok(x),
+            None => Err(TypeSystemError::NoSuchVersion(
+                api_version_from.as_ref().to_owned(),
+            )),
+        }?;
+
+        for (ty_name, ty_obj) in from.types.iter() {
+            if let Some(ty_obj_to) = to.types.get(ty_name) {
+                // Either the TO type is a safe replacement of FROM, of we need to have a lens
+                ty_obj_to
+                    .check_if_safe_to_populate(ty_obj)
+                    .with_context(|| {
+                        format!(
+                            "Not possible to evolve type {} ({} -> {})",
+                            ty_name,
+                            api_version_from.as_ref(),
+                            api_version_to.as_ref()
+                        )
+                    })?;
+
+                let ty_obj_rel = backing_store_from_type(from, ty_obj).await?;
+                let mut row_streams = engine.query_relation(ty_obj_rel);
+
+                while let Some(row) = row_streams.next().await {
+                    // FIXME: basic rate limit?
+                    let row = row
+                        .with_context(|| format!("population can't proceed as reading from the underlying database for type {} failed", ty_obj_to.name))?;
+                    engine.add_row(ty_obj_to, &row).await?;
+                }
+            }
+        }
+        Ok(())
+    }
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -484,6 +536,12 @@ impl ObjectType {
     pub(crate) fn persisted_name(&self) -> String {
         format!("{}.{}", self.api_version, self.name)
     }
+
+    fn check_if_safe_to_populate(&self, source_type: &ObjectType) -> anyhow::Result<()> {
+        let source_map: FieldMap<'_> = source_type.into();
+        let to_map: FieldMap<'_> = self.into();
+        to_map.check_populate_from(&source_map)
+    }
 }
 
 impl PartialEq for ObjectType {
@@ -492,6 +550,7 @@ impl PartialEq for ObjectType {
     }
 }
 
+#[derive(Debug)]
 struct FieldMap<'a> {
     map: BTreeMap<&'a str, &'a Field>,
 }
@@ -503,6 +562,36 @@ impl<'a> From<&'a ObjectType> for FieldMap<'a> {
             map.insert(field.name.as_str(), field);
         }
         Self { map }
+    }
+}
+
+impl<'a> FieldMap<'a> {
+    /// Similar to is_safe_replacement_for, but will be able to work across backing tables. Useful
+    /// when evolving versions
+    fn check_populate_from(&self, source_type: &Self) -> anyhow::Result<()> {
+        // to -> from, always ok to remove fields, so only loop over self.
+        //
+        // Adding fields: Ok, if there is a default value or lens
+        //
+        // Fields in common: Ok if the type is the same, or if there is a lens
+        for (name, field) in self.map.iter() {
+            match source_type.map.get(name) {
+                Some(existing) => {
+                    if existing.type_ != field.type_ {
+                        anyhow::bail!("Type mismatch on field {} ({} -> {}). We don't support that yet, but that's coming soon! 🙏", name, existing.type_.name(), field.type_.name());
+                    }
+                }
+                None => {
+                    if field.default.is_none() {
+                        anyhow::bail!(
+                            "Adding field {} without a default, which is not yet supported ",
+                            name
+                        );
+                    }
+                }
+            }
+        }
+        Ok(())
     }
 }
 
