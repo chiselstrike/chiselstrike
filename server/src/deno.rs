@@ -241,7 +241,10 @@ async fn op_chisel_store(
         .type_system
         .lookup_object_type(type_name, &api_version)?;
 
-    runtime.query_engine.add_row(&ty, &content["value"]).await
+    let value = content["value"]
+        .as_object()
+        .ok_or_else(|| anyhow!("Value passed to store is not a Json Object"))?;
+    runtime.query_engine.add_row(&ty, value).await
 }
 
 type DbStream = RefCell<SqlStream>;
