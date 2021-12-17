@@ -1,6 +1,13 @@
-# Website
+# ChiselStrike docs
 
-This website is built using [Docusaurus 2](https://docusaurus.io/), a modern static website generator.
+These docs are built using [Docusaurus 2](https://docusaurus.io/), a modern static website generator.
+
+## Adding more docs
+
+Just add the Markdown in the `./docs` folder.
+
+It's important to add `slug: /` to the top of the markdown file that you want to use as home. Right now is `./docs/intro`
+
 
 ### Installation
 
