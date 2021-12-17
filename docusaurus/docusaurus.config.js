@@ -8,13 +8,13 @@ const darkCodeTheme = require('prism-react-renderer/themes/dracula');
 const config = {
   title: 'ChiselStrike',
   tagline: 'Automated Serverless Backends',
-  url: 'https://chiselstrike.com',
+  url: 'https://docs.chiselstrike.com',
   baseUrl: '/',
   onBrokenLinks: 'warn',
   onBrokenMarkdownLinks: 'warn',
   favicon: 'img/favicon.ico',
-  organizationName: 'chiselstrike', // Usually your GitHub org/user name.
-  projectName: 'docusaurus', // Usually your repo name.
+  organizationName: 'ChiselStrike', // Usually your GitHub org/user name.
+  projectName: 'chiselstrike', // Usually your repo name.
 
   presets: [
     [
@@ -23,8 +23,9 @@ const config = {
       ({
         docs: {
           sidebarPath: require.resolve('./sidebars.js'),
-          // Please change this to your repo.
-          editUrl: 'https://github.com/chiselstrike/chiselstrike/edit/main/website/',
+          routeBasePath: '/',
+          // Uncomment this if you want to have an Edit button on each page
+          // editUrl: 'https://github.com/chiselstrike/chiselstrike/edit/main/website/',
         },
         theme: {
           customCss: require.resolve('./src/css/custom.css'),
@@ -37,20 +38,15 @@ const config = {
     /** @type {import('@docusaurus/preset-classic').ThemeConfig} */
     ({
       navbar: {
-        title: 'ChiselStrike',
+        title: 'Docs',
         logo: {
-          alt: 'My Site Logo',
-          src: 'img/logo.jpeg',
+          alt: 'ChiselStrike docs',
+          src: 'img/logo.svg',
         },
         items: [
+          { to: 'https://www.chiselstrike.com', label: 'Website', position: 'left' },
           {
-            type: 'doc',
-            docId: 'intro',
-            position: 'left',
-            label: 'Tutorial',
-          },
-          {
-            href: 'https://github.com/chiselstrike/chiselstrike/tree/main/docusaurus',
+            href: 'https://github.com/chiselstrike',
             label: 'GitHub',
             position: 'right',
           },
@@ -60,11 +56,33 @@ const config = {
         style: 'dark',
         links: [
           {
-            title: 'Docs',
+            title: 'Links',
             items: [
               {
-                label: 'Tutorial',
-                to: '/docs/intro',
+                label: 'Website',
+                to: 'https://www.chiselstrike.com',
+              },
+              {
+                label: 'Docs',
+                to: '/',
+              },
+            ],
+          },
+          {
+            title: 'Community',
+            items: [
+              {
+                label: 'Linkedin',
+                href: 'https://www.linkedin.com/company/chiselstrike/',
+              },
+            ],
+          },
+          {
+            title: 'More',
+            items: [
+              {
+                label: 'GitHub',
+                href: 'https://github.com/chiselstrike',
               },
             ],
           },

@@ -1,3 +1,7 @@
+---
+# Settings the slug to / defines the home
+slug: /
+---
 # Introduction to ChiselStrike
 
 This is a basic ChiselStrike tutorial.  It describes what ChiselStrike
