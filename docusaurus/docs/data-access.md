@@ -1,26 +1,26 @@
 ---
 sidebar_position: 3
 ---
-# ChiselStrike's data access API
+# ChiselStrike's Data Access API
 
 If you recall from the previous examples, data was stored by calling `Chisel.store`,
 and read by just referring to the entity name (`Comment`), which is an async iterator
 over all elements of the type `Comment`.
 
-You can just iterate over all the elements but if you prefer, the following functions
+You can just iterate over all the elements, but if you prefer, the following functions
 are provided. As a reminder, keep in mind that there isn't a 1:1 mapping between this and
 queries. ChiselStrike is free to optimize this code.
 
 * *findMany()*: Filter just the elements that match a certain column value
 
-```typescript title="findMany-example.ts"
+```typescript
 Comment.findMany({"content": something});
 ```
 
-* *select()*:  Selects a subset of columns to be added to the json object. Other properties are then
+* *select()*:  Restricts which columns to be added to the json object. Other properties are then
 discarded.
 
-```typescript title="findMany-example.ts"
+```typescript
 Comment.select("content");
 ```
 

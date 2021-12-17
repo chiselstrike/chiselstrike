@@ -131,18 +131,18 @@ necessary?  This is where backend types come in -- you can describe to
 ChiselStrike the data you want it to store for you by defining some
 TypeScript types.  Put a file in `my-backend/types/t.ts` like this:
 
-When you save this file, you should see this line in the `chisel dev`
-output:
-
-```
-Type defined: Comment
-```
-
 ```typescript title="my-backend/types/t.ts"
 class Comment {
     content: string;
     by: string;
 }
+```
+
+When you save this file, you should see this line in the `chisel dev`
+output:
+
+```
+Type defined: Comment
 ```
 
 :::info Feedback Requested! We could use your help!

@@ -64,7 +64,7 @@ and propagating changes.
   * 🤢 Please anything but yaml.
 :::
 
-### Use cases for API versioning
+### Use-cases for API versioning
 
 API versioning is useful for:
 * Development/preview branches,
