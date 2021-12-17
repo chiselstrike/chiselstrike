@@ -1,0 +1,53 @@
+# SPDX-FileCopyrightText: © 2021 ChiselStrike <info@chiselstrike.com>
+
+# RUN: sh -e @file
+
+cp examples/person.ts "$TEMPDIR/types"
+cp examples/store.js "$TEMPDIR/endpoints/ins.js"
+
+cat << EOF > "$TEMPDIR/endpoints/count.ts"
+export default async function chisel(req) {
+    let count = 0;
+    for await (let person of Person) {
+	count += 1
+    }
+    return new Response(count);
+}
+EOF
+
+cd "$TEMPDIR"
+$CHISEL apply
+# CHECK: Type defined: Person
+# CHECK: End point defined: /dev/count
+# CHECK: End point defined: /dev/ins
+
+$CURL --data '{
+    "first_name":"Glauber",
+    "last_name":"Costa",
+    "age": 666,
+    "human": false,
+    "height": 6.0
+}' -o - $CHISELD_HOST/dev/ins
+
+# CHECK: ok
+
+$CURL $CHISELD_HOST/dev/count
+# CHECK: HTTP/1.1 200 OK
+# CHECK: 1
+
+$CHISEL apply --version staging
+# CHECK: Type defined: Person
+# CHECK: End point defined: /staging/count
+# CHECK: End point defined: /staging/ins
+
+$CURL $CHISELD_HOST/staging/count
+# CHECK: HTTP/1.1 200 OK
+# CHECK: 0
+
+$CHISEL populate --version staging --from dev
+# CHECK: OK
+
+$CURL $CHISELD_HOST/staging/count
+# CHECK: HTTP/1.1 200 OK
+# CHECK: 1
+

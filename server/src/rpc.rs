@@ -13,8 +13,8 @@ use async_mutex::Mutex;
 use chisel::chisel_rpc_server::{ChiselRpc, ChiselRpcServer};
 use chisel::{
     ChiselApplyRequest, ChiselApplyResponse, ChiselDeleteRequest, ChiselDeleteResponse,
-    DescribeRequest, DescribeResponse, RestartRequest, RestartResponse, StatusRequest,
-    StatusResponse,
+    DescribeRequest, DescribeResponse, PopulateRequest, PopulateResponse, RestartRequest,
+    RestartResponse, StatusRequest, StatusResponse,
 };
 use futures::FutureExt;
 use std::collections::BTreeSet;
@@ -158,6 +158,28 @@ impl RpcService {
         }))
     }
 
+    async fn populate_aux(
+        &self,
+        request: Request<PopulateRequest>,
+    ) -> anyhow::Result<Response<PopulateResponse>> {
+        let request = request.into_inner();
+
+        let to = request.to_version.clone();
+        let from = request.from_version.clone();
+
+        let state = self.state.lock().await;
+
+        state
+            .type_system
+            .populate_types(&state.query_engine, &to, &from)
+            .await?;
+
+        let response = chisel::PopulateResponse {
+            msg: "OK".to_string(),
+        };
+
+        Ok(Response::new(response))
+    }
     /// Apply a new version of ChiselStrike
     async fn apply_aux(
         &self,
@@ -403,6 +425,15 @@ impl ChiselRpc for RpcService {
         request: Request<ChiselDeleteRequest>,
     ) -> Result<Response<ChiselDeleteResponse>, Status> {
         self.delete_aux(request)
+            .await
+            .map_err(|e| Status::internal(format!("{:?}", e)))
+    }
+
+    async fn populate(
+        &self,
+        request: Request<PopulateRequest>,
+    ) -> Result<Response<PopulateResponse>, Status> {
+        self.populate_aux(request)
             .await
             .map_err(|e| Status::internal(format!("{:?}", e)))
     }
