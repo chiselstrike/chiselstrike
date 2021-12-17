@@ -1,3 +1,7 @@
+---
+sidebar_position: 2
+---
+
 # Data Policies in ChiselStrike
 
 ChiselStrike lets you express data policies through a policy file that
