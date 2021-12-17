@@ -12,7 +12,7 @@ have received from us a package with executable programs `chisel` and
 is in your PATH.
 :::
 
-ChiselStrike is backend generator.  It provides instant backend
+ChiselStrike is a backend generator.  It provides instant backend
 functionality when you need it.  The main usecase it addresses is when
 you need a backend endpoint for your dynamic site, but you don't want
 to bother implementing an entire backend server.  For example, let's
