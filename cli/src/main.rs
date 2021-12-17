@@ -317,7 +317,15 @@ fn start_server() -> anyhow::Result<std::process::Child> {
     let mut cmd = std::env::current_exe()?;
     cmd.pop();
     cmd.push("chiseld");
-    let server = std::process::Command::new(cmd).spawn()?;
+    let server = match std::process::Command::new(cmd.clone()).spawn() {
+        Ok(server) => server,
+        Err(e) => {
+            match e.kind() {
+                ErrorKind::NotFound => anyhow::bail!("Unable to start the server because `chiseld` program is missing. Please make sure `chiseld` is installed in {}", cmd.display()),
+                _ => anyhow::bail!("Unable to start `chiseld` program: {}", e),
+            }
+        }
+    };
     Ok(server)
 }
 
