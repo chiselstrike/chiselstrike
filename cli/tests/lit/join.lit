@@ -56,4 +56,4 @@ $CURL -o - $CHISELD_HOST/dev/store_nick
 
 $CURL -o - $CHISELD_HOST/dev/query
 # CHECK: HTTP/1.1 200 OK
-# [(Glauber Glommer Costa) ]
+# CHECK: [(Glauber Glommer Costa) ]
