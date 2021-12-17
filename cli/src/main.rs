@@ -178,6 +178,8 @@ enum Command {
         /// Path where to create the project.
         path: String,
     },
+    /// Start the ChiselStrike server.
+    Start,
     /// Show ChiselStrike server status.
     Status,
     /// Restart the running ChiselStrike server.
@@ -309,6 +311,14 @@ fn read_manifest() -> Result<Manifest> {
             Manifest::new(types, endpoints, policies)
         }
     })
+}
+
+fn start_server() -> anyhow::Result<std::process::Child> {
+    let mut cmd = std::env::current_exe()?;
+    cmd.pop();
+    cmd.push("chiseld");
+    let server = std::process::Command::new(cmd).spawn()?;
+    Ok(server)
 }
 
 macro_rules! execute {
@@ -446,10 +456,7 @@ async fn main() -> Result<()> {
         }
         Command::Dev => {
             let manifest = read_manifest()?;
-            let mut cmd = std::env::current_exe()?;
-            cmd.pop();
-            cmd.push("chiseld");
-            let mut server = std::process::Command::new(cmd).spawn()?;
+            let mut server = start_server()?;
             wait(server_url.clone()).await?;
             apply(
                 server_url.clone(),
@@ -514,6 +521,11 @@ async fn main() -> Result<()> {
                 }
             }
             create_project(path)?;
+        }
+        Command::Start => {
+            let mut server = start_server()?;
+            wait(server_url.clone()).await?;
+            server.wait()?;
         }
         Command::Status => {
             let mut client = ChiselRpcClient::connect(server_url).await?;
