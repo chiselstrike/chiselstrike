@@ -10,7 +10,7 @@ const config = {
   tagline: 'Automated Serverless Backends',
   url: 'https://chiselstrike.com',
   baseUrl: '/',
-  onBrokenLinks: 'throw',
+  onBrokenLinks: 'warn',
   onBrokenMarkdownLinks: 'warn',
   favicon: 'img/favicon.ico',
   organizationName: 'chiselstrike', // Usually your GitHub org/user name.
