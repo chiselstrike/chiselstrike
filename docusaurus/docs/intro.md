@@ -27,7 +27,7 @@ _endpoint_, in our lingo) to call.
 
 If you had such an endpoint available, what would it look like?  Let's
 examine that first, even before we have the endpoint.  We can say, for
-instance, that it's an http URL that you can send a GET operation, and
+instance, that it's an http URL to which you can send a GET operation, and
 it will respond with a JSON array of all comments.
 
 [//]: # (TODO: We should paginate by default.)
