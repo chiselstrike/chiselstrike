@@ -1,6 +1,18 @@
 # Command-Line Reference
 
-This document is the user manual for the ChiselStrike command line tool, `chisel`.
+This is the command line reference for the ChiselStrike command line tool, `chisel`.
+
+Overview of commands:
+
+* [`apply`](#chisel-apply) - apply configuration
+* [`delete`](#chisel-delete) - delete configuration
+* [`describe`](#chisel-describe) - describe configuration
+* [`dev`](#chisel-dev) - start development server
+* [`help`](#chisel-help) - print help
+* [`init`](#chisel-init) - initialize a new project
+* [`restart`](#chisel-restart) - restart server
+* [`status`](#chisel-status) - show server status
+* [`wait`](#chisel-wait) - wait for server to start
 
 ## `chisel apply`
 
@@ -14,34 +26,30 @@ policies = ["policies"]
 
 If a `Chisel.toml` file does not exists, types are read from a `types` directory, endpoints from an `endpoints` directory, and policies from a `policies` directory.
 
-## `chisel status`
+## `chisel delete`
 
-The `chisel status` command queries a ChiselStrike server for its status.
-
-## `chisel end-point create [PATH] [FILENAME]`
-
-Creates a new endpoint at the given path that executes the code from
-the given file.
-
-Example endpoint code looks as follows:
-
-```javascript
-// hello.js
-async function chisel(req) {
-    const response = "hello, world";
-    return new Response(response, {
-        status: 200,
-        headers: [],
-    });
-}
-```
-
-You can create an ChiselStrike endpoint with the following command:
-
-```
-chisel end-point create hello hello.js
-```
+TODO
 
 ## `chisel describe`
 
 The `chisel describe` command displays the current state of the running ChiselStrike server: types, endpoints, and policies.
+
+## `chisel dev`
+
+TODO
+
+## `chisel help`
+
+TODO
+
+## `chisel init`
+
+TODO
+
+## `chisel restart`
+
+TODO
+
+## `chisel status`
+
+The `chisel status` command queries a ChiselStrike server for its status.
