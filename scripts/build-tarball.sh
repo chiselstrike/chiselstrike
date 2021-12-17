@@ -25,6 +25,7 @@ do
   esac
 done
 
+version=$(git describe --tags 2> /dev/null || git rev-parse --short HEAD)
 rustup target add "$target"
 cargo build --release --target "$target"
 mkdir -p "builds/$program-$target"
@@ -32,4 +33,4 @@ for file in ${files[@]}
 do
   cp "target/$target/release/$file" "builds/$program-$target"
 done
-tar -C builds -czvf "$program-$target.tar.gz" "$program-$target/"
+tar -C builds -czvf "$program-$version-$target.tar.gz" "$program-$target/"
