@@ -88,7 +88,7 @@ endpoint code to accidentally read `@pii` data, eliminating human
 errors from the process.
 
 :::info Feedback Requested! We could use your help!
-Please let us know which transformations (beyond `anonymize`) is
+Please let us know which transformations (beyond `anonymize`) are
 important to you.
 :::
 
@@ -137,7 +137,8 @@ $ curl -s localhost:8080/dev/comments | python -m json.tool
         "content": "Fourth comment",
         "by": "Jack"
     }
-]```
+]
+```
 
 As you can see, this endpoint now operates with the raw, untransformed
 data.
