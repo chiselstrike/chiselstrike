@@ -27,7 +27,7 @@ instance, that it's an http URL that you can send a GET operation, and
 it will respond with a JSON array of all comments.
 
 :::caution
-_All_ comments?  Surely you mean one page's wroth, plus links to
+_All_ comments?  Surely you mean one page's worth, plus links to
 subsequent pages?
 :::
 
@@ -46,7 +46,6 @@ active yet.  Let's change that: in another window, type this:
 $ mkdir my-backend && cd my-backend
 $ chisel init
 Initialized ChiselStrike project in /.../my-backend
-$ chisel dev
 $ chisel dev
 INFO - ChiselStrike is ready 🚀 - URL: http://127.0.0.1:8080 
 End point defined: /dev/hello
