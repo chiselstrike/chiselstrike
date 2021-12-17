@@ -173,16 +173,20 @@ enum Command {
     Describe,
     /// Start a ChiselStrike server for local development.
     Dev,
-    /// Shows information about ChiselStrike server status.
+    /// Show ChiselStrike server status.
     Status,
+    /// Restart the running ChiselStrike server.
     Restart,
+    /// Wait for the ChiselStrike server to start.
     Wait,
+    /// Apply configuration to the ChiselStrike server.
     Apply {
         #[structopt(long)]
         allow_type_deletion: bool,
         #[structopt(long, default_value = DEFAULT_API_VERSION, parse(try_from_str=parse_version))]
         version: String,
     },
+    /// Delete configuration from the ChiselStrike server.
     Delete {
         #[structopt(long, default_value = DEFAULT_API_VERSION, parse(try_from_str=parse_version))]
         version: String,
