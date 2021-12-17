@@ -56,7 +56,7 @@ This starts ChiselStrike on your localhost.  It will continue running
 and dynamically loading files in the `my-backend` directory when they
 change.  To stop it, run `pkill chisel` in a terminal.  For full
 reference of `chisel` command usage, please see [this
-page](chisel-cli) or run `chisel --help`.
+page](Reference/chisel-cli) or run `chisel --help`.
 
 Now that ChiselStrike is running, we can attempt to access our
 endpoint again:
