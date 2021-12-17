@@ -1,10 +1,10 @@
 # ChiselStrike Command-Line Reference
 
-This is the command line reference for the ChiselStrike `chisel` [command line interface](#CLI) and the `chiseld` [server](#server).
+This is the command-line reference for the ChiselStrike `chisel` [command-line interface](#CLI) and the `chiseld` [server](#server).
 
 ## CLI
 
-The command line interface (CLI) is the main program you use to interact with ChiselStrike during development.
+The command-line interface (CLI) is the main program you use to interact with ChiselStrike during development.
 
 Overview of commands
 
