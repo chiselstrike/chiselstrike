@@ -524,7 +524,14 @@ async fn main() -> Result<()> {
         Command::Restart => {
             let mut client = ChiselRpcClient::connect(server_url.clone()).await?;
             let response = execute!(client.restart(tonic::Request::new(RestartRequest {})).await);
-            println!("{}", if response.ok { "success" } else { "failure" });
+            println!(
+                "{}",
+                if response.ok {
+                    "Server restarted successfully."
+                } else {
+                    "Server failed to restart."
+                }
+            );
             wait(server_url.clone()).await?;
         }
         Command::Wait => {

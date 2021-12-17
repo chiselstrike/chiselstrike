@@ -25,7 +25,7 @@ echo
 
 $CHISEL restart
 
-# CHECK: success
+# CHECK: Server restarted successfully.
 
 cat << EOF > "$TEMPDIR/endpoints/test2.js"
 export default async function chisel(req) {
