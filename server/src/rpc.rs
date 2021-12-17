@@ -8,7 +8,7 @@ use crate::runtime;
 use crate::server::CommandTrait;
 use crate::server::CoordinatorChannel;
 use crate::types::{Field, NewField, NewObject, ObjectType, TypeSystem, TypeSystemError};
-use anyhow::Result;
+use anyhow::{Context, Result};
 use async_mutex::Mutex;
 use chisel::chisel_rpc_server::{ChiselRpc, ChiselRpcServer};
 use chisel::{
@@ -176,9 +176,10 @@ impl RpcService {
                 deno::define_endpoint("/__chiselstrike/rpc_errormsg".into(), code).await?;
                 Ok(())
             });
-            if let Err(err) = state.send_command(cmd).await {
-                anyhow::bail!("parsing endpoint {}:\n{}", endpoint.path, err);
-            }
+            state
+                .send_command(cmd)
+                .await
+                .with_context(|| format!("parsing endpoint {}", endpoint.path))?;
         }
 
         let api_version = apply_request.version;
@@ -386,7 +387,7 @@ impl ChiselRpc for RpcService {
     ) -> Result<Response<ChiselApplyResponse>, Status> {
         self.apply_aux(request)
             .await
-            .map_err(|e| Status::internal(format!("{}", e)))
+            .map_err(|e| Status::internal(format!("{:?}", e)))
     }
 
     /// Delete a version of ChiselStrike
@@ -396,7 +397,7 @@ impl ChiselRpc for RpcService {
     ) -> Result<Response<ChiselDeleteResponse>, Status> {
         self.delete_aux(request)
             .await
-            .map_err(|e| Status::internal(format!("{}", e)))
+            .map_err(|e| Status::internal(format!("{:?}", e)))
     }
 
     async fn describe(
