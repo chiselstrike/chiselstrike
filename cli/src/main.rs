@@ -15,7 +15,7 @@ use std::collections::BTreeMap;
 use std::env;
 use std::fs;
 use std::future::Future;
-use std::io::{stdin, Read};
+use std::io::{stdin, ErrorKind, Read};
 use std::path::{Path, PathBuf};
 use std::thread;
 use std::time::Duration;
@@ -167,12 +167,17 @@ struct Opt {
 
 #[derive(StructOpt, Debug)]
 enum Command {
-    /// Initialize a new ChiselStrike project.
+    /// Create a new ChiselStrike project in current directory.
     Init,
     /// Describe the endpoints, types, and policies.
     Describe,
     /// Start a ChiselStrike server for local development.
     Dev,
+    /// Create a new ChiselStrike project.
+    New {
+        /// Path where to create the project.
+        path: String,
+    },
     /// Show ChiselStrike server status.
     Status,
     /// Restart the running ChiselStrike server.
@@ -274,11 +279,24 @@ fn if_is_dir(path: &str) -> Vec<String> {
     ret
 }
 
-fn project_exists() -> bool {
-    Path::new(MANIFEST_FILE).exists()
-        || Path::new(TYPES_DIR).exists()
-        || Path::new(ENDPOINTS_DIR).exists()
-        || Path::new(POLICIES_DIR).exists()
+fn create_project(path: &Path) -> Result<()> {
+    if project_exists(path) {
+        anyhow::bail!("You cannot run `chisel init` on an existing ChiselStrike project");
+    }
+    fs::create_dir(path.join(TYPES_DIR))?;
+    fs::create_dir(path.join(ENDPOINTS_DIR))?;
+    fs::create_dir(path.join(POLICIES_DIR))?;
+    let endpoints = std::str::from_utf8(include_bytes!("template/hello.js"))?.to_string();
+    fs::write(path.join(ENDPOINTS_DIR).join("hello.js"), endpoints)?;
+    println!("Created ChiselStrike project in {}", path.display());
+    Ok(())
+}
+
+fn project_exists(path: &Path) -> bool {
+    path.join(Path::new(MANIFEST_FILE)).exists()
+        || path.join(Path::new(TYPES_DIR)).exists()
+        || path.join(Path::new(ENDPOINTS_DIR)).exists()
+        || path.join(Path::new(POLICIES_DIR)).exists()
 }
 
 fn read_manifest() -> Result<Manifest> {
@@ -381,16 +399,8 @@ async fn main() -> Result<()> {
     let server_url = opt.rpc_addr;
     match opt.cmd {
         Command::Init => {
-            if project_exists() {
-                anyhow::bail!("You cannot run `chisel init` on an existing ChiselStrike project");
-            }
-            fs::create_dir(TYPES_DIR)?;
-            fs::create_dir(ENDPOINTS_DIR)?;
-            fs::create_dir(POLICIES_DIR)?;
-            let endpoints = std::str::from_utf8(include_bytes!("template/hello.js"))?.to_string();
-            fs::write(format!("{}/hello.js", ENDPOINTS_DIR), endpoints)?;
             let cwd = env::current_dir()?;
-            println!("Initialized ChiselStrike project in {}", cwd.display());
+            create_project(&cwd)?;
         }
         Command::Describe => {
             let mut client = ChiselRpcClient::connect(server_url).await?;
@@ -486,6 +496,24 @@ async fn main() -> Result<()> {
                 }
             }
             server.wait()?;
+        }
+        Command::New { path } => {
+            let path = Path::new(&path);
+            if let Err(e) = fs::create_dir(path) {
+                match e.kind() {
+                    ErrorKind::AlreadyExists => {
+                        anyhow::bail!("Directory `{}` already exists. Use `chisel init` to initialize a project in the directory.", path.display());
+                    }
+                    _ => {
+                        anyhow::bail!(
+                            "Unable to create a ChiselStrike project in `{}`: {}",
+                            path.display(),
+                            e
+                        );
+                    }
+                }
+            }
+            create_project(path)?;
         }
         Command::Status => {
             let mut client = ChiselRpcClient::connect(server_url).await?;
