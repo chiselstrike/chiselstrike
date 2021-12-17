@@ -9,7 +9,7 @@ is, what it can do for you, and how to make it do various useful
 things.  To achieve this, the tutorial shows small working examples
 that illustrate important bits of functionality.
 
-:::info
+:::note
 We assume here that you are self-hosting ChiselStrike.  You should
 have received from us a package with executable programs `chisel` and
 `chiseld`.  Keep both in the same directory, and ensure this directory
@@ -99,7 +99,7 @@ $ curl localhost:8080/dev/comments
 As you can see, ChiselStrike reads your TypeScript and turns it into
 backend functionality that is available immediately.
 
-:::info
+:::note
 You may think that ChiselStrike executes your TypeScript verbatim, but
 that is not necessarily what happens.  ChiselStrike has a builtin
 compiler that lets it parse and transform your endpoint definition
