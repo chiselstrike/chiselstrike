@@ -15,7 +15,7 @@ use std::collections::BTreeMap;
 use std::env;
 use std::fs;
 use std::future::Future;
-use std::io::{stdin, Read};
+use std::io::{stdin, ErrorKind, Read};
 use std::path::{Path, PathBuf};
 use std::thread;
 use std::time::Duration;
@@ -167,22 +167,33 @@ struct Opt {
 
 #[derive(StructOpt, Debug)]
 enum Command {
-    /// Initialize a new ChiselStrike project.
+    /// Create a new ChiselStrike project in current directory.
     Init,
     /// Describe the endpoints, types, and policies.
     Describe,
     /// Start a ChiselStrike server for local development.
     Dev,
-    /// Shows information about ChiselStrike server status.
+    /// Create a new ChiselStrike project.
+    New {
+        /// Path where to create the project.
+        path: String,
+    },
+    /// Start the ChiselStrike server.
+    Start,
+    /// Show ChiselStrike server status.
     Status,
+    /// Restart the running ChiselStrike server.
     Restart,
+    /// Wait for the ChiselStrike server to start.
     Wait,
+    /// Apply configuration to the ChiselStrike server.
     Apply {
         #[structopt(long)]
         allow_type_deletion: bool,
         #[structopt(long, default_value = DEFAULT_API_VERSION, parse(try_from_str=parse_version))]
         version: String,
     },
+    /// Delete configuration from the ChiselStrike server.
     Delete {
         #[structopt(long, default_value = DEFAULT_API_VERSION, parse(try_from_str=parse_version))]
         version: String,
@@ -270,11 +281,24 @@ fn if_is_dir(path: &str) -> Vec<String> {
     ret
 }
 
-fn project_exists() -> bool {
-    Path::new(MANIFEST_FILE).exists()
-        || Path::new(TYPES_DIR).exists()
-        || Path::new(ENDPOINTS_DIR).exists()
-        || Path::new(POLICIES_DIR).exists()
+fn create_project(path: &Path) -> Result<()> {
+    if project_exists(path) {
+        anyhow::bail!("You cannot run `chisel init` on an existing ChiselStrike project");
+    }
+    fs::create_dir(path.join(TYPES_DIR))?;
+    fs::create_dir(path.join(ENDPOINTS_DIR))?;
+    fs::create_dir(path.join(POLICIES_DIR))?;
+    let endpoints = std::str::from_utf8(include_bytes!("template/hello.js"))?.to_string();
+    fs::write(path.join(ENDPOINTS_DIR).join("hello.js"), endpoints)?;
+    println!("Created ChiselStrike project in {}", path.display());
+    Ok(())
+}
+
+fn project_exists(path: &Path) -> bool {
+    path.join(Path::new(MANIFEST_FILE)).exists()
+        || path.join(Path::new(TYPES_DIR)).exists()
+        || path.join(Path::new(ENDPOINTS_DIR)).exists()
+        || path.join(Path::new(POLICIES_DIR)).exists()
 }
 
 fn read_manifest() -> Result<Manifest> {
@@ -287,6 +311,22 @@ fn read_manifest() -> Result<Manifest> {
             Manifest::new(types, endpoints, policies)
         }
     })
+}
+
+fn start_server() -> anyhow::Result<std::process::Child> {
+    let mut cmd = std::env::current_exe()?;
+    cmd.pop();
+    cmd.push("chiseld");
+    let server = match std::process::Command::new(cmd.clone()).spawn() {
+        Ok(server) => server,
+        Err(e) => {
+            match e.kind() {
+                ErrorKind::NotFound => anyhow::bail!("Unable to start the server because `chiseld` program is missing. Please make sure `chiseld` is installed in {}", cmd.display()),
+                _ => anyhow::bail!("Unable to start `chiseld` program: {}", e),
+            }
+        }
+    };
+    Ok(server)
 }
 
 macro_rules! execute {
@@ -377,16 +417,8 @@ async fn main() -> Result<()> {
     let server_url = opt.rpc_addr;
     match opt.cmd {
         Command::Init => {
-            if project_exists() {
-                anyhow::bail!("You cannot run `chisel init` on an existing ChiselStrike project");
-            }
-            fs::create_dir(TYPES_DIR)?;
-            fs::create_dir(ENDPOINTS_DIR)?;
-            fs::create_dir(POLICIES_DIR)?;
-            let endpoints = std::str::from_utf8(include_bytes!("template/hello.js"))?.to_string();
-            fs::write(format!("{}/hello.js", ENDPOINTS_DIR), endpoints)?;
             let cwd = env::current_dir()?;
-            println!("Initialized ChiselStrike project in {}", cwd.display());
+            create_project(&cwd)?;
         }
         Command::Describe => {
             let mut client = ChiselRpcClient::connect(server_url).await?;
@@ -432,10 +464,7 @@ async fn main() -> Result<()> {
         }
         Command::Dev => {
             let manifest = read_manifest()?;
-            let mut cmd = std::env::current_exe()?;
-            cmd.pop();
-            cmd.push("chiseld");
-            let mut server = std::process::Command::new(cmd).spawn()?;
+            let mut server = start_server()?;
             wait(server_url.clone()).await?;
             apply(
                 server_url.clone(),
@@ -483,6 +512,29 @@ async fn main() -> Result<()> {
             }
             server.wait()?;
         }
+        Command::New { path } => {
+            let path = Path::new(&path);
+            if let Err(e) = fs::create_dir(path) {
+                match e.kind() {
+                    ErrorKind::AlreadyExists => {
+                        anyhow::bail!("Directory `{}` already exists. Use `chisel init` to initialize a project in the directory.", path.display());
+                    }
+                    _ => {
+                        anyhow::bail!(
+                            "Unable to create a ChiselStrike project in `{}`: {}",
+                            path.display(),
+                            e
+                        );
+                    }
+                }
+            }
+            create_project(path)?;
+        }
+        Command::Start => {
+            let mut server = start_server()?;
+            wait(server_url.clone()).await?;
+            server.wait()?;
+        }
         Command::Status => {
             let mut client = ChiselRpcClient::connect(server_url).await?;
             let request = tonic::Request::new(StatusRequest {});
@@ -492,7 +544,14 @@ async fn main() -> Result<()> {
         Command::Restart => {
             let mut client = ChiselRpcClient::connect(server_url.clone()).await?;
             let response = execute!(client.restart(tonic::Request::new(RestartRequest {})).await);
-            println!("{}", if response.ok { "success" } else { "failure" });
+            println!(
+                "{}",
+                if response.ok {
+                    "Server restarted successfully."
+                } else {
+                    "Server failed to restart."
+                }
+            );
             wait(server_url.clone()).await?;
         }
         Command::Wait => {
