@@ -1,4 +1,32 @@
-# Releasing a new version of chiseld
+# Releasing ChiselStrike
+
+## Releasing binaries
+
+First, install Rust on your machine with [rustup](https://rustup.rs):
+
+```
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+```
+
+Then build the tarball with `scripts/build-tarball.sh` script, which generates a `chiselstrike-<version>-<target>.tar.gz` file for you.
+
+**Mac/Intel:**
+
+```
+./scripts/build-tarball.sh -t x86_64-apple-darwin
+```
+
+**Mac/Apple Silicon (really arm):**
+
+```
+./scripts/build-tarball.sh -t aarch64-apple-darwin
+```
+
+**Linux**:
+
+The tarball build does not yet work: https://github.com/chiselstrike/chiselstrike/issues/393
+
+## Releasing Docker image
 
 Although we plan to make this better in the future, right now the way to release
 is to push anything to a branch called "release". This will create two docker containers:
