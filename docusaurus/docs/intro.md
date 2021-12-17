@@ -1,6 +1,7 @@
 ---
 # Settings the slug to / defines the home
 slug: /
+sidebar_position: 1
 ---
 # Introduction to ChiselStrike
 
@@ -133,6 +134,7 @@ TypeScript types.  Put a file in `my-backend/types/t.ts` like this:
 ```typescript title="my-backend/types/t.ts"
 class Comment {
     content: string;
+    by: string;
 }
 ```
 
@@ -157,7 +159,12 @@ following file:
 
 ```typescript title="my-backend/endpoints/populate-comments.ts"
 export default async function chisel(_req) {
-    for (const c of [{content: "First comment"}, {content: "Second comment"}, {content: "Third comment"}, {content: "Fourth comment"}]) {
+    for (const c of [
+        {content: 'First comment', by: 'Jill'},
+        {content: 'Second comment', by: 'Jack'},
+        {content: 'Third comment', by: 'Jim'},
+        {content: 'Fourth comment', by: 'Jack'}
+    ]) {
         await Chisel.store('Comment', c);
     }
     return new Response('success\n');
@@ -177,7 +184,7 @@ Note how we can store a comment in the database by simply invoking
 representing the comment as the second.  Every time we do that, a new
 row is added.
 
-The effect of this endpoint is that the database is filled with three
+The effect of this endpoint is that the database is filled with four
 comments.  Now we just have to read them.  Let's edit the
 `my-backend/endpoints/comments.ts` file as follows:
 
@@ -206,8 +213,29 @@ of all the instances of this type that ChiselStrike has in data
 storage.  Now we can call this endpoint to see the comments we stored:
 
 ```bash
-$ curl localhost:8080/dev/comments
-[{"content":"First comment"},{"content":"Second comment"},{"content":"Third comment"},{"content":"Fourth comment"}]
+$ curl -s localhost:8080/dev/comments | python -m json.tool
+[
+    {
+        "id": "a4ca3ab3-2e26-4da6-a5de-418c1e6b9b83",
+        "content": "First comment",
+        "by": "Jill"
+    },
+    {
+        "id": "fed312d7-b36b-4f34-bb04-fba327a3f440",
+        "content": "Second comment",
+        "by": "Jack"
+    },
+    {
+        "id": "adc89862-dfaa-43ab-a639-477111afc55e",
+        "content": "Third comment",
+        "by": "Jim"
+    },
+    {
+        "id": "5bfef47e-371b-44e8-a2dd-88260b5c3f2c",
+        "content": "Fourth comment",
+        "by": "Jack"
+    }
+]
 ```
 
 Neat, they're all there! :)
