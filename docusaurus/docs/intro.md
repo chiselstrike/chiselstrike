@@ -136,6 +136,13 @@ output:
 Type defined: Comment
 ```
 
+
+:::tip
+You are able to specify default values in your type properties, like you would for a normal typescript
+class. Types can be added or removed as you go if they have default values, so it is always recommended
+you add them.
+:::
+
 What this does is define an entity named `Comment` with one string
 field named `content`.  ChiselStrike will process this and begin
 storing `Comment` objects in its database.  To populate it, add the
