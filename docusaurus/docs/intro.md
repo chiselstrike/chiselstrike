@@ -131,6 +131,13 @@ necessary?  This is where backend types come in -- you can describe to
 ChiselStrike the data you want it to store for you by defining some
 TypeScript types.  Put a file in `my-backend/types/t.ts` like this:
 
+When you save this file, you should see this line in the `chisel dev`
+output:
+
+```
+Type defined: Comment
+```
+
 ```typescript title="my-backend/types/t.ts"
 class Comment {
     content: string;
@@ -138,12 +145,14 @@ class Comment {
 }
 ```
 
-When you save this file, you should see this line in the `chisel dev`
-output:
+:::info Feedback Requested! We could use your help!
+Currently, we don't support relations (types as part of other types). We expect
+to add support for that in the next version of the beta.
 
-```
-Type defined: Comment
-```
+* Would you prefer to just add a property that references another type, or provide type decorators to guide the process?
+* What kind of complicated relationships do you want to handle, and what is challenging about them in your current solutions?
+:::
+
 
 
 :::tip
