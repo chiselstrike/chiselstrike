@@ -417,6 +417,12 @@ async fn apply<S: ToString>(
     Ok(())
 }
 
+async fn apply_from_dev(server_url: String) {
+    if let Err(e) = apply(server_url, DEFAULT_API_VERSION, AllowTypeDeletion::No).await {
+        eprintln!("{:?}", e)
+    }
+}
+
 #[tokio::main]
 async fn main() -> Result<()> {
     let opt = Opt::from_args();
@@ -472,13 +478,7 @@ async fn main() -> Result<()> {
             let manifest = read_manifest()?;
             let mut server = start_server()?;
             wait(server_url.clone()).await?;
-            apply(
-                server_url.clone(),
-                DEFAULT_API_VERSION,
-                AllowTypeDeletion::No,
-            )
-            .await
-            .ok();
+            apply_from_dev(server_url.clone()).await;
             let (mut tx, mut rx) = channel(1);
             let mut apply_watcher =
                 RecommendedWatcher::new(move |res: Result<Event, notify::Error>| {
@@ -504,13 +504,7 @@ async fn main() -> Result<()> {
                 match res {
                     Ok(event) => {
                         if event.kind.is_modify() {
-                            apply(
-                                server_url.clone(),
-                                DEFAULT_API_VERSION,
-                                AllowTypeDeletion::No,
-                            )
-                            .await
-                            .ok();
+                            apply_from_dev(server_url.clone()).await;
                         }
                     }
                     Err(e) => println!("watch error: {:?}", e),
