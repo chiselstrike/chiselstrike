@@ -184,6 +184,13 @@ export default async function chisel(_req) {
 }
 ```
 
+:::tip
+You do not need to specify an id for `Comment`. An `id` property is automatically generated for you, and
+you can access it as `c.id` in the examples above. Calling `Chisel.store()` passing an object that has an
+`id` will update the field with corresponding object.
+:::
+
+
 Note that we changed `chisel` to an async function.  This is because
 it uses the `for await` construct to go over all the stored comments.
 What makes it easy is that ChiselStrike defines the variable `Comment`
