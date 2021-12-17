@@ -43,9 +43,9 @@ Obviously, we get "Connection refused", since ChiselStrike isn't
 active yet.  Let's change that: in another window, type this:
 
 ```bash
-$ mkdir my-backend && cd my-backend
-$ chisel init
-Initialized ChiselStrike project in /.../my-backend
+$ chisel new my-backend
+Initialized ChiselStrike project in my-backend
+$ cd my-backend
 $ chisel dev
 INFO - ChiselStrike is ready 🚀 - URL: http://127.0.0.1:8080 
 End point defined: /dev/hello
