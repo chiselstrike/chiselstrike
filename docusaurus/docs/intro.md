@@ -26,7 +26,7 @@ examine that first, even before we have the endpoint.  We can say, for
 instance, that it's an http URL that you can send a GET operation, and
 it will respond with a JSON array of all comments.
 
-:::caution
+:::caution todo
 _All_ comments?  Surely you mean one page's worth, plus links to
 subsequent pages?
 :::
