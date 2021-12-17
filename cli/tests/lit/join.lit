@@ -1,0 +1,59 @@
+# SPDX-FileCopyrightText: © 2021 ChiselStrike <info@chiselstrike.com>
+
+# RUN: sh -e @file
+
+cp examples/person.ts "$TEMPDIR/types"
+cp examples/store.js "$TEMPDIR/endpoints"
+
+cat << EOF > "$TEMPDIR/types/nickname.ts"
+class Nickname {
+   first_name: string;
+   nick: string;
+}
+EOF
+
+cat << EOF > "$TEMPDIR/endpoints/store_nick.js"
+export default async function chisel(req) {
+    await Chisel.store('Nickname', {first_name: "Glauber", nick: "Glommer"});
+    return new Response('ok\n');
+}
+EOF
+
+cat << EOF > "$TEMPDIR/endpoints/query.js"
+export default async function chisel(req: Request) {
+    let ret = "[";
+    const glaubers = Person.findMany({"first_name": "Glauber"}).join(Nickname);
+    const rows = glaubers.select("first_name", "nick", "last_name");
+    for await (let row of rows) {
+        ret += "(" + row.first_name + " " + row.nick + " " + row.last_name + ") ";
+    }
+    return new Response(ret + "]\n");
+}
+EOF
+
+cd "$TEMPDIR"
+$CHISEL apply
+
+# CHECK: Type defined: Nickname
+# CHECK: Type defined: Person
+# CHECK: End point defined: /dev/query
+# CHECK: End point defined: /dev/store
+# CHECK: End point defined: /dev/store_nick
+
+$CURL --data '{
+    "first_name":"Glauber",
+    "last_name":"Costa",
+    "age": 666,
+    "human": true,
+    "height": 10.01
+}' -o - $CHISELD_HOST/dev/store
+
+# CHECK: ok
+
+$CURL -o - $CHISELD_HOST/dev/store_nick
+
+# CHECK: ok
+
+$CURL -o - $CHISELD_HOST/dev/query
+# CHECK: HTTP/1.1 200 OK
+# [(Glauber Glommer Costa) ]
