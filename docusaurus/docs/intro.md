@@ -66,6 +66,8 @@ change.  To stop it, run `pkill chisel` in a terminal.  For full
 reference of `chisel` command usage, please see [this
 page](Reference/chisel-cli) or run `chisel --help`.
 
+## Generating Endpoints
+
 Now that ChiselStrike is running, we can attempt to access our
 endpoint again:
 
@@ -124,6 +126,8 @@ uses a helper function `Chisel.json` that comes from an object named
 `Chisel` that's available to each endpoint's code.  There's much more
 to `Chisel` than `Chisel.json`, as we'll see shortly.  For full
 reference, please see [this page](chisel-backend).
+
+## Adding Data
 
 So how can we make the endpoint dynamic?  How do we leverage the
 ChiselStrike backend to store our comments and serve them to us when
