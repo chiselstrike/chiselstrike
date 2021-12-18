@@ -1,9 +1,9 @@
 // SPDX-FileCopyrightText: © 2021 ChiselStrike <info@chiselstrike.com>
 
-use crate::collection_utils::longest_prefix;
+use crate::prefix_map::PrefixMap;
 use serde_json::{json, Value};
-use std::collections::{BTreeMap, HashMap};
-use std::path::{Path, PathBuf};
+use std::collections::HashMap;
+use std::path::Path;
 use yaml_rust::YamlLoader;
 
 #[derive(Clone)]
@@ -25,13 +25,13 @@ pub(crate) type FieldPolicies = HashMap<String, fn(Value) -> Value>;
 pub(crate) struct UserAuthorization {
     /// A user is authorized to access a path if the username matches the regex for the longest path prefix present
     /// here.
-    paths: BTreeMap<PathBuf, regex::Regex>,
+    paths: PrefixMap<regex::Regex>,
 }
 
 impl UserAuthorization {
     /// Is this username allowed to execute the endpoint at this path?
     pub fn is_allowed(&self, username: Option<String>, path: &Path) -> bool {
-        match longest_prefix(path, &self.paths) {
+        match self.paths.longest_prefix(path) {
             None => true,
             Some((_, u)) => match username {
                 None => false, // Must be logged in if path specified a regex.
