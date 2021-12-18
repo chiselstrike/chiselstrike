@@ -157,8 +157,6 @@ to add support for that in the next version of the beta.
 * What kind of complicated relationships do you want to handle, and what is challenging about them in your current solutions?
 :::
 
-
-
 :::tip
 You are able to specify default values in your type properties, like you would for a normal typescript
 class. Types can be added or removed as you go if they have default values, so it is always recommended
@@ -216,7 +214,6 @@ You do not need to specify an id for `Comment`. An `id` property is automaticall
 you can access it as `c.id` in the examples above. Calling `Chisel.store()` passing an object that has an
 `id` will update the field with corresponding object.
 :::
-
 
 Note that we changed `chisel` to an async function.  This is because
 it uses the `for await` construct to go over all the stored comments.
