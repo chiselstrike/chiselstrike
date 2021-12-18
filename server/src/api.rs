@@ -109,10 +109,8 @@ impl RoutePaths {
     /// the amount of routes removed.
     pub(crate) fn remove_routes(&mut self, path: regex::Regex) -> usize {
         let before = self.paths.len();
-        self.paths.retain(|k, _| {
-            let s = k.clone().into_os_string().into_string().unwrap();
-            !path.is_match(&s)
-        });
+        self.paths
+            .retain(|k, _| !path.is_match(k.to_str().unwrap()));
         before - self.paths.len()
     }
 }
