@@ -249,3 +249,79 @@ $ curl -s localhost:8080/dev/comments | python -m json.tool
 ```
 
 Neat, they're all there! :)
+
+## POSTing
+
+You may reasonably wonder how the frontend can add some new comments.
+After all, there will likely be a site page where a user can post a
+comment -- how do we put that comment into ChiselStrike?
+
+If the GET operation to the `comments` endpoint gets all the known
+comments, what does POST do?  Let's try it:
+
+```bash
+$ $ curl -d '{"content": "Fifth comment", "by": "Jill"}' localhost:8080/dev/comments
+[{"id":"a4ca3ab3-2e26-4da6-a5de-418c1e6b9b83","content":"First comment","by":"Jill"},{"id":"fed312d7-b36b-4f34-bb04-fba327a3f440","content":"Second comment","by":"Jack"},{"id":"adc89862-dfaa-43ab-a639-477111afc55e","content":"Third comment","by":"Jim"},{"id":"5bfef47e-371b-44e8-a2dd-88260b5c3f2c","content":"Fourth comment","by":"Jack"}]
+```
+
+Looks like right now POST does the same thing as GET.  But that's not
+too surprising, when you look at the code in `comments.ts`.  It
+doesn't check the request method; it just blindly returns the
+comments.  But let's change that code to this:
+
+```typescript title="my-backend/endpoints/comments.ts"
+export default async function chisel(req) {
+    if (req.method == 'POST') {
+        const payload = await req.json();
+        await Chisel.store('Comment', payload);
+        return Chisel.json('ok');
+    } else if (req.method == 'GET') {
+        let comments = [];
+        for await (let c of Comment) {
+            comments.push(c);
+        }
+        return Chisel.json(comments);
+    } else {
+        return new Response(body = "Wrong method", status = 405);
+    }
+}
+```
+
+Now let's invoke it:
+
+```bash
+$ curl -d '{"content": "Fifth comment", "by": "Jill"}' localhost:8080/dev/comments
+"ok"$ curl -s localhost:8080/dev/comments | python -m json.tool
+
+[
+    {
+        "id": "5b415bff-2ea1-400f-89e2-f8c67494257e",
+        "content": "First comment",
+        "by": "Jill"
+    },
+    {
+        "id": "8adb7fe6-9bdb-497a-bfe3-06180201e80f",
+        "content": "Second comment",
+        "by": "Jack"
+    },
+    {
+        "id": "f52e5e98-626e-4534-9204-61a879c44c85",
+        "content": "Third comment",
+        "by": "Jim"
+    },
+    {
+        "id": "4d8ab383-529c-4402-841e-06195915a285",
+        "content": "Fourth comment",
+        "by": "Jack"
+    },
+    {
+        "id": "78604b77-7ff1-4d13-a025-2b3aa9a4d2ef",
+        "content": "Fifth comment",
+        "by": "Jill"
+    }
+]
+```
+
+Ta-da!  POST now inserts a comment, as you would expect.  The site can
+now persist comments by sending POST requests to the `comments`
+endpoint.
