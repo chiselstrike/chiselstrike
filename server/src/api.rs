@@ -69,47 +69,6 @@ type RouteFn = Box<
     dyn Fn(Request<hyper::Body>) -> LocalBoxFuture<'static, Result<Response<Body>>> + Send + Sync,
 >;
 
-#[derive(Default)]
-pub(crate) struct RoutePaths {
-    paths: PrefixMap<(String, RouteFn)>,
-}
-
-impl RoutePaths {
-    /// Finds the right RouteFn for this request.
-    fn find_route_fn<S: AsRef<Path>>(&self, request: S) -> Option<&RouteFn> {
-        match self.paths.longest_prefix(request.as_ref()) {
-            None => None,
-            Some((_, f)) => Some(&f.1),
-        }
-    }
-
-    /// Adds a route.
-    ///
-    /// Params:
-    ///
-    ///  * path: The path for the route, including any leading /
-    ///  * code: A String containing the raw code of the endpoint, before any compilation.
-    ///  * route_fn: the actual function to be executed, likely some call to deno.
-    pub(crate) fn add_route<S: AsRef<str>, C: ToString>(
-        &mut self,
-        path: S,
-        code: C,
-        route_fn: RouteFn,
-    ) {
-        let path: PathBuf = path.as_ref().into();
-        self.paths.insert(path, (code.to_string(), route_fn));
-    }
-
-    pub(crate) fn route_data(&self) -> impl Iterator<Item = (&Path, &str)> {
-        self.paths.iter().map(|(k, v)| (k, v.0.as_str()))
-    }
-
-    /// Remove all routes that have this prefix.
-    pub(crate) fn remove_routes(&mut self, prefix: &Path) {
-        self.paths.remove_prefix(prefix);
-    }
-}
-
 #[derive(Default, Clone, Debug)]
 pub(crate) struct RequestPath {
     api_version: String,
@@ -149,31 +108,32 @@ impl TryFrom<&str> for RequestPath {
 /// API service for Chisel server.
 #[derive(Default)]
 pub(crate) struct ApiService {
-    paths: RoutePaths,
+    paths: PrefixMap<RouteFn>,
 }
 
 impl ApiService {
-    pub(crate) fn new(paths: RoutePaths) -> Self {
-        Self { paths }
-    }
-
     /// Finds the right RouteFn for this request.
     fn find_route_fn<S: AsRef<Path>>(&self, request: S) -> Option<&RouteFn> {
-        self.paths.find_route_fn(request)
+        match self.paths.longest_prefix(request.as_ref()) {
+            None => None,
+            Some((_, f)) => Some(f),
+        }
     }
 
-    pub(crate) fn add_route<S: AsRef<str>, C: ToString>(
-        &mut self,
-        path: S,
-        code: C,
-        route_fn: RouteFn,
-    ) {
-        self.paths.add_route(path, code, route_fn)
+    /// Adds a route.
+    ///
+    /// Params:
+    ///
+    ///  * path: The path for the route, including any leading /
+    ///  * code: A String containing the raw code of the endpoint, before any compilation.
+    ///  * route_fn: the actual function to be executed, likely some call to deno.
+    pub(crate) fn add_route(&mut self, path: PathBuf, route_fn: RouteFn) {
+        self.paths.insert(path, route_fn);
     }
 
     /// Remove all routes that have this prefix.
     pub(crate) fn remove_routes(&mut self, prefix: &Path) {
-        self.paths.remove_routes(prefix)
+        self.paths.remove_prefix(prefix)
     }
 
     pub(crate) async fn route(

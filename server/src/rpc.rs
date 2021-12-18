@@ -1,8 +1,8 @@
 // SPDX-FileCopyrightText: © 2021 ChiselStrike <info@chiselstrike.com>
 
-use crate::api::RoutePaths;
 use crate::deno;
 use crate::policies::{Policies, VersionPolicy};
+use crate::prefix_map::PrefixMap;
 use crate::query::{MetaService, QueryEngine};
 use crate::runtime;
 use crate::server::CommandTrait;
@@ -39,7 +39,7 @@ pub(crate) struct GlobalRpcState {
     type_system: TypeSystem,
     meta: MetaService,
     query_engine: QueryEngine,
-    routes: RoutePaths, // For globally keeping track of routes
+    routes: PrefixMap<String>, // For globally keeping track of routes
     commands: Vec<CoordinatorChannel>,
     policies: Policies,
 }
@@ -132,7 +132,7 @@ impl RpcService {
         QueryEngine::commit_transaction(transaction).await?;
 
         let prefix: PathBuf = format!("/{}/", api_version).into();
-        state.routes.remove_routes(&prefix);
+        state.routes.remove_prefix(&prefix);
         state.type_system.versions.remove(&api_version);
         state.policies.versions.remove(&api_version);
 
@@ -317,7 +317,7 @@ impl RpcService {
         QueryEngine::commit_transaction(transaction).await?;
 
         let prefix: PathBuf = format!("/{}/", api_version).into();
-        state.routes.remove_routes(&prefix);
+        state.routes.remove_prefix(&prefix);
 
         for endpoint in &apply_request.endpoints {
             let path = format!("/{}/{}", api_version, endpoint.path).to_owned();
@@ -326,8 +326,8 @@ impl RpcService {
                 let path = path.clone();
                 move |req| deno::run_js(path.clone(), req).boxed_local()
             });
-            endpoint_routes.push((path.clone(), func.clone(), endpoint.code.clone()));
-            state.routes.add_route(&path, &endpoint.code, func);
+            endpoint_routes.push((path.clone(), func, endpoint.code.clone()));
+            state.routes.insert(path.into(), endpoint.code.clone());
         }
 
         state.meta.persist_endpoints(&state.routes).await?;
@@ -352,7 +352,7 @@ impl RpcService {
 
             for (path, func, code) in endpoints {
                 deno::define_endpoint(path.clone(), code.clone()).await?;
-                api.add_route(&path, code, func);
+                api.add_route(path.into(), func);
             }
             Ok(())
         });
@@ -437,7 +437,7 @@ impl ChiselRpc for RpcService {
                 type_defs.push(type_def);
             }
             let mut endpoint_defs = vec![];
-            for (path, _) in state.routes.route_data() {
+            for (path, _) in state.routes.iter() {
                 endpoint_defs.push(chisel::EndpointDefinition {
                     path: path.display().to_string(),
                 });
