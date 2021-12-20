@@ -290,6 +290,8 @@ fn create_project(path: &Path) -> Result<()> {
     fs::create_dir(path.join(POLICIES_DIR))?;
     let endpoints = std::str::from_utf8(include_bytes!("template/hello.js"))?.to_string();
     fs::write(path.join(ENDPOINTS_DIR).join("hello.js"), endpoints)?;
+    let tsconfig = std::str::from_utf8(include_bytes!("template/tsconfig.json"))?.to_string();
+    fs::write(path.join("tsconfig.json"), tsconfig)?;
     println!("Created ChiselStrike project in {}", path.display());
     Ok(())
 }
