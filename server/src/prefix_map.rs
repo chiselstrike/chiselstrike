@@ -38,10 +38,6 @@ impl<T> PrefixMap<T> {
         self.map.insert(k, v)
     }
 
-    pub(crate) fn len(&self) -> usize {
-        self.map.len()
-    }
-
     pub(crate) fn retain<F>(&mut self, mut func: F)
     where
         F: FnMut(&Path, &mut T) -> bool,
