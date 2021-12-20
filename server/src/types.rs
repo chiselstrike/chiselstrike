@@ -13,8 +13,8 @@ pub(crate) enum TypeSystemError {
     NoSuchType(String),
     #[error["no such API version: {0}"]]
     NoSuchVersion(String),
-    #[error["object type expected, got `{0}` instead"]]
-    ObjectTypeRequired(String),
+    #[error["custom type expected, got `{0}` instead"]]
+    CustomTypeRequired(String),
     #[error["unsafe to replace type: {0}. Reason: {1}"]]
     UnsafeReplacement(String, String),
     #[error["Error while trying to manipulate types: {0}"]]
@@ -24,7 +24,7 @@ pub(crate) enum TypeSystemError {
 #[derive(Debug, Default, Clone, new)]
 pub(crate) struct VersionTypes {
     #[new(default)]
-    pub(crate) types: HashMap<String, Arc<ObjectType>>,
+    pub(crate) custom_types: HashMap<String, Arc<ObjectType>>,
 }
 
 #[derive(Debug, Default, Clone, new)]
@@ -34,13 +34,13 @@ pub(crate) struct TypeSystem {
 }
 
 impl VersionTypes {
-    pub(crate) fn lookup_object_type(
+    pub(crate) fn lookup_custom_type(
         &self,
         type_name: &str,
     ) -> Result<Arc<ObjectType>, TypeSystemError> {
         match self.lookup_type(type_name) {
             Ok(Type::Object(ty)) => Ok(ty),
-            Ok(_) => Err(TypeSystemError::ObjectTypeRequired(type_name.to_string())),
+            Ok(_) => Err(TypeSystemError::CustomTypeRequired(type_name.to_string())),
             Err(e) => Err(e),
         }
     }
@@ -51,7 +51,7 @@ impl VersionTypes {
             "bigint" => Ok(Type::Int),
             "number" => Ok(Type::Float),
             "boolean" => Ok(Type::Boolean),
-            type_name => match self.types.get(type_name) {
+            type_name => match self.custom_types.get(type_name) {
                 Some(ty) => Ok(Type::Object(ty.to_owned())),
                 None => Err(TypeSystemError::NoSuchType(type_name.to_owned())),
             },
@@ -59,12 +59,12 @@ impl VersionTypes {
     }
 
     fn add_type(&mut self, ty: Arc<ObjectType>) -> Result<(), TypeSystemError> {
-        match self.lookup_object_type(&ty.name) {
+        match self.lookup_custom_type(&ty.name) {
             Ok(old) => Err(TypeSystemError::TypeAlreadyExists(old)),
             Err(TypeSystemError::NoSuchType(_)) => Ok(()),
             Err(x) => Err(x),
         }?;
-        self.types.insert(ty.name.to_owned(), ty);
+        self.custom_types.insert(ty.name.to_owned(), ty);
         Ok(())
     }
 }
@@ -88,11 +88,11 @@ impl TypeSystem {
             .ok_or_else(|| TypeSystemError::NoSuchVersion(api_version.to_owned()))
     }
 
-    /// Adds an object type to the type system.
+    /// Adds a custom type to the type system.
     ///
     /// # Arguments
     ///
-    /// * `ty` object to add
+    /// * `ty` type to add
     ///
     /// # Errors
     ///
@@ -203,24 +203,24 @@ impl TypeSystem {
         })
     }
 
-    /// Looks up an object type with name `type_name` across API versions
+    /// Looks up a custom type with name `type_name` across API versions
     ///
     /// # Arguments
     ///
-    /// * `type_name` name of object type to look up.
+    /// * `type_name` name of custom type to look up.
     /// * `version` the API version this objects belongs to
     ///
     /// # Errors
     ///
-    /// If the looked up type does not exists or is a built-in type, the function returns a `TypeSystemError`.
-    pub(crate) fn lookup_object_type(
+    /// If the looked up type does not exists, the function returns a `TypeSystemError`.
+    pub(crate) fn lookup_custom_type(
         &self,
         type_name: &str,
         api_version: &str,
     ) -> Result<Arc<ObjectType>, TypeSystemError> {
         match self.lookup_type(type_name, api_version) {
             Ok(Type::Object(ty)) => Ok(ty),
-            Ok(_) => Err(TypeSystemError::ObjectTypeRequired(type_name.to_string())),
+            Ok(_) => Err(TypeSystemError::CustomTypeRequired(type_name.to_string())),
             Err(e) => Err(e),
         }
     }
@@ -268,7 +268,7 @@ impl TypeSystem {
         // reapply the other versions. Ideally we would have an implementation
         // of this that only refreshes a single version
         for (_, version) in self.versions.iter() {
-            for (_, ty) in version.types.iter() {
+            for (_, ty) in version.custom_types.iter() {
                 crate::deno::define_type(ty)?;
             }
         }

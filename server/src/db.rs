@@ -86,7 +86,9 @@ fn convert_backing_store(val: &serde_json::Value) -> Result<Relation> {
     let runtime = runtime::get();
     let ts = &runtime.type_system;
     let api_version = current_api_version();
-    let ty = ts.lookup_object_type(name, &api_version)?;
+    // Currently object types must be custom types.  When this changes, we'll have to look up both custom and
+    // builtin types here.
+    let ty = ts.lookup_custom_type(name, &api_version)?;
     let policies = get_policies(&runtime, &ty)?;
 
     Ok(Relation {
