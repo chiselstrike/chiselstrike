@@ -1,0 +1,9 @@
+#!/bin/bash
+
+podman run \
+	-it \
+	-v $(pwd):/src:Z \
+	--privileged \
+        --pids-limit -1 \
+	centos:7 \
+	/bin/bash
