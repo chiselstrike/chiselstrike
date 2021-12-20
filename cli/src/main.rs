@@ -97,14 +97,6 @@ struct Endpoint {
 }
 
 impl Manifest {
-    pub fn new(types: Vec<String>, endpoints: Vec<String>, policies: Vec<String>) -> Self {
-        Manifest {
-            types,
-            endpoints,
-            policies,
-        }
-    }
-
     pub fn types(&self) -> anyhow::Result<Vec<PathBuf>> {
         Self::dirs_to_paths(&self.types)
     }
@@ -282,14 +274,6 @@ const ENDPOINTS_DIR: &str = "./endpoints";
 const POLICIES_DIR: &str = "./policies";
 const DTS_DIR: &str = "./dts";
 
-fn if_is_dir(path: &str) -> Vec<String> {
-    let mut ret = vec![];
-    if Path::new(path).is_dir() {
-        ret.push(path.to_string());
-    }
-    ret
-}
-
 fn create_project(path: &Path, examples: bool) -> Result<()> {
     if project_exists(path) {
         anyhow::bail!("You cannot run `chisel init` on an existing ChiselStrike project");
@@ -318,15 +302,9 @@ fn project_exists(path: &Path) -> bool {
 }
 
 fn read_manifest() -> Result<Manifest> {
-    Ok(match read_to_string(MANIFEST_FILE) {
-        Ok(manifest) => toml::from_str(&manifest)?,
-        _ => {
-            let types = if_is_dir(TYPES_DIR);
-            let endpoints = if_is_dir(ENDPOINTS_DIR);
-            let policies = if_is_dir(POLICIES_DIR);
-            Manifest::new(types, endpoints, policies)
-        }
-    })
+    let manifest = read_to_string(MANIFEST_FILE)?;
+    let manifest = toml::from_str(&manifest)?;
+    Ok(manifest)
 }
 
 fn start_server() -> anyhow::Result<std::process::Child> {
