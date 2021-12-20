@@ -300,6 +300,8 @@ fn create_project(path: &Path, examples: bool) -> Result<()> {
     fs::create_dir(path.join(DTS_DIR))?;
     let tsconfig = std::str::from_utf8(include_bytes!("template/tsconfig.json"))?.to_string();
     fs::write(path.join("tsconfig.json"), tsconfig)?;
+    let manifest = std::str::from_utf8(include_bytes!("template/Chisel.toml"))?.to_string();
+    fs::write(path.join("Chisel.toml"), manifest)?;
     if examples {
         let endpoints = std::str::from_utf8(include_bytes!("template/hello.ts"))?.to_string();
         fs::write(path.join(ENDPOINTS_DIR).join("hello.ts"), endpoints)?;
