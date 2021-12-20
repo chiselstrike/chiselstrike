@@ -19,6 +19,7 @@ use chisel::{
 use futures::FutureExt;
 use std::collections::BTreeSet;
 use std::net::SocketAddr;
+use std::path::PathBuf;
 use std::sync::Arc;
 use tonic::{transport::Server, Request, Response, Status};
 
@@ -130,8 +131,8 @@ impl RpcService {
         }
         QueryEngine::commit_transaction(transaction).await?;
 
-        let regex = regex::Regex::new(&format!("/{}/.*", api_version)).unwrap();
-        state.routes.remove_routes(regex.clone());
+        let prefix: PathBuf = format!("/{}/", api_version).into();
+        state.routes.remove_routes(&prefix);
         state.type_system.versions.remove(&api_version);
         state.policies.versions.remove(&api_version);
 
@@ -147,7 +148,7 @@ impl RpcService {
             runtime.policies.versions.remove(&version);
 
             let mut api = runtime.api.lock().await;
-            api.remove_routes(regex);
+            api.remove_routes(&prefix);
             Ok(())
         });
         state.send_command(cmd).await?;
@@ -315,8 +316,8 @@ impl RpcService {
         }
         QueryEngine::commit_transaction(transaction).await?;
 
-        let regex = regex::Regex::new(&format!("/{}/.*", api_version)).unwrap();
-        state.routes.remove_routes(regex.clone());
+        let prefix: PathBuf = format!("/{}/", api_version).into();
+        state.routes.remove_routes(&prefix);
 
         for endpoint in &apply_request.endpoints {
             let path = format!("/{}/{}", api_version, endpoint.path).to_owned();
@@ -347,7 +348,7 @@ impl RpcService {
                 .insert(api_version.to_owned(), policy.clone());
 
             let mut api = runtime.api.lock().await;
-            api.remove_routes(regex);
+            api.remove_routes(&prefix);
 
             for (path, func, code) in endpoints {
                 deno::define_endpoint(path.clone(), code.clone()).await?;

@@ -38,11 +38,8 @@ impl<T> PrefixMap<T> {
         self.map.insert(k, v)
     }
 
-    pub(crate) fn retain<F>(&mut self, mut func: F)
-    where
-        F: FnMut(&Path, &mut T) -> bool,
-    {
-        self.map.retain(|k, v| func(k, v))
+    pub(crate) fn remove_prefix(&mut self, prefix: &Path) {
+        self.map.retain(|k, _| !k.starts_with(prefix))
     }
 }
 

@@ -104,10 +104,9 @@ impl RoutePaths {
         self.paths.iter().map(|(k, v)| (k, v.0.as_str()))
     }
 
-    /// Remove all routes that match this regular expression.
-    pub(crate) fn remove_routes(&mut self, path: regex::Regex) {
-        self.paths
-            .retain(|k, _| !path.is_match(k.to_str().unwrap()));
+    /// Remove all routes that have this prefix.
+    pub(crate) fn remove_routes(&mut self, prefix: &Path) {
+        self.paths.remove_prefix(prefix);
     }
 }
 
@@ -172,9 +171,9 @@ impl ApiService {
         self.paths.add_route(path, code, route_fn)
     }
 
-    /// Remove all routes that match this regular expression.
-    pub(crate) fn remove_routes(&mut self, path: regex::Regex) {
-        self.paths.remove_routes(path)
+    /// Remove all routes that have this prefix.
+    pub(crate) fn remove_routes(&mut self, prefix: &Path) {
+        self.paths.remove_routes(prefix)
     }
 
     pub(crate) async fn route(
