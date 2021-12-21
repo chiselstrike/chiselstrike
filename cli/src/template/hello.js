@@ -1,9 +1,10 @@
-// Example ChiselStrike endpoint that supports GET and POST.
+// Example ChiselStrike endpoint.
 //
 // To access the endpoint, run:
 //
-// curl localhost:8080/hello
+// curl -d '{"hello": "world"}' localhost:8080/dev/hello
 
-export default function chisel(_req) {
-    return Chisel.json("hello, world!");
+export default async function (req) {
+    const json = await req.json();
+    return Chisel.json(json);
 }
