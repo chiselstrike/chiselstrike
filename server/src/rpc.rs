@@ -207,7 +207,8 @@ impl RpcService {
         let mut to_insert = vec![];
         let mut to_update = vec![];
 
-        let versioned_types = state.type_system.get_version_mut(&api_version);
+        state.type_system.get_version_mut(&api_version);
+        let versioned_types = state.type_system.get_version(&api_version)?; // End mutable state borrow from above.
 
         for (existing, removed) in versioned_types.custom_types.iter() {
             if type_names.get(existing).is_none() {
@@ -239,6 +240,9 @@ impl RpcService {
         // apply a type, but failing the next
         for type_def in apply_request.types {
             let name = type_def.name;
+            if state.type_system.lookup_builtin_type(&name).is_ok() {
+                anyhow::bail!("custom type expected, got `{}` instead", name);
+            }
 
             let mut fields = Vec::new();
             for field in type_def.field_defs {
@@ -247,7 +251,7 @@ impl RpcService {
                 }
 
                 let desc = NewField::new(
-                    versioned_types,
+                    &state.type_system,
                     &field.name,
                     &field.field_type,
                     &api_version,

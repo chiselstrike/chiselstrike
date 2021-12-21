@@ -13,8 +13,8 @@ pub(crate) enum TypeSystemError {
     NoSuchType(String),
     #[error["no such API version: {0}"]]
     NoSuchVersion(String),
-    #[error["custom type expected, got `{0}` instead"]]
-    CustomTypeRequired(String),
+    #[error["builtin type expected, got `{0}` instead"]]
+    NotABuiltinType(String),
     #[error["unsafe to replace type: {0}. Reason: {1}"]]
     UnsafeReplacement(String, String),
     #[error["Error while trying to manipulate types: {0}"]]
@@ -38,23 +38,9 @@ impl VersionTypes {
         &self,
         type_name: &str,
     ) -> Result<Arc<ObjectType>, TypeSystemError> {
-        match self.lookup_type(type_name) {
-            Ok(Type::Object(ty)) => Ok(ty),
-            Ok(_) => Err(TypeSystemError::CustomTypeRequired(type_name.to_string())),
-            Err(e) => Err(e),
-        }
-    }
-
-    pub(crate) fn lookup_type(&self, type_name: &str) -> Result<Type, TypeSystemError> {
-        match type_name {
-            "string" => Ok(Type::String),
-            "bigint" => Ok(Type::Int),
-            "number" => Ok(Type::Float),
-            "boolean" => Ok(Type::Boolean),
-            type_name => match self.custom_types.get(type_name) {
-                Some(ty) => Ok(Type::Object(ty.to_owned())),
-                None => Err(TypeSystemError::NoSuchType(type_name.to_owned())),
-            },
+        match self.custom_types.get(type_name) {
+            Some(ty) => Ok(ty.to_owned()),
+            None => Err(TypeSystemError::NoSuchType(type_name.to_owned())),
         }
     }
 
@@ -218,40 +204,18 @@ impl TypeSystem {
         type_name: &str,
         api_version: &str,
     ) -> Result<Arc<ObjectType>, TypeSystemError> {
-        match self.lookup_type(type_name, api_version) {
-            Ok(Type::Object(ty)) => Ok(ty),
-            Ok(_) => Err(TypeSystemError::CustomTypeRequired(type_name.to_string())),
-            Err(e) => Err(e),
-        }
+        let version = self.get_version(api_version)?;
+        version.lookup_custom_type(type_name)
     }
 
-    /// Looks up a type with name `type_name` across API versions
-    ///
-    /// # Arguments
-    ///
-    /// * `type_name` name of object type to look up.
-    /// * `version` the API version this objects belongs to
-    ///
-    /// # Errors
-    ///
-    /// If the looked up type does not exists or is a built-in type, the function returns a `TypeSystemError`.
-    pub(crate) fn lookup_type(
-        &self,
-        type_name: &str,
-        api_version: &str,
-    ) -> Result<Type, TypeSystemError> {
-        // Note that the base types exist and are the same in all versions, so we have to look them
-        // up separately, before we call get_version, which will error out if the version doesn't
-        // exist.
+    /// Looks up a builtin type with name `type_name`.
+    pub(crate) fn lookup_builtin_type(&self, type_name: &str) -> Result<Type, TypeSystemError> {
         match type_name {
             "string" => Ok(Type::String),
             "bigint" => Ok(Type::Int),
             "number" => Ok(Type::Float),
             "boolean" => Ok(Type::Boolean),
-            _ => {
-                let version = self.get_version(api_version)?;
-                version.lookup_type(type_name)
-            }
+            _ => Err(TypeSystemError::NotABuiltinType(type_name.to_string())),
         }
     }
 
@@ -283,7 +247,6 @@ pub(crate) enum Type {
     Float,
     Boolean,
     Id,
-    Object(Arc<ObjectType>),
 }
 
 impl Type {
@@ -294,7 +257,6 @@ impl Type {
             Type::Id => "string",
             Type::String => "string",
             Type::Boolean => "boolean",
-            Type::Object(ty) => &ty.name,
         }
     }
 }
@@ -537,7 +499,7 @@ impl ExistingField {
         let version = split[0].to_owned();
 
         Ok(Self {
-            ty_: ts.lookup_type(field_type, &version)?,
+            ty_: ts.lookup_builtin_type(field_type)?,
             name,
             id,
             version,
@@ -571,12 +533,12 @@ pub(crate) struct NewField<'a> {
 
 impl<'a> NewField<'a> {
     pub(crate) fn new(
-        versions: &VersionTypes,
+        ts: &TypeSystem,
         name: &'a str,
         type_name: &str,
         version: &'a str,
     ) -> anyhow::Result<Self> {
-        let ty_ = versions.lookup_type(type_name)?;
+        let ty_ = ts.lookup_builtin_type(type_name)?;
         Ok(Self { name, ty_, version })
     }
 }
