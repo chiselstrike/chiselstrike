@@ -26,4 +26,4 @@ $CHISEL apply 2>&1 || true
 #CHECK: Error: parsing endpoint /dev/error
 #CHECK: Caused by:
 #CHECK:     Uncaught ReferenceError: foo is not defined
-#CHECK:         at file://$chisel$/__chiselstrike/rpc_errormsg?ver=1:1:12
+#CHECK:         at file://$chisel$/dev/error?ver=1:1:12

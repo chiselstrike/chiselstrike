@@ -3,6 +3,7 @@
 use crate::api::ApiService;
 use crate::deno;
 use crate::deno::init_deno;
+use crate::deno::{activate_endpoint, compile_endpoint};
 use crate::query::{DbConnection, MetaService, QueryEngine};
 use crate::rpc::{GlobalRpcState, RpcService};
 use crate::runtime;
@@ -101,7 +102,9 @@ async fn run(state: SharedState, mut cmd: ExecutorChannel) -> Result<()> {
     let policies = meta.load_policies().await?;
 
     for (path, code) in routes.iter() {
-        deno::define_endpoint(path.to_str().unwrap().to_string(), code.to_string()).await?;
+        let path = path.to_str().unwrap();
+        compile_endpoint(path.to_string(), code.to_string()).await?;
+        activate_endpoint(path);
     }
 
     let mut api_service = ApiService::default();
