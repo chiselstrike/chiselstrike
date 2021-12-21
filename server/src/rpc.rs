@@ -437,10 +437,13 @@ impl ChiselRpc for RpcService {
                 type_defs.push(type_def);
             }
             let mut endpoint_defs = vec![];
+            let version_path_str = format!("/{}/", api_version);
             for (path, _) in state.routes.iter() {
-                endpoint_defs.push(chisel::EndpointDefinition {
-                    path: path.display().to_string(),
-                });
+                if path.starts_with(&version_path_str) {
+                    endpoint_defs.push(chisel::EndpointDefinition {
+                        path: path.display().to_string(),
+                    });
+                }
             }
             // FIXME don't unrwap
             let policies = state.policies.versions.get(api_version).unwrap();
