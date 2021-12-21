@@ -180,8 +180,10 @@ impl Stream for PolicyApplyingStream {
             Some(Err(e)) => Poll::Ready(Some(Err(e))),
             Some(Ok(item)) => {
                 let mut v = engine::relational_row_to_json(&columns, &item)?;
-                for (field, xform) in &policies {
-                    v[field] = xform(v[field].take());
+                for (k, v) in v.iter_mut() {
+                    if let Some(xform) = policies.get(k) {
+                        *v = xform(v.take());
+                    }
                 }
                 Poll::Ready(Some(Ok(v)))
             }
