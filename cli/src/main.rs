@@ -169,7 +169,11 @@ struct Opt {
 #[derive(StructOpt, Debug)]
 enum Command {
     /// Create a new ChiselStrike project in current directory.
-    Init,
+    Init {
+        /// Skip generating example code.
+        #[structopt(long)]
+        no_examples: bool,
+    },
     /// Describe the endpoints, types, and policies.
     Describe,
     /// Start a ChiselStrike server for local development.
@@ -178,6 +182,9 @@ enum Command {
     New {
         /// Path where to create the project.
         path: String,
+        /// Skip generating example code.
+        #[structopt(long)]
+        no_examples: bool,
     },
     /// Start the ChiselStrike server.
     Start,
@@ -283,7 +290,7 @@ fn if_is_dir(path: &str) -> Vec<String> {
     ret
 }
 
-fn create_project(path: &Path) -> Result<()> {
+fn create_project(path: &Path, examples: bool) -> Result<()> {
     if project_exists(path) {
         anyhow::bail!("You cannot run `chisel init` on an existing ChiselStrike project");
     }
@@ -291,10 +298,12 @@ fn create_project(path: &Path) -> Result<()> {
     fs::create_dir(path.join(ENDPOINTS_DIR))?;
     fs::create_dir(path.join(POLICIES_DIR))?;
     fs::create_dir(path.join(DTS_DIR))?;
-    let endpoints = std::str::from_utf8(include_bytes!("template/hello.ts"))?.to_string();
-    fs::write(path.join(ENDPOINTS_DIR).join("hello.ts"), endpoints)?;
     let tsconfig = std::str::from_utf8(include_bytes!("template/tsconfig.json"))?.to_string();
     fs::write(path.join("tsconfig.json"), tsconfig)?;
+    if examples {
+        let endpoints = std::str::from_utf8(include_bytes!("template/hello.ts"))?.to_string();
+        fs::write(path.join(ENDPOINTS_DIR).join("hello.ts"), endpoints)?;
+    }
     println!("Created ChiselStrike project in {}", path.display());
     Ok(())
 }
@@ -477,9 +486,9 @@ async fn main() -> Result<()> {
     let opt = Opt::from_args();
     let server_url = opt.rpc_addr;
     match opt.cmd {
-        Command::Init => {
+        Command::Init { no_examples } => {
             let cwd = env::current_dir()?;
-            create_project(&cwd)?;
+            create_project(&cwd, !no_examples)?;
         }
         Command::Describe => {
             let mut client = ChiselRpcClient::connect(server_url).await?;
@@ -561,7 +570,7 @@ async fn main() -> Result<()> {
             }
             server.wait()?;
         }
-        Command::New { path } => {
+        Command::New { path, no_examples } => {
             let path = Path::new(&path);
             if let Err(e) = fs::create_dir(path) {
                 match e.kind() {
@@ -577,7 +586,7 @@ async fn main() -> Result<()> {
                     }
                 }
             }
-            create_project(path)?;
+            create_project(path, !no_examples)?;
         }
         Command::Start => {
             let mut server = start_server()?;
