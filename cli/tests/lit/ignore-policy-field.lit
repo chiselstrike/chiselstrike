@@ -1,0 +1,46 @@
+# SPDX-FileCopyrightText: © 2021 ChiselStrike <info@chiselstrike.com>
+
+# RUN: sh -e @file
+
+cp examples/person.ts "$TEMPDIR/types"
+cp examples/store.js "$TEMPDIR/endpoints"
+
+cat << EOF > "$TEMPDIR/policies/pol.yaml"
+labels:
+  - name: pii
+    transform: anonymize
+EOF
+
+cat << EOF > "$TEMPDIR/endpoints/query.js"
+export default async function chisel(req: Request) {
+    let count = 0;
+    let people = Person.select("first_name");
+    for await (let person of people) {
+        count += 1
+    }
+    return new Response("count = " + count + ".\n");
+}
+EOF
+
+cd "$TEMPDIR"
+$CHISEL apply
+
+# CHECK: Type defined: Person
+# CHECK: End point defined: /dev/query
+# CHECK: End point defined: /dev/store
+# CHECK: Policy defined for label pii
+
+$CURL --data '{
+    "first_name":"Glauber",
+    "last_name":"Costa",
+    "age": 666,
+    "human": true,
+    "height": 10.01
+}' -o - $CHISELD_HOST/dev/store
+
+# CHECK: ok
+
+$CURL -o - $CHISELD_HOST/dev/query
+
+# CHECK: HTTP/1.1 200 OK
+# CHECK: count = 1.
