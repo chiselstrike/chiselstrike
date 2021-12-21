@@ -37,7 +37,6 @@ use hyper::Method;
 use hyper::{Request, Response, StatusCode};
 use once_cell::unsync::OnceCell;
 use std::cell::RefCell;
-use std::collections::hash_map::Entry;
 use std::collections::HashMap;
 use std::convert::TryInto;
 use std::future::Future;
@@ -57,14 +56,6 @@ use swc_ecma_parser::{lexer::Lexer, Parser, StringInput, Syntax};
 use swc_ecma_visit::FoldWith;
 
 use url::Url;
-
-struct VersionedHandler {
-    // This is None when there is a failure loading the module. In
-    // that case we still need the version to be set so that it is
-    // possible to change the endpoint.
-    func: Option<v8::Global<v8::Function>>,
-    version: u64,
-}
 
 struct VersionedCode {
     code: String,
@@ -90,7 +81,7 @@ struct DenoService {
     inspector: Option<Arc<InspectorServer>>,
 
     module_loader: Rc<ModuleLoader>,
-    handlers: HashMap<String, VersionedHandler>,
+    handlers: HashMap<String, v8::Global<v8::Function>>,
 }
 
 #[derive(thiserror::Error, Debug)]
@@ -100,7 +91,7 @@ enum Error {
 }
 
 struct ModuleLoader {
-    code_map: RefCell<HashMap<String, String>>,
+    code_map: RefCell<HashMap<String, VersionedCode>>,
 }
 
 const DUMMY_PREFIX: &str = "file://$chisel$";
@@ -137,7 +128,7 @@ impl deno_core::ModuleLoader for ModuleLoader {
     ) -> Pin<Box<ModuleSourceFuture>> {
         if specifier.as_str().starts_with(DUMMY_PREFIX) {
             let path = specifier.path();
-            let code = self.code_map.borrow().get(path).unwrap().clone();
+            let code = self.code_map.borrow().get(path).unwrap().code.clone();
             let code = wrap(specifier, code);
             std::future::ready(code).boxed_local()
         } else {
@@ -416,8 +407,20 @@ async fn create_deno(inspect_brk: bool) -> Result<DenoService> {
 
     {
         let mut code_map = d.module_loader.code_map.borrow_mut();
-        code_map.insert(chisel_path.clone(), chisel);
-        code_map.insert("/api.ts".to_string(), api);
+        code_map.insert(
+            chisel_path.clone(),
+            VersionedCode {
+                code: chisel,
+                version: 0,
+            },
+        );
+        code_map.insert(
+            "/api.ts".to_string(),
+            VersionedCode {
+                code: api,
+                version: 0,
+            },
+        );
     }
 
     worker
@@ -683,7 +686,7 @@ pub(crate) async fn run_js(path: String, mut req: Request<hyper::Body>) -> Resul
     let mut service = get();
     let service: &mut DenoService = &mut service;
 
-    let request_handler = service.handlers.get(&path).unwrap().func.clone().unwrap();
+    let request_handler = service.handlers.get(&path).unwrap().clone();
     let runtime = &mut service.worker.js_runtime;
 
     if service.inspector.is_some() {
@@ -748,64 +751,39 @@ fn get() -> RcMut<DenoService> {
     })
 }
 
-async fn get_endpoint(
-    module_loader: &ModuleLoader,
-    runtime: &mut JsRuntime,
-    path: String,
-    code: &VersionedCode,
-) -> Result<v8::Global<v8::Function>> {
+pub(crate) async fn define_endpoint(path: String, code: String) -> Result<()> {
+    let mut service = get();
+    let service: &mut DenoService = &mut service;
+
+    let mut code_map = service.module_loader.code_map.borrow_mut();
+    let mut entry = code_map
+        .entry(path.clone())
+        .and_modify(|v| v.version += 1)
+        .or_insert(VersionedCode {
+            code: "".to_string(),
+            version: 0,
+        });
+    entry.code = code;
+
     // Modules are never unloaded, so we need to create an unique
     // path. This will not be a problem once we publish the entire app
     // at once, since then we can create a new isolate for it.
-    let url = format!("{}/{}?ver={}", DUMMY_PREFIX, path, code.version);
+    let url = format!("{}/{}?ver={}", DUMMY_PREFIX, path, entry.version);
     let url = Url::parse(&url).unwrap();
 
-    module_loader
-        .code_map
-        .borrow_mut()
-        .insert(path.clone(), code.code.clone());
+    drop(code_map);
+    let runtime = &mut service.worker.js_runtime;
     let promise = runtime.execute_script(&path, &format!("import(\"{}\")", url))?;
     let module = runtime.resolve_value(promise).await?;
-    module_loader.code_map.borrow_mut().remove(&path);
-
     let scope = &mut runtime.handle_scope();
     let module = module
         .open(scope)
         .to_object(scope)
         .ok_or(Error::NotAResponse)?;
     let request_handler: v8::Local<v8::Function> = get_member(module, scope, "default")?;
-    Ok(v8::Global::new(scope, request_handler))
-}
-
-pub(crate) async fn define_endpoint(path: String, code: String) -> Result<()> {
-    let mut service = get();
-    let service: &mut DenoService = &mut service;
-    let mut entry = service.handlers.entry(path.clone());
-    let version = match &entry {
-        Entry::Vacant(_) => 0,
-        Entry::Occupied(o) => o.get().version + 1,
-    };
-    let dummy = VersionedHandler {
-        func: None,
-        version,
-    };
-    let entry = match entry {
-        Entry::Vacant(v) => v.insert(dummy),
-        Entry::Occupied(ref mut o) => {
-            let o = o.get_mut();
-            *o = dummy;
-            o
-        }
-    };
-    let code = VersionedCode { code, version };
-    let e = get_endpoint(
-        &service.module_loader,
-        &mut service.worker.js_runtime,
-        path,
-        &code,
-    )
-    .await?;
-    entry.func = Some(e);
+    service
+        .handlers
+        .insert(path, v8::Global::new(scope, request_handler));
     Ok(())
 }
 
