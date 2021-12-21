@@ -164,15 +164,22 @@ impl RpcService {
         request: Request<ChiselApplyRequest>,
     ) -> anyhow::Result<Response<ChiselApplyResponse>> {
         let apply_request = request.into_inner();
+        let api_version = apply_request.version;
         let mut state = self.state.lock().await;
+
+        let mut endpoint_routes = vec![];
+        for endpoint in apply_request.endpoints {
+            let path = format!("/{}/{}", api_version, endpoint.path);
+            endpoint_routes.push((path, endpoint.code));
+        }
 
         // Do this before any permanent changes to any of the databases. Otherwise
         // we end up with bad code commited to the meta database and will fail to load
         // chiseld next time, as it tries to replenish the endpoints
         //
         // FIXME: avoid creating the errormsg endpoint and just parse the code
-        for endpoint in &apply_request.endpoints {
-            let code = endpoint.code.clone();
+        for (path, code) in &endpoint_routes {
+            let code = code.clone();
             let cmd = send_command!({
                 deno::define_endpoint("/__chiselstrike/rpc_errormsg".into(), code).await?;
                 Ok(())
@@ -180,10 +187,8 @@ impl RpcService {
             state
                 .send_command(cmd)
                 .await
-                .with_context(|| format!("parsing endpoint {}", endpoint.path))?;
+                .with_context(|| format!("parsing endpoint {}", path))?;
         }
-
-        let api_version = apply_request.version;
 
         anyhow::ensure!(
             "__chiselstrike" != &api_version,
@@ -192,7 +197,6 @@ impl RpcService {
 
         let mut type_names = BTreeSet::new();
         let mut type_names_user_order = vec![];
-        let mut endpoint_routes = vec![];
 
         for tdef in apply_request.types.iter() {
             type_names.insert(tdef.name.clone());
@@ -319,15 +323,8 @@ impl RpcService {
         let prefix: PathBuf = format!("/{}/", api_version).into();
         state.routes.remove_prefix(&prefix);
 
-        for endpoint in &apply_request.endpoints {
-            let path = format!("/{}/{}", api_version, endpoint.path).to_owned();
-
-            let func = Box::new({
-                let path = path.clone();
-                move |req| deno::run_js(path.clone(), req).boxed_local()
-            });
-            endpoint_routes.push((path.clone(), func, endpoint.code.clone()));
-            state.routes.insert(path.into(), endpoint.code.clone());
+        for (path, code) in &endpoint_routes {
+            state.routes.insert(path.into(), code.clone());
         }
 
         state.meta.persist_endpoints(&state.routes).await?;
@@ -350,7 +347,11 @@ impl RpcService {
             let mut api = runtime.api.lock().await;
             api.remove_routes(&prefix);
 
-            for (path, func, code) in endpoints {
+            for (path, code) in endpoints {
+                let func = Box::new({
+                    let path = path.clone();
+                    move |req| deno::run_js(path.clone(), req).boxed_local()
+                });
                 deno::define_endpoint(path.clone(), code.clone()).await?;
                 api.add_route(path.into(), func);
             }
