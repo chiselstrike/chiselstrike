@@ -10,6 +10,7 @@ use crate::runtime::Runtime;
 use anyhow::Result;
 use async_mutex::Mutex;
 use futures::future::LocalBoxFuture;
+use futures::FutureExt;
 use futures::StreamExt;
 use std::net::SocketAddr;
 use std::panic;
@@ -99,11 +100,18 @@ async fn run(state: SharedState, mut cmd: ExecutorChannel) -> Result<()> {
     let routes = meta.load_endpoints().await?;
     let policies = meta.load_policies().await?;
 
-    for (path, code) in routes.route_data() {
+    for (path, code) in routes.iter() {
         deno::define_endpoint(path.to_str().unwrap().to_string(), code.to_string()).await?;
     }
 
-    let mut api_service = ApiService::new(routes);
+    let mut api_service = ApiService::default();
+    for (path, _) in routes.iter() {
+        let func = Box::new({
+            let path = path.to_str().unwrap().to_string();
+            move |req| deno::run_js(path.clone(), req).boxed_local()
+        });
+        api_service.add_route(path.into(), func);
+    }
     crate::auth::init(&mut api_service);
     let api_service = Arc::new(Mutex::new(api_service));
 
@@ -196,7 +204,6 @@ pub async fn run_shared_state(
 
     let (tx, rx) = async_channel::bounded(1);
     let sig_task = tokio::task::spawn(async move {
-        use futures::FutureExt;
         let res = futures::select! {
             _ = sigterm.recv().fuse() => { debug!("Got SIGTERM"); DoRepeat::No },
             _ = sigint.recv().fuse() => { debug!("Got SIGINT"); DoRepeat::No },
