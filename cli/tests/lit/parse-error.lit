@@ -10,10 +10,20 @@ EOF
 
 cd "$TEMPDIR"
 
-set +e
-$CHISEL apply 2>&1
-set -e
+$CHISEL apply 2>&1 || true
 # CHECK: Error: parsing endpoint error
 # CHECK: TypeError: Parse failed: error: Expected ',', got 'string literal (bar)'
 # CHECK: 2 |     return new Response("foo" "bar");
 
+cat << EOF > "$TEMPDIR/endpoints/error.ts"
+const xyz = foo();
+export default async function chisel(req) {
+    return xyz;
+}
+EOF
+
+$CHISEL apply 2>&1 || true
+#CHECK: Error: parsing endpoint error
+#CHECK: Caused by:
+#CHECK:     Uncaught ReferenceError: foo is not defined
+#CHECK:         at file://$chisel$/__chiselstrike/rpc_errormsg?ver=1:1:12
