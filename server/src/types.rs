@@ -55,6 +55,39 @@ impl VersionTypes {
     }
 }
 
+pub(crate) const OAUTHUSER_TYPE_NAME: &str = "OauthUser";
+
+thread_local! {
+    static OAUTHUSER_TYPE: Arc<ObjectType> = {
+        let chisel_id = Field {
+            id: None,
+            name: "id".into(),
+            type_: Type::Id,
+            labels: Vec::default(),
+            default: None,
+            is_optional: false,
+            api_version: "__chiselstrike".into(),
+        };
+        Arc::new(ObjectType {
+            meta_id: None,
+            name: OAUTHUSER_TYPE_NAME.into(),
+            api_version: "__chiselstrike".into(),
+            backing_table: "oauth_user".into(),
+            fields: vec![
+                Field{
+                    id: None,
+                    name: "username".into(),
+                    type_: Type::String,
+                    labels: vec![],
+                    default: None,
+                    is_optional: false,
+                    api_version: "__chiselstrike".into(),
+            }],
+            chisel_id,
+        })
+    }
+}
+
 impl TypeSystem {
     /// Returns a mutable reference to all types from a specific version.
     ///
@@ -215,6 +248,7 @@ impl TypeSystem {
             "bigint" => Ok(Type::Int),
             "number" => Ok(Type::Float),
             "boolean" => Ok(Type::Boolean),
+            OAUTHUSER_TYPE_NAME => OAUTHUSER_TYPE.with(|t| Ok(Type::Object(t.clone()))),
             _ => Err(TypeSystemError::NotABuiltinType(type_name.to_string())),
         }
     }
@@ -247,6 +281,7 @@ pub(crate) enum Type {
     Float,
     Boolean,
     Id,
+    Object(Arc<ObjectType>),
 }
 
 impl Type {
@@ -257,6 +292,7 @@ impl Type {
             Type::Id => "string",
             Type::String => "string",
             Type::Boolean => "boolean",
+            Type::Object(ty) => &ty.name,
         }
     }
 }
