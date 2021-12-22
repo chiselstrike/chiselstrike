@@ -176,12 +176,11 @@ impl RpcService {
         // Do this before any permanent changes to any of the databases. Otherwise
         // we end up with bad code commited to the meta database and will fail to load
         // chiseld next time, as it tries to replenish the endpoints
-        //
-        // FIXME: avoid creating the errormsg endpoint and just parse the code
         for (path, code) in &endpoint_routes {
+            let cmd_path = path.clone();
             let code = code.clone();
             let cmd = send_command!({
-                deno::define_endpoint("/__chiselstrike/rpc_errormsg".into(), code).await?;
+                deno::compile_endpoint(cmd_path, code).await?;
                 Ok(())
             });
             state
@@ -347,12 +346,12 @@ impl RpcService {
             let mut api = runtime.api.lock().await;
             api.remove_routes(&prefix);
 
-            for (path, code) in endpoints {
+            for (path, _) in endpoints {
                 let func = Box::new({
                     let path = path.clone();
                     move |req| deno::run_js(path.clone(), req).boxed_local()
                 });
-                deno::define_endpoint(path.clone(), code.clone()).await?;
+                deno::activate_endpoint(&path);
                 api.add_route(path.into(), func);
             }
             Ok(())

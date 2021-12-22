@@ -82,6 +82,9 @@ struct DenoService {
 
     module_loader: Rc<ModuleLoader>,
     handlers: HashMap<String, v8::Global<v8::Function>>,
+
+    // Handlers that have been compiled but are not yet serving requests.
+    next_handlers: HashMap<String, v8::Global<v8::Function>>,
 }
 
 #[derive(thiserror::Error, Debug)]
@@ -201,6 +204,7 @@ impl DenoService {
             inspector,
             module_loader,
             handlers: HashMap::new(),
+            next_handlers: HashMap::new(),
         }
     }
 }
@@ -751,7 +755,7 @@ fn get() -> RcMut<DenoService> {
     })
 }
 
-pub(crate) async fn define_endpoint(path: String, code: String) -> Result<()> {
+pub(crate) async fn compile_endpoint(path: String, code: String) -> Result<()> {
     let mut service = get();
     let service: &mut DenoService = &mut service;
 
@@ -782,9 +786,15 @@ pub(crate) async fn define_endpoint(path: String, code: String) -> Result<()> {
         .ok_or(Error::NotAResponse)?;
     let request_handler: v8::Local<v8::Function> = get_member(module, scope, "default")?;
     service
-        .handlers
+        .next_handlers
         .insert(path, v8::Global::new(scope, request_handler));
     Ok(())
+}
+
+pub(crate) fn activate_endpoint(path: &str) {
+    let mut service = get();
+    let (path, handler) = service.next_handlers.remove_entry(path).unwrap();
+    service.handlers.insert(path, handler);
 }
 
 pub(crate) fn define_type(ty: &ObjectType) -> Result<()> {
