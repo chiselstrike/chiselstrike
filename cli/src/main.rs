@@ -22,6 +22,7 @@ use std::time::Duration;
 use structopt::StructOpt;
 use tonic::transport::Channel;
 mod ts;
+use compile::compile_ts_code;
 
 // Timeout when waiting for connection or server status.
 const TIMEOUT: Duration = Duration::from_secs(10);
@@ -405,6 +406,8 @@ declare const Chisel: Chisel
 
     for f in endpoints.iter() {
         let code = read_to_string(&f.file_path)?;
+        let code = compile_ts_code(code)
+            .with_context(|| format!("parsing endpoint /{}/{}", version, f.name))?;
         endpoints_req.push(EndPointCreationRequest {
             path: f.name.clone(),
             code,
