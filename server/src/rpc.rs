@@ -228,6 +228,8 @@ impl RpcService {
             anyhow::bail!("Trying to remove types from type file. This will delete the underlying data associated with this type. To proceed, apply again with --allow-type-deletion");
         }
 
+        let mut decorators = BTreeSet::default();
+
         // No changes are made to the type system in this loop. We re-read the database after we
         // apply the changes, and this way we don't have to deal with the case of succeding to
         // apply a type, but failing the next
@@ -236,6 +238,10 @@ impl RpcService {
 
             let mut fields = Vec::new();
             for field in type_def.field_defs {
+                for label in &field.labels {
+                    decorators.insert(label.clone());
+                }
+
                 let desc =
                     NewField::new(type_system, &field.name, &field.field_type, &api_version)?;
                 fields.push(Field::new(
