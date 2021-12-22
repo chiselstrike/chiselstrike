@@ -1,5 +1,8 @@
 {
     "compilerOptions": {
-        "experimentalDecorators": true
+        "experimentalDecorators": true,
+        "lib": ["ESNext", "DOM"],
+        "target": "ESnext",
+        "allowJs": true
     }
 }
