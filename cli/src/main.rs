@@ -272,6 +272,7 @@ const MANIFEST_FILE: &str = "Chisel.toml";
 const TYPES_DIR: &str = "./types";
 const ENDPOINTS_DIR: &str = "./endpoints";
 const POLICIES_DIR: &str = "./policies";
+const DTS_DIR: &str = "./dts";
 
 fn if_is_dir(path: &str) -> Vec<String> {
     let mut ret = vec![];
@@ -288,6 +289,7 @@ fn create_project(path: &Path) -> Result<()> {
     fs::create_dir(path.join(TYPES_DIR))?;
     fs::create_dir(path.join(ENDPOINTS_DIR))?;
     fs::create_dir(path.join(POLICIES_DIR))?;
+    fs::create_dir(path.join(DTS_DIR))?;
     let endpoints = std::str::from_utf8(include_bytes!("template/hello.ts"))?.to_string();
     fs::write(path.join(ENDPOINTS_DIR).join("hello.ts"), endpoints)?;
     let tsconfig = std::str::from_utf8(include_bytes!("template/tsconfig.json"))?.to_string();
