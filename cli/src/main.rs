@@ -11,7 +11,7 @@ use futures::channel::mpsc::channel;
 use futures::{SinkExt, StreamExt};
 use notify::{Event, RecommendedWatcher, RecursiveMode, Watcher};
 use serde_derive::Deserialize;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashSet};
 use std::env;
 use std::fs;
 use std::future::Future;
@@ -272,6 +272,7 @@ const MANIFEST_FILE: &str = "Chisel.toml";
 const TYPES_DIR: &str = "./types";
 const ENDPOINTS_DIR: &str = "./endpoints";
 const POLICIES_DIR: &str = "./policies";
+const DTS_DIR: &str = "./dts";
 
 fn if_is_dir(path: &str) -> Vec<String> {
     let mut ret = vec![];
@@ -288,8 +289,9 @@ fn create_project(path: &Path) -> Result<()> {
     fs::create_dir(path.join(TYPES_DIR))?;
     fs::create_dir(path.join(ENDPOINTS_DIR))?;
     fs::create_dir(path.join(POLICIES_DIR))?;
-    let endpoints = std::str::from_utf8(include_bytes!("template/hello.js"))?.to_string();
-    fs::write(path.join(ENDPOINTS_DIR).join("hello.js"), endpoints)?;
+    fs::create_dir(path.join(DTS_DIR))?;
+    let endpoints = std::str::from_utf8(include_bytes!("template/hello.ts"))?.to_string();
+    fs::write(path.join(ENDPOINTS_DIR).join("hello.ts"), endpoints)?;
     let tsconfig = std::str::from_utf8(include_bytes!("template/tsconfig.json"))?.to_string();
     fs::write(path.join("tsconfig.json"), tsconfig)?;
     println!("Created ChiselStrike project in {}", path.display());
@@ -373,9 +375,33 @@ async fn apply<S: ToString>(
     let mut endpoints_req = vec![];
     let mut policy_req = vec![];
 
+    let mut decorators = HashSet::new();
     for t in crate::ts::parse_types(&types)?.into_iter() {
+        for field in &t.field_defs {
+            for label in &field.labels {
+                decorators.insert(label.clone());
+            }
+        }
         types_req.push(t);
     }
+
+    let mut decorator_definitions = String::new();
+    for label in &decorators {
+        decorator_definitions += &format!(
+            "function {}(target: any, propertyName: string): void {{}}\n",
+            label
+        );
+    }
+
+    // FIXME: for now this is a static string, but we want to add information about the
+    // types we created.
+    let dts_definitions = "declare type Chisel = {
+    store: <T>(typeName: string, content: T) => Promise<void>
+    json: (body: any, status?: number) => Response
+}
+declare const Chisel: Chisel
+"
+    .to_string();
 
     for f in endpoints.iter() {
         let code = read_to_string(&f.file_path)?;
@@ -390,6 +416,12 @@ async fn apply<S: ToString>(
             policy_config: read_to_string(p)?,
         });
     }
+
+    // if we fail we'll just write again next time, so it's fine to not worry too much
+    // about races here.
+    let dts_path = Path::new(DTS_DIR);
+    let _ = fs::write(dts_path.join("chisel-decorators.ts"), decorator_definitions);
+    let _ = fs::write(dts_path.join("chisel.d.ts"), dts_definitions);
 
     let mut client = ChiselRpcClient::connect(server_url).await?;
     let msg = execute!(
