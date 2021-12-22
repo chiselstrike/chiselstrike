@@ -24,7 +24,13 @@ Then build the tarball with `scripts/build-tarball.sh` script, which generates a
 
 **Linux**:
 
-The tarball build does not yet work: https://github.com/chiselstrike/chiselstrike/issues/393
+**Linux/Intel:**
+
+**Build the tarball on a distribution with old enough glibc for compatibility between distributions. For example, build on CentOS 7 or Ubuntu 14.04.**
+
+```
+./scripts/build-tarball.sh -t x86_64-unknown-linux-gnu
+```
 
 ## Releasing Docker image
 
