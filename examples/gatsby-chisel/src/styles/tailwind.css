@@ -1,0 +1,10 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer components {
+  .common-button {
+    @apply transition-colors bg-white mr-2 border-2 p-3 shadow-sm
+    rounded text-sm font-semibold hover:bg-slate-600 hover:text-white;
+  }
+}

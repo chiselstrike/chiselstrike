@@ -1,0 +1,18 @@
+{
+    "name": "hello",
+    "version": "1.0.0",
+    "description": "",
+    "scripts": {
+        "dev": "chisel dev"
+    },
+    "keywords": [],
+    "author": "",
+    "license": "ISC",
+    "dependencies": {
+        "@chiselstrike/api": "latest",
+        "typescript": "^4.5.4"
+    },
+    "devDependencies": {
+        "@chiselstrike/cli": "latest"
+    }
+}
