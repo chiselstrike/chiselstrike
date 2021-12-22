@@ -820,7 +820,7 @@ pub(crate) fn define_type(ty: &ObjectType) -> Result<()> {
     let name = v8::String::new(scope, ty.name()).unwrap();
     let table = try_into_or(table_func.call(scope, api.into(), &[name.into(), columns]))?;
 
-    global_proxy.set(scope, name.into(), table).unwrap();
+    chisel.set(scope, name.into(), table).unwrap();
     Ok(())
 }
 

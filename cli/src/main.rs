@@ -11,7 +11,7 @@ use futures::channel::mpsc::channel;
 use futures::{SinkExt, StreamExt};
 use notify::{Event, RecommendedWatcher, RecursiveMode, Watcher};
 use serde_derive::Deserialize;
-use std::collections::{BTreeMap, HashSet};
+use std::collections::BTreeMap;
 use std::env;
 use std::fs;
 use std::future::Future;
@@ -375,33 +375,45 @@ async fn apply<S: ToString>(
     let mut endpoints_req = vec![];
     let mut policy_req = vec![];
 
-    let mut decorators = HashSet::new();
+    let mut decorator_definitions = String::new();
+    let mut type_dts_definitions = String::new();
+
     for t in crate::ts::parse_types(&types)?.into_iter() {
+        type_dts_definitions += &format!("    {}: ChiselIterator<{}>;\n", t.name, t.name);
         for field in &t.field_defs {
             for label in &field.labels {
-                decorators.insert(label.clone());
+                decorator_definitions += &format!(
+                    "function {}(target: any, propertyName: string): void {{}}\n",
+                    label
+                );
             }
         }
         types_req.push(t);
     }
 
-    let mut decorator_definitions = String::new();
-    for label in &decorators {
-        decorator_definitions += &format!(
-            "function {}(target: any, propertyName: string): void {{}}\n",
-            label
-        );
-    }
-
     // FIXME: for now this is a static string, but we want to add information about the
     // types we created.
-    let dts_definitions = "declare type Chisel = {
-    store: <T>(typeName: string, content: T) => Promise<void>
-    json: (body: any, status?: number) => Response
-}
+    let dts_definitions = format!(
+        "
+/// <reference lib=\"esnext\" />
+/// <reference lib=\"dom\" />
+
+declare type ChiselIterator<T> = {{
+    findMany(restrictions: Partial<T>): ChiselIterator<T>;
+    select(...columns: (keyof T)[]): ChiselIterator<T>;
+    [Symbol.asyncIterator]: () => AsyncIterator<T>;
+    join<U>(right: ChiselIterator<U>): ChiselIterator<T & U>;
+}}
+
+declare type Chisel = {{
+    store: <T>(typeName: string, content: T) => Promise<void>;
+    json: (body: any, status?: number) => Response;
+{}
+}}
 declare const Chisel: Chisel
-"
-    .to_string();
+",
+        type_dts_definitions
+    );
 
     for f in endpoints.iter() {
         let code = read_to_string(&f.file_path)?;

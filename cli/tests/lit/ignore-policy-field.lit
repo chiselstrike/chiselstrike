@@ -14,7 +14,7 @@ EOF
 cat << EOF > "$TEMPDIR/endpoints/query.js"
 export default async function chisel(req: Request) {
     let count = 0;
-    let people = Person.select("first_name");
+    let people = Chisel.Person.select("first_name");
     for await (let person of people) {
         count += 1
     }

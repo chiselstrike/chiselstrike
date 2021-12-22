@@ -39,7 +39,7 @@ EOF
 cat << EOF > "$TEMPDIR/endpoints/count_glaubers.ts"
 export default async function chisel(req: Request) {
     let count = 0;
-    const rows = Person.findMany({"name":  "Glauber"});
+    const rows = Chisel.Person.findMany({"name":  "Glauber"});
     for await (let row of rows) {
         count += 1
     }
