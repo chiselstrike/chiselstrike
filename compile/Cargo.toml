@@ -1,0 +1,16 @@
+[package]
+name = "compile"
+version = "0.1.0"
+authors = ["ChiselStrike"]
+edition = "2021"
+
+[dependencies]
+anyhow = "1.0"
+swc_common = "0.14.6"
+swc_ecma_codegen = "0.80.0"
+swc_ecma_parser = "0.78.2"
+swc_ecma_transforms_typescript = "0.61.2"
+swc_ecma_visit = "0.44.0"
+
+[lib]
+name = "compile"

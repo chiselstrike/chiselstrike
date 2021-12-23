@@ -45,15 +45,11 @@ use std::pin::Pin;
 use std::rc::Rc;
 use std::sync::Arc;
 use std::task::{Context, Poll};
-use swc_common::sync::Lrc;
-use swc_common::{
-    errors::{emitter, Handler},
-    source_map::FileName,
-    SourceMap,
-};
-use swc_ecma_codegen::{text_writer::JsWriter, Emitter};
-use swc_ecma_parser::{lexer::Lexer, Parser, StringInput, Syntax};
-use swc_ecma_visit::FoldWith;
+
+// FIXME: This should not be here. The client should download and
+// compile modules, the server should not get code out of the
+// internet.
+use compile::compile_ts_code;
 
 use url::Url;
 
@@ -100,7 +96,6 @@ struct ModuleLoader {
 const DUMMY_PREFIX: &str = "file://$chisel$";
 
 fn wrap(specifier: &ModuleSpecifier, code: String) -> Result<ModuleSource> {
-    let code = compile_ts_code(code)?;
     Ok(ModuleSource {
         code,
         module_url_specified: specifier.to_string(),
@@ -110,6 +105,7 @@ fn wrap(specifier: &ModuleSpecifier, code: String) -> Result<ModuleSource> {
 
 async fn load_code(specifier: ModuleSpecifier) -> Result<ModuleSource> {
     let code = reqwest::get(specifier.clone()).await?.text().await?;
+    let code = compile_ts_code(code)?;
     wrap(&specifier, code)
 }
 
@@ -296,89 +292,6 @@ async fn op_chisel_relational_query_next(
     } else {
         Ok(None)
     }
-}
-
-// FIXME: This should not be here. The client should download and
-// compile modules, the server should not get code out of the
-// internet.
-// FIXME: This should produce an error when failing to compile.
-fn compile_ts_code(code: String) -> Result<String> {
-    #[derive(Clone)]
-    struct ErrorBuffer {
-        inner: Arc<std::sync::Mutex<Vec<u8>>>,
-    }
-
-    impl ErrorBuffer {
-        fn new() -> Self {
-            Self {
-                inner: Arc::new(std::sync::Mutex::new(vec![])),
-            }
-        }
-
-        fn get(&self) -> String {
-            String::from_utf8_lossy(&self.inner.lock().unwrap().clone()).to_string()
-        }
-    }
-
-    impl std::io::Write for ErrorBuffer {
-        fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
-            let mut v = self.inner.lock().unwrap();
-            v.extend_from_slice(buf);
-            Ok(buf.len())
-        }
-        fn flush(&mut self) -> std::io::Result<()> {
-            Ok(())
-        }
-    }
-
-    let err_buf = ErrorBuffer::new();
-
-    let cm: Lrc<SourceMap> = Default::default();
-    let emitter = Box::new(emitter::EmitterWriter::new(
-        Box::new(err_buf.clone()),
-        Some(cm.clone()),
-        false,
-        true,
-    ));
-    let handler = Handler::with_emitter(true, false, emitter);
-
-    // FIXME: We probably need a name for better error messages.
-    let fm = cm.new_source_file(FileName::Anon, code);
-    let lexer = Lexer::new(
-        Syntax::Typescript(Default::default()),
-        Default::default(),
-        StringInput::from(&*fm),
-        None,
-    );
-
-    let mut parser = Parser::new_from(lexer);
-
-    for e in parser.take_errors() {
-        e.into_diagnostic(&handler).emit();
-    }
-
-    let module = parser.parse_typescript_module().map_err(|e| {
-        // Unrecoverable fatal error occurred
-        e.into_diagnostic(&handler).emit();
-        anyhow!("Parse failed: {}", err_buf.get())
-    })?;
-
-    // Remove typescript types
-    let module = module.fold_with(&mut swc_ecma_transforms_typescript::strip());
-
-    let mut buf = vec![];
-    {
-        let mut emitter = Emitter {
-            cfg: swc_ecma_codegen::Config {
-                ..Default::default()
-            },
-            cm: cm.clone(),
-            comments: None,
-            wr: JsWriter::new(cm, "\n", &mut buf, None),
-        };
-        emitter.emit_module(&module).unwrap();
-    }
-    Ok(String::from_utf8_lossy(&buf).to_string())
 }
 
 fn compile_ts_code_as_bytes(code: &[u8]) -> Result<String> {

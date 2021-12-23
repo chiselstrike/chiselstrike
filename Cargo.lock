@@ -411,6 +411,7 @@ name = "cli"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "compile",
  "futures",
  "lit",
  "notify",
@@ -438,6 +439,18 @@ checksum = "3538270d33cc669650c4b093848450d380def10c331d38c768e34cac80576e6e"
 dependencies = [
  "termcolor",
  "unicode-width",
+]
+
+[[package]]
+name = "compile"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "swc_common",
+ "swc_ecma_codegen",
+ "swc_ecma_parser",
+ "swc_ecma_transforms_typescript",
+ "swc_ecma_visit",
 ]
 
 [[package]]
@@ -3243,6 +3256,7 @@ dependencies = [
  "anyhow",
  "async-channel",
  "async-mutex",
+ "compile",
  "deno_broadcast_channel",
  "deno_core",
  "deno_runtime",
@@ -3265,11 +3279,6 @@ dependencies = [
  "socket2 0.3.19",
  "sqlx",
  "structopt",
- "swc_common",
- "swc_ecma_codegen",
- "swc_ecma_parser",
- "swc_ecma_transforms_typescript",
- "swc_ecma_visit",
  "thiserror",
  "tokio",
  "tonic",
