@@ -1,10 +1,13 @@
 // SPDX-FileCopyrightText: © 2021 ChiselStrike <info@chiselstrike.com>
 
 use crate::api::{ApiService, Body};
+use crate::query::engine::JsonObject;
 use crate::runtime;
+use crate::types::{Type, OAUTHUSER_TYPE_NAME};
 use anyhow::anyhow;
 use futures::{Future, FutureExt};
 use hyper::{header, Request, Response, StatusCode};
+use serde_json::json;
 use std::pin::Pin;
 
 const USERPATH: &str = "/__chiselstrike/auth/user/";
@@ -26,6 +29,23 @@ fn bad_request(msg: String) -> Response<Body> {
         .unwrap()
 }
 
+async fn insert_user_into_db(username: &str) -> anyhow::Result<()> {
+    let oauth_user_type = match runtime::get()
+        .type_system
+        .lookup_builtin_type(OAUTHUSER_TYPE_NAME)
+    {
+        Ok(Type::Object(t)) => t,
+        _ => anyhow::bail!("Internal error: type {} not found", OAUTHUSER_TYPE_NAME),
+    };
+    let mut user = JsonObject::new();
+    user.insert("username".into(), json!(username));
+    runtime::get()
+        .query_engine
+        .add_row(&oauth_user_type, &user)
+        .await?;
+    Ok(())
+}
+
 fn handle_callback(
     req: Request<hyper::Body>,
 ) -> Pin<Box<dyn Future<Output = Result<Response<Body>, anyhow::Error>>>> {
@@ -45,14 +65,12 @@ fn handle_callback(
         if username.is_empty() {
             return Ok(bad_request("Callback error: parameter value empty".into()));
         }
-        let runtime = runtime::get();
+        let username = urldecode::decode(username.into());
+        insert_user_into_db(&username).await?;
         Ok(redirect(&format!(
             // TODO: redirect to the URL from state.
             "http://localhost:3000/profile?chiselstrike_token={}",
-            runtime
-                .meta
-                .new_session_token(&urldecode::decode(username.into()))
-                .await?
+            runtime::get().meta.new_session_token(&username).await?
         )))
     }
     .boxed_local()

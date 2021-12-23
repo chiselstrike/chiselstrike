@@ -109,8 +109,9 @@ impl RpcService {
             "__chiselstrike is a reserved version name"
         );
 
-        let type_system = state.type_system.get_version(&api_version)?;
-        let to_remove: Vec<&Arc<ObjectType>> = type_system.types.iter().map(|x| x.1).collect();
+        let version_types = state.type_system.get_version(&api_version)?;
+        let to_remove: Vec<&Arc<ObjectType>> =
+            version_types.custom_types.iter().map(|x| x.1).collect();
 
         let meta = &state.meta;
         let mut transaction = meta.start_transaction().await?;
@@ -228,9 +229,10 @@ impl RpcService {
         let mut to_insert = vec![];
         let mut to_update = vec![];
 
-        let type_system = state.type_system.get_version_mut(&api_version);
+        state.type_system.get_version_mut(&api_version);
+        let version_types = state.type_system.get_version(&api_version)?; // End mutable state borrow from above.
 
-        for (existing, removed) in type_system.types.iter() {
+        for (existing, removed) in version_types.custom_types.iter() {
             if type_names.get(existing).is_none() {
                 to_remove.push(removed.clone());
             }
@@ -260,6 +262,9 @@ impl RpcService {
         // apply a type, but failing the next
         for type_def in apply_request.types {
             let name = type_def.name;
+            if state.type_system.lookup_builtin_type(&name).is_ok() {
+                anyhow::bail!("custom type expected, got `{}` instead", name);
+            }
 
             let mut fields = Vec::new();
             for field in type_def.field_defs {
@@ -267,8 +272,12 @@ impl RpcService {
                     decorators.insert(label.clone());
                 }
 
-                let desc =
-                    NewField::new(type_system, &field.name, &field.field_type, &api_version)?;
+                let desc = NewField::new(
+                    &state.type_system,
+                    &field.name,
+                    &field.field_type,
+                    &api_version,
+                )?;
                 fields.push(Field::new(
                     desc,
                     field.labels,
@@ -282,7 +291,7 @@ impl RpcService {
                 fields,
             )?);
 
-            match type_system.lookup_object_type(&name) {
+            match version_types.lookup_custom_type(&name) {
                 Ok(old_type) => {
                     let delta = TypeSystem::generate_type_delta(&old_type, ty)?;
                     to_update.push((old_type.clone(), delta));
@@ -453,7 +462,7 @@ impl ChiselRpc for RpcService {
             let mut type_defs = vec![];
             use itertools::Itertools;
             for ty in version_types
-                .types
+                .custom_types
                 .values()
                 .sorted_by(|x, y| x.name().cmp(y.name()))
             {

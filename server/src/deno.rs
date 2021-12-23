@@ -228,9 +228,10 @@ async fn op_chisel_store(
     let runtime = runtime::get();
     let api_version = current_api_version();
 
+    // Users can only store custom types.  Builtin types are managed by us.
     let ty = runtime
         .type_system
-        .lookup_object_type(type_name, &api_version)?;
+        .lookup_custom_type(type_name, &api_version)?;
 
     let value = content["value"]
         .as_object()
