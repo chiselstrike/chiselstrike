@@ -245,9 +245,6 @@ impl MetaService {
             let type_id: i32 = row.get("type_id");
             let backing_table: &str = row.get("backing_table");
             let type_name: &str = row.get("type_name");
-            if type_name.starts_with("__chiselstrike") {
-                continue;
-            }
             let desc = ExistingObject::new(type_name, backing_table, type_id)?;
             let fields = self.load_type_fields(&ts, type_id).await?;
 
@@ -407,21 +404,6 @@ impl MetaService {
             policies.add_from_yaml(version, yaml)?;
         }
         Ok(policies)
-    }
-
-    /// Like insert_type, but doesn't barf if the type already exists.  Internal types are only created once,
-    /// keeping their backing tables forever.
-    pub(crate) async fn insert_internal_type(&self, ty: &ObjectType) -> anyhow::Result<()> {
-        let check_existence =
-            sqlx::query("SELECT backing_table FROM types WHERE backing_table = $1")
-                .bind(ty.backing_table().to_owned());
-        let exists = check_existence.fetch_optional(&self.pool).await?;
-        if exists.is_none() {
-            let mut transaction = self.start_transaction().await?;
-            self.insert_type(&mut transaction, ty).await?;
-            Self::commit_transaction(transaction).await?;
-        }
-        Ok(())
     }
 
     pub(crate) async fn insert_type(

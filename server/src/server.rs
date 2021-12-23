@@ -123,7 +123,6 @@ async fn run(state: SharedState, mut cmd: ExecutorChannel) -> Result<()> {
         Ok(Type::Object(t)) => t,
         _ => anyhow::bail!("Internal error: type {} not found", OAUTHUSER_TYPE_NAME),
     };
-    meta.insert_internal_type(&oauth_user_type).await?;
     crate::deno::define_type(&oauth_user_type)?;
     let query_engine = QueryEngine::local_connection(&state.data_db).await?;
     let mut transaction = query_engine.start_transaction().await?;
