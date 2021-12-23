@@ -8,6 +8,7 @@ use crate::query::{DbConnection, MetaService, QueryEngine};
 use crate::rpc::{GlobalRpcState, RpcService};
 use crate::runtime;
 use crate::runtime::Runtime;
+use crate::types::{Type, OAUTHUSER_TYPE_NAME};
 use anyhow::Result;
 use async_mutex::Mutex;
 use futures::future::LocalBoxFuture;
@@ -118,13 +119,19 @@ async fn run(state: SharedState, mut cmd: ExecutorChannel) -> Result<()> {
     crate::auth::init(&mut api_service);
     let api_service = Arc::new(Mutex::new(api_service));
 
-    let rt = Runtime::new(
-        api_service.clone(),
-        QueryEngine::local_connection(&state.data_db).await?,
-        meta,
-        ts,
-        policies,
-    );
+    let oauth_user_type = match ts.lookup_builtin_type(OAUTHUSER_TYPE_NAME) {
+        Ok(Type::Object(t)) => t,
+        _ => anyhow::bail!("Internal error: type {} not found", OAUTHUSER_TYPE_NAME),
+    };
+    crate::deno::define_type(&oauth_user_type)?;
+    let query_engine = QueryEngine::local_connection(&state.data_db).await?;
+    let mut transaction = query_engine.start_transaction().await?;
+    query_engine
+        .create_table(&mut transaction, &oauth_user_type)
+        .await?;
+    QueryEngine::commit_transaction(transaction).await?;
+
+    let rt = Runtime::new(api_service.clone(), query_engine, meta, ts, policies);
     runtime::set(rt);
 
     let command_task = tokio::task::spawn_local(async move {
