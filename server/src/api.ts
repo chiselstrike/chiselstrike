@@ -81,6 +81,16 @@ export class Table<T> {
         return new Table(i);
     }
 
+    async findOne(restrictions: Partial<T>): T | null {
+        // FIXME: add LIMIT 1 to filter
+        const i = new Filter(this.inner.columns, restrictions, this.inner);
+        const table = new Table(i);
+        for await (const t of table) {
+            return t;
+        }
+        return undefined;
+    }
+
     join<U>(right: Table<U>) {
         const s = new Set();
         const columns = [];

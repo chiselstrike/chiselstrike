@@ -17,6 +17,12 @@ queries. ChiselStrike is free to optimize this code.
 Comment.findMany({"content": something});
 ```
 
+* *findOne()*: Return a single element that match a certain column value
+
+```typescript
+Chisel.Comment.findOne({"content": something});
+```
+
 * *select()*:  Restricts which columns to be added to the json object. Other properties are then
 discarded.
 
