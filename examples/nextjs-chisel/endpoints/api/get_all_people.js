@@ -1,10 +1,9 @@
 export default async function chisel(req) {
     if (req.method == 'GET') {
         try {
-            let images = await Chisel.collections.Person.rows();
             let resp_json = [];
-            for await (let img of images) {
-                resp_json.push(img);
+            for await (let p of Chisel.Person) {
+                resp_json.push(p);
             }
             return Chisel.json(resp_json);
         } catch (e) {
