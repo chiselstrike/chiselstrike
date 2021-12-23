@@ -18,6 +18,8 @@ pub(crate) enum QueryError {
     TypeError(#[from] TypeSystemError),
     #[error["provided data for field `{0}` are incompatible with given type `{1}`"]]
     IncompatibleData(String, String),
+    #[error["feature `{0}` is not implemented"]]
+    NotImplemented(String),
     #[error["token '{0}' not found"]]
     TokenNotFound(String),
     #[error["invalid ID '{0}'"]]

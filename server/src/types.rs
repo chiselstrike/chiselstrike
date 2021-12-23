@@ -13,8 +13,8 @@ pub(crate) enum TypeSystemError {
     NoSuchType(String),
     #[error["no such API version: {0}"]]
     NoSuchVersion(String),
-    #[error["builtin type expected, got `{0}` instead"]]
-    NotABuiltinType(String),
+    #[error["object type expected, got `{0}` instead"]]
+    ObjectTypeRequired(String),
     #[error["unsafe to replace type: {0}. Reason: {1}"]]
     UnsafeReplacement(String, String),
     #[error["Error while trying to manipulate types: {0}"]]
@@ -24,7 +24,7 @@ pub(crate) enum TypeSystemError {
 #[derive(Debug, Default, Clone, new)]
 pub(crate) struct VersionTypes {
     #[new(default)]
-    pub(crate) custom_types: HashMap<String, Arc<ObjectType>>,
+    pub(crate) types: HashMap<String, Arc<ObjectType>>,
 }
 
 #[derive(Debug, Default, Clone, new)]
@@ -34,57 +34,38 @@ pub(crate) struct TypeSystem {
 }
 
 impl VersionTypes {
-    pub(crate) fn lookup_custom_type(
+    pub(crate) fn lookup_object_type(
         &self,
         type_name: &str,
     ) -> Result<Arc<ObjectType>, TypeSystemError> {
-        match self.custom_types.get(type_name) {
-            Some(ty) => Ok(ty.to_owned()),
-            None => Err(TypeSystemError::NoSuchType(type_name.to_owned())),
+        match self.lookup_type(type_name) {
+            Ok(Type::Object(ty)) => Ok(ty),
+            Ok(_) => Err(TypeSystemError::ObjectTypeRequired(type_name.to_string())),
+            Err(e) => Err(e),
+        }
+    }
+
+    pub(crate) fn lookup_type(&self, type_name: &str) -> Result<Type, TypeSystemError> {
+        match type_name {
+            "string" => Ok(Type::String),
+            "bigint" => Ok(Type::Int),
+            "number" => Ok(Type::Float),
+            "boolean" => Ok(Type::Boolean),
+            type_name => match self.types.get(type_name) {
+                Some(ty) => Ok(Type::Object(ty.to_owned())),
+                None => Err(TypeSystemError::NoSuchType(type_name.to_owned())),
+            },
         }
     }
 
     fn add_type(&mut self, ty: Arc<ObjectType>) -> Result<(), TypeSystemError> {
-        match self.lookup_custom_type(&ty.name) {
+        match self.lookup_object_type(&ty.name) {
             Ok(old) => Err(TypeSystemError::TypeAlreadyExists(old)),
             Err(TypeSystemError::NoSuchType(_)) => Ok(()),
             Err(x) => Err(x),
         }?;
-        self.custom_types.insert(ty.name.to_owned(), ty);
+        self.types.insert(ty.name.to_owned(), ty);
         Ok(())
-    }
-}
-
-pub(crate) const OAUTHUSER_TYPE_NAME: &str = "OAuthUser";
-
-thread_local! {
-    static OAUTHUSER_TYPE: Arc<ObjectType> = {
-        let chisel_id = Field {
-            id: None,
-            name: "id".into(),
-            type_: Type::Id,
-            labels: Vec::default(),
-            default: None,
-            is_optional: false,
-            api_version: "__chiselstrike".into(),
-        };
-        Arc::new(ObjectType {
-            meta_id: None,
-            name: OAUTHUSER_TYPE_NAME.into(),
-            api_version: "__chiselstrike".into(),
-            backing_table: "oauth_user".into(),
-            fields: vec![
-                Field{
-                    id: None,
-                    name: "username".into(),
-                    type_: Type::String,
-                    labels: vec![],
-                    default: None,
-                    is_optional: false,
-                    api_version: "__chiselstrike".into(),
-            }],
-            chisel_id,
-        })
     }
 }
 
@@ -107,11 +88,11 @@ impl TypeSystem {
             .ok_or_else(|| TypeSystemError::NoSuchVersion(api_version.to_owned()))
     }
 
-    /// Adds a custom type to the type system.
+    /// Adds an object type to the type system.
     ///
     /// # Arguments
     ///
-    /// * `ty` type to add
+    /// * `ty` object to add
     ///
     /// # Errors
     ///
@@ -222,34 +203,55 @@ impl TypeSystem {
         })
     }
 
-    /// Looks up a custom type with name `type_name` across API versions
+    /// Looks up an object type with name `type_name` across API versions
     ///
     /// # Arguments
     ///
-    /// * `type_name` name of custom type to look up.
+    /// * `type_name` name of object type to look up.
     /// * `version` the API version this objects belongs to
     ///
     /// # Errors
     ///
-    /// If the looked up type does not exists, the function returns a `TypeSystemError`.
-    pub(crate) fn lookup_custom_type(
+    /// If the looked up type does not exists or is a built-in type, the function returns a `TypeSystemError`.
+    pub(crate) fn lookup_object_type(
         &self,
         type_name: &str,
         api_version: &str,
     ) -> Result<Arc<ObjectType>, TypeSystemError> {
-        let version = self.get_version(api_version)?;
-        version.lookup_custom_type(type_name)
+        match self.lookup_type(type_name, api_version) {
+            Ok(Type::Object(ty)) => Ok(ty),
+            Ok(_) => Err(TypeSystemError::ObjectTypeRequired(type_name.to_string())),
+            Err(e) => Err(e),
+        }
     }
 
-    /// Looks up a builtin type with name `type_name`.
-    pub(crate) fn lookup_builtin_type(&self, type_name: &str) -> Result<Type, TypeSystemError> {
+    /// Looks up a type with name `type_name` across API versions
+    ///
+    /// # Arguments
+    ///
+    /// * `type_name` name of object type to look up.
+    /// * `version` the API version this objects belongs to
+    ///
+    /// # Errors
+    ///
+    /// If the looked up type does not exists or is a built-in type, the function returns a `TypeSystemError`.
+    pub(crate) fn lookup_type(
+        &self,
+        type_name: &str,
+        api_version: &str,
+    ) -> Result<Type, TypeSystemError> {
+        // Note that the base types exist and are the same in all versions, so we have to look them
+        // up separately, before we call get_version, which will error out if the version doesn't
+        // exist.
         match type_name {
             "string" => Ok(Type::String),
             "bigint" => Ok(Type::Int),
             "number" => Ok(Type::Float),
             "boolean" => Ok(Type::Boolean),
-            OAUTHUSER_TYPE_NAME => OAUTHUSER_TYPE.with(|t| Ok(Type::Object(t.clone()))),
-            _ => Err(TypeSystemError::NotABuiltinType(type_name.to_string())),
+            _ => {
+                let version = self.get_version(api_version)?;
+                version.lookup_type(type_name)
+            }
         }
     }
 
@@ -266,7 +268,7 @@ impl TypeSystem {
         // reapply the other versions. Ideally we would have an implementation
         // of this that only refreshes a single version
         for (_, version) in self.versions.iter() {
-            for (_, ty) in version.custom_types.iter() {
+            for (_, ty) in version.types.iter() {
                 crate::deno::define_type(ty)?;
             }
         }
@@ -535,7 +537,7 @@ impl ExistingField {
         let version = split[0].to_owned();
 
         Ok(Self {
-            ty_: ts.lookup_builtin_type(field_type)?,
+            ty_: ts.lookup_type(field_type, &version)?,
             name,
             id,
             version,
@@ -569,12 +571,12 @@ pub(crate) struct NewField<'a> {
 
 impl<'a> NewField<'a> {
     pub(crate) fn new(
-        ts: &TypeSystem,
+        versions: &VersionTypes,
         name: &'a str,
         type_name: &str,
         version: &'a str,
     ) -> anyhow::Result<Self> {
-        let ty_ = ts.lookup_builtin_type(type_name)?;
+        let ty_ = versions.lookup_type(type_name)?;
         Ok(Self { name, ty_, version })
     }
 }

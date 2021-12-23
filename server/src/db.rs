@@ -9,7 +9,7 @@ use crate::query::engine::JsonObject;
 use crate::query::engine::RawSqlStream;
 use crate::query::engine::SqlStream;
 use crate::runtime;
-use crate::types::{Type, TypeSystemError};
+use crate::types::Type;
 use anyhow::{anyhow, Result};
 use futures::future;
 use futures::stream;
@@ -86,11 +86,7 @@ fn convert_backing_store(val: &serde_json::Value) -> Result<Relation> {
     let runtime = runtime::get();
     let ts = &runtime.type_system;
     let api_version = current_api_version();
-    let ty = match ts.lookup_builtin_type(name) {
-        Ok(Type::Object(ty)) => ty,
-        Err(TypeSystemError::NotABuiltinType(_)) => ts.lookup_custom_type(name, &api_version)?,
-        _ => anyhow::bail!("Unexpected type name in convert_backing_store: {}", name),
-    };
+    let ty = ts.lookup_object_type(name, &api_version)?;
     let policies = get_policies(&runtime, &ty)?;
 
     Ok(Relation {

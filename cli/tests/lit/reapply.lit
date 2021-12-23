@@ -91,7 +91,7 @@ $CHISEL apply 2>&1 || echo # (swallow the apply abort)
 ## Redefining elemental types is not OK.
 echo 'class number { a: number}' > "$TEMPDIR/types/foo.ts"
 $CHISEL apply --allow-type-deletion 2>&1 || echo # (swallow the apply abort)
-# CHECK: custom type expected, got `number` instead
+# CHECK: object type expected, got `number` instead
 
 ### Removing fields is not OK if they didn't have a default
 cat << EOF > "$TEMPDIR/types/foo.ts"

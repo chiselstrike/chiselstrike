@@ -65,7 +65,11 @@ impl TryFrom<&Field> for ColumnDef {
             Type::Id => column_def.text().unique_key().primary_key(),
             Type::Float => column_def.double(),
             Type::Boolean => column_def.boolean(),
-            Type::Object(_) => anyhow::bail!("Relations aren't supported yet"),
+            Type::Object(_) => {
+                anyhow::bail!(QueryError::NotImplemented(
+                    "support for type Object".to_owned(),
+                ));
+            }
         };
 
         Ok(column_def)
@@ -304,7 +308,11 @@ impl QueryEngine {
                 Type::Id => bind_json_value!(as_str, str),
                 Type::Float => bind_json_value!(as_f64, f64),
                 Type::Boolean => bind_json_value!(as_bool, bool),
-                Type::Object(_) => anyhow::bail!("Relations aren't supported yet"),
+                Type::Object(_) => {
+                    anyhow::bail!(QueryError::NotImplemented(
+                        "support for type Object".to_owned(),
+                    ));
+                }
             }
         }
 
@@ -345,7 +353,7 @@ pub(crate) fn relational_row_to_json(
             Type::String => to_json!(&str),
             Type::Id => to_json!(&str),
             Type::Boolean => to_json!(bool),
-            Type::Object(_) => anyhow::bail!("Relations aren't supported yet"),
+            Type::Object(_) => unreachable!("A column cannot be a Type::Object"),
         };
         ret.insert(result_column.name().to_string(), val);
     }
