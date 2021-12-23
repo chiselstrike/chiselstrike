@@ -14,14 +14,14 @@ queries. ChiselStrike is free to optimize this code.
 * *findMany()*: Filter just the elements that match a certain column value
 
 ```typescript
-Comment.findMany({"content": something});
+Chisel.Comment.findMany({"content": something});
 ```
 
 * *select()*:  Restricts which columns to be added to the json object. Other properties are then
 discarded.
 
 ```typescript
-Comment.select("content");
+Chisel.Comment.select("content");
 ```
 
 :::info Feedback Requested! We could use your help!
