@@ -208,9 +208,9 @@ impl RpcService {
         let mut to_update = vec![];
 
         state.type_system.get_version_mut(&api_version);
-        let versioned_types = state.type_system.get_version(&api_version)?; // End mutable state borrow from above.
+        let version_types = state.type_system.get_version(&api_version)?; // End mutable state borrow from above.
 
-        for (existing, removed) in versioned_types.custom_types.iter() {
+        for (existing, removed) in version_types.custom_types.iter() {
             if type_names.get(existing).is_none() {
                 to_remove.push(removed.clone());
             }
@@ -269,7 +269,7 @@ impl RpcService {
                 fields,
             )?);
 
-            match versioned_types.lookup_custom_type(&name) {
+            match version_types.lookup_custom_type(&name) {
                 Ok(old_type) => {
                     let delta = TypeSystem::generate_type_delta(&old_type, ty)?;
                     to_update.push((old_type.clone(), delta));
