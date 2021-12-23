@@ -2,6 +2,8 @@
 
 # RUN: sh -e @file
 
+cd "$TEMPDIR"
+
 $CURL $CHISELD_HOST/__chiselstrike/auth/callback?user=a
 # CHECK: HTTP/1.1 307 Temporary Redirect
 # CHECK: location: http://localhost:3000/profile?chiselstrike_token=

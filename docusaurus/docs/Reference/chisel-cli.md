@@ -24,13 +24,7 @@ Overview of commands
 
 Applies the contents of the current project to the ChiselStrike server.
 
-By default, ChiselStrike files are organized as follows:
-
-* `types` directory contains type definitions
-* `endpoints` directory contains endpoint definitions
-* `policies` directory contains policy definitions
-
-The directory structure can also be changed via an optional [manifest file](#manifest-files).
+The `chisel apply` locates files based on the settings in your [manifest file](#manifest-files).
 
 **See also:**
 
@@ -133,7 +127,7 @@ $ chisel wait
 
 ## Manifest files
 
-The CLI parses an optional manifest file `Chisel.toml`, which has the following format:
+The CLI parses an manifest file `Chisel.toml`, which has the following format:
 
 ```toml
 types = ["types"]

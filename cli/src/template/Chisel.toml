@@ -1,0 +1,3 @@
+types = ["types"]
+endpoints = ["endpoints"]
+policies = ["policies"]

@@ -6,7 +6,12 @@ set -e
 export RUST_BACKTRACE=1
 
 export TEMPDIR=$(mktemp -d)
-mkdir -p "$TEMPDIR/types" "$TEMPDIR/endpoints" "$TEMPDIR/policies"
+
+cwd=$(pwd)
+
+cd $TEMPDIR
+$CHISEL init --no-examples
+cd $cwd
 
 $CHISELD -m "sqlite://$TEMPDIR/chiseld.db?mode=rwc" -d "sqlite://$TEMPDIR/chiseld-data.db?mode=rwc" &
 PID=$!
