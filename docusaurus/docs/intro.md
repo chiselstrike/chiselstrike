@@ -273,8 +273,8 @@ comments.  But let's change that code to this:
 export default async function chisel(req) {
     if (req.method == 'POST') {
         const payload = await req.json();
-        await Chisel.store('Comment', payload);
-        return Chisel.json('ok');
+        const created = await Chisel.store('Comment', payload);
+        return Chisel.json('inserted ' + created.id);
     } else if (req.method == 'GET') {
         let comments = [];
         for await (let c of Comment) {
@@ -291,7 +291,8 @@ Now let's invoke it:
 
 ```bash
 $ curl -d '{"content": "Fifth comment", "by": "Jill"}' localhost:8080/dev/comments
-"ok"$ curl -s localhost:8080/dev/comments | python -m json.tool
+"inserted 78604b77-7ff1-4d13-a025-2b3aa9a4d2ef"
+$ curl -s localhost:8080/dev/comments | python -m json.tool
 
 [
     {

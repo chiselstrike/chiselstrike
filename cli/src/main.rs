@@ -390,13 +390,14 @@ async fn apply<S: ToString>(
 
 declare type ChiselIterator<T> = {{
     findMany(restrictions: Partial<T>): ChiselIterator<T>;
+    findOne(restrictions: Partial<T>): T | null;
     select(...columns: (keyof T)[]): ChiselIterator<T>;
     [Symbol.asyncIterator]: () => AsyncIterator<T>;
     join<U>(right: ChiselIterator<U>): ChiselIterator<T & U>;
 }}
 
 declare type Chisel = {{
-    store: <T>(typeName: string, content: T) => Promise<void>;
+    store: <T>(typeName: string, content: T) => Promise<T>;
     json: (body: any, status?: number) => Response;
 {}
 }}
