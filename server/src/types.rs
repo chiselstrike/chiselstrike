@@ -55,7 +55,7 @@ impl VersionTypes {
     }
 }
 
-pub(crate) const OAUTHUSER_TYPE_NAME: &str = "OauthUser";
+pub(crate) const OAUTHUSER_TYPE_NAME: &str = "OAuthUser";
 
 thread_local! {
     static OAUTHUSER_TYPE: Arc<ObjectType> = {
