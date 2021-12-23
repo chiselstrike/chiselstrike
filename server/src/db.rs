@@ -9,7 +9,7 @@ use crate::query::engine::JsonObject;
 use crate::query::engine::RawSqlStream;
 use crate::query::engine::SqlStream;
 use crate::runtime;
-use crate::types::{ObjectType, Type, VersionTypes};
+use crate::types::{ObjectType, Type, TypeSystem, TypeSystemError};
 use anyhow::{anyhow, Result};
 use futures::future;
 use futures::stream;
@@ -81,13 +81,10 @@ fn get_columns(val: &serde_json::Value) -> Result<Vec<(String, Type)>> {
 }
 
 // Used from within the internal migration code, so no need to convert things to <-> from json.
-pub(crate) async fn backing_store_from_type(
-    tv: &VersionTypes,
-    ty: &ObjectType,
-) -> Result<Relation> {
+pub(crate) async fn backing_store_from_type(ts: &TypeSystem, ty: &ObjectType) -> Result<Relation> {
     let mut columns = vec![];
     for field in ty.all_fields() {
-        let field_type = tv.lookup_type(field.type_.name())?;
+        let field_type = ts.lookup_builtin_type(field.type_.name())?;
         columns.push((field.name.clone(), field_type));
     }
 
@@ -103,7 +100,11 @@ fn convert_backing_store(val: &serde_json::Value) -> Result<Relation> {
     let runtime = runtime::get();
     let ts = &runtime.type_system;
     let api_version = current_api_version();
-    let ty = ts.lookup_object_type(name, &api_version)?;
+    let ty = match ts.lookup_builtin_type(name) {
+        Ok(Type::Object(ty)) => ty,
+        Err(TypeSystemError::NotABuiltinType(_)) => ts.lookup_custom_type(name, &api_version)?,
+        _ => anyhow::bail!("Unexpected type name in convert_backing_store: {}", name),
+    };
     let policies = get_policies(&runtime, &ty)?;
 
     Ok(Relation {
