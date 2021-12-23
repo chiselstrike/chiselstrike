@@ -348,7 +348,12 @@ pub(crate) fn relational_row_to_json(
             }};
         }
         let val = match query_column.1 {
-            Type::Float => to_json!(f64),
+            Type::Float => {
+                // https://github.com/launchbadge/sqlx/issues/1596
+                // sqlx gets confused if the float doesn't have decimal points.
+                let val: &str = row.get_unchecked(i);
+                json!(val.parse::<f64>()?)
+            }
             Type::Int => to_json!(i64),
             Type::String => to_json!(&str),
             Type::Id => to_json!(&str),
