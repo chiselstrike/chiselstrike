@@ -14,7 +14,7 @@ queries. ChiselStrike is free to optimize this code.
 * *findMany()*: Filter just the elements that match a certain column value
 
 ```typescript
-Comment.findMany({"content": something});
+Chisel.Comment.findMany({"content": something});
 ```
 
 * *findOne()*: Return a single element that match a certain column value
@@ -27,7 +27,7 @@ Chisel.Comment.findOne({"content": something});
 discarded.
 
 ```typescript
-Comment.select("content");
+Chisel.Comment.select("content");
 ```
 
 :::info Feedback Requested! We could use your help!
