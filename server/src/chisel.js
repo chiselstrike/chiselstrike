@@ -26,7 +26,10 @@ Chisel.buildReadableStreamForBody = function (rid) {
 };
 
 Chisel.store = async function (typeName, content) {
-    await Deno.core.opAsync("chisel_store", { name: typeName, value: content });
+    return await Deno.core.opAsync("chisel_store", {
+        name: typeName,
+        value: content,
+    });
 };
 
 Chisel.json = function (body, status = 200) {

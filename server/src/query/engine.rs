@@ -221,7 +221,7 @@ impl QueryEngine {
         &self,
         ty: &ObjectType,
         ty_value: &JsonObject,
-    ) -> anyhow::Result<()> {
+    ) -> anyhow::Result<JsonObject> {
         let mut field_binds = String::new();
         let mut field_names = String::new();
         let mut id_name = String::new();
@@ -253,17 +253,19 @@ impl QueryEngine {
         update_binds.pop();
 
         let insert_query = std::format!(
-            "INSERT INTO {} ({}) VALUES ({}) ON CONFLICT ({}) DO UPDATE SET {} WHERE {} = {}",
+            "INSERT INTO {} ({}) VALUES ({}) ON CONFLICT ({}) DO UPDATE SET {} WHERE {} = {} RETURNING *",
             &ty.backing_table(),
             field_names,
             field_binds,
             id_name,
             update_binds,
             id_name,
-            id_bind
+            id_bind,
         );
 
         let mut insert_query = sqlx::query(&insert_query);
+        let mut columns = vec![];
+
         for field in ty.all_fields() {
             macro_rules! bind_default_json_value {
                 (str, $value:expr) => {{
@@ -302,6 +304,8 @@ impl QueryEngine {
                 }};
             }
 
+            columns.push((field.name.clone(), field.type_.clone()));
+
             match field.type_ {
                 Type::String => bind_json_value!(as_str, str),
                 Type::Int => bind_json_value!(as_i64, i64),
@@ -321,15 +325,17 @@ impl QueryEngine {
             .begin()
             .await
             .map_err(QueryError::ConnectionFailed)?;
-        transaction
-            .execute(insert_query)
+        let row = transaction
+            .fetch_one(insert_query)
             .await
             .map_err(QueryError::ExecuteFailed)?;
+
         transaction
             .commit()
             .await
             .map_err(QueryError::ExecuteFailed)?;
-        Ok(())
+
+        relational_row_to_json(&columns, &row)
     }
 }
 

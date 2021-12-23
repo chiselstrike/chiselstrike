@@ -221,7 +221,7 @@ async fn op_chisel_store(
     _state: Rc<RefCell<OpState>>,
     content: serde_json::Value,
     _: (),
-) -> Result<()> {
+) -> Result<JsonObject> {
     let type_name = content["name"]
         .as_str()
         .ok_or_else(|| anyhow!("Type name error; the .name key must have a string value"))?;

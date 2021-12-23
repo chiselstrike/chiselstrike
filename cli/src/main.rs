@@ -397,7 +397,7 @@ declare type ChiselIterator<T> = {{
 }}
 
 declare type Chisel = {{
-    store: <T>(typeName: string, content: T) => Promise<void>;
+    store: <T>(typeName: string, content: T) => Promise<T>;
     json: (body: any, status?: number) => Response;
 {}
 }}
