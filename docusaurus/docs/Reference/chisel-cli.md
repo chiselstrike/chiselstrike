@@ -127,7 +127,7 @@ $ chisel wait
 
 ## Manifest files
 
-The CLI parses an manifest file `Chisel.toml`, which has the following format:
+The CLI parses a manifest file `Chisel.toml`, which has the following format:
 
 ```toml
 types = ["types"]
