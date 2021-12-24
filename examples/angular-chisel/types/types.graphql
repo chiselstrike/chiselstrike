@@ -1,6 +1,0 @@
-type Image {
-  name: String
-  data: String
-  width: Int
-  height: Int
-}
