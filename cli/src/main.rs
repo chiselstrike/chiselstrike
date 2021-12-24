@@ -571,7 +571,7 @@ async fn main() -> Result<()> {
         }
         Command::Start => {
             let mut server = start_server()?;
-            wait(server_url.clone()).await?;
+            wait(server_url).await?;
             server.wait()?;
         }
         Command::Status => {
@@ -600,10 +600,10 @@ async fn main() -> Result<()> {
             allow_type_deletion,
             version,
         } => {
-            apply(server_url.clone(), version, allow_type_deletion.into()).await?;
+            apply(server_url, version, allow_type_deletion.into()).await?;
         }
         Command::Delete { version } => {
-            delete(server_url.clone(), version).await?;
+            delete(server_url, version).await?;
         }
     }
     Ok(())
