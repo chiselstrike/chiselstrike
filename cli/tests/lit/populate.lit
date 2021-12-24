@@ -8,7 +8,7 @@ cp examples/store.js "$TEMPDIR/endpoints/ins.js"
 cat << EOF > "$TEMPDIR/endpoints/count.ts"
 export default async function chisel(req) {
     let count = 0;
-    for await (let person of Person) {
+    for await (let person of Chisel.Person) {
 	count += 1
     }
     return new Response(count);
