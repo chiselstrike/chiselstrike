@@ -142,3 +142,41 @@ $ curl -s localhost:8080/dev/comments | python -m json.tool
 
 As you can see, this endpoint now operates with the raw, untransformed
 data.
+
+## Policies for Logged-in Users
+
+ChiselStrike supports having users log into your dynamic website.  It
+even lets you restrict endpoint access by user.
+
+:::note
+The specifics of how users log into ChiselStrike-powered frontends is
+evolving: although it's functional today, it may work differently
+tomorrow.  Please contact us to find out the details.
+:::
+
+To restrict who can access the `comments` endpoint, please edit the
+file `my-backend/policies/pol.yml` like this:
+
+```yaml title="my-backend/policies/pol.yml"
+endpoints:
+  - path: /comments
+    users: ^admin$
+```
+
+This says that only the `admin` username can access the `/comments`
+endpoint.
+
+The `endpoints` section can have any number of `path` items, each
+affecting a different path prefix.  The `users` attribute is a regular
+expression that the logged-in username must match in order to access
+endpoints under the given path.
+
+`path` values may overlap, in which case longer overrides shorter.
+When you attempt to access an endpoint, the longest specified prefix
+of its path dictates which users may access it.  Although multiple
+`path` entries may overlap, they must not be identical.
+
+When `users` is specified, anonymous access to the path will be
+prohibited.  For example, if you want to force the user to log in to
+access `comments` but don't care which specific user is accessing it,
+you can set `users` to `.*`.
