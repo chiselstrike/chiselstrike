@@ -77,14 +77,34 @@ export class Table<T> {
         }
     }
 
-    take(limit: bigint): Table<T> {
-        const table = new Table(this.inner);
-        if (table.inner.limit == null) {
-            table.inner.limit = limit;
-        } else {
-            table.inner.limit = Math.min(limit, table.inner.limit);
+    take(limit_: bigint): Table<T> {
+        const limit = (this.inner.limit == null)
+            ? limit_
+            : Math.min(limit_, this.inner.limit);
+
+        // shallow copy okay because this is an array of strings
+        const cs = [...this.inner.columns];
+        switch (this.inner.kind) {
+            case "BackingStore": {
+                const i = new BackingStore(cs, this.inner.name);
+                i.limit = limit;
+                return new Table(i);
+            }
+            case "Join": {
+                const i = new Join(cs, this.inner.left, this.inner.right);
+                i.limit = limit;
+                return new Table(i);
+            }
+            case "Filter": {
+                const i = new Filter(
+                    cs,
+                    this.inner.restrictions,
+                    this.inner.inner,
+                );
+                i.limit = limit;
+                return new Table(i);
+            }
         }
-        return table;
     }
 
     findMany(restrictions: Partial<T>): Table<T> {
