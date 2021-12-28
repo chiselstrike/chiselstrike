@@ -15,6 +15,7 @@
 type column = [string, string]; // name and type
 
 class Base {
+    limit?: bigint;
     constructor(public columns: column[]) {}
 }
 
@@ -76,14 +77,23 @@ export class Table<T> {
         }
     }
 
+    take(limit: bigint): Table<T> {
+        if (this.inner.limit == null) {
+            this.inner.limit = limit;
+        } else {
+            this.inner.limit = Math.min(limit, this.inner.limit);
+        }
+        return this;
+    }
+
     findMany(restrictions: Partial<T>): Table<T> {
         const i = new Filter(this.inner.columns, restrictions, this.inner);
         return new Table(i);
     }
 
     async findOne(restrictions: Partial<T>): T | null {
-        // FIXME: add LIMIT 1 to filter
         const i = new Filter(this.inner.columns, restrictions, this.inner);
+        i.limit = 1;
         const table = new Table(i);
         for await (const t of table) {
             return t;

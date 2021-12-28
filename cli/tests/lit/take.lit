@@ -1,0 +1,70 @@
+# SPDX-FileCopyrightText: © 2021 ChiselStrike <info@chiselstrike.com>
+
+# RUN: sh -e @file
+
+cd "$TEMPDIR"
+
+cat << EOF > "$TEMPDIR/types/types.ts"
+class Person { name: string; company: string = "ChiselStrike"; }
+EOF
+
+cat << EOF > "$TEMPDIR/endpoints/store.ts"
+export default async function chisel(req: Request) {
+    await Chisel.store("Person", {"name": "Glauber"});
+    await Chisel.store("Person", {"name": "Pekka"});
+    return new Response("Ok");
+}
+EOF
+
+cat << EOF > "$TEMPDIR/endpoints/findall.ts"
+export default async function chisel(req: Request) {
+    let response = "begin";
+    for await (let p of Chisel.Person) {
+        response += p.name
+    }
+    response += "end\n";
+    return new Response(response);
+}
+EOF
+
+cat << EOF > "$TEMPDIR/endpoints/findtake.ts"
+export default async function chisel(req: Request) {
+    let response = "begin";
+    for await (let p of Chisel.Person.take(1)) {
+        response += p.name
+    }
+    response += "end\n";
+    return new Response(response);
+}
+EOF
+
+cat << EOF > "$TEMPDIR/endpoints/findfilter.ts"
+export default async function chisel(req: Request) {
+    let response = "begin";
+    for await (let p of Chisel.Person.findMany({"company" : "ChiselStrike"}).take(1)) {
+        response += p.name
+    }
+    response += "end\n";
+    return new Response(response);
+}
+EOF
+
+$CHISEL apply
+
+# CHECK: Type defined: Person
+# CHECK: End point defined: /dev/findall
+# CHECK: End point defined: /dev/findfilter
+# CHECK: End point defined: /dev/findtake
+# CHECK: End point defined: /dev/store
+
+$CURL $CHISELD_HOST/dev/store
+# CHECK: Ok
+
+$CURL $CHISELD_HOST/dev/findall
+# CHECK: beginGlauberPekkaend
+
+$CURL $CHISELD_HOST/dev/findtake
+# CHECK: beginGlauberend
+
+$CURL $CHISELD_HOST/dev/findfilter
+# CHECK: beginGlauberend

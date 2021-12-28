@@ -51,6 +51,7 @@ enum Inner {
 pub(crate) struct Relation {
     // FIXME: This can't be a Type::Object, we should probably split the enum
     pub(crate) columns: Vec<(String, Type)>,
+    pub(crate) limit: Option<u64>,
     inner: Inner,
 }
 
@@ -91,11 +92,13 @@ pub(crate) async fn backing_store_from_type(ts: &TypeSystem, ty: &ObjectType) ->
     Ok(Relation {
         columns,
         inner: Inner::BackingStore(ty.backing_table().to_string(), FieldPolicies::default()),
+        limit: None,
     })
 }
 
 fn convert_backing_store(val: &serde_json::Value) -> Result<Relation> {
     let name = val["name"].as_str().ok_or_else(|| anyhow!("foo"))?;
+    let limit = val["limit"].as_u64();
     let columns = get_columns(val)?;
     let runtime = runtime::get();
     let ts = &runtime.type_system;
@@ -110,6 +113,7 @@ fn convert_backing_store(val: &serde_json::Value) -> Result<Relation> {
     Ok(Relation {
         columns,
         inner: Inner::BackingStore(ty.backing_table().to_string(), policies),
+        limit,
     })
 }
 
@@ -117,9 +121,11 @@ fn convert_join(val: &serde_json::Value) -> Result<Relation> {
     let columns = get_columns(val)?;
     let left = Box::new(convert(&val["left"])?);
     let right = Box::new(convert(&val["right"])?);
+    let limit = val["limit"].as_u64();
     Ok(Relation {
         columns,
         inner: Inner::Join(left, right),
+        limit,
     })
 }
 
@@ -131,6 +137,7 @@ fn escape_string(s: &str) -> String {
 fn convert_filter(val: &serde_json::Value) -> Result<Relation> {
     let columns = get_columns(val)?;
     let inner = Box::new(convert(&val["inner"])?);
+    let limit = val["limit"].as_u64();
     let restrictions = val["restrictions"]
         .as_object()
         .ok_or_else(|| anyhow!("Missing restrictions in filter"))?;
@@ -157,6 +164,7 @@ fn convert_filter(val: &serde_json::Value) -> Result<Relation> {
     Ok(Relation {
         columns,
         inner: Inner::Filter(inner, sql_restrictions),
+        limit,
     })
 }
 
@@ -212,10 +220,16 @@ impl Stream for PolicyApplyingStream {
 fn sql_backing_store(
     pool: &AnyPool,
     columns: Vec<(String, Type)>,
+    limit_str: &str,
     name: String,
     policies: FieldPolicies,
 ) -> Query {
-    let query = format!("SELECT {} FROM {}", column_list(&columns), name);
+    let query = format!(
+        "SELECT {} FROM {} {}",
+        column_list(&columns),
+        name,
+        &limit_str
+    );
     if policies.is_empty() {
         return Query::Sql(query);
     }
@@ -303,6 +317,7 @@ fn join_stream(columns: &[(String, Type)], left: SqlStream, right: SqlStream) ->
 fn sql_filter(
     pool: &AnyPool,
     columns: &[(String, Type)],
+    limit_str: &str,
     alias_count: &mut u32,
     inner: Relation,
     restrictions: Vec<Restriction>,
@@ -328,12 +343,14 @@ fn sql_filter(
             format!("{}={}", rest.k, str_v)
         })
         .join(" AND ");
+
     Query::Sql(format!(
-        "SELECT {} FROM ({}) AS {} WHERE {}",
+        "SELECT {} FROM ({}) AS {} WHERE {} {}",
         column_list(columns),
         inner_sql,
         inner_alias,
-        restrictions
+        restrictions,
+        limit_str,
     ))
 }
 
@@ -349,6 +366,7 @@ fn to_stream(pool: &AnyPool, s: String, columns: Vec<(String, Type)>) -> SqlStre
 fn sql_join(
     pool: &AnyPool,
     columns: &[(String, Type)],
+    limit_str: &str,
     alias_count: &mut u32,
     left: Relation,
     right: Relation,
@@ -398,18 +416,31 @@ fn sql_join(
     );
     let join_columns_str = join_columns.join(",");
     Query::Sql(format!(
-        "SELECT {} FROM {} ON {}",
-        join_columns_str, join, on
+        "SELECT {} FROM {} ON {} {}",
+        join_columns_str, join, on, limit_str
     ))
 }
 
 fn sql_impl(pool: &AnyPool, rel: Relation, alias_count: &mut u32) -> Query {
+    let limit_str = rel
+        .limit
+        .map(|x| format!("LIMIT {}", x))
+        .unwrap_or_else(String::new);
     match rel.inner {
-        Inner::BackingStore(name, policies) => sql_backing_store(pool, rel.columns, name, policies),
-        Inner::Filter(inner, restrictions) => {
-            sql_filter(pool, &rel.columns, alias_count, *inner, restrictions)
+        Inner::BackingStore(name, policies) => {
+            sql_backing_store(pool, rel.columns, &limit_str, name, policies)
         }
-        Inner::Join(left, right) => sql_join(pool, &rel.columns, alias_count, *left, *right),
+        Inner::Filter(inner, restrictions) => sql_filter(
+            pool,
+            &rel.columns,
+            &limit_str,
+            alias_count,
+            *inner,
+            restrictions,
+        ),
+        Inner::Join(left, right) => {
+            sql_join(pool, &rel.columns, &limit_str, alias_count, *left, *right)
+        }
     }
 }
 
