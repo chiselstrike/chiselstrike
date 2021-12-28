@@ -158,34 +158,24 @@ impl QueryEngine {
         old_ty: &ObjectType,
         delta: ObjectDelta,
     ) -> anyhow::Result<()> {
-        let mut table = Table::alter()
-            .table(Alias::new(old_ty.backing_table()))
-            .to_owned();
+        // using a macro as async closures are unstable
+        macro_rules! do_query {
+            ( $table:expr ) => {{
+                let table = $table.build_any(DbConnection::get_query_builder(&Kind::Postgres));
+                let table = sqlx::query(&table);
 
-        let mut needs_alter = false;
-        for field in delta.added_fields.iter() {
-            needs_alter = true;
-            let mut column_def = ColumnDef::try_from(field)?;
-            table.add_column(&mut column_def);
+                transaction
+                    .execute(table)
+                    .await
+                    .map_err(QueryError::ExecuteFailed)
+            }};
         }
 
-        for field in delta.removed_fields.iter() {
-            needs_alter = true;
-            table.drop_column(Alias::new(&field.name));
-        }
-        // We don't loop over the modified part of the delta: SQLite doesn't support modify columns
-        // at all, but that is fine since the currently supported field modifications are handled
-        // by ChiselStrike directly and require no modifications to the tables.
+        // SQLite doesn't support multiple add column statements
+        // (details at https://github.com/SeaQL/sea-query/issues/213), generate a separate alter
+        // statement for each delta
         //
-        // There are modifications that we can accept on application side (like changing defaults),
-        // since we always write with defaults. For all others, we should error out way before we
-        // get here.
-
-        if !needs_alter {
-            return Ok(());
-        }
-
-        // alter table is problematic on SQLite (https://sqlite.org/lang_altertable.html)
+        // Alter table is also problematic on SQLite for other reasons (https://sqlite.org/lang_altertable.html)
         //
         // However there are some modifications that are safe (like adding a column or removing a
         // non-foreign-key column), but sqlx doesn't even generate the statement for them.
@@ -199,13 +189,31 @@ impl QueryEngine {
         // FIXME: When we start generating indexes or using foreign keys, we'll have to make sure
         // that those are still safe. Adding columns is always safe, but removals may not be if
         // they are used in relations or indexes (see the document above)
-        let table = table.build_any(DbConnection::get_query_builder(&Kind::Postgres));
+        for field in delta.added_fields.iter() {
+            let mut column_def = ColumnDef::try_from(field)?;
+            let table = Table::alter()
+                .table(Alias::new(old_ty.backing_table()))
+                .add_column(&mut column_def)
+                .to_owned();
 
-        let table = sqlx::query(&table);
-        transaction
-            .execute(table)
-            .await
-            .map_err(QueryError::ExecuteFailed)?;
+            do_query!(table)?;
+        }
+
+        for field in delta.removed_fields.iter() {
+            let table = Table::alter()
+                .table(Alias::new(old_ty.backing_table()))
+                .drop_column(Alias::new(&field.name))
+                .to_owned();
+
+            do_query!(table)?;
+        }
+        // We don't loop over the modified part of the delta: SQLite doesn't support modify columns
+        // at all, but that is fine since the currently supported field modifications are handled
+        // by ChiselStrike directly and require no modifications to the tables.
+        //
+        // There are modifications that we can accept on application side (like changing defaults),
+        // since we always write with defaults. For all others, we should error out way before we
+        // get here.
         Ok(())
     }
 
