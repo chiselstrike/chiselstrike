@@ -21,7 +21,7 @@ use structopt::StructOpt;
 use tokio::task::JoinHandle;
 
 #[derive(StructOpt, Debug, Clone)]
-#[structopt(name = "chiseld")]
+#[structopt(name = "chiseld", version = env!("VERGEN_GIT_SEMVER_LIGHTWEIGHT"))]
 pub struct Opt {
     /// user-visible API server listen address.
     #[structopt(short, long, default_value = "127.0.0.1:8080")]
