@@ -30,6 +30,14 @@ discarded.
 Chisel.Comment.select("content");
 ```
 
+* *take(n: bigint)*: returns the first n elements, discarding the rest
+discarded.
+
+```typescript
+Chisel.Comment.take(1);
+```
+
+
 :::info Feedback Requested! We could use your help!
 * Is your preference to open code your business logic and allow ChiselStrike to perform optimizations,
 or do you feel more confident using this API?
