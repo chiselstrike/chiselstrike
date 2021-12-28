@@ -38,6 +38,28 @@ export default async function chisel(req: Request) {
 }
 EOF
 
+cat << EOF > "$TEMPDIR/endpoints/taketwice.ts"
+export default async function chisel(req: Request) {
+    let response = "begin";
+    for await (let p of Chisel.Person.take(4).take(1)) {
+        response += p.name
+    }
+    response += "end\n";
+    return new Response(response);
+}
+EOF
+
+cat << EOF > "$TEMPDIR/endpoints/taketwicereverse.ts"
+export default async function chisel(req: Request) {
+    let response = "begin";
+    for await (let p of Chisel.Person.take(1).take(4)) {
+        response += p.name
+    }
+    response += "end\n";
+    return new Response(response);
+}
+EOF
+
 cat << EOF > "$TEMPDIR/endpoints/findfilter.ts"
 export default async function chisel(req: Request) {
     let response = "begin";
@@ -56,6 +78,8 @@ $CHISEL apply
 # CHECK: End point defined: /dev/findfilter
 # CHECK: End point defined: /dev/findtake
 # CHECK: End point defined: /dev/store
+# CHECK: End point defined: /dev/taketwice
+# CHECK: End point defined: /dev/taketwicereverse
 
 $CURL $CHISELD_HOST/dev/store
 # CHECK: Ok
@@ -67,4 +91,10 @@ $CURL $CHISELD_HOST/dev/findtake
 # CHECK: beginGlauberend
 
 $CURL $CHISELD_HOST/dev/findfilter
+# CHECK: beginGlauberend
+
+$CURL $CHISELD_HOST/dev/taketwice
+# CHECK: beginGlauberend
+
+$CURL $CHISELD_HOST/dev/taketwicereverse
 # CHECK: beginGlauberend
