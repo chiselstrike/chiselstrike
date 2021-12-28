@@ -1,3 +1,14 @@
+defaults:
+  actions:
+    queue:
+      name: default
+      method: squash
+      update_method: rebase
+      commit_message_template: |
+        Merge '{{title}}' from #{{author}}
+
+        {{body}}
+
 pull_request_rules:
   - name: Automatic merge on approval
     conditions:
