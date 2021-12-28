@@ -149,7 +149,7 @@ impl Manifest {
 static DEFAULT_API_VERSION: &str = "dev";
 
 #[derive(StructOpt, Debug)]
-#[structopt(name = "chisel")]
+#[structopt(name = "chisel", version = env!("VERGEN_GIT_SEMVER_LIGHTWEIGHT"))]
 struct Opt {
     /// RPC server address.
     #[structopt(short, long, default_value = "http://localhost:50051")]
