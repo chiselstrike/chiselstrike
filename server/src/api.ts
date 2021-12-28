@@ -78,12 +78,13 @@ export class Table<T> {
     }
 
     take(limit: bigint): Table<T> {
-        if (this.inner.limit == null) {
-            this.inner.limit = limit;
+        const table = new Table(this.inner);
+        if (table.inner.limit == null) {
+            table.inner.limit = limit;
         } else {
-            this.inner.limit = Math.min(limit, this.inner.limit);
+            table.inner.limit = Math.min(limit, table.inner.limit);
         }
-        return this;
+        return table;
     }
 
     findMany(restrictions: Partial<T>): Table<T> {
@@ -93,8 +94,8 @@ export class Table<T> {
 
     async findOne(restrictions: Partial<T>): T | null {
         const i = new Filter(this.inner.columns, restrictions, this.inner);
-        i.limit = 1;
         const table = new Table(i);
+        table.inner.limit = 1;
         for await (const t of table) {
             return t;
         }
