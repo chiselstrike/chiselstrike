@@ -136,10 +136,7 @@ impl ApiService {
         self.paths.remove_prefix(prefix)
     }
 
-    pub(crate) async fn route(
-        &mut self,
-        req: Request<hyper::Body>,
-    ) -> hyper::http::Result<Response<Body>> {
+    async fn route(&mut self, req: Request<hyper::Body>) -> hyper::http::Result<Response<Body>> {
         if let Some(route_fn) = self.find_route_fn(req.uri().path()) {
             if req.uri().path().starts_with("/__chiselstrike") {
                 return match route_fn(req).await {
