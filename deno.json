@@ -2,7 +2,12 @@
     "fmt": {
         "files": {
             "include": ["cli", "server", "deno.json"],
-            "exclude": ["cli/examples", "cli/docs", "server/docs"]
+            "exclude": [
+                "cli/examples",
+                "cli/docs",
+                "server/docs",
+                "server/src/dts"
+            ]
         },
         "options": {
             "indentWidth": 4
