@@ -10,8 +10,8 @@ EOF
 
 cat << EOF > "$TEMPDIR/endpoints/store.ts"
 export default async function chisel(req: Request) {
-    await Chisel.store("Person", {"name": "Glauber"});
-    await Chisel.store("Person", {"name": "Pekka"});
+    await Chisel.save("Person", {"name": "Glauber"});
+    await Chisel.save("Person", {"name": "Pekka"});
     return new Response("Ok");
 }
 EOF
@@ -22,7 +22,7 @@ export default async function chisel(req: Request) {
     await Person.forEach(cnt_ => {
         count += 1;
     });
-    return new Response(count);
+    return new Response(String(count));
 }
 EOF
 

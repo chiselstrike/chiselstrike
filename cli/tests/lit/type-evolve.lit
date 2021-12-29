@@ -16,16 +16,16 @@ $CHISEL apply
 # CHECK: Type defined: Evolving
 
 cat << EOF > "$TEMPDIR/endpoints/store.ts"
-export default async function chisel(req) {
+export default async function chisel(req: Request) {
    await Chisel.save('Evolving', { "a": "A", "b": "B" });
    return new Response('ok');
 }
 EOF
 
 cat << EOF > "$TEMPDIR/endpoints/find.ts"
-export default async function chisel(req) {
+export default async function chisel(req: Request) {
    let response = "tst ";
-   for await (let ev of Chisel.Evolving) {
+   for await (let ev of Evolving) {
         let fields = [ev.a, ev.b];
         response += fields.join(" ");
         response += " ";
@@ -52,9 +52,6 @@ $CURL $CHISELD_HOST/dev/find
 cat << EOF > "$TEMPDIR/types/types.ts"
 class Evolving { a: string; }
 EOF
+rm "$TEMPDIR/endpoints/find.ts"
 $CHISEL apply
 # CHECK: Type defined: Evolving
-
-$CURL $CHISELD_HOST/dev/find
-# CHECK: HTTP/1.1 200 OK
-# CHECK: tst A  tst

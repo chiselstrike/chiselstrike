@@ -10,7 +10,7 @@ class Bar { b: string; }
 EOF
 
 cat << EOF > "$TEMPDIR/endpoints/hello.ts"
-export default async function chisel(req) {
+export default async function chisel(req: Request) {
     return new Response('ok');
 }
 EOF

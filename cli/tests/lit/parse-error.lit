@@ -3,7 +3,7 @@
 # RUN: sh -e @file
 
 cat << EOF > "$TEMPDIR/endpoints/error.ts"
-export default async function chisel(req) {
+export default async function chisel(req: Request) {
     return new Response("foo" "bar");
 }
 EOF
@@ -13,12 +13,12 @@ cd "$TEMPDIR"
 $CHISEL apply 2>&1 || true
 # CHECK: Error: parsing endpoint /dev/error
 # CHECK: Caused by:
-# CHECK:     Parse failed: error: Expected ',', got 'string literal (bar)'
-# CHECK: 2 |     return new Response("foo" "bar");
+# CHECK:     Compilation failed:
+# CHECK:     error.ts (2,31): ',' expected.
 
 cat << EOF > "$TEMPDIR/endpoints/error.ts"
 const xyz = foo();
-export default async function chisel(req) {
+export default async function chisel(req: Request) {
     return xyz;
 }
 EOF
@@ -26,5 +26,5 @@ EOF
 $CHISEL apply 2>&1 || true
 #CHECK: Error: parsing endpoint /dev/error
 #CHECK: Caused by:
-#CHECK:     Uncaught ReferenceError: foo is not defined
-#CHECK:         at file://$chisel$/dev/error?ver=0:1:12
+#CHECK:     Compilation failed:
+#CHECK:     error.ts (1,13): Cannot find name 'foo'.

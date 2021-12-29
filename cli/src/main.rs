@@ -386,15 +386,28 @@ async fn apply<S: ToString>(
     let mut endpoints_req = vec![];
     let mut policy_req = vec![];
 
-    let mut types_string = String::new();
-    for t in &types {
-        types_string += &read_to_string(&t)?;
+    let mut typedefs = "/// <reference types=\"../dts/chisel\" />\n".to_string();
+    typedefs += "declare namespace raw {\n";
+    for t in &types_req {
+        typedefs += &format!("export class {} {{\n", t.name);
+        for field in &t.field_defs {
+            typedefs += &format!("{}: {};\n", field.name, field.field_type);
+        }
+        typedefs += "}\n";
     }
+    typedefs += "}\n";
+    for t in &types_req {
+        typedefs += &format!("declare let {}: ChiselIterator<raw.{}>;\n", t.name, t.name);
+    }
+    let dts_path = Path::new(DTS_DIR);
+    let types_path = dts_path.join("types.d.ts");
+    fs::write(&types_path, typedefs)?;
 
     for f in endpoints.iter() {
-        let code = types_string.clone() + &read_to_string(&f.file_path)?;
-        let code = compile_ts_code(code)
+        let path = f.file_path.to_str().unwrap();
+        let code = compile_ts_code(path, Some(types_path.to_str().unwrap()))
             .with_context(|| format!("parsing endpoint /{}/{}", version, f.name))?;
+        let code = code[path].clone();
         endpoints_req.push(EndPointCreationRequest {
             path: f.name.clone(),
             code,

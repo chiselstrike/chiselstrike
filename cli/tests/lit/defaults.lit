@@ -13,16 +13,16 @@ class Foo {
 EOF
 
 cat << EOF > "$TEMPDIR/endpoints/default.ts"
-export default async function chisel(req) {
+export default async function chisel(req: Request) {
     await Chisel.save('Foo', { "e": "value" });
     return new Response('ok');
 }
 EOF
 
 cat << EOF > "$TEMPDIR/endpoints/read.ts"
-export default async function chisel(req) {
+export default async function chisel(req: Request) {
     let response = "";
-    for await (let f of Chisel.Foo) {
+    for await (let f of Foo) {
         let fields = [f.a, f.b, f.c, f.d, f.e];
         response += fields.join(" ");
         response += " ";
@@ -55,9 +55,9 @@ class Foo {
 EOF
 
 cat << EOF > "$TEMPDIR/endpoints/readold.ts"
-export default async function chisel(req) {
+export default async function chisel(req: Request) {
     let response = "";
-    for await (let f of Chisel.Foo) {
+    for await (let f of Foo) {
         let fields = [f.a, f.b, f.c, f.d, f.e, f.nfs, f.nfb, f.nfn];
         response += fields.join(" ");
         response += " ";

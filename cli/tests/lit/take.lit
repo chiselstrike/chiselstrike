@@ -19,7 +19,7 @@ EOF
 cat << EOF > "$TEMPDIR/endpoints/findall.ts"
 export default async function chisel(req: Request) {
     let response = "begin";
-    for await (let p of Person.all()) {
+    for await (let p of Person) {
         response += p.name
     }
     response += "end";

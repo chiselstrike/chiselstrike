@@ -1,6 +1,6 @@
 /* SPDX-FileCopyrightText: © 2021 ChiselStrike <info@chiselstrike.com> */
 
-class Person extends ChiselEntity {
+class Person {
   first_name: string;
   @labels("pii") last_name: string;
   age: number;
@@ -8,7 +8,6 @@ class Person extends ChiselEntity {
   height: number;
 }
 
-
-class Position extends ChiselEntity {
+class Position {
   title: string;
 }

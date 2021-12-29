@@ -36,11 +36,13 @@ use hyper::body::HttpBody;
 use hyper::header::HeaderValue;
 use hyper::Method;
 use hyper::{Request, Response, StatusCode};
+use mktemp::TempFile;
 use once_cell::unsync::OnceCell;
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::convert::TryInto;
 use std::future::Future;
+use std::io::Write;
 use std::net::SocketAddr;
 use std::pin::Pin;
 use std::rc::Rc;
@@ -105,9 +107,22 @@ fn wrap(specifier: &ModuleSpecifier, code: String) -> Result<ModuleSource> {
     })
 }
 
+fn compile(code: &str, lib: Option<&str>) -> Result<String> {
+    let mut f = TempFile::new("", ".ts")?;
+    let inner = f.inner();
+    inner.write_all(code.as_bytes())?;
+    inner.flush()?;
+    let path = f.path();
+    Ok(compile_ts_code(path, lib)?.remove(path).unwrap())
+}
+
 async fn load_code(specifier: ModuleSpecifier) -> Result<ModuleSource> {
     let code = reqwest::get(specifier.clone()).await?.text().await?;
-    let code = compile_ts_code(code)?;
+    let last = specifier.path_segments().unwrap().rev().next().unwrap();
+    if !last.ends_with(".ts") {
+        return wrap(&specifier, code);
+    }
+    let code = compile(&code, None)?;
     wrap(&specifier, code)
 }
 
@@ -297,11 +312,6 @@ async fn op_chisel_relational_query_next(
     }
 }
 
-fn compile_ts_code_as_bytes(code: &[u8]) -> Result<String> {
-    let code = std::str::from_utf8(code)?.to_string();
-    compile_ts_code(code)
-}
-
 async fn create_deno(inspect_brk: bool) -> Result<DenoService> {
     let mut d = DenoService::new(inspect_brk);
     let worker = &mut d.worker;
@@ -321,8 +331,15 @@ async fn create_deno(inspect_brk: bool) -> Result<DenoService> {
     runtime.sync_ops_cache();
 
     // FIXME: Include these files in the snapshop
-    let chisel = compile_ts_code_as_bytes(include_bytes!("chisel.js"))?;
-    let api = compile_ts_code_as_bytes(include_bytes!("api.ts"))?;
+    let chisel = include_str!("chisel.js").to_string();
+    let api = {
+        let lib = include_bytes!("./dts/lib.deno_core.d.ts");
+        let mut lib_f = TempFile::new("", ".d.ts")?;
+        let inner = lib_f.inner();
+        inner.write_all(lib)?;
+        inner.flush()?;
+        compile(include_str!("api.ts"), Some(lib_f.path()))?
+    };
     let chisel_path = "/chisel.js".to_string();
 
     {
@@ -736,7 +753,7 @@ pub(crate) fn define_type(ty: &ObjectType) -> Result<()> {
     let name = v8::String::new(scope, ty.name()).unwrap();
     let chisel_func = try_into_or(chisel_func.call(scope, api.into(), &[name.into(), columns]))?;
 
-    chisel.set(scope, name.into(), chisel_func).unwrap();
+    global_proxy.set(scope, name.into(), chisel_func).unwrap();
     Ok(())
 }
 

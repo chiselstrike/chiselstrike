@@ -43,7 +43,7 @@ export default async function chisel(req: Request) {
     for await (let row of rows) {
         count += 1
     }
-    return new Response(count);
+    return new Response(String(count));
 }
 EOF
 

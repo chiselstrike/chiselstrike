@@ -6,11 +6,11 @@ edition = "2021"
 
 [dependencies]
 anyhow = "1.0"
-swc_common = "0.14.6"
-swc_ecma_codegen = "0.80.0"
-swc_ecma_parser = "0.78.2"
-swc_ecma_transforms_typescript = "0.61.2"
-swc_ecma_visit = "0.44.0"
+deno_core = "0.114.0"
+isahc = "1.6.0"
+itertools = "0.10.1"
+url = "2.2.2"
+v8 = "0.36.0"
 
 [lib]
 name = "compile"
