@@ -84,6 +84,7 @@ export class Table<T> {
 
         // shallow copy okay because this is an array of strings
         const cs = [...this.inner.columns];
+        // FIXME: refactor to use the same path as select
         switch (this.inner.kind) {
             case "BackingStore": {
                 const i = new BackingStore(cs, this.inner.name);
