@@ -17,7 +17,7 @@
 type column = [string, string]; // name and type
 
 class Base {
-    limit?: bigint;
+    limit?: number;
     constructor(public columns: column[]) {}
 }
 
@@ -79,7 +79,7 @@ export class Table<T> {
         }
     }
 
-    take(limit_: bigint): Table<T> {
+    take(limit_: number): Table<T> {
         const limit = (this.inner.limit == null)
             ? limit_
             : Math.min(limit_, this.inner.limit);
@@ -115,7 +115,7 @@ export class Table<T> {
         return new Table(i);
     }
 
-    async findOne(restrictions: Partial<T>): T | null {
+    async findOne(restrictions: Partial<T>): Promise<T | null> {
         const i = new Filter(this.inner.columns, restrictions, this.inner);
         const table = new Table(i);
         table.inner.limit = 1;
