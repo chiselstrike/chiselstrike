@@ -1,5 +1,7 @@
 // SPDX-FileCopyrightText: © 2021 ChiselStrike <info@chiselstrike.com>
 
+/// <reference path="./dts/lib.deno_core.d.ts" />
+
 // In the beginning, we shall implement the following querying logic (with the sole exception of the lambdas,
 // which can be replaced by simple Attribute compare logic):
 //
