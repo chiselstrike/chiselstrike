@@ -1,18 +1,19 @@
-defaults:
-  actions:
-    queue:
-      name: default
-      method: squash
-      update_method: rebase
-      commit_message_template: |
-        Merge '{{title}}' from #{{author}}
-
-        {{body}}
-
 pull_request_rules:
-  - name: Automatic merge on approval
+  - name: Automatic merge of 2+ commits on approval
     conditions:
       - "#approved-reviews-by>=1"
+      - "#commits>=2"
     actions:
       merge:
         method: merge
+        commit_message_template: |
+            Merge '{{title}}' from @{{author}}
+
+            {{body}}
+  - name: Automatic rebase of a single commit on approval
+    conditions:
+      - "#approved-reviews-by>=1"
+      - "#commits=1"
+    actions:
+      merge:
+        method: rebase
