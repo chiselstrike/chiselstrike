@@ -1,4 +1,4 @@
-# ChiselStrike 
+# ChiselStrike
 
 Welcome to ChiselStrike source repository!
 
