@@ -22,6 +22,7 @@ use serde_json::value::Value;
 use sqlx::AnyPool;
 use std::collections::HashMap;
 use std::pin::Pin;
+use std::sync::Arc;
 use std::task::Context;
 use std::task::Poll;
 
@@ -42,7 +43,7 @@ struct Restriction {
 
 #[derive(Debug)]
 enum Inner {
-    BackingStore(String, FieldPolicies),
+    BackingStore(Arc<ObjectType>, FieldPolicies),
     Join(Box<Relation>, Box<Relation>),
     Filter(Box<Relation>, Vec<Restriction>),
 }
@@ -82,7 +83,10 @@ fn get_columns(val: &serde_json::Value) -> Result<Vec<(String, Type)>> {
 }
 
 // Used from within the internal migration code, so no need to convert things to <-> from json.
-pub(crate) async fn backing_store_from_type(ts: &TypeSystem, ty: &ObjectType) -> Result<Relation> {
+pub(crate) async fn backing_store_from_type(
+    ts: &TypeSystem,
+    ty: &Arc<ObjectType>,
+) -> Result<Relation> {
     let mut columns = vec![];
     for field in ty.all_fields() {
         let field_type = ts.lookup_builtin_type(field.type_.name())?;
@@ -91,7 +95,7 @@ pub(crate) async fn backing_store_from_type(ts: &TypeSystem, ty: &ObjectType) ->
 
     Ok(Relation {
         columns,
-        inner: Inner::BackingStore(ty.backing_table().to_string(), FieldPolicies::default()),
+        inner: Inner::BackingStore(ty.clone(), FieldPolicies::default()),
         limit: None,
     })
 }
@@ -112,7 +116,7 @@ fn convert_backing_store(val: &serde_json::Value) -> Result<Relation> {
 
     Ok(Relation {
         columns,
-        inner: Inner::BackingStore(ty.backing_table().to_string(), policies),
+        inner: Inner::BackingStore(ty, policies),
         limit,
     })
 }
@@ -221,13 +225,24 @@ fn sql_backing_store(
     pool: &AnyPool,
     columns: Vec<(String, Type)>,
     limit_str: &str,
-    name: String,
+    ty: Arc<ObjectType>,
     policies: FieldPolicies,
 ) -> Query {
+    let mut column_string = String::new();
+    for c in columns.iter() {
+        let field = ty.field_by_name(&c.0).unwrap();
+        let col = match &field.default {
+            Some(dfl) => format!("coalesce({},\"{}\") AS {},", field.name, dfl, field.name),
+            None => format!("{},", field.name),
+        };
+        column_string += &col;
+    }
+    column_string.pop();
+
     let query = format!(
         "SELECT {} FROM {} {}",
-        column_list(&columns),
-        name,
+        column_string,
+        ty.backing_table(),
         &limit_str
     );
     if policies.is_empty() {
@@ -427,8 +442,8 @@ fn sql_impl(pool: &AnyPool, rel: Relation, alias_count: &mut u32) -> Query {
         .map(|x| format!("LIMIT {}", x))
         .unwrap_or_else(String::new);
     match rel.inner {
-        Inner::BackingStore(name, policies) => {
-            sql_backing_store(pool, rel.columns, &limit_str, name, policies)
+        Inner::BackingStore(ty, policies) => {
+            sql_backing_store(pool, rel.columns, &limit_str, ty, policies)
         }
         Inner::Filter(inner, restrictions) => sql_filter(
             pool,

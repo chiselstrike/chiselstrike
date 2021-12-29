@@ -63,32 +63,23 @@ pub(crate) const OAUTHUSER_TYPE_NAME: &str = "OAuthUser";
 
 thread_local! {
     static OAUTHUSER_TYPE: Arc<ObjectType> = {
-        let chisel_id = Field {
-            id: None,
-            name: "id".into(),
-            type_: Type::Id,
-            labels: Vec::default(),
-            default: None,
-            is_optional: false,
-            api_version: "__chiselstrike".into(),
+        let fields = vec![
+            Field {
+                id: None,
+                name: "username".into(),
+                type_: Type::String,
+                labels: vec![],
+                default: None,
+                is_optional: false,
+                api_version: "__chiselstrike".into(),
+        }];
+
+        let desc = InternalObject {
+            name: OAUTHUSER_TYPE_NAME,
+            backing_table: "oauth_user",
         };
-        Arc::new(ObjectType {
-            meta_id: None,
-            name: OAUTHUSER_TYPE_NAME.into(),
-            api_version: "__chiselstrike".into(),
-            backing_table: "oauth_user".into(),
-            fields: vec![
-                Field{
-                    id: None,
-                    name: "username".into(),
-                    type_: Type::String,
-                    labels: vec![],
-                    default: None,
-                    is_optional: false,
-                    api_version: "__chiselstrike".into(),
-            }],
-            chisel_id,
-        })
+
+        Arc::new(ObjectType::new(desc, fields).unwrap())
     }
 }
 
@@ -383,6 +374,29 @@ pub(crate) trait ObjectDescriptor {
     fn api_version(&self) -> String;
 }
 
+pub(crate) struct InternalObject {
+    name: &'static str,
+    backing_table: &'static str,
+}
+
+impl ObjectDescriptor for InternalObject {
+    fn name(&self) -> String {
+        self.name.to_string()
+    }
+
+    fn id(&self) -> Option<i32> {
+        None
+    }
+
+    fn backing_table(&self) -> String {
+        self.backing_table.to_string()
+    }
+
+    fn api_version(&self) -> String {
+        "__chiselstrike".to_string()
+    }
+}
+
 pub(crate) struct ExistingObject<'a> {
     name: String,
     api_version: String,
@@ -475,6 +489,10 @@ pub(crate) struct ObjectType {
     name: String,
     /// Fields of this type.
     fields: Vec<Field>,
+    /// We want to keep the fields in the order the user provided, so above we use a Vec.
+    /// But at times we also want to search fields by name, so keep a separate data structure
+    /// for that
+    fields_by_name: HashMap<String, Field>,
     /// user-visible ID of this object.
     chisel_id: Field,
     /// Name of the backing table for this type.
@@ -505,14 +523,27 @@ impl ObjectType {
             is_optional: false,
             api_version: "__chiselstrike".into(),
         };
-        Ok(Self {
+        let mut obj = Self {
             meta_id: desc.id(),
             name: desc.name(),
             api_version,
             backing_table,
             fields,
+            fields_by_name: Default::default(),
             chisel_id,
-        })
+        };
+        obj.populate_fields_by_name();
+        Ok(obj)
+    }
+
+    fn populate_fields_by_name(&mut self) {
+        self.fields_by_name
+            .insert("id".to_string(), self.chisel_id.clone());
+
+        for field in self.fields.iter() {
+            self.fields_by_name
+                .insert(field.name.clone(), field.clone());
+        }
     }
 
     pub(crate) fn user_fields(&self) -> impl Iterator<Item = &Field> {
@@ -521,6 +552,10 @@ impl ObjectType {
 
     pub(crate) fn all_fields(&self) -> impl Iterator<Item = &Field> {
         std::iter::once(&self.chisel_id).chain(self.fields.iter())
+    }
+
+    pub(crate) fn field_by_name(&self, name: &str) -> Option<&Field> {
+        self.fields_by_name.get(name)
     }
 
     pub(crate) fn backing_table(&self) -> &str {
