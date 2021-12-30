@@ -20,7 +20,7 @@ EOF
 
 cat << EOF > "$TEMPDIR/endpoints/store_nick.js"
 export default async function chisel(req) {
-    await Chisel.store('Nickname', {first_name: "Glauber", nick: "Glommer"});
+    await Chisel.save('Nickname', {first_name: "Glauber", nick: "Glommer"});
     return new Response('ok\n');
 }
 EOF

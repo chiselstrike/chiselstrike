@@ -25,12 +25,17 @@ Chisel.buildReadableStreamForBody = function (rid) {
     });
 };
 
-Chisel.store = async function (typeName, content) {
+Chisel.save = async function (typeName, content) {
     return await Deno.core.opAsync("chisel_store", {
         name: typeName,
         value: content,
     });
 };
+
+/**
+ * NOTE! This function is marked for deprecation in favor of `Chisel.save()`.
+ */
+Chisel.store = Chisel.save;
 
 Chisel.json = function (body, status = 200) {
     return new Response(JSON.stringify(body), {
