@@ -4,7 +4,7 @@
 
 cp examples/person.ts "$TEMPDIR/types"
 
-cat << EOF > "$TEMPDIR/endpoints/query.js"
+cat << EOF > "$TEMPDIR/endpoints/query.ts"
 export default async function chisel(req: Request) {
     const filtered = Chisel.Person.findMany({"foo": "bar"});
     let ret = "";
