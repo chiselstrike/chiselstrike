@@ -396,10 +396,11 @@ async fn apply<S: ToString>(
 
 declare type ChiselIterator<T> = {{
     findMany(restrictions: Partial<T>): ChiselIterator<T>;
-    findOne(restrictions: Partial<T>): T | null;
+    findOne(restrictions: Partial<T>): Promise<T | null>;
     select(...columns: (keyof T)[]): ChiselIterator<T>;
     [Symbol.asyncIterator]: () => AsyncIterator<T>;
     join<U>(right: ChiselIterator<U>): ChiselIterator<T & U>;
+    take(limit_: number): ChiselIterator<T>;
 }}
 
 declare type Chisel = {{
