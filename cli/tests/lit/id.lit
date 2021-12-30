@@ -10,28 +10,28 @@ EOF
 
 cat << EOF > "$TEMPDIR/endpoints/bad_id.ts"
 export default async function chisel(req: Request) {
-    const filtered = await Chisel.store("Person", {"id": "badid", "name": "Glauber"});
+    const filtered = await Chisel.save("Person", {"id": "badid", "name": "Glauber"});
     return new Response("Ok");
 }
 EOF
 
 cat << EOF > "$TEMPDIR/endpoints/store_with_id.ts"
 export default async function chisel(req: Request) {
-    const filtered = await Chisel.store("Person", {"id": "6b9ebbff-46b4-4759-9dbd-850cdcb10c92", "name": "Glauber"});
+    const filtered = await Chisel.save("Person", {"id": "6b9ebbff-46b4-4759-9dbd-850cdcb10c92", "name": "Glauber"});
     return new Response("Ok");
 }
 EOF
 
 cat << EOF > "$TEMPDIR/endpoints/store_no_id.ts"
 export default async function chisel(req: Request) {
-    const filtered = await Chisel.store("Person", {"name": "Glauber"});
+    const filtered = await Chisel.save("Person", {"name": "Glauber"});
     return new Response("Ok");
 }
 EOF
 
 cat << EOF > "$TEMPDIR/endpoints/update_by_id.ts"
 export default async function chisel(req: Request) {
-    const filtered = await Chisel.store("Person", {"id": "6b9ebbff-46b4-4759-9dbd-850cdcb10c92", "name": "not-Glauber"});
+    const filtered = await Chisel.save("Person", {"id": "6b9ebbff-46b4-4759-9dbd-850cdcb10c92", "name": "not-Glauber"});
     return new Response("Ok");
 }
 EOF

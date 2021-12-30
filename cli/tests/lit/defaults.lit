@@ -14,7 +14,7 @@ EOF
 
 cat << EOF > "$TEMPDIR/endpoints/default.ts"
 export default async function chisel(req) {
-    await Chisel.store('Foo', { "e": "value" });
+    await Chisel.save('Foo', { "e": "value" });
     return new Response('ok\n');
 }
 EOF

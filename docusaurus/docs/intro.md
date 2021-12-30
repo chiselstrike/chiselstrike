@@ -176,7 +176,7 @@ export default async function chisel(_req) {
         {content: 'Third comment', by: 'Jim'},
         {content: 'Fourth comment', by: 'Jack'}
     ]) {
-        await Chisel.store('Comment', c);
+        await Chisel.save('Comment', c);
     }
     return new Response('success\n');
 }
@@ -191,7 +191,7 @@ success
 ```
 
 Note how we can store a comment in the database by simply invoking
-`Chisel.store` with `'Comment'` as the first argument and the object
+`Chisel.save` with `'Comment'` as the first argument and the object
 representing the comment as the second.  Every time we do that, a new
 row is added.
 
@@ -211,7 +211,7 @@ export default async function chisel(_req) {
 
 :::tip
 You do not need to specify an id for `Comment`. An `id` property is automatically generated for you, and
-you can access it as `c.id` in the examples above. Calling `Chisel.store()` passing an object that has an
+you can access it as `c.id` in the examples above. Calling `Chisel.save()` passing an object that has an
 `id` will update the field with corresponding object.
 :::
 
@@ -273,7 +273,7 @@ comments.  But let's change that code to this:
 export default async function chisel(req) {
     if (req.method == 'POST') {
         const payload = await req.json();
-        const created = await Chisel.store('Comment', payload);
+        const created = await Chisel.save('Comment', payload);
         return Chisel.json('inserted ' + created.id);
     } else if (req.method == 'GET') {
         let comments = [];

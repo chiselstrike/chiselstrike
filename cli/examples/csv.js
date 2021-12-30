@@ -4,7 +4,7 @@ export default async function chisel(req) {
     for (const line of lines) {
         const r = line.split(',');
         if (r.length >= 2) {
-            await Chisel.store('Person', {"first_name": r[0], "last_name": r[1], "age": 100, "human": true, "height": 5.0});
+            await Chisel.save('Person', {"first_name": r[0], "last_name": r[1], "age": 100, "human": true, "height": 5.0});
         }
     }
     return new Response('ok\n');
