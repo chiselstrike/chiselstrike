@@ -1,12 +1,12 @@
 // SPDX-FileCopyrightText: © 2021 ChiselStrike <info@chiselstrike.com>
 
-import { Table, table } from "./api.ts";
+import { ChiselIterator, chiselIterator } from "./api.ts";
 
 const Chisel = {};
 
 Chisel.api = {};
-Chisel.api.Table = Table;
-Chisel.api.table = table;
+Chisel.api.ChiselIterator = ChiselIterator;
+Chisel.api.chiselIterator = chiselIterator;
 
 Chisel.buildReadableStreamForBody = function (rid) {
     return new ReadableStream({

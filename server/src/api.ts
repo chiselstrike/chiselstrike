@@ -3,16 +3,16 @@
 // In the beginning, we shall implement the following querying logic (with the sole exception of the lambdas,
 // which can be replaced by simple Attribute compare logic):
 //
-// select(Table<T>, Table<T>::Attribute attributes...) -> Table<attributes...>
-// findMany(Table<T>, fn(T)->bool) -> Table<T>
-// sort(Table<T>, fn(T)->Sortable) -> Table<T>
-// take(Table<T>, int) -> Table<T>  (takes first n rows)
-// join(Table<T>, Table<U>, Table<T>::Attribute, Table<U>::Attribute) -> Table<Composite<T, U>> (Joins tables T and U, based on their columns Table<T>::Attribute and Table<U>::Attribute)
-// left_join(Table<T>, Table<U>, Table<T>::Attribute, Table<U>::Attribute) -> Table<Composite<T, Option<U>>>
-// right_join(Table<T>, Table<U>, Table<T>::Attribute, Table<U>::Attribute) -> Table<Composite<Option<T>, U>>
-// transform(Table<T>, fn(T)->U)->Table<U> (ambitious, maybe later)
+// select(ChiselIterator<T>, ChiselIterator<T>::Attribute attributes...) -> ChiselIterator<attributes...>
+// findMany(ChiselIterator<T>, fn(T)->bool) -> ChiselIterator<T>
+// sort(ChiselIterator<T>, fn(T)->Sortable) -> ChiselIterator<T>
+// take(ChiselIterator<T>, int) -> ChiselIterator<T>  (takes first n rows)
+// join(ChiselIterator<T>, ChiselIterator<U>, ChiselIterator<T>::Attribute, ChiselIterator<U>::Attribute) -> ChiselIterator<Composite<T, U>> (Joins chiselIterators T and U, based on their columns ChiselIterator<T>::Attribute and ChiselIterator<U>::Attribute)
+// left_join(ChiselIterator<T>, ChiselIterator<U>, ChiselIterator<T>::Attribute, ChiselIterator<U>::Attribute) -> ChiselIterator<Composite<T, Option<U>>>
+// right_join(ChiselIterator<T>, ChiselIterator<U>, ChiselIterator<T>::Attribute, ChiselIterator<U>::Attribute) -> ChiselIterator<Composite<Option<T>, U>>
+// transform(ChiselIterator<T>, fn(T)->U)->ChiselIterator<U> (ambitious, maybe later)
 //
-// Where Table<T>::Attribute represents attribute (field) of type (table) T.
+// Where ChiselIterator<T>::Attribute represents attribute (field) of type (table) T.
 
 type column = [string, string]; // name and type
 
@@ -30,7 +30,7 @@ class BackingStore extends Base {
     }
 }
 
-// This represents an inner join between two tables.
+// This represents an inner join between two chiselIterators.
 // FIXME: Add support for ON.
 class Join extends Base {
     readonly kind = "Join";
@@ -56,17 +56,17 @@ class Filter extends Base {
 
 type Inner = BackingStore | Join | Filter;
 
-export class Table<T> {
+export class ChiselIterator<T> {
     constructor(private inner: Inner) {}
-    select(...columns: (keyof T)[]): Table<Pick<T, (keyof T)>> {
+    select(...columns: (keyof T)[]): ChiselIterator<Pick<T, (keyof T)>> {
         const names = columns as string[];
         const cs = this.inner.columns.filter((c) => names.includes(c[0]));
         switch (this.inner.kind) {
             case "BackingStore":
-                return table(this.inner.name, cs);
+                return chiselIterator(this.inner.name, cs);
             case "Join": {
                 const i = new Join(cs, this.inner.left, this.inner.right);
-                return new Table(i);
+                return new ChiselIterator(i);
             }
             case "Filter": {
                 const i = new Filter(
@@ -74,12 +74,12 @@ export class Table<T> {
                     this.inner.restrictions,
                     this.inner.inner,
                 );
-                return new Table(i);
+                return new ChiselIterator(i);
             }
         }
     }
 
-    take(limit_: number): Table<T> {
+    take(limit_: number): ChiselIterator<T> {
         const limit = (this.inner.limit == null)
             ? limit_
             : Math.min(limit_, this.inner.limit);
@@ -91,12 +91,12 @@ export class Table<T> {
             case "BackingStore": {
                 const i = new BackingStore(cs, this.inner.name);
                 i.limit = limit;
-                return new Table(i);
+                return new ChiselIterator(i);
             }
             case "Join": {
                 const i = new Join(cs, this.inner.left, this.inner.right);
                 i.limit = limit;
-                return new Table(i);
+                return new ChiselIterator(i);
             }
             case "Filter": {
                 const i = new Filter(
@@ -105,27 +105,27 @@ export class Table<T> {
                     this.inner.inner,
                 );
                 i.limit = limit;
-                return new Table(i);
+                return new ChiselIterator(i);
             }
         }
     }
 
-    findMany(restrictions: Partial<T>): Table<T> {
+    findMany(restrictions: Partial<T>): ChiselIterator<T> {
         const i = new Filter(this.inner.columns, restrictions, this.inner);
-        return new Table(i);
+        return new ChiselIterator(i);
     }
 
     async findOne(restrictions: Partial<T>): Promise<T | null> {
         const i = new Filter(this.inner.columns, restrictions, this.inner);
-        const table = new Table(i);
-        table.inner.limit = 1;
-        for await (const t of table) {
+        const chiselIterator = new ChiselIterator(i);
+        chiselIterator.inner.limit = 1;
+        for await (const t of chiselIterator) {
             return t;
         }
         return undefined;
     }
 
-    join<U>(right: Table<U>) {
+    join<U>(right: ChiselIterator<U>) {
         const s = new Set();
         const columns = [];
         for (const c of this.inner.columns.concat(right.inner.columns)) {
@@ -136,7 +136,7 @@ export class Table<T> {
             columns.push(c);
         }
         const i = new Join(columns, this.inner, right.inner);
-        return new Table<T & U>(i);
+        return new ChiselIterator<T & U>(i);
     }
 
     [Symbol.asyncIterator]() {
@@ -168,9 +168,9 @@ export class Table<T> {
 
 // We have to pass the columns as a runtime argument since there is no
 // way in typescript to reflect on T to get the keys as strings. This
-// makes constructing tables a bit annoying, but that is probably fine
-// as we will create the table objects, no the chiselstrike users.
-export function table<T>(name: string, columns: column[]) {
+// makes constructing chiselIterators a bit annoying, but that is probably fine
+// as we will create the chiselIterator objects, no the chiselstrike users.
+export function chiselIterator<T>(name: string, columns: column[]) {
     const b = new BackingStore(columns, name);
-    return new Table<T>(b);
+    return new ChiselIterator<T>(b);
 }
