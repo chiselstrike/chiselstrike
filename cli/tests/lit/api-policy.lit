@@ -10,7 +10,7 @@ labels:
     transform: anonymize
 EOF
 
-cat << EOF > "$TEMPDIR/endpoints/query.js"
+cat << EOF > "$TEMPDIR/endpoints/query.ts"
 export default async function chisel(req: Request) {
     let ret = "[";
     const glaubers = Chisel.Person.findMany({"first_name": "Glauber"});
