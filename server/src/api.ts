@@ -141,6 +141,12 @@ export class ChiselIterator<T> {
         return new ChiselIterator<T & U>(i);
     }
 
+    async forEach(func: (arg: T) => void): Promise<void> {
+        for await (const t of this) {
+            func(t);
+        }
+    }
+
     [Symbol.asyncIterator]() {
         const rid = Deno.core.opSync(
             "chisel_relational_query_create",

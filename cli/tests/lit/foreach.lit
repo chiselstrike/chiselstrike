@@ -1,0 +1,39 @@
+# SPDX-FileCopyrightText: © 2021 ChiselStrike <info@chiselstrike.com>
+
+# RUN: sh -e @file
+
+cd "$TEMPDIR"
+
+cat << EOF > "$TEMPDIR/types/types.ts"
+class Person { name: string; }
+EOF
+
+cat << EOF > "$TEMPDIR/endpoints/store.ts"
+export default async function chisel(req: Request) {
+    await Chisel.store("Person", {"name": "Glauber"});
+    await Chisel.store("Person", {"name": "Pekka"});
+    return new Response("Ok");
+}
+EOF
+
+cat << EOF > "$TEMPDIR/endpoints/foreach.ts"
+export default async function chisel(req: Request) {
+    let count = 0;
+    await Chisel.Person.forEach(cnt_ => {
+        count += 1;
+    });
+    return new Response(count + "\n");
+}
+EOF
+
+
+$CHISEL apply
+# CHECK: Type defined: Person
+# CHECK: End point defined: /dev/foreach
+# CHECK: End point defined: /dev/store
+
+$CURL $CHISELD_HOST/dev/store
+# CHECK: Ok
+
+$CURL $CHISELD_HOST/dev/foreach
+# CHECK: 2

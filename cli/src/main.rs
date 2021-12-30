@@ -401,6 +401,7 @@ declare type ChiselIterator<T> = {{
     [Symbol.asyncIterator]: () => AsyncIterator<T>;
     join<U>(right: ChiselIterator<U>): ChiselIterator<T & U>;
     take(limit_: number): ChiselIterator<T>;
+    forEach(func: (arg: T) => void): Promise<void>;
 }}
 
 declare type Chisel = {{
