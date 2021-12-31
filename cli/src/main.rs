@@ -7,6 +7,7 @@ use chisel::{
     ChiselApplyRequest, ChiselDeleteRequest, DescribeRequest, EndPointCreationRequest,
     PolicyUpdateRequest, PopulateRequest, RestartRequest, StatusRequest,
 };
+use compile::compile_ts_code;
 use futures::channel::mpsc::channel;
 use futures::{SinkExt, StreamExt};
 use notify::{Event, RecommendedWatcher, RecursiveMode, Watcher};
@@ -21,8 +22,8 @@ use std::thread;
 use std::time::Duration;
 use structopt::StructOpt;
 use tonic::transport::Channel;
+
 mod ts;
-use compile::compile_ts_code;
 
 // Timeout when waiting for connection or server status.
 const TIMEOUT: Duration = Duration::from_secs(10);
