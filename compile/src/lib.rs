@@ -54,8 +54,13 @@ pub fn compile_ts_code(code: String) -> Result<String> {
 
     // FIXME: We probably need a name for better error messages.
     let fm = cm.new_source_file(FileName::Anon, code);
+    let config = swc_ecma_parser::TsConfig {
+        decorators: true,
+        ..Default::default()
+    };
+
     let lexer = Lexer::new(
-        Syntax::Typescript(Default::default()),
+        Syntax::Typescript(config),
         Default::default(),
         StringInput::from(&*fm),
         None,
