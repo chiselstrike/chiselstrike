@@ -65,6 +65,7 @@ pub type CommandResult = Result<()>;
 #[derive(Clone)]
 pub struct SharedState {
     signal_rx: async_channel::Receiver<()>,
+    /// ChiselRpc waits on all API threads to send here before it starts serving RPC.
     readiness_tx: async_channel::Sender<()>,
     api_listen_addr: SocketAddr,
     inspect_brk: bool,
