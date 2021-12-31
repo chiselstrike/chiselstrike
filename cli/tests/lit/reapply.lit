@@ -4,8 +4,8 @@
 
 cat << EOF > "$TEMPDIR/types/foo.ts"
 class Foo {
-  @L1 a: string;
-  @L2 b: number;
+  @labels("L1") a: string;
+  @labels("L2") b: number;
 }
 EOF
 
@@ -21,7 +21,7 @@ $CHISEL apply
 cat << EOF > "$TEMPDIR/types/foo.ts"
 class Foo {
   a: string;
-  @L1 b: number;
+  @labels("L1") b: number;
 }
 EOF
 $CHISEL apply
@@ -31,7 +31,7 @@ $CHISEL apply
 cat << EOF > "$TEMPDIR/types/foo.ts"
 class Foo {
   a: string = "foo";
-  @L1 b: number;
+  @labels("L1") b: number;
 }
 EOF
 $CHISEL apply

@@ -27,11 +27,14 @@ the fields of your types.  To illustrate, please edit the file
 ```typescript title="my-backend/types/t.ts"
 class Comment {
     content: string;
-     @pii by: string;
+     @labels("pii") by: string;
 }
 ```
 
-The `@pii` is a label we put on the `by` field, because we intend to
+Labels are specified by using the `@labels` decorator with a list of strings. Each
+individual string denotes a label.
+
+We add the `pii` label to the `by` field, because we intend to
 refer to it when dictating how `by` should be treated.
 
 :::note
@@ -39,7 +42,7 @@ You can pick any name for a label.  We don't have any restrictions or
 conventions at this time.
 :::
 
-Now let's enforce a transformation on `@pii` fields.  Please create
+Now let's enforce a transformation on `pii` fields.  Please create
 the file `my-backend/policies/pol.yml` like this:
 
 ```yaml title="my-backend/policies/pol.yml"
@@ -83,8 +86,8 @@ $ curl -s localhost:8080/dev/comments | python -m json.tool
 ]
 ```
 
-The `@pii` fields were anonymized!  It is not possible for any
-endpoint code to accidentally read `@pii` data, eliminating human
+The `pii` fields were anonymized!  It is not possible for any
+endpoint code to accidentally read `pii` data, eliminating human
 errors from the process.
 
 :::info Feedback Requested! We could use your help!

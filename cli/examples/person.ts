@@ -2,7 +2,7 @@
 
 class Person {
   first_name: string;
-  @pii last_name: string;
+  @labels("pii") last_name: string;
   age: number;
   human: boolean;
   height: number;

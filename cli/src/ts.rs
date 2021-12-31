@@ -1,5 +1,5 @@
 use crate::chisel::{AddTypeRequest, FieldDefinition};
-use anyhow::{anyhow, bail, Result};
+use anyhow::{anyhow, bail, ensure, Result};
 use std::collections::BTreeSet;
 use std::path::Path;
 use swc_common::sync::Lrc;
@@ -102,7 +102,27 @@ fn get_field_value(handler: &Handler, x: &Option<Box<Expr>>) -> Result<Option<(S
 fn get_type_decorators(handler: &Handler, x: &[Decorator]) -> Result<Vec<String>> {
     let mut output = vec![];
     for dec in x.iter() {
-        output.push(get_ident_string(handler, &dec.expr)?);
+        match &*dec.expr {
+            Expr::Call(call) => {
+                let callee = call.callee.clone().expr().ok_or_else(|| {
+                    anyhow!("expected expression, got {:?} instead", call.callee.clone())
+                })?;
+                let name = get_ident_string(handler, &callee)?;
+                ensure!(
+                    name == "labels",
+                    "Only the 'labels' decorator is supported by ChiselStrike"
+                );
+                for arg in &call.args {
+                    if let Some((label, ty)) = get_field_value(handler, &Some(arg.expr.clone()))? {
+                        ensure!(ty == "string", "Only strings accepted as labels");
+                        output.push(label);
+                    }
+                }
+            }
+            z => {
+                return Err(swc_err(handler, z, "expected a call-like decorator"));
+            }
+        };
     }
     Ok(output)
 }

@@ -42,10 +42,10 @@ $CURL -o - $CHISELD_HOST/dev/find
 
 cat << EOF > "$TEMPDIR/types/person.ts"
 class Person {
-  @L1 @L2 @L3 first_name: string;
-  @pii @L2 last_name: string;
-  @L1 age: number;
-  @L1 @L3 human: boolean;
+  @labels("L1", "L2", "L3") first_name: string;
+  @labels("pii", "L2") last_name: string;
+  @labels("L1", "L3") human: boolean;
+  age: number;
   height: number;
 }
 EOF

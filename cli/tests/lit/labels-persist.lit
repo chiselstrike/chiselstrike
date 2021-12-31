@@ -4,13 +4,13 @@
 
 cat << EOF > "$TEMPDIR/types/types.graphql"
   class TestLabelsPersist1 {
-    @a @b one: string;
-    @a two: string;
+    @labels("a", "b") one: string;
+    @labels("a") two: string;
   }
 
   class TestLabelsPersist2 {
-    @c @b three: string;
-    @a four: string;
+    @labels("c", "b") three: string;
+    @labels("a") four: string;
   }
 EOF
 
@@ -21,7 +21,7 @@ $CHISEL restart
 
 $CHISEL describe
 
-# CHECK: @a @b one: string;
-# CHECK: @a two: string;
-# CHECK: @c @b three: string;
-# CHECK: @a four: string;
+# CHECK: @labels("a", "b") one: string;
+# CHECK: @labels("a") two: string;
+# CHECK: @labels("c", "b") three: string;
+# CHECK: @labels("a") four: string;
