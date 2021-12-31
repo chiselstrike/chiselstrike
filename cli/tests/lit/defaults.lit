@@ -7,7 +7,7 @@ class Foo {
 	a: string = "dfl1";
 	b: number = 0.0;
 	c: boolean = false;
-	d: bigint = 2;
+	d: number = 2;
 	e: string = "dfl2";
 }
 EOF
@@ -46,10 +46,10 @@ class Foo {
 	a: string = "dfl1";
 	b: number = 0.0;
 	c: boolean = false;
-	d: bigint = 2;
+	d: number = 2;
 	e: string = "dfl2";
 	nfs: string = "oldval";
-	nfb: bigint = 2;
+	nfb: number = 2;
 	nfn: number = 2.2;
 }
 EOF

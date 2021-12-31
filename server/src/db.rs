@@ -72,7 +72,6 @@ fn get_columns(val: &serde_json::Value) -> Result<Vec<(String, Type)>> {
             .ok_or_else(|| anyhow!("type should be a string"))?;
         let type_ = match type_ {
             "number" => Type::Float,
-            "bigint" => Type::Int,
             "string" => Type::String,
             "boolean" => Type::Boolean,
             v => anyhow::bail!("Invalid type {}", v),

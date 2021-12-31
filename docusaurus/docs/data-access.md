@@ -30,7 +30,7 @@ discarded.
 Chisel.Comment.select("content");
 ```
 
-* *take(n: bigint)*: returns the first n elements, discarding the rest
+* *take(n: number)*: returns the first n elements, discarding the rest
 discarded.
 
 ```typescript

@@ -3,7 +3,7 @@
 class Person {
   first_name: string;
   @pii last_name: string;
-  age: bigint;
+  age: number;
   human: boolean;
   height: number;
 }

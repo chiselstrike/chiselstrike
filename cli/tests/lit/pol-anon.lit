@@ -44,7 +44,7 @@ cat << EOF > "$TEMPDIR/types/person.ts"
 class Person {
   @L1 @L2 @L3 first_name: string;
   @pii @L2 last_name: string;
-  @L1 age: bigint;
+  @L1 age: number;
   @L1 @L3 human: boolean;
   height: number;
 }

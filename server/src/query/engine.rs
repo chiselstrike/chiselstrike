@@ -61,7 +61,6 @@ impl TryFrom<&Field> for ColumnDef {
         let mut column_def = ColumnDef::new(Alias::new(&field.name));
         match field.type_ {
             Type::String => column_def.text(),
-            Type::Int => column_def.integer(),
             Type::Id => column_def.text().unique_key().primary_key(),
             Type::Float => column_def.double(),
             Type::Boolean => column_def.boolean(),
@@ -312,7 +311,6 @@ impl QueryEngine {
 
             match field.type_ {
                 Type::String => bind_json_value!(as_str, str),
-                Type::Int => bind_json_value!(as_i64, i64),
                 Type::Id => bind_json_value!(as_str, str),
                 Type::Float => bind_json_value!(as_f64, f64),
                 Type::Boolean => bind_json_value!(as_bool, bool),
@@ -360,7 +358,6 @@ pub(crate) fn relational_row_to_json(
                 let val: &str = row.get_unchecked(i);
                 json!(val.parse::<f64>()?)
             }
-            Type::Int => to_json!(i64),
             Type::String => to_json!(&str),
             Type::Id => to_json!(&str),
             Type::Boolean => to_json!(bool),
