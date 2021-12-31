@@ -379,6 +379,10 @@ async fn apply<S: ToString>(
     let mut policy_req = vec![];
 
     let mut type_dts_definitions = String::new();
+    let mut types_string = String::new();
+    for t in &types {
+        types_string += &read_to_string(&t)?;
+    }
 
     for t in crate::ts::parse_types(&types)?.into_iter() {
         type_dts_definitions += &format!("    {}: ChiselIterator<{}>;\n", t.name, t.name);
@@ -413,7 +417,7 @@ declare const Chisel: Chisel
     );
 
     for f in endpoints.iter() {
-        let code = read_to_string(&f.file_path)?;
+        let code = types_string.clone() + &read_to_string(&f.file_path)?;
         let code = compile_ts_code(code)
             .with_context(|| format!("parsing endpoint /{}/{}", version, f.name))?;
         endpoints_req.push(EndPointCreationRequest {
