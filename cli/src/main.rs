@@ -10,6 +10,7 @@ use chisel::{
 use compile::compile_ts_code;
 use futures::channel::mpsc::channel;
 use futures::{SinkExt, StreamExt};
+use hyper::{service::service_fn, Body, Request, Response, Server};
 use notify::{Event, RecommendedWatcher, RecursiveMode, Watcher};
 use serde_derive::Deserialize;
 use std::collections::BTreeMap;
@@ -22,6 +23,7 @@ use std::thread;
 use std::time::Duration;
 use structopt::StructOpt;
 use tonic::transport::Channel;
+use tower::make::Shared;
 
 mod ts;
 
@@ -205,6 +207,8 @@ enum Command {
         #[structopt(long)]
         from: String,
     },
+    /// Serve a web page that provides input for Apply.
+    Webdev,
 }
 
 pub mod chisel {
@@ -486,6 +490,35 @@ async fn populate(server_url: String, to_version: String, from_version: String) 
     Ok(())
 }
 
+async fn apply_from_browser(_body: Body) -> Result<()> {
+    // TODO: Make this somehow obey opt.rpc_addr.
+    let mut client = ChiselRpcClient::connect("http://localhost:50051").await?;
+    client
+        .apply(tonic::Request::new(ChiselApplyRequest {
+            types: vec![],
+            endpoints: vec![],
+            policies: vec![],
+            allow_type_deletion: true,
+            version: "dev".into(),
+        }))
+        .await?;
+    Ok(())
+}
+
+async fn serve_webui(req: Request<Body>) -> Result<Response<Body>> {
+    if req.uri().path().starts_with("/apply") {
+        match apply_from_browser(req.into_body()).await {
+            Ok(_) => Ok(Response::new(Body::from("Applied.\n"))), // TODO: generate report like regular apply().
+            Err(e) => Ok(Response::builder()
+                .status(500)
+                .body(Body::from(format!("{:?}", e)))
+                .unwrap()),
+        }
+    } else {
+        Ok(Response::new(Body::from("Click the apply button.\n")))
+    }
+}
+
 #[tokio::main]
 async fn main() -> Result<()> {
     let opt = Opt::from_args();
@@ -631,6 +664,11 @@ async fn main() -> Result<()> {
         }
         Command::Populate { version, from } => {
             populate(server_url, version, from).await?;
+        }
+        Command::Webdev => {
+            Server::bind(&"127.0.0.1:8181".parse()?)
+                .serve(Shared::new(service_fn(serve_webui)))
+                .await?
         }
     }
     Ok(())

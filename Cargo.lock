@@ -429,6 +429,7 @@ dependencies = [
  "anyhow",
  "compile",
  "futures",
+ "hyper",
  "lit",
  "notify",
  "ntest",
@@ -445,6 +446,7 @@ dependencies = [
  "toml",
  "tonic",
  "tonic-build",
+ "tower",
  "vergen",
 ]
 
