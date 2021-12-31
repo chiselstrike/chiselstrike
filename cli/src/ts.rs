@@ -39,7 +39,6 @@ fn get_field_info(handler: &Handler, x: &Expr) -> Result<(String, bool)> {
 fn type_to_string(handler: &Handler, x: &TsType) -> Result<String> {
     match x {
         TsType::TsKeywordType(kw) => match kw.kind {
-            TsKeywordTypeKind::TsBigIntKeyword => Ok("bigint".into()),
             TsKeywordTypeKind::TsStringKeyword => Ok("string".into()),
             TsKeywordTypeKind::TsNumberKeyword => Ok("number".into()),
             TsKeywordTypeKind::TsBooleanKeyword => Ok("boolean".into()),
@@ -70,7 +69,6 @@ fn lit_to_string(handler: &Handler, x: &Lit) -> Result<String> {
         Lit::Str(x) => Ok(x.value.to_string()),
         Lit::Bool(x) => Ok(x.value.to_string()),
         Lit::Num(x) => Ok(x.value.to_string()),
-        Lit::BigInt(x) => Ok(x.value.to_string()),
         x => Err(swc_err(handler, x, "literal not supported")),
     }
 }
@@ -113,7 +111,6 @@ fn validate_type_vec(type_vec: &[AddTypeRequest], valid_types: &BTreeSet<String>
     let mut basic_types: BTreeSet<&str> = BTreeSet::new();
     basic_types.insert("string");
     basic_types.insert("number");
-    basic_types.insert("bigint");
     basic_types.insert("boolean");
 
     for t in type_vec {

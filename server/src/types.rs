@@ -240,7 +240,6 @@ impl TypeSystem {
     pub(crate) fn lookup_builtin_type(&self, type_name: &str) -> Result<Type, TypeSystemError> {
         match type_name {
             "string" => Ok(Type::String),
-            "bigint" => Ok(Type::Int),
             "number" => Ok(Type::Float),
             "boolean" => Ok(Type::Boolean),
             OAUTHUSER_TYPE_NAME => OAUTHUSER_TYPE.with(|t| Ok(Type::Object(t.clone()))),
@@ -320,7 +319,6 @@ impl TypeSystem {
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) enum Type {
     String,
-    Int,
     Float,
     Boolean,
     Id,
@@ -331,7 +329,6 @@ impl Type {
     pub(crate) fn name(&self) -> &str {
         match self {
             Type::Float => "number",
-            Type::Int => "bigint",
             Type::Id => "string",
             Type::String => "string",
             Type::Boolean => "boolean",

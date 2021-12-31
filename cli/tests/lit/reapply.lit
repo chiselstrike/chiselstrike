@@ -63,7 +63,7 @@ cat << EOF > "$TEMPDIR/types/foo.ts"
 class Foo {
   a: string = "foo";
   b: number; 
-  c: bigint; 
+  c: number;
 }
 EOF
 $CHISEL apply 2>&1 || echo # (swallow the apply abort)
