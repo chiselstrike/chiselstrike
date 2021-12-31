@@ -299,6 +299,9 @@ fn create_project(path: &Path, examples: bool) -> Result<()> {
         path.join(DTS_DIR).join("chisel-decorators.ts"),
         decorator_definitions,
     )?;
+    let dts_definitions = std::str::from_utf8(include_bytes!("template/chisel.d.ts"))?.to_string();
+    fs::write(path.join(DTS_DIR).join("chisel.d.ts"), dts_definitions)?;
+
     if examples {
         let endpoints = std::str::from_utf8(include_bytes!("template/hello.ts"))?.to_string();
         fs::write(path.join(ENDPOINTS_DIR).join("hello.ts"), endpoints)?;
@@ -378,43 +381,14 @@ async fn apply<S: ToString>(
     let mut endpoints_req = vec![];
     let mut policy_req = vec![];
 
-    let mut type_dts_definitions = String::new();
     let mut types_string = String::new();
     for t in &types {
         types_string += &read_to_string(&t)?;
     }
 
     for t in crate::ts::parse_types(&types)?.into_iter() {
-        type_dts_definitions += &format!("    {}: ChiselIterator<{}>;\n", t.name, t.name);
         types_req.push(t);
     }
-
-    // FIXME: for now this is a static string, but we want to add information about the
-    // types we created.
-    let dts_definitions = format!(
-        "
-/// <reference lib=\"esnext\" />
-/// <reference lib=\"dom\" />
-
-declare type ChiselIterator<T> = {{
-    findMany(restrictions: Partial<T>): ChiselIterator<T>;
-    findOne(restrictions: Partial<T>): Promise<T | null>;
-    select(...columns: (keyof T)[]): ChiselIterator<T>;
-    [Symbol.asyncIterator]: () => AsyncIterator<T>;
-    join<U>(right: ChiselIterator<U>): ChiselIterator<T & U>;
-    take(limit_: number): ChiselIterator<T>;
-    forEach(func: (arg: T) => void): Promise<void>;
-}}
-
-declare type Chisel = {{
-    store: <T>(typeName: string, content: T) => Promise<T>;
-    json: (body: any, status?: number) => Response;
-{}
-}}
-declare const Chisel: Chisel
-",
-        type_dts_definitions
-    );
 
     for f in endpoints.iter() {
         let code = types_string.clone() + &read_to_string(&f.file_path)?;
@@ -431,11 +405,6 @@ declare const Chisel: Chisel
             policy_config: read_to_string(p)?,
         });
     }
-
-    // if we fail we'll just write again next time, so it's fine to not worry too much
-    // about races here.
-    let dts_path = Path::new(DTS_DIR);
-    let _ = fs::write(dts_path.join("chisel.d.ts"), dts_definitions);
 
     let mut client = ChiselRpcClient::connect(server_url).await?;
     let msg = execute!(

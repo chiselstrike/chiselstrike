@@ -19,7 +19,7 @@ EOF
 cat << EOF > "$TEMPDIR/endpoints/foreach.ts"
 export default async function chisel(req: Request) {
     let count = 0;
-    await Chisel.Person.forEach(cnt_ => {
+    await Person.forEach(cnt_ => {
         count += 1;
     });
     return new Response(count + "\n");

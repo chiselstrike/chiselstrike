@@ -136,7 +136,7 @@ ChiselStrike the data you want it to store for you by defining some
 TypeScript types.  Put a file in `my-backend/types/t.ts` like this:
 
 ```typescript title="my-backend/types/t.ts"
-class Comment {
+class Comment extends ChiselEntity {
     content: string;
     by: string;
 }
@@ -202,7 +202,7 @@ comments.  Now we just have to read them.  Let's edit the
 ```typescript title="my-backend/endpoints/comments.ts"
 export default async function chisel(_req) {
     let comments = [];
-    for await (let c of Chisel.Comment) {
+    for await (let c of Comment.all()) {
         comments.push(c);
     }
     return Chisel.json(comments);
@@ -277,7 +277,7 @@ export default async function chisel(req) {
         return Chisel.json('inserted ' + created.id);
     } else if (req.method == 'GET') {
         let comments = [];
-        for await (let c of Chisel.Comment) {
+        for await (let c of Comment.all()) {
             comments.push(c);
         }
         return Chisel.json(comments);

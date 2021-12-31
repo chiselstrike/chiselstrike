@@ -5,21 +5,21 @@
 cd "$TEMPDIR"
 
 cat << EOF > "$TEMPDIR/types/types.ts"
-class Person { name: string; company: string = "ChiselStrike"; }
+class Person extends ChiselEntity { name: string; company: string = "ChiselStrike"; }
 EOF
 
 cat << EOF > "$TEMPDIR/endpoints/store.ts"
 export default async function chisel(req: Request) {
     await Chisel.save("Person", {"name": "Glauber"});
     await Chisel.save("Person", {"name": "Pekka"});
-    return new Response("Ok");
+    return new Response("Ok\n");
 }
 EOF
 
 cat << EOF > "$TEMPDIR/endpoints/findall.ts"
 export default async function chisel(req: Request) {
     let response = "begin";
-    for await (let p of Chisel.Person) {
+    for await (let p of Person.all()) {
         response += p.name
     }
     response += "end\n";
@@ -30,7 +30,7 @@ EOF
 cat << EOF > "$TEMPDIR/endpoints/findtake.ts"
 export default async function chisel(req: Request) {
     let response = "begin";
-    for await (let p of Chisel.Person.take(1)) {
+    for await (let p of Person.take(1)) {
         response += p.name
     }
     response += "end\n";
@@ -41,7 +41,7 @@ EOF
 cat << EOF > "$TEMPDIR/endpoints/taketwice.ts"
 export default async function chisel(req: Request) {
     let response = "begin";
-    for await (let p of Chisel.Person.take(4).take(1)) {
+    for await (let p of Person.take(4).take(1)) {
         response += p.name
     }
     response += "end\n";
@@ -52,7 +52,7 @@ EOF
 cat << EOF > "$TEMPDIR/endpoints/taketwicereverse.ts"
 export default async function chisel(req: Request) {
     let response = "begin";
-    for await (let p of Chisel.Person.take(1).take(4)) {
+    for await (let p of Person.take(1).take(4)) {
         response += p.name
     }
     response += "end\n";
@@ -63,7 +63,7 @@ EOF
 cat << EOF > "$TEMPDIR/endpoints/takecopies.ts"
 export default async function chisel(req: Request) {
     let response = "begin";
-    let base = Chisel.Person;
+    let base = Person;
 
     let first = base.take(2);
 
@@ -82,7 +82,7 @@ EOF
 cat << EOF > "$TEMPDIR/endpoints/findfilter.ts"
 export default async function chisel(req: Request) {
     let response = "begin";
-    for await (let p of Chisel.Person.findMany({"company" : "ChiselStrike"}).take(1)) {
+    for await (let p of Person.findMany({"company" : "ChiselStrike"}).take(1)) {
         response += p.name
     }
     response += "end\n";
