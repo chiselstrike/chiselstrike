@@ -65,6 +65,7 @@ pub type CommandResult = Result<()>;
 #[derive(Clone)]
 pub struct SharedState {
     signal_rx: async_channel::Receiver<()>,
+    /// ChiselRpc waits on all API threads to send here before it starts serving RPC.
     readiness_tx: async_channel::Sender<()>,
     api_listen_addr: SocketAddr,
     inspect_brk: bool,
@@ -212,7 +213,7 @@ pub async fn run_shared_state(
         nix::sys::signal::raise(nix::sys::signal::Signal::SIGINT).unwrap();
     }));
 
-    let (tx, rx) = async_channel::bounded(1);
+    let (signal_tx, signal_rx) = async_channel::bounded(1);
     let sig_task = tokio::task::spawn(async move {
         let res = futures::select! {
             _ = sigterm.recv().fuse() => { debug!("Got SIGTERM"); DoRepeat::No },
@@ -220,7 +221,7 @@ pub async fn run_shared_state(
             _ = sighup.recv().fuse() => { debug!("Got SIGHUP"); DoRepeat::Yes },
         };
         debug!("Got signal");
-        tx.send(()).await?;
+        signal_tx.send(()).await?;
         Ok(res)
     });
 
@@ -233,7 +234,7 @@ pub async fn run_shared_state(
         }
     };
 
-    let rpc_rx = rx.clone();
+    let rpc_rx = signal_rx.clone();
     let shutdown = async move {
         rpc_rx.recv().await.ok();
     };
@@ -248,7 +249,7 @@ pub async fn run_shared_state(
     );
 
     let state = SharedState {
-        signal_rx: rx,
+        signal_rx,
         readiness_tx,
         api_listen_addr: opt.api_listen_addr,
         inspect_brk: opt.inspect_brk,
