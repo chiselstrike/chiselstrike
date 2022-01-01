@@ -437,6 +437,7 @@ dependencies = [
  "regex",
  "serde",
  "serde_derive",
+ "serde_json",
  "server",
  "structopt",
  "swc_common",

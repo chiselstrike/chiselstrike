@@ -12,7 +12,7 @@ use futures::channel::mpsc::channel;
 use futures::{SinkExt, StreamExt};
 use hyper::{service::service_fn, Body, Request, Response, Server};
 use notify::{Event, RecommendedWatcher, RecursiveMode, Watcher};
-use serde_derive::Deserialize;
+use serde_derive::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use std::env;
 use std::fs;
@@ -490,13 +490,22 @@ async fn populate(server_url: String, to_version: String, from_version: String) 
     Ok(())
 }
 
-async fn apply_from_browser(_body: Body) -> Result<()> {
+#[derive(Serialize, Deserialize)]
+struct WebUIPostBody {
+    endpoint: String,
+}
+
+async fn apply_from_browser(body: Body) -> Result<()> {
+    let body: WebUIPostBody = serde_json::from_slice(&hyper::body::to_bytes(body).await?)?;
     // TODO: Make this somehow obey opt.rpc_addr.
     let mut client = ChiselRpcClient::connect("http://localhost:50051").await?;
     client
         .apply(tonic::Request::new(ChiselApplyRequest {
             types: vec![],
-            endpoints: vec![],
+            endpoints: vec![EndPointCreationRequest {
+                path: "ep1".into(),
+                code: body.endpoint,
+            }],
             policies: vec![],
             allow_type_deletion: true,
             version: "dev".into(),
@@ -505,17 +514,24 @@ async fn apply_from_browser(_body: Body) -> Result<()> {
     Ok(())
 }
 
+fn response<S: Into<String>>(body: S, status: u16) -> Response<Body> {
+    Response::builder()
+        .header("Access-Control-Allow-Origin", "*")
+        .header("Access-Control-Allow-Methods", "POST, PUT, GET, OPTIONS")
+        .header("Access-Control-Allow-Headers", "Content-Type")
+        .status(status)
+        .body(Body::from(body.into()))
+        .unwrap()
+}
+
 async fn serve_webui(req: Request<Body>) -> Result<Response<Body>> {
-    if req.uri().path().starts_with("/apply") {
+    if req.uri().path().starts_with("/apply") && req.method() != "OPTIONS" {
         match apply_from_browser(req.into_body()).await {
-            Ok(_) => Ok(Response::new(Body::from("Applied.\n"))), // TODO: generate report like regular apply().
-            Err(e) => Ok(Response::builder()
-                .status(500)
-                .body(Body::from(format!("{:?}", e)))
-                .unwrap()),
+            Ok(_) => Ok(response("Applied.\n", 200)), // TODO: generate report like regular apply().
+            Err(e) => Ok(response(format!("{:?}", e), 500)),
         }
     } else {
-        Ok(Response::new(Body::from("Click the apply button.\n")))
+        Ok(response("Click the apply button.\n", 200))
     }
 }
 
