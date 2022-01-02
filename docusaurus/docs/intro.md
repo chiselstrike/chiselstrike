@@ -49,12 +49,12 @@ $ chisel new my-backend
 Initialized ChiselStrike project in my-backend
 $ cd my-backend
 $ chisel dev
-🙇‍♂️ Thank you for your interest in the ChiselStrike private beta! (Beta-Jan22.1)
+🙇‍♂️ Thank you for your interest in the ChiselStrike private beta! (Beta-Jan22.2)
 ⚠️  This is provided to you for evaluation purposes and should not be used to host production at this time
 Docs with a description of expected functionality and command references at https://docs.chiselstrike.com
 For any question, concerns, or early feedback, contact us at beta@chiselstrike.com
 
-🎅 Happy Holidays! 🎄
+🍾 We hope you have a great 2022! 🥂
 
 INFO - ChiselStrike is ready 🚀 - URL: http://127.0.0.1:8080 
 End point defined: /dev/hello
