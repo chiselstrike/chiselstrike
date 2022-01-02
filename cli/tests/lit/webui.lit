@@ -12,7 +12,7 @@ function cleanup() {
 
 trap cleanup EXIT
 
-until $CURL -s localhost:8181; do :; done
+#until $CURL -s localhost:8181; do :; done
 
 $CURL -d '{"endpoint": "export default async function(r) { return new Response(\"success\\n\") }"}' localhost:8181/apply
 # CHECK: access-control-allow-origin: *
