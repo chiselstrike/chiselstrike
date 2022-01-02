@@ -315,11 +315,11 @@ fn read_manifest() -> Result<Manifest> {
 }
 
 fn start_server() -> anyhow::Result<std::process::Child> {
-    println!("🙇‍♂️ Thank you for your interest in the ChiselStrike private beta! (Beta-Jan22.1)");
+    println!("🙇‍♂️ Thank you for your interest in the ChiselStrike private beta! (Beta-Jan22.2)");
     println!("⚠️  This is provided to you for evaluation purposes and should not be used to host production at this time");
     println!("Docs with a description of expected functionality and command references at https://docs.chiselstrike.com");
     println!("For any question, concerns, or early feedback, contact us at beta@chiselstrike.com");
-    println!("\n🎅 Happy Holidays! 🎄\n");
+    println!("\n 🍾 We hope you have a great 2022! 🥂\n");
 
     let mut cmd = std::env::current_exe()?;
     cmd.pop();
