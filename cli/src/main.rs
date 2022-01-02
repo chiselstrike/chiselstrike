@@ -531,7 +531,8 @@ async fn serve_webui(req: Request<Body>) -> Result<Response<Body>> {
             Err(e) => Ok(response(format!("{:?}", e), 500)),
         }
     } else {
-        Ok(response("Click the apply button.\n", 200))
+        let html = std::str::from_utf8(include_bytes!("webui.html"))?;
+        Ok(response(html, 200))
     }
 }
 
