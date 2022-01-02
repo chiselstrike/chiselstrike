@@ -11,7 +11,7 @@ export default async function chisel(req) {
     for await (let person of Chisel.Person) {
 	count += 1
     }
-    return new Response(count);
+    return new Response(count + "\n");
 }
 EOF
 
