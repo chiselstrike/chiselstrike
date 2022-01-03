@@ -8,6 +8,7 @@ declare class ChiselIterator<T> {
     [Symbol.asyncIterator]: () => AsyncIterator<T>;
     join<U>(right: ChiselIterator<U>): ChiselIterator<T & U>;
     take(limit_: number): ChiselIterator<T>;
+    toArray(): Promise<Partial<T>[]>;
     forEach(func: (arg: T) => void): Promise<void>;
 }
 

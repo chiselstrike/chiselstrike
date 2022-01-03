@@ -151,6 +151,14 @@ export class ChiselIterator<T> {
         }
     }
 
+    async toArray(): Promise<Partial<T>[]> {
+        const arr = new Array<Partial<T>>();
+        for await (const t of this) {
+            arr.push(t);
+        }
+        return arr;
+    }
+
     [Symbol.asyncIterator]() {
         const rid = Deno.core.opSync(
             "chisel_relational_query_create",
