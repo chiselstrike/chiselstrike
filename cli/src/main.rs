@@ -293,6 +293,15 @@ fn create_project(path: &Path, examples: bool) -> Result<()> {
     fs::write(path.join("tsconfig.json"), tsconfig)?;
     let manifest = std::str::from_utf8(include_bytes!("template/Chisel.toml"))?.to_string();
     fs::write(path.join("Chisel.toml"), manifest)?;
+    let decorator_definitions =
+        std::str::from_utf8(include_bytes!("template/chisel-decorators.ts"))?.to_string();
+    fs::write(
+        path.join(DTS_DIR).join("chisel-decorators.ts"),
+        decorator_definitions,
+    )?;
+    let dts_definitions = std::str::from_utf8(include_bytes!("template/chisel.d.ts"))?.to_string();
+    fs::write(path.join(DTS_DIR).join("chisel.d.ts"), dts_definitions)?;
+
     if examples {
         let endpoints = std::str::from_utf8(include_bytes!("template/hello.ts"))?.to_string();
         fs::write(path.join(ENDPOINTS_DIR).join("hello.ts"), endpoints)?;
@@ -372,51 +381,17 @@ async fn apply<S: ToString>(
     let mut endpoints_req = vec![];
     let mut policy_req = vec![];
 
-    let mut decorator_definitions = String::new();
-    let mut type_dts_definitions = String::new();
+    let mut types_string = String::new();
+    for t in &types {
+        types_string += &read_to_string(&t)?;
+    }
 
     for t in crate::ts::parse_types(&types)?.into_iter() {
-        type_dts_definitions += &format!("    {}: ChiselIterator<{}>;\n", t.name, t.name);
-        for field in &t.field_defs {
-            for label in &field.labels {
-                decorator_definitions += &format!(
-                    "function {}(target: any, propertyName: string): void {{}}\n",
-                    label
-                );
-            }
-        }
         types_req.push(t);
     }
 
-    // FIXME: for now this is a static string, but we want to add information about the
-    // types we created.
-    let dts_definitions = format!(
-        "
-/// <reference lib=\"esnext\" />
-/// <reference lib=\"dom\" />
-
-declare type ChiselIterator<T> = {{
-    findMany(restrictions: Partial<T>): ChiselIterator<T>;
-    findOne(restrictions: Partial<T>): Promise<T | null>;
-    select(...columns: (keyof T)[]): ChiselIterator<T>;
-    [Symbol.asyncIterator]: () => AsyncIterator<T>;
-    join<U>(right: ChiselIterator<U>): ChiselIterator<T & U>;
-    take(limit_: number): ChiselIterator<T>;
-    forEach(func: (arg: T) => void): Promise<void>;
-}}
-
-declare type Chisel = {{
-    store: <T>(typeName: string, content: T) => Promise<T>;
-    json: (body: any, status?: number) => Response;
-{}
-}}
-declare const Chisel: Chisel
-",
-        type_dts_definitions
-    );
-
     for f in endpoints.iter() {
-        let code = read_to_string(&f.file_path)?;
+        let code = types_string.clone() + &read_to_string(&f.file_path)?;
         let code = compile_ts_code(code)
             .with_context(|| format!("parsing endpoint /{}/{}", version, f.name))?;
         endpoints_req.push(EndPointCreationRequest {
@@ -430,12 +405,6 @@ declare const Chisel: Chisel
             policy_config: read_to_string(p)?,
         });
     }
-
-    // if we fail we'll just write again next time, so it's fine to not worry too much
-    // about races here.
-    let dts_path = Path::new(DTS_DIR);
-    let _ = fs::write(dts_path.join("chisel-decorators.ts"), decorator_definitions);
-    let _ = fs::write(dts_path.join("chisel.d.ts"), dts_definitions);
 
     let mut client = ChiselRpcClient::connect(server_url).await?;
     let msg = execute!(
@@ -505,13 +474,23 @@ async fn main() -> Result<()> {
                 for def in &version_def.type_defs {
                     println!("  class {} {{", def.name);
                     for field in &def.field_defs {
-                        println!(
-                            "    {} {}{}: {}{};",
-                            field
+                        let labels = if field.labels.is_empty() {
+                            "".into()
+                        } else {
+                            let mut labels = field
                                 .labels
                                 .iter()
-                                .map(|x| format!(" @{}", x))
-                                .collect::<String>(),
+                                .map(|x| format!("\"{}\", ", x))
+                                .collect::<String>();
+                            // We add a , and a space in the map() function above to each element,
+                            // so for the last element we pop them both.
+                            labels.pop();
+                            labels.pop();
+                            format!("@labels({})", labels)
+                        };
+                        println!(
+                            "    {} {}{}: {}{};",
+                            labels,
                             field.name,
                             if field.is_optional { "?" } else { "" },
                             field.field_type,

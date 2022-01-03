@@ -58,6 +58,10 @@ class Filter extends Base {
 
 type Inner = BackingStore | Join | Filter;
 
+/// XXX: If you add methods here, you also have to add static versions to ChiselEntity (in this file),
+//  XXX: and to cli/src/templates/chisel.d.ts.
+//  XXX: No need to tell me this sucks, but automating this properly is not trivial, and require tsc
+//  XXX: so we will do it later.
 export class ChiselIterator<T> {
     constructor(private inner: Inner) {}
     select(...columns: (keyof T)[]): ChiselIterator<Pick<T, (keyof T)>> {
@@ -181,4 +185,54 @@ export class ChiselIterator<T> {
 export function chiselIterator<T>(name: string, columns: column[]) {
     const b = new BackingStore(columns, name);
     return new ChiselIterator<T>(b);
+}
+
+/// XXX: If you add methods here, you also have to add non-static versions nto ChiselIterator (in this file),
+//  XXX: and to cli/src/templates/chisel.d.ts.
+//  XXX: No need to tell me this sucks, but automating this properly is not trivial, and require tsc
+//  XXX: so we will do it later.
+export class ChiselEntity {
+    static all<T>(this: { new (): T }): ChiselIterator<T> {
+        // FIXME: I thought this could have been written as :
+        //
+        //        return chiselIterator(this.name, Object.getOwnPropertyNames(this));
+        //
+        // but while this.name returns the correct name of the class, getOwnPropertyNames returns
+        // an empty array. That is likely because at this point the object is not constructed yet,
+        // so it has no properties. Keep in mind that those functions operate on a collection
+        // we resort then to an eval loop, that essentially delegates this to the rust code.
+        return eval("Chisel." + this.name);
+    }
+
+    static findMany<T>(
+        this: { new (): T },
+        restrictions: Partial<T>,
+    ): ChiselIterator<T> {
+        const it = eval("Chisel." + this.name);
+        return it.findMany(restrictions);
+    }
+
+    static take<T extends ChiselEntity>(
+        this: { new (): T },
+        limit: number,
+    ): ChiselIterator<T> {
+        const it = eval("Chisel." + this.name);
+        return it.take(limit);
+    }
+
+    static findOne<T extends ChiselEntity>(
+        this: { new (): T },
+        restrictions: Partial<T>,
+    ): Promise<T | null> {
+        const it = eval("Chisel." + this.name);
+        return it.findOne(restrictions);
+    }
+
+    static select<T extends ChiselEntity>(
+        this: { new (): T },
+        ...columns: (keyof T)[]
+    ): ChiselIterator<T> {
+        const it = eval("Chisel." + this.name);
+        return it.select(...columns);
+    }
 }
