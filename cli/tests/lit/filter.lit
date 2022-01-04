@@ -13,7 +13,7 @@ export default async function chisel(req: Request) {
                                                        "age":        666,
                                                        "human":      true});
     for await (let row of filtered) {
-        ret += row.first_name + " " + row.last_name + "\n";
+        ret += row.first_name + " " + row.last_name;
     }
     return new Response(ret);
 }

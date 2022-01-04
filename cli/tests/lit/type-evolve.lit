@@ -18,7 +18,7 @@ $CHISEL apply
 cat << EOF > "$TEMPDIR/endpoints/store.ts"
 export default async function chisel(req) {
    await Chisel.save('Evolving', { "a": "A", "b": "B" });
-   return new Response('ok\n');
+   return new Response('ok');
 }
 EOF
 
@@ -30,7 +30,7 @@ export default async function chisel(req) {
         response += fields.join(" ");
         response += " ";
    }
-   response += "tst\n";
+   response += "tst";
    return new Response(response);
 }
 EOF

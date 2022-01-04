@@ -18,7 +18,7 @@ export default async function chisel(req: Request) {
     for await (let row of rows) {
         ret += "(" + row.first_name + " " + row.last_name + ") ";
     }
-    return new Response(ret + "]\n");
+    return new Response(ret + "]");
 }
 EOF
 

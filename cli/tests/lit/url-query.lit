@@ -9,7 +9,7 @@ export default async function chisel(req) {
     let u = new URL(req.url);
     let name = u.searchParams.get('name');
     let ret = name in titles ? titles[name] : 'coder';
-    return new Response(ret + '\n');
+    return new Response(ret);
 }
 EOF
 

@@ -12,7 +12,7 @@ cat << EOF > "$TEMPDIR/endpoints/store.ts"
 export default async function chisel(req: Request) {
     await Chisel.save("Person", {"name": "Glauber"});
     await Chisel.save("Person", {"name": "Pekka"});
-    return new Response("Ok\n");
+    return new Response("Ok");
 }
 EOF
 
@@ -22,7 +22,7 @@ export default async function chisel(req: Request) {
     for await (let p of Person.all()) {
         response += p.name
     }
-    response += "end\n";
+    response += "end";
     return new Response(response);
 }
 EOF
@@ -33,7 +33,7 @@ export default async function chisel(req: Request) {
     for await (let p of Person.take(1)) {
         response += p.name
     }
-    response += "end\n";
+    response += "end";
     return new Response(response);
 }
 EOF
@@ -44,7 +44,7 @@ export default async function chisel(req: Request) {
     for await (let p of Person.take(4).take(1)) {
         response += p.name
     }
-    response += "end\n";
+    response += "end";
     return new Response(response);
 }
 EOF
@@ -55,7 +55,7 @@ export default async function chisel(req: Request) {
     for await (let p of Person.take(1).take(4)) {
         response += p.name
     }
-    response += "end\n";
+    response += "end";
     return new Response(response);
 }
 EOF
@@ -73,7 +73,7 @@ export default async function chisel(req: Request) {
     for await (let p of first) {
         response += p.name
     }
-    response += "end\n";
+    response += "end";
     return new Response(response);
 }
 EOF
@@ -85,7 +85,7 @@ export default async function chisel(req: Request) {
     for await (let p of Person.findMany({"company" : "ChiselStrike"}).take(1)) {
         response += p.name
     }
-    response += "end\n";
+    response += "end";
     return new Response(response);
 }
 EOF

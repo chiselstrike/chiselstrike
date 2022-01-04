@@ -31,7 +31,7 @@ mod tests {
         env::set_var("CHISEL", chisel());
         env::set_var("CHISELD_HOST", "localhost:8080");
         env::set_var("CHISELD_LOCALHOST", "localhost:9090");
-        env::set_var("CURL", "curl -S -s -i");
+        env::set_var("CURL", "curl -S -s -i -w '\\n'");
         lit::run::tests(lit::event_handler::Default::default(), |config| {
             config.add_search_path("tests/lit");
             config.add_extension("lit");

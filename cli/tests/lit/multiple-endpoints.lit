@@ -7,13 +7,13 @@
 
 cat << EOF > "$TEMPDIR/endpoints/foo.js"
 export default async function my_req_func(req) {
-    return new Response("foo\n");
+    return new Response("foo");
 }
 EOF
 
 cat << EOF > "$TEMPDIR/endpoints/bar.js"
 export default async function my_req_func(req) {
-    return new Response("bar\n");
+    return new Response("bar");
 }
 EOF
 

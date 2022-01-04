@@ -6,6 +6,5 @@ export default async function chisel(req) {
         response += fields.join(" ");
         response += " ";
     }
-    response += "\n"
     return new Response(response);
 }

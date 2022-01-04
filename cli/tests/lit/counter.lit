@@ -6,7 +6,7 @@ cat << EOF > "$TEMPDIR/endpoints/counter.js"
 let count = 0;
 export default async function chisel(req) {
     count += 1;
-    return new Response("Requests so far: " + count + ".\n");
+    return new Response("Requests so far: " + count + ".");
 }
 EOF
 
@@ -28,7 +28,7 @@ cat << EOF > "$TEMPDIR/endpoints/counter.js"
 let count = 0;
 export default async function chisel(req) {
     count += 1;
-    return new Response("Requests so far: " + count + "!\n");
+    return new Response("Requests so far: " + count + "!");
 }
 EOF
 $CHISEL apply
