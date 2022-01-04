@@ -281,6 +281,20 @@ const ENDPOINTS_DIR: &str = "./endpoints";
 const POLICIES_DIR: &str = "./policies";
 const DTS_DIR: &str = "./dts";
 
+/// Writes contents to a file in a directory.
+fn write(contents: &[u8], dir: &Path, file: &str) -> Result<()> {
+    let s = std::str::from_utf8(contents)?.to_string();
+    fs::write(dir.join(file), s).map_err(|e| e.into())
+}
+
+/// Writes "template/$file" content into $dir/$file.  The file content is read at compile time but written at
+/// runtime.
+macro_rules! write_template {
+    ( $file:expr, $dir:expr ) => {{
+        write(include_bytes!(concat!("template/", $file)), $dir, $file)
+    }};
+}
+
 fn create_project(path: &Path, examples: bool) -> Result<()> {
     if project_exists(path) {
         anyhow::bail!("You cannot run `chisel init` on an existing ChiselStrike project");
@@ -289,22 +303,13 @@ fn create_project(path: &Path, examples: bool) -> Result<()> {
     fs::create_dir(path.join(ENDPOINTS_DIR))?;
     fs::create_dir(path.join(POLICIES_DIR))?;
     fs::create_dir(path.join(DTS_DIR))?;
-    let tsconfig = std::str::from_utf8(include_bytes!("template/tsconfig.json"))?.to_string();
-    fs::write(path.join("tsconfig.json"), tsconfig)?;
-    let manifest = std::str::from_utf8(include_bytes!("template/Chisel.toml"))?.to_string();
-    fs::write(path.join("Chisel.toml"), manifest)?;
-    let decorator_definitions =
-        std::str::from_utf8(include_bytes!("template/chisel-decorators.ts"))?.to_string();
-    fs::write(
-        path.join(DTS_DIR).join("chisel-decorators.ts"),
-        decorator_definitions,
-    )?;
-    let dts_definitions = std::str::from_utf8(include_bytes!("template/chisel.d.ts"))?.to_string();
-    fs::write(path.join(DTS_DIR).join("chisel.d.ts"), dts_definitions)?;
+    write_template!("tsconfig.json", path)?;
+    write_template!("Chisel.toml", path)?;
+    write_template!("chisel-decorators.ts", &path.join(DTS_DIR))?;
+    write_template!("chisel.d.ts", &path.join(DTS_DIR))?;
 
     if examples {
-        let endpoints = std::str::from_utf8(include_bytes!("template/hello.ts"))?.to_string();
-        fs::write(path.join(ENDPOINTS_DIR).join("hello.ts"), endpoints)?;
+        write_template!("hello.ts", &path.join(ENDPOINTS_DIR))?;
     }
     println!("Created ChiselStrike project in {}", path.display());
     Ok(())
