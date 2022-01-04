@@ -18,6 +18,7 @@ declare type Chisel = {
 };
 
 declare class ChiselEntity {
+    id: string;
     static all<T>(this: { new (): T }): ChiselIterator<T>;
     static findMany<T>(
         this: { new (): T },
