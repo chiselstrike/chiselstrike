@@ -7,7 +7,7 @@ pull_request_rules:
       merge:
         method: merge
         commit_message_template: |
-            Merge '{{title}}' from @{{author}}
+            Merge #{{number}} '{{title}}'
 
             {{body}}
   - name: Automatic rebase of a single commit on approval
