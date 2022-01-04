@@ -13,7 +13,7 @@ declare class ChiselIterator<T> {
 }
 
 declare type Chisel = {
-    store: <T>(typeName: string, content: T) => Promise<T>;
+    save: <T>(typeName: string, content: T) => Promise<T>;
     json: <T>(body: T, status?: number) => Response;
 };
 
