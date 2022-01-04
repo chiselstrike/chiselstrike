@@ -1,5 +1,6 @@
 // SPDX-FileCopyrightText: © 2021 ChiselStrike <info@chiselstrike.com>
 
+use crate::chisel;
 use crate::deno;
 use crate::policies::{Policies, VersionPolicy};
 use crate::prefix_map::PrefixMap;
@@ -22,10 +23,6 @@ use std::net::SocketAddr;
 use std::path::PathBuf;
 use std::sync::Arc;
 use tonic::{transport::Server, Request, Response, Status};
-
-pub(crate) mod chisel {
-    tonic::include_proto!("chisel");
-}
 
 // First, guarantees that a single RPC command is executing throught the lock that goes over a
 // static instance of this.
