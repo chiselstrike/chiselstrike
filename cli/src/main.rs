@@ -377,17 +377,13 @@ async fn apply<S: ToString>(
     let endpoints = manifest.endpoints()?;
     let policies = manifest.policies()?;
 
-    let mut types_req = vec![];
+    let types_req = crate::ts::parse_types(&types)?;
     let mut endpoints_req = vec![];
     let mut policy_req = vec![];
 
     let mut types_string = String::new();
     for t in &types {
         types_string += &read_to_string(&t)?;
-    }
-
-    for t in crate::ts::parse_types(&types)?.into_iter() {
-        types_req.push(t);
     }
 
     for f in endpoints.iter() {
