@@ -45,8 +45,3 @@ or do you feel more confident using this API?
 
 * Which other functions would you like to see supported?
 :::
-
-:::warning
-There are currently known issues of using ChiselStrike's API and its interactions with policies, that may lead to
-crashes. If experimenting with policies, we recommend open coding your endpoints at this time.
-:::
