@@ -42,6 +42,26 @@ $ curl localhost:8080/dev/comments # the old version still exists, untouched
 
 The versions now can evolve independently.
 
+## Populating from an existing version
+
+Although you can create a new fully independent version and build it up by adding data
+through your endpoints, it is sometimes useful to populate your new version from some
+other existing version.
+
+This can be done with `chisel populate`:
+
+```bash
+$ chisel populate --version experimental --from dev
+```
+
+Assuming `experimental` is empty before the population starts, you should see that the `experimental` version
+now holding the same data as `dev`:
+
+```
+$ curl localhost:8080/experimental/comments
+[{"content":"First comment"},{"content":"Second comment"},{"content":"Third comment"},{"content":"Fourth comment"}]
+```
+
 :::info Feedback Requested! We could use your help!
 The next version of our beta will allow you to populate your new version, as well as linking different versions together
 and propagating changes.
