@@ -8,7 +8,7 @@ cp examples/csv.js examples/find.js "$TEMPDIR/endpoints"
 cd "$TEMPDIR"
 cat << EOF > "endpoints/foo.js"
 export default async function my_req_func(req) {
-    return new Response("v0\n");
+    return new Response("v0");
 }
 EOF
 
@@ -24,7 +24,7 @@ $CHISEL apply --version v0
 
 cat << EOF > "endpoints/foo.js"
 export default async function my_req_func(req) {
-    return new Response("v1\n");
+    return new Response("v1");
 }
 EOF
 

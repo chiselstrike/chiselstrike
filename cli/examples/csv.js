@@ -7,5 +7,5 @@ export default async function chisel(req) {
             await Chisel.save('Person', {"first_name": r[0], "last_name": r[1], "age": 100, "human": true, "height": 5.0});
         }
     }
-    return new Response('ok\n');
+    return new Response('ok');
 }

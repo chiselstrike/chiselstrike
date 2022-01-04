@@ -12,7 +12,7 @@ export default async function chisel(req) {
     for await (let u of Chisel.OAuthUser) {
         response += u.username + " ";
     }
-    return new Response(response + "\n");
+    return new Response(response);
 }
 EOF
 
