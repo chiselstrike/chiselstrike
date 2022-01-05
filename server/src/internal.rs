@@ -1,9 +1,13 @@
 // SPDX-FileCopyrightText: © 2021 ChiselStrike <info@chiselstrike.com>
 
+use crate::chisel::{
+    chisel_rpc_client::ChiselRpcClient, ChiselApplyRequest, EndPointCreationRequest,
+};
 use anyhow::Result;
 use hyper::service::{make_service_fn, service_fn};
 use hyper::{Body, Request, Response, Server};
 use once_cell::sync::OnceCell;
+use serde_derive::{Deserialize, Serialize};
 use std::net::SocketAddr;
 
 /// If set, serve the web UI using this address for gRPC calls.
@@ -16,6 +20,29 @@ fn response(body: &str, status: u16) -> Result<Response<Body>> {
         .unwrap())
 }
 
+#[derive(Serialize, Deserialize)]
+struct WebUIPostBody {
+    endpoint: String,
+}
+
+async fn webapply(body: Body, rpc_addr: &SocketAddr) -> Result<Response<Body>> {
+    let body: WebUIPostBody = serde_json::from_slice(&hyper::body::to_bytes(body).await?)?;
+    let mut client = ChiselRpcClient::connect(format!("http://{}", rpc_addr)).await?;
+    client
+        .apply(tonic::Request::new(ChiselApplyRequest {
+            types: vec![],
+            endpoints: vec![EndPointCreationRequest {
+                path: "ep1".into(),
+                code: body.endpoint,
+            }],
+            policies: vec![],
+            allow_type_deletion: true,
+            version: "dev".into(),
+        }))
+        .await?;
+    response("applied", 200)
+}
+
 async fn route(req: Request<Body>) -> Result<Response<Body>> {
     match (req.uri().path(), SERVE_WEBUI.get()) {
         // Conceptually those checks are different and could eventually become
@@ -25,8 +52,10 @@ async fn route(req: Request<Body>) -> Result<Response<Body>> {
         ("/status", _) => response("ok", 200),
         ("/readiness", _) => response("ready", 200),
         ("/liveness", _) => response("alive", 200),
+        ("/apply", Some(rpc_addr)) => webapply(req.into_body(), rpc_addr).await,
         _ => response("not found", 404),
     }
+    .or_else(|e| response(&format!("{:?}", e), 500))
 }
 
 /// Initialize ChiselStrike's internal routes.

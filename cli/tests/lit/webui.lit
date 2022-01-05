@@ -1,0 +1,10 @@
+# SPDX-FileCopyrightText: © 2021 ChiselStrike <info@chiselstrike.com>
+
+# RUN: sh -e @file
+
+$CURL -d '{"endpoint": "export default async function(r) { return new Response(\"success\\n\") }"}' localhost:9090/apply
+# CHECK: access-control-allow-origin: *
+# CHECK: access-control-allow-methods: POST, PUT, GET, OPTIONS
+
+$CURL localhost:8080/dev/ep1
+#CHECK: success
