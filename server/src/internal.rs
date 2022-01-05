@@ -1,22 +1,22 @@
 // SPDX-FileCopyrightText: © 2021 ChiselStrike <info@chiselstrike.com>
 
+use anyhow::Result;
 use hyper::service::{make_service_fn, service_fn};
 use hyper::{Body, Request, Response, Server};
 use once_cell::sync::OnceCell;
-use std::convert::Infallible;
 use std::net::SocketAddr;
 
 /// If set, serve the web UI using this address for gRPC calls.
 static SERVE_WEBUI: OnceCell<SocketAddr> = OnceCell::new();
 
-fn response(body: &str, status: u16) -> Result<Response<Body>, Infallible> {
+fn response(body: &str, status: u16) -> Result<Response<Body>> {
     Ok(Response::builder()
         .status(status)
         .body(Body::from(body.to_string()))
         .unwrap())
 }
 
-async fn route(req: Request<Body>) -> Result<Response<Body>, Infallible> {
+async fn route(req: Request<Body>) -> Result<Response<Body>> {
     match (req.uri().path(), SERVE_WEBUI.get()) {
         // Conceptually those checks are different and could eventually become
         // more complex functions. But for now we just return simple strings.
@@ -42,7 +42,7 @@ pub(crate) fn init(addr: SocketAddr, serve_webui: bool, rpc_addr: SocketAddr) {
     }
     let make_svc = make_service_fn(|_conn| async {
         // service_fn converts our function into a `Service`
-        Ok::<_, Infallible>(service_fn(route))
+        Ok::<_, anyhow::Error>(service_fn(route))
     });
 
     tokio::task::spawn(async move {
