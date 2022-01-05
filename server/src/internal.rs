@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: © 2021 ChiselStrike <info@chiselstrike.com>
 
 use hyper::service::{make_service_fn, service_fn};
-use hyper::{Body, Request, Response, Server, StatusCode};
+use hyper::{Body, Request, Response, Server};
 use once_cell::sync::OnceCell;
 use std::convert::Infallible;
 use std::net::SocketAddr;
@@ -9,20 +9,24 @@ use std::net::SocketAddr;
 /// If set, serve the web UI using this address for gRPC calls.
 static SERVE_WEBUI: OnceCell<SocketAddr> = OnceCell::new();
 
-async fn route(req: Request<Body>) -> Result<Response<Body>, Infallible> {
-    let mut response = Response::new(Body::empty());
+fn response(body: &str, status: u16) -> Result<Response<Body>, Infallible> {
+    Ok(Response::builder()
+        .status(status)
+        .body(Body::from(body.to_string()))
+        .unwrap())
+}
 
+async fn route(req: Request<Body>) -> Result<Response<Body>, Infallible> {
     match (req.uri().path(), SERVE_WEBUI.get()) {
         // Conceptually those checks are different and could eventually become
         // more complex functions. But for now we just return simple strings.
         // FWIW, K8s does not require us to return those specific strings.
         // Anything that returns a code 200 is enough.
-        ("/status", _) => *response.body_mut() = "ok".into(),
-        ("/readiness", _) => *response.body_mut() = "ready".into(),
-        ("/liveness", _) => *response.body_mut() = "alive".into(),
-        _ => *response.status_mut() = StatusCode::NOT_FOUND,
+        ("/status", _) => response("ok", 200),
+        ("/readiness", _) => response("ready", 200),
+        ("/liveness", _) => response("alive", 200),
+        _ => response("not found", 404),
     }
-    Ok(response)
 }
 
 /// Initialize ChiselStrike's internal routes.
