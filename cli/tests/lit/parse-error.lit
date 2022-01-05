@@ -2,6 +2,8 @@
 
 # RUN: sh -e @file
 
+cp examples/person.ts "$TEMPDIR/types"
+
 cat << EOF > "$TEMPDIR/endpoints/error.ts"
 export default async function chisel(req: Request) {
     return new Response("foo" "bar");
@@ -28,3 +30,20 @@ $CHISEL apply 2>&1 | $RMCOLOR || true
 #CHECK: Caused by:
 #CHECK:     Compilation failed:
 #CHECK:     error.ts:1:13 - error TS2304: Cannot find name 'foo'.
+
+cat << EOF > "$TEMPDIR/endpoints/error.ts"
+export default async function chisel(req: Request) {
+    const filtered = Person.findMany({"first_name": "bar"});
+    let ret = "";
+    for await (let row of filtered) {
+        ret += row.nickname + "\n";
+    }
+    return new Response(ret);
+}
+EOF
+
+$CHISEL apply 2>&1 | $RMCOLOR|| true
+#CHECK: Error: parsing endpoint /dev/error
+#CHECK: Caused by:
+#CHECK:     Compilation failed:
+#CHECK:     error.ts:5:20 - error TS2339: Property 'nickname' does not exist on type 'Person'.
