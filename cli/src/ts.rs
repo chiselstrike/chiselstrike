@@ -167,6 +167,51 @@ fn parse_class_prop(x: &ClassProp, class_name: &str, handler: &Handler) -> Resul
     })
 }
 
+fn parse_class_decl<P: AsRef<Path>>(
+    handler: &Handler,
+    filename: &P,
+    type_vec: &mut Vec<AddTypeRequest>,
+    valid_types: &mut BTreeSet<String>,
+    decl: &Stmt,
+) -> Result<()> {
+    match decl {
+        Stmt::Decl(Decl::Class(x)) => {
+            let mut field_defs = Vec::default();
+            let name = ident_to_string(&x.ident);
+            if !valid_types.insert(name.clone()) {
+                bail!("Type {} defined twice", name);
+            }
+
+            for member in &x.class.body {
+                match member {
+                    ClassMember::ClassProp(x) => match parse_class_prop(x, &name, handler) {
+                        Err(err) => {
+                            handler.span_err(x.span(), &format!("While parsing class {}", name));
+                            bail!("{}", err);
+                        }
+                        Ok(fd) => {
+                            field_defs.push(fd);
+                        }
+                    },
+                    z => {
+                        handler.span_err(z.span(), "Only property definitions (with optional decorators) allowed in the types file");
+                        bail!("invalid type file {}", filename.as_ref().display());
+                    }
+                }
+            }
+            type_vec.push(AddTypeRequest { name, field_defs });
+        }
+        z => {
+            handler.span_err(
+                z.span(),
+                "Only property definitions (with optional decorators) allowed in the types file",
+            );
+            bail!("invalid type file {}", filename.as_ref().display());
+        }
+    }
+    Ok(())
+}
+
 fn parse_one_file<P: AsRef<Path>>(
     filename: &P,
     type_vec: &mut Vec<AddTypeRequest>,
@@ -215,40 +260,7 @@ fn parse_one_file<P: AsRef<Path>>(
     })?;
 
     for decl in &x.body {
-        match decl {
-            Stmt::Decl(Decl::Class(x)) => {
-                let mut field_defs = Vec::default();
-                let name = ident_to_string(&x.ident);
-                if !valid_types.insert(name.clone()) {
-                    bail!("Type {} defined twice", name);
-                }
-
-                for member in &x.class.body {
-                    match member {
-                        ClassMember::ClassProp(x) => match parse_class_prop(x, &name, &handler) {
-                            Err(err) => {
-                                handler
-                                    .span_err(x.span(), &format!("While parsing class {}", name));
-                                bail!("{}", err);
-                            }
-                            Ok(fd) => {
-                                field_defs.push(fd);
-                            }
-                        },
-                        z => {
-                            handler.span_err(z.span(), "Only property definitions (with optional decorators) allowed in the types file");
-                            bail!("invalid type file {}", filename.as_ref().display());
-                        }
-                    }
-                }
-
-                type_vec.push(AddTypeRequest { name, field_defs });
-            }
-            z => {
-                handler.span_err(z.span(), "Only property definitions (with optional decorators) allowed in the types file");
-                bail!("invalid type file {}", filename.as_ref().display());
-            }
-        }
+        parse_class_decl(&handler, filename, type_vec, valid_types, decl)?;
     }
     Ok(())
 }
