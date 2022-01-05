@@ -119,7 +119,7 @@ async fn run(state: SharedState, mut cmd: ExecutorChannel) -> Result<()> {
         api_service.add_route(path.into(), func);
     }
     crate::auth::init(&mut api_service);
-    let api_service = Arc::new(Mutex::new(api_service));
+    let api_service = Rc::new(api_service);
 
     let oauth_user_type = match ts.lookup_builtin_type(OAUTHUSER_TYPE_NAME) {
         Ok(Type::Object(t)) => t,
