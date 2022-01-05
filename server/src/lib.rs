@@ -16,3 +16,7 @@ pub(crate) mod rpc;
 pub(crate) mod runtime;
 pub mod server;
 pub(crate) mod types;
+
+pub(crate) mod chisel {
+    tonic::include_proto!("chisel");
+}

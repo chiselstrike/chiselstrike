@@ -13,7 +13,7 @@ cd $TEMPDIR
 $CHISEL init --no-examples
 cd $cwd
 
-$CHISELD -m "sqlite://$TEMPDIR/chiseld.db?mode=rwc" -d "sqlite://$TEMPDIR/chiseld-data.db?mode=rwc" &
+$CHISELD --webui -m "sqlite://$TEMPDIR/chiseld.db?mode=rwc" -d "sqlite://$TEMPDIR/chiseld-data.db?mode=rwc" &
 PID=$!
 
 function cleanup() {
