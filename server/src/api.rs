@@ -153,11 +153,8 @@ impl ApiService {
                             .status(StatusCode::FORBIDDEN)
                             .body("Token not recognized\n".to_string().into());
                     }
-                    crate::runtime::get()
-                        .meta
-                        .get_username(token.unwrap())
-                        .await
-                        .ok()
+                    let meta = crate::runtime::get().meta.clone();
+                    meta.get_username(token.unwrap()).await.ok()
                 }
                 None => None,
             };

@@ -15,8 +15,8 @@ use std::sync::Arc;
 #[derive(new)]
 pub(crate) struct Runtime {
     pub(crate) api: Arc<Mutex<ApiService>>,
-    pub(crate) query_engine: QueryEngine,
-    pub(crate) meta: MetaService,
+    pub(crate) query_engine: Rc<QueryEngine>,
+    pub(crate) meta: Rc<MetaService>,
     pub(crate) type_system: TypeSystem,
     pub(crate) policies: Policies,
 }

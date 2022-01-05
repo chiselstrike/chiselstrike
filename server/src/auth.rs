@@ -39,10 +39,9 @@ async fn insert_user_into_db(username: &str) -> anyhow::Result<()> {
     };
     let mut user = JsonObject::new();
     user.insert("username".into(), json!(username));
-    runtime::get()
-        .query_engine
-        .add_row(&oauth_user_type, &user)
-        .await?;
+    let query_engine = { runtime::get().query_engine.clone() };
+
+    query_engine.add_row(&oauth_user_type, &user).await?;
     Ok(())
 }
 
@@ -67,10 +66,11 @@ fn handle_callback(
         }
         let username = urldecode::decode(username.into());
         insert_user_into_db(&username).await?;
+        let meta = runtime::get().meta.clone();
         Ok(redirect(&format!(
             // TODO: redirect to the URL from state.
             "http://localhost:3000/profile?chiselstrike_token={}",
-            runtime::get().meta.new_session_token(&username).await?
+            meta.new_session_token(&username).await?
         )))
     }
     .boxed_local()
@@ -85,8 +85,8 @@ fn lookup_user(
             .path()
             .strip_prefix(USERPATH)
             .ok_or_else(|| anyhow!("lookup_user on wrong URL"))?;
-        let runtime = runtime::get();
-        let bd: Body = runtime.meta.get_username(token).await?.into();
+        let meta = runtime::get().meta.clone();
+        let bd: Body = meta.get_username(token).await?.into();
         let resp = Response::builder().status(StatusCode::OK).body(bd).unwrap();
         Ok(resp)
     }

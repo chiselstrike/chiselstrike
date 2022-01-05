@@ -16,6 +16,7 @@ use futures::FutureExt;
 use futures::StreamExt;
 use std::net::SocketAddr;
 use std::panic;
+use std::rc::Rc;
 use std::sync::Arc;
 use structopt::StructOpt;
 use tokio::task::JoinHandle;
@@ -95,7 +96,7 @@ impl SharedTasks {
 async fn run(state: SharedState, mut cmd: ExecutorChannel) -> Result<()> {
     init_deno(state.inspect_brk).await?;
 
-    let meta = MetaService::local_connection(&state.metadata_db).await?;
+    let meta = Rc::new(MetaService::local_connection(&state.metadata_db).await?);
     let ts = meta.load_type_system().await?;
 
     ts.refresh_types()?;
@@ -125,7 +126,7 @@ async fn run(state: SharedState, mut cmd: ExecutorChannel) -> Result<()> {
         _ => anyhow::bail!("Internal error: type {} not found", OAUTHUSER_TYPE_NAME),
     };
     crate::deno::define_type(&oauth_user_type)?;
-    let query_engine = QueryEngine::local_connection(&state.data_db).await?;
+    let query_engine = Rc::new(QueryEngine::local_connection(&state.data_db).await?);
     let mut transaction = query_engine.start_transaction().await?;
     query_engine
         .create_table(&mut transaction, &oauth_user_type)
