@@ -384,7 +384,7 @@ impl RpcService {
             api.remove_routes(&prefix);
 
             for (path, _) in endpoints {
-                let func = Box::new({
+                let func = Arc::new({
                     let path = path.clone();
                     move |req| deno::run_js(path.clone(), req).boxed_local()
                 });

@@ -9,6 +9,7 @@ use futures::{Future, FutureExt};
 use hyper::{header, Request, Response, StatusCode};
 use serde_json::json;
 use std::pin::Pin;
+use std::sync::Arc;
 
 const USERPATH: &str = "/__chiselstrike/auth/user/";
 
@@ -96,7 +97,7 @@ fn lookup_user(
 pub(crate) fn init(api: &mut ApiService) {
     api.add_route(
         "/__chiselstrike/auth/callback".into(),
-        Box::new(handle_callback),
+        Arc::new(handle_callback),
     );
-    api.add_route(USERPATH.into(), Box::new(lookup_user));
+    api.add_route(USERPATH.into(), Arc::new(lookup_user));
 }

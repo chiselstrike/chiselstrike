@@ -65,7 +65,7 @@ impl HttpBody for Body {
     }
 }
 
-type RouteFn = Box<
+type RouteFn = Arc<
     dyn Fn(Request<hyper::Body>) -> LocalBoxFuture<'static, Result<Response<Body>>> + Send + Sync,
 >;
 

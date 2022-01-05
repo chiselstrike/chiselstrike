@@ -112,7 +112,7 @@ async fn run(state: SharedState, mut cmd: ExecutorChannel) -> Result<()> {
 
     let mut api_service = ApiService::default();
     for (path, _) in routes.iter() {
-        let func = Box::new({
+        let func = Arc::new({
             let path = path.to_str().unwrap().to_string();
             move |req| deno::run_js(path.clone(), req).boxed_local()
         });
