@@ -53,6 +53,10 @@ async fn route(req: Request<Body>) -> Result<Response<Body>> {
         ("/readiness", _) => response("ready", 200),
         ("/liveness", _) => response("alive", 200),
         ("/apply", Some(rpc_addr)) => webapply(req.into_body(), rpc_addr).await,
+        ("/webui", Some(_)) => {
+            let html = std::str::from_utf8(include_bytes!("webui.html"))?;
+            response(html, 200)
+        }
         _ => response("not found", 404),
     }
     .or_else(|e| response(&format!("{:?}", e), 500))
