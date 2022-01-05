@@ -11,6 +11,7 @@ use hyper::header::HeaderValue;
 use hyper::service::{make_service_fn, service_fn};
 use hyper::{HeaderMap, Request, Response, Server, StatusCode};
 use socket2::{Domain, Protocol, Socket, Type};
+use std::cell::RefCell;
 use std::convert::Infallible;
 use std::convert::TryFrom;
 use std::io::Cursor;
@@ -106,17 +107,35 @@ impl TryFrom<&str> for RequestPath {
 }
 
 /// API service for Chisel server.
-#[derive(Default)]
 pub(crate) struct ApiService {
-    paths: PrefixMap<RouteFn>,
+    paths: RefCell<PrefixMap<RouteFn>>,
+    thread_id: std::thread::ThreadId,
 }
 
+impl Default for ApiService {
+    fn default() -> Self {
+        Self {
+            paths: RefCell::new(PrefixMap::default()),
+            thread_id: std::thread::current().id(),
+        }
+    }
+}
+
+unsafe impl Send for ApiService {}
+unsafe impl Sync for ApiService {}
+
 impl ApiService {
+    fn runtime_thread_safety(&self) {
+        if self.thread_id != std::thread::current().id() {
+            panic!("APIService called from a thread that is not the one that constructed it");
+        }
+    }
+
     /// Finds the right RouteFn for this request.
-    fn find_route_fn<S: AsRef<Path>>(&self, request: S) -> Option<&RouteFn> {
-        match self.paths.longest_prefix(request.as_ref()) {
+    fn find_route_fn<S: AsRef<Path>>(&self, request: S) -> Option<RouteFn> {
+        match self.paths.borrow().longest_prefix(request.as_ref()) {
             None => None,
-            Some((_, f)) => Some(f),
+            Some((_, f)) => Some(f.clone()),
         }
     }
 
@@ -127,16 +146,19 @@ impl ApiService {
     ///  * path: The path for the route, including any leading /
     ///  * code: A String containing the raw code of the endpoint, before any compilation.
     ///  * route_fn: the actual function to be executed, likely some call to deno.
-    pub(crate) fn add_route(&mut self, path: PathBuf, route_fn: RouteFn) {
-        self.paths.insert(path, route_fn);
+    pub(crate) fn add_route(&self, path: PathBuf, route_fn: RouteFn) {
+        self.runtime_thread_safety();
+        self.paths.borrow_mut().insert(path, route_fn);
     }
 
     /// Remove all routes that have this prefix.
-    pub(crate) fn remove_routes(&mut self, prefix: &Path) {
-        self.paths.remove_prefix(prefix)
+    pub(crate) fn remove_routes(&self, prefix: &Path) {
+        self.runtime_thread_safety();
+        self.paths.borrow_mut().remove_prefix(prefix)
     }
 
-    async fn route(&mut self, req: Request<hyper::Body>) -> hyper::http::Result<Response<Body>> {
+    async fn route(&self, req: Request<hyper::Body>) -> hyper::http::Result<Response<Body>> {
+        self.runtime_thread_safety();
         if let Some(route_fn) = self.find_route_fn(req.uri().path()) {
             if req.uri().path().starts_with("/__chiselstrike") {
                 return match route_fn(req).await {
@@ -226,7 +248,7 @@ pub(crate) fn spawn(
             Ok::<_, Infallible>(service_fn(move |req| {
                 let api = api.clone();
                 async move {
-                    let mut api = api.lock().await;
+                    let api = api.lock().await;
                     api.route(req).await
                 }
             }))

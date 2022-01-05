@@ -148,7 +148,7 @@ impl RpcService {
 
             runtime.policies.versions.remove(&version);
 
-            let mut api = runtime.api.lock().await;
+            let api = runtime.api.lock().await;
             api.remove_routes(&prefix);
             Ok(())
         });
@@ -380,7 +380,7 @@ impl RpcService {
                 .versions
                 .insert(api_version.to_owned(), policy.clone());
 
-            let mut api = runtime.api.lock().await;
+            let api = runtime.api.lock().await;
             api.remove_routes(&prefix);
 
             for (path, _) in endpoints {
