@@ -170,14 +170,16 @@ following file:
 
 ```typescript title="my-backend/endpoints/populate-comments.ts"
 export default async function chisel(_req) {
+    let promises = [];
     for (const c of [
         {content: 'First comment', by: 'Jill'},
         {content: 'Second comment', by: 'Jack'},
         {content: 'Third comment', by: 'Jim'},
         {content: 'Fourth comment', by: 'Jack'}
     ]) {
-        await Chisel.save('Comment', c);
+        promises.push(Chisel.save('Comment', c));
     }
+    await Promise.all(promises);
     return new Response('success\n');
 }
 ```
@@ -202,9 +204,9 @@ comments.  Now we just have to read them.  Let's edit the
 ```typescript title="my-backend/endpoints/comments.ts"
 export default async function chisel(_req) {
     let comments = [];
-    for await (let c of Comment.all()) {
+    await Comment.all().forEach(c => {
         comments.push(c);
-    }
+    });
     return Chisel.json(comments);
 }
 ```
@@ -216,7 +218,7 @@ you can access it as `c.id` in the examples above. Calling `Chisel.save()` passi
 :::
 
 Note that we changed `chisel` to an async function.  This is because
-it uses the `for await` construct to go over all the stored comments.
+it uses the `forEach` method (which is an async method) to go over all the stored comments.
 What makes it easy is that ChiselStrike defines the variable `Comment`
 (corresponding to the type `Comment` from t.ts), which is a collection
 of all the instances of this type that ChiselStrike has in data
@@ -277,9 +279,9 @@ export default async function chisel(req) {
         return Chisel.json('inserted ' + created.id);
     } else if (req.method == 'GET') {
         let comments = [];
-        for await (let c of Comment.all()) {
+        await Comment.all().forEach(c => {
             comments.push(c);
-        }
+        });
         return Chisel.json(comments);
     } else {
         return new Response(body = "Wrong method", status = 405);
