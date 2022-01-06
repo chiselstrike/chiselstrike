@@ -8,8 +8,8 @@ use swc_common::{
     SourceMap, Spanned,
 };
 use swc_ecma_ast::{
-    ClassMember, ClassProp, Decl, Decorator, Expr, Ident, Lit, Stmt, TsEntityName,
-    TsKeywordTypeKind, TsType, TsTypeAnn,
+    ClassMember, ClassProp, Decl, Decorator, Expr, Ident, Lit, ModuleDecl, ModuleItem,
+    TsEntityName, TsKeywordTypeKind, TsType, TsTypeAnn,
 };
 use swc_ecma_parser::{lexer::Lexer, Parser, StringInput, Syntax, TsConfig};
 
@@ -172,10 +172,10 @@ fn parse_class_decl<P: AsRef<Path>>(
     filename: &P,
     type_vec: &mut Vec<AddTypeRequest>,
     valid_types: &mut BTreeSet<String>,
-    decl: &Stmt,
+    decl: &Decl,
 ) -> Result<()> {
     match decl {
-        Stmt::Decl(Decl::Class(x)) => {
+        Decl::Class(x) => {
             let mut field_defs = Vec::default();
             let name = ident_to_string(&x.ident);
             if !valid_types.insert(name.clone()) {
@@ -254,13 +254,28 @@ fn parse_one_file<P: AsRef<Path>>(
         bail!("Exiting on parsing errors");
     }
 
-    let x = parser.parse_script().map_err(|e| {
+    let x = parser.parse_typescript_module().map_err(|e| {
         e.into_diagnostic(&handler).emit();
         anyhow!("Exiting on script parsing errors")
     })?;
 
     for decl in &x.body {
-        parse_class_decl(&handler, filename, type_vec, valid_types, decl)?;
+        match decl {
+            ModuleItem::ModuleDecl(ModuleDecl::ExportDecl(exp)) => {
+                parse_class_decl(&handler, filename, type_vec, valid_types, &exp.decl)?;
+            }
+            ModuleItem::ModuleDecl(ModuleDecl::Import(_)) => {
+                // Right now just accept imports, but don't try to parse them.
+                // The compiler will error out if the imports are invalid.
+            }
+            z => {
+                handler.span_err(
+                    z.span(),
+                    "ChiselStrike expects either import statements or exported classes (but not default exported)",
+                );
+                bail!("invalid type file {}", filename.as_ref().display());
+            }
+        }
     }
     Ok(())
 }

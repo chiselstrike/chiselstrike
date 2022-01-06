@@ -41,7 +41,7 @@ $CURL -o - $CHISELD_HOST/dev/find
 # CHECK: hello xxxxx
 
 cat << EOF > "$TEMPDIR/types/person.ts"
-class Person extends ChiselEntity {
+export class Person extends ChiselEntity {
   @labels("L1", "L2", "L3") first_name: string;
   @labels("pii", "L2") last_name: string;
   @labels("L1", "L3") human: boolean;

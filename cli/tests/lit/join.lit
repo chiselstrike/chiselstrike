@@ -12,7 +12,7 @@ labels:
 EOF
 
 cat << EOF > "$TEMPDIR/types/nickname.ts"
-class Nickname {
+export class Nickname extends ChiselEntity {
    first_name: string;
    nick: string;
 }
@@ -28,7 +28,7 @@ EOF
 cat << EOF > "$TEMPDIR/endpoints/query.ts"
 export default async function chisel(req: Request) {
     let ret = "[";
-    const glaubers = Chisel.Person.findMany({"first_name": "Glauber"}).join(Chisel.Nickname);
+    const glaubers = Person.findMany({"first_name": "Glauber"}).join(Nickname.all());
     const rows = glaubers.select("first_name", "nick", "last_name");
     for await (let row of rows) {
         ret += "(" + row.first_name + " " + row.nick + " " + row.last_name + ") ";

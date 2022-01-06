@@ -2,7 +2,7 @@
 
 # RUN: sh -e @file
 
-echo 'class TestLabels {@labels("a", "b") foo: string; }' > "$TEMPDIR/types/types.ts"
+echo 'export class TestLabels extends ChiselEntity {@labels("a", "b") foo: string; }' > "$TEMPDIR/types/types.ts"
 
 cd "$TEMPDIR"
 $CHISEL apply
@@ -10,24 +10,24 @@ $CHISEL describe
 
 # CHECK: @labels("a", "b") foo: string;
 
-echo 'class TestLabels {@labels("a") @labels("b") foo: string; }' > "$TEMPDIR/types/types.ts"
+echo 'export class TestLabels extends ChiselEntity {@labels("a") @labels("b") foo: string; }' > "$TEMPDIR/types/types.ts"
 
 cd "$TEMPDIR"
 $CHISEL apply
 $CHISEL describe
 # CHECK: @labels("a", "b") foo: string;
 
-echo 'class TestLabels {@labels foo: string; }' > "$TEMPDIR/types/types.ts"
+echo 'export class TestLabels extends ChiselEntity {@labels foo: string; }' > "$TEMPDIR/types/types.ts"
 cd "$TEMPDIR"
 $CHISEL apply 2>&1 || echo -
 # CHECK: Error: expected a call-like decorator
 
-echo 'class TestLabels {@labels(123) foo: string; }' > "$TEMPDIR/types/types.ts"
+echo 'export class TestLabels extends ChiselEntity {@labels(123) foo: string; }' > "$TEMPDIR/types/types.ts"
 cd "$TEMPDIR"
 $CHISEL apply 2>&1 || echo -
 # CHECK: Error: Only strings accepted as labels
 #
-echo 'class TestLabels {@not_a_label("labels") foo: string; }' > "$TEMPDIR/types/types.ts"
+echo 'export class TestLabels extends ChiselEntity {@not_a_label("labels") foo: string; }' > "$TEMPDIR/types/types.ts"
 cd "$TEMPDIR"
 $CHISEL apply 2>&1 || echo -
 # CHECK: Error: Only the 'labels' decorator is supported by ChiselStrike

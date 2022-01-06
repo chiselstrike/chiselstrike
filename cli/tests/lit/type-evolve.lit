@@ -4,13 +4,13 @@
 
 cd "$TEMPDIR"
 cat << EOF > "$TEMPDIR/types/types.ts"
-class Evolving { a: string; }
+export class Evolving extends ChiselEntity { a: string; }
 EOF
 $CHISEL apply
 # CHECK: Type defined: Evolving
 
 cat << EOF > "$TEMPDIR/types/types.ts"
-class Evolving { a: string; b: string = "with_default"; }
+export class Evolving extends ChiselEntity { a: string; b: string = "with_default"; }
 EOF
 $CHISEL apply
 # CHECK: Type defined: Evolving
@@ -25,7 +25,7 @@ EOF
 cat << EOF > "$TEMPDIR/endpoints/find.ts"
 export default async function chisel(req) {
    let response = "tst ";
-   for await (let ev of Chisel.Evolving) {
+   for await (let ev of Evolving.all()) {
         let fields = [ev.a, ev.b];
         response += fields.join(" ");
         response += " ";
@@ -50,7 +50,7 @@ $CURL $CHISELD_HOST/dev/find
 # CHECK: tst A B tst
 
 cat << EOF > "$TEMPDIR/types/types.ts"
-class Evolving { a: string; }
+export class Evolving extends ChiselEntity { a: string; }
 EOF
 $CHISEL apply
 # CHECK: Type defined: Evolving

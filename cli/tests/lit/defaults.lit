@@ -3,7 +3,7 @@
 # RUN: sh -e @file
 
 cat << EOF > "$TEMPDIR/types/types.ts"
-class Foo {
+export class Foo extends ChiselEntity {
 	a: string = "dfl1";
 	b: number = 0.0;
 	c: boolean = false;
@@ -22,7 +22,7 @@ EOF
 cat << EOF > "$TEMPDIR/endpoints/read.ts"
 export default async function chisel(req) {
     let response = "";
-    for await (let f of Chisel.Foo) {
+    for await (let f of Foo.all()) {
         let fields = [f.a, f.b, f.c, f.d, f.e];
         response += fields.join(" ");
         response += " ";
@@ -42,7 +42,7 @@ $CURL -o - $CHISELD_HOST/dev/read
 # CHECK: dfl1 0 false 2 value
 
 cat << EOF > "$TEMPDIR/types/types.ts"
-class Foo {
+export class Foo extends ChiselEntity {
 	a: string = "dfl1";
 	b: number = 0.0;
 	c: boolean = false;
@@ -57,7 +57,7 @@ EOF
 cat << EOF > "$TEMPDIR/endpoints/readold.ts"
 export default async function chisel(req) {
     let response = "";
-    for await (let f of Chisel.Foo) {
+    for await (let f of Foo.all()) {
         let fields = [f.a, f.b, f.c, f.d, f.e, f.nfs, f.nfb, f.nfn];
         response += fields.join(" ");
         response += " ";
