@@ -126,7 +126,7 @@ declare namespace Deno {
 
     export type PromiseRejectCallback = (
       type: number,
-      promise: Promise<any>,
+      promise: Promise<unknown>,
       reason: any,
     ) => void;
 
