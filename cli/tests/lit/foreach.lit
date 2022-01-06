@@ -10,8 +10,8 @@ EOF
 
 cat << EOF > "$TEMPDIR/endpoints/store.ts"
 export default async function chisel(req: Request) {
-    await Chisel.store("Person", {"name": "Glauber"});
-    await Chisel.store("Person", {"name": "Pekka"});
+    await Chisel.save("Person", {"name": "Glauber"});
+    await Chisel.save("Person", {"name": "Pekka"});
     return new Response("Ok");
 }
 EOF
@@ -32,7 +32,7 @@ $CHISEL apply
 # CHECK: End point defined: /dev/foreach
 # CHECK: End point defined: /dev/store
 
-$CURL $CHISELD_HOST/dev/store
+$CURL -X POST $CHISELD_HOST/dev/store
 # CHECK: Ok
 
 $CURL $CHISELD_HOST/dev/foreach

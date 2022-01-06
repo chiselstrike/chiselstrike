@@ -222,6 +222,11 @@ async fn op_chisel_store(
     content: serde_json::Value,
     _: (),
 ) -> Result<JsonObject> {
+    anyhow::ensure!(
+        current_method() != Method::GET,
+        "Mutating the backend is not allowed during GET"
+    );
+
     let type_name = content["name"]
         .as_str()
         .ok_or_else(|| anyhow!("Type name error; the .name key must have a string value"))?;
@@ -253,7 +258,7 @@ type DbStream = RefCell<SqlStream>;
 
 pub(crate) fn get_policies(runtime: &Runtime, ty: &ObjectType) -> anyhow::Result<FieldPolicies> {
     let mut policies = FieldPolicies::default();
-    CURRENT_REQUEST_PATH.with(|p| runtime.get_policies(ty, &mut policies, p.borrow().path()));
+    CURRENT_CONTEXT.with(|p| runtime.get_policies(ty, &mut policies, p.borrow().path.path()));
     Ok(policies)
 }
 
@@ -466,28 +471,40 @@ impl Resource for BodyResource {
     }
 }
 
+#[derive(Default)]
+struct RequestContext {
+    path: RequestPath,
+    method: Method,
+}
+
 thread_local! {
-    static CURRENT_REQUEST_PATH : RefCell<RequestPath> = RefCell::new(Default::default());
+    static CURRENT_CONTEXT : RefCell<RequestContext> = RefCell::new(Default::default());
 }
 
 pub(crate) fn current_api_version() -> String {
-    CURRENT_REQUEST_PATH.with(|p| {
+    CURRENT_CONTEXT.with(|p| {
         let x = p.borrow();
-        x.api_version().to_string()
+        x.path.api_version().to_string()
     })
 }
 
-fn set_current_path(current_path: String) {
+fn set_current_context(current_path: String, method: Method) {
     let rp = RequestPath::try_from(current_path.as_ref()).unwrap();
 
-    CURRENT_REQUEST_PATH.with(|path| {
+    CURRENT_CONTEXT.with(|path| {
         let mut borrow = path.borrow_mut();
-        *borrow = rp;
+        borrow.path = rp;
+        borrow.method = method;
     });
+}
+
+fn current_method() -> Method {
+    CURRENT_CONTEXT.with(|path| path.borrow().method.clone())
 }
 
 struct RequestFuture<F> {
     request_path: String,
+    request_method: Method,
     inner: F,
 }
 
@@ -495,7 +512,7 @@ impl<F: Future> Future for RequestFuture<F> {
     type Output = F::Output;
 
     fn poll(self: Pin<&mut Self>, c: &mut Context<'_>) -> Poll<F::Output> {
-        set_current_path(self.request_path.clone());
+        set_current_context(self.request_path.clone(), self.request_method.clone());
         // Structural Pinning, it is OK because inner is pinned when we are.
         let inner = unsafe { self.map_unchecked_mut(|s| &mut s.inner) };
         inner.poll(c)
@@ -572,10 +589,11 @@ async fn get_result(
     req: &mut Request<hyper::Body>,
     path: String,
 ) -> Result<v8::Global<v8::Value>> {
+    let method = req.method().clone();
     // Set the current path to cover JS code that runs before
     // blocking. This in particular covers code that doesn't block at
     // all.
-    set_current_path(path.clone());
+    set_current_context(path.clone(), method.clone());
     let result = get_result_aux(runtime, request_handler, req)?;
     let result = runtime.resolve_value(result);
     // We got here without blocking and now have a future representing
@@ -584,6 +602,7 @@ async fn get_result(
     // RequestFuture that will reset the current path before polling.
     RequestFuture {
         request_path: path,
+        request_method: method,
         inner: result,
     }
     .await

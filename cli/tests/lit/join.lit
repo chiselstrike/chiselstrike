@@ -57,7 +57,7 @@ $CURL --data '{
 
 # CHECK: ok
 
-$CURL -o - $CHISELD_HOST/dev/store_nick
+$CURL -X POST $CHISELD_HOST/dev/store_nick
 
 # CHECK: ok
 

@@ -188,7 +188,7 @@ Upon saving this file, there will be another endpoint in ChiselStrike
 for us to call:
 
 ```bash
-$ curl localhost:8080/dev/populate-comments
+$ curl -X POST localhost:8080/dev/populate-comments
 success
 ```
 
@@ -196,6 +196,9 @@ Note how we can store a comment in the database by simply invoking
 `Chisel.save` with `'Comment'` as the first argument and the object
 representing the comment as the second.  Every time we do that, a new
 row is added.
+
+Because this endpoint mutates the state of the backend, a consequence of
+the call to `Chisel.save`, we use a POST request.
 
 The effect of this endpoint is that the database is filled with four
 comments.  Now we just have to read them.  Let's edit the
@@ -252,24 +255,17 @@ $ curl -s localhost:8080/dev/comments | python -m json.tool
 
 Neat, they're all there! :)
 
-## POSTing
+## Accepting different HTTP methods in your endpoint
 
-You may reasonably wonder how the frontend can add some new comments.
-After all, there will likely be a site page where a user can post a
-comment -- how do we put that comment into ChiselStrike?
 
-If the GET operation to the `comments` endpoint gets all the known
-comments, what does POST do?  Let's try it:
+In ChiselStrike, changes to the backend cannot happen during a `GET` request.
+We have so far seen an example of a POST endpoint, (populate) and an endpoint
+that was effectively a GET through curl's default (comments), but didn't do
+any checking to make sure it was the case. Furthermore, it is customary for
+endpoints to accept both POST and GET requests on the same path and behave
+accordingly, so we shouldn't need two different endpoints.
 
-```bash
-$ $ curl -d '{"content": "Fifth comment", "by": "Jill"}' localhost:8080/dev/comments
-[{"id":"a4ca3ab3-2e26-4da6-a5de-418c1e6b9b83","content":"First comment","by":"Jill"},{"id":"fed312d7-b36b-4f34-bb04-fba327a3f440","content":"Second comment","by":"Jack"},{"id":"adc89862-dfaa-43ab-a639-477111afc55e","content":"Third comment","by":"Jim"},{"id":"5bfef47e-371b-44e8-a2dd-88260b5c3f2c","content":"Fourth comment","by":"Jack"}]
-```
-
-Looks like right now POST does the same thing as GET.  But that's not
-too surprising, when you look at the code in `comments.ts`.  It
-doesn't check the request method; it just blindly returns the
-comments.  But let's change that code to this:
+Now let's change that code to this:
 
 ```typescript title="my-backend/endpoints/comments.ts"
 export default async function chisel(req) {
@@ -289,10 +285,10 @@ export default async function chisel(req) {
 }
 ```
 
-Now let's invoke it:
+And then invoke it:
 
 ```bash
-$ curl -d '{"content": "Fifth comment", "by": "Jill"}' localhost:8080/dev/comments
+$ curl -X POST -d '{"content": "Fifth comment", "by": "Jill"}' localhost:8080/dev/comments
 "inserted 78604b77-7ff1-4d13-a025-2b3aa9a4d2ef"
 $ curl -s localhost:8080/dev/comments | python -m json.tool
 
