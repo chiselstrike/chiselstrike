@@ -21,7 +21,7 @@ RUN \
   echo "chiseld user:";  su - chiseld -c id 
 
 COPY target/release/chiseld /usr/local/bin/chiseld
-
+USER chiseld
 EXPOSE $API_PORT $RPC_PORT
 
 CMD /usr/local/bin/chiseld \
