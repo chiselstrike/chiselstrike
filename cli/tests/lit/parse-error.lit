@@ -10,11 +10,11 @@ EOF
 
 cd "$TEMPDIR"
 
-$CHISEL apply 2>&1 || true
+$CHISEL apply 2>&1 | $RMCOLOR || true
 # CHECK: Error: parsing endpoint /dev/error
 # CHECK: Caused by:
 # CHECK:     Compilation failed:
-# CHECK:     error.ts (2,31): ',' expected.
+# CHECK:     error.ts:2:31 - error TS1005: ',' expected.
 
 cat << EOF > "$TEMPDIR/endpoints/error.ts"
 const xyz = foo();
@@ -23,8 +23,8 @@ export default async function chisel(req: Request) {
 }
 EOF
 
-$CHISEL apply 2>&1 || true
+$CHISEL apply 2>&1 | $RMCOLOR || true
 #CHECK: Error: parsing endpoint /dev/error
 #CHECK: Caused by:
 #CHECK:     Compilation failed:
-#CHECK:     error.ts (1,13): Cannot find name 'foo'.
+#CHECK:     error.ts:1:13 - error TS2304: Cannot find name 'foo'.

@@ -8,6 +8,7 @@ function compile(file, lib) {
         rootDir: "/",
         target: ts.ScriptTarget.ESNext,
         module: ts.ModuleKind.ESNext,
+        types: [],
     };
 
     const host = ts.createCompilerHostWorker(options, false, {});
@@ -21,7 +22,7 @@ function compile(file, lib) {
         return Deno.core.opSync("file_exists", path);
     };
     host.getCurrentDirectory = () => {
-        return undefined;
+        return Deno.core.opSync("get_cwd");
     };
     host.getDefaultLibLocation = () => {
         return "/default/lib/location";
@@ -59,28 +60,8 @@ function compile(file, lib) {
         .getPreEmitDiagnostics(program)
         .concat(emitResult.diagnostics);
 
-    for (const diagnostic of allDiagnostics) {
-        if (diagnostic.file) {
-            let { line, character } = ts.getLineAndCharacterOfPosition(
-                diagnostic.file,
-                diagnostic.start,
-            );
-            let message = ts.flattenDiagnosticMessageText(
-                diagnostic.messageText,
-                "\n",
-            );
-            Deno.core.opSync(
-                "diagnostic",
-                `${diagnostic.file.fileName} (${line + 1},${
-                    character + 1
-                }): ${message}`,
-            );
-        } else {
-            Deno.core.opSync(
-                "diagnostic",
-                ts.flattenDiagnosticMessageText(diagnostic.messageText, "\n"),
-            );
-        }
-    }
+    allDiagnostics = ts.sortAndDeduplicateDiagnostics(allDiagnostics);
+    let diag = ts.formatDiagnosticsWithColorAndContext(allDiagnostics, host);
+    Deno.core.opSync("diagnostic", diag);
     return !emitResult.emitSkipped;
 }

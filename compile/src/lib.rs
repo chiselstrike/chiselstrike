@@ -5,7 +5,6 @@ use deno_core::op_sync;
 use deno_core::JsRuntime;
 use deno_core::OpState;
 use isahc::ReadResponseExt;
-use itertools::Itertools;
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::env;
@@ -33,7 +32,7 @@ struct DownloadMap {
     // maps absolute path without extension to the input as written.
     input_files: HashMap<String, String>,
 
-    diagnostics: Vec<String>,
+    diagnostics: String,
 }
 
 impl DownloadMap {
@@ -181,6 +180,11 @@ fn write(_op_state: &mut OpState, path: String, content: String) -> Result<()> {
     Ok(())
 }
 
+fn get_cwd(_op_state: &mut OpState, _: (), _: ()) -> Result<String> {
+    let cwd = std::env::current_dir()?;
+    Ok(cwd.into_os_string().into_string().unwrap())
+}
+
 fn dir_exists(_op_state: &mut OpState, path: String, _: ()) -> Result<bool> {
     return Ok(Path::new(&path).is_dir());
 }
@@ -190,7 +194,11 @@ fn file_exists(_op_state: &mut OpState, path: String, _: ()) -> Result<bool> {
 }
 
 fn diagnostic(_op_state: &mut OpState, msg: String, _: ()) -> Result<()> {
-    FILES.with(|m| m.borrow_mut().diagnostics.push(msg));
+    FILES.with(|m| {
+        let mut borrow = m.borrow_mut();
+        assert!(borrow.diagnostics.is_empty());
+        borrow.diagnostics = msg;
+    });
     Ok(())
 }
 
@@ -246,6 +254,7 @@ pub fn compile_ts_code(file_name: &str, lib_name: Option<&str>) -> Result<HashMa
     runtime.register_op("fetch", op_sync(fetch));
     runtime.register_op("read", op_sync(read));
     runtime.register_op("write", op_sync(write));
+    runtime.register_op("get_cwd", op_sync(get_cwd));
     runtime.register_op("dir_exists", op_sync(dir_exists));
     runtime.register_op("file_exists", op_sync(file_exists));
     runtime.register_op("diagnostic", op_sync(diagnostic));
@@ -268,11 +277,7 @@ pub fn compile_ts_code(file_name: &str, lib_name: Option<&str>) -> Result<HashMa
         .unwrap()
         .is_true()
     {
-        return Err(FILES.with(|m| {
-            let borrow = m.borrow();
-            let msgs = borrow.diagnostics.iter().join("\n");
-            anyhow!("Compilation failed:\n{}", msgs)
-        }));
+        return Err(FILES.with(|m| anyhow!("Compilation failed:\n{}", m.borrow().diagnostics)));
     }
 
     FILES.with(|m| {
