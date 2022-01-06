@@ -225,6 +225,11 @@ async fn op_chisel_store(
     let type_name = content["name"]
         .as_str()
         .ok_or_else(|| anyhow!("Type name error; the .name key must have a string value"))?;
+
+    let value = content["value"]
+        .as_object()
+        .ok_or_else(|| anyhow!("Value passed to store is not a Json Object"))?;
+
     let runtime = runtime::get();
     let api_version = current_api_version();
 
@@ -232,11 +237,12 @@ async fn op_chisel_store(
     let ty = runtime
         .type_system
         .lookup_custom_type(type_name, &api_version)?;
+    let query_engine = runtime.query_engine.clone();
 
-    let value = content["value"]
-        .as_object()
-        .ok_or_else(|| anyhow!("Value passed to store is not a Json Object"))?;
-    runtime.query_engine.add_row(&ty, value).await
+    // Await point below, RcMut can't be held.
+    drop(runtime);
+
+    query_engine.add_row(&ty, value).await
 }
 
 type DbStream = RefCell<SqlStream>;

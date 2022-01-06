@@ -145,8 +145,7 @@ impl RpcService {
 
             runtime.policies.versions.remove(&version);
 
-            let mut api = runtime.api.lock().await;
-            api.remove_routes(&prefix);
+            runtime.api.remove_routes(&prefix);
             Ok(())
         });
         state.send_command(cmd).await?;
@@ -377,16 +376,15 @@ impl RpcService {
                 .versions
                 .insert(api_version.to_owned(), policy.clone());
 
-            let mut api = runtime.api.lock().await;
-            api.remove_routes(&prefix);
+            runtime.api.remove_routes(&prefix);
 
             for (path, _) in endpoints {
-                let func = Box::new({
+                let func = Arc::new({
                     let path = path.clone();
                     move |req| deno::run_js(path.clone(), req).boxed_local()
                 });
                 deno::activate_endpoint(&path);
-                api.add_route(path.into(), func);
+                runtime.api.add_route(path.into(), func);
             }
             Ok(())
         });

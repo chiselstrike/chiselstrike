@@ -5,18 +5,16 @@ use crate::policies::{FieldPolicies, Policies};
 use crate::query::{MetaService, QueryEngine};
 use crate::rcmut::RcMut;
 use crate::types::{ObjectType, TypeSystem};
-use async_mutex::Mutex;
 use derive_new::new;
 use once_cell::sync::OnceCell;
 use std::cell::RefCell;
 use std::rc::Rc;
-use std::sync::Arc;
 
 #[derive(new)]
 pub(crate) struct Runtime {
-    pub(crate) api: Arc<Mutex<ApiService>>,
-    pub(crate) query_engine: QueryEngine,
-    pub(crate) meta: MetaService,
+    pub(crate) api: Rc<ApiService>,
+    pub(crate) query_engine: Rc<QueryEngine>,
+    pub(crate) meta: Rc<MetaService>,
     pub(crate) type_system: TypeSystem,
     pub(crate) policies: Policies,
 }

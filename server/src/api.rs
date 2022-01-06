@@ -2,7 +2,6 @@
 
 use crate::prefix_map::PrefixMap;
 use anyhow::{Error, Result};
-use async_mutex::Mutex;
 use futures::future::LocalBoxFuture;
 use futures::ready;
 use futures::stream::Stream;
@@ -18,7 +17,8 @@ use std::net::SocketAddr;
 use std::path::Path;
 use std::path::PathBuf;
 use std::pin::Pin;
-use std::sync::Arc;
+use std::rc::Rc;
+use std::sync::{Arc, Mutex};
 use std::task::{Context, Poll};
 
 type JsStream = Pin<Box<dyn Stream<Item = Result<Box<[u8]>>>>>;
@@ -65,7 +65,12 @@ impl HttpBody for Body {
     }
 }
 
-type RouteFn = Box<
+// RouteFns are passed between threads in rpc.rs, as they are built in the RPC threads and then
+// distributed to the executors.
+//
+// At the same time, we need to make this clonable to be able to sanely use interior mutability
+// inside the ApiService struct, so we need some reference counted type instead of a Box
+type RouteFn = Arc<
     dyn Fn(Request<hyper::Body>) -> LocalBoxFuture<'static, Result<Response<Body>>> + Send + Sync,
 >;
 
@@ -108,15 +113,19 @@ impl TryFrom<&str> for RequestPath {
 /// API service for Chisel server.
 #[derive(Default)]
 pub(crate) struct ApiService {
-    paths: PrefixMap<RouteFn>,
+    // Although we are on a TPC environment, this sync mutex should be fine. It will
+    // never contend because the ApiService is thread-local. The alternative is a RefCell
+    // with runtime checking, which is likely cheaper, but still this is safer and we don't
+    // have to manually implement Send (which is unsafe).
+    paths: Mutex<PrefixMap<RouteFn>>,
 }
 
 impl ApiService {
     /// Finds the right RouteFn for this request.
-    fn find_route_fn<S: AsRef<Path>>(&self, request: S) -> Option<&RouteFn> {
-        match self.paths.longest_prefix(request.as_ref()) {
+    fn find_route_fn<S: AsRef<Path>>(&self, request: S) -> Option<RouteFn> {
+        match self.paths.lock().unwrap().longest_prefix(request.as_ref()) {
             None => None,
-            Some((_, f)) => Some(f),
+            Some((_, f)) => Some(f.clone()),
         }
     }
 
@@ -127,16 +136,16 @@ impl ApiService {
     ///  * path: The path for the route, including any leading /
     ///  * code: A String containing the raw code of the endpoint, before any compilation.
     ///  * route_fn: the actual function to be executed, likely some call to deno.
-    pub(crate) fn add_route(&mut self, path: PathBuf, route_fn: RouteFn) {
-        self.paths.insert(path, route_fn);
+    pub(crate) fn add_route(&self, path: PathBuf, route_fn: RouteFn) {
+        self.paths.lock().unwrap().insert(path, route_fn);
     }
 
     /// Remove all routes that have this prefix.
-    pub(crate) fn remove_routes(&mut self, prefix: &Path) {
-        self.paths.remove_prefix(prefix)
+    pub(crate) fn remove_routes(&self, prefix: &Path) {
+        self.paths.lock().unwrap().remove_prefix(prefix)
     }
 
-    async fn route(&mut self, req: Request<hyper::Body>) -> hyper::http::Result<Response<Body>> {
+    async fn route(&self, req: Request<hyper::Body>) -> hyper::http::Result<Response<Body>> {
         if let Some(route_fn) = self.find_route_fn(req.uri().path()) {
             if req.uri().path().starts_with("/__chiselstrike") {
                 return match route_fn(req).await {
@@ -153,11 +162,8 @@ impl ApiService {
                             .status(StatusCode::FORBIDDEN)
                             .body("Token not recognized\n".to_string().into());
                     }
-                    crate::runtime::get()
-                        .meta
-                        .get_username(token.unwrap())
-                        .await
-                        .ok()
+                    let meta = crate::runtime::get().meta.clone();
+                    meta.get_username(token.unwrap()).await.ok()
                 }
                 None => None,
             };
@@ -219,7 +225,7 @@ where
 }
 
 pub(crate) fn spawn(
-    api: Arc<Mutex<ApiService>>,
+    api: Rc<ApiService>,
     addr: SocketAddr,
     shutdown: impl core::future::Future<Output = ()> + 'static,
 ) -> Result<tokio::task::JoinHandle<Result<(), hyper::Error>>> {
@@ -228,10 +234,7 @@ pub(crate) fn spawn(
         async move {
             Ok::<_, Infallible>(service_fn(move |req| {
                 let api = api.clone();
-                async move {
-                    let mut api = api.lock().await;
-                    api.route(req).await
-                }
+                async move { api.route(req).await }
             }))
         }
     });
