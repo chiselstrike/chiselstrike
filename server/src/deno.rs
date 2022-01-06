@@ -36,7 +36,6 @@ use hyper::body::HttpBody;
 use hyper::header::HeaderValue;
 use hyper::Method;
 use hyper::{Request, Response, StatusCode};
-use mktemp::TempFile;
 use once_cell::unsync::OnceCell;
 use std::cell::RefCell;
 use std::collections::HashMap;
@@ -48,6 +47,7 @@ use std::pin::Pin;
 use std::rc::Rc;
 use std::sync::Arc;
 use std::task::{Context, Poll};
+use tempfile::Builder;
 
 // FIXME: This should not be here. The client should download and
 // compile modules, the server should not get code out of the
@@ -108,11 +108,11 @@ fn wrap(specifier: &ModuleSpecifier, code: String) -> Result<ModuleSource> {
 }
 
 fn compile(code: &str, lib: Option<&str>) -> Result<String> {
-    let mut f = TempFile::new("", ".ts")?;
-    let inner = f.inner();
+    let mut f = Builder::new().suffix(".ts").tempfile()?;
+    let inner = f.as_file_mut();
     inner.write_all(code.as_bytes())?;
     inner.flush()?;
-    let path = f.path();
+    let path = f.path().to_str().unwrap();
     Ok(compile_ts_code(path, lib)?.remove(path).unwrap())
 }
 
@@ -334,11 +334,11 @@ async fn create_deno(inspect_brk: bool) -> Result<DenoService> {
     let chisel = include_str!("chisel.js").to_string();
     let api = {
         let lib = include_bytes!("./dts/lib.deno_core.d.ts");
-        let mut lib_f = TempFile::new("", ".d.ts")?;
-        let inner = lib_f.inner();
+        let mut lib_f = Builder::new().suffix(".d.ts").tempfile()?;
+        let inner = lib_f.as_file_mut();
         inner.write_all(lib)?;
         inner.flush()?;
-        compile(include_str!("api.ts"), Some(lib_f.path()))?
+        compile(include_str!("api.ts"), Some(lib_f.path().to_str().unwrap()))?
     };
     let chisel_path = "/chisel.js".to_string();
 

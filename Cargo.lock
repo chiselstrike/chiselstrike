@@ -2310,15 +2310,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "mktemp-rs"
-version = "0.2.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "91145f1540600f57bfa5cca8484c175dd966909276ce9e933b3ead45bb557b74"
-dependencies = [
- "libc",
-]
-
-[[package]]
 name = "multimap"
 version = "0.8.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3490,7 +3481,6 @@ dependencies = [
  "hyper",
  "itertools 0.10.3",
  "log",
- "mktemp-rs",
  "nix",
  "once_cell",
  "prost",
@@ -3503,6 +3493,7 @@ dependencies = [
  "socket2 0.3.19",
  "sqlx",
  "structopt",
+ "tempfile",
  "thiserror",
  "tokio",
  "tonic",
