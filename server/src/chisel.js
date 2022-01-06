@@ -1,6 +1,11 @@
 // SPDX-FileCopyrightText: © 2021 ChiselStrike <info@chiselstrike.com>
 
-import { ChiselEntity, ChiselIterator, chiselIterator } from "./api.ts";
+import {
+    ChiselEntity,
+    ChiselIterator,
+    chiselIterator,
+    OAuthUser,
+} from "./api.ts";
 
 const Chisel = {};
 
@@ -8,6 +13,7 @@ Chisel.api = {};
 Chisel.api.ChiselIterator = ChiselIterator;
 Chisel.api.chiselIterator = chiselIterator;
 globalThis.ChiselEntity = ChiselEntity;
+globalThis.OAuthUser = OAuthUser;
 
 Chisel.buildReadableStreamForBody = function (rid) {
     return new ReadableStream({
