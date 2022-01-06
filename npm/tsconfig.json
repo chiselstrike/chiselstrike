@@ -1,0 +1,12 @@
+{
+  "compilerOptions": {
+    "allowJs": true,
+    "declaration": true,
+    "experimentalDecorators": true,
+   "lib": ["ESNext", "DOM"],
+    "outDir": "./lib",
+    "target": "ESnext",
+  },
+  "include": ["src/api.ts", "dts/lib.deno_core.d.ts"],
+  "exclude": ["node_modules", "**/__tests__/*"]
+}
