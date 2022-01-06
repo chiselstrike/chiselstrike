@@ -4,6 +4,8 @@ use anyhow::{anyhow, Result};
 use deno_core::op_sync;
 use deno_core::JsRuntime;
 use deno_core::OpState;
+use deno_core::RuntimeOptions;
+use deno_core::Snapshot;
 use isahc::ReadResponseExt;
 use std::cell::RefCell;
 use std::collections::HashMap;
@@ -237,6 +239,8 @@ fn without_extension(path: &str) -> &str {
     path.rsplit_once('.').unwrap().0
 }
 
+pub static SNAPSHOT: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/SNAPSHOT.bin"));
+
 pub fn compile_ts_code(file_name: &str, lib_name: Option<&str>) -> Result<HashMap<String, String>> {
     let lib_name = lib_name.unwrap_or("/default/lib/location/lib.esnext.d.ts");
     FILES.with(|m| {
@@ -250,7 +254,10 @@ pub fn compile_ts_code(file_name: &str, lib_name: Option<&str>) -> Result<HashMa
             .insert(abs(without_extension(file_name)), file_name.to_string());
     });
 
-    let mut runtime = JsRuntime::new(Default::default());
+    let mut runtime = JsRuntime::new(RuntimeOptions {
+        startup_snapshot: Some(Snapshot::Static(SNAPSHOT)),
+        ..Default::default()
+    });
     runtime.register_op("fetch", op_sync(fetch));
     runtime.register_op("read", op_sync(read));
     runtime.register_op("write", op_sync(write));
@@ -259,9 +266,6 @@ pub fn compile_ts_code(file_name: &str, lib_name: Option<&str>) -> Result<HashMa
     runtime.register_op("file_exists", op_sync(file_exists));
     runtime.register_op("diagnostic", op_sync(diagnostic));
     runtime.sync_ops_cache();
-
-    runtime.execute_script("typescript.js", include_str!("typescript.js"))?;
-    runtime.execute_script("tsc.js", include_str!("tsc.js"))?;
 
     let global_context = runtime.global_context();
     let scope = &mut runtime.handle_scope();
