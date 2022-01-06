@@ -6,12 +6,12 @@ cp examples/person.ts "$TEMPDIR/types"
 cp examples/store.js "$TEMPDIR/endpoints/ins.js"
 
 cat << EOF > "$TEMPDIR/endpoints/count.ts"
-export default async function chisel(req) {
+export default async function chisel(req: Request) {
     let count = 0;
     for await (let person of Chisel.Person) {
 	count += 1
     }
-    return new Response(count);
+    return new Response(String(count));
 }
 EOF
 

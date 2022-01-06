@@ -4,7 +4,7 @@
 
 cat << EOF > "$TEMPDIR/endpoints/test.js"
 // Intentionally invalid, there is no default export
-export async function chisel(req) {
+export async function chisel(req: Request) {
     return new Response("foo");
 }
 EOF
@@ -24,7 +24,7 @@ $CURL -o - $CHISELD_HOST/dev/test
 
 cat << EOF > "$TEMPDIR/endpoints/test.js"
 // Now it is OK
-export default async function chisel(req) {
+export default async function chisel(req: Request) {
     return new Response("foo");
 }
 EOF

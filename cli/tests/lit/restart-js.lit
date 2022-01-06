@@ -7,7 +7,7 @@ function foo() {
     return "test OK"
 }
 
-export default async function chisel(req) {
+export default async function chisel(req: Request) {
     return new Response(foo());
 }
 EOF
@@ -28,7 +28,7 @@ $CHISEL restart
 # CHECK: Server restarted successfully.
 
 cat << EOF > "$TEMPDIR/endpoints/test2.js"
-export default async function chisel(req) {
+export default async function chisel(req: Request) {
     return new Response(foo());
 }
 EOF

@@ -3,7 +3,7 @@
 # RUN: sh -e @file
 
 cat << EOF > "$TEMPDIR/endpoints/error.ts"
-export default async function chisel(req) {
+export default async function chisel(req: Request) {
     return new Response("foo" "bar");
 }
 EOF
@@ -18,7 +18,7 @@ $CHISEL apply 2>&1 || true
 
 cat << EOF > "$TEMPDIR/endpoints/error.ts"
 const xyz = foo();
-export default async function chisel(req) {
+export default async function chisel(req: Request) {
     return xyz;
 }
 EOF

@@ -19,7 +19,7 @@ class Nickname {
 EOF
 
 cat << EOF > "$TEMPDIR/endpoints/store_nick.js"
-export default async function chisel(req) {
+export default async function chisel(req: Request) {
     await Chisel.save('Nickname', {first_name: "Glauber", nick: "Glommer"});
     return new Response('ok');
 }
