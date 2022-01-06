@@ -16,14 +16,14 @@ $CHISEL apply
 # CHECK: Type defined: Evolving
 
 cat << EOF > "$TEMPDIR/endpoints/store.ts"
-export default async function chisel(req) {
+export default async function chisel(req: Request) {
    await Chisel.save('Evolving', { "a": "A", "b": "B" });
    return new Response('ok');
 }
 EOF
 
 cat << EOF > "$TEMPDIR/endpoints/find.ts"
-export default async function chisel(req) {
+export default async function chisel(req: Request) {
    let response = "tst ";
    for await (let ev of Chisel.Evolving) {
         let fields = [ev.a, ev.b];

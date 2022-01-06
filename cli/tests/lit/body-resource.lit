@@ -3,7 +3,7 @@
 # RUN: sh -e @file
 
 cat << EOF > "$TEMPDIR/endpoints/test1.js"
-export default async function chisel(req) {
+export default async function chisel(req: Request) {
     let res = Deno.core.resources();
     if (res[3] !== "chisel_server::deno::BodyResource") {
         throw "Missing resource";
@@ -21,7 +21,7 @@ export default async function chisel(req) {
 EOF
 
 cat << EOF > "$TEMPDIR/endpoints/test2.js"
-export default async function chisel(req) {
+export default async function chisel(req: Request) {
     let res = Deno.core.resources();
     if (res[4] !== "chisel_server::deno::BodyResource") {
         throw "Missing resource";

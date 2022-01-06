@@ -244,3 +244,7 @@ export class ChiselEntity {
         return it.select(...columns);
     }
 }
+
+export class OAuthUser extends ChiselEntity {
+    username: string;
+}

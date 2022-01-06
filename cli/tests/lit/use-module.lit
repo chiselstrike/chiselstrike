@@ -5,7 +5,7 @@
 cat << EOF > "$TEMPDIR/endpoints/pad.js"
 import indent from 'https://cdn.skypack.dev/pin/indent-string@v5.0.0-VgKPSgi4hUX5NbF4n3aC/mode=imports,min/optimized/indent-string.js'
 
-export default function chisel(req) {
+export default function chisel(req: Request) {
     return new Response("test" + indent("foo", 4));
 }
 EOF

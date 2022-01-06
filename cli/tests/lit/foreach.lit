@@ -22,7 +22,7 @@ export default async function chisel(req: Request) {
     await Person.forEach(cnt_ => {
         count += 1;
     });
-    return new Response(count);
+    return new Response(String(count));
 }
 EOF
 

@@ -3,13 +3,13 @@
 # RUN: sh -e @file
 
 cat << EOF > "$TEMPDIR/endpoints/foo.js"
-export default async function chisel(req) {
+export default async function chisel(req: Request) {
     return new Response("foo");
 }
 EOF
 
 cat << EOF > "$TEMPDIR/endpoints/bar.js"
-export default async function chisel(req) {
+export default async function chisel(req: Request) {
     return new Response("bar", {
         headers: [
             ["access-control-allow-origin", "https://chiselstrike.com"],

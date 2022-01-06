@@ -6,19 +6,19 @@ mkdir -p "$TEMPDIR/endpoints"
 cd "$TEMPDIR"
 
 cat << EOF > ./endpoints/end.js
-export default async function chisel(req) {
+export default async function chisel(req: Request) {
     return new Response("");
 }
 EOF
 
 cat << EOF > ./endpoints/endpoint.js
-export default async function chisel(req) {
+export default async function chisel(req: Request) {
     return new Response("");
 }
 EOF
 
 cat << EOF > ./endpoints/endpo.js
-export default async function chisel(req) {
+export default async function chisel(req: Request) {
     return new Response("");
 }
 EOF

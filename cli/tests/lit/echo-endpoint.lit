@@ -4,7 +4,7 @@
 
 cat << EOF > "$TEMPDIR/endpoints/echo.js"
 // This function produces a response whose body is a json of the request
-export default async function chisel(req) {
+export default async function chisel(req: Request) {
     // The replacer function is not async, so read the body first.
     let body_text = await req.text();
 

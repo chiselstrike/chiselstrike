@@ -73,3 +73,7 @@ declare class ChiselEntity {
 }
 
 declare const Chisel: Chisel;
+
+declare class OAuthUser extends ChiselEntity {
+    username: string;
+}
