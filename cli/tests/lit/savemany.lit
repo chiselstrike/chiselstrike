@@ -28,5 +28,5 @@ $CHISEL apply
 # CHECK: Type defined: Person
 # CHECK: End point defined: /dev/savemany
 
-$CURL $CHISELD_HOST/dev/savemany
+$CURL -X POST $CHISELD_HOST/dev/savemany
 # CHECK: Ok

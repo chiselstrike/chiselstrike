@@ -56,7 +56,7 @@ $CHISEL apply
 # CHECK: End point defined: /dev/store_with_id
 # CHECK: End point defined: /dev/update_by_id
 
-$CURL $CHISELD_HOST/dev/bad_id  2>&1 || echo
+$CURL -X POST $CHISELD_HOST/dev/bad_id  2>&1 || echo
 # CHECK: invalid ID 'badid'
 
 $CURL -X POST $CHISELD_HOST/dev/store_with_id

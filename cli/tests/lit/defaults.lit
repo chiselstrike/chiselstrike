@@ -34,7 +34,7 @@ EOF
 cd "$TEMPDIR"
 $CHISEL apply
 
-$CURL -o - $CHISELD_HOST/dev/default
+$CURL -X POST $CHISELD_HOST/dev/default
 # CHECK: HTTP/1.1 200 OK
 
 $CURL -o - $CHISELD_HOST/dev/read

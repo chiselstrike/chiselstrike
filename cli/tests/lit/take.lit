@@ -101,7 +101,7 @@ $CHISEL apply
 # CHECK: End point defined: /dev/taketwice
 # CHECK: End point defined: /dev/taketwicereverse
 
-$CURL $CHISELD_HOST/dev/store
+$CURL -X POST $CHISELD_HOST/dev/store
 # CHECK: Ok
 
 $CURL $CHISELD_HOST/dev/findall

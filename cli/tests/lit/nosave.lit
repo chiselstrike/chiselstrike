@@ -26,9 +26,9 @@ EOF
 cd "$TEMPDIR"
 $CHISEL apply
 
-$CURL $CHISELD_HOST/dev/oauser 2>&1 ||:
+$CURL -X POST $CHISELD_HOST/dev/oauser 2>&1 ||:
 # CHECK: Cannot save into type OAuthUser.
-$CURL $CHISELD_HOST/dev/str 2>&1 ||:
+$CURL -X POST $CHISELD_HOST/dev/str 2>&1 ||:
 # CHECK: Cannot save into type string.
-$CURL $CHISELD_HOST/dev/unk 2>&1 ||:
+$CURL -X POST $CHISELD_HOST/dev/unk 2>&1 ||:
 # CHECK: Cannot save into type FooBar.
