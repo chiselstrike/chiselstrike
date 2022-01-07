@@ -4,6 +4,13 @@ use std::process::Command;
 
 #[allow(dead_code)]
 pub fn run_in<T: IntoIterator<Item = &'static str>>(cmd: &str, args: T, dir: PathBuf) {
+    assert!(
+        dir.exists(),
+        "{:?} does not exist. Current directory is {:?}",
+        dir,
+        env::current_dir().unwrap()
+    );
+    assert!(dir.is_dir(), "{:?} is not a directory", dir);
     let status = Command::new(cmd)
         .args(args)
         .current_dir(dir)
