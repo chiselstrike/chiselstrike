@@ -180,7 +180,7 @@ export class ChiselIterator<T> {
             },
             return() {
                 Deno.core.opSync("op_close", rid);
-                return { done: true };
+                return { value: undefined as T, done: true };
             },
         };
     }
