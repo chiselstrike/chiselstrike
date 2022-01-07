@@ -11,7 +11,7 @@ use crate::runtime::Runtime;
 use crate::types::ObjectType;
 use anyhow::{anyhow, Result};
 use deno_broadcast_channel::InMemoryBroadcastChannel;
-use deno_core::error::AnyError;
+use deno_core::error::{generic_error, AnyError};
 use deno_core::CancelFuture;
 use deno_core::CancelHandle;
 use deno_core::JsRuntime;
@@ -127,7 +127,18 @@ impl deno_core::ModuleLoader for ModuleLoader {
     ) -> Pin<Box<ModuleSourceFuture>> {
         if specifier.as_str().starts_with(DUMMY_PREFIX) {
             let path = specifier.path();
-            let code = self.code_map.borrow().get(path).unwrap().code.clone();
+            let code_map = self.code_map.borrow();
+            let code = match code_map.get(path) {
+                Some(code) => code,
+                None => {
+                    let path = path.to_string();
+                    return async move {
+                        Err(generic_error(format!("No module found in path '{}'", path)))
+                    }
+                    .boxed_local();
+                }
+            };
+            let code = code.code.clone();
             let code = wrap(specifier, code);
             std::future::ready(code).boxed_local()
         } else {
