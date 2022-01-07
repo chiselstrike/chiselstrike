@@ -306,7 +306,6 @@ fn create_project(path: &Path, examples: bool) -> Result<()> {
     write_template!("tsconfig.json", path)?;
     write_template!("Chisel.toml", path)?;
     write_template!("chisel-decorators.ts", &path.join(DTS_DIR))?;
-    write_template!("chisel.d.ts", &path.join(DTS_DIR))?;
 
     if examples {
         write_template!("hello.ts", &path.join(ENDPOINTS_DIR))?;
