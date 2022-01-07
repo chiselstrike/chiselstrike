@@ -3,7 +3,7 @@
 # RUN: sh -e @file
 
 cat << EOF > "$TEMPDIR/types/foo.ts"
-class Foo {
+export class Foo extends ChiselEntity {
   @labels("L1") a: string;
   @labels("L2") b: number;
 }
@@ -19,7 +19,7 @@ $CHISEL apply
 
 ## Changing labels is OK.
 cat << EOF > "$TEMPDIR/types/foo.ts"
-class Foo {
+export class Foo extends ChiselEntity {
   a: string;
   @labels("L1") b: number;
 }
@@ -29,7 +29,7 @@ $CHISEL apply
 
 # Adding default values is OK.
 cat << EOF > "$TEMPDIR/types/foo.ts"
-class Foo {
+export class Foo extends ChiselEntity {
   a: string = "foo";
   @labels("L1") b: number;
 }
@@ -39,7 +39,7 @@ $CHISEL apply
 
 ## Two compatible definitions in different files are rejected.
 cat << EOF > "$TEMPDIR/types/fooNoteADifferentFilenameHere.ts"
-class Foo {
+export class Foo extends ChiselEntity {
   a: string = "foo";
   b: number;
 }
@@ -50,7 +50,7 @@ rm "$TEMPDIR/types/fooNoteADifferentFilenameHere.ts"
 
 ## Changing b's type is not OK.
 cat << EOF > "$TEMPDIR/types/foo.ts"
-class Foo {
+export class Foo extends ChiselEntity {
   a: string = "foo";
   b: string;
 }
@@ -60,7 +60,7 @@ $CHISEL apply 2>&1 || echo # (swallow the apply abort)
 
 ## Adding a field is not OK.
 cat << EOF > "$TEMPDIR/types/foo.ts"
-class Foo {
+export class Foo extends ChiselEntity {
   a: string = "foo";
   b: number; 
   c: number;
@@ -71,7 +71,7 @@ $CHISEL apply 2>&1 || echo # (swallow the apply abort)
 
 ## Reordering fields is OK.
 cat << EOF > "$TEMPDIR/types/foo.ts"
-class Foo {
+export class Foo extends ChiselEntity {
   b: number;
   a: string = "foo";
 }
@@ -81,7 +81,7 @@ $CHISEL apply 2>&1 || echo # (swallow the apply abort)
 
 ## Removing fields is OK if they previously had a default
 cat << EOF > "$TEMPDIR/types/foo.ts"
-class Foo {
+export class Foo extends ChiselEntity {
   b: number;
 }
 EOF
@@ -89,13 +89,13 @@ $CHISEL apply 2>&1 || echo # (swallow the apply abort)
 # CHECK: Type defined: Foo
 
 ## Redefining elemental types is not OK.
-echo 'class number { a: number}' > "$TEMPDIR/types/foo.ts"
+echo 'export class number extends ChiselEntity { a: number}' > "$TEMPDIR/types/foo.ts"
 $CHISEL apply --allow-type-deletion 2>&1 || echo # (swallow the apply abort)
 # CHECK: custom type expected, got `number` instead
 
 ### Removing fields is not OK if they didn't have a default
 cat << EOF > "$TEMPDIR/types/foo.ts"
-class Bar {
+export class Bar extends ChiselEntity {
   a: number;
   b: number;
 }
@@ -104,7 +104,7 @@ $CHISEL apply --allow-type-deletion 2>&1 || echo # (swallow the apply abort)
 # CHECK: Type defined: Bar
 #
 cat << EOF > "$TEMPDIR/types/foo.ts"
-class Bar {
+export class Bar extends ChiselEntity {
   b: number;
 }
 EOF

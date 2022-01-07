@@ -3,12 +3,12 @@
 # RUN: sh -e @file
 
 cat << EOF > "$TEMPDIR/types/types.graphql"
-  class TestLabelsPersist1 {
+  export class TestLabelsPersist1 extends ChiselEntity {
     @labels("a", "b") one: string;
     @labels("a") two: string;
   }
 
-  class TestLabelsPersist2 {
+  export class TestLabelsPersist2 extends ChiselEntity {
     @labels("c", "b") three: string;
     @labels("a") four: string;
   }
