@@ -1,0 +1,42 @@
+# SPDX-FileCopyrightText: © 2021 ChiselStrike <info@chiselstrike.com>
+
+# RUN: sh -e @file
+
+cp examples/person.ts "$TEMPDIR/types"
+cp examples/store.js "$TEMPDIR/endpoints"
+
+cat << EOF > "$TEMPDIR/endpoints/query.ts"
+export default async function chisel(req: Request) {
+    let ret = "";
+    const q1 = Person.findMany({"last_name":  "Costa"}).select("last_name");
+    for await (let row of q1) {
+        ret += JSON.stringify(row) + "\n";
+    }
+    const q2 = Person.select("last_name").findMany({"last_name":  "Costa"});
+    for await (let row of q2) {
+        ret += JSON.stringify(row) + "\n";
+    }
+    return new Response(ret);
+}
+EOF
+
+cd "$TEMPDIR"
+$CHISEL apply
+
+# CHECK: Type defined: Person
+# CHECK: End point defined: /dev/query
+# CHECK: End point defined: /dev/store
+
+$CURL --data '{
+    "first_name":"Glauber",
+    "last_name":"Costa",
+    "age": 666,
+    "human": true,
+    "height": 10.01
+}' -o - $CHISELD_HOST/dev/store
+
+$CURL -o - $CHISELD_HOST/dev/query
+
+# CHECK: HTTP/1.1 200 OK
+# CHECK: {"last_name":"Costa"}
+# CHECK: {"last_name":"Costa"}
