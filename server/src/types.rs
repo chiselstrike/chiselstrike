@@ -247,6 +247,23 @@ impl TypeSystem {
         }
     }
 
+    pub(crate) fn lookup_type(
+        &self,
+        type_name: &str,
+        api_version: &str,
+    ) -> Result<Type, TypeSystemError> {
+        if let Ok(ty) = self.lookup_builtin_type(type_name) {
+            Ok(ty)
+        } else {
+            let version = self.get_version(api_version)?;
+            if let Ok(ty) = version.lookup_custom_type(type_name) {
+                Ok(Type::Object(ty))
+            } else {
+                Err(TypeSystemError::NoSuchType(type_name.to_owned()))
+            }
+        }
+    }
+
     pub(crate) fn update(&mut self, other: &TypeSystem) {
         self.versions.clear();
         self.versions = other.versions.clone();
@@ -644,23 +661,13 @@ pub(crate) struct ExistingField {
 }
 
 impl ExistingField {
-    pub(crate) fn new(
-        ts: &TypeSystem,
-        name: &str,
-        id: i32,
-        field_type: &str,
-    ) -> anyhow::Result<Self> {
-        let split: Vec<&str> = name.split('.').collect();
-        anyhow::ensure!(split.len() == 3, "Expected version and type information as part of the field name. Got {}. Database corrupted?", name);
-        let name = split[2].to_owned();
-        let version = split[0].to_owned();
-
-        Ok(Self {
-            ty_: ts.lookup_builtin_type(field_type)?,
-            name,
+    pub(crate) fn new(name: &str, ty_: Type, id: i32, version: &str) -> Self {
+        Self {
+            name: name.to_owned(),
+            ty_,
             id,
-            version,
-        })
+            version: version.to_owned(),
+        }
     }
 }
 
@@ -689,13 +696,7 @@ pub(crate) struct NewField<'a> {
 }
 
 impl<'a> NewField<'a> {
-    pub(crate) fn new(
-        ts: &TypeSystem,
-        name: &'a str,
-        type_name: &str,
-        version: &'a str,
-    ) -> anyhow::Result<Self> {
-        let ty_ = ts.lookup_builtin_type(type_name)?;
+    pub(crate) fn new(name: &'a str, ty_: Type, version: &'a str) -> anyhow::Result<Self> {
         Ok(Self { name, ty_, version })
     }
 }

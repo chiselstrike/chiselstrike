@@ -8,6 +8,7 @@ edition = "2021"
 anyhow = { version = "1.0.45", features = ["backtrace"] }
 async-channel = "1.6.1"
 async-mutex = "1.4.0"
+async-recursion = "1.0.0"
 compile = { path = "../compile" }
 deno_broadcast_channel = "0.22.0"
 deno_core = "0.110.0"

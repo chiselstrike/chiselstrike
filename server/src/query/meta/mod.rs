@@ -263,10 +263,20 @@ impl MetaService {
             .map_err(QueryError::FetchFailed)?;
         let mut fields = Vec::new();
         for row in rows {
-            let field_name: &str = row.get("field_name");
+            let db_field_name: &str = row.get("field_name");
             let field_id: i32 = row.get("field_id");
             let field_type: &str = row.get("field_type");
-            let desc = ExistingField::new(ts, field_name, field_id, field_type)?;
+
+            let split: Vec<&str> = db_field_name.split('.').collect();
+            anyhow::ensure!(split.len() == 3, "Expected version and type information as part of the field name. Got {}. Database corrupted?", db_field_name);
+            let field_name = split[2].to_owned();
+            let version = split[0].to_owned();
+            let desc = ExistingField::new(
+                &field_name,
+                ts.lookup_type(field_type, &version)?,
+                field_id,
+                &version,
+            );
 
             let field_def: Option<String> = row.get("default_value");
             let is_optional: bool = row.get("is_optional");

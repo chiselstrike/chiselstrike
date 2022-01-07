@@ -74,7 +74,7 @@ fn get_columns(val: &serde_json::Value) -> Result<Vec<(String, Type)>> {
             "number" => Type::Float,
             "string" => Type::String,
             "boolean" => Type::Boolean,
-            v => anyhow::bail!("Invalid type {}", v),
+            _ => continue,
         };
         ret.push((name.to_string(), type_));
     }
@@ -220,38 +220,88 @@ impl Stream for PolicyApplyingStream {
     }
 }
 
+struct PolicyApplyingStreamWithType {
+    inner: RawSqlStream,
+    policies: FieldPolicies,
+    ty: Arc<ObjectType>,
+}
+
+impl Stream for PolicyApplyingStreamWithType {
+    type Item = anyhow::Result<JsonObject>;
+    fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
+        let ty = self.ty.clone();
+        let policies = self.policies.clone();
+        // Structural Pinning, it is OK because inner is pinned when we are.
+        let inner = unsafe { self.map_unchecked_mut(|s| &mut s.inner) };
+        match futures::ready!(inner.poll_next(cx)) {
+            None => Poll::Ready(None),
+            Some(Err(e)) => Poll::Ready(Some(Err(e))),
+            Some(Ok(item)) => {
+                let mut v = engine::typed_row_to_json(&ty, &item)?;
+                for (k, v) in v.iter_mut() {
+                    if let Some(xform) = policies.get(k) {
+                        *v = xform(v.take());
+                    }
+                }
+                Poll::Ready(Some(Ok(v)))
+            }
+        }
+    }
+}
+
+fn gather_columns(ty: &Arc<ObjectType>) -> (String, String) {
+    let mut column_string = String::new();
+    let mut join_string = String::new();
+
+    for field in ty.all_fields() {
+        if let Type::Object(custom_type) = &field.type_ {
+            join_string += &format!(
+                "JOIN {} ON {}.{}={}.{}\n",
+                custom_type.backing_table(),
+                custom_type.backing_table(),
+                "id",
+                ty.backing_table(),
+                field.name
+            );
+            let (rec_columns, rec_joins) = gather_columns(custom_type);
+            column_string += &rec_columns;
+            join_string += &rec_joins;
+        } else {
+            let field_name = format!("{}.{}", ty.backing_table(), field.name);
+            let col = match &field.default {
+                Some(dfl) => format!("coalesce({},\"{}\") AS {},", field_name, dfl, field_name),
+                None => format!("{},", field_name),
+            };
+            column_string += &col;
+        }
+    }
+    (column_string, join_string)
+}
+
 fn sql_backing_store(
     pool: &AnyPool,
-    columns: Vec<(String, Type)>,
     limit_str: &str,
     ty: Arc<ObjectType>,
     policies: FieldPolicies,
 ) -> Query {
-    let mut column_string = String::new();
-    for c in columns.iter() {
-        let field = ty.field_by_name(&c.0).unwrap();
-        let col = match &field.default {
-            Some(dfl) => format!("coalesce({},\"{}\") AS {},", field.name, dfl, field.name),
-            None => format!("{},", field.name),
-        };
-        column_string += &col;
-    }
+    let (mut column_string, join_string) = gather_columns(&ty);
     column_string.pop();
 
     let query = format!(
-        "SELECT {} FROM {} {}",
+        "SELECT {} FROM {} {} {}",
         column_string,
         ty.backing_table(),
+        join_string,
         &limit_str
     );
-    if policies.is_empty() {
-        return Query::Sql(query);
-    }
+    // if policies.is_empty() { // TODO: Is this ok?
+    //     return Query::Sql(query);
+    // }
     let stream = new_query_results(query, pool);
-    let pstream = Box::pin(PolicyApplyingStream {
+    let pstream = Box::pin(PolicyApplyingStreamWithType {
         inner: stream,
         policies,
-        columns,
+        ty,
     });
     Query::Stream(pstream)
 }
@@ -441,9 +491,7 @@ fn sql_impl(pool: &AnyPool, rel: Relation, alias_count: &mut u32) -> Query {
         .map(|x| format!("LIMIT {}", x))
         .unwrap_or_else(String::new);
     match rel.inner {
-        Inner::BackingStore(ty, policies) => {
-            sql_backing_store(pool, rel.columns, &limit_str, ty, policies)
-        }
+        Inner::BackingStore(ty, policies) => sql_backing_store(pool, &limit_str, ty, policies),
         Inner::Filter(inner, restrictions) => sql_filter(
             pool,
             &rel.columns,

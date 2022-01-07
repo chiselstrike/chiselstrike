@@ -3,6 +3,7 @@
 use crate::db::{sql, Relation};
 use crate::query::{DbConnection, Kind, QueryError};
 use crate::types::{Field, ObjectDelta, ObjectType, Type};
+use async_recursion::async_recursion;
 use futures::stream::BoxStream;
 use futures::stream::Stream;
 use futures::StreamExt;
@@ -16,6 +17,7 @@ use sqlx::{Executor, Row};
 use std::cell::RefCell;
 use std::marker::PhantomPinned;
 use std::pin::Pin;
+use std::sync::Arc;
 use std::task::{Context, Poll};
 use uuid::Uuid;
 
@@ -64,7 +66,7 @@ impl TryFrom<&Field> for ColumnDef {
             Type::Id => column_def.text().unique_key().primary_key(),
             Type::Float => column_def.double(),
             Type::Boolean => column_def.boolean(),
-            Type::Object(_) => anyhow::bail!("Relations aren't supported yet"),
+            Type::Object(_) => column_def.text(),
         };
 
         Ok(column_def)
@@ -224,7 +226,17 @@ impl QueryEngine {
         &self,
         ty: &ObjectType,
         ty_value: &JsonObject,
-    ) -> anyhow::Result<JsonObject> {
+    ) -> anyhow::Result<String> {
+        let new_obj_id = self.add_row_recursive(ty, ty_value).await?;
+        Ok(new_obj_id)
+    }
+
+    #[async_recursion]
+    pub(crate) async fn add_row_recursive(
+        &self,
+        ty: &ObjectType,
+        ty_value: &JsonObject,
+    ) -> anyhow::Result<String> {
         let mut field_binds = String::new();
         let mut field_names = String::new();
         let mut id_name = String::new();
@@ -255,7 +267,7 @@ impl QueryEngine {
         field_names.pop();
         update_binds.pop();
 
-        let insert_query = std::format!(
+        let insert_query_str = std::format!(
             "INSERT INTO {} ({}) VALUES ({}) ON CONFLICT ({}) DO UPDATE SET {} WHERE {} = {} RETURNING *",
             &ty.backing_table(),
             field_names,
@@ -266,7 +278,7 @@ impl QueryEngine {
             id_bind,
         );
 
-        let mut insert_query = sqlx::query(&insert_query);
+        let mut insert_query = sqlx::query(&insert_query_str);
         let mut columns = vec![];
 
         for field in ty.all_fields() {
@@ -283,7 +295,7 @@ impl QueryEngine {
             }
 
             macro_rules! bind_json_value {
-                ($as_type:ident, $fallback:ident ) => {{
+                ($as_type:ident, $fallback:ident) => {{
                     match ty_value.get(&field.name) {
                         Some(value_json) => {
                             let value = value_json.$as_type().ok_or_else(|| {
@@ -309,12 +321,20 @@ impl QueryEngine {
 
             columns.push((field.name.clone(), field.type_.clone()));
 
-            match field.type_ {
+            match &field.type_ {
                 Type::String => bind_json_value!(as_str, str),
                 Type::Id => bind_json_value!(as_str, str),
                 Type::Float => bind_json_value!(as_f64, f64),
                 Type::Boolean => bind_json_value!(as_bool, bool),
-                Type::Object(_) => anyhow::bail!("Relations aren't supported yet"),
+                Type::Object(nested_type) => {
+                    let object_id = self
+                        .add_row_recursive(
+                            nested_type,
+                            ty_value.get(&field.name).unwrap().as_object().unwrap(),
+                        )
+                        .await?;
+                    insert_query = insert_query.bind(object_id);
+                }
             }
         }
 
@@ -323,6 +343,7 @@ impl QueryEngine {
             .begin()
             .await
             .map_err(QueryError::ConnectionFailed)?;
+
         let row = transaction
             .fetch_one(insert_query)
             .await
@@ -333,7 +354,7 @@ impl QueryEngine {
             .await
             .map_err(QueryError::ExecuteFailed)?;
 
-        relational_row_to_json(&columns, &row)
+        Ok(row.get::<String, _>("id"))
     }
 }
 
@@ -366,4 +387,46 @@ pub(crate) fn relational_row_to_json(
         ret.insert(result_column.name().to_string(), val);
     }
     Ok(ret)
+}
+
+fn row_to_json_recursive(
+    ty: &Arc<ObjectType>,
+    row: &AnyRow,
+    mut col_idx: usize,
+) -> anyhow::Result<(JsonObject, usize)> {
+    let mut ret = JsonObject::default();
+    for field in ty.all_fields() {
+        // FIXME: consider result_column.type_info().is_null() too
+        macro_rules! to_json {
+            ($value_type:ty) => {{
+                let val = row.get::<$value_type, _>(col_idx);
+                col_idx += 1;
+                json!(val)
+            }};
+        }
+        let val = match &field.type_ {
+            Type::Float => {
+                // https://github.com/launchbadge/sqlx/issues/1596
+                // sqlx gets confused if the float doesn't have decimal points.
+                let val: &str = row.get_unchecked(col_idx);
+                col_idx += 1;
+                json!(val.parse::<f64>()?)
+            }
+            Type::String => to_json!(&str),
+            Type::Id => to_json!(&str),
+            Type::Boolean => to_json!(bool),
+            Type::Object(ty) => {
+                let (obj_json, new_col_idx) = row_to_json_recursive(ty, row, col_idx)?;
+                col_idx = new_col_idx;
+                serde_json::Value::Object(obj_json)
+            }
+        };
+        ret.insert(field.name.to_owned(), val);
+    }
+    Ok((ret, col_idx))
+}
+
+pub(crate) fn typed_row_to_json(ty: &Arc<ObjectType>, row: &AnyRow) -> anyhow::Result<JsonObject> {
+    let (json_row, _) = row_to_json_recursive(ty, row, 0)?;
+    Ok(json_row)
 }

@@ -8,7 +8,7 @@ use crate::query::{MetaService, QueryEngine};
 use crate::runtime;
 use crate::server::CommandTrait;
 use crate::server::CoordinatorChannel;
-use crate::types::{Field, NewField, NewObject, ObjectType, TypeSystem, TypeSystemError};
+use crate::types::{Field, NewField, NewObject, ObjectType, Type, TypeSystem, TypeSystemError};
 use anyhow::{Context, Result};
 use async_mutex::Mutex;
 use chisel::chisel_rpc_server::{ChiselRpc, ChiselRpcServer};
@@ -18,7 +18,7 @@ use chisel::{
     RestartResponse, StatusRequest, StatusResponse,
 };
 use futures::FutureExt;
-use std::collections::BTreeSet;
+use std::collections::{BTreeSet, HashMap};
 use std::net::SocketAddr;
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -252,6 +252,7 @@ impl RpcService {
         }
 
         let mut decorators = BTreeSet::default();
+        let mut new_types = HashMap::<String, Arc<ObjectType>>::default();
 
         // No changes are made to the type system in this loop. We re-read the database after we
         // apply the changes, and this way we don't have to deal with the case of succeding to
@@ -268,12 +269,18 @@ impl RpcService {
                     decorators.insert(label.clone());
                 }
 
-                let desc = NewField::new(
-                    &state.type_system,
-                    &field.name,
-                    &field.field_type,
-                    &api_version,
-                )?;
+                let field_ty = match state.type_system.lookup_builtin_type(&field.field_type) {
+                    Ok(ty) => ty,
+                    Err(_) => match new_types.get(&field.field_type) {
+                        Some(ty) => Type::Object(ty.clone()),
+                        None => anyhow::bail!(
+                            "field type `{}` is neither a built-in nor a custom type",
+                            &field.field_type
+                        ),
+                    },
+                };
+
+                let desc = NewField::new(&field.name, field_ty, &api_version)?;
                 fields.push(Field::new(
                     desc,
                     field.labels,
@@ -286,6 +293,7 @@ impl RpcService {
                 NewObject::new(&name, &api_version),
                 fields,
             )?);
+            new_types.insert(name.to_owned(), ty.clone());
 
             match version_types.lookup_custom_type(&name) {
                 Ok(old_type) => {
