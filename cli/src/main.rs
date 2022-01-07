@@ -303,6 +303,7 @@ fn create_project(path: &Path, examples: bool) -> Result<()> {
     fs::create_dir(path.join(ENDPOINTS_DIR))?;
     fs::create_dir(path.join(POLICIES_DIR))?;
     fs::create_dir(path.join(DTS_DIR))?;
+    write_template!("package.json", path)?;
     write_template!("tsconfig.json", path)?;
     write_template!("Chisel.toml", path)?;
     write_template!("chisel-decorators.ts", &path.join(DTS_DIR))?;
