@@ -1,3 +1,4 @@
+const readCache = {};
 function compile(file, lib) {
     const options = {
         allowJs: true,
@@ -50,7 +51,13 @@ function compile(file, lib) {
         return ret;
     };
     host.readFile = (specifier) => {
-        return Deno.core.opSync("read", specifier);
+        let v = readCache[specifier];
+        if (v !== undefined) {
+            return v;
+        }
+        v = Deno.core.opSync("read", specifier);
+        readCache[specifier] = v;
+        return v;
     };
 
     let program = ts.createProgram([file], options, host);
@@ -61,7 +68,11 @@ function compile(file, lib) {
         .concat(emitResult.diagnostics);
 
     allDiagnostics = ts.sortAndDeduplicateDiagnostics(allDiagnostics);
-    let diag = ts.formatDiagnosticsWithColorAndContext(allDiagnostics, host);
-    Deno.core.opSync("diagnostic", diag);
+    if (allDiagnostics.length != 0) {
+        let diag = ts.formatDiagnosticsWithColorAndContext(allDiagnostics, host);
+        Deno.core.opSync("diagnostic", diag);
+    }
     return !emitResult.emitSkipped;
 }
+
+compile("bootstrap.ts", "/default/lib/location/lib.esnext.d.ts");
