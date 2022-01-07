@@ -1,0 +1,34 @@
+# SPDX-FileCopyrightText: © 2021 ChiselStrike <info@chiselstrike.com>
+
+# RUN: sh -e @file
+
+cat << EOF > "$TEMPDIR/endpoints/oauser.ts"
+export default async function chisel(req) {
+    await Chisel.save('OAuthUser', {'username': 'bob'});
+    return new Response('stored');
+}
+EOF
+
+cat << EOF > "$TEMPDIR/endpoints/str.ts"
+export default async function chisel(req) {
+    await Chisel.save('string', {});
+    return new Response('stored');
+}
+EOF
+
+cat << EOF > "$TEMPDIR/endpoints/unk.ts"
+export default async function chisel(req) {
+    await Chisel.save('FooBar', {});
+    return new Response('stored');
+}
+EOF
+
+cd "$TEMPDIR"
+$CHISEL apply
+
+$CURL $CHISELD_HOST/dev/oauser 2>&1 ||:
+# CHECK: Cannot save into type OAuthUser.
+$CURL $CHISELD_HOST/dev/str 2>&1 ||:
+# CHECK: Cannot save into type string.
+$CURL $CHISELD_HOST/dev/unk 2>&1 ||:
+# CHECK: Cannot save into type FooBar.

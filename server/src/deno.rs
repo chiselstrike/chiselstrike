@@ -234,11 +234,15 @@ async fn op_chisel_store(
     let api_version = current_api_version();
 
     // Users can only store custom types.  Builtin types are managed by us.
-    let ty = runtime
+    let ty = match runtime
         .type_system
-        .lookup_custom_type(type_name, &api_version)?;
-    let query_engine = runtime.query_engine.clone();
+        .lookup_custom_type(type_name, &api_version)
+    {
+        Err(_) => anyhow::bail!("Cannot save into type {}.", type_name),
+        Ok(ty) => ty,
+    };
 
+    let query_engine = runtime.query_engine.clone();
     // Await point below, RcMut can't be held.
     drop(runtime);
 
