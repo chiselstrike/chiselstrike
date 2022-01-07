@@ -331,16 +331,18 @@ async fn create_deno(inspect_brk: bool) -> Result<DenoService> {
     runtime.sync_ops_cache();
 
     // FIXME: Include these files in the snapshop
-    let chisel = include_str!("chisel.js").to_string();
-    let api = {
+    let chisel = {
         let lib = include_bytes!("./dts/lib.deno_core.d.ts");
         let mut lib_f = Builder::new().suffix(".d.ts").tempfile()?;
         let inner = lib_f.as_file_mut();
         inner.write_all(lib)?;
         inner.flush()?;
-        compile(include_str!("api.ts"), Some(lib_f.path().to_str().unwrap()))?
+        compile(
+            include_str!("chisel.ts"),
+            Some(lib_f.path().to_str().unwrap()),
+        )?
     };
-    let chisel_path = "/chisel.js".to_string();
+    let chisel_path = "/chisel.ts".to_string();
 
     {
         let mut code_map = d.module_loader.code_map.borrow_mut();
@@ -348,13 +350,6 @@ async fn create_deno(inspect_brk: bool) -> Result<DenoService> {
             chisel_path.clone(),
             VersionedCode {
                 code: chisel,
-                version: 0,
-            },
-        );
-        code_map.insert(
-            "/api.ts".to_string(),
-            VersionedCode {
-                code: api,
                 version: 0,
             },
         );
