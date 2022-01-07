@@ -1,0 +1,25 @@
+{
+  "name": "@chiselstrike/chiselstrike",
+  "version": "0.3.0",
+  "main": "lib/api.js",
+  "types": "lib/api.d.ts",
+  "author": "Pekka Enberg <penberg@chiselstrike.com>",
+  "license": "Proprietary",
+  "prepare": "npm run build",
+  "bin": {
+    "chisel": "./npm/run.js",
+    "postinstall": "node ./npm/install.js"
+  },
+  "scripts": {
+    "build": "tsc"
+  },
+  "dependencies": {
+    "binary-install": "^0.1.1"
+  },
+  "devDependencies": {
+    "typescript": "^4.5.4"
+  },
+  "files": [
+    "/lib"
+  ]
+}
