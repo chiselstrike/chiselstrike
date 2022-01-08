@@ -279,7 +279,6 @@ const MANIFEST_FILE: &str = "Chisel.toml";
 const TYPES_DIR: &str = "./types";
 const ENDPOINTS_DIR: &str = "./endpoints";
 const POLICIES_DIR: &str = "./policies";
-const DTS_DIR: &str = "./dts";
 
 /// Writes contents to a file in a directory.
 fn write(contents: &[u8], dir: &Path, file: &str) -> Result<()> {
@@ -302,11 +301,9 @@ fn create_project(path: &Path, examples: bool) -> Result<()> {
     fs::create_dir(path.join(TYPES_DIR))?;
     fs::create_dir(path.join(ENDPOINTS_DIR))?;
     fs::create_dir(path.join(POLICIES_DIR))?;
-    fs::create_dir(path.join(DTS_DIR))?;
     write_template!("package.json", path)?;
     write_template!("tsconfig.json", path)?;
     write_template!("Chisel.toml", path)?;
-    write_template!("chisel-decorators.ts", &path.join(DTS_DIR))?;
 
     if examples {
         write_template!("hello.ts", &path.join(ENDPOINTS_DIR))?;
