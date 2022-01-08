@@ -3,7 +3,7 @@ sidebar_position: 3
 ---
 # ChiselStrike's Data Access API
 
-If you recall from the previous examples, when we defined our `Comment` class, we required it to extend
+If you recall from the previous examples, when we defined our `BlogComment` class, we required it to extend
 `ChiselEntity`. That makes a couple of methods available to your class, one of them we already used: `all()`.
 
 The methods in `ChiselEntity` all return a `ChiselIterator`. This is a lazy
@@ -16,27 +16,27 @@ The following methods are also available as part of `ChiselEntity`:
 * *findMany()*: Filter just the elements that match a certain column value
 
 ```typescript
-Comment.findMany({"content": something});
+BlogComment.findMany({"content": something});
 ```
 
 * *findOne()*: Return a single element that match a certain column value
 
 ```typescript
-Comment.findOne({"content": something});
+BlogComment.findOne({"content": something});
 ```
 
 * *select()*:  Restricts which columns to be added to the json object. Other properties are then
 discarded.
 
 ```typescript
-Comment.select("content");
+BlogComment.select("content");
 ```
 
 * *take(n: number)*: returns the first n elements, discarding the rest
 discarded.
 
 ```typescript
-Comment.take(1);
+BlogComment.take(1);
 ```
 
 :::info Feedback Requested! We could use your help!

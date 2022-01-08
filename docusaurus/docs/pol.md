@@ -25,7 +25,9 @@ the fields of your types.  To illustrate, please edit the file
 `types/t.ts` like this:
 
 ```typescript title="my-backend/types/t.ts"
-class Comment {
+import { ChiselEntity, labels } from "@chiselstrike/chiselstrike"
+
+class BlogComment {
     content: string;
      @labels("pii") by: string;
 }
