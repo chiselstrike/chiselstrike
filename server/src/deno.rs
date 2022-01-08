@@ -124,7 +124,7 @@ impl deno_core::ModuleLoader for ModuleLoader {
         if specifier == "@chiselstrike/chiselstrike" {
             let api_path = self
                 .base_directory
-                .join("api.ts")
+                .join("chisel.ts")
                 .to_str()
                 .unwrap()
                 .to_string();
@@ -348,34 +348,19 @@ async fn create_deno<P: AsRef<Path>>(base_directory: P, inspect_brk: bool) -> Re
     runtime.sync_ops_cache();
 
     // FIXME: Include these files in the snapshop
-    let chisel = compile_ts_code_as_bytes(include_bytes!("chisel.js"))?;
-    let api = compile_ts_code_as_bytes(include_bytes!("api.ts"))?;
+    let chisel = compile_ts_code_as_bytes(include_bytes!("chisel.ts"))?;
     let chisel_path = base_directory
         .as_ref()
-        .join("chisel.js")
+        .join("chisel.ts")
         .to_str()
         .unwrap()
         .to_string();
-    let api_path = base_directory
-        .as_ref()
-        .join("api.ts")
-        .to_str()
-        .unwrap()
-        .to_string();
-
     {
         let mut code_map = d.module_loader.code_map.borrow_mut();
         code_map.insert(
             chisel_path.clone(),
             VersionedCode {
                 code: chisel,
-                version: 0,
-            },
-        );
-        code_map.insert(
-            api_path,
-            VersionedCode {
-                code: api,
                 version: 0,
             },
         );
