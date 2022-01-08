@@ -250,7 +250,7 @@ export class OAuthUser extends ChiselEntity {
     username: string;
 }
 
-const ChiselAux = {
+export const Chisel = {
     api: {
         ChiselIterator: ChiselIterator,
         chiselIterator: chiselIterator,
@@ -295,7 +295,7 @@ const ChiselAux = {
     },
 };
 
-(globalThis as unknown as { Chisel: typeof ChiselAux }).Chisel = ChiselAux;
+(globalThis as unknown as { Chisel: typeof Chisel }).Chisel = Chisel;
 (globalThis as unknown as { ChiselEntity: typeof ChiselEntity }).ChiselEntity =
     ChiselEntity;
 (globalThis as unknown as { OAuthUser: typeof OAuthUser }).OAuthUser =
