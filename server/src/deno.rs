@@ -41,7 +41,7 @@ use std::collections::HashMap;
 use std::convert::TryInto;
 use std::future::Future;
 use std::net::SocketAddr;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::pin::Pin;
 use std::rc::Rc;
 use std::sync::Arc;
@@ -93,6 +93,7 @@ enum Error {
 
 struct ModuleLoader {
     code_map: RefCell<HashMap<String, VersionedCode>>,
+    base_directory: PathBuf,
 }
 
 fn wrap(specifier: &ModuleSpecifier, code: String) -> Result<ModuleSource> {
@@ -120,7 +121,20 @@ impl deno_core::ModuleLoader for ModuleLoader {
         referrer: &str,
         _is_main: bool,
     ) -> Result<ModuleSpecifier, AnyError> {
-        Ok(deno_core::resolve_import(specifier, referrer)?)
+        if specifier == "@chiselstrike/chiselstrike" {
+            let api_path = self
+                .base_directory
+                .join("api.ts")
+                .to_str()
+                .unwrap()
+                .to_string();
+
+            let spec = ModuleSpecifier::from_file_path(&api_path)
+                .map_err(|_| anyhow!("Can't convert {} to file-based URL", api_path))?;
+            Ok(spec)
+        } else {
+            Ok(deno_core::resolve_import(specifier, referrer)?)
+        }
     }
 
     fn load(
@@ -134,12 +148,15 @@ impl deno_core::ModuleLoader for ModuleLoader {
 }
 
 impl DenoService {
-    pub(crate) fn new(inspect_brk: bool) -> Self {
+    pub(crate) fn new(base_directory: PathBuf, inspect_brk: bool) -> Self {
         let create_web_worker_cb = Arc::new(|_| {
             todo!("Web workers are not supported");
         });
         let code_map = RefCell::new(HashMap::new());
-        let module_loader = Rc::new(ModuleLoader { code_map });
+        let module_loader = Rc::new(ModuleLoader {
+            code_map,
+            base_directory,
+        });
 
         let mut inspector = None;
         if inspect_brk {
@@ -313,7 +330,7 @@ fn compile_ts_code_as_bytes(code: &[u8]) -> Result<String> {
 }
 
 async fn create_deno<P: AsRef<Path>>(base_directory: P, inspect_brk: bool) -> Result<DenoService> {
-    let mut d = DenoService::new(inspect_brk);
+    let mut d = DenoService::new(base_directory.as_ref().to_owned(), inspect_brk);
     let worker = &mut d.worker;
     let runtime = &mut worker.js_runtime;
 
