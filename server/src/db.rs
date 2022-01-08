@@ -74,7 +74,7 @@ fn get_columns(val: &serde_json::Value) -> Result<Vec<(String, Type)>> {
             "number" => Type::Float,
             "string" => Type::String,
             "boolean" => Type::Boolean,
-            v => anyhow::bail!("Invalid type {}", v),
+            _ => continue,
         };
         ret.push((name.to_string(), type_));
     }

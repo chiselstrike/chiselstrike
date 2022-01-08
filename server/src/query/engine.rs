@@ -3,6 +3,8 @@
 use crate::db::{sql, Relation};
 use crate::query::{DbConnection, Kind, QueryError};
 use crate::types::{Field, ObjectDelta, ObjectType, Type};
+use anyhow::anyhow;
+use async_recursion::async_recursion;
 use futures::stream::BoxStream;
 use futures::stream::Stream;
 use futures::StreamExt;
@@ -65,7 +67,7 @@ impl TryFrom<&Field> for ColumnDef {
             Type::Id => column_def.text().unique_key().primary_key(),
             Type::Float => column_def.double(),
             Type::Boolean => column_def.boolean(),
-            Type::Object(_) => anyhow::bail!("Relations aren't supported yet"),
+            Type::Object(_) => column_def.text(),
         };
 
         Ok(column_def)
@@ -225,7 +227,18 @@ impl QueryEngine {
         &self,
         ty: &ObjectType,
         ty_value: &JsonObject,
-    ) -> anyhow::Result<String> {
+    ) -> anyhow::Result<JsonObject> {
+        let (_, ids_json) = self.add_row_recursive(ty, ty_value).await?;
+        Ok(ids_json)
+    }
+
+    #[async_recursion]
+    pub(crate) async fn add_row_recursive(
+        &self,
+        ty: &ObjectType,
+        ty_value: &JsonObject,
+    ) -> anyhow::Result<(String, JsonObject)> {
+        let mut ids_json = JsonObject::new();
         let mut field_binds = String::new();
         let mut field_names = String::new();
         let mut id_name = String::new();
@@ -279,7 +292,6 @@ impl QueryEngine {
         );
 
         let mut insert_query = sqlx::query(&insert_query);
-        let mut columns = vec![];
 
         for field in ty.all_fields() {
             macro_rules! bind_default_json_value {
@@ -295,7 +307,7 @@ impl QueryEngine {
             }
 
             macro_rules! bind_json_value {
-                ($as_type:ident, $fallback:ident ) => {{
+                ($as_type:ident, $fallback:ident) => {{
                     match ty_value.get(&field.name) {
                         Some(value_json) => {
                             let value = value_json.$as_type().ok_or_else(|| {
@@ -319,22 +331,32 @@ impl QueryEngine {
                 }};
             }
 
-            columns.push((field.name.clone(), field.type_.clone()));
-
-            match field.type_ {
+            match &field.type_ {
                 Type::String => bind_json_value!(as_str, str),
                 Type::Id => bind_json_value!(as_str, str),
                 Type::Float => bind_json_value!(as_f64, f64),
                 Type::Boolean => bind_json_value!(as_bool, bool),
-                Type::Object(_) => anyhow::bail!("Relations aren't supported yet"),
+                Type::Object(nested_type) => {
+                    let nested_value = ty_value
+                        .get(&field.name)
+                        .ok_or_else(|| anyhow!("json object doesn't have field `{}`", field.name))?
+                        .as_object()
+                        .ok_or_else(|| anyhow!("unexpected json type (expected an object)"))?;
+                    let (obj_id, obj_json) =
+                        self.add_row_recursive(nested_type, nested_value).await?;
+
+                    ids_json.insert(field.name.to_owned(), serde_json::json!(obj_json));
+                    insert_query = insert_query.bind(obj_id);
+                }
             }
         }
-
+        // FIXME: The whole recursive insertion should happen in one transaction
         let mut transaction = self
             .pool
             .begin()
             .await
             .map_err(QueryError::ConnectionFailed)?;
+
         let row = transaction
             .fetch_one(insert_query)
             .await
@@ -345,7 +367,9 @@ impl QueryEngine {
             .await
             .map_err(QueryError::ExecuteFailed)?;
 
-        Ok(row.get::<String, _>("id"))
+        let obj_id = row.get::<String, _>("id");
+        ids_json.insert("id".into(), serde_json::json!(obj_id));
+        Ok((obj_id, ids_json))
     }
 }
 

@@ -204,11 +204,20 @@ export class ChiselEntity {
 
     /** saves the current object into the backend */
     async save() {
-        const id = await Deno.core.opAsync("chisel_store", {
+        const jsonIds = await Deno.core.opAsync("chisel_store", {
             name: this.constructor.name,
             value: this,
         });
-        this.id = id;
+        function backfillIds(this_: ChiselEntity, jsonIds: unknown) {
+            for (const [fieldName, value] of Object.entries(jsonIds)) {
+                if (fieldName == "id") {
+                    this_.id = value as string;
+                } else {
+                    backfillIds(this_[fieldName], value);
+                }
+            }
+        }
+        backfillIds(this, jsonIds);
     }
 
     static all<T>(
