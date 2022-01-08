@@ -1,6 +1,7 @@
 // SPDX-FileCopyrightText: © 2021 ChiselStrike <info@chiselstrike.com>
 
 /// <reference path="./dts/lib.deno_core.d.ts" />
+/// <reference lib="dom" />
 
 // In the beginning, we shall implement the following querying logic (with the sole exception of the lambdas,
 // which can be replaced by simple Attribute compare logic):
@@ -248,3 +249,54 @@ export class ChiselEntity {
 export class OAuthUser extends ChiselEntity {
     username: string;
 }
+
+const ChiselAux = {
+    api: {
+        ChiselIterator: ChiselIterator,
+        chiselIterator: chiselIterator,
+    },
+
+    buildReadableStreamForBody: function (rid: number) {
+        return new ReadableStream({
+            async pull(controller: ReadableStreamDefaultController) {
+                const chunk = await Deno.core.opAsync("chisel_read_body", rid);
+                if (chunk) {
+                    controller.enqueue(chunk);
+                } else {
+                    controller.close();
+                    Deno.core.opSync("op_close", rid);
+                }
+            },
+            cancel() {
+                Deno.core.opSync("op_close", rid);
+            },
+        });
+    },
+
+    save: async function (typeName: string, content: string) {
+        return await Deno.core.opAsync("chisel_store", {
+            name: typeName,
+            value: content,
+        });
+    },
+
+    /**
+     * NOTE! This function is marked for deprecation in favor of `Chisel.save()`.
+     */
+    store: 42,
+
+    json: function (body: unknown, status = 200) {
+        return new Response(JSON.stringify(body), {
+            status: status,
+            headers: [
+                ["content-type", "application/json"],
+            ],
+        });
+    },
+};
+
+(globalThis as unknown as { Chisel: typeof ChiselAux }).Chisel = ChiselAux;
+(globalThis as unknown as { ChiselEntity: typeof ChiselEntity }).ChiselEntity =
+    ChiselEntity;
+(globalThis as unknown as { OAuthUser: typeof OAuthUser }).OAuthUser =
+    OAuthUser;

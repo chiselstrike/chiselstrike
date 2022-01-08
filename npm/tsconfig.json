@@ -5,8 +5,8 @@
     "experimentalDecorators": true,
    "lib": ["ESNext", "DOM"],
     "outDir": "./lib",
-    "target": "ESnext",
+    "target": "ESnext"
   },
-  "include": ["src/api.ts", "dts/lib.deno_core.d.ts"],
+  "include": ["src/chisel.ts", "dts/lib.deno_core.d.ts"],
   "exclude": ["node_modules", "**/__tests__/*"]
 }

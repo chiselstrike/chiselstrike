@@ -224,11 +224,8 @@ pub async fn run_shared_state(
     opt: Opt,
 ) -> Result<(SharedTasks, SharedState, Vec<ExecutorChannel>)> {
     let materialize = ModulesDirectory::new()?;
-    let file = format!("{}/chisel.js", materialize.path().display());
-    fs::write(file, include_bytes!("chisel.js")).await?;
-
-    let file = format!("{}/api.ts", materialize.path().display());
-    fs::write(file, include_bytes!("api.ts")).await?;
+    let file = format!("{}/chisel.ts", materialize.path().display());
+    fs::write(file, include_bytes!("chisel.ts")).await?;
 
     let meta_conn = DbConnection::connect(&opt.metadata_db_uri).await?;
     let data_db = DbConnection::connect(&opt.data_db_uri).await?;
