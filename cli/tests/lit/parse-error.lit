@@ -27,4 +27,3 @@ $CHISEL apply 2>&1 || true
 #CHECK: Error: parsing endpoint /dev/error
 #CHECK: Caused by:
 #CHECK:     Uncaught ReferenceError: foo is not defined
-#CHECK:         at file://$chisel$/dev/error?ver=0:1:12

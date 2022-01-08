@@ -8,6 +8,7 @@ use crate::query::{MetaService, QueryEngine};
 use crate::runtime;
 use crate::server::CommandTrait;
 use crate::server::CoordinatorChannel;
+use crate::server::ModulesDirectory;
 use crate::types::{Field, NewField, NewObject, ObjectType, TypeSystem, TypeSystemError};
 use anyhow::{Context, Result};
 use async_mutex::Mutex;
@@ -85,11 +86,18 @@ macro_rules! send_command {
 /// endpoints. The user-generated data plane endpoints are serviced with REST.
 pub(crate) struct RpcService {
     state: Arc<Mutex<GlobalRpcState>>,
+    materialize_directory: ModulesDirectory,
 }
 
 impl RpcService {
-    pub(crate) fn new(state: Arc<Mutex<GlobalRpcState>>) -> Self {
-        Self { state }
+    pub(crate) fn new(
+        state: Arc<Mutex<GlobalRpcState>>,
+        materialize_directory: ModulesDirectory,
+    ) -> Self {
+        Self {
+            state,
+            materialize_directory,
+        }
     }
 
     /// Delete a new version of ChiselStrike
@@ -189,6 +197,9 @@ impl RpcService {
         let mut endpoint_routes = vec![];
         for endpoint in apply_request.endpoints {
             let path = format!("/{}/{}", api_version, endpoint.path);
+            self.materialize_directory
+                .materialize(&path, &endpoint.code)
+                .await?;
             endpoint_routes.push((path, endpoint.code));
         }
 
@@ -198,8 +209,9 @@ impl RpcService {
         for (path, code) in &endpoint_routes {
             let cmd_path = path.clone();
             let code = code.clone();
+            let dir = self.materialize_directory.clone();
             let cmd = send_command!({
-                deno::compile_endpoint(cmd_path, code).await?;
+                deno::compile_endpoint(dir.path(), cmd_path, code).await?;
                 Ok(())
             });
             state

@@ -41,10 +41,12 @@ use std::collections::HashMap;
 use std::convert::TryInto;
 use std::future::Future;
 use std::net::SocketAddr;
+use std::path::{Path, PathBuf};
 use std::pin::Pin;
 use std::rc::Rc;
 use std::sync::Arc;
 use std::task::{Context, Poll};
+use tokio::fs;
 
 // FIXME: This should not be here. The client should download and
 // compile modules, the server should not get code out of the
@@ -91,9 +93,8 @@ enum Error {
 
 struct ModuleLoader {
     code_map: RefCell<HashMap<String, VersionedCode>>,
+    base_directory: PathBuf,
 }
-
-const DUMMY_PREFIX: &str = "file://$chisel$";
 
 fn wrap(specifier: &ModuleSpecifier, code: String) -> Result<ModuleSource> {
     Ok(ModuleSource {
@@ -104,7 +105,11 @@ fn wrap(specifier: &ModuleSpecifier, code: String) -> Result<ModuleSource> {
 }
 
 async fn load_code(specifier: ModuleSpecifier) -> Result<ModuleSource> {
-    let code = reqwest::get(specifier.clone()).await?.text().await?;
+    let code = if specifier.scheme() == "file" {
+        fs::read_to_string(specifier.to_file_path().unwrap()).await?
+    } else {
+        reqwest::get(specifier.clone()).await?.text().await?
+    };
     let code = compile_ts_code(code)?;
     wrap(&specifier, code)
 }
@@ -116,7 +121,20 @@ impl deno_core::ModuleLoader for ModuleLoader {
         referrer: &str,
         _is_main: bool,
     ) -> Result<ModuleSpecifier, AnyError> {
-        Ok(deno_core::resolve_import(specifier, referrer)?)
+        if specifier == "@chiselstrike/chiselstrike" {
+            let api_path = self
+                .base_directory
+                .join("api.ts")
+                .to_str()
+                .unwrap()
+                .to_string();
+
+            let spec = ModuleSpecifier::from_file_path(&api_path)
+                .map_err(|_| anyhow!("Can't convert {} to file-based URL", api_path))?;
+            Ok(spec)
+        } else {
+            Ok(deno_core::resolve_import(specifier, referrer)?)
+        }
     }
 
     fn load(
@@ -125,24 +143,20 @@ impl deno_core::ModuleLoader for ModuleLoader {
         _maybe_referrer: Option<ModuleSpecifier>,
         _is_dyn_import: bool,
     ) -> Pin<Box<ModuleSourceFuture>> {
-        if specifier.as_str().starts_with(DUMMY_PREFIX) {
-            let path = specifier.path();
-            let code = self.code_map.borrow().get(path).unwrap().code.clone();
-            let code = wrap(specifier, code);
-            std::future::ready(code).boxed_local()
-        } else {
-            load_code(specifier.clone()).boxed_local()
-        }
+        load_code(specifier.clone()).boxed_local()
     }
 }
 
 impl DenoService {
-    pub(crate) fn new(inspect_brk: bool) -> Self {
+    pub(crate) fn new(base_directory: PathBuf, inspect_brk: bool) -> Self {
         let create_web_worker_cb = Arc::new(|_| {
             todo!("Web workers are not supported");
         });
         let code_map = RefCell::new(HashMap::new());
-        let module_loader = Rc::new(ModuleLoader { code_map });
+        let module_loader = Rc::new(ModuleLoader {
+            code_map,
+            base_directory,
+        });
 
         let mut inspector = None;
         if inspect_brk {
@@ -315,8 +329,8 @@ fn compile_ts_code_as_bytes(code: &[u8]) -> Result<String> {
     compile_ts_code(code)
 }
 
-async fn create_deno(inspect_brk: bool) -> Result<DenoService> {
-    let mut d = DenoService::new(inspect_brk);
+async fn create_deno<P: AsRef<Path>>(base_directory: P, inspect_brk: bool) -> Result<DenoService> {
+    let mut d = DenoService::new(base_directory.as_ref().to_owned(), inspect_brk);
     let worker = &mut d.worker;
     let runtime = &mut worker.js_runtime;
 
@@ -336,7 +350,18 @@ async fn create_deno(inspect_brk: bool) -> Result<DenoService> {
     // FIXME: Include these files in the snapshop
     let chisel = compile_ts_code_as_bytes(include_bytes!("chisel.js"))?;
     let api = compile_ts_code_as_bytes(include_bytes!("api.ts"))?;
-    let chisel_path = "/chisel.js".to_string();
+    let chisel_path = base_directory
+        .as_ref()
+        .join("chisel.js")
+        .to_str()
+        .unwrap()
+        .to_string();
+    let api_path = base_directory
+        .as_ref()
+        .join("api.ts")
+        .to_str()
+        .unwrap()
+        .to_string();
 
     {
         let mut code_map = d.module_loader.code_map.borrow_mut();
@@ -348,7 +373,7 @@ async fn create_deno(inspect_brk: bool) -> Result<DenoService> {
             },
         );
         code_map.insert(
-            "/api.ts".to_string(),
+            api_path,
             VersionedCode {
                 code: api,
                 version: 0,
@@ -357,15 +382,15 @@ async fn create_deno(inspect_brk: bool) -> Result<DenoService> {
     }
 
     worker
-        .execute_main_module(
-            &ModuleSpecifier::parse(&(DUMMY_PREFIX.to_string() + &chisel_path)).unwrap(),
-        )
+        .execute_main_module(&ModuleSpecifier::parse(&format!("file://{}", &chisel_path)).unwrap())
         .await?;
     Ok(d)
 }
 
-pub(crate) async fn init_deno(inspect_brk: bool) -> Result<()> {
-    let service = Rc::new(RefCell::new(create_deno(inspect_brk).await?));
+pub(crate) async fn init_deno<P: AsRef<Path>>(base_directory: P, inspect_brk: bool) -> Result<()> {
+    let service = Rc::new(RefCell::new(
+        create_deno(base_directory, inspect_brk).await?,
+    ));
     DENO.with(|d| {
         d.set(service)
             .map_err(|_| ())
@@ -698,7 +723,11 @@ fn get() -> RcMut<DenoService> {
     })
 }
 
-pub(crate) async fn compile_endpoint(path: String, code: String) -> Result<()> {
+pub(crate) async fn compile_endpoint<P: AsRef<Path>>(
+    base_directory: P,
+    path: String,
+    code: String,
+) -> Result<()> {
     let mut service = get();
     let service: &mut DenoService = &mut service;
 
@@ -715,7 +744,12 @@ pub(crate) async fn compile_endpoint(path: String, code: String) -> Result<()> {
     // Modules are never unloaded, so we need to create an unique
     // path. This will not be a problem once we publish the entire app
     // at once, since then we can create a new isolate for it.
-    let url = format!("{}/{}?ver={}", DUMMY_PREFIX, path, entry.version);
+    let url = format!(
+        "file://{}/{}.ts?ver={}",
+        base_directory.as_ref().display(),
+        path,
+        entry.version
+    );
     let url = Url::parse(&url).unwrap();
 
     drop(code_map);
