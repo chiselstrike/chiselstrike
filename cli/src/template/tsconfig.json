@@ -3,6 +3,7 @@
         "experimentalDecorators": true,
         "lib": ["ESNext", "DOM"],
         "target": "ESnext",
-        "allowJs": true
+        "allowJs": true,
+        "module": "commonjs"
     }
 }
