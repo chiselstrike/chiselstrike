@@ -35,6 +35,7 @@ use hyper::body::HttpBody;
 use hyper::header::HeaderValue;
 use hyper::Method;
 use hyper::{Request, Response, StatusCode};
+use log::debug;
 use once_cell::unsync::OnceCell;
 use std::cell::RefCell;
 use std::collections::HashMap;
@@ -121,6 +122,7 @@ impl deno_core::ModuleLoader for ModuleLoader {
         referrer: &str,
         _is_main: bool,
     ) -> Result<ModuleSpecifier, AnyError> {
+        debug!("Deno resolving {:?}", specifier);
         if specifier == "@chiselstrike/chiselstrike" {
             let api_path = self
                 .base_directory
@@ -143,6 +145,7 @@ impl deno_core::ModuleLoader for ModuleLoader {
         _maybe_referrer: Option<ModuleSpecifier>,
         _is_dyn_import: bool,
     ) -> Pin<Box<ModuleSourceFuture>> {
+        debug!("Deno Loading {:?}", specifier);
         load_code(specifier.clone()).boxed_local()
     }
 }
