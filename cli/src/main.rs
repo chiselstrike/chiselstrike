@@ -391,6 +391,23 @@ async fn apply<S: ToString>(
         types_string += &read_to_string(&t)?;
     }
 
+    match std::process::Command::new(get_tsc())
+        .arg("--noEmit")
+        .arg("--pretty")
+        .arg("--allowJs")
+        .arg("--checkJs")
+        .output()
+    {
+        Err(_) => {}
+        Ok(tsc) => {
+            if !tsc.status.success() {
+                let err = String::from_utf8_lossy(&tsc.stdout).into_owned();
+                eprintln!("{}", err);
+                return Err(anyhow!("compilation failed"));
+            }
+        }
+    }
+
     for f in endpoints.iter() {
         let code = types_string.clone() + &read_to_string(&f.file_path)?;
         let code = compile_ts_code(code)
@@ -433,6 +450,29 @@ async fn apply<S: ToString>(
     }
 
     Ok(())
+}
+
+fn get_tsc() -> PathBuf {
+    // 1. Environment variable
+    std::env::var("CHISEL_TSC")
+        .ok()
+        .map_or_else(
+            || {
+                // 2. no env var set, try to ask npm about where the binary is located
+                // if npm is not even installed, this will return Err()
+                let npm = std::process::Command::new("npm").arg("bin").output();
+                if let Ok(npm) = npm {
+                    if npm.status.success() {
+                        let path = String::from_utf8_lossy(&npm.stdout).into_owned();
+                        return Path::new(&path).canonicalize().ok();
+                    }
+                }
+                None
+                // 3. all failed, so just try to see if the user has tsc in their PATH
+            },
+            |x| Some(Path::new(&x).to_owned()),
+        )
+        .unwrap_or_else(|| Path::new("tsc").to_owned())
 }
 
 async fn apply_from_dev(server_url: String) {
