@@ -29,6 +29,7 @@ mod tests {
         let chiseld = bd.join("chiseld").to_str().unwrap().to_string();
         env::set_var("CHISELD", chiseld);
         env::set_var("CHISEL", chisel());
+        env::set_var("CHISEL_TSC", "/bin/true");
         env::set_var("CHISELD_HOST", "localhost:8080");
         env::set_var("CHISELD_LOCALHOST", "localhost:9090");
         env::set_var("CURL", "curl -S -s -i -w '\\n'");
