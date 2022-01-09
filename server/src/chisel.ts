@@ -201,6 +201,8 @@ export function chiselIterator<T>(name: string, columns: column[]) {
 //  XXX: No need to tell me this sucks, but automating this properly is not trivial, and require tsc
 //  XXX: so we will do it later.
 export class ChiselEntity {
+    id: string;
+
     static all<T>(this: { new (): T }): ChiselIterator<T> {
         // FIXME: I thought this could have been written as :
         //
