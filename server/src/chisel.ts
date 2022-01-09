@@ -250,7 +250,7 @@ export class OAuthUser extends ChiselEntity {
     username: string;
 }
 
-const ChiselAux = {
+export const Chisel = {
     api: {
         ChiselIterator: ChiselIterator,
         chiselIterator: chiselIterator,
@@ -295,7 +295,15 @@ const ChiselAux = {
     },
 };
 
-(globalThis as unknown as { Chisel: typeof ChiselAux }).Chisel = ChiselAux;
+/* eslint-disable @typescript-eslint/no-unused-vars */
+// deno-lint-ignore-file
+export function labels(..._val: string[]) {
+    return <T>(_target: T, _propertyName: string) => {
+        // chisel-decorator, no content
+    };
+}
+
+(globalThis as unknown as { Chisel: typeof Chisel }).Chisel = Chisel;
 (globalThis as unknown as { ChiselEntity: typeof ChiselEntity }).ChiselEntity =
     ChiselEntity;
 (globalThis as unknown as { OAuthUser: typeof OAuthUser }).OAuthUser =
