@@ -1,0 +1,12 @@
+# SPDX-FileCopyrightText: © 2022 ChiselStrike <info@chiselstrike.com>
+
+# RUN: sh -e @file
+
+cat << EOF > "$TEMPDIR/models/post.ts"
+export class Post extends ChiselEntity {
+    author: OAuthUser;
+}
+EOF
+
+cd "$TEMPDIR"
+$CHISEL apply

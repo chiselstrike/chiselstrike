@@ -132,6 +132,7 @@ fn validate_type_vec(type_vec: &[AddTypeRequest], valid_types: &BTreeSet<String>
     basic_types.insert("string");
     basic_types.insert("number");
     basic_types.insert("boolean");
+    basic_types.insert("OAuthUser");
 
     for t in type_vec {
         for field in t.field_defs.iter() {
