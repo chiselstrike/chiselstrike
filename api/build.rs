@@ -7,18 +7,21 @@ use std::fs;
 use std::path::PathBuf;
 
 fn main() -> Result<()> {
-    let p = "src/chisel.ts";
+    let chisel_ts = "src/chisel.ts";
 
     // Every other file we use comes from the snapshot, so these
     // should be the only rerun-if-changed that we need.
-    println!("cargo:rerun-if-changed={}", p);
+    println!("cargo:rerun-if-changed={}", chisel_ts);
     println!("cargo:rerun-if-changed=src/dts/lib.deno_core.d.ts");
 
-    let mut map = compile_ts_code(p, Some("src/dts/lib.deno_core.d.ts"))?;
-    let code = map.remove(p).unwrap();
+    let mut map = compile_ts_code(chisel_ts, Some("src/dts/lib.deno_core.d.ts"))?;
+    let code = map.remove(chisel_ts).unwrap();
 
     let out = PathBuf::from(env::var_os("OUT_DIR").unwrap());
-    let p = out.join("chisel.js");
-    fs::write(&p, code)?;
+    fs::write(&out.join("chisel.js"), code)?;
+    fs::write(
+        &out.join("chisel.d.ts"),
+        map.remove("src/chisel.d.ts").unwrap(),
+    )?;
     Ok(())
 }

@@ -6,6 +6,7 @@ edition = "2021"
 
 [dependencies]
 anyhow = "1.0"
+api = { path = "../api" }
 compile = { path = "../compile" }
 futures = "0.3.17"
 notify = "5.0.0-pre.12"

@@ -1,5 +1,6 @@
 // SPDX-FileCopyrightText: © 2021 ChiselStrike <info@chiselstrike.com>
 
+/// <reference lib="esnext" />
 /// <reference lib="dom" />
 
 // In the beginning, we shall implement the following querying logic (with the sole exception of the lambdas,
@@ -58,7 +59,7 @@ class Filter extends Base {
 
 type Inner = BackingStore | Join | Filter;
 
-class ChiselIterator<T> {
+export class ChiselIterator<T> {
     constructor(private inner: Inner) {}
     select(...columns: (keyof T)[]): ChiselIterator<Pick<T, (keyof T)>> {
         const names = columns as string[];
@@ -119,7 +120,7 @@ class ChiselIterator<T> {
 
     async findOne(restrictions: Partial<T>): Promise<T | null> {
         const i = new Filter(this.inner.columns, restrictions, this.inner);
-        const chiselIterator = new ChiselIterator(i);
+        const chiselIterator = new ChiselIterator<T>(i);
         chiselIterator.inner.limit = 1;
         for await (const t of chiselIterator) {
             return t;
@@ -166,7 +167,7 @@ class ChiselIterator<T> {
                 const value = await Deno.core.opAsync(
                     "chisel_relational_query_next",
                     rid,
-                );
+                ) as T;
                 if (value) {
                     return { value: value, done: false };
                 } else {
@@ -213,7 +214,7 @@ export function buildReadableStreamForBody(rid: number) {
     });
 }
 
-export async function save(typeName: string, content: string) {
+export async function save(typeName: string, content: Record<string, string>) {
     return await Deno.core.opAsync("chisel_store", {
         name: typeName,
         value: content,
@@ -227,4 +228,7 @@ export function json(body: unknown, status = 200) {
             ["content-type", "application/json"],
         ],
     });
+}
+declare global {
+    let OAuthUser: ChiselIterator<{ username: string }>;
 }

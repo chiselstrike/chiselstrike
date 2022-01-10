@@ -2,6 +2,7 @@
 
 use crate::chisel::StatusResponse;
 use anyhow::{anyhow, Context, Result};
+use api::chisel_d_ts;
 use chisel::chisel_rpc_client::ChiselRpcClient;
 use chisel::{
     ChiselApplyRequest, ChiselDeleteRequest, DescribeRequest, EndPointCreationRequest,
@@ -306,7 +307,7 @@ fn create_project(path: &Path, examples: bool) -> Result<()> {
     write_template!("tsconfig.json", path)?;
     write_template!("Chisel.toml", path)?;
     write_template!("chisel-decorators.ts", &path.join(DTS_DIR))?;
-    write_template!("chisel.d.ts", &path.join(DTS_DIR))?;
+    write(chisel_d_ts().as_bytes(), &path.join(DTS_DIR), "chisel.d.ts")?;
 
     if examples {
         write_template!("hello.ts", &path.join(ENDPOINTS_DIR))?;
@@ -386,7 +387,7 @@ async fn apply<S: ToString>(
     let mut endpoints_req = vec![];
     let mut policy_req = vec![];
 
-    let mut typedefs = "/// <reference types=\"../dts/chisel\" />\n".to_string();
+    let mut typedefs = "import * as ChiselAux from \"./chisel.d.ts\";\n".to_string();
     typedefs += "declare namespace raw {\n";
     for t in &types_req {
         typedefs += &format!("export class {} {{\n", t.name);
@@ -396,9 +397,15 @@ async fn apply<S: ToString>(
         typedefs += "}\n";
     }
     typedefs += "}\n";
+    typedefs += "declare global {\n";
+    typedefs += "var Chisel: typeof ChiselAux;";
     for t in &types_req {
-        typedefs += &format!("declare let {}: ChiselIterator<raw.{}>;\n", t.name, t.name);
+        typedefs += &format!(
+            "var {}: ChiselAux.ChiselIterator<raw.{}>;\n",
+            t.name, t.name
+        );
     }
+    typedefs += "}\n";
     let dts_path = Path::new(DTS_DIR);
     let types_path = dts_path.join("types.d.ts");
     fs::write(&types_path, typedefs)?;
