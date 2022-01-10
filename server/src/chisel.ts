@@ -202,14 +202,23 @@ export function chiselIterator<T>(name: string, c?: column[]) {
 export class ChiselEntity {
     id: string;
 
+    /** saves the current object into the backend */
+    async save() {
+        const id = await Deno.core.opAsync("chisel_store", {
+            name: this.constructor.name,
+            value: this,
+        });
+        this.id = id;
+    }
+
     static all<T>(
-        this: { new (): T },
+        this: { new (...arg: Record<string, unknown>[]): T },
     ): ChiselIterator<T> {
         return chiselIterator<T>(this.name);
     }
 
     static findMany<T>(
-        this: { new (): T },
+        this: { new (...arg: Record<string, unknown>[]): T },
         restrictions: Partial<T>,
     ): ChiselIterator<T> {
         const it = chiselIterator<T>(this.name);
@@ -217,7 +226,7 @@ export class ChiselEntity {
     }
 
     static take<T extends ChiselEntity>(
-        this: { new (): T },
+        this: { new (...arg: Record<string, unknown>[]): T },
         limit: number,
     ): ChiselIterator<T> {
         const it = chiselIterator<T>(this.name);
@@ -225,7 +234,7 @@ export class ChiselEntity {
     }
 
     static findOne<T extends ChiselEntity>(
-        this: { new (): T },
+        this: { new (...arg: Record<string, unknown>[]): T },
         restrictions: Partial<T>,
     ): Promise<T | null> {
         const it = chiselIterator<T>(this.name);
@@ -233,7 +242,7 @@ export class ChiselEntity {
     }
 
     static select<T extends ChiselEntity>(
-        this: { new (): T },
+        this: { new (...arg: Record<string, unknown>[]): T },
         ...columns: (keyof T)[]
     ): ChiselIterator<T> {
         const it = chiselIterator<T>(this.name);
@@ -267,18 +276,6 @@ export const Chisel = {
             },
         });
     },
-
-    save: async function (typeName: string, content: string) {
-        return await Deno.core.opAsync("chisel_store", {
-            name: typeName,
-            value: content,
-        });
-    },
-
-    /**
-     * NOTE! This function is marked for deprecation in favor of `Chisel.save()`.
-     */
-    store: 42,
 
     json: function (body: unknown, status = 200) {
         return new Response(JSON.stringify(body), {

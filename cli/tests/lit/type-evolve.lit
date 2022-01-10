@@ -4,20 +4,38 @@
 
 cd "$TEMPDIR"
 cat << EOF > "$TEMPDIR/types/types.ts"
-export class Evolving extends ChiselEntity { a: string; }
+import { ChiselEntity } from "@chiselstrike/chiselstrike";
+
+export class Evolving extends ChiselEntity {
+    a: string;
+    constructor(a: string) {
+        super();
+        this.a = a;
+    }
+}
 EOF
 $CHISEL apply
 # CHECK: Type defined: Evolving
 
 cat << EOF > "$TEMPDIR/types/types.ts"
-export class Evolving extends ChiselEntity { a: string; b: string = "with_default"; }
+import { ChiselEntity } from "@chiselstrike/chiselstrike";
+
+export class Evolving extends ChiselEntity {
+    a: string; b: string = "with_default";
+    constructor(a: string) {
+        super();
+        this.a = a;
+    }
+}
 EOF
 $CHISEL apply
 # CHECK: Type defined: Evolving
 
 cat << EOF > "$TEMPDIR/endpoints/store.ts"
 export default async function chisel(req: Request) {
-   await Chisel.save('Evolving', { "a": "A", "b": "B" });
+   const obj = new Evolving("A");
+   obj.b = "B";
+   await obj.save();
    return new Response('ok');
 }
 EOF
@@ -50,7 +68,16 @@ $CURL $CHISELD_HOST/dev/find
 # CHECK: tst A B tst
 
 cat << EOF > "$TEMPDIR/types/types.ts"
-export class Evolving extends ChiselEntity { a: string; }
+import { ChiselEntity } from "@chiselstrike/chiselstrike";
+
+export class Evolving extends ChiselEntity {
+    a: string;
+
+    constructor(a: string) {
+        super();
+        this.a = a;
+    }
+}
 EOF
 $CHISEL apply
 # CHECK: Type defined: Evolving

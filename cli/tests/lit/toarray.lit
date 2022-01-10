@@ -2,23 +2,29 @@
 
 # RUN: sh -e @file
 
-cd "$TEMPDIR"
+cp examples/person.ts "$TEMPDIR/types"
 
-cat << EOF > "$TEMPDIR/types/types.ts"
-export class Person extends ChiselEntity { name: string; country: string; }
-EOF
+cd "$TEMPDIR"
 
 cat << EOF > "$TEMPDIR/endpoints/store.ts"
 export default async function chisel(req: Request) {
-    await Chisel.save("Person", {"name": "Glauber", "country": "Canada"});
-    await Chisel.save("Person", {"name": "Pekka", "country": "Finland"});
+    const glauber = new Person();
+    glauber.first_name = "Glauber";
+    glauber.last_name = "Costa";
+    await glauber.save();
+
+    const pekka = new Person();
+    pekka.first_name = "Pekka";
+    pekka.last_name = "Enberg";
+    await pekka.save();
+
     return new Response("Ok");
 }
 EOF
 
 cat << EOF > "$TEMPDIR/endpoints/toarray.ts"
 export default async function chisel(req: Request) {
-    let people = await Person.select("name").toArray()
+    let people = await Person.select("first_name").toArray()
     return new Response(JSON.stringify(people));
 }
 EOF
@@ -32,4 +38,4 @@ $CURL -X POST $CHISELD_HOST/dev/store
 # CHECK: Ok
 
 $CURL $CHISELD_HOST/dev/toarray
-# CHECK: [{"name":"Glauber"},{"name":"Pekka"}]
+# CHECK: [{"first_name":"Glauber"},{"first_name":"Pekka"}]
