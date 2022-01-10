@@ -221,11 +221,6 @@ const ChiselAux = {
         });
     },
 
-    /**
-     * NOTE! This function is marked for deprecation in favor of `Chisel.save()`.
-     */
-    store: 42,
-
     json: function (body: unknown, status = 200) {
         return new Response(JSON.stringify(body), {
             status: status,
