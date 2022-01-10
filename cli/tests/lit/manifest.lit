@@ -3,7 +3,7 @@
 # RUN: sh -e @file
 
 cat << EOF > "$TEMPDIR/Chisel.toml"
-types = ["types"]
+models = ["models"]
 endpoints = ["endpoints"]
 policies = ["policies"]
 EOF

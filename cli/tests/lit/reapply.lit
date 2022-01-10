@@ -2,7 +2,7 @@
 
 # RUN: sh -e @file
 
-cat << EOF > "$TEMPDIR/types/foo.ts"
+cat << EOF > "$TEMPDIR/models/foo.ts"
 export class Foo extends ChiselEntity {
   @labels("L1") a: string;
   @labels("L2") b: number;
@@ -18,7 +18,7 @@ $CHISEL apply
 # CHECK: Type defined: Foo
 
 ## Changing labels is OK.
-cat << EOF > "$TEMPDIR/types/foo.ts"
+cat << EOF > "$TEMPDIR/models/foo.ts"
 export class Foo extends ChiselEntity {
   a: string;
   @labels("L1") b: number;
@@ -28,7 +28,7 @@ $CHISEL apply
 # CHECK: Type defined: Foo
 
 # Adding default values is OK.
-cat << EOF > "$TEMPDIR/types/foo.ts"
+cat << EOF > "$TEMPDIR/models/foo.ts"
 export class Foo extends ChiselEntity {
   a: string = "foo";
   @labels("L1") b: number;
@@ -38,7 +38,7 @@ $CHISEL apply
 # CHECK: Type defined: Foo
 
 ## Two compatible definitions in different files are rejected.
-cat << EOF > "$TEMPDIR/types/fooNoteADifferentFilenameHere.ts"
+cat << EOF > "$TEMPDIR/models/fooNoteADifferentFilenameHere.ts"
 export class Foo extends ChiselEntity {
   a: string = "foo";
   b: number;
@@ -46,10 +46,10 @@ export class Foo extends ChiselEntity {
 EOF
 $CHISEL apply 2>&1 || echo
 # CHECK: Error: Type Foo defined twice
-rm "$TEMPDIR/types/fooNoteADifferentFilenameHere.ts"
+rm "$TEMPDIR/models/fooNoteADifferentFilenameHere.ts"
 
 ## Changing b's type is not OK.
-cat << EOF > "$TEMPDIR/types/foo.ts"
+cat << EOF > "$TEMPDIR/models/foo.ts"
 export class Foo extends ChiselEntity {
   a: string = "foo";
   b: string;
@@ -59,7 +59,7 @@ $CHISEL apply 2>&1 || echo # (swallow the apply abort)
 # CHECK: unsafe to replace type: Foo
 
 ## Adding a field is not OK.
-cat << EOF > "$TEMPDIR/types/foo.ts"
+cat << EOF > "$TEMPDIR/models/foo.ts"
 export class Foo extends ChiselEntity {
   a: string = "foo";
   b: number; 
@@ -70,7 +70,7 @@ $CHISEL apply 2>&1 || echo # (swallow the apply abort)
 # CHECK: unsafe to replace type: Foo
 
 ## Reordering fields is OK.
-cat << EOF > "$TEMPDIR/types/foo.ts"
+cat << EOF > "$TEMPDIR/models/foo.ts"
 export class Foo extends ChiselEntity {
   b: number;
   a: string = "foo";
@@ -80,7 +80,7 @@ $CHISEL apply 2>&1 || echo # (swallow the apply abort)
 # CHECK: Type defined: Foo
 
 ## Removing fields is OK if they previously had a default
-cat << EOF > "$TEMPDIR/types/foo.ts"
+cat << EOF > "$TEMPDIR/models/foo.ts"
 export class Foo extends ChiselEntity {
   b: number;
 }
@@ -89,12 +89,12 @@ $CHISEL apply 2>&1 || echo # (swallow the apply abort)
 # CHECK: Type defined: Foo
 
 ## Redefining elemental types is not OK.
-echo 'export class number extends ChiselEntity { a: number}' > "$TEMPDIR/types/foo.ts"
+echo 'export class number extends ChiselEntity { a: number}' > "$TEMPDIR/models/foo.ts"
 $CHISEL apply --allow-type-deletion 2>&1 || echo # (swallow the apply abort)
 # CHECK: custom type expected, got `number` instead
 
 ### Removing fields is not OK if they didn't have a default
-cat << EOF > "$TEMPDIR/types/foo.ts"
+cat << EOF > "$TEMPDIR/models/foo.ts"
 export class Bar extends ChiselEntity {
   a: number;
   b: number;
@@ -103,7 +103,7 @@ EOF
 $CHISEL apply --allow-type-deletion 2>&1 || echo # (swallow the apply abort)
 # CHECK: Type defined: Bar
 #
-cat << EOF > "$TEMPDIR/types/foo.ts"
+cat << EOF > "$TEMPDIR/models/foo.ts"
 export class Bar extends ChiselEntity {
   b: number;
 }

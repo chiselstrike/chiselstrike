@@ -37,7 +37,7 @@ TODO
 
 ### `chisel describe`
 
-The `chisel describe` command displays the current state of the running ChiselStrike server: types, endpoints, and policies.
+The `chisel describe` command displays the current state of the running ChiselStrike server: models, endpoints, and policies.
 
 ### `chisel dev`
 
@@ -130,7 +130,7 @@ $ chisel wait
 The CLI parses a manifest file `Chisel.toml`, which has the following format:
 
 ```toml
-types = ["types"]
+models = ["models"]
 endpoints = ["endpoints"]
 policies = ["policies"]
 ```

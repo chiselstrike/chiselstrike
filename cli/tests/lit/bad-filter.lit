@@ -2,7 +2,7 @@
 
 # RUN: sh -e @file
 
-cp examples/person.ts "$TEMPDIR/types"
+cp examples/person.ts "$TEMPDIR/models"
 
 cat << EOF > "$TEMPDIR/endpoints/query.ts"
 export default async function chisel(req: Request) {
