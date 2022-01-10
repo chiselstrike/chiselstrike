@@ -60,9 +60,6 @@ class Filter extends Base {
 type Inner = BackingStore | Join | Filter;
 
 /// XXX: If you add methods here, you also have to add static versions to ChiselEntity (in this file),
-//  XXX: and to cli/src/templates/chisel.d.ts.
-//  XXX: No need to tell me this sucks, but automating this properly is not trivial, and require tsc
-//  XXX: so we will do it later.
 export class ChiselIterator<T> {
     constructor(private inner: Inner) {}
     select(...columns: (keyof T)[]): ChiselIterator<Pick<T, (keyof T)>> {
@@ -196,9 +193,6 @@ export function chiselIterator<T>(name: string, c?: column[]) {
 }
 
 /// XXX: If you add methods here, you also have to add non-static versions nto ChiselIterator (in this file),
-//  XXX: and to cli/src/templates/chisel.d.ts.
-//  XXX: No need to tell me this sucks, but automating this properly is not trivial, and require tsc
-//  XXX: so we will do it later.
 export class ChiselEntity {
     id: string;
 
