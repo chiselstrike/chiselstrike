@@ -216,6 +216,35 @@ export class ChiselEntity {
     /** UUID identifying this object. */
     id: string;
 
+    /**
+     * Creates a new entity.
+     *
+     * @param properties The properties of the created entity. Please note
+     *                   that the `id` property is automatically generated.
+     * @example
+     * ```typescript
+     * export class User extends ChiselEntity {
+     *   username: string,
+     *   email: string,
+     * }
+     * // Create an entity from object literal:
+     * const user = await User.create({ username: "alice", email: "alice@example.com" });
+     * // Create an entity from JSON:
+     * const userJson = JSON.parse('{"username": "alice", "email": "alice@example.com"}');
+     * const anotherUser = await User.create(userJson);
+     * ```
+     * @returns The persisted entity with given properties and the `id` property set.
+     */
+    static async create<T extends ChiselEntity>(
+        this: { new (): T },
+        properties: Record<string, unknown>,
+    ): Promise<T> {
+        const result = new this();
+        Object.assign(result, properties);
+        await result.save();
+        return result;
+    }
+
     /** saves the current object into the backend */
     async save() {
         const jsonIds = await Deno.core.opAsync("chisel_store", {
