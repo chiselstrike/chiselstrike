@@ -336,6 +336,17 @@ async fn create_deno(inspect_brk: bool) -> Result<DenoService> {
 
     {
         let mut code_map = d.module_loader.code_map.borrow_mut();
+
+        code_map.insert(
+            "/main.ts".to_string(),
+            VersionedCode {
+                code: "import * as Chisel from \"./chisel.ts\";
+                       globalThis.Chisel = Chisel;"
+                    .to_string(),
+                version: 0,
+            },
+        );
+
         code_map.insert(
             chisel_path.clone(),
             VersionedCode {
@@ -347,7 +358,7 @@ async fn create_deno(inspect_brk: bool) -> Result<DenoService> {
 
     worker
         .execute_main_module(
-            &ModuleSpecifier::parse(&(DUMMY_PREFIX.to_string() + &chisel_path)).unwrap(),
+            &ModuleSpecifier::parse(&(DUMMY_PREFIX.to_string() + "/main.ts")).unwrap(),
         )
         .await?;
     Ok(d)

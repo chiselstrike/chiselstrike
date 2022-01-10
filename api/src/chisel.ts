@@ -58,7 +58,7 @@ class Filter extends Base {
 
 type Inner = BackingStore | Join | Filter;
 
-export class ChiselIterator<T> {
+class ChiselIterator<T> {
     constructor(private inner: Inner) {}
     select(...columns: (keyof T)[]): ChiselIterator<Pick<T, (keyof T)>> {
         const names = columns as string[];
@@ -186,49 +186,45 @@ export class ChiselIterator<T> {
 // way in typescript to reflect on T to get the keys as strings. This
 // makes constructing chiselIterators a bit annoying, but that is probably fine
 // as we will create the chiselIterator objects, no the chiselstrike users.
-export function chiselIterator<T>(name: string, columns: column[]) {
+function chiselIterator<T>(name: string, columns: column[]) {
     const b = new BackingStore(columns, name);
     return new ChiselIterator<T>(b);
 }
 
-const ChiselAux = {
-    api: {
-        ChiselIterator: ChiselIterator,
-        chiselIterator: chiselIterator,
-    },
-
-    buildReadableStreamForBody: function (rid: number) {
-        return new ReadableStream({
-            async pull(controller: ReadableStreamDefaultController) {
-                const chunk = await Deno.core.opAsync("chisel_read_body", rid);
-                if (chunk) {
-                    controller.enqueue(chunk);
-                } else {
-                    controller.close();
-                    Deno.core.opSync("op_close", rid);
-                }
-            },
-            cancel() {
-                Deno.core.opSync("op_close", rid);
-            },
-        });
-    },
-
-    save: async function (typeName: string, content: string) {
-        return await Deno.core.opAsync("chisel_store", {
-            name: typeName,
-            value: content,
-        });
-    },
-
-    json: function (body: unknown, status = 200) {
-        return new Response(JSON.stringify(body), {
-            status: status,
-            headers: [
-                ["content-type", "application/json"],
-            ],
-        });
-    },
+export const api = {
+    ChiselIterator: ChiselIterator,
+    chiselIterator: chiselIterator,
 };
 
-(globalThis as unknown as { Chisel: typeof ChiselAux }).Chisel = ChiselAux;
+export function buildReadableStreamForBody(rid: number) {
+    return new ReadableStream({
+        async pull(controller: ReadableStreamDefaultController) {
+            const chunk = await Deno.core.opAsync("chisel_read_body", rid);
+            if (chunk) {
+                controller.enqueue(chunk);
+            } else {
+                controller.close();
+                Deno.core.opSync("op_close", rid);
+            }
+        },
+        cancel() {
+            Deno.core.opSync("op_close", rid);
+        },
+    });
+}
+
+export async function save(typeName: string, content: string) {
+    return await Deno.core.opAsync("chisel_store", {
+        name: typeName,
+        value: content,
+    });
+}
+
+export function json(body: unknown, status = 200) {
+    return new Response(JSON.stringify(body), {
+        status: status,
+        headers: [
+            ["content-type", "application/json"],
+        ],
+    });
+}
