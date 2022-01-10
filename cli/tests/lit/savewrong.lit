@@ -1,0 +1,19 @@
+# SPDX-FileCopyrightText: © 2021-2022 ChiselStrike <info@chiselstrike.com>
+
+# RUN: sh -e @file
+
+cp examples/person.ts "$TEMPDIR/types"
+
+cd "$TEMPDIR"
+
+cat << EOF > "$TEMPDIR/endpoints/store.ts"
+export default async function chisel(req: Request) {
+    await Chisel.save("Person", {"invalidField": "foo"});
+    return new Response("Ok");
+}
+EOF
+
+$CHISEL apply
+
+$CURL -X POST $CHISELD_HOST/dev/store 2>&1 ||:
+# CHECK: field invalidField not present in Person 

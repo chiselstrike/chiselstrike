@@ -14,6 +14,7 @@ use sqlx::Column;
 use sqlx::Transaction;
 use sqlx::{Executor, Row};
 use std::cell::RefCell;
+use std::collections::HashSet;
 use std::marker::PhantomPinned;
 use std::pin::Pin;
 use std::task::{Context, Poll};
@@ -230,6 +231,7 @@ impl QueryEngine {
         let mut id_name = String::new();
         let mut update_binds = String::new();
         let mut id_bind = String::new();
+        let mut field_set = HashSet::new();
 
         for (i, f) in ty.all_fields().enumerate() {
             let bind = std::format!("${}", i + 1);
@@ -237,6 +239,7 @@ impl QueryEngine {
             field_binds.push(',');
 
             field_names.push_str(&f.name);
+            field_set.insert(f.name.to_string());
             field_names.push(',');
             if f.type_ == Type::Id {
                 if let Some(idstr) = ty_value.get(&f.name) {
@@ -254,6 +257,15 @@ impl QueryEngine {
         field_binds.pop();
         field_names.pop();
         update_binds.pop();
+
+        for v in ty_value.keys() {
+            anyhow::ensure!(
+                field_set.get(v).is_some(),
+                "field {} not present in {}",
+                v,
+                ty.name()
+            );
+        }
 
         let insert_query = std::format!(
             "INSERT INTO {} ({}) VALUES ({}) ON CONFLICT ({}) DO UPDATE SET {} WHERE {} = {} RETURNING *",
