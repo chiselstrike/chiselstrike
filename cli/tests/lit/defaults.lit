@@ -2,7 +2,7 @@
 
 # RUN: sh -e @file
 
-cat << EOF > "$TEMPDIR/types/types.ts"
+cat << EOF > "$TEMPDIR/models/types.ts"
 export class Foo extends ChiselEntity {
 	a: string = "dfl1";
 	b: number = 0.0;
@@ -43,7 +43,7 @@ $CURL -o - $CHISELD_HOST/dev/read
 # CHECK: HTTP/1.1 200 OK
 # CHECK: dfl1 0 false 2 value
 
-cat << EOF > "$TEMPDIR/types/types.ts"
+cat << EOF > "$TEMPDIR/models/types.ts"
 export class Foo extends ChiselEntity {
 	a: string = "dfl1";
 	b: number = 0.0;

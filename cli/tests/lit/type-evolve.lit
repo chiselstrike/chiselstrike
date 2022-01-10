@@ -3,7 +3,7 @@
 # RUN: sh -e @file
 
 cd "$TEMPDIR"
-cat << EOF > "$TEMPDIR/types/types.ts"
+cat << EOF > "$TEMPDIR/models/types.ts"
 import { ChiselEntity } from "@chiselstrike/chiselstrike";
 
 export class Evolving extends ChiselEntity {
@@ -17,7 +17,7 @@ EOF
 $CHISEL apply
 # CHECK: Type defined: Evolving
 
-cat << EOF > "$TEMPDIR/types/types.ts"
+cat << EOF > "$TEMPDIR/models/types.ts"
 import { ChiselEntity } from "@chiselstrike/chiselstrike";
 
 export class Evolving extends ChiselEntity {
@@ -67,7 +67,7 @@ $CURL $CHISELD_HOST/dev/find
 # CHECK: HTTP/1.1 200 OK
 # CHECK: tst A B tst
 
-cat << EOF > "$TEMPDIR/types/types.ts"
+cat << EOF > "$TEMPDIR/models/types.ts"
 import { ChiselEntity } from "@chiselstrike/chiselstrike";
 
 export class Evolving extends ChiselEntity {

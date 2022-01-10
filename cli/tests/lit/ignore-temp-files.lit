@@ -4,10 +4,10 @@
 
 cd "$TEMPDIR"
 
-echo \} > "$TEMPDIR/types/.types.ts"
+echo \} > "$TEMPDIR/models/.types.ts"
 $CHISEL apply
 # CHECK: ok
 
-mv "$TEMPDIR/types/.types.ts" "$TEMPDIR/types/types.ts"
+mv "$TEMPDIR/models/.types.ts" "$TEMPDIR/models/types.ts"
 $CHISEL apply 2>&1 || echo # (swallow the apply abort)
 # CHECK: types.ts

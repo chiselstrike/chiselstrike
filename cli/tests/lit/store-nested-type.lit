@@ -2,7 +2,7 @@
 
 # RUN: sh -e @file
 
-cat << EOF > "$TEMPDIR/types/types.ts"
+cat << EOF > "$TEMPDIR/models/types.ts"
 export class Person extends ChiselEntity {
    firstName: string;
    lastName: string;

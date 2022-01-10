@@ -2,7 +2,7 @@
 
 # RUN: sh -e @file
 
-cp examples/person.ts "$TEMPDIR/types"
+cp examples/person.ts "$TEMPDIR/models"
 cp examples/store.js "$TEMPDIR/endpoints"
 
 cat << EOF > "$TEMPDIR/policies/pol.yaml"
@@ -11,7 +11,7 @@ labels:
     transform: anonymize
 EOF
 
-cat << EOF > "$TEMPDIR/types/nickname.ts"
+cat << EOF > "$TEMPDIR/models/nickname.ts"
 import { ChiselEntity } from "@chiselstrike/chiselstrike";
 
 export class Nickname extends ChiselEntity {

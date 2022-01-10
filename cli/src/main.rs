@@ -36,8 +36,8 @@ const TIMEOUT: Duration = Duration::from_secs(10);
 /// endpoints are made executable via Deno.
 #[derive(Deserialize)]
 struct Manifest {
-    /// Vector of directories to scan for type definitions.
-    types: Vec<String>,
+    /// Vector of directories to scan for model definitions.
+    models: Vec<String>,
     /// Vector of directories to scan for endpoint definitions.
     endpoints: Vec<String>,
     /// Vector of directories to scan for policy definitions.
@@ -98,8 +98,8 @@ struct Endpoint {
 }
 
 impl Manifest {
-    pub fn types(&self) -> anyhow::Result<Vec<PathBuf>> {
-        Self::dirs_to_paths(&self.types)
+    pub fn models(&self) -> anyhow::Result<Vec<PathBuf>> {
+        Self::dirs_to_paths(&self.models)
     }
 
     pub fn endpoints(&self) -> anyhow::Result<Vec<Endpoint>> {
@@ -276,7 +276,7 @@ async fn wait(server_url: String) -> Result<tonic::Response<StatusResponse>> {
 }
 
 const MANIFEST_FILE: &str = "Chisel.toml";
-const TYPES_DIR: &str = "./types";
+const TYPES_DIR: &str = "./models";
 const ENDPOINTS_DIR: &str = "./endpoints";
 const POLICIES_DIR: &str = "./policies";
 const VSCODE_DIR: &str = "./.vscode/";
@@ -378,16 +378,16 @@ async fn apply<S: ToString>(
     let version = version.to_string();
 
     let manifest = read_manifest()?;
-    let types = manifest.types()?;
+    let models = manifest.models()?;
     let endpoints = manifest.endpoints()?;
     let policies = manifest.policies()?;
 
-    let types_req = crate::ts::parse_types(&types)?;
+    let types_req = crate::ts::parse_types(&models)?;
     let mut endpoints_req = vec![];
     let mut policy_req = vec![];
 
     let mut types_string = String::new();
-    for t in &types {
+    for t in &models {
         types_string += &read_to_string(&t)?;
     }
 
@@ -531,9 +531,9 @@ async fn main() -> Result<()> {
                 })?;
             let watcher_config = notify::Config::OngoingEvents(Some(Duration::from_secs(1)));
             apply_watcher.configure(watcher_config)?;
-            for types_dir in &manifest.types {
-                let types_dir = Path::new(types_dir);
-                apply_watcher.watch(types_dir, RecursiveMode::Recursive)?;
+            for models_dir in &manifest.models {
+                let models_dir = Path::new(models_dir);
+                apply_watcher.watch(models_dir, RecursiveMode::Recursive)?;
             }
             for endpoints_dir in &manifest.endpoints {
                 let endpoints_dir = Path::new(endpoints_dir);

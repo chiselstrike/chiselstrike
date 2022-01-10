@@ -4,7 +4,7 @@
 
 cd "$TEMPDIR"
 
-cat << EOF > "$TEMPDIR/types/types.ts"
+cat << EOF > "$TEMPDIR/models/types.ts"
 export class Foo extends ChiselEntity { a?: string; }
 export class Bar extends ChiselEntity { a: string = "default"; }
 EOF
@@ -23,14 +23,14 @@ $CHISEL describe
 # CHECK:   [[^ *a\?: string]]
 # CHECK: }
 
-cat << EOF > "$TEMPDIR/types/types.ts"
+cat << EOF > "$TEMPDIR/models/types.ts"
 export class Bar extends ChiselEntity { a: string = "default"; }
 EOF
 set +e
 $CHISEL apply 2>&1
 # CHECK: Trying to remove types from type file. This will delete the underlying data associated with this type. To proceed, apply again with --allow-type-deletion
 
-cat << EOF > "$TEMPDIR/types/types.ts"
+cat << EOF > "$TEMPDIR/models/types.ts"
 export class Zed extends ChiselEntity { a: string; a: string; }
 EOF
 set +e
@@ -39,7 +39,7 @@ set -e
 
 # CHECK: UNIQUE constraint failed: field_names.field_name
 #
-cat << EOF > "$TEMPDIR/types/types.ts"
+cat << EOF > "$TEMPDIR/models/types.ts"
 export class Bad extends ChiselEntity { a: SomeType; }
 EOF
 set +e
@@ -48,13 +48,13 @@ set -e
 
 # CHECK: field a in class Bad neither a basic type, nor refers to a type defined in this context
 
-cat << EOF > "$TEMPDIR/types/types.ts"
+cat << EOF > "$TEMPDIR/models/types.ts"
 export class Malformed extends ChiselEntity { name: string(); }
 EOF
 $CHISEL apply --allow-type-deletion 2>&1 || echo
 # CHECK: 1 | export class Malformed extends ChiselEntity { name: string(); }
 
-cat << EOF > "$TEMPDIR/types/types.ts"
+cat << EOF > "$TEMPDIR/models/types.ts"
 export class Malformed extends ChiselEntity { name; }
 EOF
 $CHISEL apply --allow-type-deletion 2>&1 || echo
