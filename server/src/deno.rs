@@ -310,7 +310,7 @@ fn op_chisel_introspect(
     };
 
     let vec: Vec<serde_json::Value> = ty
-        .user_fields()
+        .all_fields()
         .map(|f| serde_json::json!(vec![f.name.clone(), f.type_.name().to_string()]))
         .collect();
     Ok(serde_json::json!(vec))
