@@ -238,7 +238,7 @@ async fn op_chisel_store(
     _state: Rc<RefCell<OpState>>,
     content: serde_json::Value,
     _: (),
-) -> Result<JsonObject> {
+) -> Result<serde_json::Value> {
     anyhow::ensure!(
         current_method() != Method::GET,
         "Mutating the backend is not allowed during GET"
@@ -268,7 +268,7 @@ async fn op_chisel_store(
     // Await point below, RcMut can't be held.
     drop(runtime);
 
-    query_engine.add_row(&ty, value).await
+    Ok(serde_json::json!(query_engine.add_row(&ty, value).await?))
 }
 
 type DbStream = RefCell<SqlStream>;

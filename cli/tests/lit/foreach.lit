@@ -2,16 +2,20 @@
 
 # RUN: sh -e @file
 
-cd "$TEMPDIR"
+cp examples/person.ts "$TEMPDIR/types"
 
-cat << EOF > "$TEMPDIR/types/types.ts"
-export class Person extends ChiselEntity { name: string; }
-EOF
+cd "$TEMPDIR"
 
 cat << EOF > "$TEMPDIR/endpoints/store.ts"
 export default async function chisel(req: Request) {
-    await Chisel.save("Person", {"name": "Glauber"});
-    await Chisel.save("Person", {"name": "Pekka"});
+    const glauber = new Person();
+    glauber.first_name = "Glauber";
+    await glauber.save();
+
+    const pekka = new Person();
+    pekka.first_name = "Pekka";
+    await pekka.save();
+
     return new Response("Ok");
 }
 EOF

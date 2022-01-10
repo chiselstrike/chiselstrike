@@ -5,13 +5,20 @@
 cd "$TEMPDIR"
 
 cat << EOF > "$TEMPDIR/types/types.ts"
+import { ChiselEntity } from "@chiselstrike/chiselstrike";
+
 export class Person extends ChiselEntity { name: string; company: string = "ChiselStrike"; }
 EOF
 
 cat << EOF > "$TEMPDIR/endpoints/store.ts"
 export default async function chisel(req: Request) {
-    await Chisel.save("Person", {"name": "Glauber"});
-    await Chisel.save("Person", {"name": "Pekka"});
+    const glauber = new Person();
+    glauber.name = "Glauber";
+    await glauber.save();
+
+    const pekka = new Person();
+    pekka.name = "Pekka";
+    await pekka.save();
     return new Response("Ok");
 }
 EOF

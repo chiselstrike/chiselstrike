@@ -2,36 +2,45 @@
 
 # RUN: sh -e @file
 
-cd "$TEMPDIR"
+cp examples/person.ts "$TEMPDIR/types"
 
-cat << EOF > "$TEMPDIR/types/types.ts"
-export class Person extends ChiselEntity { name: string; }
-EOF
+cd "$TEMPDIR"
 
 cat << EOF > "$TEMPDIR/endpoints/bad_id.ts"
 export default async function chisel(req: Request) {
-    const filtered = await Chisel.save("Person", {"id": "badid", "name": "Glauber"});
+    const filtered = new Person();
+    filtered.id = "badid";
+    filtered.first_name = "Glauber";
+
+    await filtered.save();
     return new Response("Ok");
 }
 EOF
 
 cat << EOF > "$TEMPDIR/endpoints/store_with_id.ts"
 export default async function chisel(req: Request) {
-    const filtered = await Chisel.save("Person", {"id": "6b9ebbff-46b4-4759-9dbd-850cdcb10c92", "name": "Glauber"});
+    const filtered = new Person();
+    filtered.id = "6b9ebbff-46b4-4759-9dbd-850cdcb10c92";
+    filtered.first_name = "Glauber";
+    await filtered.save();
     return new Response("Ok");
 }
 EOF
 
 cat << EOF > "$TEMPDIR/endpoints/store_no_id.ts"
 export default async function chisel(req: Request) {
-    const filtered = await Chisel.save("Person", {"name": "Glauber"});
+    const filtered = new Person();
+    filtered.first_name = "Glauber";
+    await filtered.save();
     return new Response("Ok");
 }
 EOF
 
 cat << EOF > "$TEMPDIR/endpoints/update_by_id.ts"
 export default async function chisel(req: Request) {
-    const filtered = await Chisel.save("Person", {"id": "6b9ebbff-46b4-4759-9dbd-850cdcb10c92", "name": "not-Glauber"});
+    const filtered = new Person();
+    filtered.id = "6b9ebbff-46b4-4759-9dbd-850cdcb10c92";
+    filtered.first_name = "not-Glauber";
     return new Response("Ok");
 }
 EOF
@@ -39,7 +48,7 @@ EOF
 cat << EOF > "$TEMPDIR/endpoints/count_glaubers.ts"
 export default async function chisel(req: Request) {
     let count = 0;
-    const rows = Person.findMany({"name":  "Glauber"});
+    const rows = Person.findMany({"first_name":  "Glauber"});
     for await (let row of rows) {
         count += 1
     }

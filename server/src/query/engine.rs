@@ -225,7 +225,7 @@ impl QueryEngine {
         &self,
         ty: &ObjectType,
         ty_value: &JsonObject,
-    ) -> anyhow::Result<JsonObject> {
+    ) -> anyhow::Result<String> {
         let mut field_binds = String::new();
         let mut field_names = String::new();
         let mut id_name = String::new();
@@ -345,7 +345,7 @@ impl QueryEngine {
             .await
             .map_err(QueryError::ExecuteFailed)?;
 
-        relational_row_to_json(&columns, &row)
+        Ok(row.get::<String, _>("id"))
     }
 }
 

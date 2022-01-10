@@ -140,9 +140,14 @@ TypeScript types.  Put a file in `my-backend/types/types.ts` like this:
 ```typescript title="my-backend/types/types.ts"
 import { ChiselEntity } from "@chiselstrike/chiselstrike"
 
-class BlogComment extends ChiselEntity {
+export class BlogComment extends ChiselEntity {
     content: string;
     by: string;
+    constructor(content: string, by: string) {
+        super();
+        this.content = content;
+        this.by = by;
+    }
 }
 ```
 
@@ -177,14 +182,11 @@ import { Chisel } from "@chiselstrike/chiselstrike"
 
 export default async function chisel(_req) {
     let promises = [];
-    for (const c of [
-        {content: 'First comment', by: 'Jill'},
-        {content: 'Second comment', by: 'Jack'},
-        {content: 'Third comment', by: 'Jim'},
-        {content: 'Fourth comment', by: 'Jack'}
-    ]) {
-        promises.push(Chisel.save('BlogComment', c));
-    }
+    promises.push(new BlogComment("First comment", "Jill").save());
+    promises.push(new BlogComment("Second comment", "Jack").save());
+    promises.push(new BlogComment("Third comment", "Jim").save());
+    promises.push(new BlogComment("Fourth comment", "Jack").save());
+
     await Promise.all(promises);
     return new Response('success\n');
 }
@@ -198,13 +200,13 @@ $ curl -X POST localhost:8080/dev/populate-comments
 success
 ```
 
-Note how we can store a comment in the database by simply invoking
-`Chisel.save` with `'BlogComment'` as the first argument and the object
-representing the comment as the second.  Every time we do that, a new
-row is added.
+Note how we can store a comment in the database by simply invoking the `save`
+method of `'BlogComment'`. Every time we do that for an object without an id, a
+new row is added. Every time we invoke `save()` on an object that already has
+an id, the corresponding row is updated.
 
 Because this endpoint mutates the state of the backend, a consequence of
-the call to `Chisel.save`, we use a POST request.
+the call to `save()`, we use a POST request.
 
 The effect of this endpoint is that the database is filled with four
 comments.  Now we just have to read them.  Let's edit the
@@ -225,7 +227,7 @@ export default async function chisel(_req) {
 
 :::tip
 You do not need to specify an id for `BlogComment`. An `id` property is automatically generated for you, and
-you can access it as `c.id` in the examples above. Calling `Chisel.save()` passing an object that has an
+you can access it as `c.id` in the examples above. Calling the `save()` on an object that already has an
 `id` will update the field with corresponding object.
 :::
 
@@ -283,7 +285,10 @@ import { BlogComment } from "../types/types"
 export default async function chisel(req) {
     if (req.method == 'POST') {
         const payload = await req.json();
-        const created = await Chisel.save('BlogComment', payload);
+        const content = payload["content"] || "";
+        const by = payload["by"] || "anonymous";
+        const created = new BlogComment(content, by);
+        await created.save();
         return Chisel.json('inserted ' + created.id);
     } else if (req.method == 'GET') {
         let comments = [];

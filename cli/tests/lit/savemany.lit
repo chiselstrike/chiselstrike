@@ -5,20 +5,28 @@
 cd "$TEMPDIR"
 
 cat << EOF > "$TEMPDIR/types/types.ts"
-export class Person extends ChiselEntity { name: string; isQueen: boolean;}
+import { ChiselEntity } from "@chiselstrike/chiselstrike";
+
+export class Person extends ChiselEntity {
+    name: string;
+    isQueen: boolean;
+    constructor(name: string, isQueen: boolean) {
+        super();
+        this.name = name;
+        this.isQueen = isQueen;
+    }
+}
 EOF
 
 cat << EOF > "$TEMPDIR/endpoints/savemany.ts"
 export default async function chisel(req: Request) {
-    let promises = [];
-    for (const c of [
-        {name: 'Elizabeth', isQueen: true},
-        {name: 'Victoria', isQueen: true},
-        {name: 'FreddieMercury', isQueen: true},
-        {name: 'William', isQueen: false}
-    ]) {
-        promises.push(Chisel.save('Person', c));
-    }
+    const promises = [];
+
+    promises.push(new Person('Elizabeth', true).save());
+    promises.push(new Person('Victoria', true).save());
+    promises.push(new Person('FreddieMercury', true).save());
+    promises.push(new Person('William', false).save());
+
     await Promise.all(promises);
     return new Response('Ok');
 }

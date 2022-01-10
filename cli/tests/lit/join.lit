@@ -12,15 +12,20 @@ labels:
 EOF
 
 cat << EOF > "$TEMPDIR/types/nickname.ts"
+import { ChiselEntity } from "@chiselstrike/chiselstrike";
+
 export class Nickname extends ChiselEntity {
-   first_name: string;
-   nick: string;
+   first_name: string = "";
+   nick: string = "";
 }
 EOF
 
 cat << EOF > "$TEMPDIR/endpoints/store_nick.js"
 export default async function chisel(req: Request) {
-    await Chisel.save('Nickname', {first_name: "Glauber", nick: "Glommer"});
+    const nick = new Nickname();
+    nick.first_name = "Glauber";
+    nick.nick = "Glommer";
+    await nick.save();
     return new Response('ok');
 }
 EOF
