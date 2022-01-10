@@ -183,8 +183,8 @@ fn parse_class_decl<P: AsRef<Path>>(
             }
 
             for member in &x.class.body {
-                match member {
-                    ClassMember::ClassProp(x) => match parse_class_prop(x, &name, handler) {
+                if let ClassMember::ClassProp(x) = member {
+                    match parse_class_prop(x, &name, handler) {
                         Err(err) => {
                             handler.span_err(x.span(), &format!("While parsing class {}", name));
                             bail!("{}", err);
@@ -192,20 +192,13 @@ fn parse_class_decl<P: AsRef<Path>>(
                         Ok(fd) => {
                             field_defs.push(fd);
                         }
-                    },
-                    z => {
-                        handler.span_err(z.span(), "Only property definitions (with optional decorators) allowed in the types file");
-                        bail!("invalid type file {}", filename.as_ref().display());
                     }
                 }
             }
             type_vec.push(AddTypeRequest { name, field_defs });
         }
         z => {
-            handler.span_err(
-                z.span(),
-                "Only property definitions (with optional decorators) allowed in the types file",
-            );
+            handler.span_err(z.span(), "Only class definitions allowed in the types file");
             bail!("invalid type file {}", filename.as_ref().display());
         }
     }
