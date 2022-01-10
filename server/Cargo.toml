@@ -45,6 +45,7 @@ yaml-rust = "0.4"
 
 [build-dependencies]
 anyhow = "1.0"
+compile = { path = "../compile" }
 tonic-build = "0.5.2"
 vergen = { version = "6", default-features = false, features = ["git"] }
 
