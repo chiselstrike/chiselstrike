@@ -2,7 +2,7 @@
 #
 # Tarball build script.
 #
-# SPDX-FileCopyrightText: © 2021 ChiselStrike <info@chiselstrike.com>
+# SPDX-FileCopyrightText: © 2021-2022 ChiselStrike <info@chiselstrike.com>
 #
 # This scripts builds a tarball of ChiselStrike for distribution. You need to
 # specify the target (i.e. operating system and machine architecture) you are
