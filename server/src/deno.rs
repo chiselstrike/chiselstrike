@@ -8,7 +8,7 @@ use crate::query::engine::SqlStream;
 use crate::rcmut::RcMut;
 use crate::runtime;
 use crate::runtime::Runtime;
-use crate::types::ObjectType;
+use crate::types::{ObjectType, Type};
 use anyhow::{anyhow, Result};
 use deno_broadcast_channel::InMemoryBroadcastChannel;
 use deno_core::error::AnyError;
@@ -285,6 +285,37 @@ struct QueryStreamResource {
 
 impl Resource for QueryStreamResource {}
 
+fn op_chisel_introspect(
+    _op_state: &mut OpState,
+    value: serde_json::Value,
+    _: (),
+) -> Result<serde_json::Value> {
+    let runtime = runtime::get();
+    let api_version = current_api_version();
+
+    let type_name = value["name"]
+        .as_str()
+        .ok_or_else(|| anyhow!("expecting to be asked for a name"))?;
+
+    // Could be the OAuthType, so have to lookup builtins as well
+    let ty = match runtime
+        .type_system
+        .lookup_custom_type(type_name, &api_version)
+    {
+        Ok(ty) => ty,
+        Err(_) => match runtime.type_system.lookup_builtin_type(type_name)? {
+            Type::Object(ty) => ty,
+            _ => anyhow::bail!("Invalid to introspect {}", type_name),
+        },
+    };
+
+    let vec: Vec<serde_json::Value> = ty
+        .user_fields()
+        .map(|f| serde_json::json!(vec![f.name.clone(), f.type_.name().to_string()]))
+        .collect();
+    Ok(serde_json::json!(vec))
+}
+
 fn op_chisel_relational_query_create(
     op_state: &mut OpState,
     relation: serde_json::Value,
@@ -348,6 +379,7 @@ async fn create_deno<P: AsRef<Path>>(base_directory: P, inspect_brk: bool) -> Re
         "chisel_relational_query_next",
         op_async(op_chisel_relational_query_next),
     );
+    runtime.register_op("chisel_introspect", op_sync(op_chisel_introspect));
     runtime.sync_ops_cache();
 
     // FIXME: Include these files in the snapshop

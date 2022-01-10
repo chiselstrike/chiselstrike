@@ -187,11 +187,10 @@ export class ChiselIterator<T> {
     }
 }
 
-// We have to pass the columns as a runtime argument since there is no
-// way in typescript to reflect on T to get the keys as strings. This
-// makes constructing chiselIterators a bit annoying, but that is probably fine
-// as we will create the chiselIterator objects, no the chiselstrike users.
-export function chiselIterator<T>(name: string, columns: column[]) {
+export function chiselIterator<T>(name: string, c?: column[]) {
+    const columns = (c != undefined)
+        ? c
+        : Deno.core.opSync("chisel_introspect", { "name": name });
     const b = new BackingStore(columns, name);
     return new ChiselIterator<T>(b);
 }
@@ -203,23 +202,17 @@ export function chiselIterator<T>(name: string, columns: column[]) {
 export class ChiselEntity {
     id: string;
 
-    static all<T>(this: { new (): T }): ChiselIterator<T> {
-        // FIXME: I thought this could have been written as :
-        //
-        //        return chiselIterator(this.name, Object.getOwnPropertyNames(this));
-        //
-        // but while this.name returns the correct name of the class, getOwnPropertyNames returns
-        // an empty array. That is likely because at this point the object is not constructed yet,
-        // so it has no properties. Keep in mind that those functions operate on a collection
-        // we resort then to an eval loop, that essentially delegates this to the rust code.
-        return eval("Chisel." + this.name);
+    static all<T>(
+        this: { new (): T },
+    ): ChiselIterator<T> {
+        return chiselIterator<T>(this.name);
     }
 
     static findMany<T>(
         this: { new (): T },
         restrictions: Partial<T>,
     ): ChiselIterator<T> {
-        const it = eval("Chisel." + this.name);
+        const it = chiselIterator<T>(this.name);
         return it.findMany(restrictions);
     }
 
@@ -227,7 +220,7 @@ export class ChiselEntity {
         this: { new (): T },
         limit: number,
     ): ChiselIterator<T> {
-        const it = eval("Chisel." + this.name);
+        const it = chiselIterator<T>(this.name);
         return it.take(limit);
     }
 
@@ -235,7 +228,7 @@ export class ChiselEntity {
         this: { new (): T },
         restrictions: Partial<T>,
     ): Promise<T | null> {
-        const it = eval("Chisel." + this.name);
+        const it = chiselIterator<T>(this.name);
         return it.findOne(restrictions);
     }
 
@@ -243,7 +236,7 @@ export class ChiselEntity {
         this: { new (): T },
         ...columns: (keyof T)[]
     ): ChiselIterator<T> {
-        const it = eval("Chisel." + this.name);
+        const it = chiselIterator<T>(this.name);
         return it.select(...columns);
     }
 }
