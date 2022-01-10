@@ -236,7 +236,7 @@ async fn op_chisel_read_body(
 
 async fn op_chisel_store(
     _state: Rc<RefCell<OpState>>,
-    content: serde_json::Value,
+    mut content: serde_json::Value,
     _: (),
 ) -> Result<serde_json::Value> {
     anyhow::ensure!(
@@ -268,7 +268,11 @@ async fn op_chisel_store(
     // Await point below, RcMut can't be held.
     drop(runtime);
 
-    Ok(serde_json::json!(query_engine.add_row(&ty, value).await?))
+    let id = query_engine.add_row(&ty, value).await?;
+
+    content["id"] = serde_json::Value::String(id);
+
+    Ok(serde_json::json!(content))
 }
 
 type DbStream = RefCell<SqlStream>;

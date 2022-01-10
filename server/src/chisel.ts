@@ -200,15 +200,14 @@ export function chiselIterator<T>(name: string, c?: column[]) {
 //  XXX: No need to tell me this sucks, but automating this properly is not trivial, and require tsc
 //  XXX: so we will do it later.
 export class ChiselEntity {
-    id: string;
+    readonly id: string;
 
     /** saves the current object into the backend */
     async save() {
-        const id = await Deno.core.opAsync("chisel_store", {
+        return await Deno.core.opAsync("chisel_store", {
             name: this.constructor.name,
             value: this,
         });
-        this.id = id;
     }
 
     static all<T>(
