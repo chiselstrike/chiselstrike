@@ -6,6 +6,7 @@ edition = "2021"
 
 [dependencies]
 anyhow = { version = "1.0.45", features = ["backtrace"] }
+api = { path = "../api" }
 async-channel = "1.6.1"
 async-mutex = "1.4.0"
 compile = { path = "../compile" }
@@ -45,7 +46,6 @@ yaml-rust = "0.4"
 
 [build-dependencies]
 anyhow = "1.0"
-compile = { path = "../compile" }
 tonic-build = "0.5.2"
 vergen = { version = "6", default-features = false, features = ["git"] }
 

@@ -1,0 +1,12 @@
+[package]
+name = "api"
+version = "0.3.0"
+authors = ["ChiselStrike"]
+edition = "2021"
+
+[lib]
+name = "api"
+
+[build-dependencies]
+anyhow = "1.0"
+compile = { path = "../compile" }
