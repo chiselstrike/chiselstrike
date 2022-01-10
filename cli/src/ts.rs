@@ -128,15 +128,15 @@ fn get_type_decorators(handler: &Handler, x: &[Decorator]) -> Result<Vec<String>
 }
 
 fn validate_type_vec(type_vec: &[AddTypeRequest], valid_types: &BTreeSet<String>) -> Result<()> {
-    let mut basic_types: BTreeSet<&str> = BTreeSet::new();
-    basic_types.insert("string");
-    basic_types.insert("number");
-    basic_types.insert("boolean");
-    basic_types.insert("OAuthUser");
+    let mut builtin_types: BTreeSet<&str> = BTreeSet::new();
+    builtin_types.insert("string");
+    builtin_types.insert("number");
+    builtin_types.insert("boolean");
+    builtin_types.insert("OAuthUser");
 
     for t in type_vec {
         for field in t.field_defs.iter() {
-            if basic_types.get(&field.field_type as &str).is_none()
+            if builtin_types.get(&field.field_type as &str).is_none()
                 && valid_types.get(&field.field_type).is_none()
             {
                 bail!("field {} in class {} neither a basic type, nor refers to a type defined in this context",
