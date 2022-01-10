@@ -297,7 +297,7 @@ fn op_chisel_introspect(
         .as_str()
         .ok_or_else(|| anyhow!("expecting to be asked for a name"))?;
 
-    // Could be the OAuthType, so have to lookup builtins as well
+    // Could be the OAuthUser, so have to lookup builtins as well
     let ty = match runtime
         .type_system
         .lookup_custom_type(type_name, &api_version)
