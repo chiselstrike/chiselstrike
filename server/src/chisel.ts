@@ -68,11 +68,13 @@ export class ChiselIterator<T> {
         const names = columns as string[];
         const cs = this.inner.columns.filter((c) => names.includes(c[0]));
         switch (this.inner.kind) {
-            case "BackingStore":
-                return chiselIterator(this.type, cs);
+            case "BackingStore": {
+                const b = new BackingStore(cs, this.type.name);
+                return new ChiselIterator<T>(undefined, b);
+            }
             case "Join": {
                 const i = new Join(cs, this.inner.left, this.inner.right);
-                return new ChiselIterator(this.type, i);
+                return new ChiselIterator(undefined, i);
             }
             case "Filter": {
                 const i = new Filter(
@@ -80,7 +82,7 @@ export class ChiselIterator<T> {
                     this.inner.restrictions,
                     this.inner.inner,
                 );
-                return new ChiselIterator(this.type, i);
+                return new ChiselIterator(undefined, i);
             }
         }
     }
@@ -176,15 +178,21 @@ export class ChiselIterator<T> {
             "chisel_relational_query_create",
             this.inner,
         );
-
+        const ctor = this.type;
         return {
             async next() {
-                const value = await Deno.core.opAsync(
+                const properties = await Deno.core.opAsync(
                     "chisel_relational_query_next",
                     rid,
                 );
-                if (value) {
-                    return { value: value, done: false };
+                if (properties) {
+                    if (ctor) {
+                        const result = new ctor();
+                        Object.assign(result, properties);
+                        return { value: result, done: false };
+                    } else {
+                        return { value: properties, done: false };
+                    }
                 } else {
                     Deno.core.opSync("op_close", rid);
                     return { done: true };
