@@ -6,3 +6,6 @@ members = [
     "compile",
     "server",
 ]
+
+[profile.release]
+debug = true
