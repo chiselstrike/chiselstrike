@@ -12,7 +12,7 @@ export default async function chisel(req: Request) {
     for await (let row of q1) {
         ret += JSON.stringify(row) + "\n";
     }
-    const q2 = Person.select("last_name").findMany({"last_name":  "Costa"});
+    const q2 = Person.all().select("last_name").filter({"last_name":  "Costa"});
     for await (let row of q2) {
         ret += JSON.stringify(row) + "\n";
     }
