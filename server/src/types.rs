@@ -316,7 +316,7 @@ impl TypeSystem {
                     // FIXME: basic rate limit?
                     let row = row
                         .with_context(|| format!("population can't proceed as reading from the underlying database for type {} failed", ty_obj_to.name))?;
-                    engine.add_row(ty_obj_to, &row).await?;
+                    engine.add_row_shallow(ty_obj_to, &row).await?;
                 }
             }
         }
@@ -615,11 +615,27 @@ impl<'a> FieldMap<'a> {
         // Fields in common: Ok if the type is the same, or if there is a lens
         for (name, field) in self.map.iter() {
             match source_type.map.get(name) {
-                Some(existing) => {
-                    if existing.type_ != field.type_ {
-                        anyhow::bail!("Type mismatch on field {} ({} -> {}). We don't support that yet, but that's coming soon! 🙏", name, existing.type_.name(), field.type_.name());
+                Some(existing) => match &existing.type_ {
+                    Type::Object(existing_type) => {
+                        if let Type::Object(field_type) = &field.type_ {
+                            anyhow::ensure!(
+                                existing_type.name == field_type.name,
+                                "Type name mismatch on field {} ({} -> {}). We don't support that yet, but that's coming soon! 🙏",
+                                name, existing_type.name, field_type.name
+                            );
+                        } else {
+                            anyhow::bail!("Type mismatch on field {} ({} -> {}). We don't support that yet, but that's coming soon! 🙏",
+                            name, existing.type_.name(), field.type_.name());
+                        }
                     }
-                }
+                    _ => {
+                        anyhow::ensure!(
+                            existing.type_ == field.type_,
+                            "Type mismatch on field {} ({} -> {}). We don't support that yet, but that's coming soon! 🙏",
+                            name, existing.type_.name(), field.type_.name()
+                        );
+                    }
+                },
                 None => {
                     if field.default.is_none() {
                         anyhow::bail!(

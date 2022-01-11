@@ -282,6 +282,16 @@ impl QueryEngine {
         Ok(id_tree.to_json())
     }
 
+    pub(crate) async fn add_row_shallow(
+        &self,
+        ty: &ObjectType,
+        ty_value: &JsonObject,
+    ) -> anyhow::Result<()> {
+        let query = self.prepare_insertion_shallow(ty, ty_value)?;
+        self.run_sql_queries(&[query]).await?;
+        Ok(())
+    }
+
     async fn run_sql_queries(&self, queries: &[SqlQuery]) -> anyhow::Result<()> {
         let mut transaction = self.start_transaction().await?;
         for q in queries {
@@ -404,10 +414,11 @@ impl QueryEngine {
         }
 
         let arg = match &field.type_ {
-            Type::String | Type::Id => SqlValue::String(convert_json_value!(as_str, str)),
+            Type::String | Type::Id | Type::Object(_) => {
+                SqlValue::String(convert_json_value!(as_str, str))
+            }
             Type::Float => SqlValue::F64(convert_json_value!(as_f64, f64)),
             Type::Boolean => SqlValue::Bool(convert_json_value!(as_bool, bool)),
-            Type::Object(_) => anyhow::bail!("unexpected conversion type - Object"),
         };
         Ok(arg)
     }
@@ -462,6 +473,25 @@ impl QueryEngine {
             id_name,
             id_bind,
         ))
+    }
+
+    fn prepare_insertion_shallow(
+        &self,
+        ty: &ObjectType,
+        ty_value: &JsonObject,
+    ) -> anyhow::Result<SqlQuery> {
+        let mut query_args = Vec::<SqlValue>::new();
+        for field in ty.all_fields() {
+            let arg = self.convert_to_argument(field, ty_value).with_context(|| {
+                QueryError::IncompatibleData(field.name.to_owned(), ty.name().to_owned())
+            })?;
+            query_args.push(arg);
+        }
+
+        Ok(SqlQuery {
+            query: self.make_insert_query(ty, ty_value)?,
+            args: query_args,
+        })
     }
 }
 

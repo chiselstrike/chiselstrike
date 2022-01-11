@@ -90,7 +90,11 @@ pub(crate) async fn backing_store_from_type(
 ) -> Result<Relation> {
     let mut columns = vec![];
     for field in ty.all_fields() {
-        let field_type = ts.lookup_builtin_type(field.type_.name())?;
+        let field_type = ts.lookup_type(field.type_.name(), &ty.api_version)?;
+        let field_type = match field_type {
+            Type::Object(_) => Type::String, // This is actually a foreign key.
+            ty => ty,
+        };
         columns.push((field.name.clone(), field_type));
     }
 
