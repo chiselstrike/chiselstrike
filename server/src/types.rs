@@ -1,4 +1,4 @@
-// SPDX-FileCopyrightText: © 2021-2022 ChiselStrike <info@chiselstrike.com>
+// SPDX-FileCopyrightText: © 2021 ChiselStrike <info@chiselstrike.com>
 
 use crate::db::backing_store_from_type;
 use crate::query::QueryEngine;

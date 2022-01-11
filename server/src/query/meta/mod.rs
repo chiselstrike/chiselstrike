@@ -1,6 +1,6 @@
 pub(crate) mod schema;
 
-// SPDX-FileCopyrightText: © 2021-2022 ChiselStrike <info@chiselstrike.com>
+// SPDX-FileCopyrightText: © 2021 ChiselStrike <info@chiselstrike.com>
 
 use crate::policies::Policies;
 use crate::prefix_map::PrefixMap;
