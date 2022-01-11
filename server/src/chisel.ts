@@ -7,7 +7,7 @@
 // which can be replaced by simple Attribute compare logic):
 //
 // select(ChiselIterator<T>, ChiselIterator<T>::Attribute attributes...) -> ChiselIterator<attributes...>
-// findMany(ChiselIterator<T>, fn(T)->bool) -> ChiselIterator<T>
+// filter(ChiselIterator<T>, fn(T)->bool) -> ChiselIterator<T>
 // sort(ChiselIterator<T>, fn(T)->Sortable) -> ChiselIterator<T>
 // take(ChiselIterator<T>, int) -> ChiselIterator<T>  (takes first n rows)
 // join(ChiselIterator<T>, ChiselIterator<U>, ChiselIterator<T>::Attribute, ChiselIterator<U>::Attribute) -> ChiselIterator<Composite<T, U>> (Joins chiselIterators T and U, based on their columns ChiselIterator<T>::Attribute and ChiselIterator<U>::Attribute)
@@ -120,7 +120,7 @@ export class ChiselIterator<T> {
     }
 
     /** Restricts this iterator to contain just the objects that match the `Partial` object `restrictions`. */
-    findMany(restrictions: Partial<T>): ChiselIterator<T> {
+    filter(restrictions: Partial<T>): ChiselIterator<T> {
         const i = new Filter(this.inner.columns, restrictions, this.inner);
         return new ChiselIterator(this.type, i);
     }
@@ -128,7 +128,7 @@ export class ChiselIterator<T> {
     /** Returns a single object that matches the `Partial` object `restrictions` passed as its parameter.
      *
      * If more than one match is found, any is returned. */
-    async findOne(restrictions: Partial<T>): Promise<T | null> {
+    async first(restrictions: Partial<T>): Promise<T | null> {
         const i = new Filter(this.inner.columns, restrictions, this.inner);
         const chiselIterator = new ChiselIterator<T>(this.type, i);
         chiselIterator.inner.limit = 1;
@@ -293,7 +293,7 @@ export class ChiselEntity {
         restrictions: Partial<T>,
     ): ChiselIterator<T> {
         const it = chiselIterator<T>(this);
-        return it.findMany(restrictions);
+        return it.filter(restrictions);
     }
 
     /** Restricts this iterator to contain only at most `limit_` elements. */
@@ -313,7 +313,7 @@ export class ChiselEntity {
         restrictions: Partial<T>,
     ): Promise<T | null> {
         const it = chiselIterator<T>(this);
-        return it.findOne(restrictions);
+        return it.first(restrictions);
     }
 
     /** Returns an iterator containing all elements of type T known to ChiselStrike,
