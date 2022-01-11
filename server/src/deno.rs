@@ -18,6 +18,7 @@ use deno_core::JsRuntime;
 use deno_core::ModuleSource;
 use deno_core::ModuleSourceFuture;
 use deno_core::ModuleSpecifier;
+use deno_core::ModuleType;
 use deno_core::OpState;
 use deno_core::RcRef;
 use deno_core::Resource;
@@ -98,6 +99,7 @@ const DUMMY_PREFIX: &str = "file://$chisel$";
 fn wrap(specifier: &ModuleSpecifier, code: String) -> Result<ModuleSource> {
     Ok(ModuleSource {
         code,
+        module_type: ModuleType::JavaScript,
         module_url_specified: specifier.to_string(),
         module_url_found: specifier.to_string(),
     })
