@@ -178,7 +178,6 @@ fn without_extension(path: &str) -> &str {
 pub static SNAPSHOT: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/SNAPSHOT.bin"));
 
 pub fn compile_ts_code(file_name: &str, lib_name: Option<&str>) -> Result<HashMap<String, String>> {
-    let lib_name = lib_name.unwrap_or("/default/lib/location/lib.esnext.d.ts");
     FILES.with(|m| {
         let mut borrow = m.borrow_mut();
         borrow.path_to_url_content.clear();
@@ -206,7 +205,10 @@ pub fn compile_ts_code(file_name: &str, lib_name: Option<&str>) -> Result<HashMa
     let global_context = runtime.global_context();
     let scope = &mut runtime.handle_scope();
     let file = v8::String::new(scope, &abs(file_name)).unwrap().into();
-    let lib = v8::String::new(scope, &abs(lib_name)).unwrap().into();
+    let lib = match lib_name {
+        Some(v) => v8::String::new(scope, &abs(v)).unwrap().into(),
+        None => v8::undefined(scope).into(),
+    };
 
     let global_proxy = global_context.open(scope).global(scope);
 

@@ -1,11 +1,44 @@
 const readCache = {};
 function compile(file, lib) {
+    // Add the deno libraries
+    // FIXME: get this list from build.rs
+    const libs = {
+        "deno.broadcast_channel": "deno_broadcast_channel",
+        "deno.console": "deno_console",
+        "deno.core": "deno_core",
+        "deno.crypto": "deno_crypto",
+        "deno.fetch": "deno_fetch",
+        "deno.net": "deno_net",
+        "deno.ns": "deno.ns",
+        "deno.shared_globals": "deno.shared_globals",
+        "deno.url": "deno_url",
+        "deno.web": "deno_web",
+        "deno.webgpu": "deno_webgpu",
+        "deno.websocket": "deno_websocket",
+        "deno.webstorage": "deno_webstorage",
+    };
+
+    for (const k in libs) {
+        v = libs[k];
+        if (!ts.libs.includes(k)) {
+            ts.libs.push(k);
+            ts.libMap.set(k, `lib.${v}.d.ts`);
+        }
+    }
+
+    // FIXME: This is probably more than what we want.
+    const defaultLibs = ["lib.deno.window.d.ts"];
+    if (lib !== undefined) {
+        defaultLibs.push(lib);
+    }
+
     const options = {
         allowJs: true,
         declaration: true,
         emitDecoratorMetadata: false,
         experimentalDecorators: true,
         isolatedModules: true,
+        lib: defaultLibs,
         module: ts.ModuleKind.ESNext,
         noEmitOnError: true,
         noImplicitAny: true,
@@ -34,7 +67,7 @@ function compile(file, lib) {
         return "/default/lib/location";
     };
     host.getDefaultLibFileName = () => {
-        return lib;
+        return undefined;
     };
     host.writeFile = (fileName, contents) => {
         Deno.core.opSync("write", fileName, contents);
@@ -92,4 +125,4 @@ function compile(file, lib) {
     return !emitResult.emitSkipped;
 }
 
-compile("bootstrap.ts", "/default/lib/location/lib.esnext.d.ts");
+compile("bootstrap.ts", undefined);

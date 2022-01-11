@@ -8,7 +8,7 @@ use std::path::PathBuf;
 
 fn read(_op_state: &mut OpState, path: String, _: ()) -> Result<String> {
     if path == "bootstrap.ts" {
-        return Ok("/// <reference lib=\"dom\" />
+        return Ok("/// <reference lib=\"deno.core\" />
                   export {};"
             .to_string());
     }
@@ -24,6 +24,20 @@ fn read(_op_state: &mut OpState, path: String, _: ()) -> Result<String> {
             };
         }
         let content = inc!(
+            "lib.deno.ns.d.ts",
+            "lib.deno.shared_globals.d.ts",
+            "lib.deno.window.d.ts",
+            "lib.deno_broadcast_channel.d.ts",
+            "lib.deno_console.d.ts",
+            "lib.deno_core.d.ts",
+            "lib.deno_crypto.d.ts",
+            "lib.deno_fetch.d.ts",
+            "lib.deno_net.d.ts",
+            "lib.deno_url.d.ts",
+            "lib.deno_web.d.ts",
+            "lib.deno_webgpu.d.ts",
+            "lib.deno_websocket.d.ts",
+            "lib.deno_webstorage.d.ts",
             "lib.dom.d.ts",
             "lib.es2015.collection.d.ts",
             "lib.es2015.core.d.ts",

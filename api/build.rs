@@ -14,7 +14,7 @@ fn main() -> Result<()> {
     println!("cargo:rerun-if-changed={}", chisel_ts);
     println!("cargo:rerun-if-changed=src/dts/lib.deno_core.d.ts");
 
-    let mut map = compile_ts_code(chisel_ts, Some("src/dts/lib.deno_core.d.ts"))?;
+    let mut map = compile_ts_code(chisel_ts, None)?;
     let code = map.remove(chisel_ts).unwrap();
 
     let out = PathBuf::from(env::var_os("OUT_DIR").unwrap());

@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: © 2021 ChiselStrike <info@chiselstrike.com>
 
 /// <reference lib="esnext" />
-/// <reference lib="dom" />
+/// <reference lib="deno.core" />
 
 // In the beginning, we shall implement the following querying logic (with the sole exception of the lambdas,
 // which can be replaced by simple Attribute compare logic):
