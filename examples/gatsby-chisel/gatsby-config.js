@@ -13,6 +13,12 @@ module.exports = {
     "gatsby-plugin-postcss",
     `gatsby-plugin-image`,
     {
+      resolve: `gatsby-chisel`,
+      options: {
+        path: `${__dirname}/backend`,
+      },
+    },
+    {
       resolve: `gatsby-source-filesystem`,
       options: {
         path: `${__dirname}/content/blog`,
