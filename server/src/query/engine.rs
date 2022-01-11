@@ -67,7 +67,7 @@ impl TryFrom<&Field> for ColumnDef {
             Type::Id => column_def.text().unique_key().primary_key(),
             Type::Float => column_def.double(),
             Type::Boolean => column_def.boolean(),
-            Type::Object(_) => column_def.text(),
+            Type::Object(_) => column_def.text(), // Foreign key, must the be same type as Type::Id
         };
 
         Ok(column_def)
@@ -232,6 +232,17 @@ impl QueryEngine {
         Ok(ids_json)
     }
 
+    /// Inserts type's value `ty_value` into the database. It does so in a recursive
+    /// manner to accomodate for nested objects.
+    /// Returns DB id of the inserted object and JSON containing ids
+    /// of all inserted objects in the format of
+    /// IdsJson = {
+    ///     "id": new_object_id,
+    ///     "field_object1": IdsJson,
+    ///     "field_object2": IdsJson,
+    ///     ...
+    /// }
+    ///
     #[async_recursion]
     pub(crate) async fn add_row_recursive(
         &self,

@@ -4,27 +4,30 @@
 
 cat << EOF > "$TEMPDIR/types/types.ts"
 export class Person extends ChiselEntity {
-   firstName: string;
-   lastName: string;
+    firstName: string;
+    lastName: string;
 }
 export class Company extends ChiselEntity {
-   name: string;
-   ceo: Person;
+    name: string;
+    ceo: Person;
 }
 EOF
 
 cat << EOF > "$TEMPDIR/endpoints/store_adalbrecht.js"
 export default async function chisel(req: Request) {
     let ceo = new Person();
-    ceo.firstName = "This will be filled later";
+    ceo.firstName = "This will be overwritten later";
     ceo.lastName = "Neuer";
 
     let company = new Company();
-    company.name = "This is also going to be filled later";
+    company.name = "This is also going to be overwritten later";
     company.ceo = ceo;
 
     await company.save();
 
+    // The point of this is to test that the second save will not
+    // create second instances of our objects in the database. It
+    // should update the original entries instead.
     company.name = "Bananas inc.";
     ceo.firstName = "Adalbrecht";
     await company.save();
