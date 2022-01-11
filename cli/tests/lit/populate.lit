@@ -9,7 +9,7 @@ cat << EOF > "$TEMPDIR/endpoints/count.ts"
 export default async function chisel(req: Request) {
     let count = 0;
     for await (let person of Person.cursor()) {
-	count += 1
+	    count += 1
     }
     return new Response(String(count));
 }
@@ -51,3 +51,67 @@ $CURL $CHISELD_HOST/staging/count
 # CHECK: HTTP/1.1 200 OK
 # CHECK: 1
 
+
+# ----- Check functionality with nested types -----
+
+cat << EOF > "$TEMPDIR/models/types.ts"
+export class Employee extends ChiselEntity {
+   name: string;
+}
+export class Company extends ChiselEntity {
+   name: string;
+   ceo: Employee;
+   cfo: Employee;
+}
+EOF
+
+cat << EOF > "$TEMPDIR/endpoints/store_adalbrecht.js"
+export default async function chisel(req: Request) {
+    let ceo = new Employee();
+    ceo.name = "Adalbrecht";
+
+    let cfo = new Employee();
+    cfo.name = "Ruprecht";
+
+    let company = new Company();
+    company.name = "Bananas inc.";
+    company.ceo = ceo;
+    company.cfo = cfo;
+
+    await company.save();
+
+    return new Response('ok');
+}
+EOF
+
+cat << EOF > "$TEMPDIR/endpoints/retrieve_nested.ts"
+export default async function chisel(req: Request) {
+    let resp = "";
+    for await (let c of Company.cursor()) {
+        // fixme: Check if c.ceo has been correctly populated.
+        resp += c.name + " ";
+    }
+    for await (let e of Employee.cursor()) {
+        resp += e.name + " ";
+    }
+    return new Response(resp);
+}
+EOF
+
+$CHISEL apply --version staging
+
+$CURL -X POST $CHISELD_HOST/staging/store_adalbrecht
+# CHECK: ok
+
+$CURL $CHISELD_HOST/staging/retrieve_nested
+# CHECK: HTTP/1.1 200 OK
+# CHECK: Bananas inc. Adalbrecht Ruprecht
+
+$CHISEL apply --version prod
+
+$CHISEL populate --version prod --from staging
+# CHECK: OK
+
+$CURL $CHISELD_HOST/staging/retrieve_nested
+# CHECK: HTTP/1.1 200 OK
+# CHECK: Bananas inc. Adalbrecht Ruprecht
