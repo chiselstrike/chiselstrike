@@ -247,6 +247,11 @@ impl TypeSystem {
         }
     }
 
+    /// Tries to look up a type. It tries to match built-ins first, custom types second.
+    ///
+    /// # Errors
+    ///
+    /// If the looked up type does not exists, the function returns a `NoSuchType`.
     pub(crate) fn lookup_type(
         &self,
         type_name: &str,
