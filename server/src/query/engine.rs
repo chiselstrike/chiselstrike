@@ -8,7 +8,7 @@ use async_recursion::async_recursion;
 use futures::stream::BoxStream;
 use futures::stream::Stream;
 use futures::StreamExt;
-use itertools::zip;
+use itertools::{zip, Itertools};
 use sea_query::{Alias, ColumnDef, Table};
 use serde_json::json;
 use sqlx::any::{Any, AnyPool, AnyRow};
@@ -16,7 +16,6 @@ use sqlx::Column;
 use sqlx::Transaction;
 use sqlx::{Executor, Row};
 use std::cell::RefCell;
-use std::collections::HashSet;
 use std::marker::PhantomPinned;
 use std::pin::Pin;
 use std::task::{Context, Poll};
@@ -251,20 +250,17 @@ impl QueryEngine {
     ) -> anyhow::Result<(String, JsonObject)> {
         let mut ids_json = JsonObject::new();
         let mut field_binds = String::new();
-        let mut field_names = String::new();
+        let mut field_names = vec![];
         let mut id_name = String::new();
         let mut update_binds = String::new();
         let mut id_bind = String::new();
-        let mut field_set = HashSet::new();
 
         for (i, f) in ty.all_fields().enumerate() {
             let bind = std::format!("${}", i + 1);
             field_binds.push_str(&bind);
             field_binds.push(',');
 
-            field_names.push_str(&f.name);
-            field_set.insert(f.name.to_string());
-            field_names.push(',');
+            field_names.push(f.name.clone());
             if f.type_ == Type::Id {
                 if let Some(idstr) = ty_value.get(&f.name) {
                     let idstr = idstr
@@ -279,12 +275,11 @@ impl QueryEngine {
             update_binds.push_str(&std::format!("{} = {},", &f.name, &bind));
         }
         field_binds.pop();
-        field_names.pop();
         update_binds.pop();
 
         for v in ty_value.keys() {
             anyhow::ensure!(
-                field_set.get(v).is_some(),
+                field_names.contains(v),
                 "field {} not present in {}",
                 v,
                 ty.name()
@@ -294,7 +289,7 @@ impl QueryEngine {
         let insert_query = std::format!(
             "INSERT INTO {} ({}) VALUES ({}) ON CONFLICT ({}) DO UPDATE SET {} WHERE {} = {} RETURNING *",
             &ty.backing_table(),
-            field_names,
+            field_names.into_iter().join(","),
             field_binds,
             id_name,
             update_binds,
