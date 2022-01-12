@@ -125,7 +125,7 @@ export class ChiselIterator<T> {
         for await (const t of chiselIterator) {
             return t;
         }
-        return undefined;
+        return null;
     }
 
     join<U>(right: ChiselIterator<U>) {
@@ -163,7 +163,7 @@ export class ChiselIterator<T> {
         );
 
         return {
-            async next() {
+            async next(): Promise<{ value: T; done: false } | { done: true }> {
                 const value = await Deno.core.opAsync(
                     "chisel_relational_query_next",
                     rid,
@@ -175,9 +175,9 @@ export class ChiselIterator<T> {
                     return { done: true };
                 }
             },
-            return() {
+            return(): { value: T; done: false } | { done: true } {
                 Deno.core.opSync("op_close", rid);
-                return { value: undefined as T, done: true };
+                return { done: true };
             },
         };
     }
@@ -198,7 +198,7 @@ export const api = {
 };
 
 export function buildReadableStreamForBody(rid: number) {
-    return new ReadableStream({
+    return new ReadableStream<string>({
         async pull(controller: ReadableStreamDefaultController) {
             const chunk = await Deno.core.opAsync("chisel_read_body", rid);
             if (chunk) {
@@ -214,11 +214,12 @@ export function buildReadableStreamForBody(rid: number) {
     });
 }
 
+// FIXME: Untyped api. The return type depends on typeName
 export async function save(typeName: string, content: Record<string, string>) {
     return await Deno.core.opAsync("chisel_store", {
         name: typeName,
         value: content,
-    });
+    }) as unknown;
 }
 
 export function json(body: unknown, status = 200) {
