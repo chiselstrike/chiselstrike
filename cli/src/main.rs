@@ -7,12 +7,13 @@ use chisel::{
     ChiselApplyRequest, ChiselDeleteRequest, DescribeRequest, EndPointCreationRequest,
     PolicyUpdateRequest, PopulateRequest, RestartRequest, StatusRequest,
 };
-use compile::compile_ts_code;
+use compile::compile_ts_code as swc_compile;
 use futures::channel::mpsc::channel;
 use futures::{SinkExt, StreamExt};
 use notify::{Event, RecommendedWatcher, RecursiveMode, Watcher};
 use serde_derive::Deserialize;
 use std::collections::BTreeMap;
+use std::collections::HashMap;
 use std::env;
 use std::fs;
 use std::future::Future;
@@ -22,7 +23,9 @@ use std::thread;
 use std::time::Duration;
 use structopt::StructOpt;
 use tempfile::Builder;
+use tempfile::NamedTempFile;
 use tonic::transport::Channel;
+use tsc_compile::compile_ts_code;
 
 mod ts;
 
@@ -446,6 +449,14 @@ async fn delete<S: ToString>(server_url: String, version: S) -> Result<()> {
     Ok(())
 }
 
+fn to_tempfile(data: &str, suffix: &str) -> Result<NamedTempFile> {
+    let mut f = Builder::new().suffix(suffix).tempfile()?;
+    let inner = f.as_file_mut();
+    inner.write_all(data.as_bytes())?;
+    inner.flush()?;
+    Ok(f)
+}
+
 async fn apply<S: ToString>(
     server_url: String,
     version: S,
@@ -461,6 +472,13 @@ async fn apply<S: ToString>(
     let types_req = crate::ts::parse_types(&models)?;
     let mut endpoints_req = vec![];
     let mut policy_req = vec![];
+
+    let import_str = "import * as ChiselAlias from \"@chiselstrike/api\";
+         declare global {
+             var Chisel: typeof ChiselAlias;
+         }"
+    .to_string();
+    let import_temp = to_tempfile(&import_str, ".d.ts")?;
 
     let mut types_string = String::new();
     for t in &models {
@@ -516,27 +534,31 @@ async fn apply<S: ToString>(
             });
         }
     } else {
-        match std::process::Command::new(get_tsc())
-            .arg("--noEmit")
-            .arg("--pretty")
-            .arg("--allowJs")
-            .arg("--checkJs")
-            .output()
-        {
-            Err(_) => {}
-            Ok(tsc) => {
-                if !tsc.status.success() {
-                    let err = String::from_utf8_lossy(&tsc.stdout).into_owned();
-                    eprintln!("{}", err);
-                    return Err(anyhow!("compilation failed"));
-                }
-            }
-        }
+        let mods: HashMap<String, String> = [(
+            "@chiselstrike/api".to_string(),
+            api::chisel_d_ts().to_string(),
+        )]
+        .into_iter()
+        .collect();
 
         for f in endpoints.iter() {
-            let code = types_string.clone() + &read_to_string(&f.file_path)?;
-            let code = compile_ts_code(code)
+            let ext = f.file_path.extension().unwrap().to_str().unwrap();
+            let path = f.file_path.to_str().unwrap();
+
+            let code = if ext == "ts" {
+                let mut code = compile_ts_code(
+                    path,
+                    Some(import_temp.path().to_str().unwrap()),
+                    mods.clone(),
+                )
                 .with_context(|| format!("parsing endpoint /{}/{}", version, f.name))?;
+                code.remove(path).unwrap()
+            } else {
+                read_to_string(&f.file_path)?
+            };
+
+            let code = types_string.clone() + &code;
+            let code = swc_compile(code)?;
             endpoints_req.push(EndPointCreationRequest {
                 path: f.name.clone(),
                 code,
@@ -576,29 +598,6 @@ async fn apply<S: ToString>(
     }
 
     Ok(())
-}
-
-fn get_tsc() -> PathBuf {
-    // 1. Environment variable
-    std::env::var("CHISEL_TSC")
-        .ok()
-        .map_or_else(
-            || {
-                // 2. no env var set, try to ask npm about where the binary is located
-                // if npm is not even installed, this will return Err()
-                let npm = std::process::Command::new("npm").arg("bin").output();
-                if let Ok(npm) = npm {
-                    if npm.status.success() {
-                        let path = String::from_utf8_lossy(&npm.stdout).into_owned();
-                        return Path::new(&path).canonicalize().ok();
-                    }
-                }
-                None
-                // 3. all failed, so just try to see if the user has tsc in their PATH
-            },
-            |x| Some(Path::new(&x).to_owned()),
-        )
-        .unwrap_or_else(|| Path::new("tsc").to_owned())
 }
 
 async fn apply_from_dev(server_url: String) {

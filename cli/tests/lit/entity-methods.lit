@@ -13,7 +13,7 @@ export class User extends ChiselEntity {
 EOF
 
 cat << EOF > "$TEMPDIR/endpoints/entity-methods.ts"
-import { User } from "../models/user";
+import { User } from "../models/user.ts";
 
 export default async function (req: Request): Promise<Response> {
     const user = new User();
