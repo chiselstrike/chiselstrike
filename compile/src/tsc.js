@@ -5,6 +5,7 @@ function compile(file, lib) {
         declaration: true,
         emitDecoratorMetadata: false,
         experimentalDecorators: true,
+        isolatedModules: true,
         module: ts.ModuleKind.ESNext,
         noEmitOnError: true,
         noImplicitAny: true,

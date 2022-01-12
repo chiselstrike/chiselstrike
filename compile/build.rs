@@ -8,7 +8,9 @@ use std::path::PathBuf;
 
 fn read(_op_state: &mut OpState, path: String, _: ()) -> Result<String> {
     if path == "bootstrap.ts" {
-        return Ok("/// <reference lib=\"dom\" />".to_string());
+        return Ok("/// <reference lib=\"dom\" />
+                  export {};"
+            .to_string());
     }
     if let Some(suffix) = path.strip_prefix("/default/lib/location/") {
         macro_rules! inc {
