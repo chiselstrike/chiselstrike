@@ -113,7 +113,7 @@ async fn insert_field_query(
 ) -> anyhow::Result<()> {
     let type_id = ty.meta_id.xor(recently_added_type_id).ok_or_else(|| anyhow!("logical error. Seems like a type is at the same type pre-existing and recently added??"))?;
 
-    let add_field = match &field.default {
+    let add_field = match &field.user_provided_default() {
         None => {
             let query = sqlx::query("INSERT INTO fields (field_type, type_id, is_optional) VALUES ($1, $2, $3) RETURNING *");
             query

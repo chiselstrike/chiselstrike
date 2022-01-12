@@ -484,7 +484,7 @@ impl ChiselRpc for RpcService {
                         name: field.name.to_owned(),
                         field_type: field.type_.name().to_string(),
                         labels: field.labels.clone(),
-                        default_value: field.default.clone(),
+                        default_value: field.user_provided_default().clone(),
                         is_optional: field.is_optional,
                     });
                 }

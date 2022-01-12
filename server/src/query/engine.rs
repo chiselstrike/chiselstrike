@@ -66,7 +66,7 @@ impl TryFrom<&Field> for ColumnDef {
             Type::String => column_def.text(),
             Type::Id => column_def.text().unique_key().primary_key(),
             Type::Float => column_def.double(),
-            Type::Boolean => column_def.boolean(),
+            Type::Boolean => column_def.integer(),
             Type::Object(_) => column_def.text(), // Foreign key, must the be same type as Type::Id
         };
 
@@ -407,7 +407,16 @@ pub(crate) fn relational_row_to_json(
             }
             Type::String => to_json!(&str),
             Type::Id => to_json!(&str),
-            Type::Boolean => to_json!(bool),
+            Type::Boolean => {
+                // Similarly to the float issue, type information is not filled in
+                // *if* this value was put in as a result of coalesce() (default).
+                //
+                // Also the database has integers ,and we need to map it back to a boolean
+                // type on json.
+                let val: &str = row.get_unchecked(i);
+                let x: bool = val.parse::<usize>()? == 1;
+                json!(x)
+            }
             Type::Object(_) => anyhow::bail!("Relations aren't supported yet"),
         };
         ret.insert(result_column.name().to_string(), val);
