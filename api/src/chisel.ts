@@ -279,8 +279,12 @@ export class ChiselEntity {
     static async findMany<T>(
         this: { new (): T },
         restrictions: Partial<T>,
+        take?: number,
     ): Promise<Partial<T>[]> {
-        const it = chiselIterator<T>(this);
+        let it = chiselIterator<T>(this);
+        if (take) {
+            it = it.take(take);
+        }
         return await it.filter(restrictions).toArray();
     }
 
