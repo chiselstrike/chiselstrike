@@ -183,8 +183,8 @@ fn parse_class_decl<P: AsRef<Path>>(
             }
 
             for member in &x.class.body {
-                if let ClassMember::ClassProp(x) = member {
-                    match parse_class_prop(x, &name, handler) {
+                match member {
+                    ClassMember::ClassProp(x) => match parse_class_prop(x, &name, handler) {
                         Err(err) => {
                             handler.span_err(x.span(), &format!("While parsing class {}", name));
                             bail!("{}", err);
@@ -192,7 +192,12 @@ fn parse_class_decl<P: AsRef<Path>>(
                         Ok(fd) => {
                             field_defs.push(fd);
                         }
+                    },
+                    ClassMember::Constructor(_x) => {
+                        handler.span_err(member.span(), "Constructors not allowed in ChiselStrike model definitions. Consider adding default values so one is not needed, or call ChiselEntity's create method");
+                        bail!("invalid type file {}", filename.as_ref().display());
                     }
+                    _ => {}
                 }
             }
             type_vec.push(AddTypeRequest { name, field_defs });

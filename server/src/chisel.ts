@@ -278,14 +278,14 @@ export class ChiselEntity {
      *
      * Note that `ChiselIterator` is a lazy iterator, so this doesn't mean a query will be generating fetching all elements at this point. */
     static all<T>(
-        this: { new (...arg: Record<string, unknown>[]): T },
+        this: { new (): T },
     ): ChiselIterator<T> {
         return chiselIterator<T>(this);
     }
 
     /** Restricts this iterator to contain just the objects that match the `Partial` object `restrictions`. */
     static findMany<T>(
-        this: { new (...arg: Record<string, unknown>[]): T },
+        this: { new (): T },
         restrictions: Partial<T>,
     ): ChiselIterator<T> {
         const it = chiselIterator<T>(this);
@@ -294,7 +294,7 @@ export class ChiselEntity {
 
     /** Restricts this iterator to contain only at most `limit_` elements. */
     static take<T extends ChiselEntity>(
-        this: { new (...arg: Record<string, unknown>[]): T },
+        this: { new (): T },
         limit: number,
     ): ChiselIterator<T> {
         const it = chiselIterator<T>(this);
@@ -305,7 +305,7 @@ export class ChiselEntity {
      *
      * If more than one match is found, any is returned. */
     static findOne<T extends ChiselEntity>(
-        this: { new (...arg: Record<string, unknown>[]): T },
+        this: { new (): T },
         restrictions: Partial<T>,
     ): Promise<T | null> {
         const it = chiselIterator<T>(this);
@@ -316,10 +316,6 @@ export class ChiselEntity {
      * except it also forces ChiselStrike to fetch just the `...columns` that are part of the colums list. */
     static select<T extends ChiselEntity>(
         this: { new (): T },
-        ...columns: (keyof T)[]
-    ): ChiselIterator<T>;
-    static select<T extends ChiselEntity>(
-        this: { new (...arg: Record<string, unknown>[]): T },
         ...columns: (keyof T)[]
     ): ChiselIterator<T> {
         const it = chiselIterator<T>(this);
