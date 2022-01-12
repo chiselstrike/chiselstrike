@@ -31,6 +31,9 @@ export default async function chisel(req: Request) {
 EOF
 
 cat << EOF > "$TEMPDIR/endpoints/query.ts"
+import { Person } from "../models/person.ts";
+import { Nickname } from "../models/nickname.ts";
+
 export default async function chisel(req: Request) {
     let ret = "[";
     const glaubers = Person.cursor().filter({"first_name": "Glauber"}).join(Nickname.cursor());

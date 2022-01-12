@@ -1,5 +1,7 @@
 /* SPDX-FileCopyrightText: © 2021 ChiselStrike <info@chiselstrike.com> */
 
+import { labels } from "@chiselstrike/chiselstrike";
+
 export class Person extends Chisel.ChiselEntity {
   first_name: string = "";
   @labels("pii") last_name: string = "";

@@ -30,6 +30,8 @@ $CURL --data '{
 }' -o - $CHISELD_HOST/dev/store
 
 cat << EOF > "$TEMPDIR/endpoints/query.ts"
+import { Person } from "../models/person.ts";
+
 export default async function chisel(req: Request) {
     const url = new URL(req.url);
     const first_name = url.searchParams.get("first_name") ?? undefined;

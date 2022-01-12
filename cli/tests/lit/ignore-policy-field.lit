@@ -12,6 +12,8 @@ labels:
 EOF
 
 cat << EOF > "$TEMPDIR/endpoints/query.ts"
+import { Person } from "../models/person.ts";
+
 export default async function chisel(req: Request) {
     let count = 0;
     let people = Person.cursor().select("first_name");

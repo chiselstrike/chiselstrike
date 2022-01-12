@@ -6,6 +6,8 @@ cp examples/person.ts "$TEMPDIR/models"
 cp examples/store.js "$TEMPDIR/endpoints/ins.js"
 
 cat << EOF > "$TEMPDIR/endpoints/count.ts"
+import { Person } from "../models/person.ts";
+
 export default async function chisel(req: Request) {
     let count = 0;
     for await (let person of Person.cursor()) {
@@ -66,6 +68,8 @@ export class Company extends Chisel.ChiselEntity {
 EOF
 
 cat << EOF > "$TEMPDIR/endpoints/store_adalbrecht.js"
+import { Company } from "../types.ts";
+
 export default async function chisel(req: Request) {
     let ceo = new Employee();
     ceo.name = "Adalbrecht";
@@ -85,6 +89,8 @@ export default async function chisel(req: Request) {
 EOF
 
 cat << EOF > "$TEMPDIR/endpoints/retrieve_nested.ts"
+import { Company, Employee } from "../models/types.ts";
+
 export default async function chisel(req: Request) {
     let resp = "";
     for await (let c of Company.cursor()) {

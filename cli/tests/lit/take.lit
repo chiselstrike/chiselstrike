@@ -11,6 +11,8 @@ export class Person extends ChiselEntity { name: string; company: string = "Chis
 EOF
 
 cat << EOF > "$TEMPDIR/endpoints/store.ts"
+import { Person } from "../models/types.ts";
+
 export default async function chisel(req: Request) {
     const glauber = new Person();
     glauber.name = "Glauber";
@@ -24,6 +26,8 @@ export default async function chisel(req: Request) {
 EOF
 
 cat << EOF > "$TEMPDIR/endpoints/findall.ts"
+import { Person } from "../models/types.ts";
+
 export default async function chisel(req: Request) {
     let response = "begin";
     for await (let p of Person.cursor()) {
@@ -35,6 +39,8 @@ export default async function chisel(req: Request) {
 EOF
 
 cat << EOF > "$TEMPDIR/endpoints/findtake.ts"
+import { Person } from "../models/types.ts";
+
 export default async function chisel(req: Request) {
     let response = "begin";
     for await (let p of Person.cursor().take(1)) {
@@ -46,6 +52,8 @@ export default async function chisel(req: Request) {
 EOF
 
 cat << EOF > "$TEMPDIR/endpoints/taketwice.ts"
+import { Person } from "../models/types.ts";
+
 export default async function chisel(req: Request) {
     let response = "begin";
     for await (let p of Person.cursor().take(4).take(1)) {
@@ -57,6 +65,8 @@ export default async function chisel(req: Request) {
 EOF
 
 cat << EOF > "$TEMPDIR/endpoints/taketwicereverse.ts"
+import { Person } from "../models/types.ts";
+
 export default async function chisel(req: Request) {
     let response = "begin";
     for await (let p of Person.cursor().take(1).take(4)) {
@@ -68,6 +78,8 @@ export default async function chisel(req: Request) {
 EOF
 
 cat << EOF > "$TEMPDIR/endpoints/takecopies.ts"
+import { Person } from "../models/types.ts";
+
 export default async function chisel(req: Request) {
     let response = "begin";
     let base = Person.cursor();
@@ -87,6 +99,8 @@ EOF
 
 
 cat << EOF > "$TEMPDIR/endpoints/findfilter.ts"
+import { Person } from "../models/types.ts";
+
 export default async function chisel(req: Request) {
     let response = "begin";
     for await (let p of Person.cursor().filter({"company" : "ChiselStrike"}).take(1)) {
