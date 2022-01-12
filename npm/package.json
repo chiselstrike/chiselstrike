@@ -8,7 +8,7 @@
   "prepare": "npm run build",
   "bin": {
     "chisel": "./npm/run.js",
-    "postinstall": "node ./npm/install.js"
+    "postinstall": "./npm/install.js"
   },
   "scripts": {
     "build": "tsc && cp -a src/dts lib/"
