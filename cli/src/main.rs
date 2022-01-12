@@ -377,7 +377,7 @@ async fn apply<S: ToString>(
 ) -> Result<()> {
     let version = version.to_string();
 
-    let manifest = read_manifest()?;
+    let manifest = read_manifest().with_context(|| "Reading manifest file".to_string())?;
     let models = manifest.models()?;
     let endpoints = manifest.endpoints()?;
     let policies = manifest.policies()?;
