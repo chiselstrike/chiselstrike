@@ -7,6 +7,8 @@ cp examples/person.ts "$TEMPDIR/models"
 cd "$TEMPDIR"
 
 cat << EOF > "$TEMPDIR/endpoints/bad_id.ts"
+import { Person } from "../models/person.ts";
+
 export default async function chisel(req: Request) {
     const filtered = new Person();
     filtered.id = "badid";
@@ -18,6 +20,8 @@ export default async function chisel(req: Request) {
 EOF
 
 cat << EOF > "$TEMPDIR/endpoints/store_with_id.ts"
+import { Person } from "../models/person.ts";
+
 export default async function chisel(req: Request) {
     const filtered = new Person();
     filtered.id = "6b9ebbff-46b4-4759-9dbd-850cdcb10c92";
@@ -28,6 +32,8 @@ export default async function chisel(req: Request) {
 EOF
 
 cat << EOF > "$TEMPDIR/endpoints/store_no_id.ts"
+import { Person } from "../models/person.ts";
+
 export default async function chisel(req: Request) {
     const filtered = new Person();
     filtered.first_name = "Glauber";
@@ -37,6 +43,8 @@ export default async function chisel(req: Request) {
 EOF
 
 cat << EOF > "$TEMPDIR/endpoints/update_by_id.ts"
+import { Person } from "../models/person.ts";
+
 export default async function chisel(req: Request) {
     const filtered = new Person();
     filtered.id = "6b9ebbff-46b4-4759-9dbd-850cdcb10c92";
@@ -46,6 +54,8 @@ export default async function chisel(req: Request) {
 EOF
 
 cat << EOF > "$TEMPDIR/endpoints/count_glaubers.ts"
+import { Person } from "../models/person.ts";
+
 export default async function chisel(req: Request) {
     let count = 0;
     const rows = Person.findMany({"first_name":  "Glauber"});

@@ -14,6 +14,8 @@ export class Company extends Chisel.ChiselEntity {
 EOF
 
 cat << EOF > "$TEMPDIR/endpoints/store_adalbrecht.js"
+import { Company, Person } from "../models/types.ts";
+
 export default async function chisel(req: Request) {
     let ceo = new Person();
     ceo.firstName = "This will be overwritten later";
@@ -37,6 +39,8 @@ export default async function chisel(req: Request) {
 EOF
 
 cat << EOF > "$TEMPDIR/endpoints/query_people.ts"
+import { Person } from "../models/types.ts";
+
 export default async function chisel(req: Request) {
     let ret = "[";
     for await (let person of Person.cursor()) {
@@ -47,6 +51,8 @@ export default async function chisel(req: Request) {
 EOF
 
 cat << EOF > "$TEMPDIR/endpoints/query_companies.ts"
+import { Company } from "../models/types.ts";
+
 export default async function chisel(req: Request) {
     let ret = "[";
     for await (let company of Company.cursor()) {

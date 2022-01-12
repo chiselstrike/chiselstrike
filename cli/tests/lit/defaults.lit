@@ -13,6 +13,8 @@ export class Foo extends Chisel.ChiselEntity {
 EOF
 
 cat << EOF > "$TEMPDIR/endpoints/default.ts"
+import { Foo } from "../models/types.ts";
+
 export default async function chisel(req: Request) {
     const foo = new Foo();
     foo.e = "value";
@@ -22,6 +24,8 @@ export default async function chisel(req: Request) {
 EOF
 
 cat << EOF > "$TEMPDIR/endpoints/read.ts"
+import { Foo } from "../models/types.ts";
+
 export default async function chisel(req: Request) {
     let response = "";
     for await (let f of Foo.cursor()) {
@@ -57,6 +61,8 @@ export class Foo extends Chisel.ChiselEntity {
 EOF
 
 cat << EOF > "$TEMPDIR/endpoints/readold.ts"
+import { Foo } from "../models/types.ts";
+
 export default async function chisel(req: Request) {
     let response = "";
     for await (let f of Foo.cursor()) {

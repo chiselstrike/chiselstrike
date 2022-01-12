@@ -5,6 +5,8 @@
 cp examples/person.ts "$TEMPDIR/models"
 
 cat << EOF > "$TEMPDIR/endpoints/query.ts"
+import { Person } from "../models/person.ts";
+
 export default async function chisel(req: Request) {
     let ret = "";
     const filtered = await Person.findMany({"foo": "bar"});
