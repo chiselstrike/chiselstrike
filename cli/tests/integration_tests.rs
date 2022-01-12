@@ -38,7 +38,6 @@ fn main() {
     let chiseld = bd.join("chiseld").to_str().unwrap().to_string();
     env::set_var("CHISELD", chiseld);
     env::set_var("CHISEL", chisel());
-    env::set_var("CHISEL_TSC", "/bin/true");
     env::set_var("RMCOLOR", "sed s/\x1B\\[[0-9;]*[A-Za-z]//g");
     env::set_var("CHISELD_HOST", "localhost:8080");
     env::set_var("CHISELD_LOCALHOST", "localhost:9090");

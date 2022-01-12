@@ -17,7 +17,9 @@ export default async function chisel(req: Request) {
 }
 EOF
 
-$CHISEL apply
+$CHISEL apply 2>&1 | $RMCOLOR|| true
 
-$CURL -X POST $CHISELD_HOST/dev/store 2>&1 ||:
-# CHECK: field invalidField not present in Person 
+# CHECK:  Error: parsing endpoint /dev/store
+# CHECK:  Caused by:
+# CHECK:      Compilation failed:
+# CHECK:      endpoints/store.ts:5:12 - error TS2339: Property 'invalidField' does not exist on type 'Person'.

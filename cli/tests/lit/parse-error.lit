@@ -10,11 +10,11 @@ EOF
 
 cd "$TEMPDIR"
 
-$CHISEL apply 2>&1 || true
+$CHISEL apply 2>&1 | $RMCOLOR || true
 # CHECK: Error: parsing endpoint /dev/error
 # CHECK: Caused by:
-# CHECK:     Parse failed: error: Expected ',', got 'string literal (bar)'
-# CHECK: 2 |     return new Response("foo" "bar");
+# CHECK:     Compilation failed:
+# CHECK:     endpoints/error.ts:2:31 - error TS1005: ',' expected.
 
 cat << EOF > "$TEMPDIR/endpoints/error.ts"
 const xyz = foo();
@@ -23,7 +23,8 @@ export default async function chisel(req: Request) {
 }
 EOF
 
-$CHISEL apply 2>&1 || true
+$CHISEL apply 2>&1 | $RMCOLOR|| true
 #CHECK: Error: parsing endpoint /dev/error
 #CHECK: Caused by:
-#CHECK:     ReferenceError: foo is not defined
+#CHECK:     Compilation failed:
+#CHECK:     endpoints/error.ts:1:13 - error TS2304: Cannot find name 'foo'.
