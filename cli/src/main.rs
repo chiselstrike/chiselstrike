@@ -323,6 +323,10 @@ fn project_exists(path: &Path) -> bool {
 }
 
 fn read_manifest() -> Result<Manifest> {
+    if !Path::new(MANIFEST_FILE).exists() {
+        let cwd = env::current_dir()?;
+        anyhow::bail!("Could not find `{}` in `{}`. Did you forget to run `chisel init` to initialize the project?", MANIFEST_FILE, cwd.display());
+    }
     let manifest = read_to_string(MANIFEST_FILE)?;
     let manifest = toml::from_str(&manifest)?;
     Ok(manifest)
