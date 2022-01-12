@@ -284,15 +284,6 @@ export class ChiselEntity {
         return await it.filter(restrictions).toArray();
     }
 
-    /** Restricts this iterator to contain only at most `limit_` elements. */
-    static take<T extends ChiselEntity>(
-        this: { new (): T },
-        limit: number,
-    ): ChiselCursor<T> {
-        const it = chiselIterator<T>(this);
-        return it.take(limit);
-    }
-
     /** Returns a single object that matches the `Partial` object `restrictions` passed as its parameter.
      *
      * If more than one match is found, any is returned. */
