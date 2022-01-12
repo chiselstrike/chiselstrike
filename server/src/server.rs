@@ -134,8 +134,6 @@ async fn run(state: SharedState, mut cmd: ExecutorChannel) -> Result<()> {
     let meta = Rc::new(MetaService::local_connection(&state.metadata_db).await?);
     let ts = meta.load_type_system().await?;
 
-    ts.refresh_types()?;
-
     let routes = meta.load_endpoints().await?;
     let policies = meta.load_policies().await?;
 
@@ -167,7 +165,6 @@ async fn run(state: SharedState, mut cmd: ExecutorChannel) -> Result<()> {
         Ok(Type::Object(t)) => t,
         _ => anyhow::bail!("Internal error: type {} not found", OAUTHUSER_TYPE_NAME),
     };
-    crate::deno::define_type(&oauth_user_type)?;
     let query_engine = Rc::new(QueryEngine::local_connection(&state.data_db).await?);
     let mut transaction = query_engine.start_transaction().await?;
     query_engine
