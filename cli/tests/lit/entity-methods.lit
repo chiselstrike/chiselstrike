@@ -8,7 +8,7 @@ cat << EOF > "$TEMPDIR/models/user.ts"
 import { ChiselEntity } from "@chiselstrike/chiselstrike";
 
 export class User extends ChiselEntity {
-    username: string;
+    username: string = "";
 }
 EOF
 
@@ -22,7 +22,7 @@ export default async function (req: Request): Promise<Response> {
     const anotherUser = await User.findOne({ username: 'penberg'});
     // Ensure that entity methods are still there after we query the database.
     // Reproducer for https://github.com/chiselstrike/chiselstrike/issues/549
-    await anotherUser.save();
+    await anotherUser!.save();
     return new Response("Ok");
 }
 EOF
