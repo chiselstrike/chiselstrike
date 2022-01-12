@@ -42,10 +42,19 @@ function compile(file, lib) {
         }
         return ret;
     };
-    host.resolveTypeReferenceDirectives = (typeReferenceDirectiveNames, containingFile, redirectedReference, options) => {
+    host.resolveTypeReferenceDirectives = (
+        typeReferenceDirectiveNames,
+        containingFile,
+        redirectedReference,
+        options,
+    ) => {
         const ret = [];
         for (const name of typeReferenceDirectiveNames) {
-            let fname = Deno.core.opSync("fetch", name + ".d.ts", containingFile);
+            let fname = Deno.core.opSync(
+                "fetch",
+                name + ".d.ts",
+                containingFile,
+            );
             ret.push({ resolvedFileName: fname });
         }
         return ret;
@@ -69,7 +78,10 @@ function compile(file, lib) {
 
     allDiagnostics = ts.sortAndDeduplicateDiagnostics(allDiagnostics);
     if (allDiagnostics.length != 0) {
-        let diag = ts.formatDiagnosticsWithColorAndContext(allDiagnostics, host);
+        let diag = ts.formatDiagnosticsWithColorAndContext(
+            allDiagnostics,
+            host,
+        );
         Deno.core.opSync("diagnostic", diag);
     }
     return !emitResult.emitSkipped;

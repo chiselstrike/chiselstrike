@@ -1,12 +1,13 @@
 {
     "fmt": {
         "files": {
-            "include": ["cli", "server", "deno.json"],
+            "include": ["cli", "server", "compile", "deno.json"],
             "exclude": [
                 "cli/examples",
                 "cli/docs",
-                "server/docs",
-                "server/src/dts"
+                "compile/src/lib",
+                "compile/src/typescript.js",
+                "server/docs"
             ]
         },
         "options": {
