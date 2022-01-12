@@ -7,7 +7,10 @@ cd "$TEMPDIR"
 cat << EOF > "$TEMPDIR/models/types.ts"
 import { ChiselEntity } from "@chiselstrike/chiselstrike";
 
-export class Person extends ChiselEntity { name: string; company: string = "ChiselStrike"; }
+export class Person extends ChiselEntity {
+  name: string = "bob";
+  company: string = "ChiselStrike";
+}
 EOF
 
 cat << EOF > "$TEMPDIR/endpoints/store.ts"

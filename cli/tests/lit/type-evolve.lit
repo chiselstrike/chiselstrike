@@ -7,7 +7,7 @@ cat << EOF > "$TEMPDIR/models/types.ts"
 import { ChiselEntity } from "@chiselstrike/chiselstrike";
 
 export class Evolving extends ChiselEntity {
-    a: string;
+    a: string = "";
 }
 EOF
 $CHISEL apply
@@ -17,7 +17,8 @@ cat << EOF > "$TEMPDIR/models/types.ts"
 import { ChiselEntity } from "@chiselstrike/chiselstrike";
 
 export class Evolving extends ChiselEntity {
-    a: string; b: string = "with_default";
+     a: string = "";
+     b: string = "with_default";
 }
 EOF
 $CHISEL apply
@@ -67,7 +68,7 @@ cat << EOF > "$TEMPDIR/models/types.ts"
 import { ChiselEntity } from "@chiselstrike/chiselstrike";
 
 export class Evolving extends ChiselEntity {
-    a: string;
+    a: string = "";
 }
 EOF
 $CHISEL apply
@@ -81,7 +82,7 @@ cat << EOF > "$TEMPDIR/models/types.ts"
 import { ChiselEntity } from "@chiselstrike/chiselstrike";
 
 export class Evolving extends ChiselEntity {
-    a: string;
+    a: string = "";
     b: boolean = false;
 }
 EOF
@@ -96,7 +97,7 @@ cat << EOF > "$TEMPDIR/models/types.ts"
 import { ChiselEntity } from "@chiselstrike/chiselstrike";
 
 export class Evolving extends ChiselEntity {
-    a: string;
+    a: string = "";
     b: boolean = true;
 }
 EOF

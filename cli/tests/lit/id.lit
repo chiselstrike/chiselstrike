@@ -58,7 +58,7 @@ import { Person } from "../models/person.ts";
 
 export default async function chisel(req: Request) {
     let count = 0;
-    const rows = Person.findMany({"first_name":  "Glauber"});
+    const rows = await Person.findMany({"first_name":  "Glauber"});
     for await (let row of rows) {
         count += 1
     }

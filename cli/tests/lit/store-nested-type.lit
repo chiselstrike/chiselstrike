@@ -4,12 +4,12 @@
 
 cat << EOF > "$TEMPDIR/models/types.ts"
 export class Person extends Chisel.ChiselEntity {
-    firstName: string;
-    lastName: string;
+    firstName: string = "";
+    lastName: string = "";
 }
 export class Company extends Chisel.ChiselEntity {
-    name: string;
-    ceo: Person;
+    name: string = "";
+    ceo?: Person;
 }
 EOF
 
