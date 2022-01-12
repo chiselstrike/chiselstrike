@@ -130,12 +130,12 @@ export class ChiselIterator<T> {
      * If more than one match is found, any is returned. */
     async findOne(restrictions: Partial<T>): Promise<T | null> {
         const i = new Filter(this.inner.columns, restrictions, this.inner);
-        const chiselIterator = new ChiselIterator(this.type, i);
+        const chiselIterator = new ChiselIterator<T>(this.type, i);
         chiselIterator.inner.limit = 1;
         for await (const t of chiselIterator) {
             return t;
         }
-        return undefined;
+        return null;
     }
 
     /** Joins two ChiselIterators, by matching on the properties of the elements in their iterators. */
@@ -180,7 +180,7 @@ export class ChiselIterator<T> {
         );
         const ctor = this.type;
         return {
-            async next() {
+            async next(): Promise<{ value: T; done: false } | { done: true }> {
                 const properties = await Deno.core.opAsync(
                     "chisel_relational_query_next",
                     rid,
@@ -198,9 +198,9 @@ export class ChiselIterator<T> {
                     return { done: true };
                 }
             },
-            return() {
+            return(): { value: T; done: false } | { done: true } {
                 Deno.core.opSync("op_close", rid);
-                return { value: undefined as T, done: true };
+                return { done: true };
             },
         };
     }
