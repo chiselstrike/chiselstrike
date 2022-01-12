@@ -231,7 +231,7 @@ fn sql_backing_store(
     let mut column_string = String::new();
     for c in columns.iter() {
         let field = ty.field_by_name(&c.0).unwrap();
-        let col = match &field.default {
+        let col = match field.default_value() {
             Some(dfl) => format!("coalesce({},\"{}\") AS {},", field.name, dfl, field.name),
             None => format!("{},", field.name),
         };

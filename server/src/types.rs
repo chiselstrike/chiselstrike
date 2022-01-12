@@ -70,6 +70,7 @@ thread_local! {
                 type_: Type::String,
                 labels: vec![],
                 default: None,
+                effective_default: None,
                 is_optional: false,
                 api_version: "__chiselstrike".into(),
         }];
@@ -524,6 +525,7 @@ impl ObjectType {
             type_: Type::Id,
             labels: Vec::default(),
             default: None,
+            effective_default: None,
             is_optional: false,
             api_version: "__chiselstrike".into(),
         };
@@ -715,8 +717,17 @@ pub(crate) struct Field {
     pub(crate) name: String,
     pub(crate) type_: Type,
     pub(crate) labels: Vec<String>,
-    pub(crate) default: Option<String>,
     pub(crate) is_optional: bool,
+    // We want to keep the default the user gave us so we can
+    // return it in `chisel describe`. That's the default that is
+    // valid in typescriptland.
+    //
+    // However when dealing with the database we need to translate
+    // that default into something else. One example are booleans,
+    // that come to us as either 'true' or 'false', but we store as
+    // 0 or 1 in sqlite.
+    default: Option<String>,
+    effective_default: Option<String>,
     api_version: String,
 }
 
@@ -727,6 +738,15 @@ impl Field {
         default: Option<String>,
         is_optional: bool,
     ) -> Self {
+        let effective_default = if let Type::Boolean = &desc.ty() {
+            default
+                .clone()
+                .map(|x| if x == "false" { "0" } else { "1" })
+                .map(|x| x.to_string())
+        } else {
+            default.clone()
+        };
+
         Self {
             id: desc.id(),
             name: desc.name(),
@@ -734,8 +754,17 @@ impl Field {
             api_version: desc.api_version(),
             labels,
             default,
+            effective_default,
             is_optional,
         }
+    }
+
+    pub(crate) fn user_provided_default(&self) -> &Option<String> {
+        &self.default
+    }
+
+    pub(crate) fn default_value(&self) -> &Option<String> {
+        &self.effective_default
     }
 
     pub(crate) fn generate_value(&self) -> Option<String> {
