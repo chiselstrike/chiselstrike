@@ -2,13 +2,17 @@ const readCache = {};
 function compile(file, lib) {
     const options = {
         allowJs: true,
+        declaration: true,
+        emitDecoratorMetadata: false,
+        experimentalDecorators: true,
+        module: ts.ModuleKind.ESNext,
         noEmitOnError: true,
         noImplicitAny: true,
-        declaration: true,
         outDir: "chisel://",
+        removeComments: true,
         rootDir: "/",
+        strict: true,
         target: ts.ScriptTarget.ESNext,
-        module: ts.ModuleKind.ESNext,
         types: [],
     };
 
