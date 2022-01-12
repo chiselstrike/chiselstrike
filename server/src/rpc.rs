@@ -149,7 +149,6 @@ impl RpcService {
             let type_system = &mut runtime.type_system;
 
             type_system.versions.remove(&version);
-            type_system.refresh_types()?;
 
             runtime.policies.versions.remove(&version);
 
@@ -389,7 +388,6 @@ impl RpcService {
 
             type_system.update(&types_global);
 
-            type_system.refresh_types()?;
             runtime
                 .policies
                 .versions
