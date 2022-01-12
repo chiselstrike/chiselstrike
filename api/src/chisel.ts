@@ -297,16 +297,6 @@ export class ChiselEntity {
         }
         return null;
     }
-
-    /** Returns an iterator containing all elements of type T known to ChiselStrike,
-     * except it also forces ChiselStrike to fetch just the `...columns` that are part of the colums list. */
-    static select<T extends ChiselEntity>(
-        this: { new (): T },
-        ...columns: (keyof T)[]
-    ): ChiselCursor<T> {
-        const it = chiselIterator<T>(this);
-        return it.select(...columns);
-    }
 }
 
 export class OAuthUser extends ChiselEntity {
