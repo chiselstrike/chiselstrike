@@ -276,12 +276,12 @@ export class ChiselEntity {
     }
 
     /** Restricts this iterator to contain just the objects that match the `Partial` object `restrictions`. */
-    static findMany<T>(
+    static async findMany<T>(
         this: { new (): T },
         restrictions: Partial<T>,
-    ): ChiselCursor<T> {
+    ): Promise<Partial<T>[]> {
         const it = chiselIterator<T>(this);
-        return it.filter(restrictions);
+        return await it.filter(restrictions).toArray();
     }
 
     /** Restricts this iterator to contain only at most `limit_` elements. */

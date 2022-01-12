@@ -14,7 +14,7 @@ EOF
 cat << EOF > "$TEMPDIR/endpoints/query.ts"
 export default async function chisel(req: Request) {
     let ret = "";
-    const q1 = Person.findMany({"first_name":  "Glauber"}).select("first_name");
+    const q1 = Person.cursor().filter({"first_name":  "Glauber"}).select("first_name");
     for await (let row of q1) {
         ret += JSON.stringify(row) + "\n";
     }

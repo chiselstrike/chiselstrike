@@ -7,11 +7,11 @@ cp examples/store.js "$TEMPDIR/endpoints"
 
 cat << EOF > "$TEMPDIR/endpoints/query.ts"
 export default async function chisel(req: Request) {
-    const filtered = Person.findMany({first_name: "Bob'"});
     let ret = "";
-    for await (let row of filtered) {
+    const filtered = await Person.findMany({first_name: "Bob'"});
+    filtered.forEach(row => {
         ret += row.first_name + " " + row.last_name + "\n";
-    }
+    });
     return new Response(ret);
 }
 EOF
