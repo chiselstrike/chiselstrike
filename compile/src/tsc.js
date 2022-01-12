@@ -37,7 +37,7 @@ function compile(file, lib) {
     host.resolveModuleNames = (moduleNames, containingFile) => {
         const ret = [];
         for (const name of moduleNames) {
-            let fname = Deno.core.opSync("fetch", name, containingFile);
+            const fname = Deno.core.opSync("fetch", name, containingFile);
             ret.push({ resolvedFileName: fname });
         }
         return ret;
@@ -45,12 +45,12 @@ function compile(file, lib) {
     host.resolveTypeReferenceDirectives = (
         typeReferenceDirectiveNames,
         containingFile,
-        redirectedReference,
-        options,
+        _redirectedReference,
+        _options,
     ) => {
         const ret = [];
         for (const name of typeReferenceDirectiveNames) {
-            let fname = Deno.core.opSync(
+            const fname = Deno.core.opSync(
                 "fetch",
                 name + ".d.ts",
                 containingFile,
@@ -69,8 +69,8 @@ function compile(file, lib) {
         return v;
     };
 
-    let program = ts.createProgram([file], options, host);
-    let emitResult = program.emit();
+    const program = ts.createProgram([file], options, host);
+    const emitResult = program.emit();
 
     let allDiagnostics = ts
         .getPreEmitDiagnostics(program)
@@ -78,7 +78,7 @@ function compile(file, lib) {
 
     allDiagnostics = ts.sortAndDeduplicateDiagnostics(allDiagnostics);
     if (allDiagnostics.length != 0) {
-        let diag = ts.formatDiagnosticsWithColorAndContext(
+        const diag = ts.formatDiagnosticsWithColorAndContext(
             allDiagnostics,
             host,
         );

@@ -16,8 +16,12 @@
     },
     "lint": {
         "files": {
-            "include": ["cli", "server"],
-            "exclude": ["cli/examples"]
+            "include": ["cli", "server", "compile"],
+            "exclude": [
+                "cli/examples",
+                "compile/src/lib",
+                "compile/src/typescript.js"
+            ]
         },
         "rules": {
             "tags": ["recommended"]
