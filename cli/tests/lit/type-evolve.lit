@@ -8,10 +8,6 @@ import { ChiselEntity } from "@chiselstrike/chiselstrike";
 
 export class Evolving extends ChiselEntity {
     a: string;
-    constructor(a: string) {
-        super();
-        this.a = a;
-    }
 }
 EOF
 $CHISEL apply
@@ -22,10 +18,6 @@ import { ChiselEntity } from "@chiselstrike/chiselstrike";
 
 export class Evolving extends ChiselEntity {
     a: string; b: string = "with_default";
-    constructor(a: string) {
-        super();
-        this.a = a;
-    }
 }
 EOF
 $CHISEL apply
@@ -33,7 +25,7 @@ $CHISEL apply
 
 cat << EOF > "$TEMPDIR/endpoints/store.ts"
 export default async function chisel(req: Request) {
-   const obj = new Evolving("A");
+   const obj = Evolving.build({'a': "A"});
    obj.b = "B";
    await obj.save();
    return new Response('ok');
@@ -72,11 +64,6 @@ import { ChiselEntity } from "@chiselstrike/chiselstrike";
 
 export class Evolving extends ChiselEntity {
     a: string;
-
-    constructor(a: string) {
-        super();
-        this.a = a;
-    }
 }
 EOF
 $CHISEL apply

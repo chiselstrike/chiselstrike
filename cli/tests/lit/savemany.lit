@@ -8,13 +8,8 @@ cat << EOF > "$TEMPDIR/models/types.ts"
 import { ChiselEntity } from "@chiselstrike/chiselstrike";
 
 export class Person extends ChiselEntity {
-    name: string;
-    isQueen: boolean;
-    constructor(name: string, isQueen: boolean) {
-        super();
-        this.name = name;
-        this.isQueen = isQueen;
-    }
+    name: string = "";
+    isQueen: boolean = false;
 }
 EOF
 
@@ -22,10 +17,10 @@ cat << EOF > "$TEMPDIR/endpoints/savemany.ts"
 export default async function chisel(req: Request) {
     const promises = [];
 
-    promises.push(new Person('Elizabeth', true).save());
-    promises.push(new Person('Victoria', true).save());
-    promises.push(new Person('FreddieMercury', true).save());
-    promises.push(new Person('William', false).save());
+    promises.push(Person.build({ 'name': 'Elizabeth', 'isQueen': true}).save());
+    promises.push(Person.build({ 'name': 'Victoria', 'isQueen': true}).save());
+    promises.push(Person.build({ 'name': 'FreddieMercury', 'isQueen': true}).save());
+    promises.push(Person.build({ 'name': 'William', 'isQueen': false}).save());
 
     await Promise.all(promises);
     return new Response('Ok');

@@ -274,21 +274,6 @@ impl TypeSystem {
         self.versions = other.versions.clone();
     }
 
-    /// Makes sure the types in this `TypeSystem` are available
-    /// for usage in deno
-    pub(crate) fn refresh_types(&self) -> anyhow::Result<()> {
-        crate::deno::flush_types()?;
-        // FIXME: flush_types just destroyed all versions, so we have to
-        // reapply the other versions. Ideally we would have an implementation
-        // of this that only refreshes a single version
-        for (_, version) in self.versions.iter() {
-            for (_, ty) in version.custom_types.iter() {
-                crate::deno::define_type(ty)?;
-            }
-        }
-        Ok(())
-    }
-
     pub(crate) async fn populate_types<T: AsRef<str>, F: AsRef<str>>(
         &self,
         engine: &QueryEngine,

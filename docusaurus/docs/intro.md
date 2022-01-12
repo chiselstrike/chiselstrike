@@ -141,13 +141,8 @@ TypeScript types.  Put a file in `my-backend/types/types.ts` like this:
 import { ChiselEntity } from "@chiselstrike/chiselstrike"
 
 export class BlogComment extends ChiselEntity {
-    content: string;
-    by: string;
-    constructor(content: string, by: string) {
-        super();
-        this.content = content;
-        this.by = by;
-    }
+    content: string = "";
+    by: string = "";
 }
 ```
 
@@ -182,10 +177,10 @@ import { Chisel } from "@chiselstrike/chiselstrike"
 
 export default async function chisel(_req) {
     let promises = [];
-    promises.push(new BlogComment("First comment", "Jill").save());
-    promises.push(new BlogComment("Second comment", "Jack").save());
-    promises.push(new BlogComment("Third comment", "Jim").save());
-    promises.push(new BlogComment("Fourth comment", "Jack").save());
+    promises.push(BlogComment.build({'content': "First comment", 'by': "Jill"}).save());
+    promises.push(BlogComment.build({'content': "Second comment", 'by': "Jack"}).save());
+    promises.push(BlogComment.build({'content': "Third comment", 'by': "Jim"}).save());
+    promises.push(BlogComment.build({'content': "Fourth comment", 'by': "Jack"}).save());
 
     await Promise.all(promises);
     return new Response('success\n');
@@ -287,7 +282,7 @@ export default async function chisel(req) {
         const payload = await req.json();
         const content = payload["content"] || "";
         const by = payload["by"] || "anonymous";
-        const created = new BlogComment(content, by);
+        const created = new BlogComment().build(content, by);
         await created.save();
         return Chisel.json('inserted ' + created.id);
     } else if (req.method == 'GET') {

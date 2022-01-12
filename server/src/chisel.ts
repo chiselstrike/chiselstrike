@@ -62,17 +62,19 @@ type Inner = BackingStore | Join | Filter;
 /// XXX: If you add methods here, you also have to add static versions to ChiselEntity (in this file),
 /** ChiselIterator is a lazy iterator that will be used by ChiselStrike to construct an optimized query. */
 export class ChiselIterator<T> {
-    constructor(private inner: Inner) {}
+    constructor(private type: { new (): T }, private inner: Inner) {}
     /** Force ChiselStrike to fetch just the `...columns` that are part of the colums list. */
     select(...columns: (keyof T)[]): ChiselIterator<Pick<T, (keyof T)>> {
         const names = columns as string[];
         const cs = this.inner.columns.filter((c) => names.includes(c[0]));
         switch (this.inner.kind) {
-            case "BackingStore":
-                return chiselIterator(this.inner.name, cs);
+            case "BackingStore": {
+                const b = new BackingStore(cs, this.type.name);
+                return new ChiselIterator<T>(undefined, b);
+            }
             case "Join": {
                 const i = new Join(cs, this.inner.left, this.inner.right);
-                return new ChiselIterator(i);
+                return new ChiselIterator(undefined, i);
             }
             case "Filter": {
                 const i = new Filter(
@@ -80,7 +82,7 @@ export class ChiselIterator<T> {
                     this.inner.restrictions,
                     this.inner.inner,
                 );
-                return new ChiselIterator(i);
+                return new ChiselIterator(undefined, i);
             }
         }
     }
@@ -98,12 +100,12 @@ export class ChiselIterator<T> {
             case "BackingStore": {
                 const i = new BackingStore(cs, this.inner.name);
                 i.limit = limit;
-                return new ChiselIterator(i);
+                return new ChiselIterator(this.type, i);
             }
             case "Join": {
                 const i = new Join(cs, this.inner.left, this.inner.right);
                 i.limit = limit;
-                return new ChiselIterator(i);
+                return new ChiselIterator(this.type, i);
             }
             case "Filter": {
                 const i = new Filter(
@@ -112,7 +114,7 @@ export class ChiselIterator<T> {
                     this.inner.inner,
                 );
                 i.limit = limit;
-                return new ChiselIterator(i);
+                return new ChiselIterator(this.type, i);
             }
         }
     }
@@ -120,7 +122,7 @@ export class ChiselIterator<T> {
     /** Restricts this iterator to contain just the objects that match the `Partial` object `restrictions`. */
     findMany(restrictions: Partial<T>): ChiselIterator<T> {
         const i = new Filter(this.inner.columns, restrictions, this.inner);
-        return new ChiselIterator(i);
+        return new ChiselIterator(this.type, i);
     }
 
     /** Returns a single object that matches the `Partial` object `restrictions` passed as its parameter.
@@ -128,7 +130,7 @@ export class ChiselIterator<T> {
      * If more than one match is found, any is returned. */
     async findOne(restrictions: Partial<T>): Promise<T | null> {
         const i = new Filter(this.inner.columns, restrictions, this.inner);
-        const chiselIterator = new ChiselIterator(i);
+        const chiselIterator = new ChiselIterator(this.type, i);
         chiselIterator.inner.limit = 1;
         for await (const t of chiselIterator) {
             return t;
@@ -148,7 +150,7 @@ export class ChiselIterator<T> {
             columns.push(c);
         }
         const i = new Join(columns, this.inner, right.inner);
-        return new ChiselIterator<T & U>(i);
+        return new ChiselIterator<T & U>(undefined, i);
     }
 
     /** Executes the function `func` for each element of this iterator. */
@@ -176,15 +178,21 @@ export class ChiselIterator<T> {
             "chisel_relational_query_create",
             this.inner,
         );
-
+        const ctor = this.type;
         return {
             async next() {
-                const value = await Deno.core.opAsync(
+                const properties = await Deno.core.opAsync(
                     "chisel_relational_query_next",
                     rid,
                 );
-                if (value) {
-                    return { value: value, done: false };
+                if (properties) {
+                    if (ctor) {
+                        const result = new ctor();
+                        Object.assign(result, properties);
+                        return { value: result, done: false };
+                    } else {
+                        return { value: properties, done: false };
+                    }
                 } else {
                     Deno.core.opSync("op_close", rid);
                     return { done: true };
@@ -198,12 +206,12 @@ export class ChiselIterator<T> {
     }
 }
 
-export function chiselIterator<T>(name: string, c?: column[]) {
+export function chiselIterator<T>(type: { new (): T }, c?: column[]) {
     const columns = (c != undefined)
         ? c
-        : Deno.core.opSync("chisel_introspect", { "name": name });
-    const b = new BackingStore(columns, name);
-    return new ChiselIterator<T>(b);
+        : Deno.core.opSync("chisel_introspect", { "name": type.name });
+    const b = new BackingStore(columns, type.name);
+    return new ChiselIterator<T>(type, b);
 }
 
 /// XXX: If you add methods here, you also have to add non-static versions nto ChiselIterator (in this file),
@@ -215,6 +223,38 @@ export function chiselIterator<T>(name: string, c?: column[]) {
 export class ChiselEntity {
     /** UUID identifying this object. */
     id: string;
+
+    /**
+     * Builds a new entity.
+     *
+     * @param properties The properties of the created entity.
+     *
+     * @example
+     * ```typescript
+     * export class User extends ChiselEntity {
+     *   username: string,
+     *   email: string,
+     * }
+     * // Create an entity from object literal:
+     * const user = User.build({ username: "alice", email: "alice@example.com" });
+     * // Create an entity from JSON:
+     * const userJson = JSON.parse('{"username": "alice", "email": "alice@example.com"}');
+     * const anotherUser = User.build(userJson);
+     *
+     * // now optionally save them to the backend
+     * await user.save();
+     * await anotherUser.save();
+     * ```
+     * @returns The persisted entity with given properties and the `id` property set.
+     */
+    static build<T extends ChiselEntity>(
+        this: { new (): T },
+        properties: Record<string, unknown>,
+    ): T {
+        const result = new this();
+        Object.assign(result, properties);
+        return result;
+    }
 
     /** saves the current object into the backend */
     async save() {
@@ -242,26 +282,26 @@ export class ChiselEntity {
      *
      * Note that `ChiselIterator` is a lazy iterator, so this doesn't mean a query will be generating fetching all elements at this point. */
     static all<T>(
-        this: { new (...arg: Record<string, unknown>[]): T },
+        this: { new (): T },
     ): ChiselIterator<T> {
-        return chiselIterator<T>(this.name);
+        return chiselIterator<T>(this);
     }
 
     /** Restricts this iterator to contain just the objects that match the `Partial` object `restrictions`. */
     static findMany<T>(
-        this: { new (...arg: Record<string, unknown>[]): T },
+        this: { new (): T },
         restrictions: Partial<T>,
     ): ChiselIterator<T> {
-        const it = chiselIterator<T>(this.name);
+        const it = chiselIterator<T>(this);
         return it.findMany(restrictions);
     }
 
     /** Restricts this iterator to contain only at most `limit_` elements. */
     static take<T extends ChiselEntity>(
-        this: { new (...arg: Record<string, unknown>[]): T },
+        this: { new (): T },
         limit: number,
     ): ChiselIterator<T> {
-        const it = chiselIterator<T>(this.name);
+        const it = chiselIterator<T>(this);
         return it.take(limit);
     }
 
@@ -269,10 +309,10 @@ export class ChiselEntity {
      *
      * If more than one match is found, any is returned. */
     static findOne<T extends ChiselEntity>(
-        this: { new (...arg: Record<string, unknown>[]): T },
+        this: { new (): T },
         restrictions: Partial<T>,
     ): Promise<T | null> {
-        const it = chiselIterator<T>(this.name);
+        const it = chiselIterator<T>(this);
         return it.findOne(restrictions);
     }
 
@@ -281,12 +321,8 @@ export class ChiselEntity {
     static select<T extends ChiselEntity>(
         this: { new (): T },
         ...columns: (keyof T)[]
-    ): ChiselIterator<T>;
-    static select<T extends ChiselEntity>(
-        this: { new (...arg: Record<string, unknown>[]): T },
-        ...columns: (keyof T)[]
     ): ChiselIterator<T> {
-        const it = chiselIterator<T>(this.name);
+        const it = chiselIterator<T>(this);
         return it.select(...columns);
     }
 }

@@ -39,7 +39,7 @@ EOF
 cat << EOF > "$TEMPDIR/endpoints/query_people.ts"
 export default async function chisel(req: Request) {
     let ret = "[";
-    for await (let person of Chisel.Person) {
+    for await (let person of Person.all()) {
         ret += "(" + person.firstName + " " + person.lastName + ") ";
     }
     return new Response(ret + "]");
@@ -49,7 +49,7 @@ EOF
 cat << EOF > "$TEMPDIR/endpoints/query_companies.ts"
 export default async function chisel(req: Request) {
     let ret = "[";
-    for await (let company of Chisel.Company) {
+    for await (let company of Company.all()) {
         ret += "(" + company.name + " " + company.ceo + ") ";
     }
     return new Response(ret + "]");
