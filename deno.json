@@ -1,8 +1,9 @@
 {
     "fmt": {
         "files": {
-            "include": ["cli", "server", "compile", "deno.json"],
+            "include": ["cli", "server", "compile", "api", "deno.json"],
             "exclude": [
+                "api/src/dts",
                 "cli/examples",
                 "cli/docs",
                 "compile/src/lib",
@@ -16,7 +17,7 @@
     },
     "lint": {
         "files": {
-            "include": ["cli", "server", "compile"],
+            "include": ["cli", "server", "api", "compile"],
             "exclude": [
                 "cli/examples",
                 "compile/src/lib",
