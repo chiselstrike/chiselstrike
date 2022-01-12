@@ -328,7 +328,7 @@ fn read_manifest() -> Result<Manifest> {
         anyhow::bail!("Could not find `{}` in `{}`. Did you forget to run `chisel init` to initialize the project?", MANIFEST_FILE, cwd.display());
     }
     let manifest = read_to_string(MANIFEST_FILE)?;
-    let manifest = match toml::from_str(&manifest) {
+    let manifest: Manifest = match toml::from_str(&manifest) {
         Ok(manifest) => manifest,
         Err(error) => {
             anyhow::bail!(
@@ -338,6 +338,33 @@ fn read_manifest() -> Result<Manifest> {
             );
         }
     };
+    for dir in &manifest.models {
+        if !Path::new(dir).exists() {
+            anyhow::bail!(
+                "Manifest at `{}` has models directory `{}` that does not exist.",
+                cwd.join(MANIFEST_FILE).display(),
+                cwd.join(dir).display()
+            );
+        }
+    }
+    for dir in &manifest.endpoints {
+        if !Path::new(dir).exists() {
+            anyhow::bail!(
+                "Manifest at `{}` has endpoints directory `{}` that does not exist.",
+                cwd.join(MANIFEST_FILE).display(),
+                cwd.join(dir).display()
+            );
+        }
+    }
+    for dir in &manifest.policies {
+        if !Path::new(dir).exists() {
+            anyhow::bail!(
+                "Manifest at `{}` has policies directory `{}` that does not exist.",
+                cwd.join(MANIFEST_FILE).display(),
+                cwd.join(dir).display()
+            );
+        }
+    }
     Ok(manifest)
 }
 
