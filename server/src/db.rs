@@ -361,22 +361,23 @@ fn sql_filter(
     let inner_alias = format!("A{}", *alias_count);
     *alias_count += 1;
 
-    let restrictions = restrictions
-        .iter()
-        .map(|rest| {
-            let str_v = match &rest.v {
-                SqlValue::Bool(v) => format!("{}", v),
-                SqlValue::U64(v) => format!("{}", v),
-                SqlValue::I64(v) => format!("{}", v),
-                SqlValue::F64(v) => format!("{}", v),
-                SqlValue::String(v) => escape_string(v),
-            };
-            format!("{}={}", rest.k, str_v)
-        })
-        .join(" AND ");
+    let restrictions = restrictions.iter().fold(String::new(), |acc, rest| {
+        let str_v = match &rest.v {
+            SqlValue::Bool(v) => format!("{}", v),
+            SqlValue::U64(v) => format!("{}", v),
+            SqlValue::I64(v) => format!("{}", v),
+            SqlValue::F64(v) => format!("{}", v),
+            SqlValue::String(v) => escape_string(v),
+        };
+        if acc.is_empty() {
+            format!("WHERE {}={}", rest.k, str_v)
+        } else {
+            format!("{} AND {}={}", acc, rest.k, str_v)
+        }
+    });
 
     Query::Sql(format!(
-        "SELECT {} FROM ({}) AS {} WHERE {} {}",
+        "SELECT {} FROM ({}) AS {} {} {}",
         column_list(&columns),
         inner_sql,
         inner_alias,

@@ -79,15 +79,17 @@ $CURL --data '{
 # CHECK: HTTP/1.1 200 OK
 # CHECK: Glauber Costa 666 true 10.01
 
+## undefined value, means no filtering
 $CURL --data '{
     "field_name":"height"
 }' -o - $CHISELD_HOST/dev/find_by
-
-# CHECK: HTTP/1.1 500 Internal Server Error
+# CHECK: HTTP/1.1 200 OK
+# CHECK: Glauber Costa 666 true 10.01 Jan Plhak -666 true 10.02
 
 $CURL --data '{
-    "field_name":"misspelled_field_name"
+    "field_name":"misspelled_field_name",
     "value":10.01
 }' -o - $CHISELD_HOST/dev/find_by
 
 # CHECK: HTTP/1.1 500 Internal Server Error
+# CHECK Uncaught Error: error returned from database: no such column: misspelled_field_name
