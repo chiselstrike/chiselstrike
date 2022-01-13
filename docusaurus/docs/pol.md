@@ -22,9 +22,9 @@ transformed like this whenever it is accessed".
 Let's first examine more precisely how you define which data we're
 talking about.  This is done using _labels_: TypeScript decorators on
 the fields of your types.  To illustrate, please edit the file
-`types/t.ts` like this:
+`types/types.ts` like this:
 
-```typescript title="my-backend/types/t.ts"
+```typescript title="my-backend/types/types.ts"
 import { ChiselEntity, labels } from "@chiselstrike/chiselstrike"
 
 class BlogComment {
