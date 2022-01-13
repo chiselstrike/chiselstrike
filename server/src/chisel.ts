@@ -89,7 +89,7 @@ export class ChiselCursor<T> {
         }
     }
 
-    /** Restricts this iterator to contain only at most `limit_` elements */
+    /** Restricts this cursor to contain only at most `limit_` elements */
     take(limit_: number): ChiselCursor<T> {
         const limit = (this.inner.limit == null)
             ? limit_
@@ -121,13 +121,13 @@ export class ChiselCursor<T> {
         }
     }
 
-    /** Restricts this iterator to contain just the objects that match the `Partial` object `restrictions`. */
+    /** Restricts this cursor to contain just the objects that match the `Partial` object `restrictions`. */
     filter(restrictions: Partial<T>): ChiselCursor<T> {
         const i = new Filter(this.inner.columns, restrictions, this.inner);
         return new ChiselCursor(this.type, i);
     }
 
-    /** Joins two ChiselCursors, by matching on the properties of the elements in their iterators. */
+    /** Joins two ChiselCursors, by matching on the properties of the elements in their cursors. */
     join<U>(right: ChiselCursor<U>) {
         const s = new Set();
         const columns = [];
@@ -142,14 +142,14 @@ export class ChiselCursor<T> {
         return new ChiselCursor<T & U>(undefined, i);
     }
 
-    /** Executes the function `func` for each element of this iterator. */
+    /** Executes the function `func` for each element of this cursor. */
     async forEach(func: (arg: T) => void): Promise<void> {
         for await (const t of this) {
             func(t);
         }
     }
 
-    /** Converts this iterator to an Array.
+    /** Converts this cursor to an Array.
      *
      * Use this with caution as the result set can be very big.
      * It is recommended that you take() first to cap the maximum number of elements. */
