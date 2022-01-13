@@ -59,7 +59,6 @@ class Filter extends Base {
 
 type Inner = BackingStore | Join | Filter;
 
-/// XXX: If you add methods here, you also have to add static versions to ChiselEntity (in this file),
 /** ChiselIterator is a lazy iterator that will be used by ChiselStrike to construct an optimized query. */
 export class ChiselIterator<T> {
     constructor(private type: { new (): T }, private inner: Inner) {}
@@ -214,7 +213,6 @@ export function chiselIterator<T>(type: { new (): T }, c?: column[]) {
     return new ChiselIterator<T>(type, b);
 }
 
-/// XXX: If you add methods here, you also have to add non-static versions nto ChiselIterator (in this file),
 /** ChiselEntity is a class that ChiselStrike user-defined entities are expected to extend.
  *
  * It provides properties that are inherent to a ChiselStrike entity, like an id, and static
