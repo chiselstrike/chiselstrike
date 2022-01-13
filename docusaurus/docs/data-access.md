@@ -4,7 +4,7 @@ sidebar_position: 3
 # ChiselStrike's Data Access API
 
 If you recall from the previous examples, when we defined our `BlogComment` class, we required it to extend
-`ChiselEntity`. That makes a couple of methods available to your class, one of them we already used: `all()`.
+`ChiselEntity`. That makes a couple of methods available to your class, one of them we already used: `cursor()`.
 
 The methods in `ChiselEntity` all return a `ChiselCursor`. This is a lazy
 iterator so you can compose them at will. An actual database query is only

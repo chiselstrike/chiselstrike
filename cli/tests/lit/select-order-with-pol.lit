@@ -18,7 +18,7 @@ export default async function chisel(req: Request) {
     for await (let row of q1) {
         ret += JSON.stringify(row) + "\n";
     }
-    const q2 = Person.all().select("first_name").filter({"first_name":  "Glauber"});
+    const q2 = Person.cursor().select("first_name").filter({"first_name":  "Glauber"});
     for await (let row of q2) {
         ret += JSON.stringify(row) + "\n";
     }

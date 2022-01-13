@@ -269,7 +269,7 @@ export class ChiselEntity {
     /** Returns a `ChiselCursor` containing all elements of type T known to ChiselStrike.
      *
      * Note that `ChiselCursor` is a lazy iterator, so this doesn't mean a query will be generating fetching all elements at this point. */
-    static all<T>(
+    static cursor<T>(
         this: { new (): T },
     ): ChiselCursor<T> {
         return chiselIterator<T>(this);
