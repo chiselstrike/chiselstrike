@@ -261,10 +261,7 @@ fn map_stream_item(
     columns: &HashSet<String>,
     o: anyhow::Result<JsonObject>,
 ) -> anyhow::Result<JsonObject> {
-    let mut o = match o {
-        Ok(o) => o,
-        Err(_) => return o,
-    };
+    let mut o = o?;
     o.retain(|k, _| columns.contains(k));
     Ok(o)
 }
