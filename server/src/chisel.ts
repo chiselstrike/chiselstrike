@@ -61,14 +61,17 @@ type Inner = BackingStore | Join | Filter;
 
 /** ChiselIterator is a lazy iterator that will be used by ChiselStrike to construct an optimized query. */
 export class ChiselIterator<T> {
-    constructor(private type: { new (): T }, private inner: Inner) {}
+    constructor(
+        private type: { new (): T } | undefined,
+        private inner: Inner,
+    ) {}
     /** Force ChiselStrike to fetch just the `...columns` that are part of the colums list. */
     select(...columns: (keyof T)[]): ChiselIterator<Pick<T, (keyof T)>> {
         const names = columns as string[];
         const cs = this.inner.columns.filter((c) => names.includes(c[0]));
         switch (this.inner.kind) {
             case "BackingStore": {
-                const b = new BackingStore(cs, this.type.name);
+                const b = new BackingStore(cs, this.inner.name);
                 return new ChiselIterator<T>(undefined, b);
             }
             case "Join": {
@@ -207,7 +210,7 @@ export function chiselIterator<T>(type: { new (): T }, c?: column[]) {
  */
 export class ChiselEntity {
     /** UUID identifying this object. */
-    id: string;
+    id?: string;
 
     /**
      * Builds a new entity.
@@ -316,7 +319,7 @@ export class ChiselEntity {
 }
 
 export class OAuthUser extends ChiselEntity {
-    username: string;
+    username: string | undefined = undefined;
 }
 
 export const Chisel = {
