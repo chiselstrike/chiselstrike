@@ -124,19 +124,6 @@ export class ChiselIterator<T> {
         return new ChiselIterator(this.type, i);
     }
 
-    /** Returns a single object that matches the `Partial` object `restrictions` passed as its parameter.
-     *
-     * If more than one match is found, any is returned. */
-    async first(restrictions: Partial<T>): Promise<T | null> {
-        const i = new Filter(this.inner.columns, restrictions, this.inner);
-        const chiselIterator = new ChiselIterator<T>(this.type, i);
-        chiselIterator.inner.limit = 1;
-        for await (const t of chiselIterator) {
-            return t;
-        }
-        return null;
-    }
-
     /** Joins two ChiselIterators, by matching on the properties of the elements in their iterators. */
     join<U>(right: ChiselIterator<U>) {
         const s = new Set();
@@ -306,12 +293,15 @@ export class ChiselEntity {
     /** Returns a single object that matches the `Partial` object `restrictions` passed as its parameter.
      *
      * If more than one match is found, any is returned. */
-    static findOne<T extends ChiselEntity>(
+    static async findOne<T extends ChiselEntity>(
         this: { new (): T },
         restrictions: Partial<T>,
     ): Promise<T | null> {
-        const it = chiselIterator<T>(this);
-        return it.first(restrictions);
+        const it = chiselIterator<T>(this).filter(restrictions).take(1);
+        for await (const value of it) {
+            return value;
+        }
+        return null;
     }
 
     /** Returns an iterator containing all elements of type T known to ChiselStrike,
