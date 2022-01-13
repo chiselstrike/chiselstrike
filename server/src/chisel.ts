@@ -101,10 +101,49 @@ export class ChiselIterator<T> {
             case "BackingStore": {
                 const i = new BackingStore(cs, this.inner.name);
                 i.limit = limit;
+                i.offset = this.inner.offset;
                 return new ChiselIterator(this.type, i);
             }
             case "Join": {
                 const i = new Join(cs, this.inner.left, this.inner.right);
+                i.limit = limit;
+                i.offset = this.inner.offset;
+                return new ChiselIterator(this.type, i);
+            }
+            case "Filter": {
+                const i = new Filter(
+                    cs,
+                    this.inner.restrictions,
+                    this.inner.inner,
+                );
+                i.limit = limit;
+                i.offset = this.inner.offset;
+                return new ChiselIterator(this.type, i);
+            }
+        }
+    }
+
+    /** Skip @count elements of this iterator. */
+    skip(count: number): ChiselIterator<T> {
+        const offset = (this.inner.offset == null)
+            ? count
+            : this.inner.offset + count;
+        const limit = (this.inner.limit == null)
+            ? null
+            : Math.max(this.inner.limit - count, 0);
+        // shallow copy okay because this is an array of strings
+        const cs = [...this.inner.columns];
+        // FIXME: refactor to use the same path as select
+        switch (this.inner.kind) {
+            case "BackingStore": {
+                const i = new BackingStore(cs, this.inner.name);
+                i.offset = offset;
+                i.limit = limit;
+                return new ChiselIterator(this.type, i);
+            }
+            case "Join": {
+                const i = new Join(cs, this.inner.left, this.inner.right);
+                i.offset = offset;
                 i.limit = limit;
                 return new ChiselIterator(this.type, i);
             }
@@ -114,6 +153,7 @@ export class ChiselIterator<T> {
                     this.inner.restrictions,
                     this.inner.inner,
                 );
+                i.offset = offset;
                 i.limit = limit;
                 return new ChiselIterator(this.type, i);
             }
@@ -175,6 +215,11 @@ export class ChiselIterator<T> {
 
     /** ChiselIterator implements asyncIterator, meaning you can use it in any asynchronous context. */
     [Symbol.asyncIterator]() {
+        if (this.inner.offset && !this.inner.limit) {
+            throw new Error(
+                "The `skip()` method was called without a corresponding `take()`",
+            );
+        }
         const rid = Deno.core.opSync(
             "chisel_relational_query_create",
             this.inner,
