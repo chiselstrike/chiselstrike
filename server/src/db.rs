@@ -21,6 +21,7 @@ use itertools::Itertools;
 use serde_json::value::Value;
 use sqlx::AnyPool;
 use std::collections::HashMap;
+use std::collections::HashSet;
 use std::pin::Pin;
 use std::sync::Arc;
 use std::task::Context;
@@ -256,6 +257,18 @@ fn sql_backing_store(
     Query::Stream(pstream)
 }
 
+fn map_stream_item(
+    columns: &HashSet<String>,
+    o: anyhow::Result<JsonObject>,
+) -> anyhow::Result<JsonObject> {
+    let mut o = match o {
+        Ok(o) => o,
+        Err(_) => return o,
+    };
+    o.retain(|k, _| columns.contains(k));
+    Ok(o)
+}
+
 fn filter_stream_item(
     o: &anyhow::Result<JsonObject>,
     restrictions: &HashMap<String, SqlValue>,
@@ -281,10 +294,17 @@ fn filter_stream_item(
     true
 }
 
-fn filter_stream(stream: SqlStream, restrictions: Vec<Restriction>) -> Query {
+fn filter_stream(
+    stream: SqlStream,
+    columns: Vec<(String, Type)>,
+    restrictions: Vec<Restriction>,
+) -> Query {
+    let columns: HashSet<String> = columns.into_iter().map(|(k, _)| k).collect();
     let restrictions: HashMap<String, SqlValue> =
         restrictions.into_iter().map(|r| (r.k, r.v)).collect();
-    let stream = stream.filter(move |o| future::ready(filter_stream_item(o, &restrictions)));
+    let stream = stream
+        .filter(move |o| future::ready(filter_stream_item(o, &restrictions)))
+        .map(move |o| map_stream_item(&columns, o));
     Query::Stream(Box::pin(stream))
 }
 
@@ -330,7 +350,7 @@ fn join_stream(columns: &[(String, Type)], left: SqlStream, right: SqlStream) ->
 
 fn sql_filter(
     pool: &AnyPool,
-    columns: &[(String, Type)],
+    columns: Vec<(String, Type)>,
     limit_str: &str,
     alias_count: &mut u32,
     inner: Relation,
@@ -339,7 +359,7 @@ fn sql_filter(
     let inner_sql = sql_impl(pool, inner, alias_count);
     let inner_sql = match inner_sql {
         Query::Sql(s) => s,
-        Query::Stream(s) => return filter_stream(s, restrictions),
+        Query::Stream(s) => return filter_stream(s, columns, restrictions),
     };
     let inner_alias = format!("A{}", *alias_count);
     *alias_count += 1;
@@ -360,7 +380,7 @@ fn sql_filter(
 
     Query::Sql(format!(
         "SELECT {} FROM ({}) AS {} WHERE {} {}",
-        column_list(columns),
+        column_list(&columns),
         inner_sql,
         inner_alias,
         restrictions,
@@ -446,7 +466,7 @@ fn sql_impl(pool: &AnyPool, rel: Relation, alias_count: &mut u32) -> Query {
         }
         Inner::Filter(inner, restrictions) => sql_filter(
             pool,
-            &rel.columns,
+            rel.columns,
             &limit_str,
             alias_count,
             *inner,
