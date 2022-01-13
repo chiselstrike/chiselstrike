@@ -1,0 +1,108 @@
+# SPDX-FileCopyrightText: © 2022 ChiselStrike <info@chiselstrike.com>
+
+# RUN: sh -e @file
+
+cd "$TEMPDIR"
+
+cat << EOF > "$TEMPDIR/models/types.ts"
+import { ChiselEntity } from "@chiselstrike/chiselstrike";
+
+export class Person extends ChiselEntity { name: string; company: string = "ChiselStrike"; }
+EOF
+
+cat << EOF > "$TEMPDIR/endpoints/store.ts"
+export default async function chisel(req: Request) {
+    const glauber = new Person();
+    glauber.name = "Glauber";
+    await glauber.save();
+
+    const pekka = new Person();
+    pekka.name = "Pekka";
+    await pekka.save();
+
+    const dejan = new Person();
+    dejan.name = "Dejan";
+    await dejan.save();
+
+    const rafael = new Person();
+    rafael.name = "Rafael";
+    await rafael.save();
+
+    const jan = new Person();
+    jan.name = "Jan";
+    await jan.save();
+
+    const dan = new Person();
+    dan.name = "Dan";
+    await dan.save();
+
+    return new Response("Ok");
+}
+EOF
+
+cat << EOF > "$TEMPDIR/endpoints/findall.ts"
+export default async function chisel(req: Request) {
+    let response = "begin";
+    for await (let p of Person.all()) {
+        response += p.name
+    }
+    response += "end";
+    return new Response(response);
+}
+EOF
+
+cat << EOF > "$TEMPDIR/endpoints/findskip.ts"
+export default async function chisel(req: Request) {
+    let response = "begin";
+    for await (let p of Person.all().skip(1)) {
+        response += p.name
+    }
+    response += "end";
+    return new Response(response);
+}
+EOF
+
+cat << EOF > "$TEMPDIR/endpoints/findskiptake.ts"
+export default async function chisel(req: Request) {
+    let response = "begin";
+    for await (let p of Person.all().skip(2).take(2)) {
+        response += p.name
+    }
+    response += "end";
+    return new Response(response);
+}
+EOF
+
+cat << EOF > "$TEMPDIR/endpoints/findskiptakeskip.ts"
+export default async function chisel(req: Request) {
+    let response = "begin";
+    for await (let p of Person.all().skip(2).take(3).skip(1)) {
+        response += p.name
+    }
+    response += "end";
+    return new Response(response);
+}
+EOF
+
+$CHISEL apply
+
+# CHECK: Type defined: Person
+# CHECK: End point defined: /dev/findall
+# CHECK: End point defined: /dev/findskip
+# CHECK: End point defined: /dev/findskiptake
+# CHECK: End point defined: /dev/findskiptakeskip
+
+$CURL -X POST $CHISELD_HOST/dev/store
+# CHECK: Ok
+
+$CURL $CHISELD_HOST/dev/findall
+# CHECK: beginGlauberPekkaDejanRafaelJanDanend
+
+$CURL $CHISELD_HOST/dev/findskip
+# CHECK: Uncaught Error: The `skip()` method was called without a corresponding `take()`
+
+$CURL $CHISELD_HOST/dev/findskiptake
+# CHECK: beginDejanRafaelend
+
+$CURL $CHISELD_HOST/dev/findskiptakeskip
+# CHECK: beginRafaelJanend
