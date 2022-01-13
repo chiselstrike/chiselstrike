@@ -20,6 +20,7 @@
 type column = [string, string]; // name and type
 
 class Base {
+    offset?: number;
     limit?: number;
     constructor(public columns: column[]) {}
 }

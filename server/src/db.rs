@@ -53,8 +53,28 @@ enum Inner {
 pub(crate) struct Relation {
     // FIXME: This can't be a Type::Object, we should probably split the enum
     pub(crate) columns: Vec<(String, Type)>,
+    pub(crate) offset: Option<u64>,
     pub(crate) limit: Option<u64>,
     inner: Inner,
+}
+
+impl Relation {
+    fn new(
+        columns: Vec<(String, Type)>,
+        offset: Option<u64>,
+        limit: Option<u64>,
+        inner: Inner,
+    ) -> Result<Relation> {
+        if offset.is_some() && limit.is_none() {
+            anyhow::bail!("The `offset` property cannot be set without a `limit`.");
+        }
+        Ok(Relation {
+            columns,
+            offset,
+            limit,
+            inner,
+        })
+    }
 }
 
 fn get_columns(val: &serde_json::Value) -> Result<Vec<(String, Type)>> {
@@ -93,15 +113,13 @@ pub(crate) async fn backing_store_from_type(
         columns.push((field.name.clone(), field_type));
     }
 
-    Ok(Relation {
-        columns,
-        inner: Inner::BackingStore(ty.clone(), FieldPolicies::default()),
-        limit: None,
-    })
+    let inner = Inner::BackingStore(ty.clone(), FieldPolicies::default());
+    Relation::new(columns, None, None, inner)
 }
 
 fn convert_backing_store(val: &serde_json::Value) -> Result<Relation> {
     let name = val["name"].as_str().ok_or_else(|| anyhow!("foo"))?;
+    let offset = val["offset"].as_u64();
     let limit = val["limit"].as_u64();
     let columns = get_columns(val)?;
     let runtime = runtime::get();
@@ -114,23 +132,18 @@ fn convert_backing_store(val: &serde_json::Value) -> Result<Relation> {
     };
     let policies = get_policies(&runtime, &ty)?;
 
-    Ok(Relation {
-        columns,
-        inner: Inner::BackingStore(ty, policies),
-        limit,
-    })
+    let inner = Inner::BackingStore(ty, policies);
+    Relation::new(columns, offset, limit, inner)
 }
 
 fn convert_join(val: &serde_json::Value) -> Result<Relation> {
     let columns = get_columns(val)?;
     let left = Box::new(convert(&val["left"])?);
     let right = Box::new(convert(&val["right"])?);
+    let offset = val["offset"].as_u64();
     let limit = val["limit"].as_u64();
-    Ok(Relation {
-        columns,
-        inner: Inner::Join(left, right),
-        limit,
-    })
+    let inner = Inner::Join(left, right);
+    Relation::new(columns, offset, limit, inner)
 }
 
 // FIXME: We should use prepared statements instead
@@ -141,6 +154,7 @@ fn escape_string(s: &str) -> String {
 fn convert_filter(val: &serde_json::Value) -> Result<Relation> {
     let columns = get_columns(val)?;
     let inner = Box::new(convert(&val["inner"])?);
+    let offset = val["offset"].as_u64();
     let limit = val["limit"].as_u64();
     let restrictions = val["restrictions"]
         .as_object()
@@ -165,11 +179,8 @@ fn convert_filter(val: &serde_json::Value) -> Result<Relation> {
         };
         sql_restrictions.push(Restriction { k: k.clone(), v });
     }
-    Ok(Relation {
-        columns,
-        inner: Inner::Filter(inner, sql_restrictions),
-        limit,
-    })
+    let inner = Inner::Filter(inner, sql_restrictions);
+    Relation::new(columns, offset, limit, inner)
 }
 
 pub(crate) fn convert(val: &serde_json::Value) -> Result<Relation> {
@@ -224,7 +235,7 @@ impl Stream for PolicyApplyingStream {
 fn sql_backing_store(
     pool: &AnyPool,
     columns: Vec<(String, Type)>,
-    limit_str: &str,
+    offset_limit_str: &str,
     ty: Arc<ObjectType>,
     policies: FieldPolicies,
 ) -> Query {
@@ -243,7 +254,7 @@ fn sql_backing_store(
         "SELECT {} FROM {} {}",
         column_string,
         ty.backing_table(),
-        &limit_str
+        &offset_limit_str
     );
     if policies.is_empty() {
         return Query::Sql(query);
@@ -351,7 +362,7 @@ fn join_stream(columns: &[(String, Type)], left: SqlStream, right: SqlStream) ->
 fn sql_filter(
     pool: &AnyPool,
     columns: Vec<(String, Type)>,
-    limit_str: &str,
+    offset_limit_str: &str,
     alias_count: &mut u32,
     inner: Relation,
     restrictions: Vec<Restriction>,
@@ -384,7 +395,7 @@ fn sql_filter(
         inner_sql,
         inner_alias,
         restrictions,
-        limit_str,
+        offset_limit_str,
     ))
 }
 
@@ -400,7 +411,7 @@ fn to_stream(pool: &AnyPool, s: String, columns: Vec<(String, Type)>) -> SqlStre
 fn sql_join(
     pool: &AnyPool,
     columns: &[(String, Type)],
-    limit_str: &str,
+    offset_limit_str: &str,
     alias_count: &mut u32,
     left: Relation,
     right: Relation,
@@ -451,30 +462,39 @@ fn sql_join(
     let join_columns_str = join_columns.join(",");
     Query::Sql(format!(
         "SELECT {} FROM {} ON {} {}",
-        join_columns_str, join, on, limit_str
+        join_columns_str, join, on, offset_limit_str
     ))
 }
 
 fn sql_impl(pool: &AnyPool, rel: Relation, alias_count: &mut u32) -> Query {
-    let limit_str = rel
-        .limit
-        .map(|x| format!("LIMIT {}", x))
-        .unwrap_or_else(String::new);
+    let mut offset_limit_str = String::new();
+    if let Some(limit) = rel.limit {
+        offset_limit_str += &format!(" LIMIT {}", limit);
+    }
+    if let Some(offset) = rel.offset {
+        // TODO: We need ORDER BY for OFFSET to work reliabily.
+        offset_limit_str += &format!(" OFFSET {}", offset);
+    }
     match rel.inner {
         Inner::BackingStore(ty, policies) => {
-            sql_backing_store(pool, rel.columns, &limit_str, ty, policies)
+            sql_backing_store(pool, rel.columns, &offset_limit_str, ty, policies)
         }
         Inner::Filter(inner, restrictions) => sql_filter(
             pool,
             rel.columns,
-            &limit_str,
+            &offset_limit_str,
             alias_count,
             *inner,
             restrictions,
         ),
-        Inner::Join(left, right) => {
-            sql_join(pool, &rel.columns, &limit_str, alias_count, *left, *right)
-        }
+        Inner::Join(left, right) => sql_join(
+            pool,
+            &rel.columns,
+            &offset_limit_str,
+            alias_count,
+            *left,
+            *right,
+        ),
     }
 }
 
