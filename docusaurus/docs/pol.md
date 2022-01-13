@@ -150,14 +150,9 @@ data.
 
 ## Policies for Logged-in Users
 
-ChiselStrike supports having users log into your dynamic website.  It
-even lets you restrict endpoint access by user.
-
-:::note
-The specifics of how users log into ChiselStrike-powered frontends is
-evolving: although it's functional today, it may work differently
-tomorrow.  Please contact us to find out the details.
-:::
+ChiselStrike supports [having users log into your dynamic
+website](./login.md).  It even lets you restrict endpoint access by
+user.
 
 To restrict who can access the `comments` endpoint, please edit the
 file `my-backend/policies/pol.yml` like this:
