@@ -7,14 +7,12 @@
   "license": "Proprietary",
   "prepare": "npm run build",
   "bin": {
-    "chisel": "./npm/run.js",
     "postinstall": "./npm/install.js"
   },
   "scripts": {
     "build": "tsc && cp -a src/dts lib/"
   },
   "dependencies": {
-    "binary-install": "^0.1.1",
     "typescript": "^4.5.4"
   },
   "files": [
