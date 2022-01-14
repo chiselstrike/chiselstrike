@@ -11,7 +11,7 @@
     "postinstall": "./npm/install.js"
   },
   "scripts": {
-    "build": "tsc && cp -a src/dts lib/"
+    "build": "tsc"
   },
   "dependencies": {
     "binary-install": "^0.1.1",
