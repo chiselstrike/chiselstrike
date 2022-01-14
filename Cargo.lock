@@ -4059,6 +4059,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "third_party"
+version = "0.4.0"
+
+[[package]]
 name = "thiserror"
 version = "1.0.30"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4395,6 +4399,7 @@ dependencies = [
  "deno_core",
  "isahc",
  "itertools 0.10.3",
+ "third_party",
  "url",
  "v8",
 ]

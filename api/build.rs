@@ -12,7 +12,7 @@ fn main() -> Result<()> {
     // Every other file we use comes from the snapshot, so these
     // should be the only rerun-if-changed that we need.
     println!("cargo:rerun-if-changed={}", chisel_ts);
-    println!("cargo:rerun-if-changed=src/dts/lib.deno_core.d.ts");
+    println!("cargo:rerun-if-changed=../third_party/deno/core/lib.deno_core.d.ts");
 
     let mut map = compile_ts_code(chisel_ts, None)?;
     let code = map.remove(chisel_ts).unwrap();

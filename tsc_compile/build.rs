@@ -13,79 +13,103 @@ fn read(_op_state: &mut OpState, path: String, _: ()) -> Result<String> {
             .to_string());
     }
     if let Some(suffix) = path.strip_prefix("/default/lib/location/") {
+        macro_rules! inc_and_rerun {
+            ( $e:expr ) => {{
+                println!("cargo:rerun-if-changed={}", $e);
+                include_str!($e)
+            }};
+        }
         macro_rules! inc {
             ( $($e:expr),* ) => {
                 match suffix {
                     $(
-                        $e => include_str!(concat!("src/lib/", $e)),
+                        $e => inc_and_rerun!(concat!("../third_party/deno/cli/dts/", $e)),
                     )*
                         _ => "",
                 }
             };
         }
-        let content = inc!(
-            "lib.deno.ns.d.ts",
-            "lib.deno.shared_globals.d.ts",
-            "lib.deno.window.d.ts",
-            "lib.deno_broadcast_channel.d.ts",
-            "lib.deno_console.d.ts",
-            "lib.deno_core.d.ts",
-            "lib.deno_crypto.d.ts",
-            "lib.deno_fetch.d.ts",
-            "lib.deno_net.d.ts",
-            "lib.deno_url.d.ts",
-            "lib.deno_web.d.ts",
-            "lib.deno_webgpu.d.ts",
-            "lib.deno_websocket.d.ts",
-            "lib.deno_webstorage.d.ts",
-            "lib.dom.d.ts",
-            "lib.es2015.collection.d.ts",
-            "lib.es2015.core.d.ts",
-            "lib.es2015.d.ts",
-            "lib.es2015.generator.d.ts",
-            "lib.es2015.iterable.d.ts",
-            "lib.es2015.promise.d.ts",
-            "lib.es2015.proxy.d.ts",
-            "lib.es2015.reflect.d.ts",
-            "lib.es2015.symbol.d.ts",
-            "lib.es2015.symbol.wellknown.d.ts",
-            "lib.es2016.array.include.d.ts",
-            "lib.es2016.d.ts",
-            "lib.es2017.d.ts",
-            "lib.es2017.intl.d.ts",
-            "lib.es2017.object.d.ts",
-            "lib.es2017.sharedmemory.d.ts",
-            "lib.es2017.string.d.ts",
-            "lib.es2017.typedarrays.d.ts",
-            "lib.es2018.asyncgenerator.d.ts",
-            "lib.es2018.asynciterable.d.ts",
-            "lib.es2018.d.ts",
-            "lib.es2018.intl.d.ts",
-            "lib.es2018.promise.d.ts",
-            "lib.es2018.regexp.d.ts",
-            "lib.es2019.array.d.ts",
-            "lib.es2019.d.ts",
-            "lib.es2019.object.d.ts",
-            "lib.es2019.string.d.ts",
-            "lib.es2019.symbol.d.ts",
-            "lib.es2020.bigint.d.ts",
-            "lib.es2020.d.ts",
-            "lib.es2020.intl.d.ts",
-            "lib.es2020.promise.d.ts",
-            "lib.es2020.sharedmemory.d.ts",
-            "lib.es2020.string.d.ts",
-            "lib.es2020.symbol.wellknown.d.ts",
-            "lib.es2021.d.ts",
-            "lib.es2021.intl.d.ts",
-            "lib.es2021.promise.d.ts",
-            "lib.es2021.string.d.ts",
-            "lib.es2021.weakref.d.ts",
-            "lib.es5.d.ts",
-            "lib.esnext.d.ts",
-            "lib.esnext.intl.d.ts"
-        );
+
+        let content = match suffix {
+            "lib.deno_broadcast_channel.d.ts" => inc_and_rerun!(
+                "../third_party/deno/ext/broadcast_channel/lib.deno_broadcast_channel.d.ts"
+            ),
+            "lib.deno_console.d.ts" => {
+                inc_and_rerun!("../third_party/deno/ext/console/lib.deno_console.d.ts")
+            }
+            "lib.deno_core.d.ts" => inc_and_rerun!("../third_party/deno/core/lib.deno_core.d.ts"),
+            "lib.deno_crypto.d.ts" => {
+                inc_and_rerun!("../third_party/deno/ext/crypto/lib.deno_crypto.d.ts")
+            }
+            "lib.deno_fetch.d.ts" => {
+                inc_and_rerun!("../third_party/deno/ext/fetch/lib.deno_fetch.d.ts")
+            }
+            "lib.deno_net.d.ts" => inc_and_rerun!("../third_party/deno/ext/net/lib.deno_net.d.ts"),
+            "lib.deno_url.d.ts" => inc_and_rerun!("../third_party/deno/ext/url/lib.deno_url.d.ts"),
+            "lib.deno_web.d.ts" => inc_and_rerun!("../third_party/deno/ext/web/lib.deno_web.d.ts"),
+            "lib.deno_webgpu.d.ts" => {
+                inc_and_rerun!("../third_party/deno/ext/webgpu/lib.deno_webgpu.d.ts")
+            }
+            "lib.deno_websocket.d.ts" => {
+                inc_and_rerun!("../third_party/deno/ext/websocket/lib.deno_websocket.d.ts")
+            }
+            "lib.deno_webstorage.d.ts" => {
+                inc_and_rerun!("../third_party/deno/ext/webstorage/lib.deno_webstorage.d.ts")
+            }
+            _ => inc!(
+                "lib.deno.ns.d.ts",
+                "lib.deno.shared_globals.d.ts",
+                "lib.deno.window.d.ts",
+                "lib.dom.d.ts",
+                "lib.es2015.collection.d.ts",
+                "lib.es2015.core.d.ts",
+                "lib.es2015.d.ts",
+                "lib.es2015.generator.d.ts",
+                "lib.es2015.iterable.d.ts",
+                "lib.es2015.promise.d.ts",
+                "lib.es2015.proxy.d.ts",
+                "lib.es2015.reflect.d.ts",
+                "lib.es2015.symbol.d.ts",
+                "lib.es2015.symbol.wellknown.d.ts",
+                "lib.es2016.array.include.d.ts",
+                "lib.es2016.d.ts",
+                "lib.es2017.d.ts",
+                "lib.es2017.intl.d.ts",
+                "lib.es2017.object.d.ts",
+                "lib.es2017.sharedmemory.d.ts",
+                "lib.es2017.string.d.ts",
+                "lib.es2017.typedarrays.d.ts",
+                "lib.es2018.asyncgenerator.d.ts",
+                "lib.es2018.asynciterable.d.ts",
+                "lib.es2018.d.ts",
+                "lib.es2018.intl.d.ts",
+                "lib.es2018.promise.d.ts",
+                "lib.es2018.regexp.d.ts",
+                "lib.es2019.array.d.ts",
+                "lib.es2019.d.ts",
+                "lib.es2019.object.d.ts",
+                "lib.es2019.string.d.ts",
+                "lib.es2019.symbol.d.ts",
+                "lib.es2020.bigint.d.ts",
+                "lib.es2020.d.ts",
+                "lib.es2020.intl.d.ts",
+                "lib.es2020.promise.d.ts",
+                "lib.es2020.sharedmemory.d.ts",
+                "lib.es2020.string.d.ts",
+                "lib.es2020.symbol.wellknown.d.ts",
+                "lib.es2021.d.ts",
+                "lib.es2021.intl.d.ts",
+                "lib.es2021.promise.d.ts",
+                "lib.es2021.string.d.ts",
+                "lib.es2021.weakref.d.ts",
+                "lib.es5.d.ts",
+                "lib.esnext.d.ts",
+                "lib.esnext.error.d.ts",
+                "lib.esnext.object.d.ts",
+                "lib.esnext.intl.d.ts"
+            ),
+        };
         if !content.is_empty() {
-            println!("cargo:rerun-if-changed=src/lib/{}", suffix);
             return Ok(content.to_string());
         }
     }
@@ -115,7 +139,7 @@ fn main() {
     runtime.register_op("dir_exists", op_sync(dir_exists));
     runtime.sync_ops_cache();
 
-    for p in ["src/typescript.js", "src/tsc.js"] {
+    for p in ["../third_party/deno/cli/tsc/00_typescript.js", "src/tsc.js"] {
         println!("cargo:rerun-if-changed={}", p);
         let code = std::fs::read_to_string(p).unwrap();
         runtime.execute_script(p, &code).unwrap();
