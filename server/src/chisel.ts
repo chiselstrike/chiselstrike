@@ -6,16 +6,16 @@
 // In the beginning, we shall implement the following querying logic (with the sole exception of the lambdas,
 // which can be replaced by simple Attribute compare logic):
 //
-// select(ChiselIterator<T>, ChiselIterator<T>::Attribute attributes...) -> ChiselIterator<attributes...>
-// filter(ChiselIterator<T>, fn(T)->bool) -> ChiselIterator<T>
-// sort(ChiselIterator<T>, fn(T)->Sortable) -> ChiselIterator<T>
-// take(ChiselIterator<T>, int) -> ChiselIterator<T>  (takes first n rows)
-// join(ChiselIterator<T>, ChiselIterator<U>, ChiselIterator<T>::Attribute, ChiselIterator<U>::Attribute) -> ChiselIterator<Composite<T, U>> (Joins chiselIterators T and U, based on their columns ChiselIterator<T>::Attribute and ChiselIterator<U>::Attribute)
-// left_join(ChiselIterator<T>, ChiselIterator<U>, ChiselIterator<T>::Attribute, ChiselIterator<U>::Attribute) -> ChiselIterator<Composite<T, Option<U>>>
-// right_join(ChiselIterator<T>, ChiselIterator<U>, ChiselIterator<T>::Attribute, ChiselIterator<U>::Attribute) -> ChiselIterator<Composite<Option<T>, U>>
-// transform(ChiselIterator<T>, fn(T)->U)->ChiselIterator<U> (ambitious, maybe later)
+// select(ChiselCursor<T>, ChiselCursor<T>::Attribute attributes...) -> ChiselCursor<attributes...>
+// filter(ChiselCursor<T>, fn(T)->bool) -> ChiselCursor<T>
+// sort(ChiselCursor<T>, fn(T)->Sortable) -> ChiselCursor<T>
+// take(ChiselCursor<T>, int) -> ChiselCursor<T>  (takes first n rows)
+// join(ChiselCursor<T>, ChiselCursor<U>, ChiselCursor<T>::Attribute, ChiselCursor<U>::Attribute) -> ChiselCursor<Composite<T, U>> (Joins chiselIterators T and U, based on their columns ChiselCursor<T>::Attribute and ChiselCursor<U>::Attribute)
+// left_join(ChiselCursor<T>, ChiselCursor<U>, ChiselCursor<T>::Attribute, ChiselCursor<U>::Attribute) -> ChiselCursor<Composite<T, Option<U>>>
+// right_join(ChiselCursor<T>, ChiselCursor<U>, ChiselCursor<T>::Attribute, ChiselCursor<U>::Attribute) -> ChiselCursor<Composite<Option<T>, U>>
+// transform(ChiselCursor<T>, fn(T)->U)->ChiselCursor<U> (ambitious, maybe later)
 //
-// Where ChiselIterator<T>::Attribute represents attribute (field) of type (table) T.
+// Where ChiselCursor<T>::Attribute represents attribute (field) of type (table) T.
 
 type column = [string, string]; // name and type
 
@@ -59,24 +59,24 @@ class Filter extends Base {
 
 type Inner = BackingStore | Join | Filter;
 
-/** ChiselIterator is a lazy iterator that will be used by ChiselStrike to construct an optimized query. */
-export class ChiselIterator<T> {
+/** ChiselCursor is a lazy iterator that will be used by ChiselStrike to construct an optimized query. */
+export class ChiselCursor<T> {
     constructor(
         private type: { new (): T } | undefined,
         private inner: Inner,
     ) {}
     /** Force ChiselStrike to fetch just the `...columns` that are part of the colums list. */
-    select(...columns: (keyof T)[]): ChiselIterator<Pick<T, (keyof T)>> {
+    select(...columns: (keyof T)[]): ChiselCursor<Pick<T, (keyof T)>> {
         const names = columns as string[];
         const cs = this.inner.columns.filter((c) => names.includes(c[0]));
         switch (this.inner.kind) {
             case "BackingStore": {
                 const b = new BackingStore(cs, this.inner.name);
-                return new ChiselIterator<T>(undefined, b);
+                return new ChiselCursor<T>(undefined, b);
             }
             case "Join": {
                 const i = new Join(cs, this.inner.left, this.inner.right);
-                return new ChiselIterator(undefined, i);
+                return new ChiselCursor(undefined, i);
             }
             case "Filter": {
                 const i = new Filter(
@@ -84,13 +84,13 @@ export class ChiselIterator<T> {
                     this.inner.restrictions,
                     this.inner.inner,
                 );
-                return new ChiselIterator(undefined, i);
+                return new ChiselCursor(undefined, i);
             }
         }
     }
 
-    /** Restricts this iterator to contain only at most `limit_` elements */
-    take(limit_: number): ChiselIterator<T> {
+    /** Restricts this cursor to contain only at most `limit_` elements */
+    take(limit_: number): ChiselCursor<T> {
         const limit = (this.inner.limit == null)
             ? limit_
             : Math.min(limit_, this.inner.limit);
@@ -102,12 +102,12 @@ export class ChiselIterator<T> {
             case "BackingStore": {
                 const i = new BackingStore(cs, this.inner.name);
                 i.limit = limit;
-                return new ChiselIterator(this.type, i);
+                return new ChiselCursor(this.type, i);
             }
             case "Join": {
                 const i = new Join(cs, this.inner.left, this.inner.right);
                 i.limit = limit;
-                return new ChiselIterator(this.type, i);
+                return new ChiselCursor(this.type, i);
             }
             case "Filter": {
                 const i = new Filter(
@@ -116,19 +116,19 @@ export class ChiselIterator<T> {
                     this.inner.inner,
                 );
                 i.limit = limit;
-                return new ChiselIterator(this.type, i);
+                return new ChiselCursor(this.type, i);
             }
         }
     }
 
-    /** Restricts this iterator to contain just the objects that match the `Partial` object `restrictions`. */
-    filter(restrictions: Partial<T>): ChiselIterator<T> {
+    /** Restricts this cursor to contain just the objects that match the `Partial` object `restrictions`. */
+    filter(restrictions: Partial<T>): ChiselCursor<T> {
         const i = new Filter(this.inner.columns, restrictions, this.inner);
-        return new ChiselIterator(this.type, i);
+        return new ChiselCursor(this.type, i);
     }
 
-    /** Joins two ChiselIterators, by matching on the properties of the elements in their iterators. */
-    join<U>(right: ChiselIterator<U>) {
+    /** Joins two ChiselCursors, by matching on the properties of the elements in their cursors. */
+    join<U>(right: ChiselCursor<U>) {
         const s = new Set();
         const columns = [];
         for (const c of this.inner.columns.concat(right.inner.columns)) {
@@ -139,17 +139,17 @@ export class ChiselIterator<T> {
             columns.push(c);
         }
         const i = new Join(columns, this.inner, right.inner);
-        return new ChiselIterator<T & U>(undefined, i);
+        return new ChiselCursor<T & U>(undefined, i);
     }
 
-    /** Executes the function `func` for each element of this iterator. */
+    /** Executes the function `func` for each element of this cursor. */
     async forEach(func: (arg: T) => void): Promise<void> {
         for await (const t of this) {
             func(t);
         }
     }
 
-    /** Converts this iterator to an Array.
+    /** Converts this cursor to an Array.
      *
      * Use this with caution as the result set can be very big.
      * It is recommended that you take() first to cap the maximum number of elements. */
@@ -161,7 +161,7 @@ export class ChiselIterator<T> {
         return arr;
     }
 
-    /** ChiselIterator implements asyncIterator, meaning you can use it in any asynchronous context. */
+    /** ChiselCursor implements asyncIterator, meaning you can use it in any asynchronous context. */
     [Symbol.asyncIterator]() {
         const rid = Deno.core.opSync(
             "chisel_relational_query_create",
@@ -200,13 +200,13 @@ export function chiselIterator<T>(type: { new (): T }, c?: column[]) {
         ? c
         : Deno.core.opSync("chisel_introspect", { "name": type.name });
     const b = new BackingStore(columns, type.name);
-    return new ChiselIterator<T>(type, b);
+    return new ChiselCursor<T>(type, b);
 }
 
 /** ChiselEntity is a class that ChiselStrike user-defined entities are expected to extend.
  *
  * It provides properties that are inherent to a ChiselStrike entity, like an id, and static
- * methods that can be used to obtain a `ChiselIterator`.
+ * methods that can be used to obtain a `ChiselCursor`.
  */
 export class ChiselEntity {
     /** UUID identifying this object. */
@@ -266,12 +266,12 @@ export class ChiselEntity {
         backfillIds(this, jsonIds);
     }
 
-    /** Returns a `ChiselIterator` containing all elements of type T known to ChiselStrike.
+    /** Returns a `ChiselCursor` containing all elements of type T known to ChiselStrike.
      *
-     * Note that `ChiselIterator` is a lazy iterator, so this doesn't mean a query will be generating fetching all elements at this point. */
-    static all<T>(
+     * Note that `ChiselCursor` is a lazy iterator, so this doesn't mean a query will be generating fetching all elements at this point. */
+    static cursor<T>(
         this: { new (): T },
-    ): ChiselIterator<T> {
+    ): ChiselCursor<T> {
         return chiselIterator<T>(this);
     }
 
@@ -279,7 +279,7 @@ export class ChiselEntity {
     static findMany<T>(
         this: { new (): T },
         restrictions: Partial<T>,
-    ): ChiselIterator<T> {
+    ): ChiselCursor<T> {
         const it = chiselIterator<T>(this);
         return it.filter(restrictions);
     }
@@ -288,7 +288,7 @@ export class ChiselEntity {
     static take<T extends ChiselEntity>(
         this: { new (): T },
         limit: number,
-    ): ChiselIterator<T> {
+    ): ChiselCursor<T> {
         const it = chiselIterator<T>(this);
         return it.take(limit);
     }
@@ -312,7 +312,7 @@ export class ChiselEntity {
     static select<T extends ChiselEntity>(
         this: { new (): T },
         ...columns: (keyof T)[]
-    ): ChiselIterator<T> {
+    ): ChiselCursor<T> {
         const it = chiselIterator<T>(this);
         return it.select(...columns);
     }
@@ -324,7 +324,7 @@ export class OAuthUser extends ChiselEntity {
 
 export const Chisel = {
     api: {
-        ChiselIterator: ChiselIterator,
+        ChiselCursor: ChiselCursor,
         chiselIterator: chiselIterator,
     },
 

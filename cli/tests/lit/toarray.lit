@@ -24,7 +24,7 @@ EOF
 
 cat << EOF > "$TEMPDIR/endpoints/toarray.ts"
 export default async function chisel(req: Request) {
-    let people = await Person.all().select("first_name").toArray()
+    let people = await Person.cursor().select("first_name").toArray()
     return new Response(JSON.stringify(people));
 }
 EOF

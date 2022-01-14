@@ -213,7 +213,7 @@ import { BlogComment } from "../types/types"
 
 export default async function chisel(_req) {
     let comments = [];
-    await BlogComment.all().forEach(c => {
+    await BlogComment.cursor().forEach(c => {
         comments.push(c);
     });
     return Chisel.json(comments);
@@ -287,7 +287,7 @@ export default async function chisel(req) {
         return Chisel.json('inserted ' + created.id);
     } else if (req.method == 'GET') {
         let comments = [];
-        await BlogComment.all().forEach(c => {
+        await BlogComment.cursor().forEach(c => {
             comments.push(c);
         });
         return Chisel.json(comments);
