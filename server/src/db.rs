@@ -11,6 +11,7 @@ use crate::query::engine::SqlStream;
 use crate::runtime;
 use crate::types::{ObjectType, Type, TypeSystem, TypeSystemError};
 use anyhow::{anyhow, Result};
+use enum_as_inner::EnumAsInner;
 use futures::future;
 use futures::stream;
 use futures::FutureExt;
@@ -27,8 +28,8 @@ use std::sync::Arc;
 use std::task::Context;
 use std::task::Poll;
 
-#[derive(Debug)]
-enum SqlValue {
+#[derive(Debug, EnumAsInner)]
+pub(crate) enum SqlValue {
     Bool(bool),
     U64(u64),
     I64(i64),

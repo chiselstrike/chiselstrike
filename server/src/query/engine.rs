@@ -1,10 +1,9 @@
 // SPDX-FileCopyrightText: © 2021 ChiselStrike <info@chiselstrike.com>
 
-use crate::db::{sql, Relation};
+use crate::db::{sql, Relation, SqlValue};
 use crate::query::{DbConnection, Kind, QueryError};
 use crate::types::{Field, ObjectDelta, ObjectType, Type};
-use anyhow::anyhow;
-use async_recursion::async_recursion;
+use anyhow::{anyhow, Context as AnyhowContext};
 use futures::stream::BoxStream;
 use futures::stream::Stream;
 use futures::StreamExt;
@@ -16,6 +15,7 @@ use sqlx::Column;
 use sqlx::Transaction;
 use sqlx::{Executor, Row};
 use std::cell::RefCell;
+use std::collections::HashMap;
 use std::marker::PhantomPinned;
 use std::pin::Pin;
 use std::task::{Context, Poll};
@@ -70,6 +70,47 @@ impl TryFrom<&Field> for ColumnDef {
         };
 
         Ok(column_def)
+    }
+}
+
+#[derive(Debug)]
+struct SqlQuery {
+    query: String,
+    args: Vec<SqlValue>,
+}
+
+/// Represents recurent structure of nested object ids. Each level holds
+/// the `id` of the current object and `children` object in a map where
+/// key is the field name of the object and value is another IdTree level.
+///
+/// Example: Object {
+///     id: "xxx",
+///     foo: 1,
+///     bar: {
+///         id: "yyy",
+///         count: 12
+///     }
+/// } will yield an ID tree: {
+///     id: "xxx",
+///     children: {
+///         bar: {
+///             id: "yyy"
+///         }
+///     }
+/// }
+#[derive(Debug)]
+struct IdTree {
+    id: String,
+    children: HashMap<String, IdTree>,
+}
+
+impl IdTree {
+    fn to_json(&self) -> serde_json::Value {
+        let mut ids_json = json!({"id": self.id});
+        for (field_name, child_tree) in &self.children {
+            ids_json[field_name.to_owned()] = child_tree.to_json();
+        }
+        ids_json
     }
 }
 
@@ -222,19 +263,8 @@ impl QueryEngine {
         sql(&self.pool, rel)
     }
 
-    pub(crate) async fn add_row(
-        &self,
-        ty: &ObjectType,
-        ty_value: &JsonObject,
-    ) -> anyhow::Result<JsonObject> {
-        let (_, ids_json) = self.add_row_recursive(ty, ty_value).await?;
-        Ok(ids_json)
-    }
-
-    /// Inserts type's value `ty_value` into the database. It does so in a recursive
-    /// manner to accomodate for nested objects.
-    /// Returns DB id of the inserted object and JSON containing ids
-    /// of all inserted objects in the format of
+    /// Inserts object of type `ty` and value `ty_value` into the database.
+    /// Returns JSON containing ids of all inserted objects in the format of
     /// IdsJson = {
     ///     "id": new_object_id,
     ///     "field_object1": IdsJson,
@@ -242,13 +272,149 @@ impl QueryEngine {
     ///     ...
     /// }
     ///
-    #[async_recursion]
-    pub(crate) async fn add_row_recursive(
+    pub(crate) async fn add_row(
         &self,
         ty: &ObjectType,
         ty_value: &JsonObject,
-    ) -> anyhow::Result<(String, JsonObject)> {
-        let mut ids_json = JsonObject::new();
+    ) -> anyhow::Result<serde_json::Value> {
+        let (inserts, id_tree) = self.prepare_insertion(ty, ty_value)?;
+        self.run_sql_queries(&inserts).await?;
+        Ok(id_tree.to_json())
+    }
+
+    async fn run_sql_queries(&self, queries: &[SqlQuery]) -> anyhow::Result<()> {
+        let mut transaction = self.start_transaction().await?;
+        for q in queries {
+            let mut sqlx_query = sqlx::query(&q.query);
+            for arg in &q.args {
+                match arg {
+                    SqlValue::Bool(arg) => sqlx_query = sqlx_query.bind(arg),
+                    SqlValue::U64(arg) => sqlx_query = sqlx_query.bind(*arg as i64),
+                    SqlValue::I64(arg) => sqlx_query = sqlx_query.bind(arg),
+                    SqlValue::F64(arg) => sqlx_query = sqlx_query.bind(arg),
+                    SqlValue::String(arg) => sqlx_query = sqlx_query.bind(arg),
+                };
+            }
+            transaction
+                .fetch_one(sqlx_query)
+                .await
+                .map_err(QueryError::ExecuteFailed)?;
+        }
+        QueryEngine::commit_transaction(transaction).await?;
+        Ok(())
+    }
+
+    /// Recursively generates insert SQL queries necessary to insert object of type `ty`
+    /// and value `ty_value` into database.
+    /// Returns vector of SQL insert queries with corresponding arguments and IdTree of
+    /// inserted objects.
+    fn prepare_insertion(
+        &self,
+        ty: &ObjectType,
+        ty_value: &JsonObject,
+    ) -> anyhow::Result<(Vec<SqlQuery>, IdTree)> {
+        let mut child_ids = HashMap::<String, IdTree>::new();
+        let mut obj_id = Option::<String>::None;
+        let mut query_args = Vec::<SqlValue>::new();
+        let mut inserts = Vec::<SqlQuery>::new();
+
+        for field in ty.all_fields() {
+            let incompatible_data =
+                || QueryError::IncompatibleData(field.name.to_owned(), ty.name().to_owned());
+            let arg = match &field.type_ {
+                Type::Object(nested_type) => {
+                    let nested_value = ty_value
+                        .get(&field.name)
+                        .context("json object doesn't have required field")
+                        .with_context(incompatible_data)?
+                        .as_object()
+                        .context("unexpected json type (expected an object)")
+                        .with_context(incompatible_data)?;
+
+                    let (nested_inserts, nested_ids) =
+                        self.prepare_insertion(nested_type, nested_value)?;
+                    let nested_id = nested_ids.id.to_owned();
+
+                    child_ids.insert(field.name.to_owned(), nested_ids);
+                    inserts.extend(nested_inserts);
+                    SqlValue::String(nested_id)
+                }
+                _ => self
+                    .convert_to_argument(field, ty_value)
+                    .with_context(incompatible_data)?,
+            };
+
+            if field.name == "id" {
+                obj_id = Some(
+                    arg.as_string()
+                        .context("the id value is not string")?
+                        .to_owned(),
+                );
+            }
+            query_args.push(arg);
+        }
+
+        inserts.push(SqlQuery {
+            query: self.make_insert_query(ty, ty_value)?,
+            args: query_args,
+        });
+        let obj_id = obj_id
+            .ok_or_else(|| anyhow!("attempting to insert an object `{}` with no id", ty.name()))?;
+        Ok((
+            inserts,
+            IdTree {
+                id: obj_id,
+                children: child_ids,
+            },
+        ))
+    }
+
+    /// Converts `field` with value `ty_value` into SqlValue while ensuring the
+    /// generation of default and generable values.
+    fn convert_to_argument(
+        &self,
+        field: &Field,
+        ty_value: &JsonObject,
+    ) -> anyhow::Result<SqlValue> {
+        macro_rules! parse_default_value {
+            (str, $value:expr) => {{
+                $value
+            }};
+            ($fallback:ident, $value:expr) => {{
+                let value: $fallback = $value
+                    .as_str()
+                    .parse()
+                    .context("failed to parse default value")?;
+                value
+            }};
+        }
+        macro_rules! convert_json_value {
+            ($as_type:ident, $fallback:ident) => {{
+                match ty_value.get(&field.name) {
+                    Some(value_json) => value_json
+                        .$as_type()
+                        .context("failed to convert json to specific type")?
+                        .to_owned(),
+                    None => {
+                        let value = field.generate_value().context("failed to generate value")?;
+                        parse_default_value!($fallback, value)
+                    }
+                }
+            }};
+        }
+
+        let arg = match &field.type_ {
+            Type::String | Type::Id => SqlValue::String(convert_json_value!(as_str, str)),
+            Type::Float => SqlValue::F64(convert_json_value!(as_f64, f64)),
+            Type::Boolean => SqlValue::Bool(convert_json_value!(as_bool, bool)),
+            Type::Object(_) => anyhow::bail!("unexpected conversion type - Object"),
+        };
+        Ok(arg)
+    }
+
+    /// For given object of type `ty` and its value `ty_value` computes a string
+    /// representing SQL query which inserts the object into database.
+    fn make_insert_query(&self, ty: &ObjectType, ty_value: &JsonObject) -> anyhow::Result<String> {
         let mut field_binds = String::new();
         let mut field_names = vec![];
         let mut id_name = String::new();
@@ -286,7 +452,7 @@ impl QueryEngine {
             );
         }
 
-        let insert_query = std::format!(
+        Ok(std::format!(
             "INSERT INTO {} ({}) VALUES ({}) ON CONFLICT ({}) DO UPDATE SET {} WHERE {} = {} RETURNING *",
             &ty.backing_table(),
             field_names.into_iter().join(","),
@@ -295,87 +461,7 @@ impl QueryEngine {
             update_binds,
             id_name,
             id_bind,
-        );
-
-        let mut insert_query = sqlx::query(&insert_query);
-
-        for field in ty.all_fields() {
-            macro_rules! bind_default_json_value {
-                (str, $value:expr) => {{
-                    insert_query = insert_query.bind($value);
-                }};
-                ($fallback:ident, $value:expr) => {{
-                    let value: $fallback = $value.as_str().parse().map_err(|_| {
-                        QueryError::IncompatibleData(field.name.to_owned(), $value.clone())
-                    })?;
-                    insert_query = insert_query.bind(value);
-                }};
-            }
-
-            macro_rules! bind_json_value {
-                ($as_type:ident, $fallback:ident) => {{
-                    match ty_value.get(&field.name) {
-                        Some(value_json) => {
-                            let value = value_json.$as_type().ok_or_else(|| {
-                                QueryError::IncompatibleData(
-                                    field.name.to_owned(),
-                                    ty.name().to_owned(),
-                                )
-                            })?;
-                            insert_query = insert_query.bind(value);
-                        }
-                        None => {
-                            let value = field.generate_value().ok_or_else(|| {
-                                QueryError::IncompatibleData(
-                                    field.name.to_owned(),
-                                    ty.name().to_owned(),
-                                )
-                            })?;
-                            bind_default_json_value!($fallback, value);
-                        }
-                    }
-                }};
-            }
-
-            match &field.type_ {
-                Type::String => bind_json_value!(as_str, str),
-                Type::Id => bind_json_value!(as_str, str),
-                Type::Float => bind_json_value!(as_f64, f64),
-                Type::Boolean => bind_json_value!(as_bool, bool),
-                Type::Object(nested_type) => {
-                    let nested_value = ty_value
-                        .get(&field.name)
-                        .ok_or_else(|| anyhow!("json object doesn't have field `{}`", field.name))?
-                        .as_object()
-                        .ok_or_else(|| anyhow!("unexpected json type (expected an object)"))?;
-                    let (obj_id, obj_json) =
-                        self.add_row_recursive(nested_type, nested_value).await?;
-
-                    ids_json.insert(field.name.to_owned(), serde_json::json!(obj_json));
-                    insert_query = insert_query.bind(obj_id);
-                }
-            }
-        }
-        // FIXME: The whole recursive insertion should happen in one transaction
-        let mut transaction = self
-            .pool
-            .begin()
-            .await
-            .map_err(QueryError::ConnectionFailed)?;
-
-        let row = transaction
-            .fetch_one(insert_query)
-            .await
-            .map_err(QueryError::ExecuteFailed)?;
-
-        transaction
-            .commit()
-            .await
-            .map_err(QueryError::ExecuteFailed)?;
-
-        let obj_id = row.get::<String, _>("id");
-        ids_json.insert("id".into(), serde_json::json!(obj_id));
-        Ok((obj_id, ids_json))
+        ))
     }
 }
 
