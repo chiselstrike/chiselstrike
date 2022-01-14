@@ -9,6 +9,10 @@ mod tests {
 
     #[test]
     fn npm_build() {
-        run_in("npm", ["run", "build"], Path::new("../npm").to_path_buf());
+        run_in(
+            "npm",
+            ["run", "build"],
+            Path::new("../packages/chiselstrike").to_path_buf(),
+        );
     }
 }
