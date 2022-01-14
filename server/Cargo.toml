@@ -48,6 +48,7 @@ yaml-rust = "0.4"
 [build-dependencies]
 anyhow = "1.0"
 tonic-build = "0.5.2"
+tsc_compile = { path = "../tsc_compile" }
 vergen = { version = "6", default-features = false, features = ["git"] }
 
 [lib]

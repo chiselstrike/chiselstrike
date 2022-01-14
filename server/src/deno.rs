@@ -49,7 +49,6 @@ use std::pin::Pin;
 use std::rc::Rc;
 use std::sync::Arc;
 use std::task::{Context, Poll};
-use tempdir::TempDir;
 use tempfile::Builder;
 use tokio::fs;
 
@@ -396,25 +395,7 @@ async fn create_deno<P: AsRef<Path>>(base_directory: P, inspect_brk: bool) -> Re
 
     // FIXME: Include these files in the snapshop
 
-    let chisel = {
-        let dir = TempDir::new("endpoint")?;
-        let dir = dir.path();
-        let dts = dir.join("dts");
-        std::fs::create_dir(&dts)?;
-
-        let chisel_path = dir.join("chisel.ts");
-        let chisel = include_str!("chisel.ts");
-        fs::write(&chisel_path, &chisel).await?;
-
-        let deno_core_path = dts.join("lib.deno_core.d.ts");
-        let deno_core = include_str!("dts/lib.deno_core.d.ts");
-        fs::write(deno_core_path, &deno_core).await?;
-
-        let chisel_path = chisel_path.to_str().unwrap();
-        compile_ts_code(chisel_path, None)?
-            .remove(chisel_path)
-            .unwrap()
-    };
+    let chisel = include_str!(concat!(env!("OUT_DIR"), "/chisel.js")).to_string();
 
     let chisel_path = base_directory.as_ref().join("chisel.js");
     fs::write(&chisel_path, &chisel).await?;
