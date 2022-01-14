@@ -48,6 +48,7 @@ active yet.  Let's change that: in another window, type this:
 $ chisel new my-backend
 Initialized ChiselStrike project in my-backend
 $ cd my-backend
+$ npm install
 $ chisel dev
 🙇‍♂️ Thank you for your interest in the ChiselStrike private beta! (Beta-Jan22.2)
 ⚠️  This is provided to you for evaluation purposes and should not be used to host production at this time
