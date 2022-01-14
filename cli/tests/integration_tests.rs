@@ -17,7 +17,7 @@ mod tests {
     }
 
     #[test]
-    #[timeout(100_000)]
+    #[timeout(1_000_000)]
     fn lit() {
         let repo = repo_dir();
         let bd = bin_dir();

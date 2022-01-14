@@ -42,18 +42,21 @@ use std::cell::RefCell;
 use std::collections::HashMap;
 use std::convert::TryInto;
 use std::future::Future;
+use std::io::Write;
 use std::net::SocketAddr;
 use std::path::{Path, PathBuf};
 use std::pin::Pin;
 use std::rc::Rc;
 use std::sync::Arc;
 use std::task::{Context, Poll};
+use tempdir::TempDir;
+use tempfile::Builder;
 use tokio::fs;
 
 // FIXME: This should not be here. The client should download and
 // compile modules, the server should not get code out of the
 // internet.
-use compile::compile_ts_code;
+use tsc_compile::compile_ts_code;
 
 use url::Url;
 
@@ -107,13 +110,25 @@ fn wrap(specifier: &ModuleSpecifier, code: String) -> Result<ModuleSource> {
     })
 }
 
+fn compile(code: &str, lib: Option<&str>) -> Result<String> {
+    let mut f = Builder::new().suffix(".ts").tempfile()?;
+    let inner = f.as_file_mut();
+    inner.write_all(code.as_bytes())?;
+    inner.flush()?;
+    let path = f.path().to_str().unwrap();
+    Ok(compile_ts_code(path, lib)?.remove(path).unwrap())
+}
+
 async fn load_code(specifier: ModuleSpecifier) -> Result<ModuleSource> {
-    let code = if specifier.scheme() == "file" {
+    let mut code = if specifier.scheme() == "file" {
         fs::read_to_string(specifier.to_file_path().unwrap()).await?
     } else {
         reqwest::get(specifier.clone()).await?.text().await?
     };
-    let code = compile_ts_code(code)?;
+    let last = specifier.path_segments().unwrap().rev().next().unwrap();
+    if last.ends_with(".ts") {
+        code = compile(&code, None)?;
+    }
     wrap(&specifier, code)
 }
 
@@ -128,7 +143,7 @@ impl deno_core::ModuleLoader for ModuleLoader {
         if specifier == "@chiselstrike/chiselstrike" {
             let api_path = self
                 .base_directory
-                .join("chisel.ts")
+                .join("chisel.js")
                 .to_str()
                 .unwrap()
                 .to_string();
@@ -360,11 +375,6 @@ async fn op_chisel_relational_query_next(
     }
 }
 
-fn compile_ts_code_as_bytes(code: &[u8]) -> Result<String> {
-    let code = std::str::from_utf8(code)?.to_string();
-    compile_ts_code(code)
-}
-
 async fn create_deno<P: AsRef<Path>>(base_directory: P, inspect_brk: bool) -> Result<DenoService> {
     let mut d = DenoService::new(base_directory.as_ref().to_owned(), inspect_brk);
     let worker = &mut d.worker;
@@ -385,13 +395,31 @@ async fn create_deno<P: AsRef<Path>>(base_directory: P, inspect_brk: bool) -> Re
     runtime.sync_ops_cache();
 
     // FIXME: Include these files in the snapshop
-    let chisel = compile_ts_code_as_bytes(include_bytes!("chisel.ts"))?;
-    let chisel_path = base_directory
-        .as_ref()
-        .join("chisel.ts")
-        .to_str()
-        .unwrap()
-        .to_string();
+
+    let chisel = {
+        let dir = TempDir::new("endpoint")?;
+        let dir = dir.path();
+        let dts = dir.join("dts");
+        std::fs::create_dir(&dts)?;
+
+        let chisel_path = dir.join("chisel.ts");
+        let chisel = include_str!("chisel.ts");
+        fs::write(&chisel_path, &chisel).await?;
+
+        let deno_core_path = dts.join("lib.deno_core.d.ts");
+        let deno_core = include_str!("dts/lib.deno_core.d.ts");
+        fs::write(deno_core_path, &deno_core).await?;
+
+        let chisel_path = chisel_path.to_str().unwrap();
+        compile_ts_code(chisel_path, None)?
+            .remove(chisel_path)
+            .unwrap()
+    };
+
+    let chisel_path = base_directory.as_ref().join("chisel.js");
+    fs::write(&chisel_path, &chisel).await?;
+
+    let chisel_path = chisel_path.to_str().unwrap().to_string();
     {
         let mut code_map = d.module_loader.code_map.borrow_mut();
         code_map.insert(
@@ -767,7 +795,7 @@ pub(crate) async fn compile_endpoint<P: AsRef<Path>>(
     // path. This will not be a problem once we publish the entire app
     // at once, since then we can create a new isolate for it.
     let url = format!(
-        "file://{}/{}.ts?ver={}",
+        "file://{}/{}.js?ver={}",
         base_directory.as_ref().display(),
         path,
         entry.version
