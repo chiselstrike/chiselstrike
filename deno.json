@@ -1,12 +1,10 @@
 {
     "fmt": {
         "files": {
-            "include": ["cli", "server", "deno.json"],
+            "include": ["api", "server", "deno.json"],
             "exclude": [
-                "cli/examples",
-                "cli/docs",
                 "server/docs",
-                "server/src/dts"
+                "third_party"
             ]
         },
         "options": {
@@ -15,8 +13,7 @@
     },
     "lint": {
         "files": {
-            "include": ["cli", "server"],
-            "exclude": ["cli/examples"]
+            "include": ["api", "server"]
         },
         "rules": {
             "tags": ["recommended"]

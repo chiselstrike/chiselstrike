@@ -1,0 +1,31 @@
+{
+  "name": "@chiselstrike/create-chiselstrike-app",
+  "version": "0.5.0",
+  "description": "Create ChiselStrike-powered backends with one command",
+  "author": "ChiselStrike Inc.",
+  "license": "Proprietary",
+  "main": "./dist/index.js",
+  "bin": {
+    "create-chiselstrike-app": "./dist/index.js"
+  },
+  "scripts": {
+    "dev": "ncc build ./index.ts -w -o dist/",
+    "prerelease": "rimraf ./dist/",
+    "release": "ncc build ./index.ts -o ./dist/",
+    "prepublish": "yarn release"
+  },
+  "files": [
+    "dist"
+  ],
+  "devDependencies": {
+    "@types/cross-spawn": "^6.0.2",
+    "@types/node": "^17.0.8",
+    "@vercel/ncc": "^0.33.1",
+    "commander": "^8.3.0",
+    "cross-spawn": "^7.0.3",
+    "rimraf": "^3.0.2"
+  },
+  "engines": {
+    "node": ">=12.22.0"
+  }
+}
