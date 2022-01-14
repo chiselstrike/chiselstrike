@@ -5,6 +5,7 @@ members = [
     "cli",
     "compile",
     "server",
+    "tsc_compile",
 ]
 
 [profile.release]

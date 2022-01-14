@@ -88,7 +88,7 @@ impl ModulesDirectory {
         // Path.join() doesn't work when path can be absolute, which it usually is here
         // Also has to force .ts here, otherwise /dev/foo.ts becomes /dev/foo endpoints,
         // and then later trying /dev/foo/bar clashes and fails
-        let file = format!("{}/{}.ts", self.dir.path().display(), path);
+        let file = format!("{}/{}.js", self.dir.path().display(), path);
         let base = Path::new(&file).parent().unwrap();
 
         fs::create_dir_all(base).await?;
