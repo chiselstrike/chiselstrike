@@ -441,7 +441,7 @@ dependencies = [
 
 [[package]]
 name = "cli"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "anyhow",
  "compile",
@@ -477,7 +477,7 @@ dependencies = [
 
 [[package]]
 name = "compile"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "anyhow",
  "swc_common",
@@ -3440,7 +3440,7 @@ dependencies = [
 
 [[package]]
 name = "server"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "anyhow",
  "async-channel",
