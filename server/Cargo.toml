@@ -6,6 +6,7 @@ edition = "2021"
 
 [dependencies]
 anyhow = { version = "1.0.45", features = ["backtrace"] }
+api = { path = "../api" }
 async-channel = "1.6.1"
 async-mutex = "1.4.0"
 async-recursion = "1.0.0"
@@ -48,7 +49,6 @@ yaml-rust = "0.4"
 [build-dependencies]
 anyhow = "1.0"
 tonic-build = "0.5.2"
-tsc_compile = { path = "../tsc_compile" }
 vergen = { version = "6", default-features = false, features = ["git"] }
 
 [lib]

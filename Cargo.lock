@@ -99,6 +99,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "api"
+version = "0.4.0"
+dependencies = [
+ "anyhow",
+ "tsc_compile",
+]
+
+[[package]]
 name = "arrayvec"
 version = "0.5.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3573,6 +3581,7 @@ name = "server"
 version = "0.4.0"
 dependencies = [
  "anyhow",
+ "api",
  "async-channel",
  "async-mutex",
  "async-recursion",

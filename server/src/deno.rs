@@ -10,6 +10,7 @@ use crate::runtime;
 use crate::runtime::Runtime;
 use crate::types::{ObjectType, Type};
 use anyhow::{anyhow, Result};
+use api::chisel_js;
 use deno_broadcast_channel::InMemoryBroadcastChannel;
 use deno_core::error::AnyError;
 use deno_core::CancelFuture;
@@ -395,7 +396,7 @@ async fn create_deno<P: AsRef<Path>>(base_directory: P, inspect_brk: bool) -> Re
 
     // FIXME: Include these files in the snapshop
 
-    let chisel = include_str!(concat!(env!("OUT_DIR"), "/chisel.js")).to_string();
+    let chisel = chisel_js().to_string();
 
     let chisel_path = base_directory.as_ref().join("chisel.js");
     fs::write(&chisel_path, &chisel).await?;
