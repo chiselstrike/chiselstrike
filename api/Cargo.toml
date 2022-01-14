@@ -1,0 +1,12 @@
+[package]
+name = "api"
+version = "0.4.0"
+authors = ["ChiselStrike"]
+edition = "2021"
+
+[lib]
+name = "api"
+
+[build-dependencies]
+anyhow = "1.0"
+tsc_compile = { path = "../tsc_compile" }
