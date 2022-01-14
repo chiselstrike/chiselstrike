@@ -5,25 +5,10 @@
 cp examples/person.ts "$TEMPDIR/models"
 cp examples/store.js "$TEMPDIR/endpoints"
 
-cat << EOF > "$TEMPDIR/endpoints/query.ts"
-export default async function chisel(req: Request) {
-    let ret = "";
-    const filtered = Person.findMany({"last_name":  "Costa",
-                                                       "first_name": "Glauber",
-                                                       "age":        666,
-                                                       "human":      true});
-    for await (let row of filtered) {
-        ret += row.first_name + " " + row.last_name;
-    }
-    return new Response(ret);
-}
-EOF
-
 cd "$TEMPDIR"
 $CHISEL apply
 
 # CHECK: Type defined: Person
-# CHECK: End point defined: /dev/query
 # CHECK: End point defined: /dev/store
 
 $CURL --data '{
@@ -36,11 +21,6 @@ $CURL --data '{
 
 # CHECK: ok
 
-$CURL -o - $CHISELD_HOST/dev/query
-
-# CHECK: HTTP/1.1 200 OK
-# CHECK: Glauber Costa
-#
 $CURL --data '{
     "first_name":"notGlauber",
     "last_name":"notCosta",
@@ -49,7 +29,6 @@ $CURL --data '{
     "height": 10.01
 }' -o - $CHISELD_HOST/dev/store
 
-## filter with undefined values
 cat << EOF > "$TEMPDIR/endpoints/query.ts"
 export default async function chisel(req: Request) {
     const url = new URL(req.url);
@@ -69,6 +48,7 @@ $CURL -o - $CHISELD_HOST/dev/query?first_name="Glauber"
 # CHECK: [Costa]
 $CURL -o - $CHISELD_HOST/dev/query?first_name="123"
 # CHECK: []
+## filter with undefined values
 $CURL -o - $CHISELD_HOST/dev/query
 # CHECK: [CostanotCosta]
 
@@ -83,5 +63,6 @@ $CURL -o - $CHISELD_HOST/dev/query?first_name="Glauber"
 # CHECK: [xxxxx]
 $CURL -o - $CHISELD_HOST/dev/query?first_name="123"
 # CHECK: []
+## filter with undefined values, in the presence of policies
 $CURL -o - $CHISELD_HOST/dev/query
 # CHECK: [xxxxxxxxxx]
