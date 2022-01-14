@@ -329,7 +329,7 @@ export const Chisel = {
     },
 
     buildReadableStreamForBody: function (rid: number) {
-        return new ReadableStream({
+        return new ReadableStream<string>({
             async pull(controller: ReadableStreamDefaultController) {
                 const chunk = await Deno.core.opAsync("chisel_read_body", rid);
                 if (chunk) {
