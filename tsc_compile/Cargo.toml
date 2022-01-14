@@ -1,6 +1,6 @@
 [package]
-name = "compile"
-version = "0.3.0"
+name = "tsc_compile"
+version = "0.4.0"
 authors = ["ChiselStrike"]
 edition = "2021"
 
@@ -17,4 +17,4 @@ anyhow = "1.0"
 deno_core = "0.114.0"
 
 [lib]
-name = "compile"
+name = "tsc_compile"

@@ -11,7 +11,7 @@ module.exports = {
         "eslint:recommended",
         "plugin:@typescript-eslint/recommended",
     ],
-    ignorePatterns: ["/examples/", "/cli/examples/", "api/src/dts/", "compile/src/lib/"],
+    ignorePatterns: ["/examples/", "/cli/examples/", "api/src/dts/", "tsc_compile/src/lib/"],
     rules: {
         "@typescript-eslint/switch-exhaustiveness-check": "error",
         "@typescript-eslint/triple-slash-reference": "off",

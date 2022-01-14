@@ -8,7 +8,6 @@ use chisel::{
     ChiselApplyRequest, ChiselDeleteRequest, DescribeRequest, EndPointCreationRequest,
     PolicyUpdateRequest, PopulateRequest, RestartRequest, StatusRequest,
 };
-use compile::compile_ts_code;
 use futures::channel::mpsc::channel;
 use futures::{SinkExt, StreamExt};
 use notify::{Event, RecommendedWatcher, RecursiveMode, Watcher};
@@ -23,6 +22,7 @@ use std::thread;
 use std::time::Duration;
 use structopt::StructOpt;
 use tonic::transport::Channel;
+use tsc_compile::compile_ts_code;
 
 mod ts;
 

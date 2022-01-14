@@ -53,7 +53,7 @@ use tempfile::Builder;
 // FIXME: This should not be here. The client should download and
 // compile modules, the server should not get code out of the
 // internet.
-use compile::compile_ts_code;
+use tsc_compile::compile_ts_code;
 
 use url::Url;
 

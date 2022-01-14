@@ -1,10 +1,10 @@
 // SPDX-FileCopyrightText: © 2022 ChiselStrike <info@chiselstrike.com>
 
 use anyhow::Result;
-use compile::compile_ts_code;
 use std::env;
 use std::fs;
 use std::path::PathBuf;
+use tsc_compile::compile_ts_code;
 
 fn main() -> Result<()> {
     let chisel_ts = "src/chisel.ts";

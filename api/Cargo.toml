@@ -9,4 +9,4 @@ name = "api"
 
 [build-dependencies]
 anyhow = "1.0"
-compile = { path = "../compile" }
+tsc_compile = { path = "../tsc_compile" }

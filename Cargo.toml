@@ -4,6 +4,6 @@ resolver = "2"
 members = [
     "api",
     "cli",
-    "compile",
     "server",
+    "tsc_compile",
 ]

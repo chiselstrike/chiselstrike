@@ -9,7 +9,6 @@ anyhow = { version = "1.0.45", features = ["backtrace"] }
 api = { path = "../api" }
 async-channel = "1.6.1"
 async-mutex = "1.4.0"
-compile = { path = "../compile" }
 deno_broadcast_channel = "0.26.0"
 deno_core = "0.114.0"
 deno_runtime = "0.40.0"
@@ -38,6 +37,7 @@ tempfile = "3.2.0"
 thiserror = "1.0"
 tokio = { version = "1.11.0", features = ["rt"] }
 tonic = "0.5.2"
+tsc_compile = { path = "../tsc_compile" }
 url = "2.2.2"
 urldecode = "0.1.1"
 uuid = { version = "0.8.2", features = ["v4"] }

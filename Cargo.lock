@@ -103,7 +103,7 @@ name = "api"
 version = "0.3.0"
 dependencies = [
  "anyhow",
- "compile",
+ "tsc_compile",
 ]
 
 [[package]]
@@ -442,7 +442,6 @@ version = "0.3.0"
 dependencies = [
  "anyhow",
  "api",
- "compile",
  "futures",
  "lit",
  "notify",
@@ -460,6 +459,7 @@ dependencies = [
  "toml",
  "tonic",
  "tonic-build",
+ "tsc_compile",
  "vergen",
 ]
 
@@ -471,18 +471,6 @@ checksum = "3538270d33cc669650c4b093848450d380def10c331d38c768e34cac80576e6e"
 dependencies = [
  "termcolor",
  "unicode-width",
-]
-
-[[package]]
-name = "compile"
-version = "0.3.0"
-dependencies = [
- "anyhow",
- "deno_core",
- "isahc",
- "itertools 0.10.3",
- "url",
- "v8",
 ]
 
 [[package]]
@@ -3478,7 +3466,6 @@ dependencies = [
  "api",
  "async-channel",
  "async-mutex",
- "compile",
  "deno_broadcast_channel",
  "deno_core",
  "deno_runtime",
@@ -3508,6 +3495,7 @@ dependencies = [
  "tokio",
  "tonic",
  "tonic-build",
+ "tsc_compile",
  "url",
  "urldecode",
  "uuid",
@@ -4398,6 +4386,18 @@ name = "try-lock"
 version = "0.2.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "59547bce71d9c38b83d9c0e92b6066c4253371f15005def0c30d9657f50c7642"
+
+[[package]]
+name = "tsc_compile"
+version = "0.4.0"
+dependencies = [
+ "anyhow",
+ "deno_core",
+ "isahc",
+ "itertools 0.10.3",
+ "url",
+ "v8",
+]
 
 [[package]]
 name = "tungstenite"
