@@ -276,21 +276,16 @@ export class ChiselEntity {
     }
 
     /** Restricts this iterator to contain just the objects that match the `Partial` object `restrictions`. */
-    static findMany<T>(
+    static async findMany<T>(
         this: { new (): T },
         restrictions: Partial<T>,
-    ): ChiselCursor<T> {
-        const it = chiselIterator<T>(this);
-        return it.filter(restrictions);
-    }
-
-    /** Restricts this iterator to contain only at most `limit_` elements. */
-    static take<T extends ChiselEntity>(
-        this: { new (): T },
-        limit: number,
-    ): ChiselCursor<T> {
-        const it = chiselIterator<T>(this);
-        return it.take(limit);
+        take?: number,
+    ): Promise<Partial<T>[]> {
+        let it = chiselIterator<T>(this);
+        if (take) {
+            it = it.take(take);
+        }
+        return await it.filter(restrictions).toArray();
     }
 
     /** Returns a single object that matches the `Partial` object `restrictions` passed as its parameter.
@@ -305,16 +300,6 @@ export class ChiselEntity {
             return value;
         }
         return null;
-    }
-
-    /** Returns an iterator containing all elements of type T known to ChiselStrike,
-     * except it also forces ChiselStrike to fetch just the `...columns` that are part of the colums list. */
-    static select<T extends ChiselEntity>(
-        this: { new (): T },
-        ...columns: (keyof T)[]
-    ): ChiselCursor<T> {
-        const it = chiselIterator<T>(this);
-        return it.select(...columns);
     }
 }
 

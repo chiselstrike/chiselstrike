@@ -89,7 +89,7 @@ EOF
 cat << EOF > "$TEMPDIR/endpoints/findfilter.ts"
 export default async function chisel(req: Request) {
     let response = "begin";
-    for await (let p of Person.findMany({"company" : "ChiselStrike"}).take(1)) {
+    for await (let p of Person.cursor().filter({"company" : "ChiselStrike"}).take(1)) {
         response += p.name
     }
     response += "end";

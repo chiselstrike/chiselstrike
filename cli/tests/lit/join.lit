@@ -33,7 +33,7 @@ EOF
 cat << EOF > "$TEMPDIR/endpoints/query.ts"
 export default async function chisel(req: Request) {
     let ret = "[";
-    const glaubers = Person.findMany({"first_name": "Glauber"}).join(Nickname.cursor());
+    const glaubers = Person.cursor().filter({"first_name": "Glauber"}).join(Nickname.cursor());
     const rows = glaubers.select("first_name", "nick", "last_name");
     for await (let row of rows) {
         ret += "(" + row.first_name + " " + row.nick + " " + row.last_name + ") ";
