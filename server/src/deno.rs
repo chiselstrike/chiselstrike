@@ -742,7 +742,7 @@ pub(crate) async fn run_js(path: String, mut req: Request<hyper::Body>) -> Resul
     let entry = headers.entry("Access-Control-Allow-Methods");
     entry.or_insert(HeaderValue::from_static("POST, PUT, GET, OPTIONS"));
     let entry = headers.entry("Access-Control-Allow-Headers");
-    entry.or_insert(HeaderValue::from_static("Content-Type"));
+    entry.or_insert(HeaderValue::from_static("Content-Type,ChiselStrikeToken"));
 
     let body = builder.body(Body::Stream(Box::pin(stream)))?;
     Ok(body)
