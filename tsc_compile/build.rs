@@ -1,3 +1,5 @@
+// SPDX-FileCopyrightText: © 2022 ChiselStrike <info@chiselstrike.com>
+
 use anyhow::Result;
 use deno_core::op_sync;
 use deno_core::JsRuntime;
