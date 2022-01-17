@@ -6,7 +6,6 @@ use deno_core::JsRuntime;
 use deno_core::OpState;
 use deno_core::RuntimeOptions;
 use deno_core::Snapshot;
-use isahc::ReadResponseExt;
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::env;
@@ -68,7 +67,7 @@ fn fetch_aux(map: &mut DownloadMap, path: String, mut base: String) -> Result<St
     let text = if resolved.scheme() == "file" {
         fs::read_to_string(resolved.to_file_path().unwrap())?
     } else {
-        isahc::get(resolved.to_string())?.text()?
+        ureq::get(&resolved.to_string()).call()?.into_string()?
     };
 
     let n = map.len();
