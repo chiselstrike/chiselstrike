@@ -29,9 +29,12 @@ vergen = { version = "6", default-features = false, features = ["git"] }
 [dev-dependencies]
 futures = "0.3.17"
 lit = "1.0.4"
-ntest = "0.7.3"
 server = { path = "../server" }
 
 [[bin]]
 name = "chisel"
 path = "src/main.rs"
+
+[[test]]
+name = "integration_tests"
+harness = false
