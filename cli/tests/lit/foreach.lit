@@ -23,10 +23,10 @@ EOF
 cat << EOF > "$TEMPDIR/endpoints/foreach.ts"
 export default async function chisel(req: Request) {
     let count = 0;
-    await Person.forEach(cnt_ => {
+    await Person.cursor().forEach(cnt_ => {
         count += 1;
     });
-    return new Response(String(count));
+    return new Response('total: ' + count);
 }
 EOF
 
@@ -40,4 +40,4 @@ $CURL -X POST $CHISELD_HOST/dev/store
 # CHECK: Ok
 
 $CURL $CHISELD_HOST/dev/foreach
-# CHECK: 2
+# CHECK: total: 2
