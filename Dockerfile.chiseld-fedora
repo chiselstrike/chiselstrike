@@ -1,29 +1,27 @@
 FROM fedora:latest
 
 #Some sane defaults
-ENV API_PORT=8080
-ENV DATA_DB_URI="sqlite:///home/chiseld/chiseld-data.db?mode=rwc"
-ENV EXECUTOR_THREADS=1
-ENV METADATA_DB_URI="sqlite:///home/chiseld/chiseld.db?mode=rwc"
-ENV RPC_PORT=50051
+ENV DATAPATH="/var/data"
+ENV API_PORT="8080"
+ENV API_LISTEN_ADDR="0.0.0.0"
+ENV DATA_DB_URI="sqlite://$DATAPATH/chiseld-data.db?mode=rwc"
+ENV EXECUTOR_THREADS="1"
+ENV METADATA_DB_URI="sqlite://$DATAPATH/chiseld-meta.db?mode=rwc"
+ENV RPC_PORT="50051"
+ENV RPC_LISTEN_ADDR="0.0.0.0"
+ENV HEALTH_PORT="9090"
 
 RUN \
-  groupadd -g 1999 -r chiseld && useradd -r -u 1999 -g chiseld -d /home/chiseld -G chiseld -m -s /bin/bash chiseld && \
-  sed -i /etc/sudoers -re 's/^%sudo.*/%sudo ALL=(ALL:ALL) NOPASSWD: ALL/g' && \
-  sed -i /etc/sudoers -re 's/^root.*/root ALL=(ALL:ALL) NOPASSWD: ALL/g' && \
-  sed -i /etc/sudoers -re 's/^#includedir.*/## **Removed the include directive** ##"/g' && \
-  echo "chiseld ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers && \
-  echo "Customized the sudoers file for passwordless access to the chiseld user!" && \
-  echo "chiseld user:";  su - chiseld -c id 
+  groupadd -g 345 -r chiseld && \
+  useradd -r -u 345 -g chiseld -d /home/chiseld -G chiseld -m -s /bin/bash chiseld 
+
+RUN mkdir -p $DATAPATH && chown chiseld:chiseld $DATAPATH
+VOLUME $DATAPATH
 
 COPY target/release/chiseld /usr/local/bin/chiseld
 
 USER chiseld 
 
-EXPOSE $API_PORT $RPC_PORT
-CMD  /usr/local/bin/chiseld \ 
-  -a 0.0.0.0:$API_PORT \
-  -d $DATA_DB_URI \
-  -e $EXECUTOR_THREADS \
-  -m $METADATA_DB_URI \
-  -r 0.0.0.0:$RPC_PORT
+EXPOSE $API_PORT $RPC_PORT $HEALTH_PORT
+
+CMD ["/bin/bash","-c", "sleep infinity"]
