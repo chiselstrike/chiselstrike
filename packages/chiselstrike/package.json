@@ -6,9 +6,6 @@
   "author": "Pekka Enberg <penberg@chiselstrike.com>",
   "license": "Proprietary",
   "prepare": "npm run build",
-  "bin": {
-    "postinstall": "./npm/install.js"
-  },
   "scripts": {
     "build": "tsc --noResolve && cp -La ../../api/src/lib.deno_core.d.ts lib/"
   },
