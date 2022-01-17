@@ -1,0 +1,1 @@
+../../third_party/deno/core/lib.deno_core.d.ts
