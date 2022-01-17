@@ -94,10 +94,10 @@ easy.  We do it by adding a TypeScript file under the
 `my-backend/endpoints` directory.  Here is one:
 
 ```typescript title="my-backend/endpoints/comments.ts"
-import { Chisel } from "@chiselstrike/chiselstrike"
+import { json } from "@chiselstrike/chiselstrike"
 
 export default function chisel(_req) {
-    return Chisel.json("Temporarily empty");
+    return json("Temporarily empty");
 }
 ```
 
@@ -184,7 +184,6 @@ storing `BlogComment` objects in its database.  To populate it, add the
 following file:
 
 ```typescript title="my-backend/endpoints/populate-comments.ts"
-import { Chisel } from "@chiselstrike/chiselstrike"
 import { BlogComment } from "../models/models";
 
 export default async function chisel(_req) {
@@ -220,7 +219,7 @@ comments.  Now we just have to read them.  Let's edit the
 `my-backend/endpoints/comments.ts` file as follows:
 
 ```typescript title="my-backend/endpoints/comments.ts"
-import { Chisel } from "@chiselstrike/chiselstrike"
+import { json } from "@chiselstrike/chiselstrike"
 import { BlogComment } from "../models/models"
 
 export default async function chisel(_req) {
@@ -228,7 +227,7 @@ export default async function chisel(_req) {
     await BlogComment.cursor().forEach(c => {
         comments.push(c);
     });
-    return Chisel.json(comments);
+    return json(comments);
 }
 ```
 
@@ -286,7 +285,7 @@ accordingly, so we shouldn't need two different endpoints.
 Now let's change that code to this:
 
 ```typescript title="my-backend/endpoints/comments.ts"
-import { Chisel } from "@chiselstrike/chiselstrike"
+import { json } from "@chiselstrike/chiselstrike"
 import { BlogComment } from "../models/models"
 
 export default async function chisel(req) {
@@ -296,13 +295,13 @@ export default async function chisel(req) {
         const by = payload["by"] || "anonymous";
         const created = BlogComment.build({'content': content, 'by': by});
         await created.save();
-        return Chisel.json('inserted ' + created.id);
+        return json('inserted ' + created.id);
     } else if (req.method == 'GET') {
         let comments = [];
         await BlogComment.cursor().forEach(c => {
             comments.push(c);
         });
-        return Chisel.json(comments);
+        return json(comments);
     } else {
         return new Response("Wrong method", { status: 405 });
     }
