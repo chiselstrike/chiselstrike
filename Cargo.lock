@@ -100,7 +100,7 @@ dependencies = [
 
 [[package]]
 name = "api"
-version = "0.5.0"
+version = "0.5.1"
 dependencies = [
  "anyhow",
  "tsc_compile",
@@ -444,7 +444,7 @@ dependencies = [
 
 [[package]]
 name = "cli"
-version = "0.5.0"
+version = "0.5.1"
 dependencies = [
  "anyhow",
  "compile",
@@ -480,7 +480,7 @@ dependencies = [
 
 [[package]]
 name = "compile"
-version = "0.5.0"
+version = "0.5.1"
 dependencies = [
  "anyhow",
  "swc_common",
@@ -3409,12 +3409,12 @@ dependencies = [
 
 [[package]]
 name = "serde_urlencoded"
-version = "0.7.0"
+version = "0.7.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "edfa57a7f8d9c1d260a549e7224100f6c43d43f9103e06dd8b4095a9b2b43ce9"
+checksum = "d3491c14715ca2294c4d6a88f15e84739788c1d030eed8c110436aafdaa2f3fd"
 dependencies = [
  "form_urlencoded",
- "itoa 0.4.8",
+ "itoa 1.0.1",
  "ryu",
  "serde",
 ]
@@ -3432,7 +3432,7 @@ dependencies = [
 
 [[package]]
 name = "server"
-version = "0.5.0"
+version = "0.5.1"
 dependencies = [
  "anyhow",
  "api",
@@ -4169,7 +4169,7 @@ dependencies = [
 
 [[package]]
 name = "third_party"
-version = "0.5.0"
+version = "0.5.1"
 
 [[package]]
 name = "thiserror"
@@ -4502,7 +4502,7 @@ checksum = "59547bce71d9c38b83d9c0e92b6066c4253371f15005def0c30d9657f50c7642"
 
 [[package]]
 name = "tsc_compile"
-version = "0.5.0"
+version = "0.5.1"
 dependencies = [
  "anyhow",
  "deno_core",
@@ -4676,9 +4676,9 @@ checksum = "070c2eb79ba268848a73885f94a83b86d9e6441c5d5b10727d5f8989db2c8edc"
 
 [[package]]
 name = "urlpattern"
-version = "0.1.3"
+version = "0.1.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8f7decaf7b744aab3251b934f4b92b2d1db77d12b23d76730b55ac2c80956ba9"
+checksum = "b45a3aa9d6c33eaea42eab9b4cd483373efa62a02d6dd6193452513db41a860b"
 dependencies = [
  "derive_more",
  "regex",

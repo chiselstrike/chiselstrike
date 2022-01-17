@@ -1,6 +1,6 @@
 {
   "name": "@chiselstrike/chiselstrike-cli",
-  "version": "0.5.0",
+  "version": "0.5.1",
   "description": "ChiselStrike CLI",
   "author": "Pekka Enberg <penberg@chiselstrike.com>",
   "main": "binary.js",
