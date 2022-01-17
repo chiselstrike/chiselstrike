@@ -25,6 +25,7 @@ fi
 version=$1
 
 cargo set-version --workspace $1
+cargo update
 
 cwd=$(pwd)
 
