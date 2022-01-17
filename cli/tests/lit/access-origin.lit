@@ -3,12 +3,12 @@
 # RUN: sh -e @file
 
 cat << EOF > "$TEMPDIR/endpoints/foo.js"
-import { Chisel } from "@chiselstrike/chiselstrike"
+import { json } from "@chiselstrike/chiselstrike"
 export default async function chisel(req: Request) {
     if (req.method == 'GET') {
         return new Response("foo");
     } else {
-        return Chisel.json("error", 405);
+        return json("error", 405);
     }
 }
 EOF

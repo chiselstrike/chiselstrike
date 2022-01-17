@@ -396,13 +396,27 @@ async fn create_deno<P: AsRef<Path>>(base_directory: P, inspect_brk: bool) -> Re
     // FIXME: Include these files in the snapshop
 
     let chisel = chisel_js().to_string();
-
     let chisel_path = base_directory.as_ref().join("chisel.js");
     fs::write(&chisel_path, &chisel).await?;
-
     let chisel_path = chisel_path.to_str().unwrap().to_string();
+
+    let main = "import * as Chisel from \"./chisel.js\";
+                       globalThis.Chisel = Chisel;"
+        .to_string();
+    let main_path = base_directory.as_ref().join("main.js");
+    fs::write(&main_path, &main).await?;
+    let main_path = main_path.to_str().unwrap().to_string();
+
     {
         let mut code_map = d.module_loader.code_map.borrow_mut();
+        code_map.insert(
+            main_path.clone(),
+            VersionedCode {
+                code: main,
+                version: 0,
+            },
+        );
+
         code_map.insert(
             chisel_path.clone(),
             VersionedCode {
@@ -413,7 +427,7 @@ async fn create_deno<P: AsRef<Path>>(base_directory: P, inspect_brk: bool) -> Re
     }
 
     worker
-        .execute_main_module(&ModuleSpecifier::parse(&format!("file://{}", &chisel_path)).unwrap())
+        .execute_main_module(&ModuleSpecifier::parse(&format!("file://{}", &main_path)).unwrap())
         .await?;
     Ok(d)
 }

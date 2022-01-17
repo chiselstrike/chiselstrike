@@ -29,7 +29,7 @@ The `ChiselEntity` base class that our `User` entity extends provides a `save()`
 We can, for example, write the following endpoint that takes input as JSON, builds a `User` entity, and persists it with the `save()` method as follows:
 
 ```typescript title="endpoints/create.ts"
-import { Chisel } from "@chiselstrike/chiselstrike"
+import { json } from "@chiselstrike/chiselstrike"
 import { User } from "../models/user"
 
 export default async function (req) {
@@ -39,7 +39,7 @@ export default async function (req) {
   const city = payload["city"] || "";
   const user = User.build({ username: username, email: email, city: city });
   await user.save();
-  return Chisel.json('Created ' + user.username);
+  return json('Created ' + user.username);
 }
 ```
 
@@ -55,7 +55,7 @@ Please note that the ChiselStrike runtime assigns an `id` to your entity automat
 For example, you could write the following endpoint that takes the same JSON, but updates the `User` entity based on the provided `username`:
 
 ```typescript title="endpoints/update.ts"
-import { Chisel } from "@chiselstrike/chiselstrike"
+import { json } from "@chiselstrike/chiselstrike"
 import { User } from "../models/user"
 
 export default async function (req) {
@@ -67,7 +67,7 @@ export default async function (req) {
   user.email = email;
   user.city = city;
   await user.save();
-  return Chisel.json('Updated ' + user.username);
+  return json('Updated ' + user.username);
 }
 ```
 
@@ -87,13 +87,13 @@ The `ChiselEntity` base class provides two convenience methods, `findOne()` and 
 For example, to query one entity with a given `username`, you could define the following endpoint:
 
 ```typescript title="endpoints/find-one.ts"
-import { Chisel } from "@chiselstrike/chiselstrike"
+import { json } from "@chiselstrike/chiselstrike"
 import { User } from "../models/user"
 
 export default async function (req) {
   const payload = await req.json();
   const user = await User.findOne(payload);
-  return Chisel.json('Found ' + user.username);
+  return json.json('Found ' + user.username);
 }
 ```
 
@@ -107,13 +107,13 @@ $ curl -d '{ "email": "alice@mit.edu" }' localhost:8080/dev/find-one
 To find multiple entities, you can use the `findMany()` method. For example, you can write the following endpoint:
 
 ```typescript title="endpoints/find-many.ts"
-import { Chisel } from "@chiselstrike/chiselstrike"
+import { json } from "@chiselstrike/chiselstrike"
 import { User } from "../models/user"
 
 export default async function (req) {
   const payload = await req.json();
   const user = await User.findMany(payload);
-  return Chisel.json('Found ' + user.map(user => user.username));
+  return json('Found ' + user.map(user => user.username));
 }
 ```
 
@@ -171,13 +171,13 @@ The ChiselStrike runtime does not perform query optimizations in the current rel
 For example, the `findOne()` example could be written using the cursor-based API as follows:
 
 ```typescript title="endpoints/find-one-cursor.ts"
-import { Chisel } from "@chiselstrike/chiselstrike"
+import { json } from "@chiselstrike/chiselstrike"
 import { User } from "../models/user"
 
 export default async function (req) {
   const payload = await req.json();
   const users = await User.cursor().filter(payload).take(1).toArray();
-  return Chisel.json('Found ' + users.map(user => user.username));
+  return json('Found ' + users.map(user => user.username));
 }
 ```
 

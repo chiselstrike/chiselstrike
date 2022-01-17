@@ -307,49 +307,52 @@ export class OAuthUser extends ChiselEntity {
     username: string | undefined = undefined;
 }
 
-export const Chisel = {
-    api: {
-        ChiselCursor: ChiselCursor,
-        chiselIterator: chiselIterator,
-    },
-
-    buildReadableStreamForBody: function (rid: number) {
-        return new ReadableStream<string>({
-            async pull(controller: ReadableStreamDefaultController) {
-                const chunk = await Deno.core.opAsync("chisel_read_body", rid);
-                if (chunk) {
-                    controller.enqueue(chunk);
-                } else {
-                    controller.close();
-                    Deno.core.opSync("op_close", rid);
-                }
-            },
-            cancel() {
-                Deno.core.opSync("op_close", rid);
-            },
-        });
-    },
-
-    json: function (body: unknown, status = 200) {
-        return new Response(JSON.stringify(body), {
-            status: status,
-            headers: [
-                ["content-type", "application/json"],
-            ],
-        });
-    },
+export const api = {
+    ChiselCursor: ChiselCursor,
+    chiselIterator: chiselIterator,
 };
 
-/* eslint-disable @typescript-eslint/no-unused-vars */
-// deno-lint-ignore-file
+export function buildReadableStreamForBody(rid: number) {
+    return new ReadableStream<string>({
+        async pull(controller: ReadableStreamDefaultController) {
+            const chunk = await Deno.core.opAsync("chisel_read_body", rid);
+            if (chunk) {
+                controller.enqueue(chunk);
+            } else {
+                controller.close();
+                Deno.core.opSync("op_close", rid);
+            }
+        },
+        cancel() {
+            Deno.core.opSync("op_close", rid);
+        },
+    });
+}
+
+export function json(body: unknown, status = 200) {
+    return new Response(JSON.stringify(body), {
+        status: status,
+        headers: [
+            ["content-type", "application/json"],
+        ],
+    });
+}
+
 export function labels(..._val: string[]) {
     return <T>(_target: T, _propertyName: string) => {
         // chisel-decorator, no content
     };
 }
 
-(globalThis as unknown as { Chisel: typeof Chisel }).Chisel = Chisel;
-(globalThis as unknown as { ChiselEntity: typeof ChiselEntity }).ChiselEntity =
-    ChiselEntity;
-(globalThis as unknown as { OAuthUser: typeof OAuthUser }).OAuthUser =
-    OAuthUser;
+const OAuthUserAlias = OAuthUser;
+const ChiselEntityAlias = ChiselEntity;
+
+declare global {
+    // deno-lint-ignore no-var
+    var OAuthUser: typeof OAuthUserAlias; // eslint-disable-line no-var
+    // deno-lint-ignore no-var
+    var ChiselEntity: typeof ChiselEntityAlias; // eslint-disable-line no-var
+}
+
+globalThis.OAuthUser = OAuthUser;
+globalThis.ChiselEntity = ChiselEntity;
