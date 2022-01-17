@@ -104,15 +104,3 @@ await chiselFetch(chisel, 'api/dev/comments, {
 When an endpoint is invoked like this, the backend will know the
 identity of your logged-in user.  (And if your user logged out, this
 call is identical to calling `fetch` directly.)
-
-:::warning
-
-There is currently a known CORS limitation in ChiselStrike that makes
-direct requests from browser JavaScript to a ChiselStrike endpoint
-fail in preflight.  To work around this, we recommend proxy-routing
-through your frontend server.  For example, you can use NextJS
-[rewrites](https://nextjs.org/docs/api-reference/next.config.js/rewrites)
-or Gatsby [proxying](https://www.gatsbyjs.com/docs/api-proxy/).  The
-above `chiselFetch` example relies on such proxying.
-
-:::

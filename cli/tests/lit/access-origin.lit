@@ -3,27 +3,19 @@
 # RUN: sh -e @file
 
 cat << EOF > "$TEMPDIR/endpoints/foo.js"
+import { Chisel } from "@chiselstrike/chiselstrike"
 export default async function chisel(req: Request) {
-    return new Response("foo");
-}
-EOF
-
-cat << EOF > "$TEMPDIR/endpoints/bar.js"
-export default async function chisel(req: Request) {
-    return new Response("bar", {
-        headers: [
-            ["access-control-allow-origin", "https://chiselstrike.com"],
-            ["access-control-allow-methods", "get"],
-            ["access-control-allow-headers", "foo"]
-        ]
-    });
+    if (req.method == 'GET') {
+        return new Response("foo");
+    } else {
+        return Chisel.json("error", 405);
+    }
 }
 EOF
 
 cd "$TEMPDIR"
 $CHISEL apply
 
-# CHECK: End point defined: /dev/bar
 # CHECK: End point defined: /dev/foo
 
 $CURL -o - $CHISELD_HOST/dev/foo
@@ -34,12 +26,9 @@ $CURL -o - $CHISELD_HOST/dev/foo
 # CHECK: access-control-allow-headers: Content-Type,ChiselStrikeToken
 # CHECK: foo
 
-echo
-
-$CURL -o - $CHISELD_HOST/dev/bar
-
+$CURL -XOPTIONS $CHISELD_HOST/dev/foo
 # CHECK: HTTP/1.1 200 OK
-# CHECK: access-control-allow-headers: foo
-# CHECK: access-control-allow-methods: get
-# CHECK: access-control-allow-origin: https://chiselstrike.com
-# CHECK: bar
+# CHECK: access-control-allow-origin: *
+# CHECK: access-control-allow-methods: POST, PUT, GET, OPTIONS
+# CHECK: access-control-allow-headers: Content-Type,ChiselStrikeToken
+# CHECK: ok

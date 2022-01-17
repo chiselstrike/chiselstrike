@@ -154,6 +154,11 @@ impl ApiService {
                 };
             }
 
+            // TODO: Make this optional, for users who want to reject some OPTIONS requests.
+            if req.method() == "OPTIONS" {
+                return response_template().body("ok".to_string().into()); // Makes CORS preflights pass.
+            }
+
             let username = match req.headers().get("ChiselStrikeToken") {
                 Some(token) => {
                     let token = token.to_str();
@@ -258,4 +263,14 @@ pub(crate) fn spawn(
         debug!("hyper shutdown");
         ret
     }))
+}
+
+pub(crate) fn response_template() -> http::response::Builder {
+    Response::builder()
+        .header("Access-Control-Allow-Origin", "*")
+        .header("Access-Control-Allow-Methods", "POST, PUT, GET, OPTIONS")
+        .header(
+            "Access-Control-Allow-Headers",
+            "Content-Type,ChiselStrikeToken",
+        )
 }
