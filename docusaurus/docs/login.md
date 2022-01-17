@@ -32,8 +32,8 @@ after initialization, its functions can be run either server-side or
 browser-side.
 
 We currently only support login via GitHub, using a test OAuth app
-named `TestAppOne`.  In the future, we will support multiple OAuth
-providers with client-specific OAuth identities.
+named `ChiselStrike Beta`.  In the future, we will support multiple
+OAuth providers with client-specific OAuth identities.
 
 :::
 
