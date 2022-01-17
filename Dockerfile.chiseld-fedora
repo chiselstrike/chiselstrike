@@ -7,9 +7,6 @@ ENV EXECUTOR_THREADS=1
 ENV METADATA_DB_URI="sqlite:///home/chiseld/chiseld.db?mode=rwc"
 ENV RPC_PORT=50051
 
-RUN yum -y update && \
-  yum -y install openssl openssl-libs
-
 RUN \
   groupadd -g 1999 -r chiseld && useradd -r -u 1999 -g chiseld -d /home/chiseld -G chiseld -m -s /bin/bash chiseld && \
   sed -i /etc/sudoers -re 's/^%sudo.*/%sudo ALL=(ALL:ALL) NOPASSWD: ALL/g' && \
