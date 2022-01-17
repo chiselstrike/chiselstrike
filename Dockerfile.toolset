@@ -3,13 +3,8 @@ FROM ubuntu:20.04
 COPY target/release/chisel /usr/local/bin/chisel
 
 RUN \
-  groupadd -g 1999 -r chiseld && useradd -r -u 1999 -g chiseld -d /home/chiseld -G chiseld -m -s /bin/bash chiseld && \
-  sed -i /etc/sudoers -re 's/^%sudo.*/%sudo ALL=(ALL:ALL) NOPASSWD: ALL/g' && \
-  sed -i /etc/sudoers -re 's/^root.*/root ALL=(ALL:ALL) NOPASSWD: ALL/g' && \
-  sed -i /etc/sudoers -re 's/^#includedir.*/## **Removed the include directive** ##"/g' && \
-  echo "chiseld ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers && \
-  echo "Customized the sudoers file for passwordless access to the chiseld user!" && \
-  echo "chiseld user:";  su - chiseld -c id 
+  groupadd -g 345 -r chiseld && \
+  useradd -r -u 345 -g chiseld -d /home/chiseld -G chiseld -m -s /bin/bash chiseld
 
 USER chiseld
-CMD exec /bin/bash -c "trap : TERM INT; sleep infinity & wait"
+CMD ["/bin/bash","-c", "sleep infinity"] 
