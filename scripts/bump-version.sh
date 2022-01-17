@@ -26,8 +26,10 @@ version=$1
 
 cargo set-version --workspace $1
 
-cd packages/chiselstrike && npm version --no-git-tag-version $version
-cd packages/chiselstrike-cli && npm version --no-git-tag-version $version
+cwd=$(pwd)
+
+cd "$cwd/packages/chiselstrike" && npm version --no-git-tag-version $version
+cd "$cwd/packages/chiselstrike-cli" && npm version --no-git-tag-version $version
 
 git commit -a -m "ChiselStrike v$version"
 
