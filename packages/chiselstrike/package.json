@@ -10,7 +10,7 @@
     "postinstall": "./npm/install.js"
   },
   "scripts": {
-    "build": "tsc && cp -La ../../api/src/lib.deno_core.d.ts lib/"
+    "build": "tsc --noResolve && cp -La ../../api/src/lib.deno_core.d.ts lib/"
   },
   "dependencies": {
     "typescript": "^4.5.4"
