@@ -8,6 +8,6 @@
     "outDir": "./lib",
     "target": "ESnext"
   },
-  "include": ["src/chisel.ts", "dts/lib.deno_core.d.ts"],
+  "include": ["src/chisel.ts", "src/lib.deno_core.d.ts"],
   "exclude": ["node_modules", "**/__tests__/*"]
 }
