@@ -12,9 +12,8 @@ that illustrate important bits of functionality.
 
 :::note
 We assume here that you are self-hosting ChiselStrike.  You should
-have received from us a package with executable programs `chisel` and
-`chiseld`.  Keep both in the same directory, and ensure this directory
-is in your PATH.
+have received from us information on how to access ChiselStrike npm
+packages.
 :::
 
 ChiselStrike is a backend generator.  It provides instant backend
@@ -45,19 +44,30 @@ Obviously, we get "Connection refused", since ChiselStrike isn't
 active yet.  Let's change that: in another window, type this:
 
 ```
-$ chisel new my-backend
-Initialized ChiselStrike project in my-backend
+$ npx @chiselstrike/create-chiselstrike-app my-backend
+Creating a new ChiselStrike project in my-backend ...
+Installing packages. This might take a couple of minutes.
+
+added 25 packages, and audited 26 packages in 8s
+
+3 packages are looking for funding
+  run `npm fund` for details
+
+found 0 vulnerabilities
 $ cd my-backend
-$ npm install
-$ chisel dev
+$ npm run dev
+
+> hello@1.0.0 dev
+> chisel dev
+
 🙇‍♂️ Thank you for your interest in the ChiselStrike private beta! (Beta-Jan22.2)
 ⚠️  This is provided to you for evaluation purposes and should not be used to host production at this time
 Docs with a description of expected functionality and command references at https://docs.chiselstrike.com
 For any question, concerns, or early feedback, contact us at beta@chiselstrike.com
 
-🍾 We hope you have a great 2022! 🥂
+ 🍾 We hope you have a great 2022! 🥂
 
-INFO - ChiselStrike is ready 🚀 - URL: http://127.0.0.1:8080 
+INFO - ChiselStrike is ready 🚀 - URL: http://127.0.0.1:8080
 End point defined: /dev/hello
 ```
 
