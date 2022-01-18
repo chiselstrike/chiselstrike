@@ -59,7 +59,12 @@ pub(crate) struct Relation {
 }
 
 fn get_columns(val: &serde_json::Value) -> Result<Vec<(String, Type)>> {
-    let columns = val["columns"].as_array().ok_or_else(|| anyhow!("foo"))?;
+    let columns = val["columns"].as_array().ok_or_else(|| {
+        anyhow!(
+            "internal error: `columns` field is either missing or not an array: {}",
+            val
+        )
+    })?;
     let mut ret = vec![];
     for c in columns {
         let c = c
@@ -106,7 +111,12 @@ pub(crate) async fn backing_store_from_type(
 }
 
 fn convert_backing_store(val: &serde_json::Value) -> Result<Relation> {
-    let name = val["name"].as_str().ok_or_else(|| anyhow!("foo"))?;
+    let name = val["name"].as_str().ok_or_else(|| {
+        anyhow!(
+            "internal error: `name` field is either missing or not a string: {}",
+            val
+        )
+    })?;
     let limit = val["limit"].as_u64();
     let columns = get_columns(val)?;
     let runtime = runtime::get();
@@ -178,7 +188,12 @@ fn convert_filter(val: &serde_json::Value) -> Result<Relation> {
 }
 
 pub(crate) fn convert(val: &serde_json::Value) -> Result<Relation> {
-    let kind = val["kind"].as_str().ok_or_else(|| anyhow!("foo"))?;
+    let kind = val["kind"].as_str().ok_or_else(|| {
+        anyhow!(
+            "internal error: `kind` field is either missing or not a string: {}",
+            val
+        )
+    })?;
     match kind {
         "BackingStore" => convert_backing_store(val),
         "Join" => convert_join(val),
