@@ -93,7 +93,7 @@ import { User } from "../models/user"
 export default async function (req) {
   const payload = await req.json();
   const user = await User.findOne(payload);
-  return json.json('Found ' + user.username);
+  return json('Found ' + user.username);
 }
 ```
 
