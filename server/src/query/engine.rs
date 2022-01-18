@@ -73,10 +73,10 @@ impl TryFrom<&Field> for ColumnDef {
     }
 }
 
-/// An SQL string with placeholders, plus its parameter values.  Keeps them all alive so they can be fed to
+/// An SQL string with placeholders, plus its argument values.  Keeps them all alive so they can be fed to
 /// sqlx::Query by reference.
 #[derive(Debug)]
-struct SqlWithPlaceholders {
+struct SqlWithArguments {
     /// SQL query text with placeholders $1, $2, ...
     sql: String,
     /// Values for $n placeholders.
@@ -299,7 +299,7 @@ impl QueryEngine {
         Ok(())
     }
 
-    async fn run_sql_queries(&self, queries: &[SqlWithPlaceholders]) -> anyhow::Result<()> {
+    async fn run_sql_queries(&self, queries: &[SqlWithArguments]) -> anyhow::Result<()> {
         let mut transaction = self.start_transaction().await?;
         for q in queries {
             let mut sqlx_query = sqlx::query(&q.sql);
@@ -329,11 +329,11 @@ impl QueryEngine {
         &self,
         ty: &ObjectType,
         ty_value: &JsonObject,
-    ) -> anyhow::Result<(Vec<SqlWithPlaceholders>, IdTree)> {
+    ) -> anyhow::Result<(Vec<SqlWithArguments>, IdTree)> {
         let mut child_ids = HashMap::<String, IdTree>::new();
         let mut obj_id = Option::<String>::None;
         let mut query_args = Vec::<SqlValue>::new();
-        let mut inserts = Vec::<SqlWithPlaceholders>::new();
+        let mut inserts = Vec::<SqlWithArguments>::new();
 
         for field in ty.all_fields() {
             let incompatible_data =
@@ -371,7 +371,7 @@ impl QueryEngine {
             query_args.push(arg);
         }
 
-        inserts.push(SqlWithPlaceholders {
+        inserts.push(SqlWithArguments {
             sql: self.make_insert_query(ty, ty_value)?,
             args: query_args,
         });
@@ -486,7 +486,7 @@ impl QueryEngine {
         &self,
         ty: &ObjectType,
         ty_value: &JsonObject,
-    ) -> anyhow::Result<SqlWithPlaceholders> {
+    ) -> anyhow::Result<SqlWithArguments> {
         let mut query_args = Vec::<SqlValue>::new();
         for field in ty.all_fields() {
             let arg = self.convert_to_argument(field, ty_value).with_context(|| {
@@ -495,7 +495,7 @@ impl QueryEngine {
             query_args.push(arg);
         }
 
-        Ok(SqlWithPlaceholders {
+        Ok(SqlWithArguments {
             sql: self.make_insert_query(ty, ty_value)?,
             args: query_args,
         })
