@@ -3,7 +3,7 @@
 # RUN: sh -e @file
 
 cat << EOF > "$TEMPDIR/models/types.ts"
-export class Foo extends ChiselEntity {
+export class Foo extends Chisel.ChiselEntity {
 	a: string = "dfl1";
 	b: number = 0.0;
 	c: boolean = false;
@@ -44,7 +44,7 @@ $CURL -o - $CHISELD_HOST/dev/read
 # CHECK: dfl1 0 false 2 value
 
 cat << EOF > "$TEMPDIR/models/types.ts"
-export class Foo extends ChiselEntity {
+export class Foo extends Chisel.ChiselEntity {
 	a: string = "dfl1";
 	b: number = 0.0;
 	c: boolean = false;
