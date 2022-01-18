@@ -55,10 +55,10 @@ $CURL $CHISELD_HOST/staging/count
 # ----- Check functionality with nested types -----
 
 cat << EOF > "$TEMPDIR/models/types.ts"
-export class Employee extends ChiselEntity {
+export class Employee extends Chisel.ChiselEntity {
    name: string;
 }
-export class Company extends ChiselEntity {
+export class Company extends Chisel.ChiselEntity {
    name: string;
    ceo: Employee;
    cfo: Employee;

@@ -5,8 +5,8 @@
 cd "$TEMPDIR"
 
 cat << EOF > "$TEMPDIR/models/types.ts"
-export class Foo extends ChiselEntity { a: string; }
-export class Bar extends ChiselEntity { b: string; }
+export class Foo extends Chisel.ChiselEntity { a: string; }
+export class Bar extends Chisel.ChiselEntity { b: string; }
 EOF
 
 cat << EOF > "$TEMPDIR/endpoints/hello.ts"

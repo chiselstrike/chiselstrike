@@ -338,12 +338,3 @@ export function labels(..._val: string[]) {
         // chisel-decorator, no content
     };
 }
-
-const ChiselEntityAlias = ChiselEntity;
-
-declare global {
-    // deno-lint-ignore no-var
-    var ChiselEntity: typeof ChiselEntityAlias; // eslint-disable-line no-var
-}
-
-globalThis.ChiselEntity = ChiselEntity;

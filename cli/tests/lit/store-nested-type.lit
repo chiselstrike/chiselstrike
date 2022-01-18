@@ -3,11 +3,11 @@
 # RUN: sh -e @file
 
 cat << EOF > "$TEMPDIR/models/types.ts"
-export class Person extends ChiselEntity {
+export class Person extends Chisel.ChiselEntity {
     firstName: string;
     lastName: string;
 }
-export class Company extends ChiselEntity {
+export class Company extends Chisel.ChiselEntity {
     name: string;
     ceo: Person;
 }
