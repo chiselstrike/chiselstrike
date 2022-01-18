@@ -73,10 +73,17 @@ impl TryFrom<&Field> for ColumnDef {
     }
 }
 
+/// An SQL string with placeholders, plus its parameter values.  Keeps them all alive so they can be fed to
+/// sqlx::Query by reference.
 #[derive(Debug)]
-struct SqlQuery {
-    query: String,
+struct SqlWithPlaceholders {
+    /// SQL query text with placeholders $1, $2, ...
+    sql: String,
+    /// Values for $n placeholders.
     args: Vec<SqlValue>,
+    // We could theoretically create sqlx::Query and bind it as soon as self.sql and self.args are final.
+    // Unfortunately, this requires hitting the precise ProcRUSTean incantation required to have a Query field,
+    // which, let's be honest, is never going to happen. >:-[
 }
 
 /// Represents recurent structure of nested object ids. Each level holds
@@ -292,10 +299,10 @@ impl QueryEngine {
         Ok(())
     }
 
-    async fn run_sql_queries(&self, queries: &[SqlQuery]) -> anyhow::Result<()> {
+    async fn run_sql_queries(&self, queries: &[SqlWithPlaceholders]) -> anyhow::Result<()> {
         let mut transaction = self.start_transaction().await?;
         for q in queries {
-            let mut sqlx_query = sqlx::query(&q.query);
+            let mut sqlx_query = sqlx::query(&q.sql);
             for arg in &q.args {
                 match arg {
                     SqlValue::Bool(arg) => sqlx_query = sqlx_query.bind(arg),
@@ -322,11 +329,11 @@ impl QueryEngine {
         &self,
         ty: &ObjectType,
         ty_value: &JsonObject,
-    ) -> anyhow::Result<(Vec<SqlQuery>, IdTree)> {
+    ) -> anyhow::Result<(Vec<SqlWithPlaceholders>, IdTree)> {
         let mut child_ids = HashMap::<String, IdTree>::new();
         let mut obj_id = Option::<String>::None;
         let mut query_args = Vec::<SqlValue>::new();
-        let mut inserts = Vec::<SqlQuery>::new();
+        let mut inserts = Vec::<SqlWithPlaceholders>::new();
 
         for field in ty.all_fields() {
             let incompatible_data =
@@ -364,8 +371,8 @@ impl QueryEngine {
             query_args.push(arg);
         }
 
-        inserts.push(SqlQuery {
-            query: self.make_insert_query(ty, ty_value)?,
+        inserts.push(SqlWithPlaceholders {
+            sql: self.make_insert_query(ty, ty_value)?,
             args: query_args,
         });
         let obj_id = obj_id
@@ -479,7 +486,7 @@ impl QueryEngine {
         &self,
         ty: &ObjectType,
         ty_value: &JsonObject,
-    ) -> anyhow::Result<SqlQuery> {
+    ) -> anyhow::Result<SqlWithPlaceholders> {
         let mut query_args = Vec::<SqlValue>::new();
         for field in ty.all_fields() {
             let arg = self.convert_to_argument(field, ty_value).with_context(|| {
@@ -488,8 +495,8 @@ impl QueryEngine {
             query_args.push(arg);
         }
 
-        Ok(SqlQuery {
-            query: self.make_insert_query(ty, ty_value)?,
+        Ok(SqlWithPlaceholders {
+            sql: self.make_insert_query(ty, ty_value)?,
             args: query_args,
         })
     }
