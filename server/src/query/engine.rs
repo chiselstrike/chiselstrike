@@ -2,7 +2,7 @@
 
 use crate::db::{sql, Relation, SqlValue};
 use crate::query::{DbConnection, Kind, QueryError};
-use crate::types::{Field, ObjectDelta, ObjectType, Type};
+use crate::types::{Field, ObjectDelta, ObjectType, Type, OAUTHUSER_TYPE_NAME};
 use anyhow::{anyhow, Context as AnyhowContext};
 use futures::stream::BoxStream;
 use futures::stream::Stream;
@@ -340,6 +340,9 @@ impl QueryEngine {
                 || QueryError::IncompatibleData(field.name.to_owned(), ty.name().to_owned());
             let arg = match &field.type_ {
                 Type::Object(nested_type) => {
+                    if nested_type.name() == OAUTHUSER_TYPE_NAME {
+                        anyhow::bail!("Cannot save into type {}.", OAUTHUSER_TYPE_NAME);
+                    }
                     let nested_value = ty_value
                         .get(&field.name)
                         .context("json object doesn't have required field")
