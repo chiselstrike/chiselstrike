@@ -185,6 +185,7 @@ following file:
 
 ```typescript title="my-backend/endpoints/populate-comments.ts"
 import { Chisel } from "@chiselstrike/chiselstrike"
+import { BlogComment } from "../models/models";
 
 export default async function chisel(_req) {
     let promises = [];
@@ -293,7 +294,7 @@ export default async function chisel(req) {
         const payload = await req.json();
         const content = payload["content"] || "";
         const by = payload["by"] || "anonymous";
-        const created = new BlogComment().build(content, by);
+        const created = BlogComment.build({'content': content, 'by': by});
         await created.save();
         return Chisel.json('inserted ' + created.id);
     } else if (req.method == 'GET') {
@@ -303,7 +304,7 @@ export default async function chisel(req) {
         });
         return Chisel.json(comments);
     } else {
-        return new Response(body = "Wrong method", status = 405);
+        return new Response("Wrong method", { status: 405 });
     }
 }
 ```

@@ -24,12 +24,12 @@ talking about.  This is done using _labels_: TypeScript decorators on
 the fields of your models.  To illustrate, please edit the file
 `models/models.ts` like this:
 
-```typescript title="my-backend/types/types.ts"
+```typescript title="my-backend/models/models.ts"
 import { ChiselEntity, labels } from "@chiselstrike/chiselstrike"
 
-class BlogComment {
+export class BlogComment extends ChiselEntity {
     content: string;
-     @labels("pii") by: string;
+    @labels("pii") by: string;
 }
 ```
 
