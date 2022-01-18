@@ -115,7 +115,9 @@ fn compile(code: &str, lib: Option<&str>) -> Result<String> {
     inner.write_all(code.as_bytes())?;
     inner.flush()?;
     let path = f.path().to_str().unwrap();
-    Ok(compile_ts_code(path, lib)?.remove(path).unwrap())
+    Ok(compile_ts_code(path, lib, Default::default())?
+        .remove(path)
+        .unwrap())
 }
 
 async fn load_code(specifier: ModuleSpecifier) -> Result<ModuleSource> {
