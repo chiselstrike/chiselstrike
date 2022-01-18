@@ -339,15 +339,11 @@ export function labels(..._val: string[]) {
     };
 }
 
-const OAuthUserAlias = OAuthUser;
 const ChiselEntityAlias = ChiselEntity;
 
 declare global {
     // deno-lint-ignore no-var
-    var OAuthUser: typeof OAuthUserAlias; // eslint-disable-line no-var
-    // deno-lint-ignore no-var
     var ChiselEntity: typeof ChiselEntityAlias; // eslint-disable-line no-var
 }
 
-globalThis.OAuthUser = OAuthUser;
 globalThis.ChiselEntity = ChiselEntity;
