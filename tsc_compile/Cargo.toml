@@ -12,6 +12,9 @@ ureq = "2.4.0"
 url = "2.2.2"
 v8 = "0.36.0"
 
+[dev-dependencies]
+tempfile = "3.2.0"
+
 [build-dependencies]
 anyhow = "1.0"
 deno_core = "0.114.0"

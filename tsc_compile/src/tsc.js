@@ -92,7 +92,11 @@ function compile(file, lib) {
         const ret = [];
         for (const name of moduleNames) {
             const fname = Deno.core.opSync("fetch", name, containingFile);
-            ret.push({ resolvedFileName: fname });
+            // FIXME: Not every file is typescript. We say it is to
+            // handle user libraries that don't end in .ts
+            // (like @foo/bar). We should probably get the extension
+            // from rust.
+            ret.push({ resolvedFileName: fname, extension: ".ts" });
         }
         return ret;
     };

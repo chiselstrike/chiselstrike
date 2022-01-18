@@ -33,6 +33,9 @@ struct DownloadMap {
     // maps absolute path without extension to the input as written.
     input_files: HashMap<String, String>,
 
+    // User provided libraries
+    extra_libs: HashMap<String, String>,
+
     diagnostics: String,
 }
 
@@ -53,6 +56,9 @@ thread_local! {
 }
 
 fn fetch_aux(map: &mut DownloadMap, path: String, mut base: String) -> Result<String> {
+    if map.extra_libs.contains_key(&path) {
+        return Ok(path);
+    }
     if let Some(url_and_content) = map.path_to_url_content.get(&base) {
         base = url_and_content.url.to_string();
     } else {
@@ -82,6 +88,9 @@ fn fetch(_op_state: &mut OpState, path: String, base: String) -> Result<String> 
 }
 
 fn read_aux(map: &mut DownloadMap, path: String) -> Result<String> {
+    if let Some(v) = map.extra_libs.get(&path) {
+        return Ok(v.to_string());
+    }
     if let Some(c) = map.path_to_url_content.get(&path) {
         return Ok(c.content.clone());
     }
@@ -176,9 +185,14 @@ fn without_extension(path: &str) -> &str {
 
 pub static SNAPSHOT: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/SNAPSHOT.bin"));
 
-pub fn compile_ts_code(file_name: &str, lib_name: Option<&str>) -> Result<HashMap<String, String>> {
+pub fn compile_ts_code(
+    file_name: &str,
+    extra_default_lib: Option<&str>,
+    extra_libs: HashMap<String, String>,
+) -> Result<HashMap<String, String>> {
     FILES.with(|m| {
         let mut borrow = m.borrow_mut();
+        borrow.extra_libs = extra_libs;
         borrow.path_to_url_content.clear();
         borrow.url_to_path.clear();
         borrow.written.clear();
@@ -204,7 +218,7 @@ pub fn compile_ts_code(file_name: &str, lib_name: Option<&str>) -> Result<HashMa
     let global_context = runtime.global_context();
     let scope = &mut runtime.handle_scope();
     let file = v8::String::new(scope, &abs(file_name)).unwrap().into();
-    let lib = match lib_name {
+    let lib = match extra_default_lib {
         Some(v) => v8::String::new(scope, &abs(v)).unwrap().into(),
         None => v8::undefined(scope).into(),
     };
@@ -225,4 +239,23 @@ pub fn compile_ts_code(file_name: &str, lib_name: Option<&str>) -> Result<HashMa
         let borrow = m.borrow();
         Ok(borrow.written.clone())
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::compile_ts_code;
+    use anyhow::Result;
+    use std::io::Write;
+    use tempfile::Builder;
+
+    #[test]
+    fn test() -> Result<()> {
+        let mut f = Builder::new().suffix(".ts").tempfile()?;
+        f.write_all(b"import * as zed from \"@foo/bar\";")?;
+        let libs = [("@foo/bar".to_string(), "export {}".to_string())]
+            .into_iter()
+            .collect();
+        compile_ts_code(f.path().to_str().unwrap(), None, libs)?;
+        Ok(())
+    }
 }
