@@ -3,7 +3,7 @@ sidebar_position: 4
 ---
 # API versioning
 
-Now that we have defined our endpoints, types, and policies, it is time to spice things up.
+Now that we have defined our endpoints, models, and policies, it is time to spice things up.
 You may have noticed that all endpoints created by ChiselStrike have `/dev/` as part of the route.
 That's because ChiselStrike makes API versioning a first-class citizen: everything you deploy to
 ChiselStrike is deployed as part of a _version_.
@@ -77,7 +77,7 @@ and propagating changes.
   * In the command-line?
   * Through a JSON endpoint?
 
-* If two versions contain incompatible types, we will allow you to specify a function with a transformation.
+* If two versions contain incompatible models, we will allow you to specify a function with a transformation.
   * I would prefer to write this file in Typescript.
   * I would prefer to write this file in yaml, and only support simple property mappings.
   * I would prefer to write this file in yaml covering the simple cases, but embed a Typescript expression for the complex cases.

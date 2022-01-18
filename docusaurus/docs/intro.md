@@ -134,11 +134,11 @@ reference, please see [this page](chisel-backend).
 
 So how can we make the endpoint dynamic?  How do we leverage the
 ChiselStrike backend to store our comments and serve them to us when
-necessary?  This is where backend types come in -- you can describe to
+necessary?  This is where backend models come in -- you can describe to
 ChiselStrike the data you want it to store for you by defining some
-TypeScript types.  Put a file in `my-backend/types/types.ts` like this:
+TypeScript types.  Put a file in `my-backend/models/models.ts` like this:
 
-```typescript title="my-backend/types/types.ts"
+```typescript title="my-backend/models/models.ts"
 import { ChiselEntity } from "@chiselstrike/chiselstrike"
 
 export class BlogComment extends ChiselEntity {
@@ -155,7 +155,7 @@ Type defined: BlogComment
 ```
 
 :::info Feedback Requested! We could use your help!
-Currently, we don't support relations (types as part of other types). We expect
+Currently, we don't support relations (models as part of other models). We expect
 to add support for that in the next version of the beta.
 
 * Would you prefer to just add a property that references another type, or provide type decorators to guide the process?
@@ -210,7 +210,7 @@ comments.  Now we just have to read them.  Let's edit the
 
 ```typescript title="my-backend/endpoints/comments.ts"
 import { Chisel } from "@chiselstrike/chiselstrike"
-import { BlogComment } from "../types/types"
+import { BlogComment } from "../models/models"
 
 export default async function chisel(_req) {
     let comments = [];
@@ -230,7 +230,7 @@ you can access it as `c.id` in the examples above. Calling the `save()` on an ob
 Note that we changed `chisel` to an async function.  This is because
 it uses the `forEach` method (which is an async method) to go over all the stored comments.
 What makes it easy is that ChiselStrike defines the variable `BlogComment`
-(corresponding to the type `BlogComment` from types.ts), which is a collection
+(corresponding to the type `BlogComment` from models.ts), which is a collection
 of all the instances of this type that ChiselStrike has in data
 storage.  Now we can call this endpoint to see the comments we stored:
 
@@ -276,7 +276,7 @@ Now let's change that code to this:
 
 ```typescript title="my-backend/endpoints/comments.ts"
 import { Chisel } from "@chiselstrike/chiselstrike"
-import { BlogComment } from "../types/types"
+import { BlogComment } from "../models/models"
 
 export default async function chisel(req) {
     if (req.method == 'POST') {

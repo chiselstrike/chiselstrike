@@ -21,8 +21,8 @@ transformed like this whenever it is accessed".
 
 Let's first examine more precisely how you define which data we're
 talking about.  This is done using _labels_: TypeScript decorators on
-the fields of your types.  To illustrate, please edit the file
-`types/types.ts` like this:
+the fields of your models.  To illustrate, please edit the file
+`models/models.ts` like this:
 
 ```typescript title="my-backend/types/types.ts"
 import { ChiselEntity, labels } from "@chiselstrike/chiselstrike"
