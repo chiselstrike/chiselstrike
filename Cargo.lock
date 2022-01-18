@@ -3448,6 +3448,7 @@ dependencies = [
  "env_logger",
  "format-sql-query",
  "futures",
+ "http",
  "hyper",
  "itertools 0.10.3",
  "log",

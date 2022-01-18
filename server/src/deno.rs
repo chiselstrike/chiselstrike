@@ -1,6 +1,6 @@
 // SPDX-FileCopyrightText: © 2021 ChiselStrike <info@chiselstrike.com>
 
-use crate::api::{Body, RequestPath};
+use crate::api::{response_template, Body, RequestPath};
 use crate::db::convert;
 use crate::policies::FieldPolicies;
 use crate::query::engine::JsonObject;
@@ -34,7 +34,6 @@ use deno_web::BlobStore;
 use futures::stream::{try_unfold, Stream};
 use futures::FutureExt;
 use hyper::body::HttpBody;
-use hyper::header::HeaderValue;
 use hyper::Method;
 use hyper::{Request, Response, StatusCode};
 use log::debug;
@@ -716,7 +715,7 @@ pub(crate) async fn run_js(path: String, mut req: Request<hyper::Body>) -> Resul
     let iter: v8::Local<v8::Object> = try_into_or(entries.call(scope, headers.into(), &[]))?;
 
     let next: v8::Local<v8::Function> = get_member(iter, scope, "next")?;
-    let mut builder = Response::builder().status(StatusCode::from_u16(status)?);
+    let mut builder = response_template().status(StatusCode::from_u16(status)?);
 
     loop {
         let item: v8::Local<v8::Object> = try_into_or(next.call(scope, iter.into(), &[]))?;
@@ -735,14 +734,6 @@ pub(crate) async fn run_js(path: String, mut req: Request<hyper::Body>) -> Resul
             value.to_rust_string_lossy(scope),
         );
     }
-
-    let headers = builder.headers_mut().ok_or(Error::NotAResponse)?;
-    let entry = headers.entry("Access-Control-Allow-Origin");
-    entry.or_insert(HeaderValue::from_static("*"));
-    let entry = headers.entry("Access-Control-Allow-Methods");
-    entry.or_insert(HeaderValue::from_static("POST, PUT, GET, OPTIONS"));
-    let entry = headers.entry("Access-Control-Allow-Headers");
-    entry.or_insert(HeaderValue::from_static("Content-Type,ChiselStrikeToken"));
 
     let body = builder.body(Body::Stream(Box::pin(stream)))?;
     Ok(body)
