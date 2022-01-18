@@ -307,11 +307,6 @@ export class OAuthUser extends ChiselEntity {
     username: string | undefined = undefined;
 }
 
-export const api = {
-    ChiselCursor: ChiselCursor,
-    chiselIterator: chiselIterator,
-};
-
 export function buildReadableStreamForBody(rid: number) {
     return new ReadableStream<string>({
         async pull(controller: ReadableStreamDefaultController) {
