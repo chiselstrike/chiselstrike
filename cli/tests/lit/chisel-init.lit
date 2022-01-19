@@ -1,0 +1,9 @@
+# SPDX-FileCopyrightText: © 2022 ChiselStrike <info@chiselstrike.com>
+
+# RUN: sh -e @file
+
+cd "$TEMPDIR"
+
+$CHISEL init --force
+
+$CHISEL apply
