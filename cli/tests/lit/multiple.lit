@@ -1,0 +1,23 @@
+# SPDX-FileCopyrightText: © 2022 ChiselStrike <info@chiselstrike.com>
+
+# RUN: sh -e @file
+
+cp examples/person.ts "$TEMPDIR/models"
+
+cat << EOF > "$TEMPDIR/endpoints/sleep.ts"
+export default async function chisel(req: Request) {
+    await new Promise(resolve => setTimeout(resolve, 2000));
+    return new Response("sleeper");
+}
+EOF
+cd "$TEMPDIR"
+
+
+$CHISEL apply
+
+## First one will block for 2s, so we go on the background
+$CURL $CHISELD_HOST/dev/sleep &
+
+## Second one will crash if we are awaiting on a suspension point
+$CURL $CHISELD_HOST/dev/sleep
+# CHECK: sleeper
