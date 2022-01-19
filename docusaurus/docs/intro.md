@@ -94,7 +94,7 @@ easy.  We do it by adding a TypeScript file under the
 `my-backend/endpoints` directory.  Here is one:
 
 ```typescript title="my-backend/endpoints/comments.ts"
-import { json } from "@chiselstrike/chiselstrike"
+import { json } from "@chiselstrike/api"
 
 export default function chisel(_req) {
     return json("Temporarily empty");
@@ -149,7 +149,7 @@ ChiselStrike the data you want it to store for you by defining some
 TypeScript types.  Put a file in `my-backend/models/models.ts` like this:
 
 ```typescript title="my-backend/models/models.ts"
-import { ChiselEntity } from "@chiselstrike/chiselstrike"
+import { ChiselEntity } from "@chiselstrike/api"
 
 export class BlogComment extends ChiselEntity {
     content: string = "";
@@ -219,7 +219,7 @@ comments.  Now we just have to read them.  Let's edit the
 `my-backend/endpoints/comments.ts` file as follows:
 
 ```typescript title="my-backend/endpoints/comments.ts"
-import { json } from "@chiselstrike/chiselstrike"
+import { json } from "@chiselstrike/api"
 import { BlogComment } from "../models/models"
 
 export default async function chisel(_req) {
@@ -285,7 +285,7 @@ accordingly, so we shouldn't need two different endpoints.
 Now let's change that code to this:
 
 ```typescript title="my-backend/endpoints/comments.ts"
-import { json } from "@chiselstrike/chiselstrike"
+import { json } from "@chiselstrike/api"
 import { BlogComment } from "../models/models"
 
 export default async function chisel(req) {

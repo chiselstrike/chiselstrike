@@ -141,7 +141,7 @@ impl deno_core::ModuleLoader for ModuleLoader {
         _is_main: bool,
     ) -> Result<ModuleSpecifier, AnyError> {
         debug!("Deno resolving {:?}", specifier);
-        if specifier == "@chiselstrike/chiselstrike" {
+        if specifier == "@chiselstrike/api" {
             let api_path = self
                 .base_directory
                 .join("chisel.js")

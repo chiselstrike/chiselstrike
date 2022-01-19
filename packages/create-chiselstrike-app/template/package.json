@@ -9,10 +9,10 @@
     "author": "",
     "license": "ISC",
     "dependencies": {
-        "@chiselstrike/chiselstrike": "latest",
+        "@chiselstrike/api": "latest",
         "typescript": "^4.5.4"
     },
     "devDependencies": {
-        "@chiselstrike/chiselstrike-cli": "latest"
+        "@chiselstrike/cli": "latest"
     }
 }
