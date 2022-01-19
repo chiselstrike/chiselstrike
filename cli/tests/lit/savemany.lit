@@ -5,7 +5,7 @@
 cd "$TEMPDIR"
 
 cat << EOF > "$TEMPDIR/models/types.ts"
-import { ChiselEntity } from "@chiselstrike/chiselstrike";
+import { ChiselEntity } from "@chiselstrike/api";
 
 export class Person extends ChiselEntity {
     name: string = "";

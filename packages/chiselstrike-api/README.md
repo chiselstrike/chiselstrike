@@ -3,7 +3,7 @@
 Install with:
 
 ```
-npm i @chiselstrike/chiselstrike
+npm i @chiselstrike/api
 ```
 
 You can start ChiselStrike server in development mode with:

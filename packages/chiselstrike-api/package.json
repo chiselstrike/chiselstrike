@@ -1,5 +1,5 @@
 {
-  "name": "@chiselstrike/chiselstrike",
+  "name": "@chiselstrike/api",
   "version": "0.5.0",
   "main": "lib/chisel.js",
   "types": "lib/chisel.d.ts",

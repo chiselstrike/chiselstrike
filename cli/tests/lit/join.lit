@@ -12,7 +12,7 @@ labels:
 EOF
 
 cat << EOF > "$TEMPDIR/models/nickname.ts"
-import { ChiselEntity } from "@chiselstrike/chiselstrike";
+import { ChiselEntity } from "@chiselstrike/api";
 
 export class Nickname extends ChiselEntity {
    first_name: string = "";

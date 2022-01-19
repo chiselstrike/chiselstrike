@@ -25,7 +25,7 @@ the fields of your models.  To illustrate, please edit the file
 `models/models.ts` like this:
 
 ```typescript title="my-backend/models/models.ts"
-import { ChiselEntity, labels } from "@chiselstrike/chiselstrike"
+import { ChiselEntity, labels } from "@chiselstrike/api"
 
 export class BlogComment extends ChiselEntity {
     content: string;
