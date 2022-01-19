@@ -77,7 +77,14 @@ fn fetch_aux(map: &mut DownloadMap, path: String, mut base: String) -> Result<St
     };
 
     let n = map.len();
-    let extension = path.rsplit_once('.').unwrap().1;
+    let extension = if path.ends_with(".d.ts") {
+        "d.ts"
+    } else if path.ends_with(".js") {
+        "js"
+    } else {
+        "ts"
+    };
+
     let path = format!("/path/to/downloaded/files/{}.{}", n, extension);
     map.insert(path.clone(), resolved, text);
     Ok(path)
