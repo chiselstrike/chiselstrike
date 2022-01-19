@@ -7,6 +7,11 @@
 import { responseFromJson } from "@chiselstrike/api";
 
 export default async function (req: Request): Promise<Response> {
-    const json = await req.json();
+    let json: unknown;
+    try {
+        json = await req.json();
+    } catch (e) {
+        json = "empty";
+    }
     return responseFromJson(json);
 }
