@@ -353,10 +353,9 @@ impl QueryEngine {
 
                     let (nested_inserts, nested_ids) =
                         self.prepare_insertion(nested_type, nested_value)?;
-                    let nested_id = nested_ids.id.to_owned();
-
-                    child_ids.insert(field.name.to_owned(), nested_ids);
                     inserts.extend(nested_inserts);
+                    let nested_id = nested_ids.id.to_owned();
+                    child_ids.insert(field.name.to_owned(), nested_ids);
                     SqlValue::String(nested_id)
                 }
                 _ => self
