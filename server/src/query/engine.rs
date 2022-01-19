@@ -340,9 +340,6 @@ impl QueryEngine {
                 || QueryError::IncompatibleData(field.name.to_owned(), ty.name().to_owned());
             let arg = match &field.type_ {
                 Type::Object(nested_type) => {
-                    if nested_type.name() == OAUTHUSER_TYPE_NAME {
-                        anyhow::bail!("Cannot save into type {}.", OAUTHUSER_TYPE_NAME);
-                    }
                     let nested_value = ty_value
                         .get(&field.name)
                         .context("json object doesn't have required field")
@@ -351,7 +348,9 @@ impl QueryEngine {
                         .context("unexpected json type (expected an object)")
                         .with_context(incompatible_data)?;
 
-                    let nested_id = {
+                    let nested_id = if nested_type.name() == OAUTHUSER_TYPE_NAME {
+                        anyhow::bail!("Cannot save into type {}.", OAUTHUSER_TYPE_NAME);
+                    } else {
                         let (nested_inserts, nested_ids) =
                             self.prepare_insertion(nested_type, nested_value)?;
                         inserts.extend(nested_inserts);
