@@ -4,12 +4,12 @@
   "description": "Create ChiselStrike-powered backends with one command",
   "author": "ChiselStrike Inc.",
   "license": "Proprietary",
-  "prepare": "npm run build",
   "main": "./dist/index.js",
   "bin": {
     "create-chiselstrike-app": "./dist/index.js"
   },
   "scripts": {
+    "prepare": "npm run build",
     "build": "rimraf ./dist && ncc build ./index.ts -o ./dist/"
   },
   "files": [
