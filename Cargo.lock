@@ -100,7 +100,7 @@ dependencies = [
 
 [[package]]
 name = "api"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "anyhow",
  "tsc_compile",
@@ -444,7 +444,7 @@ dependencies = [
 
 [[package]]
 name = "cli"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "anyhow",
  "compile",
@@ -479,7 +479,7 @@ dependencies = [
 
 [[package]]
 name = "compile"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "anyhow",
  "swc_common",
@@ -1572,9 +1572,9 @@ dependencies = [
 
 [[package]]
 name = "gpu-alloc"
-version = "0.5.2"
+version = "0.5.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0e64cbb8d36508d3e19da95e56e196a84f674fc190881f2cc010000798838aa6"
+checksum = "7fc59e5f710e310e76e6707f86c561dd646f69a8876da9131703b2f717de818d"
 dependencies = [
  "bitflags",
  "gpu-alloc-types",
@@ -3381,7 +3381,7 @@ dependencies = [
 
 [[package]]
 name = "server"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "anyhow",
  "api",
@@ -3741,9 +3741,9 @@ checksum = "6446ced80d6c486436db5c078dde11a9f73d42b57fb273121e160b84f63d894c"
 
 [[package]]
 name = "structopt"
-version = "0.3.25"
+version = "0.3.26"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "40b9788f4202aa75c240ecc9c15c65185e6a39ccdeb0fd5d008b98825464c87c"
+checksum = "0c6b5c64445ba8094a6ab0c3cd2ad323e07171012d9c98b0b15651daf1787a10"
 dependencies = [
  "clap",
  "lazy_static",
@@ -4119,7 +4119,7 @@ dependencies = [
 
 [[package]]
 name = "third_party"
-version = "0.5.0"
+version = "0.6.0"
 
 [[package]]
 name = "thiserror"
@@ -4452,7 +4452,7 @@ checksum = "59547bce71d9c38b83d9c0e92b6066c4253371f15005def0c30d9657f50c7642"
 
 [[package]]
 name = "tsc_compile"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "anyhow",
  "deno_core",
@@ -4627,9 +4627,9 @@ checksum = "070c2eb79ba268848a73885f94a83b86d9e6441c5d5b10727d5f8989db2c8edc"
 
 [[package]]
 name = "urlpattern"
-version = "0.1.4"
+version = "0.1.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b45a3aa9d6c33eaea42eab9b4cd483373efa62a02d6dd6193452513db41a860b"
+checksum = "889a1e93b9812fe97a3aa69efdb2146740d70e67916e37911c3bd837762c4902"
 dependencies = [
  "derive_more",
  "regex",
