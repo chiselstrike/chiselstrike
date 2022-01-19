@@ -163,6 +163,9 @@ struct Opt {
 enum Command {
     /// Create a new ChiselStrike project in current directory.
     Init {
+        /// Force project initialization by overwriting files if needed.
+        #[structopt(long)]
+        force: bool,
         /// Skip generating example code.
         #[structopt(long)]
         no_examples: bool,
@@ -295,14 +298,14 @@ macro_rules! write_template {
     }};
 }
 
-fn create_project(path: &Path, examples: bool) -> Result<()> {
-    if project_exists(path) {
+fn create_project(path: &Path, force: bool, examples: bool) -> Result<()> {
+    if !force && project_exists(path) {
         anyhow::bail!("You cannot run `chisel init` on an existing ChiselStrike project");
     }
-    fs::create_dir(path.join(TYPES_DIR))?;
-    fs::create_dir(path.join(ENDPOINTS_DIR))?;
-    fs::create_dir(path.join(POLICIES_DIR))?;
-    fs::create_dir(path.join(VSCODE_DIR))?;
+    fs::create_dir_all(path.join(TYPES_DIR))?;
+    fs::create_dir_all(path.join(ENDPOINTS_DIR))?;
+    fs::create_dir_all(path.join(POLICIES_DIR))?;
+    fs::create_dir_all(path.join(VSCODE_DIR))?;
     write_template!("package.json", path)?;
     write_template!("tsconfig.json", path)?;
     write_template!("Chisel.toml", path)?;
@@ -541,9 +544,9 @@ async fn main() -> Result<()> {
     let opt = Opt::from_args();
     let server_url = opt.rpc_addr;
     match opt.cmd {
-        Command::Init { no_examples } => {
+        Command::Init { force, no_examples } => {
             let cwd = env::current_dir()?;
-            create_project(&cwd, !no_examples)?;
+            create_project(&cwd, force, !no_examples)?;
         }
         Command::Describe => {
             let mut client = ChiselRpcClient::connect(server_url).await?;
@@ -651,7 +654,7 @@ async fn main() -> Result<()> {
                     }
                 }
             }
-            create_project(path, !no_examples)?;
+            create_project(path, false, !no_examples)?;
         }
         Command::Start => {
             let mut server = start_server()?;
