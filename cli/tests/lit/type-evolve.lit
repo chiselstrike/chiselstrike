@@ -24,10 +24,10 @@ EOF
 $CHISEL apply
 # CHECK: Type defined: Evolving
 
-cat << EOF > "$TEMPDIR/endpoints/store.ts"
+cat << EOF > "$TEMPDIR/endpoints/store.js"
 import { Evolving } from "../models/types.ts";
 
-export default async function chisel(req: Request) {
+export default async function chisel(req) {
    const obj = Evolving.build({'a': "A"});
    obj.b = "B";
    await obj.save();
@@ -35,10 +35,10 @@ export default async function chisel(req: Request) {
 }
 EOF
 
-cat << EOF > "$TEMPDIR/endpoints/find.ts"
+cat << EOF > "$TEMPDIR/endpoints/find.js"
 import { Evolving } from "../models/types.ts";
 
-export default async function chisel(req: Request) {
+export default async function chisel(req) {
    let response = "tst ";
    for await (let ev of Evolving.cursor()) {
         let fields = [ev.a, ev.b];
