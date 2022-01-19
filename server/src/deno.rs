@@ -548,7 +548,7 @@ impl Resource for BodyResource {
     }
 }
 
-#[derive(Default)]
+#[derive(Default, Clone)]
 struct RequestContext {
     path: RequestPath,
     method: Method,
@@ -565,13 +565,9 @@ pub(crate) fn current_api_version() -> String {
     })
 }
 
-fn set_current_context(current_path: String, method: Method) {
-    let rp = RequestPath::try_from(current_path.as_ref()).unwrap();
-
+fn set_current_context(c: RequestContext) {
     CURRENT_CONTEXT.with(|path| {
-        let mut borrow = path.borrow_mut();
-        borrow.path = rp;
-        borrow.method = method;
+        *path.borrow_mut() = c;
     });
 }
 
@@ -580,8 +576,7 @@ fn current_method() -> Method {
 }
 
 struct RequestFuture<F> {
-    request_path: String,
-    request_method: Method,
+    context: RequestContext,
     inner: F,
 }
 
@@ -589,7 +584,7 @@ impl<F: Future> Future for RequestFuture<F> {
     type Output = F::Output;
 
     fn poll(self: Pin<&mut Self>, c: &mut Context<'_>) -> Poll<F::Output> {
-        set_current_context(self.request_path.clone(), self.request_method.clone());
+        set_current_context(self.context.clone());
         // Structural Pinning, it is OK because inner is pinned when we are.
         let inner = unsafe { self.map_unchecked_mut(|s| &mut s.inner) };
         inner.poll(c)
@@ -666,11 +661,14 @@ async fn get_result(
     req: &mut Request<hyper::Body>,
     path: String,
 ) -> Result<v8::Global<v8::Value>> {
-    let method = req.method().clone();
+    let context = RequestContext {
+        method: req.method().clone(),
+        path: RequestPath::try_from(path.as_ref()).unwrap(),
+    };
     // Set the current path to cover JS code that runs before
     // blocking. This in particular covers code that doesn't block at
     // all.
-    set_current_context(path.clone(), method.clone());
+    set_current_context(context.clone());
     let result = get_result_aux(runtime, request_handler, req)?;
     let result = runtime.resolve_value(result);
     // We got here without blocking and now have a future representing
@@ -678,8 +676,7 @@ async fn get_result(
     // before the current path is changed, so wrap the future in a
     // RequestFuture that will reset the current path before polling.
     RequestFuture {
-        request_path: path,
-        request_method: method,
+        context,
         inner: result,
     }
     .await
