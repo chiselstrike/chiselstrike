@@ -351,11 +351,14 @@ impl QueryEngine {
                         .context("unexpected json type (expected an object)")
                         .with_context(incompatible_data)?;
 
-                    let (nested_inserts, nested_ids) =
-                        self.prepare_insertion(nested_type, nested_value)?;
-                    inserts.extend(nested_inserts);
-                    let nested_id = nested_ids.id.to_owned();
-                    child_ids.insert(field.name.to_owned(), nested_ids);
+                    let nested_id = {
+                        let (nested_inserts, nested_ids) =
+                            self.prepare_insertion(nested_type, nested_value)?;
+                        inserts.extend(nested_inserts);
+                        let nested_id = nested_ids.id.to_owned();
+                        child_ids.insert(field.name.to_owned(), nested_ids);
+                        nested_id
+                    };
                     SqlValue::String(nested_id)
                 }
                 _ => self
