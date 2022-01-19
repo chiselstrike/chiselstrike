@@ -427,6 +427,13 @@ async fn apply<S: ToString>(
     let mut policy_req = vec![];
 
     let mut types_string = String::new();
+    if models.len() > 1 {
+        let files: Vec<String> = models
+            .iter()
+            .map(|m| -> String { m.display().to_string() })
+            .collect();
+        anyhow::bail!("ChiselStrike currently only supports one TypeScript file in the `models` directory, but you now have:\n\n{}\n\nPlease consolidate the files into a single file. This limitation will be lifted in future releases.", files.join("\n"));
+    }
     for t in &models {
         types_string += &read_to_string(&t)?;
     }
