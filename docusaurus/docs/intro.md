@@ -94,10 +94,10 @@ easy.  We do it by adding a TypeScript file under the
 `my-backend/endpoints` directory.  Here is one:
 
 ```typescript title="my-backend/endpoints/comments.ts"
-import { json } from "@chiselstrike/api"
+import { responseFromJson } from "@chiselstrike/api"
 
 export default function chisel(_req) {
-    return json("Temporarily empty");
+    return responseFromJson("Temporarily empty");
 }
 ```
 
@@ -135,9 +135,8 @@ a single parameter.  This function defines the endpoint.  It takes a
 and returns the corresponding
 [Response](https://developer.mozilla.org/en-US/docs/Web/API/Response).
 In this case, it simply returns a string wrapped as a JSON value.  It
-uses a helper function `Chisel.json` that comes from an object named
-`Chisel` that's available to each endpoint's code.  There's much more
-to `Chisel` than `Chisel.json`, as we'll see shortly.  For full
+uses a helper function `responseFromJson` There's much more
+to `responseFromJson` as we'll see shortly.  For full
 reference, please see [this page](chisel-backend).
 
 ## Adding Data
@@ -219,7 +218,7 @@ comments.  Now we just have to read them.  Let's edit the
 `my-backend/endpoints/comments.ts` file as follows:
 
 ```typescript title="my-backend/endpoints/comments.ts"
-import { json } from "@chiselstrike/api"
+import { responseFromJson } from "@chiselstrike/api"
 import { BlogComment } from "../models/models"
 
 export default async function chisel(_req) {
@@ -227,7 +226,7 @@ export default async function chisel(_req) {
     await BlogComment.cursor().forEach(c => {
         comments.push(c);
     });
-    return json(comments);
+    return responseFromJson(comments);
 }
 ```
 
@@ -285,7 +284,7 @@ accordingly, so we shouldn't need two different endpoints.
 Now let's change that code to this:
 
 ```typescript title="my-backend/endpoints/comments.ts"
-import { json } from "@chiselstrike/api"
+import { responseFromJson } from "@chiselstrike/api"
 import { BlogComment } from "../models/models"
 
 export default async function chisel(req) {
@@ -295,13 +294,13 @@ export default async function chisel(req) {
         const by = payload["by"] || "anonymous";
         const created = BlogComment.build({'content': content, 'by': by});
         await created.save();
-        return json('inserted ' + created.id);
+        return responseFromJson('inserted ' + created.id);
     } else if (req.method == 'GET') {
         let comments = [];
         await BlogComment.cursor().forEach(c => {
             comments.push(c);
         });
-        return json(comments);
+        return responseFromJson(comments);
     } else {
         return new Response("Wrong method", { status: 405 });
     }
