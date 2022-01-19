@@ -1,10 +1,17 @@
 # Create ChiselStrike App
 
 The quickest way to get started with ChiselStrike is to use the
-following command to create a ChiselStrike-powered backend application:
+following command to create a ChiselStrike-powered backend application with
+`npx`:
 
 ```console
-npx @chiselstrike/create-chiselstrike-app hello-world
+npx create-chiselstrike-app hello-world
+```
+
+or with `yarn`:
+
+```console
+yarn create chiselstrike-app hello-world
 ```
 
 The command creates a new ChiselStrike project in the 'hello-world'

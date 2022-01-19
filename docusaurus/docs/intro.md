@@ -44,7 +44,7 @@ Obviously, we get "Connection refused", since ChiselStrike isn't
 active yet.  Let's change that: in another window, type this:
 
 ```
-$ npx @chiselstrike/create-chiselstrike-app my-backend
+$ npx create-chiselstrike-app my-backend
 Creating a new ChiselStrike project in my-backend ...
 Installing packages. This might take a couple of minutes.
 
