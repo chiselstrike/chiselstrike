@@ -13,6 +13,6 @@
         "typescript": "^4.5.4"
     },
     "devDependencies": {
-        "@chiselstrike/chiselstrike-cli": "latest"
+        "@chiselstrike/cli": "latest"
     }
 }
