@@ -213,6 +213,7 @@ pub fn compile_ts_code(
         borrow.url_to_path.clear();
         borrow.written.clear();
         borrow.input_files.clear();
+        borrow.diagnostics.clear();
         borrow
             .input_files
             .insert(abs(without_extension(file_name)), file_name.to_string());
@@ -271,6 +272,18 @@ mod tests {
             .into_iter()
             .collect();
         compile_ts_code(f.path().to_str().unwrap(), None, libs)?;
+        Ok(())
+    }
+
+    #[test]
+    fn dignostics() -> Result<()> {
+        for _ in 0..2 {
+            let mut f = Builder::new().suffix(".ts").tempfile()?;
+            f.write_all(b"export {}; zed;")?;
+            let err = compile_ts_code(f.path().to_str().unwrap(), None, Default::default());
+            let err = err.unwrap_err().to_string();
+            assert!(err.contains("Cannot find name 'zed'"));
+        }
         Ok(())
     }
 
