@@ -338,3 +338,8 @@ export function labels(..._val: string[]) {
         // chisel-decorator, no content
     };
 }
+
+/** Returns the currently logged-in user or undefined if no one is logged in. */
+export function user() {
+    return Deno.core.opSync("chisel_user", {});
+}

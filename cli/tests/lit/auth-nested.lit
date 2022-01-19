@@ -22,3 +22,17 @@ $CHISEL apply
 
 $CURL -X POST $CHISELD_HOST/dev/newuser
 # CHECK: Cannot save into type OAuthUser
+
+cat << EOF > "$TEMPDIR/endpoints/curuser.js"
+import { Post } from '../models/post.ts';
+export default async function (req: Request) {
+    await Post.build({ author: Chisel.user() }).save();
+    return new Response('Successful save!');
+}
+EOF
+
+cd "$TEMPDIR"
+$CHISEL apply
+
+$CURL -X POST $CHISELD_HOST/dev/curuser
+# CHECK: Successful save!

@@ -349,7 +349,10 @@ impl QueryEngine {
                         .with_context(incompatible_data)?;
 
                     let nested_id = if nested_type.name() == OAUTHUSER_TYPE_NAME {
-                        anyhow::bail!("Cannot save into type {}.", OAUTHUSER_TYPE_NAME);
+                        match nested_value.get("id") {
+                            Some(serde_json::Value::String(id)) => id.clone(), // Could be wrong id, but it won't make a new user.
+                            _ => anyhow::bail!("Cannot save into type {}.", OAUTHUSER_TYPE_NAME),
+                        }
                     } else {
                         let (nested_inserts, nested_ids) =
                             self.prepare_insertion(nested_type, nested_value)?;

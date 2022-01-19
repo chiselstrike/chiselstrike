@@ -376,6 +376,10 @@ async fn op_chisel_relational_query_next(
     }
 }
 
+fn op_chisel_user(_op_state: &mut OpState, _: (), _: ()) -> Result<serde_json::Value> {
+    Ok(serde_json::json!({"username": "abc", "id": "123"}))
+}
+
 async fn create_deno<P: AsRef<Path>>(base_directory: P, inspect_brk: bool) -> Result<DenoService> {
     let mut d = DenoService::new(base_directory.as_ref().to_owned(), inspect_brk);
     let worker = &mut d.worker;
@@ -393,6 +397,7 @@ async fn create_deno<P: AsRef<Path>>(base_directory: P, inspect_brk: bool) -> Re
         op_async(op_chisel_relational_query_next),
     );
     runtime.register_op("chisel_introspect", op_sync(op_chisel_introspect));
+    runtime.register_op("chisel_user", op_sync(op_chisel_user));
     runtime.sync_ops_cache();
 
     // FIXME: Include these files in the snapshop
