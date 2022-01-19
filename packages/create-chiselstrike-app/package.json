@@ -1,6 +1,6 @@
 {
   "name": "create-chiselstrike-app",
-  "version": "0.6.0",
+  "version": "0.6.1",
   "description": "Create ChiselStrike-powered backends with one command",
   "author": "ChiselStrike Inc.",
   "license": "Proprietary",
