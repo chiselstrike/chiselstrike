@@ -147,7 +147,7 @@ async fn run(state: SharedState, mut cmd: ExecutorChannel) -> Result<()> {
             code.to_string(),
         )
         .await?;
-        activate_endpoint(path);
+        activate_endpoint(path).await;
     }
 
     let mut api_service = ApiService::default();

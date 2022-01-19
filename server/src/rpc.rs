@@ -400,7 +400,7 @@ impl RpcService {
                     let path = path.clone();
                     move |req| deno::run_js(path.clone(), req).boxed_local()
                 });
-                deno::activate_endpoint(&path);
+                deno::activate_endpoint(&path).await;
                 runtime.api.add_route(path.into(), func);
             }
             Ok(())

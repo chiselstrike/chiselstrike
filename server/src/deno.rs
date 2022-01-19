@@ -5,12 +5,12 @@ use crate::db::convert;
 use crate::policies::FieldPolicies;
 use crate::query::engine::JsonObject;
 use crate::query::engine::SqlStream;
-use crate::rcmut::RcMut;
 use crate::runtime;
 use crate::runtime::Runtime;
 use crate::types::{ObjectType, Type};
 use anyhow::{anyhow, Result};
 use api::chisel_js;
+use async_mutex::Mutex;
 use deno_broadcast_channel::InMemoryBroadcastChannel;
 use deno_core::error::AnyError;
 use deno_core::CancelFuture;
@@ -435,9 +435,7 @@ async fn create_deno<P: AsRef<Path>>(base_directory: P, inspect_brk: bool) -> Re
 }
 
 pub(crate) async fn init_deno<P: AsRef<Path>>(base_directory: P, inspect_brk: bool) -> Result<()> {
-    let service = Rc::new(RefCell::new(
-        create_deno(base_directory, inspect_brk).await?,
-    ));
+    let service = Rc::new(Mutex::new(create_deno(base_directory, inspect_brk).await?));
     DENO.with(|d| {
         d.set(service)
             .map_err(|_| ())
@@ -450,7 +448,7 @@ thread_local! {
     // There is no 'thread lifetime in rust. So without Rc we can't
     // convince rust that a future produced with DENO.with doesn't
     // outlive the DenoService.
-    static DENO: OnceCell<Rc<RefCell<DenoService>>> = OnceCell::new();
+    static DENO: OnceCell<Rc<Mutex<DenoService>>> = OnceCell::new();
 }
 
 fn try_into_or<'s, T: std::convert::TryFrom<v8::Local<'s, v8::Value>>>(
@@ -479,7 +477,8 @@ async fn get_read_future(
     reader: v8::Global<v8::Value>,
     read: v8::Global<v8::Function>,
 ) -> Result<Option<(Box<[u8]>, ())>> {
-    let mut service = get();
+    let service_lock = get();
+    let mut service = service_lock.lock().await;
     let runtime = &mut service.worker.js_runtime;
     let js_promise = {
         let scope = &mut runtime.handle_scope();
@@ -702,7 +701,9 @@ pub(crate) async fn run_js(path: String, mut req: Request<hyper::Body>) -> Resul
     //   let f = &mut f;
     //   let g = &mut f.0;
     //   foo(g, f.1);
-    let mut service = get();
+    let service_lock = get();
+    let mut service = service_lock.lock().await;
+
     let service: &mut DenoService = &mut service;
 
     let request_handler = service.handlers.get(&path).unwrap().clone();
@@ -755,11 +756,8 @@ pub(crate) async fn run_js(path: String, mut req: Request<hyper::Body>) -> Resul
     Ok(body)
 }
 
-fn get() -> RcMut<DenoService> {
-    DENO.with(|x| {
-        let rc = x.get().expect("Runtime is not yet initialized.").clone();
-        RcMut::new(rc)
-    })
+fn get() -> Rc<Mutex<DenoService>> {
+    DENO.with(|x| x.get().expect("Runtime is not yet initialized.").clone())
 }
 
 pub(crate) async fn compile_endpoint<P: AsRef<Path>>(
@@ -767,7 +765,8 @@ pub(crate) async fn compile_endpoint<P: AsRef<Path>>(
     path: String,
     code: String,
 ) -> Result<()> {
-    let mut service = get();
+    let service_lock = get();
+    let mut service = service_lock.lock().await;
     let service: &mut DenoService = &mut service;
 
     let mut code_map = service.module_loader.code_map.borrow_mut();
@@ -807,8 +806,10 @@ pub(crate) async fn compile_endpoint<P: AsRef<Path>>(
     Ok(())
 }
 
-pub(crate) fn activate_endpoint(path: &str) {
-    let mut service = get();
+pub(crate) async fn activate_endpoint(path: &str) {
+    let service_lock = get();
+    let mut service = service_lock.lock().await;
+
     let (path, handler) = service.next_handlers.remove_entry(path).unwrap();
     service.handlers.insert(path, handler);
 }
