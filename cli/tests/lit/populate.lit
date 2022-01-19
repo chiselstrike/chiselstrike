@@ -2,11 +2,11 @@
 
 # RUN: sh -e @file
 
-cp examples/person.ts "$TEMPDIR/models"
+cp examples/person.ts "$TEMPDIR/models/types.ts"
 cp examples/store.js "$TEMPDIR/endpoints/ins.js"
 
 cat << EOF > "$TEMPDIR/endpoints/count.ts"
-import { Person } from "../models/person.ts";
+import { Person } from "../models/types.ts";
 
 export default async function chisel(req: Request) {
     let count = 0;
@@ -56,7 +56,7 @@ $CURL $CHISELD_HOST/staging/count
 
 # ----- Check functionality with nested types -----
 
-cat << EOF > "$TEMPDIR/models/types.ts"
+cat << EOF >> "$TEMPDIR/models/types.ts"
 export class Employee extends Chisel.ChiselEntity {
    name: string = "";
 }
