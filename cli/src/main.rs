@@ -625,11 +625,13 @@ async fn main() -> Result<()> {
             }
             while let Some(res) = rx.next().await {
                 match res {
-                    Ok(event) => {
-                        if event.kind.is_modify() {
-                            apply_from_dev(server_url.clone()).await;
-                        }
+                    Ok(notify::event::Event {
+                        kind: notify::event::EventKind::Modify(notify::event::ModifyKind::Data(_)),
+                        ..
+                    }) => {
+                        apply_from_dev(server_url.clone()).await;
                     }
+                    Ok(_) => { /* ignore */ }
                     Err(e) => println!("watch error: {:?}", e),
                 }
             }
