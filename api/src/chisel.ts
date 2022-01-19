@@ -324,7 +324,7 @@ export function buildReadableStreamForBody(rid: number) {
     });
 }
 
-export function json(body: unknown, status = 200) {
+export function responseFromJson(body: unknown, status = 200) {
     return new Response(JSON.stringify(body), {
         status: status,
         headers: [
