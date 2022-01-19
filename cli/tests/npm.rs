@@ -12,7 +12,7 @@ mod tests {
         run_in(
             "npm",
             ["run", "build"],
-            Path::new("../packages/chiselstrike").to_path_buf(),
+            Path::new("../packages/chiselstrike-api").to_path_buf(),
         );
     }
 }
