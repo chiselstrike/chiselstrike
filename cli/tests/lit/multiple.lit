@@ -17,7 +17,11 @@ $CHISEL apply
 
 ## First one will block for 2s, so we go on the background
 $CURL $CHISELD_HOST/dev/sleep &
+PID=$!
 
 ## Second one will crash if we are awaiting on a suspension point
 $CURL $CHISELD_HOST/dev/sleep
+# CHECK: sleeper
+
+wait $PID
 # CHECK: sleeper
