@@ -430,20 +430,8 @@ async fn apply<S: ToString>(
     let mut policy_req = vec![];
 
     let mut types_string = String::new();
-    let mut types_import_string = vec![];
     for t in &models {
-        let lines = read_to_string(&t)?;
-        for l in lines.lines() {
-            if l.trim().starts_with("import") {
-                let mut just_chars = l.to_string();
-                just_chars.retain(|c| !c.is_whitespace());
-                if !types_import_string.contains(&just_chars) {
-                    types_import_string.push(just_chars);
-                }
-            } else {
-                types_string += l
-            }
-        }
+        types_string += &read_to_string(&t)?;
     }
 
     match std::process::Command::new(get_tsc())
@@ -464,7 +452,7 @@ async fn apply<S: ToString>(
     }
 
     for f in endpoints.iter() {
-        let code = types_import_string.join("\n") + &types_string + &read_to_string(&f.file_path)?;
+        let code = types_string.clone() + &read_to_string(&f.file_path)?;
         let code = compile_ts_code(code)
             .with_context(|| format!("parsing endpoint /{}/{}", version, f.name))?;
         endpoints_req.push(EndPointCreationRequest {
