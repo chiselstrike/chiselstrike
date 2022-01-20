@@ -1,13 +1,15 @@
 // SPDX-FileCopyrightText: © 2021 ChiselStrike <info@chiselstrike.com>
 
 use crate::api::{ApiService, Body};
-use crate::query::engine::JsonObject;
+use crate::db::SqlValue;
+use crate::query::engine::{JsonObject, SqlWithArguments};
 use crate::runtime;
 use crate::types::{ObjectType, Type, OAUTHUSER_TYPE_NAME};
 use anyhow::anyhow;
 use futures::{Future, FutureExt};
 use hyper::{header, Request, Response, StatusCode};
 use serde_json::json;
+use sqlx::Row;
 use std::pin::Pin;
 use std::sync::Arc;
 
@@ -48,6 +50,21 @@ async fn insert_user_into_db(username: &str) -> anyhow::Result<()> {
 
     query_engine.add_row(&oauth_user_type, &user).await?;
     Ok(())
+}
+
+pub(crate) async fn get_userid_from_db(username: String) -> anyhow::Result<String> {
+    let oauth_user_type = get_oauth_user_type()?;
+    let qeng = { runtime::get().query_engine.clone() };
+    Ok(qeng
+        .fetch_one(SqlWithArguments {
+            sql: format!(
+                "SELECT id FROM {} WHERE username=$1",
+                oauth_user_type.backing_table()
+            ),
+            args: vec![SqlValue::String(username)],
+        })
+        .await?
+        .get("id"))
 }
 
 fn handle_callback(

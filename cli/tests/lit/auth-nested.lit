@@ -3,16 +3,17 @@
 # RUN: sh -e @file
 
 cat << EOF > "$TEMPDIR/models/post.ts"
-import { ChiselEntity } from "@chiselstrike/chiselstrike";
+import { ChiselEntity } from "@chiselstrike/api";
 export class Post extends ChiselEntity {
     author: OAuthUser;
 }
 EOF
 
-cat << EOF > "$TEMPDIR/endpoints/newuser.js"
+cat << EOF > "$TEMPDIR/endpoints/user.js"
 import { Post } from '../models/post.ts';
 export default async function (req: Request) {
-    await Post.build( {author: {username: ''} } ).save();
+    const author = await Chisel.user() ?? { username: '' };
+    await Post.build({ author }).save();
     return new Response('Successful save!');
 }
 EOF
@@ -20,19 +21,9 @@ EOF
 cd "$TEMPDIR"
 $CHISEL apply
 
-$CURL -X POST $CHISELD_HOST/dev/newuser
+$CURL -X POST $CHISELD_HOST/dev/user
 # CHECK: Cannot save into type OAuthUser
 
-cat << EOF > "$TEMPDIR/endpoints/curuser.js"
-import { Post } from '../models/post.ts';
-export default async function (req: Request) {
-    await Post.build({ author: Chisel.user() }).save();
-    return new Response('Successful save!');
-}
-EOF
-
-cd "$TEMPDIR"
-$CHISEL apply
-
-$CURL -X POST $CHISELD_HOST/dev/curuser
+token=`$CURL -s $CHISELD_HOST/__chiselstrike/auth/callback?user=aaa|sed -ne "s/.*chiselstrike_token=//" -e "s/<.*//p"`
+$CURL -H "ChiselStrikeToken:$token" -X POST $CHISELD_HOST/dev/user
 # CHECK: Successful save!

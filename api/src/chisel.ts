@@ -339,7 +339,8 @@ export function labels(..._val: string[]) {
     };
 }
 
-/** Returns the currently logged-in user or undefined if no one is logged in. */
-export function user() {
-    return Deno.core.opSync("chisel_user", {});
+/** Returns the currently logged-in user or null if no one is logged in. */
+export async function user(): Promise<OAuthUser | null> {
+    const id = await Deno.core.opAsync("chisel_user", {});
+    return id == null ? null : await OAuthUser.findOne({ id });
 }

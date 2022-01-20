@@ -76,14 +76,11 @@ impl TryFrom<&Field> for ColumnDef {
 /// An SQL string with placeholders, plus its argument values.  Keeps them all alive so they can be fed to
 /// sqlx::Query by reference.
 #[derive(Debug)]
-struct SqlWithArguments {
+pub(crate) struct SqlWithArguments {
     /// SQL query text with placeholders $1, $2, ...
-    sql: String,
+    pub(crate) sql: String,
     /// Values for $n placeholders.
-    args: Vec<SqlValue>,
-    // We could theoretically create sqlx::Query and bind it as soon as self.sql and self.args are final.
-    // Unfortunately, this requires hitting the precise ProcRUSTean incantation required to have a Query field,
-    // which, let's be honest, is never going to happen. >:-[
+    pub(crate) args: Vec<SqlValue>,
 }
 
 /// Represents recurent structure of nested object ids. Each level holds
@@ -297,6 +294,20 @@ impl QueryEngine {
         let query = self.prepare_insertion_shallow(ty, ty_value)?;
         self.run_sql_queries(&[query]).await?;
         Ok(())
+    }
+
+    pub(crate) async fn fetch_one(&self, q: SqlWithArguments) -> anyhow::Result<AnyRow> {
+        let mut sqlx_query = sqlx::query(&q.sql);
+        for arg in &q.args {
+            match arg {
+                SqlValue::Bool(arg) => sqlx_query = sqlx_query.bind(arg),
+                SqlValue::U64(arg) => sqlx_query = sqlx_query.bind(*arg as i64),
+                SqlValue::I64(arg) => sqlx_query = sqlx_query.bind(arg),
+                SqlValue::F64(arg) => sqlx_query = sqlx_query.bind(arg),
+                SqlValue::String(arg) => sqlx_query = sqlx_query.bind(arg),
+            };
+        }
+        Ok(sqlx_query.fetch_one(&self.pool).await?)
     }
 
     async fn run_sql_queries(&self, queries: &[SqlWithArguments]) -> anyhow::Result<()> {
