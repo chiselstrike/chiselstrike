@@ -83,18 +83,20 @@ pub(crate) struct SqlWithArguments {
     pub(crate) args: Vec<SqlValue>,
 }
 
-fn get_sqlx(q: &SqlWithArguments) -> sqlx::query::Query<'_, sqlx::Any, AnyArguments> {
-    let mut sqlx_query = sqlx::query(&q.sql);
-    for arg in &q.args {
-        match arg {
-            SqlValue::Bool(arg) => sqlx_query = sqlx_query.bind(arg),
-            SqlValue::U64(arg) => sqlx_query = sqlx_query.bind(*arg as i64),
-            SqlValue::I64(arg) => sqlx_query = sqlx_query.bind(arg),
-            SqlValue::F64(arg) => sqlx_query = sqlx_query.bind(arg),
-            SqlValue::String(arg) => sqlx_query = sqlx_query.bind(arg),
-        };
+impl SqlWithArguments {
+    fn get_sqlx(&self) -> sqlx::query::Query<'_, sqlx::Any, AnyArguments> {
+        let mut sqlx_query = sqlx::query(&self.sql);
+        for arg in &self.args {
+            match arg {
+                SqlValue::Bool(arg) => sqlx_query = sqlx_query.bind(arg),
+                SqlValue::U64(arg) => sqlx_query = sqlx_query.bind(*arg as i64),
+                SqlValue::I64(arg) => sqlx_query = sqlx_query.bind(arg),
+                SqlValue::F64(arg) => sqlx_query = sqlx_query.bind(arg),
+                SqlValue::String(arg) => sqlx_query = sqlx_query.bind(arg),
+            };
+        }
+        sqlx_query
     }
-    sqlx_query
 }
 
 /// Represents recurent structure of nested object ids. Each level holds
@@ -311,14 +313,14 @@ impl QueryEngine {
     }
 
     pub(crate) async fn fetch_one(&self, q: SqlWithArguments) -> anyhow::Result<AnyRow> {
-        Ok(get_sqlx(&q).fetch_one(&self.pool).await?)
+        Ok(q.get_sqlx().fetch_one(&self.pool).await?)
     }
 
     async fn run_sql_queries(&self, queries: &[SqlWithArguments]) -> anyhow::Result<()> {
         let mut transaction = self.start_transaction().await?;
         for q in queries {
             transaction
-                .fetch_one(get_sqlx(q))
+                .fetch_one(q.get_sqlx())
                 .await
                 .map_err(QueryError::ExecuteFailed)?;
         }
