@@ -212,7 +212,7 @@ The `findMany()` method is convenient, but also problematic if you have a lot of
 entities stored because loading them can take a lot of time and memory. In future
 releases of ChiselStrike, the runtime will enforce a maximum number of entities
 `findMany()` can return and also enforce timeouts at the data store level. The
-runtime will also provide optional pagination for the `findMany()` method. 
+runtime will also provide optional pagination for the `findMany()` method.
 :::
 
 ## Cursors
@@ -270,3 +270,15 @@ The methods provided by `ChiselCursor` are outlined in the following table.
 The `ChiselCursor` interface is still work-in-progress. For example, methods such as `skip()`,  `map()`, and `reduce()` are planned for future releases.
 Also, the current implementation of `filter()` takes a _restriction object_, but future ChiselStrike runtimes will allow you to write filter functions using TypeScript, which are automatically converted to efficient database queries in many cases.
 :::
+
+## Transacitons
+
+We currently support implicit transactional evaluation. The transaction is created before ChiselStrike
+starts evaluating your endpoint and is automatically committed after your endpoint ends and we generate
+the HTTP response. In case your endpoint returns a stream, any database-related operation done within
+stream generation code will happen outside of the transaction and can result in a crash.
+
+If your code crashes or explicitly throws exception that is not caught, ChiselStrike rollbacks the
+transaction automatically.
+
+Explicit user-controlled transactions are coming soon.

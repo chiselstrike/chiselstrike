@@ -277,7 +277,7 @@ impl TypeSystem {
 
     pub(crate) async fn populate_types<T: AsRef<str>, F: AsRef<str>>(
         &self,
-        engine: &QueryEngine,
+        engine: Arc<QueryEngine>,
         api_version_to: T,
         api_version_from: F,
     ) -> anyhow::Result<()> {
@@ -310,7 +310,8 @@ impl TypeSystem {
                     })?;
 
                 let ty_obj_rel = backing_store_from_type(self, ty_obj).await?;
-                let mut row_streams = engine.query_relation(ty_obj_rel);
+                let tr = engine.clone().start_transaction_static().await?;
+                let mut row_streams = engine.query_relation(ty_obj_rel, tr.clone());
 
                 while let Some(row) = row_streams.next().await {
                     // FIXME: basic rate limit?
@@ -318,6 +319,8 @@ impl TypeSystem {
                         .with_context(|| format!("population can't proceed as reading from the underlying database for type {} failed", ty_obj_to.name))?;
                     engine.add_row_shallow(ty_obj_to, &row).await?;
                 }
+                drop(row_streams);
+                QueryEngine::commit_transaction_static(tr).await?;
             }
         }
         Ok(())

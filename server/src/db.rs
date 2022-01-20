@@ -6,6 +6,7 @@ use crate::policies::FieldPolicies;
 use crate::query::engine;
 use crate::query::engine::new_query_results;
 use crate::query::engine::SqlStream;
+use crate::query::engine::TransactionStatic;
 use crate::runtime;
 use crate::types::{Field, ObjectType, Type, TypeSystem, TypeSystemError, OAUTHUSER_TYPE_NAME};
 use crate::JsonObject;
@@ -21,7 +22,6 @@ use itertools::Itertools;
 use pin_project::pin_project;
 use serde_json::value::Value;
 use sqlx::any::AnyRow;
-use sqlx::AnyPool;
 use std::collections::HashMap;
 use std::collections::HashSet;
 use std::pin::Pin;
@@ -286,7 +286,7 @@ fn sql_where_for_match_login(
 }
 
 fn sql_backing_store(
-    pool: &AnyPool,
+    tr: TransactionStatic,
     columns: Vec<(String, Type)>,
     limit_str: &str,
     ty: Arc<ObjectType>,
@@ -313,7 +313,7 @@ fn sql_backing_store(
     if policies.transforms.is_empty() {
         return Query::Sql(query);
     }
-    let inner = new_query_results(query, pool);
+    let inner = new_query_results(query, tr);
     let pstream = Box::pin(PolicyApplyingStream {
         inner,
         policies,
@@ -405,14 +405,14 @@ fn join_stream(columns: &[(String, Type)], left: SqlStream, right: SqlStream) ->
 }
 
 fn sql_filter(
-    pool: &AnyPool,
+    tr: TransactionStatic,
     columns: Vec<(String, Type)>,
     limit_str: &str,
     alias_count: &mut u32,
     inner: Relation,
     restrictions: Vec<Restriction>,
 ) -> Query {
-    let inner_sql = sql_impl(pool, inner, alias_count);
+    let inner_sql = sql_impl(tr, inner, alias_count);
     let inner_sql = match inner_sql {
         Query::Sql(s) => s,
         Query::Stream(s) => return filter_stream(s, columns, restrictions),
@@ -450,8 +450,8 @@ pub(crate) fn sql_restrictions(restrictions: Vec<Restriction>) -> String {
     })
 }
 
-fn to_stream(pool: &AnyPool, s: String, columns: Vec<(String, Type)>) -> SqlStream {
-    let inner = new_query_results(s, pool);
+fn to_stream(tr: TransactionStatic, s: String, columns: Vec<(String, Type)>) -> SqlStream {
+    let inner = new_query_results(s, tr);
     Box::pin(PolicyApplyingStream {
         inner,
         policies: FieldPolicies::default(),
@@ -460,7 +460,7 @@ fn to_stream(pool: &AnyPool, s: String, columns: Vec<(String, Type)>) -> SqlStre
 }
 
 fn sql_join(
-    pool: &AnyPool,
+    tr: TransactionStatic,
     columns: &[(String, Type)],
     limit_str: &str,
     alias_count: &mut u32,
@@ -487,15 +487,15 @@ fn sql_join(
     // FIXME: Optimize the case of table.left or table.right being just
     // a BackingStore with all fields. The database probably doesn't
     // care, but will make the logs cleaner.
-    let lsql = sql_impl(pool, left, alias_count);
-    let rsql = sql_impl(pool, right, alias_count);
+    let lsql = sql_impl(tr.clone(), left, alias_count);
+    let rsql = sql_impl(tr.clone(), right, alias_count);
     let (lsql, rsql) = match (lsql, rsql) {
         (Query::Sql(l), Query::Sql(r)) => (l, r),
         (Query::Stream(l), Query::Sql(r)) => {
-            return join_stream(columns, l, to_stream(pool, r, right_columns))
+            return join_stream(columns, l, to_stream(tr, r, right_columns))
         }
         (Query::Sql(l), Query::Stream(r)) => {
-            return join_stream(columns, to_stream(pool, l, left_columns), r)
+            return join_stream(columns, to_stream(tr, l, left_columns), r)
         }
         (Query::Stream(l), Query::Stream(r)) => return join_stream(columns, l, r),
     };
@@ -517,17 +517,17 @@ fn sql_join(
     ))
 }
 
-fn sql_impl(pool: &AnyPool, rel: Relation, alias_count: &mut u32) -> Query {
+fn sql_impl(tr: TransactionStatic, rel: Relation, alias_count: &mut u32) -> Query {
     let limit_str = rel
         .limit
         .map(|x| format!("LIMIT {}", x))
         .unwrap_or_else(String::new);
     match rel.inner {
         Inner::BackingStore(ty, policies) => {
-            sql_backing_store(pool, rel.columns, &limit_str, ty, policies)
+            sql_backing_store(tr, rel.columns, &limit_str, ty, policies)
         }
         Inner::Filter(inner, restrictions) => sql_filter(
-            pool,
+            tr,
             rel.columns,
             &limit_str,
             alias_count,
@@ -535,16 +535,16 @@ fn sql_impl(pool: &AnyPool, rel: Relation, alias_count: &mut u32) -> Query {
             restrictions,
         ),
         Inner::Join(left, right) => {
-            sql_join(pool, &rel.columns, &limit_str, alias_count, *left, *right)
+            sql_join(tr, &rel.columns, &limit_str, alias_count, *left, *right)
         }
     }
 }
 
-pub(crate) fn sql(pool: &AnyPool, rel: Relation) -> SqlStream {
+pub(crate) fn sql(tr: TransactionStatic, rel: Relation) -> SqlStream {
     let mut v = 0;
     let columns = rel.columns.clone();
-    match sql_impl(pool, rel, &mut v) {
-        Query::Sql(s) => to_stream(pool, s, columns),
+    match sql_impl(tr.clone(), rel, &mut v) {
+        Query::Sql(s) => to_stream(tr, s, columns),
         Query::Stream(s) => s,
     }
 }

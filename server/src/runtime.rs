@@ -10,11 +10,12 @@ use derive_new::new;
 use once_cell::sync::OnceCell;
 use std::cell::RefCell;
 use std::rc::Rc;
+use std::sync::Arc;
 
 #[derive(new)]
 pub(crate) struct Runtime {
     pub(crate) api: Rc<ApiService>,
-    pub(crate) query_engine: Rc<QueryEngine>,
+    pub(crate) query_engine: Arc<QueryEngine>,
     pub(crate) meta: Rc<MetaService>,
     pub(crate) type_system: TypeSystem,
     pub(crate) policies: Policies,

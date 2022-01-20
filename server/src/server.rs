@@ -148,8 +148,7 @@ async fn run(state: SharedState, mut cmd: ExecutorChannel) -> Result<()> {
         Ok(Type::Object(t)) => t,
         _ => anyhow::bail!("Internal error: type {} not found", OAUTHUSER_TYPE_NAME),
     };
-
-    let query_engine = Rc::new(QueryEngine::local_connection(&state.data_db).await?);
+    let query_engine = Arc::new(QueryEngine::local_connection(&state.data_db).await?);
     let mut transaction = query_engine.start_transaction().await?;
     query_engine
         .create_table(&mut transaction, &oauth_user_type)

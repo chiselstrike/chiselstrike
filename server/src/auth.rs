@@ -65,7 +65,7 @@ async fn insert_user_into_db(username: &str) -> Result<String> {
     }
     user.insert("username".into(), json!(username));
     query_engine
-        .add_row(&oauth_user_type, &user)
+        .add_row(&oauth_user_type, &user, None)
         .await?
         .get("id")
         .ok_or_else(|| anyhow!("Didn't get user ID from storing a user."))?

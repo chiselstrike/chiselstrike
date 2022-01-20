@@ -1,0 +1,82 @@
+# SPDX-FileCopyrightText: © 2021 ChiselStrike <info@chiselstrike.com>
+
+# RUN: sh -e @file
+
+cat << EOF > "$TEMPDIR/models/types.ts"
+export class Person extends Chisel.ChiselEntity {
+   name: string = "";
+}
+EOF
+
+cat << EOF > "$TEMPDIR/endpoints/store_person.js"
+import { Person } from "../types.ts";
+
+export default async function chisel(req: Request) {
+    const req_json = await req.json();
+
+    let p = new Person();
+    p.name = req_json.name;
+    await p.save();
+
+    if (req_json.command == "die with honor") {
+        throw "Let's see if transaction gets cancelled";
+    }
+
+    return new Response('Mission acomplished');
+}
+EOF
+
+cat << EOF > "$TEMPDIR/endpoints/retrieve_all.ts"
+import { Person } from "../models/types.ts";
+
+export default async function chisel(req: Request) {
+    let resp = "[";
+    for await (let p of Person.cursor()) {
+        resp += p.name + " ";
+    }
+    resp += "]";
+    return new Response(resp);
+}
+EOF
+
+cat << EOF > "$TEMPDIR/endpoints/write_and_read.ts"
+import { Person } from "../models/types.ts";
+
+export default async function chisel(req: Request) {
+    let p = new Person();
+    p.name = "ThisIsTheBestName";
+    await p.save();
+
+    let resp = "[";
+    for await (let p of Person.cursor()) {
+        resp += p.name + " ";
+    }
+    resp += "]";
+
+    return new Response(resp);
+}
+EOF
+
+cd "$TEMPDIR"
+$CHISEL apply
+
+$CURL -X POST --data '{ "name": "Adalbrecht" }' $CHISELD_HOST/dev/store_person
+# CHECK: Mission acomplished
+
+$CURL $CHISELD_HOST/dev/retrieve_all
+# CHECK: HTTP/1.1 200 OK
+# CHECK: [Adalbrecht ]
+
+$CURL -X POST --data '{
+    "name": "Ruprt",
+    "command": "die with honor"
+}' $CHISELD_HOST/dev/store_person
+# CHECK: HTTP/1.1 500 Internal Server Error
+
+$CURL $CHISELD_HOST/dev/retrieve_all
+# CHECK: HTTP/1.1 200 OK
+# CHECK: [Adalbrecht ]
+
+$CURL -X POST $CHISELD_HOST/dev/write_and_read
+# CHECK: HTTP/1.1 200 OK
+# CHECK: [Adalbrecht ThisIsTheBestName ]

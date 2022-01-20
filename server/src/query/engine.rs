@@ -7,40 +7,60 @@ use crate::JsonObject;
 use anyhow::{anyhow, Context as AnyhowContext, Result};
 use futures::stream::BoxStream;
 use futures::stream::Stream;
+use futures::FutureExt;
 use futures::StreamExt;
 use itertools::{zip, Itertools};
 use pin_project::pin_project;
 use sea_query::{Alias, ColumnDef, Table};
 use serde_json::json;
 use sqlx::any::{Any, AnyArguments, AnyPool, AnyRow};
-use sqlx::Column;
-use sqlx::Transaction;
-use sqlx::{Executor, Row};
+use sqlx::{Column, Executor, Row, Transaction};
 use std::collections::HashMap;
 use std::pin::Pin;
+use std::sync::Arc;
 use std::task::{Context, Poll};
+use tokio::sync::Mutex;
+use tokio::sync::OwnedMutexGuard;
 use uuid::Uuid;
 
 // Results with policies applied
 pub(crate) type SqlStream = BoxStream<'static, Result<JsonObject>>;
 
+pub(crate) type TransactionStatic = Arc<Mutex<Transaction<'static, Any>>>;
+
 #[pin_project]
 struct QueryResults<T> {
     raw_query: String,
-    // The streams we use in here only depend on the lifetime of raw_query.
+    tr: OwnedMutexGuard<Transaction<'static, Any>>,
     #[pin]
     stream: T,
 }
 
-pub(crate) fn new_query_results(
+async fn make_transactioned_stream(
+    tr: TransactionStatic,
     raw_query: String,
-    pool: &AnyPool,
 ) -> impl Stream<Item = anyhow::Result<AnyRow>> {
-    // The string data will not move anymore.
+    let mut tr = tr.lock_owned().await;
+
+    // The string data and Transaction will not move anymore.
     let raw_query_ptr = raw_query.as_ref() as *const str;
     let query = sqlx::query::<Any>(unsafe { &*raw_query_ptr });
-    let stream = query.fetch(pool).map(|i| i.map_err(anyhow::Error::new));
-    QueryResults { raw_query, stream }
+    let tr_ptr = &mut *tr as *mut _;
+    let tr_ref = unsafe { &mut *tr_ptr };
+    let stream = query.fetch(tr_ref).map(|i| i.map_err(anyhow::Error::new));
+
+    QueryResults {
+        tr,
+        raw_query,
+        stream,
+    }
+}
+
+pub(crate) fn new_query_results(
+    raw_query: String,
+    tr: TransactionStatic,
+) -> impl Stream<Item = anyhow::Result<AnyRow>> {
+    make_transactioned_stream(tr, raw_query).flatten_stream()
 }
 
 impl<T: Stream<Item = Result<AnyRow>>> Stream for QueryResults<T> {
@@ -166,7 +186,16 @@ impl QueryEngine {
         Ok(())
     }
 
-    pub(crate) async fn start_transaction(&self) -> Result<Transaction<'_, Any>> {
+    pub(crate) async fn start_transaction_static(self: Arc<Self>) -> Result<TransactionStatic> {
+        Ok(Arc::new(Mutex::new(
+            self.pool
+                .begin()
+                .await
+                .map_err(QueryError::ConnectionFailed)?,
+        )))
+    }
+
+    pub(crate) async fn start_transaction(&self) -> Result<Transaction<'static, Any>> {
         Ok(self
             .pool
             .begin()
@@ -174,7 +203,19 @@ impl QueryEngine {
             .map_err(QueryError::ConnectionFailed)?)
     }
 
-    pub(crate) async fn commit_transaction(transaction: Transaction<'_, Any>) -> Result<()> {
+    pub(crate) async fn commit_transaction(transaction: Transaction<'static, Any>) -> Result<()> {
+        transaction
+            .commit()
+            .await
+            .map_err(QueryError::ExecuteFailed)?;
+        Ok(())
+    }
+
+    pub(crate) async fn commit_transaction_static(transaction: TransactionStatic) -> Result<()> {
+        let transaction = Arc::try_unwrap(transaction)
+            .map_err(|_| anyhow!("Transaction still have references held!"))?;
+        let transaction = transaction.into_inner();
+
         transaction
             .commit()
             .await
@@ -271,8 +312,8 @@ impl QueryEngine {
         Ok(())
     }
 
-    pub(crate) fn query_relation(&self, rel: Relation) -> SqlStream {
-        sql(&self.pool, rel)
+    pub(crate) fn query_relation(&self, rel: Relation, tr: TransactionStatic) -> SqlStream {
+        sql(tr, rel)
     }
 
     /// Inserts object of type `ty` and value `ty_value` into the database.
@@ -288,9 +329,10 @@ impl QueryEngine {
         &self,
         ty: &ObjectType,
         ty_value: &JsonObject,
+        transaction: Option<&mut Transaction<'_, Any>>,
     ) -> Result<serde_json::Value> {
         let (inserts, id_tree) = self.prepare_insertion(ty, ty_value)?;
-        self.run_sql_queries(&inserts).await?;
+        self.run_sql_queries(&inserts, transaction).await?;
         Ok(id_tree.to_json())
     }
 
@@ -320,7 +362,7 @@ impl QueryEngine {
         ty_value: &JsonObject,
     ) -> Result<()> {
         let query = self.prepare_insertion_shallow(ty, ty_value)?;
-        self.run_sql_queries(&[query]).await?;
+        self.run_sql_queries(&[query], None).await?;
         Ok(())
     }
 
@@ -328,15 +370,28 @@ impl QueryEngine {
         Ok(q.get_sqlx().fetch_one(&self.pool).await?)
     }
 
-    async fn run_sql_queries(&self, queries: &[SqlWithArguments]) -> Result<()> {
-        let mut transaction = self.start_transaction().await?;
-        for q in queries {
-            transaction
-                .fetch_one(q.get_sqlx())
-                .await
-                .map_err(QueryError::ExecuteFailed)?;
+    async fn run_sql_queries(
+        &self,
+        queries: &[SqlWithArguments],
+        transaction: Option<&mut Transaction<'_, Any>>,
+    ) -> Result<()> {
+        if let Some(transaction) = transaction {
+            for q in queries {
+                transaction
+                    .fetch_one(q.get_sqlx())
+                    .await
+                    .map_err(QueryError::ExecuteFailed)?;
+            }
+        } else {
+            let mut transaction = self.start_transaction().await?;
+            for q in queries {
+                transaction
+                    .fetch_one(q.get_sqlx())
+                    .await
+                    .map_err(QueryError::ExecuteFailed)?;
+            }
+            QueryEngine::commit_transaction(transaction).await?;
         }
-        QueryEngine::commit_transaction(transaction).await?;
         Ok(())
     }
 

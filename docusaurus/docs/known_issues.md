@@ -19,11 +19,6 @@ There are also other potential issues with Node imports that are [well-known](ht
 While we do plan to provide you with a better experience in the future, for now if you do
 want to use external modules, browser-style should work.
 
-* **Transactions:** ChiselStrike aims to fully support transactions at the endpoint boundary and,
-at a later date, with user-defined granularity (for advanced users). There is a known bug with
-that, though: endpoints should be serialized so RMW is write, but transactions won't be rolled
-back if there is an exception in the endpoint and it doesn't complete.
-
 * **Nested models:** (Also known as relationships.) With the exception of the special `OAuthUser`
 model, it is not possible to embed a model inside another yet. The code to persist nested models
 works, but the code to retrieve them doesn't. 🤷‍♂️
