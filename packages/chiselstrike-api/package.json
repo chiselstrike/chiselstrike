@@ -7,10 +7,14 @@
   "license": "Proprietary",
   "prepare": "npm run build",
   "scripts": {
-    "build": "tsc --noResolve && cp -La ../../api/src/lib.deno_core.d.ts lib/"
+    "prepare": "npm run build",
+    "build": "rimraf ./lib && tsc --noResolve && cp -La ../../api/src/lib.deno_core.d.ts lib/"
   },
   "dependencies": {
     "typescript": "^4.5.4"
+  },
+  "devDependencies": {
+    "rimraf": "^3.0.2"
   },
   "files": [
     "/lib"
