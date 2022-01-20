@@ -4,6 +4,7 @@ use crate::api::{response_template, Body, RequestPath};
 use crate::db::{convert, convert_restrictions};
 use crate::policies::FieldPolicies;
 use crate::query::engine::SqlStream;
+use crate::query::engine::TransactionStatic;
 use crate::runtime;
 use crate::runtime::Runtime;
 use crate::types::{ObjectType, Type};
@@ -45,6 +46,7 @@ use std::convert::TryInto;
 use std::future::Future;
 use std::io::Write;
 use std::net::SocketAddr;
+use std::ops::DerefMut;
 use std::path::{Path, PathBuf};
 use std::pin::Pin;
 use std::rc::Rc;
@@ -287,7 +289,13 @@ async fn op_chisel_store(
     // Await point below, RcMut can't be held.
     drop(runtime);
 
-    Ok(serde_json::json!(query_engine.add_row(&ty, value).await?))
+    let transaction = current_transaction()?;
+    let mut transaction = transaction.lock().await;
+    Ok(serde_json::json!(
+        query_engine
+            .add_row(&ty, value, Some(transaction.deref_mut()))
+            .await?
+    ))
 }
 
 async fn op_chisel_entity_delete(
@@ -404,7 +412,9 @@ fn op_chisel_relational_query_create(
     let relation = convert(&relation)?;
     let mut runtime = runtime::get();
     let query_engine = &mut runtime.query_engine;
-    let stream = Box::pin(query_engine.query_relation(relation));
+
+    let transaction = current_transaction()?;
+    let stream = Box::pin(query_engine.query_relation(relation, transaction));
     let resource = QueryStreamResource {
         stream: RefCell::new(stream),
     };
@@ -616,6 +626,7 @@ struct RequestContext {
     method: Method,
     /// Uniquely identifies the OAuthUser row for the logged-in user.  None if there was no login.
     userid: Option<String>,
+    transaction: Option<TransactionStatic>,
 }
 
 thread_local! {
@@ -635,8 +646,26 @@ fn set_current_context(c: RequestContext) {
     });
 }
 
+fn clear_current_context() -> Option<TransactionStatic> {
+    CURRENT_CONTEXT.with(|c| {
+        let mut ctx = c.borrow_mut();
+        let transaction = ctx.transaction.clone();
+        *ctx = RequestContext::default();
+        transaction
+    })
+}
+
 fn current_method() -> Method {
     CURRENT_CONTEXT.with(|path| path.borrow().method.clone())
+}
+
+fn current_transaction() -> Result<TransactionStatic> {
+    CURRENT_CONTEXT.with(|path| {
+        path.borrow()
+            .transaction
+            .clone()
+            .ok_or_else(|| anyhow!("no active transaction"))
+    })
 }
 
 #[pin_project]
@@ -720,35 +749,58 @@ fn get_result_aux(
     Ok(v8::Global::new(scope, result))
 }
 
-async fn get_result(
-    runtime: &mut JsRuntime,
+// See
+// https://stackoverflow.com/questions/68591843/async-fn-reports-hidden-type-for-impl-trait-captures-lifetime-that-does-not-a?noredirect=1&lq=1
+// for an explanation of why this dark arts stuff is needed. This is, in summary,
+// a limitation of the current implementation of auto-async in Rust.
+//
+// It gets confused if we pass a 'static lifetime because what it tries to do instead is to
+// bring everybody to the most restrictive lifetime (and JsRuntime and Request cannot be static)
+//
+// So we open code the Future, which to be honest, outside from Glommio primitives this is the
+// first time I've ever had to do it!
+#[allow(clippy::manual_async_fn)]
+fn get_result<'a>(
+    runtime: &'a mut JsRuntime,
     request_handler: v8::Global<v8::Function>,
-    req: &mut Request<hyper::Body>,
+    req: &'a mut Request<hyper::Body>,
     path: String,
-) -> Result<v8::Global<v8::Value>> {
-    let context = RequestContext {
-        method: req.method().clone(),
-        path: RequestPath::try_from(path.as_ref()).unwrap(),
-        userid: crate::auth::get_user(req).await?,
-    };
-    // Set the current path to cover JS code that runs before
-    // blocking. This in particular covers code that doesn't block at
-    // all.
-    set_current_context(context.clone());
-    let result = get_result_aux(runtime, request_handler, req)?;
-    let result = runtime.resolve_value(result);
-    // We got here without blocking and now have a future representing
-    // pending work for the endpoint. We might not get to that future
-    // before the current path is changed, so wrap the future in a
-    // RequestFuture that will reset the current path before polling.
-    RequestFuture {
-        context,
-        inner: result,
+    transaction: TransactionStatic,
+) -> impl Future<Output = Result<v8::Global<v8::Value>>> + 'a {
+    async move {
+        let context = RequestContext {
+            method: req.method().clone(),
+            path: RequestPath::try_from(path.as_ref()).unwrap(),
+            userid: crate::auth::get_user(req).await?,
+            transaction: Some(transaction.clone()),
+        };
+
+        // Set the current path to cover JS code that runs before
+        // blocking. This in particular covers code that doesn't block at
+        // all.
+        set_current_context(context.clone());
+        let result = get_result_aux(runtime, request_handler, req)?;
+        let result = runtime.resolve_value(result);
+        // We got here without blocking and now have a future representing
+        // pending work for the endpoint. We might not get to that future
+        // before the current path is changed, so wrap the future in a
+        // RequestFuture that will reset the current path before polling.
+        RequestFuture {
+            context,
+            inner: result,
+        }
+        .await
     }
-    .await
 }
 
 pub(crate) async fn run_js(path: String, mut req: Request<hyper::Body>) -> Result<Response<Body>> {
+    let qe = {
+        let runtime = runtime::get();
+        let qe = runtime.query_engine.clone();
+        drop(runtime);
+        qe
+    };
+
     // The rust borrow checker can track fields independently, but
     // only in very simple cases. For example,
     //
@@ -784,7 +836,13 @@ pub(crate) async fn run_js(path: String, mut req: Request<hyper::Body>) -> Resul
             .wait_for_session_and_break_on_next_statement();
     }
 
-    let result = get_result(runtime, request_handler, &mut req, path).await?;
+    let transaction = qe.start_transaction_static().await?;
+    let result = get_result(runtime, request_handler, &mut req, path, transaction).await;
+    // FIXME: maybe defer creating the transaction until we need one, to avoid doing it for
+    // endpoints that don't do any data access. For now, because we always create it above,
+    // it should be safe to unwrap.
+    let transaction = clear_current_context().unwrap();
+    let result = result?;
 
     let stream = get_read_stream(runtime, result.clone())?;
     let scope = &mut runtime.handle_scope();
@@ -822,6 +880,10 @@ pub(crate) async fn run_js(path: String, mut req: Request<hyper::Body>) -> Resul
     }
 
     let body = builder.body(Body::Stream(Box::pin(stream)))?;
+    // Defer committing of the transaction to the last possible moment. It would be better
+    // to commit the transaction after the response stream is closed, but it would be a lot
+    // of work and this will do for now.
+    crate::query::QueryEngine::commit_transaction_static(transaction).await?;
     Ok(body)
 }
 

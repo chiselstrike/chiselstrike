@@ -36,7 +36,7 @@ use tonic::{transport::Server, Request, Response, Status};
 pub(crate) struct GlobalRpcState {
     type_system: TypeSystem,
     meta: MetaService,
-    query_engine: QueryEngine,
+    query_engine: Arc<QueryEngine>,
     routes: PrefixMap<String>, // For globally keeping track of routes
     commands: Vec<CoordinatorChannel>,
     policies: Policies,
@@ -55,7 +55,7 @@ impl GlobalRpcState {
         Ok(Self {
             type_system,
             meta,
-            query_engine,
+            query_engine: Arc::new(query_engine),
             commands,
             routes,
             policies,
@@ -169,7 +169,7 @@ impl RpcService {
 
         state
             .type_system
-            .populate_types(&state.query_engine, &to, &from)
+            .populate_types(state.query_engine.clone(), &to, &from)
             .await?;
 
         let response = chisel::PopulateResponse {
