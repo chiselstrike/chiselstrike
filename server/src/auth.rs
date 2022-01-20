@@ -101,3 +101,14 @@ pub(crate) fn init(api: &mut ApiService) {
     );
     api.add_route(USERPATH.into(), Arc::new(lookup_user));
 }
+
+pub(crate) async fn get_username(req: &Request<hyper::Body>) -> anyhow::Result<Option<String>> {
+    match req.headers().get("ChiselStrikeToken") {
+        Some(token) => {
+            let token = token.to_str()?;
+            let meta = { crate::runtime::get().meta.clone() };
+            Ok(meta.get_username(token).await.ok())
+        }
+        None => Ok(None),
+    }
+}
