@@ -4,6 +4,10 @@ version = "0.5.0"
 authors = ["ChiselStrike"]
 edition = "2021"
 
+[features]
+default = []
+must_not_suspend = []
+
 [dependencies]
 anyhow = { version = "1.0.45", features = ["backtrace"] }
 api = { path = "../api" }
