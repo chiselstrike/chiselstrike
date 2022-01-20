@@ -1,6 +1,6 @@
 [package]
 name = "third_party"
-version = "0.6.0"
+version = "0.6.1"
 authors = ["ChiselStrike"]
 edition = "2021"
 
