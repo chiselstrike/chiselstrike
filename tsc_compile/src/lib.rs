@@ -258,4 +258,12 @@ mod tests {
         compile_ts_code(f.path().to_str().unwrap(), None, libs)?;
         Ok(())
     }
+
+    #[test]
+    fn property_constructor_not_strict() -> Result<()> {
+        let mut f = Builder::new().suffix(".ts").tempfile()?;
+        f.write_all(b"export class Foo { a: number };")?;
+        compile_ts_code(f.path().to_str().unwrap(), None, Default::default())?;
+        Ok(())
+    }
 }

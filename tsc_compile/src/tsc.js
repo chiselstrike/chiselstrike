@@ -60,6 +60,7 @@ function compile(file, lib) {
         noImplicitAny: true,
         outDir: "chisel://",
         removeComments: true,
+        strictPropertyInitialization: false, // we don't support constructors, so don't be strict about this
         rootDir: "/",
         strict: true,
         target: ts.ScriptTarget.ESNext,
