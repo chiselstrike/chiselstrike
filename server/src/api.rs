@@ -159,18 +159,13 @@ impl ApiService {
                 return response_template().body("ok".to_string().into()); // Makes CORS preflights pass.
             }
 
-            let username = match req.headers().get("ChiselStrikeToken") {
-                Some(token) => {
-                    let token = token.to_str();
-                    if token.is_err() {
-                        return Response::builder()
-                            .status(StatusCode::FORBIDDEN)
-                            .body("Token not recognized\n".to_string().into());
-                    }
-                    let meta = crate::runtime::get().meta.clone();
-                    meta.get_username(token.unwrap()).await.ok()
+            let username = match crate::auth::get_username(&req).await {
+                Ok(u) => u,
+                _ => {
+                    return Response::builder()
+                        .status(StatusCode::FORBIDDEN)
+                        .body("Token not recognized\n".to_string().into())
                 }
-                None => None,
             };
             let rp = match RequestPath::try_from(req.uri().path()) {
                 Ok(rp) => rp,

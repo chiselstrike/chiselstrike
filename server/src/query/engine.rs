@@ -2,7 +2,7 @@
 
 use crate::db::{sql, Relation, SqlValue};
 use crate::query::{DbConnection, Kind, QueryError};
-use crate::types::{Field, ObjectDelta, ObjectType, Type};
+use crate::types::{Field, ObjectDelta, ObjectType, Type, OAUTHUSER_TYPE_NAME};
 use anyhow::{anyhow, Context as AnyhowContext};
 use futures::stream::BoxStream;
 use futures::stream::Stream;
@@ -10,7 +10,7 @@ use futures::StreamExt;
 use itertools::{zip, Itertools};
 use sea_query::{Alias, ColumnDef, Table};
 use serde_json::json;
-use sqlx::any::{Any, AnyPool, AnyRow};
+use sqlx::any::{Any, AnyArguments, AnyPool, AnyRow};
 use sqlx::Column;
 use sqlx::Transaction;
 use sqlx::{Executor, Row};
@@ -76,14 +76,27 @@ impl TryFrom<&Field> for ColumnDef {
 /// An SQL string with placeholders, plus its argument values.  Keeps them all alive so they can be fed to
 /// sqlx::Query by reference.
 #[derive(Debug)]
-struct SqlWithArguments {
+pub(crate) struct SqlWithArguments {
     /// SQL query text with placeholders $1, $2, ...
-    sql: String,
+    pub(crate) sql: String,
     /// Values for $n placeholders.
-    args: Vec<SqlValue>,
-    // We could theoretically create sqlx::Query and bind it as soon as self.sql and self.args are final.
-    // Unfortunately, this requires hitting the precise ProcRUSTean incantation required to have a Query field,
-    // which, let's be honest, is never going to happen. >:-[
+    pub(crate) args: Vec<SqlValue>,
+}
+
+impl SqlWithArguments {
+    fn get_sqlx(&self) -> sqlx::query::Query<'_, sqlx::Any, AnyArguments> {
+        let mut sqlx_query = sqlx::query(&self.sql);
+        for arg in &self.args {
+            match arg {
+                SqlValue::Bool(arg) => sqlx_query = sqlx_query.bind(arg),
+                SqlValue::U64(arg) => sqlx_query = sqlx_query.bind(*arg as i64),
+                SqlValue::I64(arg) => sqlx_query = sqlx_query.bind(arg),
+                SqlValue::F64(arg) => sqlx_query = sqlx_query.bind(arg),
+                SqlValue::String(arg) => sqlx_query = sqlx_query.bind(arg),
+            };
+        }
+        sqlx_query
+    }
 }
 
 /// Represents recurent structure of nested object ids. Each level holds
@@ -299,21 +312,15 @@ impl QueryEngine {
         Ok(())
     }
 
+    pub(crate) async fn fetch_one(&self, q: SqlWithArguments) -> anyhow::Result<AnyRow> {
+        Ok(q.get_sqlx().fetch_one(&self.pool).await?)
+    }
+
     async fn run_sql_queries(&self, queries: &[SqlWithArguments]) -> anyhow::Result<()> {
         let mut transaction = self.start_transaction().await?;
         for q in queries {
-            let mut sqlx_query = sqlx::query(&q.sql);
-            for arg in &q.args {
-                match arg {
-                    SqlValue::Bool(arg) => sqlx_query = sqlx_query.bind(arg),
-                    SqlValue::U64(arg) => sqlx_query = sqlx_query.bind(*arg as i64),
-                    SqlValue::I64(arg) => sqlx_query = sqlx_query.bind(arg),
-                    SqlValue::F64(arg) => sqlx_query = sqlx_query.bind(arg),
-                    SqlValue::String(arg) => sqlx_query = sqlx_query.bind(arg),
-                };
-            }
             transaction
-                .fetch_one(sqlx_query)
+                .fetch_one(q.get_sqlx())
                 .await
                 .map_err(QueryError::ExecuteFailed)?;
         }
@@ -348,12 +355,19 @@ impl QueryEngine {
                         .context("unexpected json type (expected an object)")
                         .with_context(incompatible_data)?;
 
-                    let (nested_inserts, nested_ids) =
-                        self.prepare_insertion(nested_type, nested_value)?;
-                    let nested_id = nested_ids.id.to_owned();
-
-                    child_ids.insert(field.name.to_owned(), nested_ids);
-                    inserts.extend(nested_inserts);
+                    let nested_id = if nested_type.name() == OAUTHUSER_TYPE_NAME {
+                        match nested_value.get("id") {
+                            Some(serde_json::Value::String(id)) => id.clone(), // Could be wrong id, but it won't make a new user.
+                            _ => anyhow::bail!("Cannot save into type {}.", OAUTHUSER_TYPE_NAME),
+                        }
+                    } else {
+                        let (nested_inserts, nested_ids) =
+                            self.prepare_insertion(nested_type, nested_value)?;
+                        inserts.extend(nested_inserts);
+                        let nested_id = nested_ids.id.to_owned();
+                        child_ids.insert(field.name.to_owned(), nested_ids);
+                        nested_id
+                    };
                     SqlValue::String(nested_id)
                 }
                 _ => self

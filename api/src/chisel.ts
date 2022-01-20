@@ -338,3 +338,9 @@ export function labels(..._val: string[]) {
         // chisel-decorator, no content
     };
 }
+
+/** Returns the currently logged-in user or null if no one is logged in. */
+export async function loggedInUser(): Promise<OAuthUser | null> {
+    const id = await Deno.core.opAsync("chisel_user", {});
+    return id == null ? null : await OAuthUser.findOne({ id });
+}
