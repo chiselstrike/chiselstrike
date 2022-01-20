@@ -11,8 +11,9 @@ EOF
 
 cat << EOF > "$TEMPDIR/endpoints/user.js"
 import { Post } from '../models/post.ts';
+import { loggedInUser } from '@chiselstrike/api';
 export default async function (req: Request) {
-    const author = await Chisel.loggedInUser() ?? { username: '' };
+    const author = await loggedInUser() ?? { username: '' };
     await Post.build({ author }).save();
     return new Response('Successful save!');
 }
