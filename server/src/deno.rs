@@ -5,13 +5,13 @@ use crate::db::{convert, convert_restrictions};
 use crate::policies::FieldPolicies;
 use crate::query::engine::SqlStream;
 use crate::query::engine::TransactionStatic;
+use crate::rcmut::RcMut;
 use crate::runtime;
 use crate::runtime::Runtime;
 use crate::types::{ObjectType, Type};
 use crate::JsonObject;
 use anyhow::{anyhow, Result};
 use api::chisel_js;
-use async_mutex::Mutex;
 use deno_broadcast_channel::InMemoryBroadcastChannel;
 use deno_core::error::AnyError;
 use deno_core::CancelFuture;
@@ -32,6 +32,7 @@ use deno_runtime::permissions::Permissions;
 use deno_runtime::worker::{MainWorker, WorkerOptions};
 use deno_runtime::BootstrapOptions;
 use deno_web::BlobStore;
+use futures::pin_mut;
 use futures::stream::{try_unfold, Stream};
 use futures::FutureExt;
 use hyper::body::HttpBody;
@@ -243,6 +244,20 @@ impl DenoService {
     }
 }
 
+// A future that resolves the hyper::Body has data.
+struct ReadFuture {
+    resource: Rc<BodyResource>,
+}
+
+impl Future for ReadFuture {
+    type Output = Option<Result<hyper::body::Bytes, hyper::Error>>;
+    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        let mut borrow = self.resource.body.borrow_mut();
+        let body: &mut hyper::Body = &mut borrow;
+        Pin::new(body).poll_data(cx)
+    }
+}
+
 async fn op_chisel_read_body(
     state: Rc<RefCell<OpState>>,
     body_rid: ResourceId,
@@ -250,8 +265,10 @@ async fn op_chisel_read_body(
 ) -> Result<Option<ZeroCopyBuf>> {
     let resource: Rc<BodyResource> = state.borrow().resource_table.get(body_rid)?;
     let cancel = RcRef::map(&resource, |r| &r.cancel);
-    let mut borrow = resource.body.borrow_mut();
-    let fut = borrow.data().or_cancel(cancel);
+    let fut = ReadFuture {
+        resource: resource.clone(),
+    };
+    let fut = fut.or_cancel(cancel);
     Ok(fut.await?.transpose()?.map(|x| x.to_vec().into()))
 }
 
@@ -273,21 +290,22 @@ async fn op_chisel_store(
         .as_object()
         .ok_or_else(|| anyhow!("Value passed to store is not a Json Object"))?;
 
-    let runtime = runtime::get();
-    let api_version = current_api_version();
+    let (query_engine, ty) = {
+        let runtime = runtime::get();
+        let api_version = current_api_version();
 
-    // Users can only store custom types.  Builtin types are managed by us.
-    let ty = match runtime
-        .type_system
-        .lookup_custom_type(type_name, &api_version)
-    {
-        Err(_) => anyhow::bail!("Cannot save into type {}.", type_name),
-        Ok(ty) => ty,
+        // Users can only store custom types.  Builtin types are managed by us.
+        let ty = match runtime
+            .type_system
+            .lookup_custom_type(type_name, &api_version)
+        {
+            Err(_) => anyhow::bail!("Cannot save into type {}.", type_name),
+            Ok(ty) => ty,
+        };
+
+        let query_engine = runtime.query_engine.clone();
+        (query_engine, ty)
     };
-
-    let query_engine = runtime.query_engine.clone();
-    // Await point below, RcMut can't be held.
-    drop(runtime);
 
     let transaction = current_transaction()?;
     let mut transaction = transaction.lock().await;
@@ -313,19 +331,21 @@ async fn op_chisel_entity_delete(
     let restrictions = content["restrictions"].as_object().ok_or_else(|| {
         anyhow!("The `restrictions` passed to `op_chisel_entity_delete` is not a JSON object.")
     })?;
-    let runtime = runtime::get();
-    let api_version = current_api_version();
-    let ty = match runtime
-        .type_system
-        .lookup_custom_type(type_name, &api_version)
-    {
-        Err(_) => anyhow::bail!("Cannot delete from type `{}`", type_name),
-        Ok(ty) => ty,
+    let (query_engine, ty, restrictions) = {
+        let runtime = runtime::get();
+        let api_version = current_api_version();
+        let ty = match runtime
+            .type_system
+            .lookup_custom_type(type_name, &api_version)
+        {
+            Err(_) => anyhow::bail!("Cannot delete from type `{}`", type_name),
+            Ok(ty) => ty,
+        };
+        let restrictions = convert_restrictions(restrictions)?;
+        let query_engine = runtime.query_engine.clone();
+        (query_engine, ty, restrictions)
     };
-    let restrictions = convert_restrictions(restrictions)?;
-    let query_engine = runtime.query_engine.clone();
-    // Await point below, RcMut can't be held.
-    drop(runtime);
+
     Ok(serde_json::json!(
         query_engine.delete(&ty, restrictions).await?
     ))
@@ -422,16 +442,28 @@ fn op_chisel_relational_query_create(
     Ok(rid)
 }
 
+// A future that resolves when this stream next element is available.
+struct QueryNextFuture {
+    resource: Rc<QueryStreamResource>,
+}
+
+impl Future for QueryNextFuture {
+    type Output = Option<Result<JsonObject>>;
+    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        let mut stream = self.resource.stream.borrow_mut();
+        let stream: &mut SqlStream = &mut stream;
+        Pin::new(stream).poll_next(cx)
+    }
+}
+
 async fn op_chisel_relational_query_next(
     state: Rc<RefCell<OpState>>,
     query_stream_rid: ResourceId,
     _: (),
 ) -> Result<Option<JsonObject>> {
     let resource: Rc<QueryStreamResource> = state.borrow().resource_table.get(query_stream_rid)?;
-    let mut stream = resource.stream.borrow_mut();
-    use futures::stream::StreamExt;
-
-    if let Some(row) = stream.next().await {
+    let fut = QueryNextFuture { resource };
+    if let Some(row) = fut.await {
         Ok(Some(row?))
     } else {
         Ok(None)
@@ -513,7 +545,9 @@ async fn create_deno<P: AsRef<Path>>(base_directory: P, inspect_brk: bool) -> Re
 }
 
 pub(crate) async fn init_deno<P: AsRef<Path>>(base_directory: P, inspect_brk: bool) -> Result<()> {
-    let service = Rc::new(Mutex::new(create_deno(base_directory, inspect_brk).await?));
+    let service = Rc::new(RefCell::new(
+        create_deno(base_directory, inspect_brk).await?,
+    ));
     DENO.with(|d| {
         d.set(service)
             .map_err(|_| ())
@@ -526,7 +560,7 @@ thread_local! {
     // There is no 'thread lifetime in rust. So without Rc we can't
     // convince rust that a future produced with DENO.with doesn't
     // outlive the DenoService.
-    static DENO: OnceCell<Rc<Mutex<DenoService>>> = OnceCell::new();
+    static DENO: OnceCell<Rc<RefCell<DenoService>>> = OnceCell::new();
 }
 
 fn try_into_or<'s, T: std::convert::TryFrom<v8::Local<'s, v8::Value>>>(
@@ -551,6 +585,31 @@ where
     Ok(res)
 }
 
+// A future that resolves when the js promise is fulfilled.
+struct ResolveFuture {
+    js_promise: v8::Global<v8::Value>,
+}
+
+impl Future for ResolveFuture {
+    type Output = Result<v8::Global<v8::Value>>;
+    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        let mut service = get();
+        let runtime = &mut service.worker.js_runtime;
+        // FIXME: Use runtime.poll_value once we upgrade to a deno_core that has it.
+        let fut = runtime.resolve_value(self.js_promise.clone());
+        pin_mut!(fut);
+        let ret = fut.poll(cx);
+        if ret.is_pending() {
+            // FIXME: This a hack around
+            // https://github.com/denoland/deno/issues/13458 We call
+            // wake more often than needed, but at least this prevents
+            // us from stalling.
+            cx.waker().clone().wake();
+        }
+        ret
+    }
+}
+
 async fn get_read_future(
     read_tpl: Option<(v8::Global<v8::Value>, v8::Global<v8::Function>)>,
 ) -> Result<Option<(Box<[u8]>, ())>> {
@@ -561,10 +620,9 @@ async fn get_read_future(
         }
     };
 
-    let service_lock = get();
-    let mut service = service_lock.lock().await;
-    let runtime = &mut service.worker.js_runtime;
     let js_promise = {
+        let mut service = get();
+        let runtime = &mut service.worker.js_runtime;
         let scope = &mut runtime.handle_scope();
         let reader = v8::Local::new(scope, reader.clone());
         let res = read
@@ -573,7 +631,10 @@ async fn get_read_future(
             .ok_or(Error::NotAResponse)?;
         v8::Global::new(scope, res)
     };
-    let read_result = runtime.resolve_value(js_promise).await?;
+    let read_result = ResolveFuture { js_promise };
+    let read_result = read_result.await?;
+    let mut service = get();
+    let runtime = &mut service.worker.js_runtime;
     let scope = &mut runtime.handle_scope();
     let read_result = read_result
         .open(scope)
@@ -680,16 +741,16 @@ fn current_transaction() -> Result<TransactionStatic> {
 }
 
 #[pin_project]
-struct RequestFuture<F> {
+struct RequestFuture {
     context: RequestContext,
     #[pin]
-    inner: F,
+    inner: ResolveFuture,
 }
 
-impl<F: Future> Future for RequestFuture<F> {
-    type Output = F::Output;
+impl Future for RequestFuture {
+    type Output = Result<v8::Global<v8::Value>>;
 
-    fn poll(self: Pin<&mut Self>, c: &mut Context<'_>) -> Poll<F::Output> {
+    fn poll(self: Pin<&mut Self>, c: &mut Context<'_>) -> Poll<Self::Output> {
         let this = self.project();
         set_current_context(this.context.clone());
         this.inner.poll(c)
@@ -697,10 +758,12 @@ impl<F: Future> Future for RequestFuture<F> {
 }
 
 fn get_result_aux(
-    runtime: &mut JsRuntime,
     request_handler: v8::Global<v8::Function>,
     req: &mut Request<hyper::Body>,
 ) -> Result<v8::Global<v8::Value>> {
+    let mut service = get();
+    let runtime = &mut service.worker.js_runtime;
+
     let op_state = runtime.op_state();
     let global_context = runtime.global_context();
     let scope = &mut runtime.handle_scope();
@@ -760,48 +823,33 @@ fn get_result_aux(
     Ok(v8::Global::new(scope, result))
 }
 
-// See
-// https://stackoverflow.com/questions/68591843/async-fn-reports-hidden-type-for-impl-trait-captures-lifetime-that-does-not-a?noredirect=1&lq=1
-// for an explanation of why this dark arts stuff is needed. This is, in summary,
-// a limitation of the current implementation of auto-async in Rust.
-//
-// It gets confused if we pass a 'static lifetime because what it tries to do instead is to
-// bring everybody to the most restrictive lifetime (and JsRuntime and Request cannot be static)
-//
-// So we open code the Future, which to be honest, outside from Glommio primitives this is the
-// first time I've ever had to do it!
-#[allow(clippy::manual_async_fn)]
-fn get_result<'a>(
-    runtime: &'a mut JsRuntime,
+async fn get_result(
     request_handler: v8::Global<v8::Function>,
-    req: &'a mut Request<hyper::Body>,
+    req: &mut Request<hyper::Body>,
     path: String,
     transaction: TransactionStatic,
-) -> impl Future<Output = Result<v8::Global<v8::Value>>> + 'a {
-    async move {
-        let context = RequestContext {
-            method: req.method().clone(),
-            path: RequestPath::try_from(path.as_ref()).unwrap(),
-            userid: crate::auth::get_user(req).await?,
-            transaction: Some(transaction.clone()),
-        };
+) -> Result<v8::Global<v8::Value>> {
+    let context = RequestContext {
+        method: req.method().clone(),
+        path: RequestPath::try_from(path.as_ref()).unwrap(),
+        userid: crate::auth::get_user(req).await?,
+        transaction: Some(transaction.clone()),
+    };
 
-        // Set the current path to cover JS code that runs before
-        // blocking. This in particular covers code that doesn't block at
-        // all.
-        set_current_context(context.clone());
-        let result = get_result_aux(runtime, request_handler, req)?;
-        let result = runtime.resolve_value(result);
-        // We got here without blocking and now have a future representing
-        // pending work for the endpoint. We might not get to that future
-        // before the current path is changed, so wrap the future in a
-        // RequestFuture that will reset the current path before polling.
-        RequestFuture {
-            context,
-            inner: result,
-        }
-        .await
+    // Set the current path to cover JS code that runs before
+    // blocking. This in particular covers code that doesn't block at
+    // all.
+    set_current_context(context.clone());
+    let result = get_result_aux(request_handler, req)?;
+    // We got here without blocking and now have a future representing
+    // pending work for the endpoint. We might not get to that future
+    // before the current path is changed, so wrap the future in a
+    // RequestFuture that will reset the current path before polling.
+    RequestFuture {
+        context,
+        inner: ResolveFuture { js_promise: result },
     }
+    .await
 }
 
 pub(crate) async fn run_js(path: String, mut req: Request<hyper::Body>) -> Result<Response<Body>> {
@@ -833,64 +881,71 @@ pub(crate) async fn run_js(path: String, mut req: Request<hyper::Body>) -> Resul
     //   let f = &mut f;
     //   let g = &mut f.0;
     //   foo(g, f.1);
-    let service_lock = get();
-    let mut service = service_lock.lock().await;
+    let request_handler = {
+        let mut service = get();
+        let service: &mut DenoService = &mut service;
 
-    let service: &mut DenoService = &mut service;
+        let request_handler = service.handlers.get(&path).unwrap().clone();
+        let runtime = &mut service.worker.js_runtime;
 
-    let request_handler = service.handlers.get(&path).unwrap().clone();
-    let runtime = &mut service.worker.js_runtime;
-
-    if service.inspector.is_some() {
-        runtime
-            .inspector()
-            .wait_for_session_and_break_on_next_statement();
-    }
+        if service.inspector.is_some() {
+            runtime
+                .inspector()
+                .wait_for_session_and_break_on_next_statement();
+        }
+        request_handler
+    };
 
     let transaction = qe.start_transaction_static().await?;
-    let result = get_result(runtime, request_handler, &mut req, path, transaction).await;
+    let result = get_result(request_handler, &mut req, path, transaction).await;
     // FIXME: maybe defer creating the transaction until we need one, to avoid doing it for
     // endpoints that don't do any data access. For now, because we always create it above,
     // it should be safe to unwrap.
     let transaction = clear_current_context().unwrap();
     let result = result?;
 
-    let stream = get_read_stream(runtime, result.clone())?;
-    let scope = &mut runtime.handle_scope();
-    let response = result
-        .open(scope)
-        .to_object(scope)
-        .ok_or(Error::NotAResponse)?;
+    let body = {
+        let mut service = get();
+        let service: &mut DenoService = &mut service;
+        let runtime = &mut service.worker.js_runtime;
 
-    let status: v8::Local<v8::Number> = get_member(response, scope, "status")?;
-    let status = status.value() as u16;
+        let stream = get_read_stream(runtime, result.clone())?;
+        let scope = &mut runtime.handle_scope();
+        let response = result
+            .open(scope)
+            .to_object(scope)
+            .ok_or(Error::NotAResponse)?;
 
-    let headers: v8::Local<v8::Object> = get_member(response, scope, "headers")?;
-    let entries: v8::Local<v8::Function> = get_member(headers, scope, "entries")?;
-    let iter: v8::Local<v8::Object> = try_into_or(entries.call(scope, headers.into(), &[]))?;
+        let status: v8::Local<v8::Number> = get_member(response, scope, "status")?;
+        let status = status.value() as u16;
 
-    let next: v8::Local<v8::Function> = get_member(iter, scope, "next")?;
-    let mut builder = response_template().status(StatusCode::from_u16(status)?);
+        let headers: v8::Local<v8::Object> = get_member(response, scope, "headers")?;
+        let entries: v8::Local<v8::Function> = get_member(headers, scope, "entries")?;
+        let iter: v8::Local<v8::Object> = try_into_or(entries.call(scope, headers.into(), &[]))?;
 
-    loop {
-        let item: v8::Local<v8::Object> = try_into_or(next.call(scope, iter.into(), &[]))?;
+        let next: v8::Local<v8::Function> = get_member(iter, scope, "next")?;
+        let mut builder = response_template().status(StatusCode::from_u16(status)?);
 
-        let done: v8::Local<v8::Value> = get_member(item, scope, "done")?;
-        if done.is_true() {
-            break;
+        loop {
+            let item: v8::Local<v8::Object> = try_into_or(next.call(scope, iter.into(), &[]))?;
+
+            let done: v8::Local<v8::Value> = get_member(item, scope, "done")?;
+            if done.is_true() {
+                break;
+            }
+            let value: v8::Local<v8::Array> = get_member(item, scope, "value")?;
+            let key: v8::Local<v8::String> = try_into_or(value.get_index(scope, 0))?;
+            let value: v8::Local<v8::String> = try_into_or(value.get_index(scope, 1))?;
+
+            // FIXME: Do we have to handle non utf-8 values?
+            builder = builder.header(
+                key.to_rust_string_lossy(scope),
+                value.to_rust_string_lossy(scope),
+            );
         }
-        let value: v8::Local<v8::Array> = get_member(item, scope, "value")?;
-        let key: v8::Local<v8::String> = try_into_or(value.get_index(scope, 0))?;
-        let value: v8::Local<v8::String> = try_into_or(value.get_index(scope, 1))?;
 
-        // FIXME: Do we have to handle non utf-8 values?
-        builder = builder.header(
-            key.to_rust_string_lossy(scope),
-            value.to_rust_string_lossy(scope),
-        );
-    }
-
-    let body = builder.body(Body::Stream(Box::pin(stream)))?;
+        builder.body(Body::Stream(Box::pin(stream)))?
+    };
     // Defer committing of the transaction to the last possible moment. It would be better
     // to commit the transaction after the response stream is closed, but it would be a lot
     // of work and this will do for now.
@@ -898,8 +953,11 @@ pub(crate) async fn run_js(path: String, mut req: Request<hyper::Body>) -> Resul
     Ok(body)
 }
 
-fn get() -> Rc<Mutex<DenoService>> {
-    DENO.with(|x| x.get().expect("Runtime is not yet initialized.").clone())
+fn get() -> RcMut<DenoService> {
+    DENO.with(|x| {
+        let rc = x.get().expect("Runtime is not yet initialized.").clone();
+        RcMut::new(rc)
+    })
 }
 
 pub(crate) async fn compile_endpoint<P: AsRef<Path>>(
@@ -907,35 +965,44 @@ pub(crate) async fn compile_endpoint<P: AsRef<Path>>(
     path: String,
     code: String,
 ) -> Result<()> {
-    let service_lock = get();
-    let mut service = service_lock.lock().await;
+    let promise = {
+        let mut service = get();
+        let service: &mut DenoService = &mut service;
+
+        let mut code_map = service.module_loader.code_map.borrow_mut();
+        let mut entry = code_map
+            .entry(path.clone())
+            .and_modify(|v| v.version += 1)
+            .or_insert(VersionedCode {
+                code: "".to_string(),
+                version: 0,
+            });
+        entry.code = code;
+
+        // Modules are never unloaded, so we need to create an unique
+        // path. This will not be a problem once we publish the entire app
+        // at once, since then we can create a new isolate for it.
+        let url = format!(
+            "file://{}/{}.js?ver={}",
+            base_directory.as_ref().display(),
+            path,
+            entry.version
+        );
+        let url = Url::parse(&url).unwrap();
+
+        drop(code_map);
+        let runtime = &mut service.worker.js_runtime;
+        runtime.execute_script(&path, &format!("import(\"{}\")", url))?
+    };
+
+    let module = ResolveFuture {
+        js_promise: promise,
+    };
+    let module = module.await?;
+
+    let mut service = get();
     let service: &mut DenoService = &mut service;
-
-    let mut code_map = service.module_loader.code_map.borrow_mut();
-    let mut entry = code_map
-        .entry(path.clone())
-        .and_modify(|v| v.version += 1)
-        .or_insert(VersionedCode {
-            code: "".to_string(),
-            version: 0,
-        });
-    entry.code = code;
-
-    // Modules are never unloaded, so we need to create an unique
-    // path. This will not be a problem once we publish the entire app
-    // at once, since then we can create a new isolate for it.
-    let url = format!(
-        "file://{}/{}.js?ver={}",
-        base_directory.as_ref().display(),
-        path,
-        entry.version
-    );
-    let url = Url::parse(&url).unwrap();
-
-    drop(code_map);
     let runtime = &mut service.worker.js_runtime;
-    let promise = runtime.execute_script(&path, &format!("import(\"{}\")", url))?;
-    let module = runtime.resolve_value(promise).await?;
     let scope = &mut runtime.handle_scope();
     let module = module
         .open(scope)
@@ -948,10 +1015,8 @@ pub(crate) async fn compile_endpoint<P: AsRef<Path>>(
     Ok(())
 }
 
-pub(crate) async fn activate_endpoint(path: &str) {
-    let service_lock = get();
-    let mut service = service_lock.lock().await;
-
+pub(crate) fn activate_endpoint(path: &str) {
+    let mut service = get();
     let (path, handler) = service.next_handlers.remove_entry(path).unwrap();
     service.handlers.insert(path, handler);
 }
