@@ -128,22 +128,26 @@ function compile(file, lib) {
         return v;
     };
 
-    const program = ts.createProgram([file], options, host);
-    const emitResult = program.emit();
+    try {
+        const program = ts.createProgram([file], options, host);
+        const emitResult = program.emit();
 
-    let allDiagnostics = ts
-        .getPreEmitDiagnostics(program)
-        .concat(emitResult.diagnostics);
+        let allDiagnostics = ts
+            .getPreEmitDiagnostics(program)
+            .concat(emitResult.diagnostics);
 
-    allDiagnostics = ts.sortAndDeduplicateDiagnostics(allDiagnostics);
-    if (allDiagnostics.length != 0) {
-        const diag = ts.formatDiagnosticsWithColorAndContext(
-            allDiagnostics,
-            host,
-        );
-        Deno.core.opSync("diagnostic", diag);
+        allDiagnostics = ts.sortAndDeduplicateDiagnostics(allDiagnostics);
+        if (allDiagnostics.length != 0) {
+            const diag = ts.formatDiagnosticsWithColorAndContext(
+                allDiagnostics,
+                host,
+            );
+            Deno.core.opSync("diagnostic", diag);
+        }
+        return !emitResult.emitSkipped;
+    } catch (e) {
+        undefined;
     }
-    return !emitResult.emitSkipped;
 }
 
 compile("bootstrap.ts", undefined);
