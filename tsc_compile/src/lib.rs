@@ -1,6 +1,6 @@
 // SPDX-FileCopyrightText: © 2022 ChiselStrike <info@chiselstrike.com>
 
-use anyhow::{anyhow, Result};
+use anyhow::{anyhow, Context, Result};
 use deno_core::op_sync;
 use deno_core::JsRuntime;
 use deno_core::OpState;
@@ -84,7 +84,15 @@ fn fetch_aux(map: &mut DownloadMap, path: String, mut base: String) -> Result<St
 }
 
 fn fetch(_op_state: &mut OpState, path: String, base: String) -> Result<String> {
-    FILES.with(|m| fetch_aux(&mut m.borrow_mut(), path, base))
+    FILES.with(|m| {
+        let mut map = m.borrow_mut();
+        fetch_aux(&mut map, path.clone(), base.clone())
+            .with_context(|| format!("Resolving {} from {}", path, base))
+            .map_err(|x| {
+                map.diagnostics += &format!("{:?}", x);
+                x
+            })
+    })
 }
 
 fn read_aux(map: &mut DownloadMap, path: String) -> Result<String> {
@@ -98,7 +106,15 @@ fn read_aux(map: &mut DownloadMap, path: String) -> Result<String> {
 }
 
 fn read(_op_state: &mut OpState, path: String, _: ()) -> Result<String> {
-    FILES.with(|m| read_aux(&mut m.borrow_mut(), path))
+    FILES.with(|m| {
+        let mut map = m.borrow_mut();
+        read_aux(&mut map, path.clone())
+            .with_context(|| format!("Reading {}", path))
+            .map_err(|x| {
+                map.diagnostics += &format!("{:?}", x);
+                x
+            })
+    })
 }
 
 fn write_aux(map: &mut DownloadMap, mut path: String, content: String) {
@@ -229,8 +245,7 @@ pub fn compile_ts_code(
 
     if !compile
         .call(scope, global_proxy.into(), &[file, lib])
-        .unwrap()
-        .is_true()
+        .map_or(false, |x| x.is_true())
     {
         return Err(FILES.with(|m| anyhow!("Compilation failed:\n{}", m.borrow().diagnostics)));
     }
