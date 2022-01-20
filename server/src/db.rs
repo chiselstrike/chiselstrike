@@ -9,7 +9,7 @@ use crate::query::engine::JsonObject;
 use crate::query::engine::RawSqlStream;
 use crate::query::engine::SqlStream;
 use crate::runtime;
-use crate::types::{ObjectType, Type, TypeSystem, TypeSystemError};
+use crate::types::{Field, ObjectType, Type, TypeSystem, TypeSystemError, OAUTHUSER_TYPE_NAME};
 use anyhow::{anyhow, Result};
 use enum_as_inner::EnumAsInner;
 use futures::future;
@@ -241,6 +241,34 @@ impl Stream for PolicyApplyingStream {
     }
 }
 
+fn sql_where_for_match_login(
+    fields: &HashSet<String>,
+    ty: &ObjectType,
+    current_userid: &Option<String>,
+) -> String {
+    let current_userid = match current_userid {
+        None => "NULL".to_string(),
+        Some(id) => format!("\"{}\"", id),
+    };
+    let mut conjuncts = vec![];
+    for f in fields.iter() {
+        match ty.field_by_name(f) {
+            Some(Field {
+                type_: Type::Object(obj),
+                ..
+            }) if obj.name() == OAUTHUSER_TYPE_NAME => {
+                conjuncts.push(format!("{} = {}", f, current_userid));
+            }
+            _ => {}
+        }
+    }
+    if conjuncts.is_empty() {
+        "".to_string()
+    } else {
+        format!("WHERE {}", conjuncts.iter().join(" AND "))
+    }
+}
+
 fn sql_backing_store(
     pool: &AnyPool,
     columns: Vec<(String, Type)>,
@@ -260,9 +288,10 @@ fn sql_backing_store(
     column_string.pop();
 
     let query = format!(
-        "SELECT {} FROM {} {}",
+        "SELECT {} FROM {} {} {}",
         column_string,
         ty.backing_table(),
+        sql_where_for_match_login(&policies.match_login, &ty, &policies.current_userid),
         &limit_str
     );
     if policies.transforms.is_empty() {
