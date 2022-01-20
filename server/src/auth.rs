@@ -3,7 +3,7 @@
 use crate::api::{ApiService, Body};
 use crate::query::engine::JsonObject;
 use crate::runtime;
-use crate::types::{Type, OAUTHUSER_TYPE_NAME};
+use crate::types::{ObjectType, Type, OAUTHUSER_TYPE_NAME};
 use anyhow::anyhow;
 use futures::{Future, FutureExt};
 use hyper::{header, Request, Response, StatusCode};
@@ -30,14 +30,18 @@ fn bad_request(msg: String) -> Response<Body> {
         .unwrap()
 }
 
-async fn insert_user_into_db(username: &str) -> anyhow::Result<()> {
-    let oauth_user_type = match runtime::get()
+fn get_oauth_user_type() -> anyhow::Result<Arc<ObjectType>> {
+    match runtime::get()
         .type_system
         .lookup_builtin_type(OAUTHUSER_TYPE_NAME)
     {
-        Ok(Type::Object(t)) => t,
+        Ok(Type::Object(t)) => Ok(t),
         _ => anyhow::bail!("Internal error: type {} not found", OAUTHUSER_TYPE_NAME),
-    };
+    }
+}
+
+async fn insert_user_into_db(username: &str) -> anyhow::Result<()> {
+    let oauth_user_type = get_oauth_user_type()?;
     let mut user = JsonObject::new();
     user.insert("username".into(), json!(username));
     let query_engine = { runtime::get().query_engine.clone() };
