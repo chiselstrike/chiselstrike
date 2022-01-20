@@ -10,7 +10,7 @@ use futures::StreamExt;
 use itertools::{zip, Itertools};
 use sea_query::{Alias, ColumnDef, Table};
 use serde_json::json;
-use sqlx::any::{Any, AnyPool, AnyRow};
+use sqlx::any::{Any, AnyArguments, AnyPool, AnyRow};
 use sqlx::Column;
 use sqlx::Transaction;
 use sqlx::{Executor, Row};
@@ -81,6 +81,20 @@ pub(crate) struct SqlWithArguments {
     pub(crate) sql: String,
     /// Values for $n placeholders.
     pub(crate) args: Vec<SqlValue>,
+}
+
+fn get_sqlx(q: &SqlWithArguments) -> sqlx::query::Query<'_, sqlx::Any, AnyArguments> {
+    let mut sqlx_query = sqlx::query(&q.sql);
+    for arg in &q.args {
+        match arg {
+            SqlValue::Bool(arg) => sqlx_query = sqlx_query.bind(arg),
+            SqlValue::U64(arg) => sqlx_query = sqlx_query.bind(*arg as i64),
+            SqlValue::I64(arg) => sqlx_query = sqlx_query.bind(arg),
+            SqlValue::F64(arg) => sqlx_query = sqlx_query.bind(arg),
+            SqlValue::String(arg) => sqlx_query = sqlx_query.bind(arg),
+        };
+    }
+    sqlx_query
 }
 
 /// Represents recurent structure of nested object ids. Each level holds
@@ -297,34 +311,14 @@ impl QueryEngine {
     }
 
     pub(crate) async fn fetch_one(&self, q: SqlWithArguments) -> anyhow::Result<AnyRow> {
-        let mut sqlx_query = sqlx::query(&q.sql);
-        for arg in &q.args {
-            match arg {
-                SqlValue::Bool(arg) => sqlx_query = sqlx_query.bind(arg),
-                SqlValue::U64(arg) => sqlx_query = sqlx_query.bind(*arg as i64),
-                SqlValue::I64(arg) => sqlx_query = sqlx_query.bind(arg),
-                SqlValue::F64(arg) => sqlx_query = sqlx_query.bind(arg),
-                SqlValue::String(arg) => sqlx_query = sqlx_query.bind(arg),
-            };
-        }
-        Ok(sqlx_query.fetch_one(&self.pool).await?)
+        Ok(get_sqlx(&q).fetch_one(&self.pool).await?)
     }
 
     async fn run_sql_queries(&self, queries: &[SqlWithArguments]) -> anyhow::Result<()> {
         let mut transaction = self.start_transaction().await?;
         for q in queries {
-            let mut sqlx_query = sqlx::query(&q.sql);
-            for arg in &q.args {
-                match arg {
-                    SqlValue::Bool(arg) => sqlx_query = sqlx_query.bind(arg),
-                    SqlValue::U64(arg) => sqlx_query = sqlx_query.bind(*arg as i64),
-                    SqlValue::I64(arg) => sqlx_query = sqlx_query.bind(arg),
-                    SqlValue::F64(arg) => sqlx_query = sqlx_query.bind(arg),
-                    SqlValue::String(arg) => sqlx_query = sqlx_query.bind(arg),
-                };
-            }
             transaction
-                .fetch_one(sqlx_query)
+                .fetch_one(get_sqlx(q))
                 .await
                 .map_err(QueryError::ExecuteFailed)?;
         }
