@@ -1,5 +1,8 @@
 // SPDX-FileCopyrightText: © 2021 ChiselStrike <info@chiselstrike.com>
 
+#![cfg_attr(feature = "must_not_suspend", feature(must_not_suspend))]
+#![cfg_attr(feature = "must_not_suspend", deny(must_not_suspend))]
+
 #[macro_use]
 extern crate log;
 

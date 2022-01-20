@@ -13,6 +13,10 @@ use std::rc::Rc;
 // borrow_mut(). This is OK for the expected use case of thread-local
 // variables, since it is easy to get a fresh copy from the variable
 // instead of saving the RcMut.
+#[cfg_attr(
+    feature = "must_not_suspend",
+    must_not_suspend = "holding a RcMut across suspend"
+)]
 pub(crate) struct RcMut<T: 'static> {
     rc: Rc<RefCell<T>>,
     refmut: MaybeUninit<RefMut<'static, T>>,

@@ -47,16 +47,6 @@ mod tests {
 
     #[test]
     fn check_clippy() {
-        run(
-            "cargo",
-            [
-                "clippy",
-                "--all-targets",
-                "--all-features",
-                "--",
-                "-D",
-                "warnings",
-            ],
-        );
+        run("cargo", ["clippy", "--all-targets", "--", "-D", "warnings"]);
     }
 }
