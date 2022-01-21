@@ -6,10 +6,16 @@ use std::collections::HashMap;
 use std::path::Path;
 use yaml_rust::YamlLoader;
 
+/// Different kinds of policies.
+#[derive(Clone)]
+pub(crate) enum Kind {
+    /// How this policy transforms values read from storage.
+    Transform(fn(Value) -> Value),
+}
+
 #[derive(Clone)]
 pub(crate) struct Policy {
-    /// How this policy transforms values read from storage.
-    pub(crate) transform: fn(Value) -> Value,
+    pub(crate) kind: Kind,
 
     /// This policy doesn't apply when the request URI matches.
     pub(crate) except_uri: regex::Regex,
@@ -94,7 +100,7 @@ impl VersionPolicy {
                         policies.labels.insert(
                             name.to_owned(),
                             Policy {
-                                transform: crate::policies::anonymize,
+                                kind: Kind::Transform(crate::policies::anonymize),
                                 except_uri: regex::Regex::new(pattern)?,
                             },
                         );
