@@ -343,6 +343,6 @@ $ curl -s localhost:8080/dev/comments | python -m json.tool
 ]
 ```
 
-Ta-da!  POST now inserts a comment, as you would expect.  The site can
+🎉 Ta-da!  POST now inserts a comment, as you would expect.  The site can
 now persist comments by sending POST requests to the `comments`
 endpoint.
