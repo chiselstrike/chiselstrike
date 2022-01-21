@@ -1,7 +1,7 @@
 ---
 sidebar_position: 5
 ---
-# Letting Users Log In
+# OAuth and Login
 
 ChiselStrike supports the process of having your own users.  Your
 website can let them log in using an OAuth provider, and your
