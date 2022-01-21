@@ -1,7 +1,7 @@
 ---
 sidebar_position: 2
 ---
-# Accessing Data
+# Entities and Queries
 
 ## Defining Entities
 
