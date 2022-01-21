@@ -27,7 +27,7 @@ type
 
 ```bash
 $ chisel apply --version experimental
-Type defined: BlogComment
+Model defined: BlogComment
 End point defined: /experimental/comments
 ```
 

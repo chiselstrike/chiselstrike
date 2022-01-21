@@ -8,7 +8,7 @@ cp examples/csv.js examples/find.js "$TEMPDIR/endpoints"
 cd "$TEMPDIR"
 $CHISEL apply
 
-# CHECK: Type defined: Person
+# CHECK: Model defined: Person
 # CHECK: End point defined: /dev/csv
 # CHECK: End point defined: /dev/find
 

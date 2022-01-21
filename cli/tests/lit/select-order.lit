@@ -25,7 +25,7 @@ EOF
 cd "$TEMPDIR"
 $CHISEL apply
 
-# CHECK: Type defined: Person
+# CHECK: Model defined: Person
 # CHECK: End point defined: /dev/query
 # CHECK: End point defined: /dev/store
 

@@ -8,7 +8,7 @@ cp examples/store.js "$TEMPDIR/endpoints"
 cd "$TEMPDIR"
 $CHISEL apply
 
-# CHECK: Type defined: Person
+# CHECK: Model defined: Person
 # CHECK: End point defined: /dev/store
 
 $CURL --data '{

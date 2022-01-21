@@ -145,7 +145,7 @@ So how can we make the endpoint dynamic?  How do we leverage the
 ChiselStrike backend to store our comments and serve them to us when
 necessary?  This is where backend models come in -- you can describe to
 ChiselStrike the data you want it to store for you by defining some
-TypeScript types.  Put a file in `my-backend/models/models.ts` like this:
+TypeScript classes.  Put a file in `my-backend/models/models.ts` like this:
 
 ```typescript title="my-backend/models/models.ts"
 import { ChiselEntity } from "@chiselstrike/api"
@@ -160,7 +160,7 @@ When you save this file, you should see this line in the `chisel dev`
 output:
 
 ```
-Type defined: BlogComment
+Model defined: BlogComment
 ```
 
 :::info Feedback Requested! We could use your help!
@@ -173,7 +173,7 @@ to add support for that in the next version of the beta.
 
 :::tip
 You are able to specify default values in your type properties, like you would for a normal typescript
-class. Types can be added or removed as you go if they have default values, so it is always recommended
+class. Properties can be added or removed as you go if they have default values, so it is always recommended
 you add them.
 :::
 

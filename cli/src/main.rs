@@ -481,7 +481,7 @@ async fn apply<S: ToString>(
     );
 
     for ty in msg.types {
-        println!("Type defined: {}", ty);
+        println!("Model defined: {}", ty);
     }
 
     for end in msg.endpoints {

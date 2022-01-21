@@ -19,7 +19,7 @@ EOF
 
 cd "$TEMPDIR"
 $CHISEL apply
-# CHECK: Type defined: Person
+# CHECK: Model defined: Person
 # CHECK: End point defined: /dev/count
 # CHECK: End point defined: /dev/ins
 
@@ -38,7 +38,7 @@ $CURL $CHISELD_HOST/dev/count
 # CHECK: 1
 
 $CHISEL apply --version staging
-# CHECK: Type defined: Person
+# CHECK: Model defined: Person
 # CHECK: End point defined: /staging/count
 # CHECK: End point defined: /staging/ins
 
