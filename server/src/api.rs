@@ -113,6 +113,45 @@ impl TryFrom<&str> for RequestPath {
     }
 }
 
+/// Extracts the username of the logged-in user, or None if there was no login.
+async fn get_username(req: &Request<hyper::Body>) -> Option<String> {
+    let userid = match crate::auth::get_user(req).await {
+        Ok(id) => id,
+        Err(e) => {
+            warn!("Token parsing error: {:?}", e);
+            return None;
+        }
+    };
+
+    let qeng = { crate::runtime::get().query_engine.clone() };
+
+    match (userid, crate::auth::get_oauth_user_type()) {
+        (None, _) => None,
+        (Some(_), Err(e)) => {
+            warn!("{:?}", e);
+            None
+        }
+        (Some(id), Ok(user_type)) => {
+            match qeng
+                .fetch_one(SqlWithArguments {
+                    sql: format!(
+                        "SELECT username FROM {} WHERE id=$1",
+                        user_type.backing_table()
+                    ),
+                    args: vec![SqlValue::String(id)],
+                })
+                .await
+            {
+                Err(e) => {
+                    warn!("Username query error: {:?}", e);
+                    None
+                }
+                Ok(row) => row.get("username"),
+            }
+        }
+    }
+}
+
 /// API service for Chisel server.
 #[derive(Default)]
 pub(crate) struct ApiService {
@@ -162,51 +201,12 @@ impl ApiService {
                 return response_template().body("ok".to_string().into()); // Makes CORS preflights pass.
             }
 
-            let userid = match crate::auth::get_user(&req).await {
-                Ok(id) => id,
-                _ => {
-                    return Response::builder()
-                        .status(StatusCode::FORBIDDEN)
-                        .body("Token not recognized\n".to_string().into())
-                }
-            };
-
+            let pol = { crate::runtime::get().policies.clone() };
+            let username = get_username(&req).await;
             let rp = match RequestPath::try_from(req.uri().path()) {
                 Ok(rp) => rp,
                 Err(_) => return ApiService::not_found(),
             };
-
-            let (pol, qeng) = {
-                let rt = crate::runtime::get();
-                (rt.policies.clone(), rt.query_engine.clone())
-            };
-
-            let username: Option<String> = match (userid, crate::auth::get_oauth_user_type()) {
-                (None, _) => None,
-                (Some(_), Err(e)) => {
-                    warn!("{:?}", e);
-                    None
-                }
-                (Some(id), Ok(user_type)) => {
-                    match qeng
-                        .fetch_one(SqlWithArguments {
-                            sql: format!(
-                                "SELECT username FROM {} WHERE id=$1",
-                                user_type.backing_table()
-                            ),
-                            args: vec![SqlValue::String(id)],
-                        })
-                        .await
-                    {
-                        Err(e) => {
-                            warn!("Username query error: {:?}", e);
-                            None
-                        }
-                        Ok(row) => row.get("username"),
-                    }
-                }
-            };
-
             let is_allowed = {
                 match pol.versions.get(rp.api_version()) {
                     None => {
