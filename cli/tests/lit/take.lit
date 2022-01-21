@@ -116,7 +116,7 @@ EOF
 
 $CHISEL apply
 
-# CHECK: Type defined: Person
+# CHECK: Model defined: Person
 # CHECK: End point defined: /dev/findall
 # CHECK: End point defined: /dev/findfilter
 # CHECK: End point defined: /dev/findtake

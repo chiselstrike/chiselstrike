@@ -9,7 +9,7 @@ cp examples/store.js "$TEMPDIR/endpoints/ins.js"
 cd "$TEMPDIR"
 $CHISEL apply
 
-# CHECK: Type defined: Person
+# CHECK: Model defined: Person
 # CHECK: End point defined: /dev/find
 # CHECK: End point defined: /dev/ins
 

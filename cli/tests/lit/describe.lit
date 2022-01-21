@@ -23,8 +23,8 @@ EOF
 
 $CHISEL apply
 
-# CHECK: Type defined: Foo
-# CHECK: Type defined: Bar
+# CHECK: Model defined: Foo
+# CHECK: Model defined: Bar
 # CHECK: End point defined: /dev/hello
 
 $CHISEL describe

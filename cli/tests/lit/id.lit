@@ -68,7 +68,7 @@ EOF
 
 $CHISEL apply
 
-# CHECK: Type defined: Person
+# CHECK: Model defined: Person
 # CHECK: End point defined: /dev/bad_id
 # CHECK: End point defined: /dev/count_glaubers
 # CHECK: End point defined: /dev/store_no_id

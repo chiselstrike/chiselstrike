@@ -36,7 +36,7 @@ EOF
 
 
 $CHISEL apply
-# CHECK: Type defined: Person
+# CHECK: Model defined: Person
 # CHECK: End point defined: /dev/foreach
 # CHECK: End point defined: /dev/store
 

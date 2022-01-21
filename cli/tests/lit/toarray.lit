@@ -34,7 +34,7 @@ export default async function chisel(req: Request) {
 EOF
 
 $CHISEL apply
-# CHECK: Type defined: Person
+# CHECK: Model defined: Person
 # CHECK: End point defined: /dev/store
 # CHECK: End point defined: /dev/toarray
 

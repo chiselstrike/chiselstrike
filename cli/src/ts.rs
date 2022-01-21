@@ -179,7 +179,7 @@ fn parse_class_decl<P: AsRef<Path>>(
             let mut field_defs = Vec::default();
             let name = ident_to_string(&x.ident);
             if !valid_types.insert(name.clone()) {
-                bail!("Type {} defined twice", name);
+                bail!("Model {} defined twice", name);
             }
 
             for member in &x.class.body {
