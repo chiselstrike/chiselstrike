@@ -2,7 +2,7 @@
 
 use crate::prefix_map::PrefixMap;
 use serde_json::{json, Value};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::path::Path;
 use yaml_rust::YamlLoader;
 
@@ -26,8 +26,13 @@ pub(crate) struct Policy {
 /// Maps labels to their applicable policies.
 pub(crate) type LabelPolicies = HashMap<String, Policy>;
 
-/// Maps a field name to the transformation we apply to that field's values.
-pub(crate) type FieldPolicies = HashMap<String, fn(Value) -> Value>;
+#[derive(Clone, Default, Debug)]
+pub(crate) struct FieldPolicies {
+    /// Maps a field name to the transformation we apply to that field's values.
+    pub(crate) transforms: HashMap<String, fn(Value) -> Value>,
+    /// Names of fields that must equal the currently logged-in user.
+    pub(crate) match_login: HashSet<String>,
+}
 
 #[derive(Clone, Default, Debug)]
 pub(crate) struct UserAuthorization {

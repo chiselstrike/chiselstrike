@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: © 2021 ChiselStrike <info@chiselstrike.com>
 
 use crate::api::ApiService;
-use crate::policies::{FieldPolicies, Kind, Policies, Policy};
+use crate::policies::{FieldPolicies, Kind, Policies};
 use crate::query::{MetaService, QueryEngine};
 use crate::rcmut::RcMut;
 use crate::types::{ObjectType, TypeSystem};
@@ -30,13 +30,16 @@ impl Runtime {
         if let Some(version) = self.policies.versions.get(&ty.api_version) {
             for fld in ty.user_fields() {
                 for lbl in &fld.labels {
-                    if let Some(Policy {
-                        kind: Kind::Transform(f),
-                        except_uri: e,
-                    }) = version.labels.get(lbl)
-                    {
-                        if !e.is_match(current_path) {
-                            policies.insert(fld.name.clone(), *f);
+                    if let Some(p) = version.labels.get(lbl) {
+                        if !p.except_uri.is_match(current_path) {
+                            match p.kind {
+                                Kind::Transform(f) => {
+                                    policies.transforms.insert(fld.name.clone(), f);
+                                }
+                                Kind::MatchLogin => {
+                                    policies.match_login.insert(fld.name.clone());
+                                }
+                            }
                         }
                     }
                 }

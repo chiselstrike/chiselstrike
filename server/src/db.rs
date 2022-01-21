@@ -231,7 +231,7 @@ impl Stream for PolicyApplyingStream {
             Some(Ok(item)) => {
                 let mut v = engine::relational_row_to_json(&columns, &item)?;
                 for (k, v) in v.iter_mut() {
-                    if let Some(xform) = policies.get(k) {
+                    if let Some(xform) = policies.transforms.get(k) {
                         *v = xform(v.take());
                     }
                 }
@@ -265,7 +265,7 @@ fn sql_backing_store(
         ty.backing_table(),
         &limit_str
     );
-    if policies.is_empty() {
+    if policies.transforms.is_empty() {
         return Query::Sql(query);
     }
     let stream = new_query_results(query, pool);
@@ -410,7 +410,7 @@ fn to_stream(pool: &AnyPool, s: String, columns: Vec<(String, Type)>) -> SqlStre
     let inner = new_query_results(s, pool);
     Box::pin(PolicyApplyingStream {
         inner,
-        policies: FieldPolicies::new(),
+        policies: FieldPolicies::default(),
         columns,
     })
 }
