@@ -61,7 +61,7 @@ enum Policies {
 enum Sessions {
     Table,
     Token,
-    Username,
+    UserId,
 }
 
 pub(crate) fn tables() -> Vec<TableCreateStatement> {
@@ -144,7 +144,7 @@ pub(crate) fn tables() -> Vec<TableCreateStatement> {
         .table(Sessions::Table)
         .if_not_exists()
         .col(ColumnDef::new(Sessions::Token).uuid().primary_key())
-        .col(ColumnDef::new(Sessions::Username).text())
+        .col(ColumnDef::new(Sessions::UserId).text())
         .to_owned();
 
     let policies = Table::create()

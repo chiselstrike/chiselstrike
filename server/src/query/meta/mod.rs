@@ -442,12 +442,12 @@ impl MetaService {
         Ok(())
     }
 
-    pub(crate) async fn new_session_token(&self, username: &str) -> Result<String, QueryError> {
+    pub(crate) async fn new_session_token(&self, userid: &str) -> Result<String, QueryError> {
         let token = Uuid::new_v4().to_string();
         // TODO: Expire tokens.
-        let insert = sqlx::query("INSERT INTO sessions(token, username) VALUES($1, $2)")
+        let insert = sqlx::query("INSERT INTO sessions(token, user_id) VALUES($1, $2)")
             .bind(&token)
-            .bind(username);
+            .bind(userid);
         let mut transaction = self
             .pool
             .begin()
@@ -464,15 +464,15 @@ impl MetaService {
         Ok(token)
     }
 
-    pub(crate) async fn get_username(&self, token: &str) -> Result<String, QueryError> {
-        let row = sqlx::query("SELECT username FROM sessions WHERE token=$1")
+    pub(crate) async fn get_user_id(&self, token: &str) -> Result<String, QueryError> {
+        let row = sqlx::query("SELECT user_id FROM sessions WHERE token=$1")
             .bind(token)
             .fetch_all(&self.pool)
             .await
             .map_err(QueryError::FetchFailed)?
             .pop()
             .ok_or_else(|| QueryError::TokenNotFound(token.into()))?;
-        let username: &str = row.get("username");
-        Ok(username.into())
+        let id: &str = row.get("user_id");
+        Ok(id.into())
     }
 }
