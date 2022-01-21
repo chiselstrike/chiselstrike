@@ -8,10 +8,15 @@ sidebar_position: 3
 Models represent the domain concepts of your application, and consists of one more more entities, which are effectively persistent objects.
 In ChiselStrike, you define models with entity class definitions in the `models/` directory of your project.
 
-For example, to define an entity `User` that represents an user in your application, you define the following TypeScript class:
+For example, to define an entity `User` that represents an user in your application, you can add the following TypeScript class to your existing models file:
 
-```typescript title="models/user.ts"
-import { ChiselEntity } from "@chiselstrike/api"
+```typescript title="models/models.ts"
+import { ChiselEntity, labels } from "@chiselstrike/api"
+
+export class BlogComment extends ChiselEntity {
+    content: string = "";
+    labels("pii") by: string = "";
+}
 
 export class User extends ChiselEntity {
     username: string;
@@ -19,6 +24,11 @@ export class User extends ChiselEntity {
     city: string;
 }
 ```
+
+:::info
+All of your models have to be in the same file. We will to lift this restriction
+in the future so each model can live in its own file.
+:::
 
 The ChiselStrike runtime picks up this entity definition in the `models` directory and automatically does the necessary adjustments to the underlying backing datastore so that the entity can be persisted.
 
@@ -30,7 +40,7 @@ We can, for example, write the following endpoint that takes input as JSON, buil
 
 ```typescript title="endpoints/create.ts"
 import { responseFromJson } from "@chiselstrike/api"
-import { User } from "../models/user"
+import { User } from "../models/models"
 
 export default async function (req) {
   const payload = await req.json();
@@ -56,7 +66,7 @@ For example, you could write the following endpoint that takes the same JSON, bu
 
 ```typescript title="endpoints/update.ts"
 import { responseFromJson } from "@chiselstrike/api"
-import { User } from "../models/user"
+import { User } from "../models/models"
 
 export default async function (req) {
   const payload = await req.json();
@@ -88,7 +98,7 @@ For example, to query one entity with a given `username`, you could define the f
 
 ```typescript title="endpoints/find-one.ts"
 import { responseFromJson } from "@chiselstrike/api"
-import { User } from "../models/user"
+import { User } from "../models/models"
 
 export default async function (req) {
   const payload = await req.json();
@@ -108,7 +118,7 @@ To find multiple entities, you can use the `findMany()` method. For example, you
 
 ```typescript title="endpoints/find-many.ts"
 import { responseFromJson } from "@chiselstrike/api"
-import { User } from "../models/user"
+import { User } from "../models/models"
 
 export default async function (req) {
   const payload = await req.json();
@@ -172,7 +182,7 @@ For example, the `findOne()` example could be written using the cursor-based API
 
 ```typescript title="endpoints/find-one-cursor.ts"
 import { responseFromJson } from "@chiselstrike/api"
-import { User } from "../models/user"
+import { User } from "../models/models"
 
 export default async function (req) {
   const payload = await req.json();
