@@ -2,7 +2,7 @@
 # Settings the slug to / defines the home
 sidebar_position: 1
 ---
-# Introduction to ChiselStrike
+# Getting Started
 
 This is a basic ChiselStrike tutorial.  It describes what ChiselStrike
 is, what it can do for you, and how to make it do various useful
