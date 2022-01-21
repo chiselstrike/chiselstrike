@@ -11,6 +11,8 @@ use yaml_rust::YamlLoader;
 pub(crate) enum Kind {
     /// How this policy transforms values read from storage.
     Transform(fn(Value) -> Value),
+    /// Field is of OAuthUser type and must match the user currently logged in.
+    MatchLogin,
 }
 
 #[derive(Clone)]
@@ -110,6 +112,20 @@ impl VersionPolicy {
                     }
                     None => {}
                 };
+                if label["match_login"].as_bool().unwrap_or(false) {
+                    let pattern = label["except_uri"].as_str().unwrap_or("^$"); // ^$ never matches; each path has at least a '/' in it.
+
+                    // FIXME: This overwrites any existing entries for this label.  We don't currently expect
+                    // anyone to deliberately use both "transform" and "match_login" on the same label, but
+                    // mistakes can happen.
+                    policies.labels.insert(
+                        name.to_owned(),
+                        Policy {
+                            kind: Kind::MatchLogin,
+                            except_uri: regex::Regex::new(pattern)?,
+                        },
+                    );
+                }
             }
             for endpoint in config["endpoints"]
                 .as_vec()
