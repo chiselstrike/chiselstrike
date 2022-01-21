@@ -2,7 +2,7 @@
 sidebar_position: 2
 ---
 
-# Data Policies in ChiselStrike
+# Data Policies
 
 ChiselStrike lets you express data policies through a policy file that
 succinctly expresses your rules for how the data is served from
