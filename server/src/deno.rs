@@ -377,11 +377,9 @@ async fn op_chisel_relational_query_next(
 }
 
 async fn op_chisel_user(_: Rc<RefCell<OpState>>, _: (), _: ()) -> Result<serde_json::Value> {
-    match CURRENT_CONTEXT.with(|path| path.borrow().username.clone()) {
+    match CURRENT_CONTEXT.with(|path| path.borrow().userid.clone()) {
         None => Ok(serde_json::Value::Null),
-        Some(username) => Ok(serde_json::Value::String(
-            crate::auth::get_userid_from_db(username).await?,
-        )),
+        Some(id) => Ok(serde_json::Value::String(id)),
     }
 }
 
@@ -557,7 +555,7 @@ struct RequestContext {
     path: RequestPath,
     method: Method,
     /// Uniquely identifies the OAuthUser row for the logged-in user.  None if there was no login.
-    username: Option<String>,
+    userid: Option<String>,
 }
 
 thread_local! {
@@ -670,7 +668,7 @@ async fn get_result(
     let context = RequestContext {
         method: req.method().clone(),
         path: RequestPath::try_from(path.as_ref()).unwrap(),
-        username: crate::auth::get_username(req).await?,
+        userid: crate::auth::get_user(req).await?,
     };
     // Set the current path to cover JS code that runs before
     // blocking. This in particular covers code that doesn't block at

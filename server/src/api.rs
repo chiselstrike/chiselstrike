@@ -1,6 +1,8 @@
 // SPDX-FileCopyrightText: © 2021 ChiselStrike <info@chiselstrike.com>
 
+use crate::db::SqlValue;
 use crate::prefix_map::PrefixMap;
+use crate::query::engine::SqlWithArguments;
 use anyhow::{Error, Result};
 use futures::future::LocalBoxFuture;
 use futures::ready;
@@ -10,6 +12,7 @@ use hyper::header::HeaderValue;
 use hyper::service::{make_service_fn, service_fn};
 use hyper::{HeaderMap, Request, Response, Server, StatusCode};
 use socket2::{Domain, Protocol, Socket, Type};
+use sqlx::Row;
 use std::convert::Infallible;
 use std::convert::TryFrom;
 use std::io::Cursor;
@@ -159,21 +162,53 @@ impl ApiService {
                 return response_template().body("ok".to_string().into()); // Makes CORS preflights pass.
             }
 
-            let username = match crate::auth::get_username(&req).await {
-                Ok(u) => u,
+            let userid = match crate::auth::get_user(&req).await {
+                Ok(id) => id,
                 _ => {
                     return Response::builder()
                         .status(StatusCode::FORBIDDEN)
                         .body("Token not recognized\n".to_string().into())
                 }
             };
+
             let rp = match RequestPath::try_from(req.uri().path()) {
                 Ok(rp) => rp,
                 Err(_) => return ApiService::not_found(),
             };
+
+            let (pol, qeng) = {
+                let rt = crate::runtime::get();
+                (rt.policies.clone(), rt.query_engine.clone())
+            };
+
+            let username: Option<String> = match (userid, crate::auth::get_oauth_user_type()) {
+                (None, _) => None,
+                (Some(_), Err(e)) => {
+                    warn!("{:?}", e);
+                    None
+                }
+                (Some(id), Ok(user_type)) => {
+                    match qeng
+                        .fetch_one(SqlWithArguments {
+                            sql: format!(
+                                "SELECT username FROM {} WHERE id=$1",
+                                user_type.backing_table()
+                            ),
+                            args: vec![SqlValue::String(id)],
+                        })
+                        .await
+                    {
+                        Err(e) => {
+                            warn!("Username query error: {:?}", e);
+                            None
+                        }
+                        Ok(row) => row.get("username"),
+                    }
+                }
+            };
+
             let is_allowed = {
-                let runtime = crate::runtime::get();
-                match runtime.policies.versions.get(rp.api_version()) {
+                match pol.versions.get(rp.api_version()) {
                     None => {
                         return Self::internal_error(anyhow::anyhow!(
                             "found a route, but no version object for {}",
