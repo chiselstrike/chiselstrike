@@ -1,6 +1,5 @@
 ---
 # Settings the slug to / defines the home
-slug: /
 sidebar_position: 1
 ---
 # Introduction to ChiselStrike
@@ -9,12 +8,6 @@ This is a basic ChiselStrike tutorial.  It describes what ChiselStrike
 is, what it can do for you, and how to make it do various useful
 things.  To achieve this, the tutorial shows small working examples
 that illustrate important bits of functionality.
-
-:::note
-We assume here that you are self-hosting ChiselStrike.  You should
-have received from us information on how to access ChiselStrike npm
-packages.
-:::
 
 ChiselStrike is a backend generator.  It provides instant backend
 functionality when you need it.  The main use-case it addresses is when
