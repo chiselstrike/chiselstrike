@@ -11,7 +11,7 @@ export class Evolving extends ChiselEntity {
 }
 EOF
 $CHISEL apply
-# CHECK: Type defined: Evolving
+# CHECK: Model defined: Evolving
 
 cat << EOF > "$TEMPDIR/models/types.ts"
 import { ChiselEntity } from "@chiselstrike/api";
@@ -22,7 +22,7 @@ export class Evolving extends ChiselEntity {
 }
 EOF
 $CHISEL apply
-# CHECK: Type defined: Evolving
+# CHECK: Model defined: Evolving
 
 cat << EOF > "$TEMPDIR/endpoints/store.js"
 import { Evolving } from "../models/types.ts";
@@ -51,7 +51,7 @@ export default async function chisel(req) {
 EOF
 
 $CHISEL apply
-# CHECK: Type defined: Evolving
+# CHECK: Model defined: Evolving
 # CHECK: End point defined: /dev/find
 # CHECK: End point defined: /dev/store
 
@@ -72,7 +72,7 @@ export class Evolving extends ChiselEntity {
 }
 EOF
 $CHISEL apply
-# CHECK: Type defined: Evolving
+# CHECK: Model defined: Evolving
 
 $CURL $CHISELD_HOST/dev/find
 # CHECK: HTTP/1.1 200 OK
@@ -87,7 +87,7 @@ export class Evolving extends ChiselEntity {
 }
 EOF
 $CHISEL apply
-# CHECK: Type defined: Evolving
+# CHECK: Model defined: Evolving
 
 $CURL $CHISELD_HOST/dev/find
 # CHECK: HTTP/1.1 200 OK
@@ -102,7 +102,7 @@ export class Evolving extends ChiselEntity {
 }
 EOF
 $CHISEL apply
-# CHECK: Type defined: Evolving
+# CHECK: Model defined: Evolving
 
 $CURL $CHISELD_HOST/dev/find
 # CHECK: HTTP/1.1 200 OK

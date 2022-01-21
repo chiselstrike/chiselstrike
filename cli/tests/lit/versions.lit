@@ -16,8 +16,8 @@ $CHISEL apply --version __chiselstrike 2>&1 || echo
 # CHECK: Error
 
 $CHISEL apply --version v0
-# CHECK: Type defined: Person
-# CHECK: Type defined: Position
+# CHECK: Model defined: Person
+# CHECK: Model defined: Position
 # CHECK: End point defined: /v0/csv
 # CHECK: End point defined: /v0/find
 # CHECK: End point defined: /v0/foo
@@ -29,8 +29,8 @@ export default async function my_req_func(req) {
 EOF
 
 $CHISEL apply --version v1
-# CHECK: Type defined: Person
-# CHECK: Type defined: Position
+# CHECK: Model defined: Person
+# CHECK: Model defined: Position
 # CHECK: End point defined: /v1/csv
 # CHECK: End point defined: /v1/find
 # CHECK: End point defined: /v1/foo

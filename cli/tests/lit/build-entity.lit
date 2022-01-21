@@ -25,7 +25,7 @@ export default async function (req: Request): Promise<Response> {
 EOF
 
 $CHISEL apply
-# CHECK: Type defined: User
+# CHECK: Model defined: User
 # CHECK: End point defined: /dev/user
 
 $CURL -d '{"username": "penberg"}' $CHISELD_HOST/dev/user

@@ -9,7 +9,7 @@ cp examples/find_by.js "$TEMPDIR/endpoints"
 cd "$TEMPDIR"
 $CHISEL apply
 
-# CHECK: Type defined: Person
+# CHECK: Model defined: Person
 # CHECK: End point defined: /dev/find_by
 # CHECK: End point defined: /dev/ins
 

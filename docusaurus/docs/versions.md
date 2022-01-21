@@ -1,5 +1,5 @@
 ---
-sidebar_position: 4
+sidebar_position: 3
 ---
 # API versioning
 
@@ -27,7 +27,7 @@ type
 
 ```bash
 $ chisel apply --version experimental
-Type defined: BlogComment
+Model defined: BlogComment
 End point defined: /experimental/comments
 ```
 
