@@ -32,6 +32,8 @@ pub(crate) struct FieldPolicies {
     pub(crate) transforms: HashMap<String, fn(Value) -> Value>,
     /// Names of fields that must equal the currently logged-in user.
     pub(crate) match_login: HashSet<String>,
+    /// ID of the currently logged-in user.
+    pub(crate) current_userid: Option<String>,
 }
 
 #[derive(Clone, Default, Debug)]

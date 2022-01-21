@@ -127,7 +127,7 @@ fn convert_backing_store(val: &serde_json::Value) -> Result<Relation> {
         Err(TypeSystemError::NotABuiltinType(_)) => ts.lookup_custom_type(name, &api_version)?,
         _ => anyhow::bail!("Unexpected type name in convert_backing_store: {}", name),
     };
-    let policies = get_policies(&runtime, &ty)?;
+    let policies = get_policies(&runtime, &ty);
 
     Ok(Relation {
         columns,
