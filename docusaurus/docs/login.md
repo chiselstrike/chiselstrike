@@ -130,7 +130,7 @@ returns the OAuthUser object corresponding to the user currently
 logged in (or `null` if no one is logged in).  This works, for
 example:
 
-```typescript
+```typescript title="my-backend/endpoints/example.ts"
 import { BlogComment } from '../models/models.ts';
 import { loggedInUser, responseFromJson } from '@chiselstrike/api';
 export default async function (req) {
