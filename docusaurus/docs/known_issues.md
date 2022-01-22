@@ -1,7 +1,7 @@
 ---
 sidebar_position: 6
 ---
-# Known issues
+# Known Issues
 
 We put a lot of effort in getting this beta out of the door soon so we could
 hear from you (yes, you!) about what you like and dislike in the product and
