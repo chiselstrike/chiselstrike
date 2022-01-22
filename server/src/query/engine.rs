@@ -1,19 +1,18 @@
 // SPDX-FileCopyrightText: © 2021 ChiselStrike <info@chiselstrike.com>
 
-use crate::db::{sql, Relation, SqlValue};
+use crate::db::{run_select, SqlSelect, SqlValue};
 use crate::query::{DbConnection, Kind, QueryError};
 use crate::types::{Field, ObjectDelta, ObjectType, Type, OAUTHUSER_TYPE_NAME};
 use anyhow::{anyhow, Context as AnyhowContext};
 use futures::stream::BoxStream;
 use futures::stream::Stream;
 use futures::StreamExt;
-use itertools::{zip, Itertools};
+use itertools::Itertools;
 use sea_query::{Alias, ColumnDef, Table};
 use serde_json::json;
 use sqlx::any::{Any, AnyArguments, AnyPool, AnyRow};
-use sqlx::Column;
+use sqlx::Executor;
 use sqlx::Transaction;
-use sqlx::{Executor, Row};
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::marker::PhantomPinned;
@@ -279,8 +278,8 @@ impl QueryEngine {
         Ok(())
     }
 
-    pub(crate) fn query_relation(&self, rel: Relation) -> SqlStream {
-        sql(&self.pool, rel)
+    pub(crate) fn run_select(&self, select: SqlSelect) -> anyhow::Result<SqlStream> {
+        run_select(&self.pool, select)
     }
 
     /// Inserts object of type `ty` and value `ty_value` into the database.
@@ -514,44 +513,4 @@ impl QueryEngine {
             args: query_args,
         })
     }
-}
-
-pub(crate) fn relational_row_to_json(
-    columns: &[(String, Type)],
-    row: &AnyRow,
-) -> anyhow::Result<JsonObject> {
-    let mut ret = JsonObject::default();
-    for (query_column, result_column) in zip(columns, row.columns()) {
-        let i = result_column.ordinal();
-        // FIXME: consider result_column.type_info().is_null() too
-        macro_rules! to_json {
-            ($value_type:ty) => {{
-                let val = row.get::<$value_type, _>(i);
-                json!(val)
-            }};
-        }
-        let val = match query_column.1 {
-            Type::Float => {
-                // https://github.com/launchbadge/sqlx/issues/1596
-                // sqlx gets confused if the float doesn't have decimal points.
-                let val: &str = row.get_unchecked(i);
-                json!(val.parse::<f64>()?)
-            }
-            Type::String => to_json!(&str),
-            Type::Id => to_json!(&str),
-            Type::Boolean => {
-                // Similarly to the float issue, type information is not filled in
-                // *if* this value was put in as a result of coalesce() (default).
-                //
-                // Also the database has integers ,and we need to map it back to a boolean
-                // type on json.
-                let val: &str = row.get_unchecked(i);
-                let x: bool = val.parse::<usize>()? == 1;
-                json!(x)
-            }
-            Type::Object(_) => anyhow::bail!("Relations aren't supported yet"),
-        };
-        ret.insert(result_column.name().to_string(), val);
-    }
-    Ok(ret)
 }

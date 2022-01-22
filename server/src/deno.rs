@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: © 2021 ChiselStrike <info@chiselstrike.com>
 
 use crate::api::{response_template, Body, RequestPath};
-use crate::db::convert;
+use crate::db::convert_to_select;
 use crate::policies::FieldPolicies;
 use crate::query::engine::JsonObject;
 use crate::query::engine::SqlStream;
@@ -303,6 +303,24 @@ struct QueryStreamResource {
 
 impl Resource for QueryStreamResource {}
 
+fn make_fields_json(ty: &Arc<ObjectType>) -> serde_json::Value {
+    let mut columns = vec![];
+    for f in ty.all_fields() {
+        let c = match &f.type_ {
+            Type::Object(nested_ty) => {
+                let nested_json = serde_json::json!({
+                    "field_name": f.name.to_owned(),
+                    "columns": make_fields_json(nested_ty)
+                });
+                serde_json::json!(vec![nested_json, serde_json::json!(f.type_.name())])
+            }
+            _ => serde_json::json!(vec![f.name.to_owned(), f.type_.name().to_string()]),
+        };
+        columns.push(c);
+    }
+    serde_json::json!(columns)
+}
+
 fn op_chisel_introspect(
     _op_state: &mut OpState,
     value: serde_json::Value,
@@ -326,12 +344,7 @@ fn op_chisel_introspect(
             _ => anyhow::bail!("Invalid to introspect {}", type_name),
         },
     };
-
-    let vec: Vec<serde_json::Value> = ty
-        .all_fields()
-        .map(|f| serde_json::json!(vec![f.name.clone(), f.type_.name().to_string()]))
-        .collect();
-    Ok(serde_json::json!(vec))
+    Ok(make_fields_json(&ty))
 }
 
 fn op_chisel_relational_query_create(
@@ -349,10 +362,10 @@ fn op_chisel_relational_query_create(
     // is no way to access it from here. We would have to replace
     // op_chisel_relational_query_create with a closure that has an
     // Rc<DenoService>.
-    let relation = convert(&relation)?;
+    let sql_select = convert_to_select(&relation)?;
     let mut runtime = runtime::get();
     let query_engine = &mut runtime.query_engine;
-    let stream = Box::pin(query_engine.query_relation(relation));
+    let stream = Box::pin(query_engine.run_select(sql_select)?);
     let resource = QueryStreamResource {
         stream: RefCell::new(stream),
     };

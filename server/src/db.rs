@@ -3,32 +3,24 @@
 use crate::deno::current_api_version;
 use crate::deno::get_policies;
 use crate::policies::FieldPolicies;
-use crate::query::engine;
 use crate::query::engine::new_query_results;
 use crate::query::engine::JsonObject;
-use crate::query::engine::RawSqlStream;
 use crate::query::engine::SqlStream;
 use crate::runtime;
-use crate::types::{ObjectType, Type, TypeSystem, TypeSystemError};
+use crate::types::{Field, ObjectType, Type, TypeSystemError};
 use anyhow::{anyhow, Result};
 use enum_as_inner::EnumAsInner;
 use futures::future;
-use futures::stream;
-use futures::FutureExt;
-use futures::Stream;
 use futures::StreamExt;
-use futures::TryStreamExt;
-use itertools::Itertools;
+use serde_json::json;
 use serde_json::value::Value;
-use sqlx::AnyPool;
+use sqlx::any::{AnyPool, AnyRow};
+use sqlx::Row;
 use std::collections::HashMap;
 use std::collections::HashSet;
-use std::pin::Pin;
 use std::sync::Arc;
-use std::task::Context;
-use std::task::Poll;
 
-#[derive(Debug, EnumAsInner)]
+#[derive(Debug, Clone, EnumAsInner)]
 pub(crate) enum SqlValue {
     Bool(bool),
     U64(u64),
@@ -37,253 +29,405 @@ pub(crate) enum SqlValue {
     String(String),
 }
 
-#[derive(Debug)]
-struct Restriction {
-    k: String,
-    v: SqlValue,
+#[derive(Debug, Clone)]
+pub(crate) enum SelectField {
+    Builtin {
+        name: String,
+        type_: Type,
+        column_idx: usize,
+    },
+    Nested {
+        name: String,
+        children: Vec<SelectField>,
+    },
 }
 
-#[derive(Debug)]
-enum Inner {
-    BackingStore(Arc<ObjectType>, FieldPolicies),
-    Join(Box<Relation>, Box<Relation>),
-    Filter(Box<Relation>, Vec<Restriction>),
+/// `SqlSelect` is a structure representing a query ready to be fired.
+#[derive(Debug, Clone)]
+pub(crate) struct SqlSelect {
+    /// SQL query text
+    raw_query: String,
+    /// Nested structure representing a blueprint which is used to reconstruct
+    /// multi-dimensional (=potentialy nested) JSON response from a linear
+    /// sql response row.
+    fields: Vec<SelectField>,
+    /// Equality filters to be applied. Key is a name of field, value is the
+    /// expected value. Currently doesn't support filtering based on nested
+    /// fields.
+    filters: HashMap<String, SqlValue>,
+    /// JSON fields to be sent to user. This could be done in the builder directly,
+    /// but many factors (including filters) need to be taken into account and it
+    /// is better to do it later.
+    allowed_columns: Option<HashSet<String>>,
+    /// Field policies to be applied on the resulting response.
+    policies: FieldPolicies,
 }
 
-#[derive(Debug)]
-pub(crate) struct Relation {
-    // FIXME: This can't be a Type::Object, we should probably split the enum
-    pub(crate) columns: Vec<(String, Type)>,
-    pub(crate) limit: Option<u64>,
-    inner: Inner,
+#[derive(Debug, Clone)]
+struct SqlJoin {
+    rtype: Arc<ObjectType>,
+    lkey: String,
+    rkey: String,
+    lalias: String,
+    ralias: String,
 }
 
-fn get_columns(val: &serde_json::Value) -> Result<Vec<(String, Type)>> {
-    let columns = val["columns"].as_array().ok_or_else(|| {
-        anyhow!(
-            "internal error: `columns` field is either missing or not an array: {}",
-            val
-        )
-    })?;
-    let mut ret = vec![];
-    for c in columns {
-        let c = c
-            .as_array()
-            .ok_or_else(|| anyhow!("colums should be arrays"))?;
-        anyhow::ensure!(c.len() == 2, "colums should have a name and a type");
-        let name = c[0]
-            .as_str()
-            .ok_or_else(|| anyhow!("name should be a string"))?;
-        let type_ = c[1]
-            .as_str()
-            .ok_or_else(|| anyhow!("type should be a string"))?;
-        let type_ = match type_ {
-            "number" => Type::Float,
-            "string" => Type::String,
-            "boolean" => Type::Boolean,
-            _ => continue,
+struct SqlSelectBuilder {
+    fields: Vec<SelectField>,
+    columns: Vec<(String, Field)>,
+    base_type: Arc<ObjectType>,
+    joins: Vec<SqlJoin>,
+    filters: HashMap<String, SqlValue>,
+    allowed_columns: Option<HashSet<String>>,
+    policies: FieldPolicies,
+    limit: Option<u64>,
+}
+
+/// Class used to build `SqlSelect` from either JSON query or `ObjectType`.
+/// The json part recursively descends through selected fields and captures all
+/// joins necessary for nested types retrieval.
+/// Once constructed, it can be further restricted by calling load_restrictions method.
+/// When we are done with that, `build_sql_select` is called which creates a `SqlSelect`
+/// structure that contains raw SQL query string and additional data necessary for
+/// JSON response reconstruction and filtering.
+impl SqlSelectBuilder {
+    fn new_from_json(val: &serde_json::Value) -> Result<Self> {
+        let name = val["name"].as_str().ok_or_else(|| {
+            anyhow!(
+                "internal error: `name` field is either missing or not a string: {}",
+                val
+            )
+        })?;
+        let runtime = runtime::get();
+        let ts = &runtime.type_system;
+        let api_version = current_api_version();
+        let ty = match ts.lookup_builtin_type(name) {
+            Ok(Type::Object(ty)) => ty,
+            Err(TypeSystemError::NotABuiltinType(_)) => {
+                ts.lookup_custom_type(name, &api_version)?
+            }
+            _ => anyhow::bail!("Unexpected type name as select base type: {}", name),
         };
-        ret.push((name.to_string(), type_));
-    }
-    Ok(ret)
-}
+        let policies = get_policies(&runtime, &ty)?;
 
-// Used from within the internal migration code, so no need to convert things to <-> from json.
-pub(crate) async fn backing_store_from_type(
-    ts: &TypeSystem,
-    ty: &Arc<ObjectType>,
-) -> Result<Relation> {
-    let mut columns = vec![];
-    for field in ty.all_fields() {
-        let field_type = ts.lookup_type(field.type_.name(), &ty.api_version)?;
-        let field_type = match field_type {
-            Type::Object(_) => Type::String, // This is actually a foreign key.
-            ty => ty,
+        let mut builder = Self {
+            fields: vec![],
+            columns: vec![],
+            base_type: ty.clone(),
+            joins: vec![],
+            filters: HashMap::default(),
+            allowed_columns: None,
+            policies,
+            limit: val["limit"].as_u64(),
         };
-        columns.push((field.name.clone(), field_type));
+        builder.fields = builder.load_fields(&ty, ty.backing_table(), &val["columns"])?;
+        Ok(builder)
+    }
+    fn new_from_type(ty: &Arc<ObjectType>) -> Result<Self> {
+        let mut builder = Self {
+            fields: vec![],
+            columns: vec![],
+            base_type: ty.clone(),
+            joins: vec![],
+            filters: HashMap::default(),
+            allowed_columns: None,
+            policies: FieldPolicies::default(),
+            limit: None,
+        };
+
+        for field in ty.all_fields() {
+            let mut field = field.clone();
+            field.type_ = match field.type_ {
+                Type::Object(_) => Type::String, // This is actually a foreign key.
+                ty => ty,
+            };
+            let field = builder.make_builtin_field(&field, field.name.as_str());
+            builder.fields.push(field)
+        }
+        Ok(builder)
     }
 
-    Ok(Relation {
-        columns,
-        inner: Inner::BackingStore(ty.clone(), FieldPolicies::default()),
-        limit: None,
-    })
-}
+    fn make_builtin_field(&mut self, field: &Field, column_name: &str) -> SelectField {
+        let select_field = SelectField::Builtin {
+            name: field.name.clone(),
+            type_: field.type_.clone(),
+            column_idx: self.columns.len(),
+        };
+        self.columns.push((column_name.to_owned(), field.clone()));
+        select_field
+    }
 
-fn convert_backing_store(val: &serde_json::Value) -> Result<Relation> {
-    let name = val["name"].as_str().ok_or_else(|| {
-        anyhow!(
-            "internal error: `name` field is either missing or not a string: {}",
-            val
-        )
-    })?;
-    let limit = val["limit"].as_u64();
-    let columns = get_columns(val)?;
-    let runtime = runtime::get();
-    let ts = &runtime.type_system;
-    let api_version = current_api_version();
-    let ty = match ts.lookup_builtin_type(name) {
-        Ok(Type::Object(ty)) => ty,
-        Err(TypeSystemError::NotABuiltinType(_)) => ts.lookup_custom_type(name, &api_version)?,
-        _ => anyhow::bail!("Unexpected type name in convert_backing_store: {}", name),
-    };
-    let policies = get_policies(&runtime, &ty)?;
+    fn load_fields(
+        &mut self,
+        ty: &Arc<ObjectType>,
+        current_table: &str,
+        columns: &serde_json::Value,
+    ) -> Result<Vec<SelectField>> {
+        let columns = columns.as_array().ok_or_else(|| {
+            anyhow!(
+                "internal error: `columns` object must be an array, got `{}`",
+                columns
+            )
+        })?;
+        let mut fields: Vec<SelectField> = vec![];
+        for c in columns {
+            let c = &c.as_array().ok_or_else(|| {
+                // FIXME: This is ugly and the internal part is not necessary.
+                anyhow!(
+                    "internal error: column object must be an array, got `{}`",
+                    c
+                )
+            })?[0];
+            match c {
+                Value::String(field_name) => {
+                    let field = ty.field_by_name(field_name).ok_or_else(|| {
+                        anyhow!(
+                            "unknown field name `{}` in type `{}`",
+                            field_name,
+                            ty.name()
+                        )
+                    })?;
+                    let column_name = format!("{}.{}", current_table, field_name);
+                    let field = self.make_builtin_field(field, column_name.as_str());
+                    fields.push(field);
+                }
+                Value::Object(nested_fields) => {
+                    let field_name = nested_fields["field_name"]
+                        .as_str()
+                        .ok_or_else(|| anyhow!("name should be a string"))?;
+                    let field = ty.field_by_name(field_name).ok_or_else(|| {
+                        anyhow!(
+                            "unknown field name `{}` in type `{}`",
+                            field_name,
+                            ty.name()
+                        )
+                    })?;
+                    if let Type::Object(nested_ty) = &field.type_ {
+                        let nested_table = format!(
+                            "{}_JOIN{}_{}",
+                            current_table,
+                            self.joins.len(),
+                            nested_ty.backing_table()
+                        );
+                        self.joins.push(SqlJoin {
+                            rtype: nested_ty.clone(),
+                            lkey: field_name.to_owned(),
+                            rkey: "id".to_owned(),
+                            lalias: current_table.to_owned(),
+                            ralias: nested_table.to_owned(),
+                        });
 
-    Ok(Relation {
-        columns,
-        inner: Inner::BackingStore(ty, policies),
-        limit,
-    })
-}
+                        let nested_fields =
+                            self.load_fields(nested_ty, &nested_table, &nested_fields["columns"])?;
+                        fields.push(SelectField::Nested {
+                            name: field.name.clone(),
+                            children: nested_fields,
+                        });
+                    } else {
+                        anyhow::bail!(
+                            "found nested column selection on field that is not an object"
+                        )
+                    }
+                }
+                _ => anyhow::bail!("expected String or Object, got `{}`", c),
+            }
+        }
+        Ok(fields)
+    }
 
-fn convert_join(val: &serde_json::Value) -> Result<Relation> {
-    let columns = get_columns(val)?;
-    let left = Box::new(convert(&val["left"])?);
-    let right = Box::new(convert(&val["right"])?);
-    let limit = val["limit"].as_u64();
-    Ok(Relation {
-        columns,
-        inner: Inner::Join(left, right),
-        limit,
-    })
-}
-
-// FIXME: We should use prepared statements instead
-fn escape_string(s: &str) -> String {
-    format!("{}", format_sql_query::QuotedData(s))
-}
-
-fn convert_filter(val: &serde_json::Value) -> Result<Relation> {
-    let columns = get_columns(val)?;
-    let inner = Box::new(convert(&val["inner"])?);
-    let limit = val["limit"].as_u64();
-    let restrictions = val["restrictions"]
-        .as_object()
-        .ok_or_else(|| anyhow!("Missing restrictions in filter"))?;
-    let mut sql_restrictions = vec![];
-    for (k, v) in restrictions.iter() {
-        let v = match v {
-            Value::Null => anyhow::bail!("Null restriction"),
-            Value::Bool(v) => SqlValue::Bool(*v),
-            Value::Number(v) => {
-                if let Some(v) = v.as_u64() {
-                    SqlValue::U64(v)
-                } else if let Some(v) = v.as_i64() {
-                    SqlValue::I64(v)
-                } else {
-                    SqlValue::F64(v.as_f64().unwrap())
+    fn update_allowed_columns(&mut self, columns_json: &serde_json::Value) -> Result<()> {
+        if let Some(columns) = columns_json.as_array() {
+            let mut allowed_columns = HashSet::<String>::default();
+            for c in columns {
+                let c = &c.as_array().ok_or_else(|| {
+                    // FIXME: This is ugly and the internal part is not necessary.
+                    anyhow!(
+                        "internal error: column object must be an array, got `{}`",
+                        c
+                    )
+                })?[0];
+                if let Value::String(field_name) = c {
+                    allowed_columns.insert(field_name.to_owned());
                 }
             }
-            Value::String(v) => SqlValue::String(v.clone()),
-            Value::Array(v) => anyhow::bail!("Array restriction {:?}", v),
-            Value::Object(v) => anyhow::bail!("Object restriction {:?}", v),
-        };
-        sql_restrictions.push(Restriction { k: k.clone(), v });
+            self.allowed_columns = Some(allowed_columns);
+        }
+        Ok(())
     }
-    Ok(Relation {
-        columns,
-        inner: Inner::Filter(inner, sql_restrictions),
-        limit,
-    })
+
+    fn load_restrictions(&mut self, rest_json: &serde_json::Value) -> Result<()> {
+        if let Some(limit) = rest_json["limit"].as_u64() {
+            self.limit = Some(limit);
+        }
+        self.update_allowed_columns(&rest_json["columns"])?;
+        let restrictions = rest_json["restrictions"]
+            .as_object()
+            .ok_or_else(|| anyhow!("Missing restrictions in filter"))?;
+        for (k, v) in restrictions.iter() {
+            anyhow::ensure!(
+                self.base_type.field_by_name(k).is_some(),
+                "trying to filter by non-existent field `{}`",
+                k
+            );
+            let v = match v {
+                Value::Null => anyhow::bail!("Null restriction"),
+                Value::Bool(v) => SqlValue::Bool(*v),
+                Value::Number(v) => {
+                    if let Some(v) = v.as_u64() {
+                        SqlValue::U64(v)
+                    } else if let Some(v) = v.as_i64() {
+                        SqlValue::I64(v)
+                    } else {
+                        SqlValue::F64(v.as_f64().unwrap())
+                    }
+                }
+                Value::String(v) => SqlValue::String(v.clone()),
+                Value::Array(v) => anyhow::bail!("Array restriction {:?}", v),
+                Value::Object(v) => anyhow::bail!("Object restriction {:?}", v),
+            };
+            self.filters.insert(k.clone(), v);
+        }
+        Ok(())
+    }
+
+    fn make_column_string(&self) -> String {
+        let mut column_string = String::new();
+        for (column_name, field) in &self.columns {
+            let col = match field.default_value() {
+                Some(dfl) => format!(
+                    "coalesce({},\"{}\") AS {},",
+                    column_name,
+                    dfl,
+                    column_name.replace(".", "_")
+                ),
+                None => format!("{},", column_name),
+            };
+            column_string += &col;
+        }
+        column_string.pop();
+        column_string
+    }
+
+    fn make_join_string(&self) -> String {
+        let mut join_string = String::new();
+        for join in &self.joins {
+            join_string += &format!(
+                "JOIN ({}) AS {} ON {}.{}={}.{}\n",
+                join.rtype.backing_table(),
+                join.ralias,
+                join.lalias,
+                join.lkey,
+                join.ralias,
+                join.rkey
+            );
+        }
+        join_string
+    }
+
+    fn make_raw_query(&self) -> String {
+        let column_string = self.make_column_string();
+        let join_string = self.make_join_string();
+
+        let mut raw_query = format!(
+            "SELECT {} FROM {} {}",
+            column_string,
+            self.base_type.backing_table(),
+            join_string
+        );
+        if let Some(limit) = self.limit {
+            raw_query += format!(" LIMIT {}", limit).as_str();
+        }
+        raw_query
+    }
+
+    fn build_sql_select(&self) -> SqlSelect {
+        SqlSelect {
+            raw_query: self.make_raw_query(),
+            fields: self.fields.clone(),
+            filters: self.filters.clone(),
+            allowed_columns: self.allowed_columns.clone(),
+            policies: self.policies.clone(),
+        }
+    }
 }
 
-pub(crate) fn convert(val: &serde_json::Value) -> Result<Relation> {
+pub(crate) fn select_from_type(ty: &Arc<ObjectType>) -> Result<SqlSelect> {
+    let builder = SqlSelectBuilder::new_from_type(ty)?;
+    Ok(builder.build_sql_select())
+}
+
+pub(crate) fn convert_to_select(val: &serde_json::Value) -> Result<SqlSelect> {
+    let builder = convert_to_select_builder(val)?;
+    Ok(builder.build_sql_select())
+}
+
+fn convert_to_select_builder(val: &serde_json::Value) -> Result<SqlSelectBuilder> {
     let kind = val["kind"].as_str().ok_or_else(|| {
         anyhow!(
             "internal error: `kind` field is either missing or not a string: {}",
             val
         )
     })?;
+
     match kind {
-        "BackingStore" => convert_backing_store(val),
-        "Join" => convert_join(val),
-        "Filter" => convert_filter(val),
-        _ => Err(anyhow!("Unexpected relation kind")),
+        "BackingStore" => SqlSelectBuilder::new_from_json(val),
+        "Join" => anyhow::bail!("join is not supported"),
+        "Filter" => {
+            let mut select = convert_to_select_builder(&val["inner"])?;
+            select.load_restrictions(val)?;
+            Ok(select)
+        }
+        _ => anyhow::bail!("unexpected relation kind `{}`", kind),
     }
 }
 
-fn column_list(columns: &[(String, Type)]) -> String {
-    let mut names = columns.iter().map(|c| &c.0);
-    names.join(",")
-}
-
-enum Query {
-    Sql(String),
-    Stream(SqlStream),
-}
-
-struct PolicyApplyingStream {
-    inner: RawSqlStream,
-    policies: FieldPolicies,
-    columns: Vec<(String, Type)>,
-}
-
-impl Stream for PolicyApplyingStream {
-    type Item = anyhow::Result<JsonObject>;
-    fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
-        let columns = self.columns.clone();
-        let policies = self.policies.clone();
-        // Structural Pinning, it is OK because inner is pinned when we are.
-        let inner = unsafe { self.map_unchecked_mut(|s| &mut s.inner) };
-        match futures::ready!(inner.poll_next(cx)) {
-            None => Poll::Ready(None),
-            Some(Err(e)) => Poll::Ready(Some(Err(e))),
-            Some(Ok(item)) => {
-                let mut v = engine::relational_row_to_json(&columns, &item)?;
-                for (k, v) in v.iter_mut() {
-                    if let Some(xform) = policies.get(k) {
-                        *v = xform(v.take());
-                    }
+fn row_to_json(fields: &[SelectField], row: &AnyRow) -> anyhow::Result<JsonObject> {
+    let mut ret = JsonObject::default();
+    for s_field in fields {
+        match s_field {
+            SelectField::Builtin {
+                name,
+                type_,
+                column_idx,
+            } => {
+                let i = column_idx;
+                // FIXME: consider result_column.type_info().is_null() too
+                macro_rules! to_json {
+                    ($value_type:ty) => {{
+                        let val = row.get::<$value_type, _>(i);
+                        json!(val)
+                    }};
                 }
-                Poll::Ready(Some(Ok(v)))
+                let val = match type_ {
+                    Type::Float => {
+                        // https://github.com/launchbadge/sqlx/issues/1596
+                        // sqlx gets confused if the float doesn't have decimal points.
+                        let val: &str = row.get_unchecked(i);
+                        json!(val.parse::<f64>()?)
+                    }
+                    Type::String => to_json!(&str),
+                    Type::Id => to_json!(&str),
+                    Type::Boolean => {
+                        // Similarly to the float issue, type information is not filled in
+                        // *if* this value was put in as a result of coalesce() (default).
+                        //
+                        // Also the database has integers, and we need to map it back to a
+                        // boolean type on json.
+                        let val: &str = row.get_unchecked(i);
+                        let x: bool = val.parse::<usize>()? == 1;
+                        json!(x)
+                    }
+                    Type::Object(_) => anyhow::bail!("object is not a builtin"),
+                };
+                ret.insert(name.clone(), val);
+            }
+            SelectField::Nested { name, children } => {
+                let val = json!(row_to_json(children, row)?);
+                ret.insert(name.clone(), val);
             }
         }
     }
-}
-
-fn sql_backing_store(
-    pool: &AnyPool,
-    columns: Vec<(String, Type)>,
-    limit_str: &str,
-    ty: Arc<ObjectType>,
-    policies: FieldPolicies,
-) -> Query {
-    let mut column_string = String::new();
-    for c in columns.iter() {
-        let field = ty.field_by_name(&c.0).unwrap();
-        let col = match field.default_value() {
-            Some(dfl) => format!("coalesce({},\"{}\") AS {},", field.name, dfl, field.name),
-            None => format!("{},", field.name),
-        };
-        column_string += &col;
-    }
-    column_string.pop();
-
-    let query = format!(
-        "SELECT {} FROM {} {}",
-        column_string,
-        ty.backing_table(),
-        &limit_str
-    );
-    if policies.is_empty() {
-        return Query::Sql(query);
-    }
-    let stream = new_query_results(query, pool);
-    let pstream = Box::pin(PolicyApplyingStream {
-        inner: stream,
-        policies,
-        columns,
-    });
-    Query::Stream(pstream)
-}
-
-fn map_stream_item(
-    columns: &HashSet<String>,
-    o: anyhow::Result<JsonObject>,
-) -> anyhow::Result<JsonObject> {
-    let mut o = o?;
-    o.retain(|k, _| columns.contains(k));
-    Ok(o)
+    Ok(ret)
 }
 
 fn filter_stream_item(
@@ -298,8 +442,10 @@ fn filter_stream_item(
         if let Some(v2) = restrictions.get(k) {
             let eq = match v2 {
                 SqlValue::Bool(v2) => v == v2,
-                SqlValue::U64(v2) => v == v2,
-                SqlValue::I64(v2) => v == v2,
+                // FIXME: This is very unfortunate consequence of
+                // storing all ints as floats.
+                SqlValue::U64(v2) => v == *v2 as f64,
+                SqlValue::I64(v2) => v == *v2 as f64,
                 SqlValue::F64(v2) => v == v2,
                 SqlValue::String(v2) => v == v2,
             };
@@ -310,197 +456,49 @@ fn filter_stream_item(
     }
     true
 }
-
-fn filter_stream(
-    stream: SqlStream,
-    columns: Vec<(String, Type)>,
-    restrictions: Vec<Restriction>,
-) -> Query {
-    let columns: HashSet<String> = columns.into_iter().map(|(k, _)| k).collect();
-    let restrictions: HashMap<String, SqlValue> =
-        restrictions.into_iter().map(|r| (r.k, r.v)).collect();
-    let stream = stream
-        .filter(move |o| future::ready(filter_stream_item(o, &restrictions)))
-        .map(move |o| map_stream_item(&columns, o));
-    Query::Stream(Box::pin(stream))
-}
-
-async fn join_stream_aux(
-    columns: Vec<(String, Type)>,
-    left: SqlStream,
-    right: SqlStream,
-) -> Result<Vec<JsonObject>> {
-    // FIXME: Try to not discard the part of a stream before we get to an error
-    let left: Vec<JsonObject> = left.try_collect().await?;
-    let right: Vec<JsonObject> = right.try_collect().await?;
-
-    // FIXME: Don't create a full N*M vector upfront
-    let mut ret = vec![];
-    for l_row in left {
-        for r_row in &right {
-            let mut row = JsonObject::new();
-            for c in &columns {
-                let v = if let Some(v) = l_row.get(&c.0) {
-                    v.clone()
-                } else {
-                    r_row.get(&c.0).unwrap().clone()
-                };
-                row.insert(c.0.clone(), v);
-            }
-            ret.push(row);
+fn filter_columns(
+    o: anyhow::Result<JsonObject>,
+    allowed_columns: &Option<HashSet<String>>,
+) -> anyhow::Result<JsonObject> {
+    let mut o = o?;
+    if let Some(allowed_columns) = &allowed_columns {
+        let removed_keys = o
+            .iter()
+            .map(|(k, _)| k.to_owned())
+            .filter(|k| !allowed_columns.contains(k))
+            .collect::<Vec<String>>();
+        for k in &removed_keys {
+            o.remove(k);
         }
     }
-    Ok(ret)
+    Ok(o)
 }
 
-fn join_stream(columns: &[(String, Type)], left: SqlStream, right: SqlStream) -> Query {
-    let columns = columns.to_vec();
-    let fut = async {
-        let vec = match join_stream_aux(columns, left, right).await {
-            Ok(v) => v.into_iter().map(Ok).collect(),
-            Err(e) => vec![Err(e)],
-        };
-        stream::iter(vec)
-    };
-    Query::Stream(Box::pin(fut.flatten_stream()))
-}
-
-fn sql_filter(
-    pool: &AnyPool,
-    columns: Vec<(String, Type)>,
-    limit_str: &str,
-    alias_count: &mut u32,
-    inner: Relation,
-    restrictions: Vec<Restriction>,
-) -> Query {
-    let inner_sql = sql_impl(pool, inner, alias_count);
-    let inner_sql = match inner_sql {
-        Query::Sql(s) => s,
-        Query::Stream(s) => return filter_stream(s, columns, restrictions),
-    };
-    let inner_alias = format!("A{}", *alias_count);
-    *alias_count += 1;
-
-    let restrictions = restrictions.iter().fold(String::new(), |acc, rest| {
-        let str_v = match &rest.v {
-            SqlValue::Bool(v) => format!("{}", v),
-            SqlValue::U64(v) => format!("{}", v),
-            SqlValue::I64(v) => format!("{}", v),
-            SqlValue::F64(v) => format!("{}", v),
-            SqlValue::String(v) => escape_string(v),
-        };
-        if acc.is_empty() {
-            format!("WHERE {}={}", rest.k, str_v)
-        } else {
-            format!("{} AND {}={}", acc, rest.k, str_v)
-        }
-    });
-
-    Query::Sql(format!(
-        "SELECT {} FROM ({}) AS {} {} {}",
-        column_list(&columns),
-        inner_sql,
-        inner_alias,
-        restrictions,
-        limit_str,
-    ))
-}
-
-fn to_stream(pool: &AnyPool, s: String, columns: Vec<(String, Type)>) -> SqlStream {
-    let inner = new_query_results(s, pool);
-    Box::pin(PolicyApplyingStream {
-        inner,
-        policies: FieldPolicies::new(),
-        columns,
-    })
-}
-
-fn sql_join(
-    pool: &AnyPool,
-    columns: &[(String, Type)],
-    limit_str: &str,
-    alias_count: &mut u32,
-    left: Relation,
-    right: Relation,
-) -> Query {
-    let left_alias = format!("A{}", *alias_count);
-    let right_alias = format!("A{}", *alias_count + 1);
-    *alias_count += 2;
-
-    let mut join_columns = vec![];
-    let mut on_columns = vec![];
-    for c in columns {
-        if left.columns.contains(c) && right.columns.contains(c) {
-            join_columns.push(format!("{}.{}", left_alias, c.0));
-            on_columns.push(format!("{}.{} = {}.{}", left_alias, c.0, right_alias, c.0));
-        } else {
-            join_columns.push(c.0.clone());
+/// FIXME: This function should perform recursive descend into nested fields.
+fn apply_policies(
+    o: anyhow::Result<JsonObject>,
+    policies: &FieldPolicies,
+) -> anyhow::Result<JsonObject> {
+    let mut o = o?;
+    for (k, v) in o.iter_mut() {
+        if let Some(xform) = policies.get(k) {
+            *v = xform(v.take());
         }
     }
-
-    let left_columns = left.columns.clone();
-    let right_columns = right.columns.clone();
-    // FIXME: Optimize the case of table.left or table.right being just
-    // a BackingStore with all fields. The database probably doesn't
-    // care, but will make the logs cleaner.
-    let lsql = sql_impl(pool, left, alias_count);
-    let rsql = sql_impl(pool, right, alias_count);
-    let (lsql, rsql) = match (lsql, rsql) {
-        (Query::Sql(l), Query::Sql(r)) => (l, r),
-        (Query::Stream(l), Query::Sql(r)) => {
-            return join_stream(columns, l, to_stream(pool, r, right_columns))
-        }
-        (Query::Sql(l), Query::Stream(r)) => {
-            return join_stream(columns, to_stream(pool, l, left_columns), r)
-        }
-        (Query::Stream(l), Query::Stream(r)) => return join_stream(columns, l, r),
-    };
-
-    let on = if on_columns.is_empty() {
-        "TRUE".to_string()
-    } else {
-        on_columns.join(" AND ")
-    };
-    // Funny way to write it, but works on PostgreSQL and sqlite.
-    let join = format!(
-        "({}) AS {} JOIN ({}) AS {}",
-        lsql, left_alias, rsql, right_alias
-    );
-    let join_columns_str = join_columns.join(",");
-    Query::Sql(format!(
-        "SELECT {} FROM {} ON {} {}",
-        join_columns_str, join, on, limit_str
-    ))
+    Ok(o)
 }
 
-fn sql_impl(pool: &AnyPool, rel: Relation, alias_count: &mut u32) -> Query {
-    let limit_str = rel
-        .limit
-        .map(|x| format!("LIMIT {}", x))
-        .unwrap_or_else(String::new);
-    match rel.inner {
-        Inner::BackingStore(ty, policies) => {
-            sql_backing_store(pool, rel.columns, &limit_str, ty, policies)
-        }
-        Inner::Filter(inner, restrictions) => sql_filter(
-            pool,
-            rel.columns,
-            &limit_str,
-            alias_count,
-            *inner,
-            restrictions,
-        ),
-        Inner::Join(left, right) => {
-            sql_join(pool, &rel.columns, &limit_str, alias_count, *left, *right)
-        }
-    }
-}
+pub(crate) fn run_select(pool: &AnyPool, select: SqlSelect) -> Result<SqlStream> {
+    let policies = select.policies;
+    let filters = select.filters;
+    let allowed_columns = select.allowed_columns;
 
-pub(crate) fn sql(pool: &AnyPool, rel: Relation) -> SqlStream {
-    let mut v = 0;
-    let columns = rel.columns.clone();
-    match sql_impl(pool, rel, &mut v) {
-        Query::Sql(s) => to_stream(pool, s, columns),
-        Query::Stream(s) => s,
-    }
+    let stream = new_query_results(select.raw_query, pool);
+    let stream = stream.map(move |row| row_to_json(&select.fields, &row?));
+    let stream = stream.filter(move |o| future::ready(filter_stream_item(o, &filters)));
+    let stream = Box::pin(stream.map(move |o| {
+        let o = filter_columns(o, &allowed_columns);
+        apply_policies(o, &policies)
+    }));
+    Ok(stream)
 }

@@ -1,6 +1,6 @@
 // SPDX-FileCopyrightText: © 2021 ChiselStrike <info@chiselstrike.com>
 
-use crate::db::backing_store_from_type;
+use crate::db::select_from_type;
 use crate::query::QueryEngine;
 use anyhow::Context;
 use derive_new::new;
@@ -309,8 +309,8 @@ impl TypeSystem {
                         )
                     })?;
 
-                let ty_obj_rel = backing_store_from_type(self, ty_obj).await?;
-                let mut row_streams = engine.query_relation(ty_obj_rel);
+                let sql_select = select_from_type(ty_obj)?;
+                let mut row_streams = engine.run_select(sql_select)?;
 
                 while let Some(row) = row_streams.next().await {
                     // FIXME: basic rate limit?
