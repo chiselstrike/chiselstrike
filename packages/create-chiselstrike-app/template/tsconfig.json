@@ -6,5 +6,6 @@
         "allowJs": true,
         "module": "ESnext",
         "moduleResolution": "node"
-    }
+    },
+    "exclude": [".webpack"]
 }

@@ -16,17 +16,32 @@ use std::collections::BTreeMap;
 use std::env;
 use std::fs;
 use std::future::Future;
-use std::io::{stdin, ErrorKind, Read};
+use std::io::{stdin, ErrorKind, Read, Write};
 use std::path::{Path, PathBuf};
 use std::thread;
 use std::time::Duration;
 use structopt::StructOpt;
+use tempfile::Builder;
 use tonic::transport::Channel;
 
 mod ts;
 
 // Timeout when waiting for connection or server status.
 const TIMEOUT: Duration = Duration::from_secs(10);
+
+#[derive(Deserialize, PartialEq)]
+enum Module {
+    #[serde(rename = "node")]
+    Node,
+    #[serde(rename = "deno")]
+    Deno,
+}
+
+impl Default for Module {
+    fn default() -> Self {
+        Module::Node
+    }
+}
 
 /// Manifest defines the files that describe types, endpoints, and policies.
 ///
@@ -42,6 +57,9 @@ struct Manifest {
     endpoints: Vec<String>,
     /// Vector of directories to scan for policy definitions.
     policies: Vec<String>,
+    /// Whether to use deno-style or node-style modules
+    #[serde(default)]
+    modules: Module,
 }
 
 enum AllowTypeDeletion {
@@ -309,6 +327,11 @@ fn create_project(path: &Path, force: bool, examples: bool) -> Result<()> {
     write_template!("package.json", path)?;
     write_template!("tsconfig.json", path)?;
     write_template!("Chisel.toml", path)?;
+    // creating through chisel instead of npx: default to deno resolution
+    let mut toml = include_bytes!("template/Chisel.toml").to_vec();
+    toml.extend_from_slice("modules = \"deno\"\n".as_bytes());
+    write(&toml, path, "Chisel.toml")?;
+
     write_template!("settings.json", &path.join(VSCODE_DIR))?;
 
     if examples {
@@ -434,31 +457,81 @@ async fn apply<S: ToString>(
         types_string += &read_to_string(&t)?;
     }
 
-    match std::process::Command::new(get_tsc())
-        .arg("--noEmit")
-        .arg("--pretty")
-        .arg("--allowJs")
-        .arg("--checkJs")
-        .output()
-    {
-        Err(_) => {}
-        Ok(tsc) => {
-            if !tsc.status.success() {
-                let err = String::from_utf8_lossy(&tsc.stdout).into_owned();
+    if manifest.modules == Module::Node {
+        let webpack_output = tempfile::tempdir()?;
+        let webpack_output_dname = webpack_output.path().to_str().unwrap();
+        let cwd = env::current_dir()?;
+
+        for endpoint in endpoints.iter() {
+            let mut f = Builder::new().suffix(".ts").tempfile()?;
+            let inner = f.as_file_mut();
+            let mut import_path = endpoint.file_path.to_owned();
+            import_path.set_extension("");
+
+            let code = format!(
+                "import fun from \"{}/{}\";\nexport default fun",
+                cwd.display(),
+                import_path.display()
+            );
+            inner.write_all(code.as_bytes())?;
+            inner.flush()?;
+            let webpack_entry_fname = f.path().to_str().unwrap();
+            let res = std::process::Command::new("npx")
+                .arg("webpack")
+                .arg("--color")
+                .arg("-c")
+                .arg("./.webpack/webpack.config.js")
+                .arg("--entry")
+                .arg(webpack_entry_fname)
+                .arg("-o")
+                .arg(webpack_output_dname)
+                .output()
+                .with_context(|| {
+                    "trying to execute `npx webpack`. Is npx on your PATH?".to_string()
+                })?;
+
+            if !res.status.success() {
+                let err = String::from_utf8(res.stdout).expect("command output not utf-8");
                 eprintln!("{}", err);
-                return Err(anyhow!("compilation failed"));
+                return Err(anyhow!(
+                    "compiling endpoint {}",
+                    endpoint.file_path.display()
+                ));
+            }
+            let code = read_to_string(webpack_output.path().join("endpoint.mjs"))?;
+
+            endpoints_req.push(EndPointCreationRequest {
+                path: endpoint.name.clone(),
+                code,
+            });
+        }
+    } else {
+        match std::process::Command::new(get_tsc())
+            .arg("--noEmit")
+            .arg("--pretty")
+            .arg("--allowJs")
+            .arg("--checkJs")
+            .output()
+        {
+            Err(_) => {}
+            Ok(tsc) => {
+                if !tsc.status.success() {
+                    let err = String::from_utf8_lossy(&tsc.stdout).into_owned();
+                    eprintln!("{}", err);
+                    return Err(anyhow!("compilation failed"));
+                }
             }
         }
-    }
 
-    for f in endpoints.iter() {
-        let code = types_string.clone() + &read_to_string(&f.file_path)?;
-        let code = compile_ts_code(code)
-            .with_context(|| format!("parsing endpoint /{}/{}", version, f.name))?;
-        endpoints_req.push(EndPointCreationRequest {
-            path: f.name.clone(),
-            code,
-        });
+        for f in endpoints.iter() {
+            let code = types_string.clone() + &read_to_string(&f.file_path)?;
+            let code = compile_ts_code(code)
+                .with_context(|| format!("parsing endpoint /{}/{}", version, f.name))?;
+            endpoints_req.push(EndPointCreationRequest {
+                path: f.name.clone(),
+                code,
+            });
+        }
     }
 
     for p in policies {
