@@ -1,10 +1,16 @@
 {
     "fmt": {
         "files": {
-            "include": ["api", "server", "deno.json"],
+            "include": ["api", "server", "packages", "deno.json"],
             "exclude": [
                 "server/docs",
-                "third_party"
+                "third_party",
+                "packages/create-chiselstrike-app/node_modules/",
+                "packages/create-chiselstrike-app/package-lock.json",
+                "packages/create-chiselstrike-app/dist/",
+                "packages/chiselstrike-cli/package-lock.json",
+                "packages/chiselstrike-api/package-lock.json",
+                "packages/chiselstrike-api/lib/"
             ]
         },
         "options": {
@@ -13,7 +19,15 @@
     },
     "lint": {
         "files": {
-            "include": ["api", "server"]
+            "include": ["api", "server", "packages"],
+            "exclude": [
+                "packages/create-chiselstrike-app/node_modules/",
+                "packages/create-chiselstrike-app/package-lock.json",
+                "packages/create-chiselstrike-app/dist/",
+                "packages/chiselstrike-api/lib/",
+                "packages/chiselstrike-cli/package-lock.json",
+                "packages/chiselstrike-api/package-lock.json"
+            ]
         },
         "rules": {
             "tags": ["recommended"]

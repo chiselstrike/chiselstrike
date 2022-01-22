@@ -10,7 +10,7 @@ export default async function (req: Request): Promise<Response> {
     let json: unknown;
     try {
         json = await req.json();
-    } catch (e) {
+    } catch (_e) {
         json = "empty";
     }
     return responseFromJson(json);
