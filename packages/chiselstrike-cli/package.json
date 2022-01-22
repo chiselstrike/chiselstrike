@@ -1,17 +1,17 @@
 {
-  "name": "@chiselstrike/cli",
-  "version": "0.5.0",
-  "description": "ChiselStrike CLI",
-  "author": "Pekka Enberg <penberg@chiselstrike.com>",
-  "main": "binary.js",
-  "bin": {
-    "chisel": "./run.js"
-  },
-  "scripts": {
-    "postinstall": "node ./install.js"
-  },
-  "license": "Proprietary",
-  "dependencies": {
-    "binary-install": "^0.1.0"
-  }
+    "name": "@chiselstrike/cli",
+    "version": "0.5.0",
+    "description": "ChiselStrike CLI",
+    "author": "Pekka Enberg <penberg@chiselstrike.com>",
+    "main": "binary.js",
+    "bin": {
+        "chisel": "./run.js"
+    },
+    "scripts": {
+        "postinstall": "node ./install.js"
+    },
+    "license": "Proprietary",
+    "dependencies": {
+        "binary-install": "^0.1.0"
+    }
 }
