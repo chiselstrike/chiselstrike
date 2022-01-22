@@ -24,6 +24,7 @@ function run(projectDirectory: string) {
     );
     fs.mkdirSync(projectDirectory);
     fs.mkdirSync(path.join(projectDirectory, ".vscode"));
+    fs.mkdirSync(path.join(projectDirectory, ".webpack"));
     fs.mkdirSync(path.join(projectDirectory, "endpoints"));
     fs.mkdirSync(path.join(projectDirectory, "models"));
     fs.mkdirSync(path.join(projectDirectory, "policies"));
@@ -38,6 +39,11 @@ function run(projectDirectory: string) {
             path.join(projectDirectory, f),
         );
     }
+    fs.appendFileSync(
+        path.join(projectDirectory, "Chisel.toml"),
+        'modules = "node"\n',
+    );
+
     fs.copyFileSync(
         path.join(__dirname, "template", "settings.json"),
         path.join(projectDirectory, ".vscode", "settings.json"),
@@ -45,6 +51,14 @@ function run(projectDirectory: string) {
     fs.copyFileSync(
         path.join(__dirname, "template", "hello.ts"),
         path.join(projectDirectory, "endpoints", "hello.ts"),
+    );
+    fs.copyFileSync(
+        path.join(__dirname, "template", "hello.ts"),
+        path.join(projectDirectory, "endpoints", "hello.ts"),
+    );
+    fs.copyFileSync(
+        path.join(__dirname, "template", "webpack.config.js"),
+        path.join(projectDirectory, ".webpack", "webpack.config.js"),
     );
     console.log("Installing packages. This might take a couple of minutes.");
     process.chdir(projectDirectory);
