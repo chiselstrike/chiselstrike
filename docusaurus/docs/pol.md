@@ -214,15 +214,17 @@ Then please add the following policy:
 ```yaml title="my-backend/policies/pol.yml"
 labels:
   - name: protect
-    match_login: true
+    transform: match_login
 ```
 
-The `match_login` entry says that fields labeled with `protect` (if
-they are of OAuthUser type) must equal the value of `loggedInUser()`.
-Whenever an endpoint reads BlogComment entities, it will see only the
-rows whose `author` matches the currently logged-in user.
+The `match_login` transformation compares fields labeled with
+`protect` (if they are of OAuthUser type) to the value of
+`loggedInUser()`.  When the field value doesn't match, the row is
+ignored.  So in this case, when endpoints read BlogComment entities,
+they will see only the rows whose `author` matches the currently
+logged-in user.
 
-:::note
-You can add an `except_uri` entry to a `match_login` label, and it
-works the same way as described above.
+:::tip
+You can use `except_uri` here, and it works the same as described
+above.
 :::

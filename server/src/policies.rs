@@ -102,14 +102,23 @@ impl VersionPolicy {
 
                 labels.push(name.to_owned());
                 debug!("Applying policy for label {:?}", name);
+                let pattern = label["except_uri"].as_str().unwrap_or("^$"); // ^$ never matches; each path has at least a '/' in it.
 
                 match label["transform"].as_str() {
                     Some("anonymize") => {
-                        let pattern = label["except_uri"].as_str().unwrap_or("^$"); // ^$ never matches; each path has at least a '/' in it.
                         policies.labels.insert(
                             name.to_owned(),
                             Policy {
                                 kind: Kind::Transform(crate::policies::anonymize),
+                                except_uri: regex::Regex::new(pattern)?,
+                            },
+                        );
+                    }
+                    Some("match_login") => {
+                        policies.labels.insert(
+                            name.to_owned(),
+                            Policy {
+                                kind: Kind::MatchLogin,
                                 except_uri: regex::Regex::new(pattern)?,
                             },
                         );
@@ -119,20 +128,6 @@ impl VersionPolicy {
                     }
                     None => {}
                 };
-                if label["match_login"].as_bool().unwrap_or(false) {
-                    let pattern = label["except_uri"].as_str().unwrap_or("^$"); // ^$ never matches; each path has at least a '/' in it.
-
-                    // FIXME: This overwrites any existing entries for this label.  We don't currently expect
-                    // anyone to deliberately use both "transform" and "match_login" on the same label, but
-                    // mistakes can happen.
-                    policies.labels.insert(
-                        name.to_owned(),
-                        Policy {
-                            kind: Kind::MatchLogin,
-                            except_uri: regex::Regex::new(pattern)?,
-                        },
-                    );
-                }
             }
             for endpoint in config["endpoints"]
                 .as_vec()

@@ -107,7 +107,7 @@ $CURL -H "ChiselStrikeToken:$token_al" $CHISELD_HOST/dev/po
 cat << EOF > "$TEMPDIR/policies/pol.yaml"
 labels:
   - name: protect
-    match_login: true
+    transform: match_login
 EOF
 $CHISEL apply
 $CURL -H "ChiselStrikeToken:$token_al" $CHISELD_HOST/dev/po
