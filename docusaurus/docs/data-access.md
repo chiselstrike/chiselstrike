@@ -8,7 +8,7 @@ sidebar_position: 2
 Models represent the domain concepts of your application, and consists of one more more entities, which are effectively persistent objects.
 In ChiselStrike, you define models with entity class definitions in the `models/` directory of your project.
 
-For example, to define an entity `User` that represents an user in your application, you can add the following TypeScript class to your existing models file:
+For example, to define an entity `User` that represents a user in your application, you can add the following TypeScript class to your existing models file:
 
 ```typescript title="models/models.ts"
 import { ChiselEntity, labels } from "@chiselstrike/api"
@@ -25,9 +25,9 @@ export class User extends ChiselEntity {
 }
 ```
 
-:::info
-All of your models have to be in the same file. We will to lift this restriction
-in the future so each model can live in its own file.
+:::note
+All of your models have to be in the same file. We will lift this restriction
+in the future, so each model can live in its own file.
 :::
 
 The ChiselStrike runtime picks up this entity definition in the `models` directory and automatically does the necessary adjustments to the underlying backing datastore so that the entity can be persisted.
