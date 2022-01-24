@@ -10,16 +10,18 @@ ChiselStrike is deployed as part of a _version_.
 
 ## Creating a new version
 
-Versions are an optional parameter to the `chisel apply` command.
-
 :::tip
 Versioning is a production-oriented workflow.
 
 When starting to play with versions, it is advisable that you turn off `chisel dev`, as it will
 keep trying to push changes to the `dev` version. Start your server with `chisel start` instead,
 and push your changes manually with `chisel apply`.
+
+If you installed througn `npm`, the `chisel` utility is available through `npx chisel`. Just
+substitute `npx chisel` in the examples.
 :::
 
+Versions are an optional parameter to the `chisel apply` command.
 Creating a version creates a fully independent branch of your backend.
 
 Let's now create a new API version, called `experimental`. In the same directory,
