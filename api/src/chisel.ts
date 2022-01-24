@@ -154,7 +154,7 @@ export class ChiselCursor<T> {
      * Use this with caution as the result set can be very big.
      * It is recommended that you take() first to cap the maximum number of elements. */
     async toArray(): Promise<Partial<T>[]> {
-        const arr = new Array<Partial<T>>();
+        const arr = [];
         for await (const t of this) {
             arr.push(t);
         }
