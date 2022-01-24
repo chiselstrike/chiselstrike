@@ -1,6 +1,6 @@
 // SPDX-FileCopyrightText: © 2021 ChiselStrike <info@chiselstrike.com>
 
-/// <reference path="lib.deno_core.d.ts" />
+/// <reference types="./lib.deno_core.d.ts" />
 /// <reference lib="dom" />
 
 // In the beginning, we shall implement the following querying logic (with the sole exception of the lambdas,

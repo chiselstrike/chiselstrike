@@ -111,7 +111,7 @@ function compile(file, lib) {
         for (const name of typeReferenceDirectiveNames) {
             const fname = Deno.core.opSync(
                 "fetch",
-                name + ".d.ts",
+                name,
                 containingFile,
             );
             ret.push({ resolvedFileName: fname });
