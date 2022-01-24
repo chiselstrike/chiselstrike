@@ -73,17 +73,27 @@ fn dir_to_paths(dir: &Path, paths: &mut Vec<PathBuf>) -> anyhow::Result<()> {
         let path = dentry.path();
         if dentry.file_type()?.is_dir() {
             dir_to_paths(&path, paths)?;
-        } else if !dentry
-            .file_name()
-            .to_str()
-            .map_or(false, |x| x.starts_with('.') || x.ends_with('~'))
-        {
+        } else if !dentry.file_name().to_str().map_or(false, ignore_path) {
             // files with names that can't be converted wtih to_str() or that start with . are
             // ignored
             paths.push(path);
         }
     }
     Ok(())
+}
+
+fn ignore_path(path: &str) -> bool {
+    if path.starts_with('.') {
+        return true;
+    }
+    if path.ends_with('~') {
+        return true;
+    }
+    if path.starts_with('#') && path.ends_with('#') {
+        // Emacs auto-save files.
+        return true;
+    }
+    false
 }
 
 fn parse_version(version: &str) -> anyhow::Result<String> {
