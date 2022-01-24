@@ -60,10 +60,17 @@ output:
 Policy defined for label pii
 ```
 
-And now notice how the output of the `comments` endpoint changes:
+And now notice how the output of the `comments` endpoint changes.
+
+If you invoke the `/dev/comments` endpoint with:
 
 ```bash
-$ curl -s localhost:8080/dev/comments | python -m json.tool
+curl -s localhost:8080/dev/comments | python -m json.tool
+```
+
+The `curl` command reports:
+
+```console
 [
     {
         "id": "a4ca3ab3-2e26-4da6-a5de-418c1e6b9b83",
@@ -116,11 +123,15 @@ the `comments` endpoint.  But in general, the value can be a path
 prefix and even a regular expression; any matching endpoints will be
 exempt from the policy.
 
-Let's see what happens now when you query `comments`:
+If you now query the `/dev/comments` endpoint:
 
 ```bash
-$ curl -s localhost:8080/dev/comments | python -m json.tool
+curl -s localhost:8080/dev/comments | python -m json.tool
+```
 
+The `curl` command reports:
+
+```console
 [
     {
         "id": "a4ca3ab3-2e26-4da6-a5de-418c1e6b9b83",
