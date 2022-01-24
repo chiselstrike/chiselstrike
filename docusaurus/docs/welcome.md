@@ -5,8 +5,6 @@ sidebar_position: 0
 ---
 # Welcome to ChiselStrike!
 
-Before we begin, consider joining our Discord community: https://discord.gg/GHNN9CNAZe
-
 It's a pleasure to have you as part of our private beta. Although
 ChiselStrike is in its early stages, we hope you will already find it very
 useful for a variety of your use cases.
