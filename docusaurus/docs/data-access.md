@@ -53,10 +53,15 @@ export default async function (req) {
 }
 ```
 
-You can now access the `/dev/create` endpoint with:
+You can now access the `/dev/create` endpoint:
 
 ```bash
-$ curl -d '{"username": "alice", "email": "alice@example.com", "city": "Cambridge" }' localhost:8080/dev/create
+curl -d '{"username": "alice", "email": "alice@example.com", "city": "Cambridge" }' localhost:8080/dev/create
+```
+
+to see `curl` report the following:
+
+```console
 "Created alice"
 ```
 
@@ -81,10 +86,15 @@ export default async function (req) {
 }
 ```
 
-You can now update an entity using the `/dev/update` endpoint with:
+You can now update an entity using the `/dev/update` endpoint:
 
 ```bash
-$ curl -d '{"username": "alice", "email": "alice@mit.edu", "city": "Cambridge" }' localhost:8080/dev/update
+curl -d '{"username": "alice", "email": "alice@mit.edu", "city": "Cambridge" }' localhost:8080/dev/update
+```
+
+and see `curl` report:
+
+```console
 "Updated alice"
 ```
 
@@ -110,7 +120,12 @@ export default async function (req) {
 and query it with `/dev/find-one`:
 
 ```bash
-$ curl -d '{ "email": "alice@mit.edu" }' localhost:8080/dev/find-one
+curl -d '{ "email": "alice@mit.edu" }' localhost:8080/dev/find-one
+```
+
+and see `curl` report:
+
+```console
 "Found alice"
 ```
 
@@ -130,28 +145,50 @@ export default async function (req) {
 and query it with `/dev/find-many`:
 
 ```bash
-$ curl -d '{ "city": "Cambridge" }' localhost:8080/dev/find-many
-"Found alice"%
+curl -d '{ "city": "Cambridge" }' localhost:8080/dev/find-many
 ```
 
-If we create more entities:
+and see `curl` report:
+
+```console
+"Found alice"
+```
+
+We can create more entities with:
 
 ```bash
 $ curl -d '{"username": "bob", "email": "bob@example.com", "city": "Cambridge" }' localhost:8080/dev/create
+```
+
+and see `curl` report:
+
+```console
 "Created bob"
 ```
 
-we can see that `findMany()` returns them if they match the restrictions:
+We can then invoke the `/dev/find-many` endpoint:
 
 ```bash
 $ curl -d '{ "city": "Cambridge" }' localhost:8080/dev/find-many
+```
+
+To see that `findMany()` returns them if they match the restrictions:
+
+```console
 "Found alice,bob"
 ```
 
-You can also pass an empty restrictions object to `findMany()` and you will get all the entities of that type:
+You can also pass an empty restrictions object to `findMany()` and you will get all the entities of that type.
+
+To do that, invoke the `/dev/find-many` endpoint with an empty JSON document:
 
 ```bash
-$ curl -d '{}' localhost:8080/dev/find-many
+curl -d '{}' localhost:8080/dev/find-many
+```
+
+and see `curl` report:
+
+```
 "Found alice,bob"
 ```
 
@@ -191,10 +228,15 @@ export default async function (req) {
 }
 ```
 
-You can query it:
+You can invoke the `/dev/find-one-cursor` endpoint with:
 
 ```bash
-$ curl -d '{ "email": "alice@mit.edu" }' localhost:8080/dev/find-one-cursor
+curl -d '{ "email": "alice@mit.edu" }' localhost:8080/dev/find-one-cursor
+```
+
+and see `curl` report:
+
+```console
 "Found alice"
 ```
 

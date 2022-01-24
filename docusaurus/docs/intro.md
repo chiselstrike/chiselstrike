@@ -29,15 +29,25 @@ If we had such and endpoint right now, we could interact with it via
 `curl`, like this:
 
 ```bash
-$ curl localhost:8080/dev/comments
+curl localhost:8080/dev/comments
+```
+
+You are expected to see:
+
+```output
 curl: (7) Failed to connect to localhost port 8080: Connection refused
 ```
 
 Obviously, we get "Connection refused", since ChiselStrike isn't
 active yet.  Let's change that: in another window, type this:
 
+```bash
+npx create-chiselstrike-app my-backend
 ```
-$ npx create-chiselstrike-app my-backend
+
+and you will see a new ChiselStrike project being generated:
+
+```console
 Creating a new ChiselStrike project in my-backend ...
 Installing packages. This might take a couple of minutes.
 
@@ -47,9 +57,18 @@ added 25 packages, and audited 26 packages in 8s
   run `npm fund` for details
 
 found 0 vulnerabilities
-$ cd my-backend
-$ npm run dev
+```
 
+You can then start ChiselStrike in local development mode with:
+
+```bash
+cd my-backend
+npm run dev
+```
+
+and see the ChiselStrike start up:
+
+```
 > hello@1.0.0 dev
 > chisel dev
 
@@ -76,7 +95,12 @@ Now that ChiselStrike is running, we can attempt to access our
 endpoint again:
 
 ```bash
-$ curl -f localhost:8080/dev/comments
+curl -f localhost:8080/dev/comments
+```
+
+and see `curl` output the following:
+
+```console
 curl: (22) The requested URL returned error: 404
 ```
 
@@ -105,7 +129,12 @@ That's all it takes to define an endpoint!  It is now ready for use,
 which you can again verify with `curl`:
 
 ```bash
-$ curl localhost:8080/dev/comments
+curl localhost:8080/dev/comments
+```
+
+to see `curl` output the following:
+
+```
 "Temporarily empty"
 ```
 
@@ -194,7 +223,12 @@ Upon saving this file, there will be another endpoint in ChiselStrike
 for us to call:
 
 ```bash
-$ curl -X POST localhost:8080/dev/populate-comments
+curl -X POST localhost:8080/dev/populate-comments
+```
+
+and see `curl` output:
+
+```
 success
 ```
 
@@ -237,7 +271,12 @@ of all the instances of this type that ChiselStrike has in data
 storage.  Now we can call this endpoint to see the comments we stored:
 
 ```bash
-$ curl -s localhost:8080/dev/comments | python -m json.tool
+curl -s localhost:8080/dev/comments | python -m json.tool
+```
+
+and see `curl` output:
+
+```console
 [
     {
         "id": "a4ca3ab3-2e26-4da6-a5de-418c1e6b9b83",
@@ -300,13 +339,27 @@ export default async function chisel(req) {
 }
 ```
 
-And then invoke it:
+And then invoke it with:
 
 ```bash
-$ curl -X POST -d '{"content": "Fifth comment", "by": "Jill"}' localhost:8080/dev/comments
-"inserted 78604b77-7ff1-4d13-a025-2b3aa9a4d2ef"
-$ curl -s localhost:8080/dev/comments | python -m json.tool
+curl -X POST -d '{"content": "Fifth comment", "by": "Jill"}' localhost:8080/dev/comments
+```
 
+to see `curl` report:
+
+```console
+"inserted 78604b77-7ff1-4d13-a025-2b3aa9a4d2ef"
+```
+
+We can then run the following `curl` command:
+
+```bash
+curl -s localhost:8080/dev/comments | python -m json.tool
+```
+
+and see the following:
+
+```console
 [
     {
         "id": "5b415bff-2ea1-400f-89e2-f8c67494257e",

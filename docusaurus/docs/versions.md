@@ -26,17 +26,39 @@ Let's now create a new API version, called `experimental`. In the same directory
 type
 
 ```bash
-$ chisel apply --version experimental
+chisel apply --version experimental
+```
+
+and `chisel apply` reports:
+
+```console
 Model defined: BlogComment
 End point defined: /experimental/comments
 ```
 
-Now let's try comparing the two endpoints:
+Now let's try comparing the two endpoints.
+
+If we invoke the new `experimental` API version:
 
 ```bash
-$ curl localhost:8080/experimental/comments # brand new API version, no data yet
+$ curl localhost:8080/experimental/comments
+```
+
+The `curl` command reports no data:
+
+```console
 []
-$ curl localhost:8080/dev/comments # the old version still exists, untouched
+```
+
+However, we can still invoke the old `dev` version of the endpoint:
+
+```bash
+curl localhost:8080/dev/comments
+```
+
+and the `curl` command reports all the old data, untouched:
+
+```console
 [{"content":"First comment"},{"content":"Second comment"},{"content":"Third comment"},{"content":"Fourth comment"}]
 ```
 
@@ -51,14 +73,21 @@ other existing version.
 This can be done with `chisel populate`:
 
 ```bash
-$ chisel populate --version experimental --from dev
+chisel populate --version experimental --from dev
 ```
 
 Assuming `experimental` is empty before the population starts, you should see that the `experimental` version
-now holding the same data as `dev`:
+now holding the same data as `dev`.
 
+If you invoke the `/experimental/comments` endpoint:
+
+```bash
+curl localhost:8080/experimental/comments
 ```
-$ curl localhost:8080/experimental/comments
+
+The `curl` command reports:
+
+```console
 [{"content":"First comment"},{"content":"Second comment"},{"content":"Third comment"},{"content":"Fourth comment"}]
 ```
 
