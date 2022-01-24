@@ -83,7 +83,17 @@ fn dir_to_paths(dir: &Path, paths: &mut Vec<PathBuf>) -> anyhow::Result<()> {
 }
 
 fn ignore_path(path: &str) -> bool {
-    path.starts_with('.') || path.ends_with('~')
+    if path.starts_with('.') {
+        return true;
+    }
+    if path.ends_with('~') {
+        return true;
+    }
+    if path.starts_with('#') && path.ends_with('#') {
+        // Emacs auto-save files.
+        return true;
+    }
+    false
 }
 
 fn parse_version(version: &str) -> anyhow::Result<String> {
