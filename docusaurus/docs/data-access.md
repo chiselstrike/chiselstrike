@@ -5,8 +5,9 @@ sidebar_position: 2
 
 ## Defining Entities
 
-Models represent the domain concepts of your application, and consists of one more more entities, which are effectively persistent objects.
-In ChiselStrike, you define models with entity class definitions in the `models/` directory of your project.
+Entities represent the domain objects of your application.
+For example, in a blogging platform, you will have entities such as `BlogPost`, `BlogComment`, `Author`, and so on.
+The set of entities in your application represents the domain model, which is why in ChiselStrike, entities are defined in your project's `models` directory.
 
 For example, to define an entity `User` that represents a user in your application, you can add the following TypeScript class to your existing models file:
 
@@ -65,7 +66,7 @@ to see `curl` report the following:
 "Created alice"
 ```
 
-Please note that the ChiselStrike runtime assigns an `id` to your entity automatically upon `save()`. If you want to _update_ your entity, you first need to query it to obtain an entity with an `id`.
+Please note that, as discussed in the [Getting Started](intro.md) section, the ChiselStrike runtime assigns an `id` to your entity automatically upon `save()`. If you want to _update_ your entity, you first need to query it to obtain an entity with an `id`.
 
 For example, you could write the following endpoint that takes the same JSON, but updates the `User` entity based on the provided `username`:
 
@@ -102,7 +103,7 @@ and see `curl` report:
 
 We have now seen how to define entities and how to persist them, but also saw a glimpse of how to query them with the `User.findOne()` method call when we updated the entity.
 
-The `ChiselEntity` base class provides two convenience methods, `findOne()` and `findMany()`, which you can use to query for entities of that type. Both of the method take a restriction object as an argument.
+The `ChiselEntity` base class provides two convenience methods, `findOne()` and `findMany()`, which you can use to query for entities of that type. Both of the method take an object as an argument, which represents the filtering restrictions.
 
 For example, to query one entity with a given `username`, you could define the following endpoint:
 
