@@ -215,7 +215,8 @@ export class ChiselEntity {
     /**
      * Builds a new entity.
      *
-     * @param properties The properties of the created entity.
+     * @param properties The properties of the created entity. If more than one property
+     * is passed, the expected order of assignment is the same as Object.assign.
      *
      * @example
      * ```typescript
@@ -229,18 +230,23 @@ export class ChiselEntity {
      * const userJson = JSON.parse('{"username": "alice", "email": "alice@example.com"}');
      * const anotherUser = User.build(userJson);
      *
+     * // Create an entity from different JSON objects:
+     * const otherUserJson = JSON.parse('{"username": "alice"}, {"email": "alice@example.com"}');
+     * const yetAnotherUser = User.build(userJson);
+     *
      * // now optionally save them to the backend
      * await user.save();
      * await anotherUser.save();
+     * await yetAnotherUser.save();
      * ```
      * @returns The persisted entity with given properties and the `id` property set.
      */
     static build<T extends ChiselEntity>(
         this: { new (): T },
-        properties: Record<string, unknown>,
+        ...properties: Record<string, unknown>[]
     ): T {
         const result = new this();
-        Object.assign(result, properties);
+        Object.assign(result, ...properties);
         return result;
     }
 
