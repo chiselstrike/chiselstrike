@@ -7,7 +7,7 @@
                 "third_party",
                 "packages/create-chiselstrike-app/node_modules/",
                 "packages/chiselstrike-cli/node_modules/",
-                "packages/chiselstrike-app/node_modules/",
+                "packages/chiselstrike-api/node_modules/",
                 "packages/create-chiselstrike-app/package-lock.json",
                 "packages/create-chiselstrike-app/dist/",
                 "packages/chiselstrike-cli/package-lock.json",
@@ -25,7 +25,7 @@
             "exclude": [
                 "packages/create-chiselstrike-app/node_modules/",
                 "packages/chiselstrike-cli/node_modules/",
-                "packages/chiselstrike-app/node_modules/",
+                "packages/chiselstrike-api/node_modules/",
                 "packages/create-chiselstrike-app/package-lock.json",
                 "packages/create-chiselstrike-app/dist/",
                 "packages/chiselstrike-api/lib/",
