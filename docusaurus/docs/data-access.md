@@ -5,8 +5,9 @@ sidebar_position: 2
 
 ## Defining Entities
 
-Models represent the domain concepts of your application, and consists of one more more entities, which are effectively persistent objects.
-In ChiselStrike, you define models with entity class definitions in the `models/` directory of your project.
+Entities represent the domain objects of your application.
+For example, in a blogging platform, you will have entities such as `BlogPost`, `BlogComment`, `Author`, and so on.
+The set of entities in your application represents the domain model, which is why in ChiselStrike, entities are defined in your project's `models` directory.
 
 For example, to define an entity `User` that represents a user in your application, you can add the following TypeScript class to your existing models file:
 
