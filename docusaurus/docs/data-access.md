@@ -65,7 +65,7 @@ to see `curl` report the following:
 "Created alice"
 ```
 
-Please note that the ChiselStrike runtime assigns an `id` to your entity automatically upon `save()`. If you want to _update_ your entity, you first need to query it to obtain an entity with an `id`.
+Please note that, as discussed in the [Getting Started](intro.md) section, the ChiselStrike runtime assigns an `id` to your entity automatically upon `save()`. If you want to _update_ your entity, you first need to query it to obtain an entity with an `id`.
 
 For example, you could write the following endpoint that takes the same JSON, but updates the `User` entity based on the provided `username`:
 
