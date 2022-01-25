@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: © 2021 ChiselStrike <info@chiselstrike.com>
 
 use crate::deno::current_api_version;
-use crate::deno::get_policies;
+use crate::deno::make_field_policies;
 use crate::policies::FieldPolicies;
 use crate::query::engine;
 use crate::query::engine::new_query_results;
@@ -127,7 +127,7 @@ fn convert_backing_store(val: &serde_json::Value) -> Result<Relation> {
         Err(TypeSystemError::NotABuiltinType(_)) => ts.lookup_custom_type(name, &api_version)?,
         _ => anyhow::bail!("Unexpected type name in convert_backing_store: {}", name),
     };
-    let policies = get_policies(&runtime, &ty);
+    let policies = make_field_policies(&runtime, &ty);
 
     Ok(Relation {
         columns,

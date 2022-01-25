@@ -20,8 +20,8 @@ pub(crate) struct Runtime {
 }
 
 impl Runtime {
-    /// Adds the current policies of ty to policies.
-    pub(crate) fn get_policies(
+    /// Adds the current policies on ty's fields to policies.
+    pub(crate) fn add_field_policies(
         &self,
         ty: &ObjectType,
         policies: &mut FieldPolicies,

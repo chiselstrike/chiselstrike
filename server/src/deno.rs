@@ -291,14 +291,15 @@ async fn op_chisel_store(
 
 type DbStream = RefCell<SqlStream>;
 
-pub(crate) fn get_policies(runtime: &Runtime, ty: &ObjectType) -> FieldPolicies {
+/// Calculates field policies for the request being processed.
+pub(crate) fn make_field_policies(runtime: &Runtime, ty: &ObjectType) -> FieldPolicies {
     let mut policies = FieldPolicies::default();
     let (path, userid) = CURRENT_CONTEXT.with(|p| {
         let p = p.borrow();
         (p.path.path().to_string(), p.userid.clone())
     });
     policies.current_userid = userid;
-    runtime.get_policies(ty, &mut policies, &path);
+    runtime.add_field_policies(ty, &mut policies, &path);
     policies
 }
 
