@@ -9,6 +9,7 @@ import { ChiselEntity } from "@chiselstrike/api";
 
 export class User extends ChiselEntity {
     username: string = "";
+    name: string = "";
 }
 EOF
 
@@ -17,10 +18,10 @@ import { User } from "../models/user";
 
 export default async function (req: Request): Promise<Response> {
     const json = await req.json();
-    const user = await User.build(json);
+    const user = await User.build(json, {"name": "Pekka"});
     await user.save();
     const result = await User.findOne({"id": user.id});
-    return new Response(result!.username);
+    return new Response(result!.username + result!.name);
 }
 EOF
 
@@ -29,4 +30,4 @@ $CHISEL apply
 # CHECK: End point defined: /dev/user
 
 $CURL -d '{"username": "penberg"}' $CHISELD_HOST/dev/user
-# CHECK: penberg
+# CHECK: penbergPekka
