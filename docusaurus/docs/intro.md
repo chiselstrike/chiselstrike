@@ -157,9 +157,9 @@ a single parameter.  This function defines the endpoint.  It takes a
 and returns the corresponding
 [Response](https://developer.mozilla.org/en-US/docs/Web/API/Response).
 In this case, it simply returns a string wrapped as a JSON value.  It
-uses a helper function `responseFromJson` There's much more
-to `responseFromJson` as we'll see shortly.  For full
-reference, please see [this page](chisel-backend).
+uses a helper function `responseFromJson`. There's much more
+to `@chiselstrike/api`, as we'll see shortly.  For full
+reference, please see [this page](data-access).
 
 ## Adding Data
 
