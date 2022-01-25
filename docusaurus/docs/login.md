@@ -136,7 +136,7 @@ import { loggedInUser, responseFromJson } from '@chiselstrike/api';
 export default async function (req) {
     let c = BlogComment.build(await req.json());
     c.author = await loggedInUser();
-    if (c.author == null) return responseFromJson('Must be logged in', 401);
+    if (c.author == null) { return responseFromJson('Must be logged in', 401) }
     await c.save();
     return responseFromJson('saved successfully');
 }
