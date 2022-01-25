@@ -43,7 +43,7 @@ Now let's try comparing the two endpoints.
 If we invoke the new `experimental` API version:
 
 ```bash
-$ curl localhost:8080/experimental/comments
+curl localhost:8080/experimental/comments
 ```
 
 The `curl` command reports no data:

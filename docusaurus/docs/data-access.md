@@ -157,7 +157,7 @@ and see `curl` report:
 We can create more entities with:
 
 ```bash
-$ curl -d '{"username": "bob", "email": "bob@example.com", "city": "Cambridge" }' localhost:8080/dev/create
+curl -d '{"username": "bob", "email": "bob@example.com", "city": "Cambridge" }' localhost:8080/dev/create
 ```
 
 and see `curl` report:
@@ -169,7 +169,7 @@ and see `curl` report:
 We can then invoke the `/dev/find-many` endpoint:
 
 ```bash
-$ curl -d '{ "city": "Cambridge" }' localhost:8080/dev/find-many
+curl -d '{ "city": "Cambridge" }' localhost:8080/dev/find-many
 ```
 
 To see that `findMany()` returns them if they match the restrictions:
