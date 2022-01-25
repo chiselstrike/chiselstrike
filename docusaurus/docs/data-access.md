@@ -102,7 +102,7 @@ and see `curl` report:
 
 We have now seen how to define entities and how to persist them, but also saw a glimpse of how to query them with the `User.findOne()` method call when we updated the entity.
 
-The `ChiselEntity` base class provides two convenience methods, `findOne()` and `findMany()`, which you can use to query for entities of that type. Both of the method take a restriction object as an argument.
+The `ChiselEntity` base class provides two convenience methods, `findOne()` and `findMany()`, which you can use to query for entities of that type. Both of the method take an object as an argument, which represents the filtering restrictions.
 
 For example, to query one entity with a given `username`, you could define the following endpoint:
 
