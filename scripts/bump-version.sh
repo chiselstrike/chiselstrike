@@ -4,6 +4,10 @@
 #
 # Bump ChiselStrike project version across all the metadata files.
 #
+# Prerequisites:
+#
+#  cargo install set-cargo-version
+#
 # Example usage:
 #
 #  bump-version.sh 0.1.2
