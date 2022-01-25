@@ -158,8 +158,7 @@ and returns the corresponding
 [Response](https://developer.mozilla.org/en-US/docs/Web/API/Response).
 In this case, it simply returns a string wrapped as a JSON value.  It
 uses a helper function `responseFromJson` There's much more
-to `responseFromJson` as we'll see shortly.  For full
-reference, please see [this page](chisel-backend).
+to `responseFromJson` as we'll see shortly.
 
 ## Adding Data
 
