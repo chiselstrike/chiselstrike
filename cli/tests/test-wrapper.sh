@@ -9,6 +9,8 @@ export TEMPDIR=$(mktemp -d)
 
 cwd=$(pwd)
 
+export CHISEL_SECRET_LOCATION="file://$TEMPDIR/.env"
+
 cd $TEMPDIR
 $CHISEL init --no-examples
 cd $cwd

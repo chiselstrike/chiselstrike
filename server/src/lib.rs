@@ -5,6 +5,12 @@
 
 pub(crate) type JsonObject = serde_json::Map<String, serde_json::Value>;
 
+macro_rules! send_command {
+    ( $code:block ) => {{
+        Box::new({ move || async move { $code }.boxed_local() })
+    }};
+}
+
 #[macro_use]
 extern crate log;
 
@@ -19,6 +25,7 @@ pub(crate) mod query;
 pub(crate) mod rcmut;
 pub(crate) mod rpc;
 pub(crate) mod runtime;
+pub(crate) mod secrets;
 pub mod server;
 pub(crate) mod types;
 

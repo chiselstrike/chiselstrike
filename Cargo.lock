@@ -2690,6 +2690,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "116bee8279d783c0cf370efa1a94632f2108e5ef0bb32df31f051647810a4e2c"
 dependencies = [
  "der",
+ "pem-rfc7468",
  "zeroize",
 ]
 
@@ -3478,6 +3479,7 @@ dependencies = [
  "api",
  "async-channel",
  "async-mutex",
+ "base64 0.13.0",
  "deno_broadcast_channel",
  "deno_core",
  "deno_runtime",
@@ -3496,8 +3498,10 @@ dependencies = [
  "once_cell",
  "pin-project",
  "prost",
+ "rand 0.8.4",
  "regex",
  "reqwest",
+ "rsa",
  "sea-query",
  "serde",
  "serde_derive",
