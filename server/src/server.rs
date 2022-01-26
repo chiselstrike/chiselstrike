@@ -29,7 +29,7 @@ use tokio::task::JoinHandle;
 pub struct Opt {
     /// user-visible API server listen address.
     #[structopt(short, long, default_value = "127.0.0.1:8080")]
-    api_listen_addr: SocketAddr,
+    api_listen_addr: String,
     /// RPC server listen address.
     #[structopt(short, long, default_value = "127.0.0.1:50051")]
     rpc_listen_addr: SocketAddr,
@@ -102,7 +102,7 @@ pub struct SharedState {
     signal_rx: async_channel::Receiver<()>,
     /// ChiselRpc waits on all API threads to send here before it starts serving RPC.
     readiness_tx: async_channel::Sender<()>,
-    api_listen_addr: SocketAddr,
+    api_listen_addr: String,
     inspect_brk: bool,
     executor_threads: usize,
     data_db: DbConnection,
@@ -182,9 +182,11 @@ async fn run(state: SharedState, mut cmd: ExecutorChannel) -> Result<()> {
         }
     });
 
-    let api_task = crate::api::spawn(api_service, state.api_listen_addr, async move {
-        state.signal_rx.recv().await.ok();
-    })?;
+    let api_tasks = crate::api::spawn(
+        api_service,
+        state.api_listen_addr.clone(),
+        state.signal_rx.clone(),
+    )?;
     state.readiness_tx.send(()).await?;
 
     info!(
@@ -192,7 +194,9 @@ async fn run(state: SharedState, mut cmd: ExecutorChannel) -> Result<()> {
         state.api_listen_addr
     );
 
-    api_task.await??;
+    for api_task in api_tasks {
+        api_task.await??;
+    }
     command_task.await?;
     Ok(())
 }
