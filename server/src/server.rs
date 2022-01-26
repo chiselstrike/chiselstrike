@@ -28,7 +28,7 @@ use tokio::task::JoinHandle;
 #[structopt(name = "chiseld", version = env!("VERGEN_GIT_SEMVER_LIGHTWEIGHT"))]
 pub struct Opt {
     /// user-visible API server listen address.
-    #[structopt(short, long, default_value = "127.0.0.1:8080")]
+    #[structopt(short, long, default_value = "localhost:8080")]
     api_listen_addr: String,
     /// RPC server listen address.
     #[structopt(short, long, default_value = "127.0.0.1:50051")]
