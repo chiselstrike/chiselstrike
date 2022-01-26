@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: © 2021 ChiselStrike <info@chiselstrike.com>
 
 use crate::deno::current_api_version;
-use crate::deno::get_policies;
+use crate::deno::make_field_policies;
 use crate::policies::FieldPolicies;
 use crate::query::engine;
 use crate::query::engine::new_query_results;
@@ -9,7 +9,7 @@ use crate::query::engine::JsonObject;
 use crate::query::engine::RawSqlStream;
 use crate::query::engine::SqlStream;
 use crate::runtime;
-use crate::types::{ObjectType, Type, TypeSystem, TypeSystemError};
+use crate::types::{Field, ObjectType, Type, TypeSystem, TypeSystemError, OAUTHUSER_TYPE_NAME};
 use anyhow::{anyhow, Result};
 use enum_as_inner::EnumAsInner;
 use futures::future;
@@ -127,7 +127,7 @@ fn convert_backing_store(val: &serde_json::Value) -> Result<Relation> {
         Err(TypeSystemError::NotABuiltinType(_)) => ts.lookup_custom_type(name, &api_version)?,
         _ => anyhow::bail!("Unexpected type name in convert_backing_store: {}", name),
     };
-    let policies = get_policies(&runtime, &ty)?;
+    let policies = make_field_policies(&runtime, &ty);
 
     Ok(Relation {
         columns,
@@ -231,13 +231,41 @@ impl Stream for PolicyApplyingStream {
             Some(Ok(item)) => {
                 let mut v = engine::relational_row_to_json(&columns, &item)?;
                 for (k, v) in v.iter_mut() {
-                    if let Some(xform) = policies.get(k) {
+                    if let Some(xform) = policies.transforms.get(k) {
                         *v = xform(v.take());
                     }
                 }
                 Poll::Ready(Some(Ok(v)))
             }
         }
+    }
+}
+
+fn sql_where_for_match_login(
+    fields: &HashSet<String>,
+    ty: &ObjectType,
+    current_userid: &Option<String>,
+) -> String {
+    let current_userid = match current_userid {
+        None => "NULL".to_string(),
+        Some(id) => format!("\"{}\"", id),
+    };
+    let mut conjuncts = vec![];
+    for f in fields.iter() {
+        match ty.field_by_name(f) {
+            Some(Field {
+                type_: Type::Object(obj),
+                ..
+            }) if obj.name() == OAUTHUSER_TYPE_NAME => {
+                conjuncts.push(format!("{} = {}", f, current_userid));
+            }
+            _ => {}
+        }
+    }
+    if conjuncts.is_empty() {
+        "".to_string()
+    } else {
+        format!("WHERE {}", conjuncts.iter().join(" AND "))
     }
 }
 
@@ -260,12 +288,13 @@ fn sql_backing_store(
     column_string.pop();
 
     let query = format!(
-        "SELECT {} FROM {} {}",
+        "SELECT {} FROM {} {} {}",
         column_string,
         ty.backing_table(),
+        sql_where_for_match_login(&policies.match_login, &ty, &policies.current_userid),
         &limit_str
     );
-    if policies.is_empty() {
+    if policies.transforms.is_empty() {
         return Query::Sql(query);
     }
     let stream = new_query_results(query, pool);
@@ -410,7 +439,7 @@ fn to_stream(pool: &AnyPool, s: String, columns: Vec<(String, Type)>) -> SqlStre
     let inner = new_query_results(s, pool);
     Box::pin(PolicyApplyingStream {
         inner,
-        policies: FieldPolicies::new(),
+        policies: FieldPolicies::default(),
         columns,
     })
 }

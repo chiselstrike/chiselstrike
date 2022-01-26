@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: © 2021 ChiselStrike <info@chiselstrike.com>
 
 use crate::api::ApiService;
-use crate::policies::{FieldPolicies, Policies};
+use crate::policies::{FieldPolicies, Kind, Policies};
 use crate::query::{MetaService, QueryEngine};
 use crate::rcmut::RcMut;
 use crate::types::{ObjectType, TypeSystem};
@@ -20,8 +20,8 @@ pub(crate) struct Runtime {
 }
 
 impl Runtime {
-    /// Adds the current policies of ty to policies.
-    pub(crate) fn get_policies(
+    /// Adds the current policies on ty's fields to policies.
+    pub(crate) fn add_field_policies(
         &self,
         ty: &ObjectType,
         policies: &mut FieldPolicies,
@@ -32,7 +32,14 @@ impl Runtime {
                 for lbl in &fld.labels {
                     if let Some(p) = version.labels.get(lbl) {
                         if !p.except_uri.is_match(current_path) {
-                            policies.insert(fld.name.clone(), p.transform);
+                            match p.kind {
+                                Kind::Transform(f) => {
+                                    policies.transforms.insert(fld.name.clone(), f);
+                                }
+                                Kind::MatchLogin => {
+                                    policies.match_login.insert(fld.name.clone());
+                                }
+                            }
                         }
                     }
                 }

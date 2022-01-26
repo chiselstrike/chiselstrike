@@ -191,3 +191,40 @@ When `users` is specified, anonymous access to the path will be
 prohibited.  For example, if you want to force the user to log in to
 access `comments` but don't care which specific user is accessing it,
 you can set `users` to `.*`.
+
+### Restricting Data Access to Matching User
+
+As explained in ["Tracking Logins in the
+Backend"](login#tracking-logins-in-the-backend), you can store the
+logged-in user as a field in your entities.  Let's continue the
+example from that link here.  Please edit the file `models/models.ts`
+like this:
+
+```typescript title="my-backend/models/models.ts"
+import { ChiselEntity } from "@chiselstrike/api"
+
+export class BlogComment extends ChiselEntity {
+    content: string = "";
+    @labels("protect") author: OAuthUser;
+}
+```
+
+Then please add the following policy:
+
+```yaml title="my-backend/policies/pol.yml"
+labels:
+  - name: protect
+    transform: match_login
+```
+
+The `match_login` transformation compares fields labeled with
+`protect` (if they are of OAuthUser type) to the value of
+`loggedInUser()`.  When the field value doesn't match, the row is
+ignored.  So in this case, when endpoints read BlogComment entities,
+they will see only the rows whose `author` matches the currently
+logged-in user.
+
+:::tip
+You can use `except_uri` here, and it works the same as described
+above.
+:::

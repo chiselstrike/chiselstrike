@@ -1,19 +1,15 @@
 // SPDX-FileCopyrightText: © 2021 ChiselStrike <info@chiselstrike.com>
 
 use crate::api::{ApiService, Body};
-use crate::db::SqlValue;
-use crate::query::engine::{JsonObject, SqlWithArguments};
+use crate::query::engine::JsonObject;
 use crate::runtime;
 use crate::types::{ObjectType, Type, OAUTHUSER_TYPE_NAME};
 use anyhow::anyhow;
 use futures::{Future, FutureExt};
 use hyper::{header, Request, Response, StatusCode};
 use serde_json::json;
-use sqlx::Row;
 use std::pin::Pin;
 use std::sync::Arc;
-
-const USERPATH: &str = "/__chiselstrike/auth/user/";
 
 fn redirect(link: &str) -> Response<Body> {
     let bd: Body = format!("Redirecting to <a href='{}'>{}</a>\n", link, link).into();
@@ -32,7 +28,7 @@ fn bad_request(msg: String) -> Response<Body> {
         .unwrap()
 }
 
-fn get_oauth_user_type() -> anyhow::Result<Arc<ObjectType>> {
+pub(crate) fn get_oauth_user_type() -> anyhow::Result<Arc<ObjectType>> {
     match runtime::get()
         .type_system
         .lookup_builtin_type(OAUTHUSER_TYPE_NAME)
@@ -42,29 +38,21 @@ fn get_oauth_user_type() -> anyhow::Result<Arc<ObjectType>> {
     }
 }
 
-async fn insert_user_into_db(username: &str) -> anyhow::Result<()> {
+/// Upserts username into OAuthUser type, returning its ID.
+async fn insert_user_into_db(username: &str) -> anyhow::Result<String> {
     let oauth_user_type = get_oauth_user_type()?;
     let mut user = JsonObject::new();
     user.insert("username".into(), json!(username));
     let query_engine = { runtime::get().query_engine.clone() };
 
-    query_engine.add_row(&oauth_user_type, &user).await?;
-    Ok(())
-}
-
-pub(crate) async fn get_userid_from_db(username: String) -> anyhow::Result<String> {
-    let oauth_user_type = get_oauth_user_type()?;
-    let qeng = { runtime::get().query_engine.clone() };
-    Ok(qeng
-        .fetch_one(SqlWithArguments {
-            sql: format!(
-                "SELECT id FROM {} WHERE username=$1",
-                oauth_user_type.backing_table()
-            ),
-            args: vec![SqlValue::String(username)],
-        })
+    query_engine
+        .add_row(&oauth_user_type, &user)
         .await?
-        .get("id"))
+        .get("id")
+        .ok_or_else(|| anyhow!("Didn't get user ID from storing a user."))?
+        .as_str()
+        .map(|s| s.to_string())
+        .ok_or_else(|| anyhow!("User ID wasn't a string."))
 }
 
 fn handle_callback(
@@ -87,30 +75,13 @@ fn handle_callback(
             return Ok(bad_request("Callback error: parameter value empty".into()));
         }
         let username = urldecode::decode(username.into());
-        insert_user_into_db(&username).await?;
+        let userid = insert_user_into_db(&username).await?;
         let meta = runtime::get().meta.clone();
         Ok(redirect(&format!(
             // TODO: redirect to the URL from state.
             "http://localhost:3000/profile?chiselstrike_token={}",
-            meta.new_session_token(&username).await?
+            meta.new_session_token(&userid).await?
         )))
-    }
-    .boxed_local()
-}
-
-fn lookup_user(
-    req: Request<hyper::Body>,
-) -> Pin<Box<dyn Future<Output = Result<Response<Body>, anyhow::Error>>>> {
-    async move {
-        let token = req
-            .uri()
-            .path()
-            .strip_prefix(USERPATH)
-            .ok_or_else(|| anyhow!("lookup_user on wrong URL"))?;
-        let meta = runtime::get().meta.clone();
-        let bd: Body = meta.get_username(token).await?.into();
-        let resp = Response::builder().status(StatusCode::OK).body(bd).unwrap();
-        Ok(resp)
     }
     .boxed_local()
 }
@@ -120,14 +91,14 @@ pub(crate) fn init(api: &mut ApiService) {
         "/__chiselstrike/auth/callback".into(),
         Arc::new(handle_callback),
     );
-    api.add_route(USERPATH.into(), Arc::new(lookup_user));
 }
 
-pub(crate) async fn get_username(req: &Request<hyper::Body>) -> anyhow::Result<Option<String>> {
+/// Returns the user ID corresponding to the token in req.  If token is absent, returns None.
+pub(crate) async fn get_user(req: &Request<hyper::Body>) -> anyhow::Result<Option<String>> {
     match req.headers().get("ChiselStrikeToken") {
         Some(token) => {
             let meta = { crate::runtime::get().meta.clone() };
-            Ok(meta.get_username(token.to_str()?).await.ok())
+            Ok(meta.get_user_id(token.to_str()?).await.ok())
         }
         None => Ok(None),
     }

@@ -104,3 +104,44 @@ await chiselFetch(chisel, 'api/dev/comments, {
 When an endpoint is invoked like this, the backend will know the
 identity of your logged-in user.  (And if your user logged out, this
 call is identical to calling `fetch` directly.)
+
+# Tracking Logins in the Backend
+
+The ChiselStrike backend keeps track of your website's users via a
+builtin type called OAuthUser.  When a user logs in for the first
+time, a new OAuthUser entity is added.
+
+One interesting thing to do is have OAuthUser-typed fields in your
+entities.  For example:
+
+```typescript title="my-backend/models/models.ts"
+import { ChiselEntity } from "@chiselstrike/api"
+
+export class BlogComment extends ChiselEntity {
+    content: string = "";
+    author: OAuthUser;
+}
+```
+
+This makes it easy to link a `BlogComment` to the user who created it:
+you simply provide a special `author` value when creating it.  The
+ChiselStrike API includes a function named `loggedInUser`, which
+returns the OAuthUser object corresponding to the user currently
+logged in (or `null` if no one is logged in).  This works, for
+example:
+
+```typescript title="my-backend/endpoints/example.ts"
+import { BlogComment } from '../models/models.ts';
+import { loggedInUser, responseFromJson } from '@chiselstrike/api';
+export default async function (req) {
+    let c = BlogComment.build(await req.json());
+    c.author = await loggedInUser();
+    if (c.author == null) { return responseFromJson('Must be logged in', 401) }
+    await c.save();
+    return responseFromJson('saved successfully');
+}
+```
+
+You can even restrict a user's access to only their own comments;
+please see ["Restricting Data Access to Matching
+User"](pol#restricting-data-access-to-matching-user).

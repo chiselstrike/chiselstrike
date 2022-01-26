@@ -2,14 +2,22 @@
 
 use crate::prefix_map::PrefixMap;
 use serde_json::{json, Value};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::path::Path;
 use yaml_rust::YamlLoader;
 
+/// Different kinds of policies.
+#[derive(Clone)]
+pub(crate) enum Kind {
+    /// How this policy transforms values read from storage.
+    Transform(fn(Value) -> Value),
+    /// Field is of OAuthUser type and must match the user currently logged in.
+    MatchLogin,
+}
+
 #[derive(Clone)]
 pub(crate) struct Policy {
-    /// How this policy transforms values read from storage.
-    pub(crate) transform: fn(Value) -> Value,
+    pub(crate) kind: Kind,
 
     /// This policy doesn't apply when the request URI matches.
     pub(crate) except_uri: regex::Regex,
@@ -18,8 +26,15 @@ pub(crate) struct Policy {
 /// Maps labels to their applicable policies.
 pub(crate) type LabelPolicies = HashMap<String, Policy>;
 
-/// Maps a field name to the transformation we apply to that field's values.
-pub(crate) type FieldPolicies = HashMap<String, fn(Value) -> Value>;
+#[derive(Clone, Default, Debug)]
+pub(crate) struct FieldPolicies {
+    /// Maps a field name to the transformation we apply to that field's values.
+    pub(crate) transforms: HashMap<String, fn(Value) -> Value>,
+    /// Names of fields that must equal the currently logged-in user.
+    pub(crate) match_login: HashSet<String>,
+    /// ID of the currently logged-in user.
+    pub(crate) current_userid: Option<String>,
+}
 
 #[derive(Clone, Default, Debug)]
 pub(crate) struct UserAuthorization {
@@ -87,14 +102,23 @@ impl VersionPolicy {
 
                 labels.push(name.to_owned());
                 debug!("Applying policy for label {:?}", name);
+                let pattern = label["except_uri"].as_str().unwrap_or("^$"); // ^$ never matches; each path has at least a '/' in it.
 
                 match label["transform"].as_str() {
                     Some("anonymize") => {
-                        let pattern = label["except_uri"].as_str().unwrap_or("^$"); // ^$ never matches; each path has at least a '/' in it.
                         policies.labels.insert(
                             name.to_owned(),
                             Policy {
-                                transform: crate::policies::anonymize,
+                                kind: Kind::Transform(crate::policies::anonymize),
+                                except_uri: regex::Regex::new(pattern)?,
+                            },
+                        );
+                    }
+                    Some("match_login") => {
+                        policies.labels.insert(
+                            name.to_owned(),
+                            Policy {
+                                kind: Kind::MatchLogin,
                                 except_uri: regex::Regex::new(pattern)?,
                             },
                         );
