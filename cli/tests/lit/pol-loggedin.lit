@@ -68,7 +68,7 @@ $CHISEL apply 2>&1 || echo # (swallow the apply abort)
 rm "$TEMPDIR/policies/pol.yaml"
 
 cat << EOF > "$TEMPDIR/models/post.ts"
-import { ChiselEntity } from '@chiselstrike/api'
+import { ChiselEntity, OAuthUser } from '@chiselstrike/api'
 export class Post extends ChiselEntity {
     text: string = "Lorem Ipsum";
     @labels("protect") author: OAuthUser;
@@ -78,15 +78,16 @@ EOF
 cat << EOF > "$TEMPDIR/endpoints/po.ts"
 import { Post } from '../models/post.ts';
 import { loggedInUser, responseFromJson } from '@chiselstrike/api';
-export default async function chisel(req) {
+export default async function chisel(req: Request) {
     if (req.method == 'POST') {
         let p = Post.build(await req.json());
-        p.author = await loggedInUser();
-        if (p.author == null) return responseFromJson('Must be logged in', 401);
+        let author = await loggedInUser();
+        if (author == null) return responseFromJson('Must be logged in', 401);
+        p.author = author;
         await p.save();
         return new Response('saved post successfully');
     } else if (req.method == 'GET') {
-        let r = [];
+        let r: Array<Post> = [];
         await Post.cursor().select('text').forEach(p => r.push(p));
         return responseFromJson(r);
     }
