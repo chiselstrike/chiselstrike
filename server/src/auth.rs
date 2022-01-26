@@ -1,13 +1,14 @@
 // SPDX-FileCopyrightText: © 2021 ChiselStrike <info@chiselstrike.com>
 
 use crate::api::{ApiService, Body};
-use crate::query::engine::JsonObject;
+use crate::query::engine::{JsonObject, SqlWithArguments};
 use crate::runtime;
 use crate::types::{ObjectType, Type, OAUTHUSER_TYPE_NAME};
 use anyhow::anyhow;
 use futures::{Future, FutureExt};
 use hyper::{header, Request, Response, StatusCode};
 use serde_json::json;
+use sqlx::Row;
 use std::pin::Pin;
 use std::sync::Arc;
 
@@ -42,9 +43,23 @@ pub(crate) fn get_oauth_user_type() -> anyhow::Result<Arc<ObjectType>> {
 async fn insert_user_into_db(username: &str) -> anyhow::Result<String> {
     let oauth_user_type = get_oauth_user_type()?;
     let mut user = JsonObject::new();
-    user.insert("username".into(), json!(username));
     let query_engine = { runtime::get().query_engine.clone() };
-
+    match query_engine
+        .fetch_one(SqlWithArguments {
+            sql: format!(
+                "SELECT id FROM {} WHERE username=$1",
+                oauth_user_type.backing_table()
+            ),
+            args: vec![username.into()],
+        })
+        .await
+    {
+        Err(_) => { /* Presume the ID just isn't in the database because this is a new user. */ }
+        Ok(row) => {
+            user.insert("id".into(), serde_json::Value::String(row.get("id")));
+        }
+    }
+    user.insert("username".into(), json!(username));
     query_engine
         .add_row(&oauth_user_type, &user)
         .await?
