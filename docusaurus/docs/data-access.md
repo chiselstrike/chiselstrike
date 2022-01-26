@@ -16,7 +16,7 @@ import { ChiselEntity, labels } from "@chiselstrike/api"
 
 export class BlogComment extends ChiselEntity {
     content: string = "";
-    labels("pii") by: string = "";
+    @labels("pii") by: string = "";
 }
 
 export class User extends ChiselEntity {
@@ -50,7 +50,7 @@ export default async function (req) {
   const city = payload["city"] || "";
   const user = User.build({ username: username, email: email, city: city });
   await user.save();
-  return responseFromJson('Created ' + user.username);
+  return responseFromJson('Created user ' + user.username + ' with id ' + user.id);
 }
 ```
 
@@ -63,10 +63,10 @@ curl -d '{"username": "alice", "email": "alice@example.com", "city": "Cambridge"
 to see `curl` report the following:
 
 ```console
-"Created alice"
+"Created user alice with id 72325865-1887-4604-a127-025919ca281c"
 ```
 
-Please note that, as discussed in the [Getting Started](intro.md) section, the ChiselStrike runtime assigns an `id` to your entity automatically upon `save()`. If you want to _update_ your entity, you first need to query it to obtain an entity with an `id`.
+Please note that, as discussed in the [Getting Started](intro.md) section, the ChiselStrike runtime assigns an `id` to your entity automatically upon `save()`. If you want to _update_ your entity, you need to either know its `id` from another object or external source or query it to obtain an entity with an `id`.
 
 For example, you could write the following endpoint that takes the same JSON, but updates the `User` entity based on the provided `username`:
 
@@ -79,24 +79,36 @@ export default async function (req) {
   const username = payload["username"] || "";
   const email = payload["email"] || "";
   const city = payload["city"] || "";
-  const user = await User.findOne({ username: username });
+  const id = payload["id"];
+  let user;
+  if (!id) {
+      user = await User.findOne({ username: username });
+  } else {
+      user = User.build({ id, username, email, city });
+  }
   user.email = email;
   user.city = city;
   await user.save();
-  return responseFromJson('Updated ' + user.username);
+  return responseFromJson('Updated ' + user.username + ' id ' + user.id);
 }
 ```
 
-You can now update an entity using the `/dev/update` endpoint:
+You can now update an entity using the `/dev/update` endpoint issuing a read-modify-write pattern:
 
 ```bash
 curl -d '{"username": "alice", "email": "alice@mit.edu", "city": "Cambridge" }' localhost:8080/dev/update
 ```
+or by explicitly mentioning the id:
 
-and see `curl` report:
+
+```bash
+curl -d '{"id": "72325865-1887-4604-a127-025919ca281c", "username": "alice", "email": "alice@mit.edu", "city": "Cambridge" }' localhost:8080/dev/update
+```
+
+which would both produce the following `curl` report:
 
 ```console
-"Updated alice"
+"Updated alice id 72325865-1887-4604-a127-025919ca281c"
 ```
 
 ## Querying Entities
