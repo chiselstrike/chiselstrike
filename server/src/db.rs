@@ -37,6 +37,12 @@ pub(crate) enum SqlValue {
     String(String),
 }
 
+impl From<&str> for SqlValue {
+    fn from(f: &str) -> Self {
+        Self::String(f.to_string())
+    }
+}
+
 #[derive(Debug)]
 struct Restriction {
     k: String,

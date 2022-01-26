@@ -12,7 +12,7 @@ export default async function chisel(req: Request) {
     for await (let u of Chisel.OAuthUser.cursor()) {
         response += u.username + " ";
     }
-    return new Response(response);
+    return new Response(response + '.');
 }
 EOF
 
@@ -28,6 +28,11 @@ EOF
 cd "$TEMPDIR"
 $CHISEL apply
 $CURL $CHISELD_HOST/dev/users
-# CHECK: alice bob charlie
+# CHECK: alice bob charlie .
 $CURL -XPOST $CHISELD_HOST/dev/trysave
 # CHECK: Cannot save into type OAuthUser
+
+## Reproduces #708:
+$CURL $CHISELD_HOST/__chiselstrike/auth/callback?user=bob
+$CURL $CHISELD_HOST/dev/users
+# CHECK: alice bob charlie .
