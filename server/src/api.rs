@@ -13,7 +13,7 @@ use socket2::{Domain, Protocol, Socket, Type};
 use std::convert::Infallible;
 use std::convert::TryFrom;
 use std::io::Cursor;
-use std::net::SocketAddr;
+use std::net::ToSocketAddrs;
 use std::path::Path;
 use std::path::PathBuf;
 use std::pin::Pin;
@@ -231,38 +231,50 @@ where
 
 pub(crate) fn spawn(
     api: Rc<ApiService>,
-    addr: SocketAddr,
-    shutdown: impl core::future::Future<Output = ()> + 'static,
-) -> Result<tokio::task::JoinHandle<Result<(), hyper::Error>>> {
-    let make_svc = make_service_fn(move |_conn| {
+    listen_addr: String,
+    rx: async_channel::Receiver<()>,
+) -> Result<Vec<tokio::task::JoinHandle<Result<(), hyper::Error>>>> {
+    let mut tasks = Vec::new();
+    let sock_addrs = listen_addr.to_socket_addrs()?;
+    for addr in sock_addrs {
+        info!("{} has address {:?}", listen_addr, addr);
         let api = api.clone();
-        async move {
-            Ok::<_, Infallible>(service_fn(move |req| {
-                let api = api.clone();
-                async move { api.route(req).await }
-            }))
-        }
-    });
+        let rx = rx.clone();
+        let domain = if addr.is_ipv6() {
+            Domain::ipv6()
+        } else {
+            Domain::ipv4()
+        };
+        let sk = Socket::new(domain, Type::stream(), Some(Protocol::tcp()))?;
+        let addr = socket2::SockAddr::from(addr);
+        sk.set_reuse_port(true)?;
+        sk.bind(&addr)?;
+        sk.listen(1024)?;
 
-    let domain = if addr.is_ipv6() {
-        Domain::ipv6()
-    } else {
-        Domain::ipv4()
-    };
-    let sk = Socket::new(domain, Type::stream(), Some(Protocol::tcp()))?;
-    let addr = socket2::SockAddr::from(addr);
-    sk.set_reuse_port(true)?;
-    sk.bind(&addr)?;
-    sk.listen(1024)?;
-
-    let server = Server::from_tcp(sk.into_tcp_listener())?
-        .executor(LocalExec)
-        .serve(make_svc);
-    Ok(tokio::task::spawn_local(async move {
-        let ret = server.with_graceful_shutdown(shutdown).await;
-        debug!("hyper shutdown");
-        ret
-    }))
+        let make_svc = make_service_fn(move |_conn| {
+            let api = api.clone();
+            async move {
+                Ok::<_, Infallible>(service_fn(move |req| {
+                    let api = api.clone();
+                    async move { api.route(req).await }
+                }))
+            }
+        });
+        let server = Server::from_tcp(sk.into_tcp_listener())?
+            .executor(LocalExec)
+            .serve(make_svc);
+        let task = tokio::task::spawn_local(async move {
+            let ret = server
+                .with_graceful_shutdown(async {
+                    rx.recv().await.ok();
+                })
+                .await;
+            debug!("hyper shutdown");
+            ret
+        });
+        tasks.push(task);
+    }
+    Ok(tasks)
 }
 
 pub(crate) fn response_template() -> http::response::Builder {
