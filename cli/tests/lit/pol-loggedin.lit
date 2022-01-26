@@ -75,7 +75,8 @@ export class Post extends ChiselEntity {
 }
 EOF
 
-cat << EOF > "$TEMPDIR/endpoints/po.ts"
+# FIXME, This should be po.ts once we can import labels in post.ts
+cat << EOF > "$TEMPDIR/endpoints/po.js"
 import { Post } from '../models/post.ts';
 import { loggedInUser, responseFromJson } from '@chiselstrike/api';
 export default async function chisel(req: Request) {
