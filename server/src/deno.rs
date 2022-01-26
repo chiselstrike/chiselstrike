@@ -389,12 +389,18 @@ async fn op_chisel_user(_: Rc<RefCell<OpState>>, _: (), _: ()) -> Result<serde_j
     }
 }
 
+// Used by deno to format names in errors
+fn op_format_file_name(_: &mut OpState, file_name: String, _: ()) -> anyhow::Result<String> {
+    Ok(file_name)
+}
+
 async fn create_deno<P: AsRef<Path>>(base_directory: P, inspect_brk: bool) -> Result<DenoService> {
     let mut d = DenoService::new(base_directory.as_ref().to_owned(), inspect_brk);
     let worker = &mut d.worker;
     let runtime = &mut worker.js_runtime;
 
     // FIXME: Turn this into a deno extension
+    runtime.register_op("op_format_file_name", op_sync(op_format_file_name));
     runtime.register_op("chisel_read_body", op_async(op_chisel_read_body));
     runtime.register_op("chisel_store", op_async(op_chisel_store));
     runtime.register_op(
