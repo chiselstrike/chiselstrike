@@ -57,7 +57,7 @@ impl UserAuthorization {
 
     /// Authorizes users matching a regex to execute any endpoint under this path.  Longer paths override existing
     /// prefixes.  Error if this same path has already been added.
-    pub fn add(&mut self, path: &str, users: regex::Regex) -> Result<(), anyhow::Error> {
+    pub fn add(&mut self, path: &str, users: regex::Regex) -> anyhow::Result<()> {
         if self.paths.insert(path.into(), users).is_some() {
             anyhow::bail!("Repeated path in user authorization: {:?}", path);
         }

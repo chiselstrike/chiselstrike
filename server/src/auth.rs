@@ -76,7 +76,7 @@ async fn insert_user_into_db(username: &str) -> anyhow::Result<String> {
 
 fn handle_callback(
     req: Request<hyper::Body>,
-) -> Pin<Box<dyn Future<Output = Result<Response<Body>, anyhow::Error>>>> {
+) -> Pin<Box<dyn Future<Output = anyhow::Result<Response<Body>>>>> {
     // TODO: Grab state out of the request, validate it, and grab the referrer URL out of it.
     async move {
         let params = req.uri().query();
