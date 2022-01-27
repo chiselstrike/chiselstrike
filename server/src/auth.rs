@@ -6,7 +6,7 @@ use crate::query::engine::SqlWithArguments;
 use crate::runtime;
 use crate::types::{ObjectType, Type, OAUTHUSER_TYPE_NAME};
 use crate::JsonObject;
-use anyhow::anyhow;
+use anyhow::{anyhow, Result};
 use futures::{Future, FutureExt};
 use hyper::{header, Request, Response, StatusCode};
 use serde_json::json;
@@ -33,7 +33,7 @@ fn bad_request(msg: String) -> Response<Body> {
         .unwrap()
 }
 
-pub(crate) fn get_oauth_user_type() -> anyhow::Result<Arc<ObjectType>> {
+pub(crate) fn get_oauth_user_type() -> Result<Arc<ObjectType>> {
     match runtime::get()
         .type_system
         .lookup_builtin_type(OAUTHUSER_TYPE_NAME)
@@ -44,7 +44,7 @@ pub(crate) fn get_oauth_user_type() -> anyhow::Result<Arc<ObjectType>> {
 }
 
 /// Upserts username into OAuthUser type, returning its ID.
-async fn insert_user_into_db(username: &str) -> anyhow::Result<String> {
+async fn insert_user_into_db(username: &str) -> Result<String> {
     let oauth_user_type = get_oauth_user_type()?;
     let mut user = JsonObject::new();
     let query_engine = { runtime::get().query_engine.clone() };
@@ -76,7 +76,7 @@ async fn insert_user_into_db(username: &str) -> anyhow::Result<String> {
 
 fn handle_callback(
     req: Request<hyper::Body>,
-) -> Pin<Box<dyn Future<Output = anyhow::Result<Response<Body>>>>> {
+) -> Pin<Box<dyn Future<Output = Result<Response<Body>>>>> {
     // TODO: Grab state out of the request, validate it, and grab the referrer URL out of it.
     async move {
         let params = req.uri().query();
@@ -105,7 +105,7 @@ fn handle_callback(
     .boxed_local()
 }
 
-async fn lookup_user(req: Request<hyper::Body>) -> anyhow::Result<Response<Body>> {
+async fn lookup_user(req: Request<hyper::Body>) -> Result<Response<Body>> {
     match get_username(&req).await {
         None => anyhow::bail!("Error finding logged-in user; perhaps no one is logged in?"),
         Some(username) => Ok(response_template().body(username.into()).unwrap()),
@@ -124,7 +124,7 @@ pub(crate) fn init(api: &mut ApiService) {
 }
 
 /// Returns the user ID corresponding to the token in req.  If token is absent, returns None.
-pub(crate) async fn get_user(req: &Request<hyper::Body>) -> anyhow::Result<Option<String>> {
+pub(crate) async fn get_user(req: &Request<hyper::Body>) -> Result<Option<String>> {
     match req.headers().get("ChiselStrikeToken") {
         Some(token) => {
             let meta = { crate::runtime::get().meta.clone() };

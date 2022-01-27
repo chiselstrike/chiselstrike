@@ -89,7 +89,7 @@ impl ModulesDirectory {
         self.dir.path()
     }
 
-    pub async fn materialize(&self, path: &str, code: &str) -> anyhow::Result<()> {
+    pub async fn materialize(&self, path: &str, code: &str) -> Result<()> {
         // Path.join() doesn't work when path can be absolute, which it usually is here
         // Also has to force .ts here, otherwise /dev/foo.ts becomes /dev/foo endpoints,
         // and then later trying /dev/foo/bar clashes and fails
