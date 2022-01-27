@@ -307,6 +307,31 @@ export class ChiselEntity {
         }
         return null;
     }
+
+    /**
+     * Deletes all entities that match the `restrictions` object.
+     *
+     * @example
+     * ```typescript
+     * export class User extends ChiselEntity {
+     *   username: string,
+     *   email: string,
+     * }
+     * const user = User.build({ username: "alice", email: "alice@example.com" });
+     * await user.save();
+     *
+     * await User.delete({ email: "alice@example.com"})
+     * ```
+     */
+    static async delete<T extends ChiselEntity>(
+        this: { new (): T },
+        restrictions: Partial<T>,
+    ): Promise<void> {
+        await Deno.core.opAsync("chisel_entity_delete", {
+            type_name: this.name,
+            restrictions: restrictions,
+        });
+    }
 }
 
 export class OAuthUser extends ChiselEntity {

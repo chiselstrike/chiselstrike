@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: © 2021 ChiselStrike <info@chiselstrike.com>
 
 use crate::api::{response_template, Body, RequestPath};
-use crate::db::convert;
+use crate::db::{convert, convert_restrictions};
 use crate::policies::FieldPolicies;
 use crate::query::engine::JsonObject;
 use crate::query::engine::SqlStream;
@@ -289,6 +289,39 @@ async fn op_chisel_store(
     Ok(serde_json::json!(query_engine.add_row(&ty, value).await?))
 }
 
+async fn op_chisel_entity_delete(
+    _state: Rc<RefCell<OpState>>,
+    content: serde_json::Value,
+    _: (),
+) -> Result<serde_json::Value> {
+    anyhow::ensure!(
+        current_method() != Method::GET,
+        "Mutating the backend is not allowed during GET"
+    );
+    let type_name = content["type_name"].as_str().ok_or_else(|| {
+        anyhow!("The `type_name` field passed to `op_chisel_entity_delete` is not a JSON string.")
+    })?;
+    let restrictions = content["restrictions"].as_object().ok_or_else(|| {
+        anyhow!("The `restrictions` passed to `op_chisel_entity_delete` is not a JSON object.")
+    })?;
+    let runtime = runtime::get();
+    let api_version = current_api_version();
+    let ty = match runtime
+        .type_system
+        .lookup_custom_type(type_name, &api_version)
+    {
+        Err(_) => anyhow::bail!("Cannot delete from type `{}`", type_name),
+        Ok(ty) => ty,
+    };
+    let restrictions = convert_restrictions(restrictions)?;
+    let query_engine = runtime.query_engine.clone();
+    // Await point below, RcMut can't be held.
+    drop(runtime);
+    Ok(serde_json::json!(
+        query_engine.delete(&ty, restrictions).await?
+    ))
+}
+
 type DbStream = RefCell<SqlStream>;
 
 /// Calculates field policies for the request being processed.
@@ -403,6 +436,7 @@ async fn create_deno<P: AsRef<Path>>(base_directory: P, inspect_brk: bool) -> Re
     runtime.register_op("op_format_file_name", op_sync(op_format_file_name));
     runtime.register_op("chisel_read_body", op_async(op_chisel_read_body));
     runtime.register_op("chisel_store", op_async(op_chisel_store));
+    runtime.register_op("chisel_entity_delete", op_async(op_chisel_entity_delete));
     runtime.register_op(
         "chisel_relational_query_create",
         op_sync(op_chisel_relational_query_create),

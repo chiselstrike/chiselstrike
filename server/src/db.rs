@@ -44,7 +44,7 @@ impl From<&str> for SqlValue {
 }
 
 #[derive(Debug)]
-struct Restriction {
+pub struct Restriction {
     k: String,
     v: SqlValue,
 }
@@ -166,6 +166,18 @@ fn convert_filter(val: &serde_json::Value) -> Result<Relation> {
     let restrictions = val["restrictions"]
         .as_object()
         .ok_or_else(|| anyhow!("Missing restrictions in filter"))?;
+    let sql_restrictions = convert_restrictions(restrictions)?;
+    Ok(Relation {
+        columns,
+        inner: Inner::Filter(inner, sql_restrictions),
+        limit,
+    })
+}
+
+/// Convert JSON restrictions into vector of `Restriction` objects.
+pub(crate) fn convert_restrictions(
+    restrictions: &serde_json::Map<std::string::String, serde_json::Value>,
+) -> Result<Vec<Restriction>> {
     let mut sql_restrictions = vec![];
     for (k, v) in restrictions.iter() {
         let v = match v {
@@ -186,11 +198,7 @@ fn convert_filter(val: &serde_json::Value) -> Result<Relation> {
         };
         sql_restrictions.push(Restriction { k: k.clone(), v });
     }
-    Ok(Relation {
-        columns,
-        inner: Inner::Filter(inner, sql_restrictions),
-        limit,
-    })
+    Ok(sql_restrictions)
 }
 
 pub(crate) fn convert(val: &serde_json::Value) -> Result<Relation> {
@@ -416,7 +424,21 @@ fn sql_filter(
     let inner_alias = format!("A{}", *alias_count);
     *alias_count += 1;
 
-    let restrictions = restrictions.iter().fold(String::new(), |acc, rest| {
+    let restrictions = sql_restrictions(restrictions);
+
+    Query::Sql(format!(
+        "SELECT {} FROM ({}) AS {} {} {}",
+        column_list(&columns),
+        inner_sql,
+        inner_alias,
+        restrictions,
+        limit_str,
+    ))
+}
+
+/// Convert a vector of `Restriction` objects into a SQL `WHERE` clause.
+pub(crate) fn sql_restrictions(restrictions: Vec<Restriction>) -> String {
+    restrictions.iter().fold(String::new(), |acc, rest| {
         let str_v = match &rest.v {
             SqlValue::Bool(v) => format!("{}", v),
             SqlValue::U64(v) => format!("{}", v),
@@ -429,16 +451,7 @@ fn sql_filter(
         } else {
             format!("{} AND {}={}", acc, rest.k, str_v)
         }
-    });
-
-    Query::Sql(format!(
-        "SELECT {} FROM ({}) AS {} {} {}",
-        column_list(&columns),
-        inner_sql,
-        inner_alias,
-        restrictions,
-        limit_str,
-    ))
+    })
 }
 
 fn to_stream(pool: &AnyPool, s: String, columns: Vec<(String, Type)>) -> SqlStream {
