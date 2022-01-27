@@ -48,7 +48,7 @@ export default async function (req) {
   const username = payload["username"] || "";
   const email = payload["email"] || "";
   const city = payload["city"] || "";
-  const user = User.build({ username: username, email: email, city: city });
+  const user = User.build({ username, email, city });
   await user.save();
   return responseFromJson('Created user ' + user.username + ' with id ' + user.id);
 }
@@ -71,8 +71,8 @@ Please note that, as discussed in the [Getting Started](intro.md) section, the C
 For example, you could write the following endpoint that takes the same JSON, but updates the `User` entity based on the provided `username`:
 
 ```typescript title="endpoints/update.ts"
-import { responseFromJson } from "@chiselstrike/api"
-import { User } from "../models/models"
+import { responseFromJson } from "@chiselstrike/api";
+import { User } from "../models/models";
 
 export default async function (req) {
   const payload = await req.json();
@@ -80,16 +80,18 @@ export default async function (req) {
   const email = payload["email"] || "";
   const city = payload["city"] || "";
   const id = payload["id"];
-  let user;
-  if (!id) {
-      user = await User.findOne({ username: username });
+  let user = id
+    ? User.build({ id, username, email, city })
+    : await User.findOne({ username });
+
+  if (!user) {
+    return new Response("id not provided and user " + username + " not found");
   } else {
-      user = User.build({ id, username, email, city });
+    user.email = email;
+    user.city = city;
+    await user.save();
+    return responseFromJson("Updated " + user.username + " id " + user.id);
   }
-  user.email = email;
-  user.city = city;
-  await user.save();
-  return responseFromJson('Updated ' + user.username + ' id ' + user.id);
 }
 ```
 
@@ -125,8 +127,8 @@ import { User } from "../models/models"
 
 export default async function (req) {
   const payload = await req.json();
-  const user = await User.findOne(payload);
-  return responseFromJson('Found ' + user.username);
+  const user = await User.findOne(payload) ?? "Not found";
+  return responseFromJson(user);
 }
 ```
 
