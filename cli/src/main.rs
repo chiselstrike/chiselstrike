@@ -519,12 +519,14 @@ async fn apply<S: ToString>(
                 })?;
 
             if !res.status.success() {
-                let err = String::from_utf8(res.stdout).expect("command output not utf-8");
-                eprintln!("{}", err);
+                let out = String::from_utf8(res.stdout).expect("command output not utf-8");
+                let err = String::from_utf8(res.stderr).expect("command output not utf-8");
+
                 return Err(anyhow!(
                     "compiling endpoint {}",
                     endpoint.file_path.display()
-                ));
+                ))
+                .with_context(|| format!("{}\n{}", out, err));
             }
             let code = read_to_string(webpack_output.path().join("endpoint.mjs"))?;
 
