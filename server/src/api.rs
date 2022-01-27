@@ -226,7 +226,7 @@ pub(crate) fn spawn(
     let mut tasks = Vec::new();
     let sock_addrs = listen_addr.to_socket_addrs()?;
     for addr in sock_addrs {
-        info!("{} has address {:?}", listen_addr, addr);
+        debug!("{} has address {:?}", listen_addr, addr);
         let api = api.clone();
         let rx = rx.clone();
         let domain = if addr.is_ipv6() {
