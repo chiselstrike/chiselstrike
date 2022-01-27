@@ -30,7 +30,7 @@ works, but the code to retrieve them doesn't. 🤷‍♂️
 
 * **Multi-file models:** All models have to go in the same file for now. We envision models
 being put in different files (like `Person.ts`, `User.ts`, etc). But because those files are
-essentially modules (and see the fist bullet), this will only work at the moment if they are
+essentially modules (and see the first bullet), this will only work at the moment if they are
 all in the same file.
 
 * **Changing types:** It is possible to evolve a model by adding and removing fields that have
