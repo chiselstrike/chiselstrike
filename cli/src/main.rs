@@ -694,7 +694,7 @@ async fn main() -> Result<()> {
                         tx.send(res).await.unwrap();
                     });
                 })?;
-            let watcher_config = notify::Config::OngoingEvents(Some(Duration::from_secs(1)));
+            let watcher_config = notify::Config::OngoingEvents(Some(Duration::from_millis(100)));
             apply_watcher.configure(watcher_config)?;
             for models_dir in &manifest.models {
                 let models_dir = Path::new(models_dir);
