@@ -29,6 +29,7 @@ itertools = "0.10.1"
 log = "0.4.14"
 nix = "0.22.2"
 once_cell = "1.8.0"
+pin-project = "1"
 prost = "0.8.0"
 regex = "1"
 reqwest = { version = "=0.11.7", features = ["rustls-tls"], default-features = false } # strict = because of https://github.com/seanmonstar/reqwest/issues/1403

@@ -19,6 +19,7 @@ use futures::Stream;
 use futures::StreamExt;
 use futures::TryStreamExt;
 use itertools::Itertools;
+use pin_project::pin_project;
 use serde_json::value::Value;
 use sqlx::AnyPool;
 use std::collections::HashMap;
@@ -226,7 +227,9 @@ enum Query {
     Stream(SqlStream),
 }
 
+#[pin_project]
 struct PolicyApplyingStream {
+    #[pin]
     inner: RawSqlStream,
     policies: FieldPolicies,
     columns: Vec<(String, Type)>,
@@ -235,11 +238,10 @@ struct PolicyApplyingStream {
 impl Stream for PolicyApplyingStream {
     type Item = anyhow::Result<JsonObject>;
     fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
-        let columns = self.columns.clone();
-        let policies = self.policies.clone();
-        // Structural Pinning, it is OK because inner is pinned when we are.
-        let inner = unsafe { self.map_unchecked_mut(|s| &mut s.inner) };
-        match futures::ready!(inner.poll_next(cx)) {
+        let this = self.project();
+        let columns = this.columns.clone();
+        let policies = this.policies.clone();
+        match futures::ready!(this.inner.poll_next(cx)) {
             None => Poll::Ready(None),
             Some(Err(e)) => Poll::Ready(Some(Err(e))),
             Some(Ok(item)) => {
