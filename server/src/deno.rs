@@ -436,7 +436,7 @@ async fn op_chisel_user(_: Rc<RefCell<OpState>>, _: (), _: ()) -> Result<serde_j
 }
 
 // Used by deno to format names in errors
-fn op_format_file_name(_: &mut OpState, file_name: String, _: ()) -> anyhow::Result<String> {
+fn op_format_file_name(_: &mut OpState, file_name: String, _: ()) -> Result<String> {
     Ok(file_name)
 }
 

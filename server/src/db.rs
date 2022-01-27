@@ -236,7 +236,7 @@ struct PolicyApplyingStream {
 }
 
 impl Stream for PolicyApplyingStream {
-    type Item = anyhow::Result<JsonObject>;
+    type Item = Result<JsonObject>;
     fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
         let this = self.project();
         let columns = this.columns.clone();
@@ -322,19 +322,13 @@ fn sql_backing_store(
     Query::Stream(pstream)
 }
 
-fn map_stream_item(
-    columns: &HashSet<String>,
-    o: anyhow::Result<JsonObject>,
-) -> anyhow::Result<JsonObject> {
+fn map_stream_item(columns: &HashSet<String>, o: Result<JsonObject>) -> Result<JsonObject> {
     let mut o = o?;
     o.retain(|k, _| columns.contains(k));
     Ok(o)
 }
 
-fn filter_stream_item(
-    o: &anyhow::Result<JsonObject>,
-    restrictions: &HashMap<String, SqlValue>,
-) -> bool {
+fn filter_stream_item(o: &Result<JsonObject>, restrictions: &HashMap<String, SqlValue>) -> bool {
     let o = match o {
         Ok(o) => o,
         Err(_) => return true,
