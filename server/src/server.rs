@@ -8,7 +8,9 @@ use crate::query::{DbConnection, MetaService, QueryEngine};
 use crate::rpc::{GlobalRpcState, RpcService};
 use crate::runtime;
 use crate::runtime::Runtime;
+use crate::secrets::{get_private_key, get_secrets, SecretManager};
 use crate::types::{Type, OAUTHUSER_TYPE_NAME};
+use crate::JsonObject;
 use anyhow::Result;
 use async_mutex::Mutex;
 use futures::future::LocalBoxFuture;
@@ -19,10 +21,13 @@ use std::panic;
 use std::path::Path;
 use std::rc::Rc;
 use std::sync::Arc;
+use std::time::Duration;
 use structopt::StructOpt;
 use tempdir::TempDir;
 use tokio::fs;
 use tokio::task::JoinHandle;
+use tokio::time::sleep;
+use url::Url;
 
 #[derive(StructOpt, Debug, Clone)]
 #[structopt(name = "chiseld", version = env!("VERGEN_GIT_SEMVER_LIGHTWEIGHT"))]
@@ -172,7 +177,14 @@ async fn run(state: SharedState, mut cmd: ExecutorChannel) -> Result<()> {
         .await?;
     QueryEngine::commit_transaction(transaction).await?;
 
-    let rt = Runtime::new(api_service.clone(), query_engine, meta, ts, policies);
+    let rt = Runtime::new(
+        api_service.clone(),
+        query_engine,
+        meta,
+        ts,
+        policies,
+        SecretManager::default(),
+    );
     runtime::set(rt);
 
     let command_task = tokio::task::spawn_local(async move {
@@ -208,6 +220,7 @@ pub struct ExecutorChannel {
 }
 
 // Sends commands, receives results.
+#[derive(Clone)]
 pub struct CoordinatorChannel {
     pub tx: async_channel::Sender<Command>,
     pub rx: async_channel::Receiver<CommandResult>,
@@ -246,8 +259,9 @@ pub async fn run_shared_state(
         commands2.push(CoordinatorChannel { tx: ctx, rx: rrx });
     }
 
+    let rpc_commands = commands2.clone();
     let state = Arc::new(Mutex::new(
-        GlobalRpcState::new(meta, query_engine, commands2).await?,
+        GlobalRpcState::new(meta, query_engine, rpc_commands).await?,
     ));
 
     let rpc = RpcService::new(state, materialize.clone());
@@ -273,6 +287,67 @@ pub async fn run_shared_state(
         Ok(res)
     });
 
+    let secret_commands = commands2.clone();
+    let secret_location = match std::env::var("CHISEL_SECRET_LOCATION") {
+        Ok(s) => Url::parse(&s)?,
+        Err(_) => {
+            let cwd = std::env::current_dir()?;
+            Url::from_file_path(&cwd.join(".env")).unwrap()
+        }
+    };
+
+    let private_key = get_private_key().await?;
+    let secret_reader = tokio::task::spawn(async move {
+        use std::collections::hash_map::DefaultHasher;
+        use std::hash::{Hash, Hasher};
+
+        let calculate_hash = |t: &str| {
+            let mut s = DefaultHasher::new();
+            t.hash(&mut s);
+            s.finish()
+        };
+
+        let mut last_hash = 0;
+        let mut last_try_was_failure = false;
+        loop {
+            sleep(Duration::from_millis(100)).await;
+            match get_secrets(&secret_location, &private_key).await {
+                Ok(secrets) => {
+                    last_try_was_failure = false;
+                    let hash = calculate_hash(&secrets);
+                    if hash == last_hash {
+                        continue;
+                    }
+                    let val: JsonObject = match serde_json::from_str(&secrets) {
+                        Err(x) => {
+                            warn!("Could not read secrets: {:?}", x);
+                            serde_json::Map::new()
+                        }
+                        Ok(x) => x,
+                    };
+                    last_hash = hash;
+
+                    for cmd in &secret_commands {
+                        let v = val.clone();
+                        let payload = send_command!({
+                            let mut runtime = runtime::get();
+                            let sec = &mut runtime.secrets;
+                            sec.update_secrets(v);
+                            Ok(())
+                        });
+                        cmd.send(payload).await.unwrap();
+                    }
+                }
+                Err(x) => {
+                    if !last_try_was_failure {
+                        warn!("Could not read secrets: {:?}", x);
+                    }
+                    last_try_was_failure = true;
+                }
+            }
+        }
+    });
+
     // rpc server should start listening only when all threads start
     let (readiness_tx, readiness_rx) = async_channel::bounded(opt.executor_threads);
 
@@ -285,6 +360,7 @@ pub async fn run_shared_state(
     let rpc_rx = signal_rx.clone();
     let shutdown = async move {
         rpc_rx.recv().await.ok();
+        secret_reader.abort();
     };
 
     let rpc_task = crate::rpc::spawn(rpc, opt.rpc_listen_addr, start_wait, shutdown);

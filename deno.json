@@ -23,6 +23,7 @@
         "files": {
             "include": ["api", "server", "packages"],
             "exclude": [
+                "third_party",
                 "packages/create-chiselstrike-app/node_modules/",
                 "packages/chiselstrike-cli/node_modules/",
                 "packages/chiselstrike-api/node_modules/",

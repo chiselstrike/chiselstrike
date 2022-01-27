@@ -3,6 +3,7 @@
 use crate::db::{sql, sql_restrictions, Relation, Restriction, SqlValue};
 use crate::query::{DbConnection, Kind, QueryError};
 use crate::types::{Field, ObjectDelta, ObjectType, Type, OAUTHUSER_TYPE_NAME};
+use crate::JsonObject;
 use anyhow::{anyhow, Context as AnyhowContext};
 use futures::stream::BoxStream;
 use futures::stream::Stream;
@@ -24,7 +25,6 @@ use uuid::Uuid;
 pub(crate) type RawSqlStream = BoxStream<'static, anyhow::Result<AnyRow>>;
 
 // Results with policies applied
-pub(crate) type JsonObject = serde_json::Map<String, serde_json::Value>;
 pub(crate) type SqlStream = BoxStream<'static, anyhow::Result<JsonObject>>;
 
 #[pin_project]

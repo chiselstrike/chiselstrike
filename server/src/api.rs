@@ -270,7 +270,10 @@ pub(crate) fn response_template() -> http::response::Builder {
     Response::builder()
         // TODO: Let the user control this.
         .header("Access-Control-Allow-Origin", "*")
-        .header("Access-Control-Allow-Methods", "POST, PUT, GET, OPTIONS")
+        .header(
+            "Access-Control-Allow-Methods",
+            "POST, PUT, GET, OPTIONS, DELETE",
+        )
         .header(
             "Access-Control-Allow-Headers",
             "Content-Type,ChiselStrikeToken",
