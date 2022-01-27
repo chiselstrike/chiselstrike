@@ -32,7 +32,14 @@ $CURL $CHISELD_HOST/dev/users
 $CURL -XPOST $CHISELD_HOST/dev/trysave
 # CHECK: Cannot save into type OAuthUser
 
+
 ## Reproduces #708:
 $CURL $CHISELD_HOST/__chiselstrike/auth/callback?user=bob
 $CURL $CHISELD_HOST/dev/users
 # CHECK: alice bob charlie .
+
+## Reproduces #710:
+token=`$CURL -s $CHISELD_HOST/__chiselstrike/auth/callback?user=thoroughly-unique-username|sed -ne "s/.*chiselstrike_token=//" -e "s/<.*//p"`
+$CURL -H "ChiselStrikeToken:$token" $CHISELD_HOST/__chiselstrike/auth/user
+# CHECK: HTTP/1.1 200 OK
+# CHECK: thoroughly-unique-username
