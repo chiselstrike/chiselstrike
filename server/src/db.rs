@@ -44,7 +44,7 @@ impl From<&str> for SqlValue {
 }
 
 #[derive(Debug)]
-struct Restriction {
+pub struct Restriction {
     k: String,
     v: SqlValue,
 }
@@ -424,7 +424,21 @@ fn sql_filter(
     let inner_alias = format!("A{}", *alias_count);
     *alias_count += 1;
 
-    let restrictions = restrictions.iter().fold(String::new(), |acc, rest| {
+    let restrictions = sql_restrictions(restrictions);
+
+    Query::Sql(format!(
+        "SELECT {} FROM ({}) AS {} {} {}",
+        column_list(&columns),
+        inner_sql,
+        inner_alias,
+        restrictions,
+        limit_str,
+    ))
+}
+
+/// Convert a vector of `Restriction` objects into a SQL `WHERE` clause.
+pub(crate) fn sql_restrictions(restrictions: Vec<Restriction>) -> String {
+    restrictions.iter().fold(String::new(), |acc, rest| {
         let str_v = match &rest.v {
             SqlValue::Bool(v) => format!("{}", v),
             SqlValue::U64(v) => format!("{}", v),
@@ -437,16 +451,7 @@ fn sql_filter(
         } else {
             format!("{} AND {}={}", acc, rest.k, str_v)
         }
-    });
-
-    Query::Sql(format!(
-        "SELECT {} FROM ({}) AS {} {} {}",
-        column_list(&columns),
-        inner_sql,
-        inner_alias,
-        restrictions,
-        limit_str,
-    ))
+    })
 }
 
 fn to_stream(pool: &AnyPool, s: String, columns: Vec<(String, Type)>) -> SqlStream {
