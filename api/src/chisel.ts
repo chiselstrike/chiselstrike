@@ -355,6 +355,29 @@ export function buildReadableStreamForBody(rid: number) {
     });
 }
 
+/**
+ * Gets a secret from the environment
+ *
+ * To allow a secret to be used, the server has to be run with * --allow-env <YOUR_SECRET>
+ *
+ * In development mode, all of your environment variables are accessible
+ */
+type JSONValue =
+    | string
+    | number
+    | boolean
+    | null
+    | { [x: string]: JSONValue }
+    | Array<JSONValue>;
+
+export function getSecret(key: string): JSONValue | undefined {
+    const secret = Deno.core.opSync("chisel_get_secret", key);
+    if (secret === undefined || secret === null) {
+        return undefined;
+    }
+    return secret;
+}
+
 export function responseFromJson(body: unknown, status = 200) {
     return new Response(JSON.stringify(body), {
         status: status,

@@ -4,6 +4,7 @@ use crate::api::ApiService;
 use crate::policies::{FieldPolicies, Kind, Policies};
 use crate::query::{MetaService, QueryEngine};
 use crate::rcmut::RcMut;
+use crate::secrets::SecretManager;
 use crate::types::{ObjectType, TypeSystem};
 use derive_new::new;
 use once_cell::sync::OnceCell;
@@ -17,6 +18,7 @@ pub(crate) struct Runtime {
     pub(crate) meta: Rc<MetaService>,
     pub(crate) type_system: TypeSystem,
     pub(crate) policies: Policies,
+    pub(crate) secrets: SecretManager,
 }
 
 impl Runtime {

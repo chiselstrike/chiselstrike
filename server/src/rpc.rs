@@ -73,12 +73,6 @@ impl GlobalRpcState {
     }
 }
 
-macro_rules! send_command {
-    ( $code:block ) => {{
-        Box::new({ move || async move { $code }.boxed_local() })
-    }};
-}
-
 /// RPC service for Chisel server.
 ///
 /// The RPC service provides a Protobuf-based interface for Chisel control

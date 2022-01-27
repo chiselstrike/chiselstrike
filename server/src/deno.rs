@@ -3,11 +3,11 @@
 use crate::api::{response_template, Body, RequestPath};
 use crate::db::{convert, convert_restrictions};
 use crate::policies::FieldPolicies;
-use crate::query::engine::JsonObject;
 use crate::query::engine::SqlStream;
 use crate::runtime;
 use crate::runtime::Runtime;
 use crate::types::{ObjectType, Type};
+use crate::JsonObject;
 use anyhow::{anyhow, Result};
 use api::chisel_js;
 use async_mutex::Mutex;
@@ -374,6 +374,18 @@ fn op_chisel_introspect(
     Ok(serde_json::json!(vec))
 }
 
+fn op_chisel_get_secret(
+    _op_state: &mut OpState,
+    secret: serde_json::Value,
+    _: (),
+) -> Result<Option<serde_json::Value>> {
+    let key = secret
+        .as_str()
+        .ok_or_else(|| anyhow!("secret key is not a string"))?;
+    let runtime = runtime::get();
+    Ok(runtime.secrets.get_secret(key))
+}
+
 fn op_chisel_relational_query_create(
     op_state: &mut OpState,
     relation: serde_json::Value,
@@ -438,6 +450,7 @@ async fn create_deno<P: AsRef<Path>>(base_directory: P, inspect_brk: bool) -> Re
     runtime.register_op("chisel_read_body", op_async(op_chisel_read_body));
     runtime.register_op("chisel_store", op_async(op_chisel_store));
     runtime.register_op("chisel_entity_delete", op_async(op_chisel_entity_delete));
+    runtime.register_op("chisel_get_secret", op_sync(op_chisel_get_secret));
     runtime.register_op(
         "chisel_relational_query_create",
         op_sync(op_chisel_relational_query_create),
