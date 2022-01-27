@@ -3,7 +3,8 @@
 async function getUser(token) {
     if (!token) return null;
     const resp = await fetch(
-        `http://localhost:8080/__chiselstrike/auth/user/${token}`,
+        "http://localhost:8080/__chiselstrike/auth/user",
+        { headers: { ChiselStrikeToken: token } },
     );
     return resp.ok ? await resp.text() : "failure: " + resp.status;
 }
