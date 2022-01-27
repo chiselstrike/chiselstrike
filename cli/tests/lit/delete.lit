@@ -1,0 +1,60 @@
+# SPDX-FileCopyrightText: © 2021 ChiselStrike <info@chiselstrike.com>
+
+# RUN: sh -e @file
+
+cd "$TEMPDIR"
+
+cat << EOF > "$TEMPDIR/models/user.ts"
+import { ChiselEntity } from "@chiselstrike/api";
+
+export class User extends ChiselEntity {
+    username: string;
+    email: string;
+}
+EOF
+
+cat << EOF > "$TEMPDIR/endpoints/user.ts"
+import { User } from "../models/user.ts";
+import { responseFromJson } from "@chiselstrike/api";
+
+export default async function (req: Request) {
+    switch (req.method) {
+    case 'GET': {
+        let users = await User.findMany({});
+        return responseFromJson(users.map(user => user.username));
+    }
+    case 'POST': {
+        const json = await req.json();
+        const user = await User.build(json);
+        await user.save();
+        return responseFromJson(user.username);
+    }
+    case 'DELETE': {
+        const json = await req.json();
+        await User.delete(json);
+        return responseFromJson("ok");
+    }
+    default:
+        return responseFromJson("Unsupported HTTP method: " + req.method, 405);
+    }
+}
+EOF
+
+$CHISEL apply
+# CHECK: Model defined: User
+# CHECK: End point defined: /dev/user
+
+$CURL -X POST -d '{"username": "alice", "email": "alice@example.org"}' $CHISELD_HOST/dev/user
+# CHECK: "alice"
+
+$CURL -X POST -d '{"username": "bob", "email": "bob@bob.me"}' $CHISELD_HOST/dev/user
+# CHECK: "bob"
+
+$CURL $CHISELD_HOST/dev/user
+# CHECK: ["alice","bob"]
+
+$CURL -X DELETE -d '{"email": "bob@bob.me"}' $CHISELD_HOST/dev/user
+# CHECK: "ok"
+
+$CURL $CHISELD_HOST/dev/user
+# CHECK: ["alice"]

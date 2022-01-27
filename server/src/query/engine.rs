@@ -1,6 +1,6 @@
 // SPDX-FileCopyrightText: © 2021 ChiselStrike <info@chiselstrike.com>
 
-use crate::db::{sql, Relation, SqlValue};
+use crate::db::{sql, sql_restrictions, Relation, Restriction, SqlValue};
 use crate::query::{DbConnection, Kind, QueryError};
 use crate::types::{Field, ObjectDelta, ObjectType, Type, OAUTHUSER_TYPE_NAME};
 use anyhow::{anyhow, Context as AnyhowContext};
@@ -300,6 +300,26 @@ impl QueryEngine {
         let (inserts, id_tree) = self.prepare_insertion(ty, ty_value)?;
         self.run_sql_queries(&inserts).await?;
         Ok(id_tree.to_json())
+    }
+
+    pub(crate) async fn delete(
+        &self,
+        ty: &ObjectType,
+        restrictions: Vec<Restriction>,
+    ) -> anyhow::Result<()> {
+        let sql = format!(
+            "DELETE FROM {} {}",
+            &ty.backing_table(),
+            sql_restrictions(restrictions)
+        );
+        let mut transaction = self.start_transaction().await?;
+        let query = sqlx::query(&sql);
+        transaction
+            .execute(query)
+            .await
+            .map_err(QueryError::ExecuteFailed)?;
+        QueryEngine::commit_transaction(transaction).await?;
+        Ok(())
     }
 
     pub(crate) async fn add_row_shallow(
