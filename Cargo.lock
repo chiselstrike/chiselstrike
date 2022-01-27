@@ -3494,6 +3494,7 @@ dependencies = [
  "log",
  "nix",
  "once_cell",
+ "pin-project",
  "prost",
  "regex",
  "reqwest",
