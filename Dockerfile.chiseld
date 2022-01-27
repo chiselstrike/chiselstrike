@@ -10,6 +10,8 @@ ENV METADATA_DB_URI="sqlite://$DATAPATH/chiseld-meta.db?mode=rwc"
 ENV RPC_PORT="50051"
 ENV RPC_LISTEN_ADDR="0.0.0.0"
 ENV HEALTH_PORT="9090"
+ENV CHISEL_SECRET_LOCATION=https://localhost:8080/nowhere
+ENV CHISEL_SECRET_KEY_LOCATION=/var/secrets/masterkey.pem
 
 RUN groupadd -g 345 -r chiseld && \
     useradd -r -u 345 -g chiseld -d /home/chiseld -G chiseld -m -s /bin/bash chiseld
