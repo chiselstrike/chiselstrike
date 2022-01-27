@@ -8,15 +8,14 @@ use futures::stream::BoxStream;
 use futures::stream::Stream;
 use futures::StreamExt;
 use itertools::{zip, Itertools};
+use pin_project::pin_project;
 use sea_query::{Alias, ColumnDef, Table};
 use serde_json::json;
 use sqlx::any::{Any, AnyArguments, AnyPool, AnyRow};
 use sqlx::Column;
 use sqlx::Transaction;
 use sqlx::{Executor, Row};
-use std::cell::RefCell;
 use std::collections::HashMap;
-use std::marker::PhantomPinned;
 use std::pin::Pin;
 use std::task::{Context, Poll};
 use uuid::Uuid;
@@ -28,32 +27,28 @@ pub(crate) type RawSqlStream = BoxStream<'static, anyhow::Result<AnyRow>>;
 pub(crate) type JsonObject = serde_json::Map<String, serde_json::Value>;
 pub(crate) type SqlStream = BoxStream<'static, anyhow::Result<JsonObject>>;
 
-struct QueryResults {
+#[pin_project]
+struct QueryResults<T> {
     raw_query: String,
     // The streams we use in here only depend on the lifetime of raw_query.
-    stream: RefCell<Option<RawSqlStream>>,
-    _marker: PhantomPinned, // QueryStream cannot be moved
+    #[pin]
+    stream: T,
 }
 
 pub(crate) fn new_query_results(raw_query: String, pool: &AnyPool) -> RawSqlStream {
-    let ret = Box::pin(QueryResults {
-        raw_query,
-        stream: RefCell::new(None),
-        _marker: PhantomPinned,
-    });
-    let ptr: *const String = &ret.raw_query;
-    let query = sqlx::query::<Any>(unsafe { &*ptr });
+    // The string data will not move anymore.
+    let raw_query_ptr = raw_query.as_ref() as *const str;
+    let query = sqlx::query::<Any>(unsafe { &*raw_query_ptr });
     let stream = query.fetch(pool).map(|i| i.map_err(anyhow::Error::new));
-    ret.stream.replace(Some(Box::pin(stream)));
-    ret
+
+    Box::pin(QueryResults { raw_query, stream })
 }
 
-impl Stream for QueryResults {
+impl<T: Stream<Item = anyhow::Result<AnyRow>>> Stream for QueryResults<T> {
     type Item = anyhow::Result<AnyRow>;
 
     fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
-        let mut borrow = self.stream.borrow_mut();
-        borrow.as_mut().unwrap().as_mut().poll_next(cx)
+        self.project().stream.poll_next(cx)
     }
 }
 
