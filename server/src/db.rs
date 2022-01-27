@@ -5,7 +5,6 @@ use crate::deno::make_field_policies;
 use crate::policies::FieldPolicies;
 use crate::query::engine;
 use crate::query::engine::new_query_results;
-use crate::query::engine::RawSqlStream;
 use crate::query::engine::SqlStream;
 use crate::runtime;
 use crate::types::{Field, ObjectType, Type, TypeSystem, TypeSystemError, OAUTHUSER_TYPE_NAME};
@@ -21,6 +20,7 @@ use futures::TryStreamExt;
 use itertools::Itertools;
 use pin_project::pin_project;
 use serde_json::value::Value;
+use sqlx::any::AnyRow;
 use sqlx::AnyPool;
 use std::collections::HashMap;
 use std::collections::HashSet;
@@ -228,14 +228,14 @@ enum Query {
 }
 
 #[pin_project]
-struct PolicyApplyingStream {
+struct PolicyApplyingStream<T> {
     #[pin]
-    inner: RawSqlStream,
+    inner: T,
     policies: FieldPolicies,
     columns: Vec<(String, Type)>,
 }
 
-impl Stream for PolicyApplyingStream {
+impl<T: Stream<Item = Result<AnyRow>>> Stream for PolicyApplyingStream<T> {
     type Item = Result<JsonObject>;
     fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
         let this = self.project();
@@ -313,9 +313,9 @@ fn sql_backing_store(
     if policies.transforms.is_empty() {
         return Query::Sql(query);
     }
-    let stream = new_query_results(query, pool);
+    let inner = new_query_results(query, pool);
     let pstream = Box::pin(PolicyApplyingStream {
-        inner: stream,
+        inner,
         policies,
         columns,
     });

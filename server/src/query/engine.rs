@@ -21,9 +21,6 @@ use std::pin::Pin;
 use std::task::{Context, Poll};
 use uuid::Uuid;
 
-// Results directly out of the database
-pub(crate) type RawSqlStream = BoxStream<'static, Result<AnyRow>>;
-
 // Results with policies applied
 pub(crate) type SqlStream = BoxStream<'static, Result<JsonObject>>;
 
@@ -35,13 +32,15 @@ struct QueryResults<T> {
     stream: T,
 }
 
-pub(crate) fn new_query_results(raw_query: String, pool: &AnyPool) -> RawSqlStream {
+pub(crate) fn new_query_results(
+    raw_query: String,
+    pool: &AnyPool,
+) -> impl Stream<Item = anyhow::Result<AnyRow>> {
     // The string data will not move anymore.
     let raw_query_ptr = raw_query.as_ref() as *const str;
     let query = sqlx::query::<Any>(unsafe { &*raw_query_ptr });
     let stream = query.fetch(pool).map(|i| i.map_err(anyhow::Error::new));
-
-    Box::pin(QueryResults { raw_query, stream })
+    QueryResults { raw_query, stream }
 }
 
 impl<T: Stream<Item = Result<AnyRow>>> Stream for QueryResults<T> {
