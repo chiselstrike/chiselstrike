@@ -1,8 +1,7 @@
 // SPDX-FileCopyrightText: © 2021 ChiselStrike <info@chiselstrike.com>
 
-use crate::db::SqlValue;
+use crate::auth::get_username;
 use crate::prefix_map::PrefixMap;
-use crate::query::engine::SqlWithArguments;
 use anyhow::{Error, Result};
 use futures::future::LocalBoxFuture;
 use futures::ready;
@@ -12,7 +11,6 @@ use hyper::header::HeaderValue;
 use hyper::service::{make_service_fn, service_fn};
 use hyper::{HeaderMap, Request, Response, Server, StatusCode};
 use socket2::{Domain, Protocol, Socket, Type};
-use sqlx::Row;
 use std::convert::Infallible;
 use std::convert::TryFrom;
 use std::io::Cursor;
@@ -110,45 +108,6 @@ impl TryFrom<&str> for RequestPath {
         })?;
 
         Ok(RequestPath { api_version, path })
-    }
-}
-
-/// Extracts the username of the logged-in user, or None if there was no login.
-async fn get_username(req: &Request<hyper::Body>) -> Option<String> {
-    let userid = match crate::auth::get_user(req).await {
-        Ok(id) => id,
-        Err(e) => {
-            warn!("Token parsing error: {:?}", e);
-            return None;
-        }
-    };
-
-    let qeng = { crate::runtime::get().query_engine.clone() };
-
-    match (userid, crate::auth::get_oauth_user_type()) {
-        (None, _) => None,
-        (Some(_), Err(e)) => {
-            warn!("{:?}", e);
-            None
-        }
-        (Some(id), Ok(user_type)) => {
-            match qeng
-                .fetch_one(SqlWithArguments {
-                    sql: format!(
-                        "SELECT username FROM {} WHERE id=$1",
-                        user_type.backing_table()
-                    ),
-                    args: vec![SqlValue::String(id)],
-                })
-                .await
-            {
-                Err(e) => {
-                    warn!("Username query error: {:?}", e);
-                    None
-                }
-                Ok(row) => row.get("username"),
-            }
-        }
     }
 }
 

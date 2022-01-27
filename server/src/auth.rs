@@ -1,6 +1,7 @@
 // SPDX-FileCopyrightText: © 2021 ChiselStrike <info@chiselstrike.com>
 
-use crate::api::{ApiService, Body};
+use crate::api::{response_template, ApiService, Body};
+use crate::db::SqlValue;
 use crate::query::engine::{JsonObject, SqlWithArguments};
 use crate::runtime;
 use crate::types::{ObjectType, Type, OAUTHUSER_TYPE_NAME};
@@ -11,6 +12,8 @@ use serde_json::json;
 use sqlx::Row;
 use std::pin::Pin;
 use std::sync::Arc;
+
+const USERPATH: &str = "/__chiselstrike/auth/user/";
 
 fn redirect(link: &str) -> Response<Body> {
     let bd: Body = format!("Redirecting to <a href='{}'>{}</a>\n", link, link).into();
@@ -101,10 +104,21 @@ fn handle_callback(
     .boxed_local()
 }
 
+async fn lookup_user(req: Request<hyper::Body>) -> anyhow::Result<Response<Body>> {
+    match get_username(&req).await {
+        None => anyhow::bail!("Error finding logged-in user; perhaps no one is logged in?"),
+        Some(username) => Ok(response_template().body(username.into()).unwrap()),
+    }
+}
+
 pub(crate) fn init(api: &mut ApiService) {
     api.add_route(
         "/__chiselstrike/auth/callback".into(),
         Arc::new(handle_callback),
+    );
+    api.add_route(
+        USERPATH.into(),
+        Arc::new(move |req| { lookup_user(req) }.boxed_local()),
     );
 }
 
@@ -116,5 +130,44 @@ pub(crate) async fn get_user(req: &Request<hyper::Body>) -> anyhow::Result<Optio
             Ok(meta.get_user_id(token.to_str()?).await.ok())
         }
         None => Ok(None),
+    }
+}
+
+/// Extracts the username of the logged-in user, or None if there was no login.
+pub(crate) async fn get_username(req: &Request<hyper::Body>) -> Option<String> {
+    let userid = match get_user(req).await {
+        Ok(id) => id,
+        Err(e) => {
+            warn!("Token parsing error: {:?}", e);
+            return None;
+        }
+    };
+
+    let qeng = { crate::runtime::get().query_engine.clone() };
+
+    match (userid, crate::auth::get_oauth_user_type()) {
+        (None, _) => None,
+        (Some(_), Err(e)) => {
+            warn!("{:?}", e);
+            None
+        }
+        (Some(id), Ok(user_type)) => {
+            match qeng
+                .fetch_one(SqlWithArguments {
+                    sql: format!(
+                        "SELECT username FROM {} WHERE id=$1",
+                        user_type.backing_table()
+                    ),
+                    args: vec![SqlValue::String(id)],
+                })
+                .await
+            {
+                Err(e) => {
+                    warn!("Username query error: {:?}", e);
+                    None
+                }
+                Ok(row) => row.get("username"),
+            }
+        }
     }
 }
