@@ -3,6 +3,8 @@
 #![cfg_attr(feature = "must_not_suspend", feature(must_not_suspend))]
 #![cfg_attr(feature = "must_not_suspend", deny(must_not_suspend))]
 
+pub(crate) type JsonObject = serde_json::Map<String, serde_json::Value>;
+
 #[macro_use]
 extern crate log;
 

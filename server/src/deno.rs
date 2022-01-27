@@ -3,11 +3,11 @@
 use crate::api::{response_template, Body, RequestPath};
 use crate::db::{convert, convert_restrictions};
 use crate::policies::FieldPolicies;
-use crate::query::engine::JsonObject;
 use crate::query::engine::SqlStream;
 use crate::runtime;
 use crate::runtime::Runtime;
 use crate::types::{ObjectType, Type};
+use crate::JsonObject;
 use anyhow::{anyhow, Result};
 use api::chisel_js;
 use async_mutex::Mutex;

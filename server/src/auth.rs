@@ -2,9 +2,10 @@
 
 use crate::api::{response_template, ApiService, Body};
 use crate::db::SqlValue;
-use crate::query::engine::{JsonObject, SqlWithArguments};
+use crate::query::engine::SqlWithArguments;
 use crate::runtime;
 use crate::types::{ObjectType, Type, OAUTHUSER_TYPE_NAME};
+use crate::JsonObject;
 use anyhow::anyhow;
 use futures::{Future, FutureExt};
 use hyper::{header, Request, Response, StatusCode};
