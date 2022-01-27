@@ -166,6 +166,18 @@ fn convert_filter(val: &serde_json::Value) -> Result<Relation> {
     let restrictions = val["restrictions"]
         .as_object()
         .ok_or_else(|| anyhow!("Missing restrictions in filter"))?;
+    let sql_restrictions = convert_restrictions(restrictions)?;
+    Ok(Relation {
+        columns,
+        inner: Inner::Filter(inner, sql_restrictions),
+        limit,
+    })
+}
+
+/// Convert JSON restrictions into vector of `Restriction` objects.
+pub(crate) fn convert_restrictions(
+    restrictions: &serde_json::Map<std::string::String, serde_json::Value>,
+) -> Result<Vec<Restriction>> {
     let mut sql_restrictions = vec![];
     for (k, v) in restrictions.iter() {
         let v = match v {
@@ -186,11 +198,7 @@ fn convert_filter(val: &serde_json::Value) -> Result<Relation> {
         };
         sql_restrictions.push(Restriction { k: k.clone(), v });
     }
-    Ok(Relation {
-        columns,
-        inner: Inner::Filter(inner, sql_restrictions),
-        limit,
-    })
+    Ok(sql_restrictions)
 }
 
 pub(crate) fn convert(val: &serde_json::Value) -> Result<Relation> {
