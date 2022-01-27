@@ -38,6 +38,7 @@ use hyper::Method;
 use hyper::{Request, Response, StatusCode};
 use log::debug;
 use once_cell::unsync::OnceCell;
+use pin_project::pin_project;
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::convert::TryInto;
@@ -625,8 +626,10 @@ fn current_method() -> Method {
     CURRENT_CONTEXT.with(|path| path.borrow().method.clone())
 }
 
+#[pin_project]
 struct RequestFuture<F> {
     context: RequestContext,
+    #[pin]
     inner: F,
 }
 
@@ -634,10 +637,9 @@ impl<F: Future> Future for RequestFuture<F> {
     type Output = F::Output;
 
     fn poll(self: Pin<&mut Self>, c: &mut Context<'_>) -> Poll<F::Output> {
-        set_current_context(self.context.clone());
-        // Structural Pinning, it is OK because inner is pinned when we are.
-        let inner = unsafe { self.map_unchecked_mut(|s| &mut s.inner) };
-        inner.poll(c)
+        let this = self.project();
+        set_current_context(this.context.clone());
+        this.inner.poll(c)
     }
 }
 
