@@ -100,7 +100,7 @@ dependencies = [
 
 [[package]]
 name = "api"
-version = "0.6.3"
+version = "0.6.4"
 dependencies = [
  "anyhow",
  "tsc_compile",
@@ -444,7 +444,7 @@ dependencies = [
 
 [[package]]
 name = "cli"
-version = "0.6.3"
+version = "0.6.4"
 dependencies = [
  "anyhow",
  "compile",
@@ -479,7 +479,7 @@ dependencies = [
 
 [[package]]
 name = "compile"
-version = "0.6.3"
+version = "0.6.4"
 dependencies = [
  "anyhow",
  "swc_common",
@@ -3381,7 +3381,7 @@ dependencies = [
 
 [[package]]
 name = "server"
-version = "0.6.3"
+version = "0.6.4"
 dependencies = [
  "anyhow",
  "api",
@@ -4119,7 +4119,7 @@ dependencies = [
 
 [[package]]
 name = "third_party"
-version = "0.6.3"
+version = "0.6.4"
 
 [[package]]
 name = "thiserror"
@@ -4452,7 +4452,7 @@ checksum = "59547bce71d9c38b83d9c0e92b6066c4253371f15005def0c30d9657f50c7642"
 
 [[package]]
 name = "tsc_compile"
-version = "0.6.3"
+version = "0.6.4"
 dependencies = [
  "anyhow",
  "deno_core",
