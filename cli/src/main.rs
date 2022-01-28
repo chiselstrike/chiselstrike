@@ -486,6 +486,17 @@ async fn apply<S: ToString>(
     }
 
     if manifest.modules == Module::Node {
+        // For existing installations that didn't have webpack, we create the conf
+        // file here
+        let webpack_conf_dir = PathBuf::from("./.webpack");
+        let _ignored = tokio::fs::create_dir(&webpack_conf_dir).await;
+        if let Err(path) = tokio::fs::metadata(webpack_conf_dir.join("webpack.config.js")).await {
+            if path.kind() == std::io::ErrorKind::NotFound {
+                // synchronous, but that's fine because only happens once.
+                write_template!("webpack.config.js", &webpack_conf_dir)?;
+            }
+        }
+
         let webpack_output = tempfile::tempdir()?;
         let webpack_output_dname = webpack_output.path().to_str().unwrap();
         let cwd = env::current_dir()?;
@@ -519,12 +530,14 @@ async fn apply<S: ToString>(
                 })?;
 
             if !res.status.success() {
-                let err = String::from_utf8(res.stdout).expect("command output not utf-8");
-                eprintln!("{}", err);
+                let out = String::from_utf8(res.stdout).expect("command output not utf-8");
+                let err = String::from_utf8(res.stderr).expect("command output not utf-8");
+
                 return Err(anyhow!(
                     "compiling endpoint {}",
                     endpoint.file_path.display()
-                ));
+                ))
+                .with_context(|| format!("{}\n{}", out, err));
             }
             let code = read_to_string(webpack_output.path().join("endpoint.mjs"))?;
 
