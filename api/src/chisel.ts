@@ -379,7 +379,13 @@ export function getSecret(key: string): JSONValue | undefined {
 }
 
 export function responseFromJson(body: unknown, status = 200) {
-    return new Response(JSON.stringify(body), {
+    // https://fetch.spec.whatwg.org/#null-body-status
+    const isNullBody = (status: number): boolean => {
+        return status == 101 || status == 204 || status == 205 || status == 304;
+    };
+
+    const json = isNullBody(status) ? null : JSON.stringify(body);
+    return new Response(json, {
         status: status,
         headers: [
             ["content-type", "application/json"],
