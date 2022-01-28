@@ -89,7 +89,7 @@ impl ModulesDirectory {
         self.dir.path()
     }
 
-    pub async fn materialize(&self, path: &str, code: &str) -> anyhow::Result<()> {
+    pub async fn materialize(&self, path: &str, code: &str) -> Result<()> {
         // Path.join() doesn't work when path can be absolute, which it usually is here
         // Also has to force .ts here, otherwise /dev/foo.ts becomes /dev/foo endpoints,
         // and then later trying /dev/foo/bar clashes and fails
@@ -141,6 +141,31 @@ async fn run(state: SharedState, mut cmd: ExecutorChannel) -> Result<()> {
 
     let routes = meta.load_endpoints().await?;
     let policies = meta.load_policies().await?;
+    let mut api_service = ApiService::default();
+    crate::auth::init(&mut api_service);
+
+    let oauth_user_type = match ts.lookup_builtin_type(OAUTHUSER_TYPE_NAME) {
+        Ok(Type::Object(t)) => t,
+        _ => anyhow::bail!("Internal error: type {} not found", OAUTHUSER_TYPE_NAME),
+    };
+
+    let query_engine = Rc::new(QueryEngine::local_connection(&state.data_db).await?);
+    let mut transaction = query_engine.start_transaction().await?;
+    query_engine
+        .create_table(&mut transaction, &oauth_user_type)
+        .await?;
+    QueryEngine::commit_transaction(transaction).await?;
+    let api_service = Rc::new(api_service);
+
+    let rt = Runtime::new(
+        api_service.clone(),
+        query_engine,
+        meta,
+        ts,
+        policies,
+        SecretManager::default(),
+    );
+    runtime::set(rt);
 
     for (path, code) in routes.iter() {
         let path = path.to_str().unwrap();
@@ -153,39 +178,13 @@ async fn run(state: SharedState, mut cmd: ExecutorChannel) -> Result<()> {
         )
         .await?;
         activate_endpoint(path).await;
-    }
 
-    let mut api_service = ApiService::default();
-    for (path, _) in routes.iter() {
         let func = Arc::new({
-            let path = path.to_str().unwrap().to_string();
+            let path = path.to_string();
             move |req| deno::run_js(path.clone(), req).boxed_local()
         });
         api_service.add_route(path.into(), func);
     }
-    crate::auth::init(&mut api_service);
-    let api_service = Rc::new(api_service);
-
-    let oauth_user_type = match ts.lookup_builtin_type(OAUTHUSER_TYPE_NAME) {
-        Ok(Type::Object(t)) => t,
-        _ => anyhow::bail!("Internal error: type {} not found", OAUTHUSER_TYPE_NAME),
-    };
-    let query_engine = Rc::new(QueryEngine::local_connection(&state.data_db).await?);
-    let mut transaction = query_engine.start_transaction().await?;
-    query_engine
-        .create_table(&mut transaction, &oauth_user_type)
-        .await?;
-    QueryEngine::commit_transaction(transaction).await?;
-
-    let rt = Runtime::new(
-        api_service.clone(),
-        query_engine,
-        meta,
-        ts,
-        policies,
-        SecretManager::default(),
-    );
-    runtime::set(rt);
 
     let command_task = tokio::task::spawn_local(async move {
         while let Some(item) = cmd.rx.next().await {

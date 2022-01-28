@@ -1,6 +1,7 @@
 // SPDX-FileCopyrightText: © 2021 ChiselStrike <info@chiselstrike.com>
 
 use crate::prefix_map::PrefixMap;
+use anyhow::Result;
 use serde_json::{json, Value};
 use std::collections::{HashMap, HashSet};
 use std::path::Path;
@@ -57,7 +58,7 @@ impl UserAuthorization {
 
     /// Authorizes users matching a regex to execute any endpoint under this path.  Longer paths override existing
     /// prefixes.  Error if this same path has already been added.
-    pub fn add(&mut self, path: &str, users: regex::Regex) -> Result<(), anyhow::Error> {
+    pub fn add(&mut self, path: &str, users: regex::Regex) -> Result<()> {
         if self.paths.insert(path.into(), users).is_some() {
             anyhow::bail!("Repeated path in user authorization: {:?}", path);
         }
@@ -81,7 +82,7 @@ impl Policies {
         &mut self,
         version: K,
         yaml: Y,
-    ) -> anyhow::Result<()> {
+    ) -> Result<()> {
         let v = VersionPolicy::from_yaml(yaml)?;
         self.versions.insert(version.to_string(), v);
         Ok(())
@@ -89,7 +90,7 @@ impl Policies {
 }
 
 impl VersionPolicy {
-    pub(crate) fn from_yaml<S: AsRef<str>>(config: S) -> anyhow::Result<Self> {
+    pub(crate) fn from_yaml<S: AsRef<str>>(config: S) -> Result<Self> {
         let mut policies = Self::default();
         let mut labels = vec![];
 

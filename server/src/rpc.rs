@@ -47,7 +47,7 @@ impl GlobalRpcState {
         meta: MetaService,
         query_engine: QueryEngine,
         commands: Vec<CoordinatorChannel>,
-    ) -> anyhow::Result<Self> {
+    ) -> Result<Self> {
         let type_system = meta.load_type_system().await?;
         let routes = meta.load_endpoints().await?;
         let policies = meta.load_policies().await?;
@@ -98,7 +98,7 @@ impl RpcService {
     async fn delete_aux(
         &self,
         request: Request<ChiselDeleteRequest>,
-    ) -> anyhow::Result<Response<ChiselDeleteResponse>> {
+    ) -> Result<Response<ChiselDeleteResponse>> {
         let mut state = self.state.lock().await;
         let apply_request = request.into_inner();
         let api_version = apply_request.version;
@@ -159,7 +159,7 @@ impl RpcService {
     async fn populate_aux(
         &self,
         request: Request<PopulateRequest>,
-    ) -> anyhow::Result<Response<PopulateResponse>> {
+    ) -> Result<Response<PopulateResponse>> {
         let request = request.into_inner();
 
         let to = request.to_version.clone();
@@ -182,7 +182,7 @@ impl RpcService {
     async fn apply_aux(
         &self,
         request: Request<ChiselApplyRequest>,
-    ) -> anyhow::Result<Response<ChiselApplyResponse>> {
+    ) -> Result<Response<ChiselApplyResponse>> {
         let apply_request = request.into_inner();
         let api_version = apply_request.version;
         let mut state = self.state.lock().await;
@@ -531,7 +531,7 @@ pub(crate) fn spawn(
     addr: SocketAddr,
     start_wait: impl core::future::Future<Output = ()> + Send + 'static,
     shutdown: impl core::future::Future<Output = ()> + Send + 'static,
-) -> tokio::task::JoinHandle<anyhow::Result<()>> {
+) -> tokio::task::JoinHandle<Result<()>> {
     tokio::task::spawn(async move {
         start_wait.await;
 

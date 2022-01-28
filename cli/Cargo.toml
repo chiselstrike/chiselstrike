@@ -19,7 +19,7 @@ swc_common = "0.14.6"
 swc_ecma_ast = "0.58.0"
 swc_ecma_parser = "0.78.2"
 tempfile = "3.2.0"
-tokio = { version = "1.11.0", features = ["rt-multi-thread", "net"] }
+tokio = { version = "1.11.0", features = ["rt-multi-thread", "net", "fs"] }
 toml = "0.5.8"
 tonic = "0.5.2"
 tsc_compile = { path = "../tsc_compile" }

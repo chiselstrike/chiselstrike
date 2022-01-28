@@ -4,7 +4,7 @@ use crate::db::{sql, sql_restrictions, Relation, Restriction, SqlValue};
 use crate::query::{DbConnection, Kind, QueryError};
 use crate::types::{Field, ObjectDelta, ObjectType, Type, OAUTHUSER_TYPE_NAME};
 use crate::JsonObject;
-use anyhow::{anyhow, Context as AnyhowContext};
+use anyhow::{anyhow, Context as AnyhowContext, Result};
 use futures::stream::BoxStream;
 use futures::stream::Stream;
 use futures::StreamExt;
@@ -21,11 +21,8 @@ use std::pin::Pin;
 use std::task::{Context, Poll};
 use uuid::Uuid;
 
-// Results directly out of the database
-pub(crate) type RawSqlStream = BoxStream<'static, anyhow::Result<AnyRow>>;
-
 // Results with policies applied
-pub(crate) type SqlStream = BoxStream<'static, anyhow::Result<JsonObject>>;
+pub(crate) type SqlStream = BoxStream<'static, Result<JsonObject>>;
 
 #[pin_project]
 struct QueryResults<T> {
@@ -35,17 +32,19 @@ struct QueryResults<T> {
     stream: T,
 }
 
-pub(crate) fn new_query_results(raw_query: String, pool: &AnyPool) -> RawSqlStream {
+pub(crate) fn new_query_results(
+    raw_query: String,
+    pool: &AnyPool,
+) -> impl Stream<Item = anyhow::Result<AnyRow>> {
     // The string data will not move anymore.
     let raw_query_ptr = raw_query.as_ref() as *const str;
     let query = sqlx::query::<Any>(unsafe { &*raw_query_ptr });
     let stream = query.fetch(pool).map(|i| i.map_err(anyhow::Error::new));
-
-    Box::pin(QueryResults { raw_query, stream })
+    QueryResults { raw_query, stream }
 }
 
-impl<T: Stream<Item = anyhow::Result<AnyRow>>> Stream for QueryResults<T> {
-    type Item = anyhow::Result<AnyRow>;
+impl<T: Stream<Item = Result<AnyRow>>> Stream for QueryResults<T> {
+    type Item = Result<AnyRow>;
 
     fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
         self.project().stream.poll_next(cx)
@@ -54,7 +53,7 @@ impl<T: Stream<Item = anyhow::Result<AnyRow>>> Stream for QueryResults<T> {
 
 impl TryFrom<&Field> for ColumnDef {
     type Error = anyhow::Error;
-    fn try_from(field: &Field) -> anyhow::Result<Self> {
+    fn try_from(field: &Field) -> Result<Self> {
         let mut column_def = ColumnDef::new(Alias::new(&field.name));
         match field.type_ {
             Type::String => column_def.text(),
@@ -144,7 +143,7 @@ impl QueryEngine {
         Self { kind, pool }
     }
 
-    pub(crate) async fn local_connection(conn: &DbConnection) -> anyhow::Result<Self> {
+    pub(crate) async fn local_connection(conn: &DbConnection) -> Result<Self> {
         let local = conn.local_connection().await?;
         Ok(Self::new(local.kind, local.pool))
     }
@@ -153,7 +152,7 @@ impl QueryEngine {
         &self,
         transaction: &mut Transaction<'_, Any>,
         ty: &ObjectType,
-    ) -> anyhow::Result<()> {
+    ) -> Result<()> {
         let drop_table = Table::drop()
             .table(Alias::new(ty.backing_table()))
             .to_owned();
@@ -167,7 +166,7 @@ impl QueryEngine {
         Ok(())
     }
 
-    pub(crate) async fn start_transaction(&self) -> anyhow::Result<Transaction<'_, Any>> {
+    pub(crate) async fn start_transaction(&self) -> Result<Transaction<'_, Any>> {
         Ok(self
             .pool
             .begin()
@@ -175,9 +174,7 @@ impl QueryEngine {
             .map_err(QueryError::ConnectionFailed)?)
     }
 
-    pub(crate) async fn commit_transaction(
-        transaction: Transaction<'_, Any>,
-    ) -> anyhow::Result<()> {
+    pub(crate) async fn commit_transaction(transaction: Transaction<'_, Any>) -> Result<()> {
         transaction
             .commit()
             .await
@@ -189,7 +186,7 @@ impl QueryEngine {
         &self,
         transaction: &mut Transaction<'_, Any>,
         ty: &ObjectType,
-    ) -> anyhow::Result<()> {
+    ) -> Result<()> {
         let mut create_table = Table::create()
             .table(Alias::new(ty.backing_table()))
             .if_not_exists()
@@ -214,7 +211,7 @@ impl QueryEngine {
         transaction: &mut Transaction<'_, Any>,
         old_ty: &ObjectType,
         delta: ObjectDelta,
-    ) -> anyhow::Result<()> {
+    ) -> Result<()> {
         // using a macro as async closures are unstable
         macro_rules! do_query {
             ( $table:expr ) => {{
@@ -291,7 +288,7 @@ impl QueryEngine {
         &self,
         ty: &ObjectType,
         ty_value: &JsonObject,
-    ) -> anyhow::Result<serde_json::Value> {
+    ) -> Result<serde_json::Value> {
         let (inserts, id_tree) = self.prepare_insertion(ty, ty_value)?;
         self.run_sql_queries(&inserts).await?;
         Ok(id_tree.to_json())
@@ -301,7 +298,7 @@ impl QueryEngine {
         &self,
         ty: &ObjectType,
         restrictions: Vec<Restriction>,
-    ) -> anyhow::Result<()> {
+    ) -> Result<()> {
         let sql = format!(
             "DELETE FROM {} {}",
             &ty.backing_table(),
@@ -321,17 +318,17 @@ impl QueryEngine {
         &self,
         ty: &ObjectType,
         ty_value: &JsonObject,
-    ) -> anyhow::Result<()> {
+    ) -> Result<()> {
         let query = self.prepare_insertion_shallow(ty, ty_value)?;
         self.run_sql_queries(&[query]).await?;
         Ok(())
     }
 
-    pub(crate) async fn fetch_one(&self, q: SqlWithArguments) -> anyhow::Result<AnyRow> {
+    pub(crate) async fn fetch_one(&self, q: SqlWithArguments) -> Result<AnyRow> {
         Ok(q.get_sqlx().fetch_one(&self.pool).await?)
     }
 
-    async fn run_sql_queries(&self, queries: &[SqlWithArguments]) -> anyhow::Result<()> {
+    async fn run_sql_queries(&self, queries: &[SqlWithArguments]) -> Result<()> {
         let mut transaction = self.start_transaction().await?;
         for q in queries {
             transaction
@@ -351,7 +348,7 @@ impl QueryEngine {
         &self,
         ty: &ObjectType,
         ty_value: &JsonObject,
-    ) -> anyhow::Result<(Vec<SqlWithArguments>, IdTree)> {
+    ) -> Result<(Vec<SqlWithArguments>, IdTree)> {
         let mut child_ids = HashMap::<String, IdTree>::new();
         let mut obj_id = Option::<String>::None;
         let mut query_args = Vec::<SqlValue>::new();
@@ -417,11 +414,7 @@ impl QueryEngine {
 
     /// Converts `field` with value `ty_value` into SqlValue while ensuring the
     /// generation of default and generable values.
-    fn convert_to_argument(
-        &self,
-        field: &Field,
-        ty_value: &JsonObject,
-    ) -> anyhow::Result<SqlValue> {
+    fn convert_to_argument(&self, field: &Field, ty_value: &JsonObject) -> Result<SqlValue> {
         macro_rules! parse_default_value {
             (str, $value:expr) => {{
                 $value
@@ -461,7 +454,7 @@ impl QueryEngine {
 
     /// For given object of type `ty` and its value `ty_value` computes a string
     /// representing SQL query which inserts the object into database.
-    fn make_insert_query(&self, ty: &ObjectType, ty_value: &JsonObject) -> anyhow::Result<String> {
+    fn make_insert_query(&self, ty: &ObjectType, ty_value: &JsonObject) -> Result<String> {
         let mut field_binds = String::new();
         let mut field_names = vec![];
         let mut id_name = String::new();
@@ -515,7 +508,7 @@ impl QueryEngine {
         &self,
         ty: &ObjectType,
         ty_value: &JsonObject,
-    ) -> anyhow::Result<SqlWithArguments> {
+    ) -> Result<SqlWithArguments> {
         let mut query_args = Vec::<SqlValue>::new();
         for field in ty.all_fields() {
             let arg = self.convert_to_argument(field, ty_value).with_context(|| {
@@ -534,7 +527,7 @@ impl QueryEngine {
 pub(crate) fn relational_row_to_json(
     columns: &[(String, Type)],
     row: &AnyRow,
-) -> anyhow::Result<JsonObject> {
+) -> Result<JsonObject> {
     let mut ret = JsonObject::default();
     for (query_column, result_column) in zip(columns, row.columns()) {
         let i = result_column.ordinal();
