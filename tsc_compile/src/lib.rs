@@ -95,10 +95,6 @@ fn fetch(_op_state: &mut OpState, path: String, base: String) -> Result<String> 
         let mut map = m.borrow_mut();
         fetch_aux(&mut map, path.clone(), base.clone())
             .with_context(|| format!("Resolving {} from {}", path, base))
-            .map_err(|x| {
-                map.diagnostics += &format!("{:?}", x);
-                x
-            })
     })
 }
 
@@ -115,12 +111,7 @@ fn read_aux(map: &mut DownloadMap, path: String) -> Result<String> {
 fn read(_op_state: &mut OpState, path: String, _: ()) -> Result<String> {
     FILES.with(|m| {
         let mut map = m.borrow_mut();
-        read_aux(&mut map, path.clone())
-            .with_context(|| format!("Reading {}", path))
-            .map_err(|x| {
-                map.diagnostics += &format!("{:?}", x);
-                x
-            })
+        read_aux(&mut map, path.clone()).with_context(|| format!("Reading {}", path))
     })
 }
 
@@ -299,6 +290,15 @@ mod tests {
         let mut f = Builder::new().suffix(".ts").tempfile()?;
         f.write_all(b"export class Foo { a: number };")?;
         compile_ts_code(f.path().to_str().unwrap(), None, Default::default())?;
+        Ok(())
+    }
+
+    #[test]
+    fn missing_file() -> Result<()> {
+        let err = compile_ts_code("/no/such/file.ts", None, Default::default())
+            .unwrap_err()
+            .to_string();
+        assert!(err.contains("Cannot read file '/no/such/file.ts': Reading /no/such/file.ts."));
         Ok(())
     }
 }
