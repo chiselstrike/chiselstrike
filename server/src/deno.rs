@@ -31,7 +31,6 @@ use deno_runtime::inspector_server::InspectorServer;
 use deno_runtime::permissions::Permissions;
 use deno_runtime::worker::{MainWorker, WorkerOptions};
 use deno_runtime::BootstrapOptions;
-use futures::pin_mut;
 use futures::stream::{try_unfold, Stream};
 use futures::FutureExt;
 use hyper::body::HttpBody;
@@ -594,10 +593,7 @@ impl Future for ResolveFuture {
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         let mut service = get();
         let runtime = &mut service.worker.js_runtime;
-        // FIXME: Use runtime.poll_value once we upgrade to a deno_core that has it.
-        let fut = runtime.resolve_value(self.js_promise.clone());
-        pin_mut!(fut);
-        let ret = fut.poll(cx);
+        let ret = runtime.poll_value(&self.js_promise, cx);
         if ret.is_pending() {
             // FIXME: This a hack around
             // https://github.com/denoland/deno/issues/13458 We call
