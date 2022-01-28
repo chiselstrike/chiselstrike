@@ -552,9 +552,15 @@ where
 }
 
 async fn get_read_future(
-    reader: v8::Global<v8::Value>,
-    read: v8::Global<v8::Function>,
+    read_tpl: Option<(v8::Global<v8::Value>, v8::Global<v8::Function>)>,
 ) -> Result<Option<(Box<[u8]>, ())>> {
+    let (reader, read) = match read_tpl {
+        Some(x) => x,
+        None => {
+            return Ok(None);
+        }
+    };
+
     let service_lock = get();
     let mut service = service_lock.lock().await;
     let runtime = &mut service.worker.js_runtime;
@@ -597,16 +603,21 @@ fn get_read_stream(
         .to_object(scope)
         .ok_or(Error::NotAResponse)?;
 
-    let body: v8::Local<v8::Object> = get_member(response, scope, "body")?;
-    let get_reader: v8::Local<v8::Function> = get_member(body, scope, "getReader")?;
-    let reader: v8::Local<v8::Object> = try_into_or(get_reader.call(scope, body.into(), &[]))?;
-    let read: v8::Local<v8::Function> = get_member(reader, scope, "read")?;
-    let reader: v8::Local<v8::Value> = reader.into();
-    let reader: v8::Global<v8::Value> = v8::Global::new(scope, reader);
-    let read = v8::Global::new(scope, read);
+    let read = match get_member::<v8::Local<v8::Object>>(response, scope, "body") {
+        Ok(body) => {
+            let get_reader: v8::Local<v8::Function> = get_member(body, scope, "getReader")?;
+            let reader: v8::Local<v8::Object> =
+                try_into_or(get_reader.call(scope, body.into(), &[]))?;
+            let read: v8::Local<v8::Function> = get_member(reader, scope, "read")?;
+            let reader: v8::Local<v8::Value> = reader.into();
+            let reader: v8::Global<v8::Value> = v8::Global::new(scope, reader);
+            let read = v8::Global::new(scope, read);
+            Some((reader, read))
+        }
+        Err(_) => None,
+    };
 
-    let stream = try_unfold((), move |_| get_read_future(reader.clone(), read.clone()));
-    Ok(stream)
+    Ok(try_unfold((), move |_| get_read_future(read.clone())))
 }
 
 struct BodyResource {

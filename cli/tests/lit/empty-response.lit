@@ -1,0 +1,27 @@
+# SPDX-FileCopyrightText: © 2021 ChiselStrike <info@chiselstrike.com>
+
+# RUN: sh -e @file
+
+cat << EOF > "$TEMPDIR/endpoints/empty.ts"
+export default async function chisel(req: Request) {
+    return new Response(null, { status : 204 });
+}
+EOF
+
+cat << EOF > "$TEMPDIR/endpoints/emptychisel.ts"
+import { responseFromJson } from "@chiselstrike/api"
+
+export default async function chisel(req: Request) {
+    return responseFromJson(null, 204);
+}
+EOF
+
+cd "$TEMPDIR"
+
+$CHISEL apply
+$CURL $CHISELD_HOST/dev/empty
+# CHECK: HTTP/1.1 204 No Content
+
+$CURL $CHISELD_HOST/dev/emptychisel
+# CHECK: HTTP/1.1 204 No Content
+
