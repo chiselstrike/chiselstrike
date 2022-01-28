@@ -30,6 +30,10 @@ jobs:
       with:
         images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
 
+    - name: Make some room available
+      id: makeroom
+      run: "sudo rm -rf /usr/local/lib/android && sudo rm -rf /usr/share/dotnet"
+
     - name: Find desired image
       id: findimg
       run: echo "::set-output name=img_name::$(md5sum Dockerfile.test.baseimg | awk '{print $1}')"
