@@ -14,7 +14,6 @@ api = { path = "../api" }
 async-channel = "1.6.1"
 async-mutex = "1.4.0"
 base64 = "0.13.0"
-deno_broadcast_channel = "0.28.0"
 deno_core = "0.116.0"
 deno_runtime = "0.42.0"
 deno_web = "0.65.0"

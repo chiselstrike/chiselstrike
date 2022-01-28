@@ -3480,7 +3480,6 @@ dependencies = [
  "async-channel",
  "async-mutex",
  "base64 0.13.0",
- "deno_broadcast_channel",
  "deno_core",
  "deno_runtime",
  "deno_web",

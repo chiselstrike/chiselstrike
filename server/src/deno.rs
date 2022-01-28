@@ -12,7 +12,6 @@ use crate::types::{ObjectType, Type};
 use crate::JsonObject;
 use anyhow::{anyhow, Result};
 use api::chisel_js;
-use deno_broadcast_channel::InMemoryBroadcastChannel;
 use deno_core::error::AnyError;
 use deno_core::v8;
 use deno_core::CancelFuture;
@@ -217,7 +216,7 @@ impl DenoService {
             get_error_class_fn: None,
             origin_storage_dir: None,
             blob_store: BlobStore::default(),
-            broadcast_channel: InMemoryBroadcastChannel::default(),
+            broadcast_channel: Default::default(),
             shared_array_buffer_store: None,
             compiled_wasm_module_store: None,
         };
