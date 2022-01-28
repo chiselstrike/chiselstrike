@@ -3519,7 +3519,6 @@ dependencies = [
  "url",
  "urldecode",
  "uuid",
- "v8",
  "vergen",
  "yaml-rust",
 ]
@@ -4557,7 +4556,6 @@ dependencies = [
  "third_party",
  "ureq",
  "url",
- "v8",
 ]
 
 [[package]]

@@ -2,6 +2,7 @@
 
 use anyhow::{anyhow, Context, Result};
 use deno_core::op_sync;
+use deno_core::v8;
 use deno_core::JsRuntime;
 use deno_core::OpState;
 use deno_core::RuntimeOptions;

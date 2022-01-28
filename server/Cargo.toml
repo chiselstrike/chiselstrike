@@ -52,7 +52,6 @@ tsc_compile = { path = "../tsc_compile" }
 url = "2.2.2"
 urldecode = "0.1.1"
 uuid = { version = "0.8.2", features = ["v4"] }
-v8 = "0.38.1"
 yaml-rust = "0.4"
 
 [build-dependencies]

@@ -14,6 +14,7 @@ use anyhow::{anyhow, Result};
 use api::chisel_js;
 use deno_broadcast_channel::InMemoryBroadcastChannel;
 use deno_core::error::AnyError;
+use deno_core::v8;
 use deno_core::CancelFuture;
 use deno_core::CancelHandle;
 use deno_core::JsRuntime;

@@ -10,7 +10,6 @@ deno_core = "0.116.0"
 itertools = "0.10.1"
 ureq = "2.4.0"
 url = "2.2.2"
-v8 = "0.38.1"
 
 [dev-dependencies]
 tempfile = "3.2.0"
