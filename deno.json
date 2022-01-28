@@ -1,7 +1,13 @@
 {
     "fmt": {
         "files": {
-            "include": ["api", "server", "packages", "deno.json"],
+            "include": [
+                "api",
+                "server",
+                "packages",
+                "deno.json",
+                "tsc_compile"
+            ],
             "exclude": [
                 "server/docs",
                 "third_party",
@@ -21,7 +27,7 @@
     },
     "lint": {
         "files": {
-            "include": ["api", "server", "packages"],
+            "include": ["api", "server", "packages", "tsc_compile"],
             "exclude": [
                 "third_party",
                 "packages/create-chiselstrike-app/node_modules/",
