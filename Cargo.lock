@@ -3482,7 +3482,6 @@ dependencies = [
  "base64 0.13.0",
  "deno_core",
  "deno_runtime",
- "deno_web",
  "derive-new",
  "enclose",
  "enum-as-inner",

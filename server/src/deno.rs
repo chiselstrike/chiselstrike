@@ -31,7 +31,6 @@ use deno_runtime::inspector_server::InspectorServer;
 use deno_runtime::permissions::Permissions;
 use deno_runtime::worker::{MainWorker, WorkerOptions};
 use deno_runtime::BootstrapOptions;
-use deno_web::BlobStore;
 use futures::pin_mut;
 use futures::stream::{try_unfold, Stream};
 use futures::FutureExt;
@@ -215,7 +214,7 @@ impl DenoService {
             module_loader: module_loader.clone(),
             get_error_class_fn: None,
             origin_storage_dir: None,
-            blob_store: BlobStore::default(),
+            blob_store: Default::default(),
             broadcast_channel: Default::default(),
             shared_array_buffer_store: None,
             compiled_wasm_module_store: None,
