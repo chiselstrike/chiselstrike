@@ -4,14 +4,7 @@
 //
 // curl -d '{"hello": "world"}' localhost:8080/dev/hello
 
-import { responseFromJson } from "@chiselstrike/api";
-
 export default async function (req: Request): Promise<Response> {
-    let json: unknown;
-    try {
-        json = await req.json();
-    } catch (_e) {
-        json = "empty";
-    }
-    return responseFromJson(json);
+    const response = await req.text() || "hello world";
+    return new Response(response);
 }
