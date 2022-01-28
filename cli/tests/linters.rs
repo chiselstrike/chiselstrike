@@ -46,6 +46,14 @@ mod tests {
     }
 
     #[test]
+    fn must_not_suspend() {
+        run(
+            "cargo",
+            ["+nightly", "check", "--features", "must_not_suspend"],
+        );
+    }
+
+    #[test]
     fn check_clippy() {
         run("cargo", ["clippy", "--all-targets", "--", "-D", "warnings"]);
     }

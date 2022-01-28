@@ -56,7 +56,12 @@ jobs:
     - name: Install rust toolchain
       uses: actions-rs/toolchain@v1
       with:
-          override: true
+          components: rustfmt, clippy
+
+    - name: Install nightly rust toolchain
+      uses: actions-rs/toolchain@v1
+      with:
+          toolchain: nightly
           components: rustfmt, clippy
 
     - name: set up cache
