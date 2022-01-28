@@ -14,10 +14,8 @@ api = { path = "../api" }
 async-channel = "1.6.1"
 async-mutex = "1.4.0"
 base64 = "0.13.0"
-deno_broadcast_channel = "0.28.0"
-deno_core = "0.116.0"
-deno_runtime = "0.42.0"
-deno_web = "0.65.0"
+deno_core = "0.117.0"
+deno_runtime = "0.43.0"
 derive-new = "0.5.9"
 enclose = "1.1"
 enum-as-inner = "0.3.3"
@@ -52,7 +50,6 @@ tsc_compile = { path = "../tsc_compile" }
 url = "2.2.2"
 urldecode = "0.1.1"
 uuid = { version = "0.8.2", features = ["v4"] }
-v8 = "0.38.1"
 yaml-rust = "0.4"
 
 [build-dependencies]
