@@ -42,7 +42,7 @@ function compile(file, lib) {
         "lib.deno.websocket.d.ts",
         "lib.deno.crypto.d.ts",
         "lib.deno.broadcast_channel.d.ts",
-        "lib.esnext.d.ts"
+        "lib.esnext.d.ts",
     ];
     if (lib !== undefined) {
         defaultLibs.push(lib);
