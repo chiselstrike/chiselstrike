@@ -195,7 +195,7 @@ fn abs(path: &str) -> String {
 }
 
 fn without_extension(path: &str) -> &str {
-    path.rsplit_once('.').unwrap().0
+    path.rsplit_once('.').map_or(path, |p| p.0)
 }
 
 pub static SNAPSHOT: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/SNAPSHOT.bin"));
@@ -297,6 +297,15 @@ mod tests {
     #[test]
     fn missing_file() -> Result<()> {
         let err = compile_ts_code("/no/such/file.ts", None, Default::default())
+            .unwrap_err()
+            .to_string();
+        assert!(err.contains("Cannot read file '/no/such/file.ts': Reading /no/such/file.ts."));
+        Ok(())
+    }
+
+    #[test]
+    fn no_extension() -> Result<()> {
+        let err = compile_ts_code("/no/such/file", None, Default::default())
             .unwrap_err()
             .to_string();
         assert!(err.contains("Cannot read file '/no/such/file.ts': Reading /no/such/file.ts."));
