@@ -361,8 +361,16 @@ macro_rules! write_template {
     }};
 }
 
-fn create_project(path: &Path, force: bool, examples: bool) -> Result<()> {
-    if !force && project_exists(path) {
+/// Project creation options.
+struct CreateProjectOptions {
+    /// Force project creation by overwriting existing project files.
+    force: bool,
+    /// Generate example code for project.
+    examples: bool,
+}
+
+fn create_project(path: &Path, opts: CreateProjectOptions) -> Result<()> {
+    if !opts.force && project_exists(path) {
         anyhow::bail!("You cannot run `chisel init` on an existing ChiselStrike project");
     }
     fs::create_dir_all(path.join(TYPES_DIR))?;
@@ -379,7 +387,7 @@ fn create_project(path: &Path, force: bool, examples: bool) -> Result<()> {
 
     write_template!("settings.json", &path.join(VSCODE_DIR))?;
 
-    if examples {
+    if opts.examples {
         write_template!("hello.ts", &path.join(ENDPOINTS_DIR))?;
     }
     println!("Created ChiselStrike project in {}", path.display());
@@ -710,7 +718,11 @@ async fn main() -> Result<()> {
     match opt.cmd {
         Command::Init { force, no_examples } => {
             let cwd = env::current_dir()?;
-            create_project(&cwd, force, !no_examples)?;
+            let opts = CreateProjectOptions {
+                force,
+                examples: !no_examples,
+            };
+            create_project(&cwd, opts)?;
         }
         Command::Describe => {
             let mut client = ChiselRpcClient::connect(server_url).await?;
@@ -821,7 +833,11 @@ async fn main() -> Result<()> {
                     }
                 }
             }
-            create_project(path, false, !no_examples)?;
+            let opts = CreateProjectOptions {
+                force: false,
+                examples: !no_examples,
+            };
+            create_project(path, opts)?;
         }
         Command::Start => {
             let mut server = start_server()?;
