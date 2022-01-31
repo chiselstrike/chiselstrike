@@ -1,6 +1,7 @@
 // SPDX-FileCopyrightText: © 2022 ChiselStrike <info@chiselstrike.com>
 
 use crate::JsonObject;
+use anyhow::Context;
 use anyhow::{anyhow, Result};
 use rsa::{PaddingScheme, RsaPrivateKey};
 use url::Url;
@@ -80,7 +81,7 @@ pub(crate) async fn get_private_key() -> Result<Option<RsaPrivateKey>> {
         return pkcs1;
     }
 
-    get_pkcs8_private_key(&pem)
+    get_pkcs8_private_key(&pem).with_context(|| format!("Could not read private key at {}", url))
 }
 
 pub(crate) async fn get_secrets(
