@@ -50,7 +50,7 @@ fn read(_op_state: &mut OpState, path: String, _: ()) -> Result<String> {
             "lib.deno_url.d.ts" => inc_and_rerun!("../third_party/deno/ext/url/lib.deno_url.d.ts"),
             "lib.deno_web.d.ts" => inc_and_rerun!("../third_party/deno/ext/web/lib.deno_web.d.ts"),
             "lib.deno_webgpu.d.ts" => {
-                inc_and_rerun!("../third_party/deno/ext/webgpu/lib.deno_webgpu.d.ts")
+                inc_and_rerun!("../third_party/deno/cli/dts/lib.deno_webgpu.d.ts")
             }
             "lib.deno_websocket.d.ts" => {
                 inc_and_rerun!("../third_party/deno/ext/websocket/lib.deno_websocket.d.ts")

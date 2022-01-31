@@ -15,5 +15,5 @@ fn main() {
     // Check that we got the correct revision. The main reason for
     // this is to force build.rs to change and the build to be rerun
     // when updating the submodule.
-    assert!(out.starts_with(b" df5fe5a35f8ace40275a822927f3385c828beba7 deno"));
+    assert!(out.starts_with(b" 0c931060784ee83082f7c221374aed451d4f1ad6 deno"));
 }
