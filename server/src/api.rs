@@ -218,17 +218,23 @@ where
     }
 }
 
+/// Spawn an API server
+///
+/// # Arguments
+/// * `api` - the API service of the server
+/// * `listen_addr` - the listen address of the API server
+/// * `shutdown` - channel that notifies the server of shutdown
 pub(crate) fn spawn(
     api: Rc<ApiService>,
     listen_addr: String,
-    rx: async_channel::Receiver<()>,
+    shutdown: async_channel::Receiver<()>,
 ) -> Result<Vec<tokio::task::JoinHandle<Result<(), hyper::Error>>>> {
     let mut tasks = Vec::new();
     let sock_addrs = listen_addr.to_socket_addrs()?;
     for addr in sock_addrs {
         debug!("{} has address {:?}", listen_addr, addr);
         let api = api.clone();
-        let rx = rx.clone();
+        let shutdown = shutdown.clone();
         let domain = if addr.is_ipv6() {
             Domain::ipv6()
         } else {
@@ -255,7 +261,7 @@ pub(crate) fn spawn(
         let task = tokio::task::spawn_local(async move {
             let ret = server
                 .with_graceful_shutdown(async {
-                    rx.recv().await.ok();
+                    shutdown.recv().await.ok();
                 })
                 .await;
             debug!("hyper shutdown");
