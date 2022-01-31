@@ -14,8 +14,8 @@ api = { path = "../api" }
 async-channel = "1.6.1"
 async-mutex = "1.4.0"
 base64 = "0.13.0"
-deno_core = "0.117.0"
-deno_runtime = "0.43.0"
+deno_core = { path = "../third_party/deno/core" }
+deno_runtime = { path = "../third_party/deno/runtime" }
 derive-new = "0.5.9"
 enclose = "1.1"
 enum-as-inner = "0.3.3"
