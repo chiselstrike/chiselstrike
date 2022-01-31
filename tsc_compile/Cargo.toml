@@ -6,7 +6,7 @@ edition = "2021"
 
 [dependencies]
 anyhow = "1.0"
-deno_core = "0.117.0"
+deno_core = { path = "../third_party/deno/core" }
 ureq = "2.4.0"
 url = "2.2.2"
 
@@ -19,7 +19,7 @@ build = ["third_party"]
 
 [build-dependencies]
 anyhow = "1.0"
-deno_core = "0.117.0"
+deno_core = { path = "../third_party/deno/core" }
 third_party = { path = "../third_party" }
 
 [lib]
