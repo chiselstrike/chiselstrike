@@ -4,6 +4,12 @@
 
 cd "$TEMPDIR"
 
+$CHISEL init 2>&1 || echo
+
+# CHECK: Error: You cannot run `chisel init` on an existing ChiselStrike project
+
 $CHISEL init --force
+
+# CHECK: Created ChiselStrike project
 
 $CHISEL apply
