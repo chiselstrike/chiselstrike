@@ -161,8 +161,11 @@ impl MetaService {
         Self { kind, pool }
     }
 
-    pub(crate) async fn local_connection(conn: &DbConnection) -> anyhow::Result<Self> {
-        let local = conn.local_connection().await?;
+    pub(crate) async fn local_connection(
+        conn: &DbConnection,
+        nr_conn: usize,
+    ) -> anyhow::Result<Self> {
+        let local = conn.local_connection(nr_conn).await?;
         Ok(Self::new(local.kind, local.pool))
     }
 
