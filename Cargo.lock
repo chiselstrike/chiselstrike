@@ -4541,7 +4541,6 @@ version = "0.7.0-dev.0"
 dependencies = [
  "anyhow",
  "deno_core",
- "itertools 0.10.3",
  "tempfile",
  "third_party",
  "ureq",
