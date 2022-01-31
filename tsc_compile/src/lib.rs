@@ -308,6 +308,7 @@ mod tests {
         let err = compile_ts_code("/no/such/file", None, Default::default())
             .unwrap_err()
             .to_string();
+        // FIXME: Something is adding a .ts extension
         assert!(err.contains("Cannot read file '/no/such/file.ts': Reading /no/such/file.ts."));
         Ok(())
     }
