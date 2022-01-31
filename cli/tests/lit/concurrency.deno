@@ -12,7 +12,7 @@ $CHISEL apply
 # CHECK: Model defined: Person
 # CHECK: End point defined: /dev/store
 
-for i in $(seq 1 1000); do
+for i in $(seq 1 100); do
   $CURL --data '{
       "first_name":"Glauber",
       "last_name":"Costa",
