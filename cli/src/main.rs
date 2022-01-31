@@ -24,6 +24,7 @@ use std::time::Duration;
 use structopt::StructOpt;
 use tempfile::Builder;
 use tempfile::NamedTempFile;
+use tokio::task::{spawn_blocking, JoinHandle};
 use tonic::transport::Channel;
 use tsc_compile::compile_ts_code;
 
@@ -84,6 +85,30 @@ impl From<bool> for AllowTypeDeletion {
         match v {
             false => AllowTypeDeletion::No,
             true => AllowTypeDeletion::Yes,
+        }
+    }
+}
+
+#[derive(Copy, Clone)]
+enum TypeChecking {
+    No,
+    Yes,
+}
+
+impl From<TypeChecking> for bool {
+    fn from(v: TypeChecking) -> Self {
+        match v {
+            TypeChecking::No => false,
+            TypeChecking::Yes => true,
+        }
+    }
+}
+
+impl From<bool> for TypeChecking {
+    fn from(v: bool) -> Self {
+        match v {
+            false => TypeChecking::No,
+            true => TypeChecking::Yes,
         }
     }
 }
@@ -204,7 +229,11 @@ enum Command {
     /// Describe the endpoints, types, and policies.
     Describe,
     /// Start a ChiselStrike server for local development.
-    Dev,
+    Dev {
+        /// calls tsc --noEmit to check types. Useful if your IDE isn't doing it.
+        #[structopt(long)]
+        type_check: bool,
+    },
     /// Create a new ChiselStrike project.
     New {
         /// Path where to create the project.
@@ -227,6 +256,9 @@ enum Command {
         allow_type_deletion: bool,
         #[structopt(long, default_value = DEFAULT_API_VERSION, parse(try_from_str=parse_version))]
         version: String,
+        /// calls tsc --noEmit to check types. Useful if your IDE isn't doing it.
+        #[structopt(long)]
+        type_check: bool,
     },
     /// Delete configuration from the ChiselStrike server.
     Delete {
@@ -457,10 +489,21 @@ fn to_tempfile(data: &str, suffix: &str) -> Result<NamedTempFile> {
     Ok(f)
 }
 
+fn npx(command: &str, args: &[&str]) -> JoinHandle<Result<std::process::Output>> {
+    let mut cmd = std::process::Command::new("npx");
+    cmd.arg(command).args(args);
+
+    spawn_blocking(move || {
+        cmd.output()
+            .with_context(|| "trying to execute `npx esbuild`. Is npx on your PATH?".to_string())
+    })
+}
+
 async fn apply<S: ToString>(
     server_url: String,
     version: S,
     allow_type_deletion: AllowTypeDeletion,
+    type_check: TypeChecking,
 ) -> Result<()> {
     let version = version.to_string();
 
@@ -486,20 +529,20 @@ async fn apply<S: ToString>(
     }
 
     if manifest.modules == Module::Node {
-        // For existing installations that didn't have webpack, we create the conf
-        // file here
-        let webpack_conf_dir = PathBuf::from("./.webpack");
-        let _ignored = tokio::fs::create_dir(&webpack_conf_dir).await;
-        if let Err(path) = tokio::fs::metadata(webpack_conf_dir.join("webpack.config.js")).await {
-            if path.kind() == std::io::ErrorKind::NotFound {
-                // synchronous, but that's fine because only happens once.
-                write_template!("webpack.config.js", &webpack_conf_dir)?;
-            }
-        }
+        let tsc = match type_check {
+            TypeChecking::Yes => Some(npx(
+                "tsc",
+                &["--noemit", "--pretty", "--allowJs", "--checkJs"],
+            )),
+            TypeChecking::No => None,
+        };
 
-        let webpack_output = tempfile::tempdir()?;
-        let webpack_output_dname = webpack_output.path().to_str().unwrap();
+        let f = Builder::new().suffix(".ts").tempfile()?;
+        let bundler_output_file = f.path().to_str().unwrap();
         let cwd = env::current_dir()?;
+
+        let mut endpoint_futures = vec![];
+        let mut keep_tmp_alive = vec![];
 
         for endpoint in endpoints.iter() {
             let mut f = Builder::new().suffix(".ts").tempfile()?;
@@ -514,20 +557,30 @@ async fn apply<S: ToString>(
             );
             inner.write_all(code.as_bytes())?;
             inner.flush()?;
-            let webpack_entry_fname = f.path().to_str().unwrap();
-            let res = std::process::Command::new("npx")
-                .arg("webpack")
-                .arg("--color")
-                .arg("-c")
-                .arg("./.webpack/webpack.config.js")
-                .arg("--entry")
-                .arg(webpack_entry_fname)
-                .arg("-o")
-                .arg(webpack_output_dname)
-                .output()
-                .with_context(|| {
-                    "trying to execute `npx webpack`. Is npx on your PATH?".to_string()
-                })?;
+            let bundler_entry_fname = f.path().to_str().unwrap().to_owned();
+            keep_tmp_alive.push(f);
+
+            endpoint_futures.push(npx(
+                "esbuild",
+                &[
+                    &bundler_entry_fname,
+                    "--bundle",
+                    "--color=true",
+                    "--target=esnext",
+                    "--external:@chiselstrike",
+                    "--format=esm",
+                    "--tree-shaking=true",
+                    "--tsconfig=./tsconfig.json",
+                    // flip this to true when we have the deno-side polyfills. We can't really
+                    // do it now, as it will look for the "module" import unconditionally and fail
+                    //.arg("--platform=node")
+                    &format!("--outfile={}", bundler_output_file),
+                ],
+            ));
+        }
+
+        for (endpoint, res) in endpoints.iter().zip(endpoint_futures.into_iter()) {
+            let res = res.await.unwrap()?;
 
             if !res.status.success() {
                 let out = String::from_utf8(res.stdout).expect("command output not utf-8");
@@ -539,12 +592,21 @@ async fn apply<S: ToString>(
                 ))
                 .with_context(|| format!("{}\n{}", out, err));
             }
-            let code = read_to_string(webpack_output.path().join("endpoint.mjs"))?;
+            let code = read_to_string(bundler_output_file)?;
 
             endpoints_req.push(EndPointCreationRequest {
                 path: endpoint.name.clone(),
                 code,
             });
+        }
+
+        if let Some(tsc) = tsc {
+            let tsc_res = tsc.await.unwrap()?;
+            if !tsc_res.status.success() {
+                let out = String::from_utf8(tsc_res.stdout).expect("command output not utf-8");
+                let err = String::from_utf8(tsc_res.stderr).expect("command output not utf-8");
+                anyhow::bail!("{}\n{}", out, err);
+            }
         }
     } else {
         let mods: HashMap<String, String> = [(
@@ -613,8 +675,15 @@ async fn apply<S: ToString>(
     Ok(())
 }
 
-async fn apply_from_dev(server_url: String) {
-    if let Err(e) = apply(server_url, DEFAULT_API_VERSION, AllowTypeDeletion::No).await {
+async fn apply_from_dev(server_url: String, type_check: TypeChecking) {
+    if let Err(e) = apply(
+        server_url,
+        DEFAULT_API_VERSION,
+        AllowTypeDeletion::No,
+        type_check,
+    )
+    .await
+    {
         eprintln!("{:?}", e)
     }
 }
@@ -695,11 +764,12 @@ async fn main() -> Result<()> {
                 println!("}}");
             }
         }
-        Command::Dev => {
+        Command::Dev { type_check } => {
+            let type_check = type_check.into();
             let manifest = read_manifest()?;
             let mut server = start_server()?;
             wait(server_url.clone()).await?;
-            apply_from_dev(server_url.clone()).await;
+            apply_from_dev(server_url.clone(), type_check).await;
             let (mut tx, mut rx) = channel(1);
             let mut apply_watcher =
                 RecommendedWatcher::new(move |res: Result<Event, notify::Error>| {
@@ -727,7 +797,7 @@ async fn main() -> Result<()> {
                         kind: notify::event::EventKind::Modify(notify::event::ModifyKind::Data(_)),
                         ..
                     }) => {
-                        apply_from_dev(server_url.clone()).await;
+                        apply_from_dev(server_url.clone(), type_check).await;
                     }
                     Ok(_) => { /* ignore */ }
                     Err(e) => println!("watch error: {:?}", e),
@@ -783,8 +853,15 @@ async fn main() -> Result<()> {
         Command::Apply {
             allow_type_deletion,
             version,
+            type_check,
         } => {
-            apply(server_url, version, allow_type_deletion.into()).await?;
+            apply(
+                server_url,
+                version,
+                allow_type_deletion.into(),
+                type_check.into(),
+            )
+            .await?;
         }
         Command::Delete { version } => {
             delete(server_url, version).await?;

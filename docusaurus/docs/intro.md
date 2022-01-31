@@ -89,6 +89,12 @@ change.  To stop it, run `pkill chisel` in a terminal.  For full
 reference of `chisel` command usage, please see [this
 page](Reference/chisel-cli) or run `chisel --help`.
 
+:::tip
+By default, ChiselStrike doesn't check your types (we assume your IDE did that for you!), which results
+in faster loading of your endpoints. Our cli can bundle type checking by calling `tsc` directly, which can
+be achieved by passing the `--type-check` option to `npm run dev`, or to the apply command `npx chisel apply`
+:::
+
 ## Generating Endpoints
 
 Now that ChiselStrike is running, we can attempt to access our
