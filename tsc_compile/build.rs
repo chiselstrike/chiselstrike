@@ -126,6 +126,9 @@ fn get_cwd(_op_state: &mut OpState, _: (), _: ()) -> Result<String> {
 fn dir_exists(_op_state: &mut OpState, _path: String, _: ()) -> Result<bool> {
     Ok(false)
 }
+fn diagnostic(_op_state: &mut OpState, msg: String, _: ()) -> Result<()> {
+    panic!("unexpected: {}", msg);
+}
 fn main() {
     let out = PathBuf::from(env::var_os("OUT_DIR").unwrap());
     let snapshot_path = out.join("SNAPSHOT.bin");
@@ -135,6 +138,7 @@ fn main() {
         ..Default::default()
     });
 
+    runtime.register_op("diagnostic", op_sync(diagnostic));
     runtime.register_op("read", op_sync(read));
     runtime.register_op("write", op_sync(write));
     runtime.register_op("get_cwd", op_sync(get_cwd));
