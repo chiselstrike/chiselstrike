@@ -107,8 +107,8 @@ fn read(_op_state: &mut OpState, path: String, _: ()) -> Result<String> {
                 "lib.es5.d.ts",
                 "lib.esnext.d.ts",
                 "lib.esnext.error.d.ts",
-                "lib.esnext.object.d.ts",
-                "lib.esnext.intl.d.ts"
+                "lib.esnext.intl.d.ts",
+                "lib.esnext.object.d.ts"
             ),
         };
         if !content.is_empty() {
