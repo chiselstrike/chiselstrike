@@ -312,4 +312,18 @@ mod tests {
         assert!(err.contains("Cannot read file '/no/such/file.ts': Reading /no/such/file.ts."));
         Ok(())
     }
+
+    #[test]
+    fn async_iter_readable_stream() -> Result<()> {
+        let mut f = Builder::new().suffix(".ts").tempfile()?;
+        f.write_all(
+            br#"
+export function foo<R>(bar: ReadableStream<R>): AsyncIterableIterator<R> {
+    return bar[Symbol.asyncIterator]();
+}
+"#,
+        )?;
+        compile_ts_code(f.path().to_str().unwrap(), None, Default::default())?;
+        Ok(())
+    }
 }
