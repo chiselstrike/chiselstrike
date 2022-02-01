@@ -35,8 +35,8 @@ function compile(file, lib) {
     const defaultLibs = [
         "lib.deno.ns.d.ts",
         "lib.dom.d.ts",
-        "lib.deno.console.d.ts",
-        "lib.deno.broadcast_channel.d.ts",
+        "lib.deno_console.d.ts",
+        "lib.deno_broadcast_channel.d.ts",
         "lib.esnext.d.ts",
     ];
     if (lib !== undefined) {
