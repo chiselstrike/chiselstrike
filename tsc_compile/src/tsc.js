@@ -36,11 +36,6 @@ function compile(file, lib) {
         "lib.deno.ns.d.ts",
         "lib.dom.d.ts",
         "lib.deno.console.d.ts",
-        "lib.deno.url.d.ts",
-        "lib.deno.web.d.ts",
-        "lib.deno.fetch.d.ts",
-        "lib.deno.websocket.d.ts",
-        "lib.deno.crypto.d.ts",
         "lib.deno.broadcast_channel.d.ts",
         "lib.esnext.d.ts",
     ];
