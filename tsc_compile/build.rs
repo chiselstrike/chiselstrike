@@ -105,17 +105,19 @@ fn read(_op_state: &mut OpState, path: String, _: ()) -> Result<String> {
                 "lib.es2021.string.d.ts",
                 "lib.es2021.weakref.d.ts",
                 "lib.es5.d.ts",
+                "lib.esnext.array.d.ts",
                 "lib.esnext.d.ts",
                 "lib.esnext.error.d.ts",
                 "lib.esnext.intl.d.ts",
-                "lib.esnext.object.d.ts"
+                "lib.esnext.object.d.ts",
+                "lib.esnext.string.d.ts"
             ),
         };
         if !content.is_empty() {
             return Ok(content.to_string());
         }
     }
-    Ok("".to_string())
+    panic!("Unexpected file at build time: {}", path);
 }
 fn write(_op_state: &mut OpState, _path: String, _content: String) -> Result<()> {
     Ok(())
