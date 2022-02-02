@@ -50,6 +50,9 @@ pub struct Opt {
     /// Should we wait for a debugger before executing any JS?
     #[structopt(long)]
     inspect_brk: bool,
+    /// size of database connection pool.
+    #[structopt(short, long, default_value = "1000")]
+    nr_connections: usize,
     /// How many executor threads to create
     #[structopt(short, long, default_value = "1")]
     executor_threads: usize,
@@ -113,6 +116,7 @@ pub struct SharedState {
     data_db: DbConnection,
     metadata_db: DbConnection,
     materialize: ModulesDirectory,
+    nr_connections: usize,
 }
 
 impl SharedState {
@@ -136,7 +140,8 @@ impl SharedTasks {
 async fn run(state: SharedState, mut cmd: ExecutorChannel) -> Result<()> {
     init_deno(&state.materialize.path(), state.inspect_brk).await?;
 
-    let meta = Rc::new(MetaService::local_connection(&state.metadata_db).await?);
+    let meta =
+        Rc::new(MetaService::local_connection(&state.metadata_db, state.nr_connections).await?);
     let ts = meta.load_type_system().await?;
 
     let routes = meta.load_endpoints().await?;
@@ -148,7 +153,8 @@ async fn run(state: SharedState, mut cmd: ExecutorChannel) -> Result<()> {
         Ok(Type::Object(t)) => t,
         _ => anyhow::bail!("Internal error: type {} not found", OAUTHUSER_TYPE_NAME),
     };
-    let query_engine = Arc::new(QueryEngine::local_connection(&state.data_db).await?);
+    let query_engine =
+        Arc::new(QueryEngine::local_connection(&state.data_db, state.nr_connections).await?);
     let mut transaction = query_engine.start_transaction().await?;
     query_engine
         .create_table(&mut transaction, &oauth_user_type)
@@ -239,11 +245,11 @@ pub async fn run_shared_state(
     let file = format!("{}/chisel.ts", materialize.path().display());
     fs::write(file, include_bytes!("../../api/src/chisel.ts")).await?;
 
-    let meta_conn = DbConnection::connect(&opt.metadata_db_uri).await?;
-    let data_db = DbConnection::connect(&opt.data_db_uri).await?;
+    let meta_conn = DbConnection::connect(&opt.metadata_db_uri, opt.nr_connections).await?;
+    let data_db = DbConnection::connect(&opt.data_db_uri, opt.nr_connections).await?;
 
-    let meta = MetaService::local_connection(&meta_conn).await?;
-    let query_engine = QueryEngine::local_connection(&data_db).await?;
+    let meta = MetaService::local_connection(&meta_conn, opt.nr_connections).await?;
+    let query_engine = QueryEngine::local_connection(&data_db, opt.nr_connections).await?;
 
     meta.create_schema().await?;
 
@@ -383,6 +389,7 @@ pub async fn run_shared_state(
         data_db,
         metadata_db: meta_conn,
         materialize: materialize.clone(),
+        nr_connections: opt.nr_connections,
     };
 
     let tasks = SharedTasks { rpc_task, sig_task };

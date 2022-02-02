@@ -1,6 +1,7 @@
 // SPDX-FileCopyrightText: © 2021 ChiselStrike <info@chiselstrike.com>
 
 use crate::query::QueryError;
+use anyhow::Context;
 use anyhow::Result;
 use sea_query::{PostgresQueryBuilder, SchemaBuilder, SqliteQueryBuilder};
 use sqlx::any::{AnyConnectOptions, AnyKind, AnyPool, AnyPoolOptions};
@@ -41,12 +42,15 @@ pub(crate) struct DbConnection {
 }
 
 impl DbConnection {
-    pub(crate) async fn connect(uri: &str) -> Result<Self> {
+    pub(crate) async fn connect(uri: &str, nr_conn: usize) -> Result<Self> {
         let opts = AnyConnectOptions::from_str(uri).map_err(QueryError::ConnectionFailed)?;
         let pool = AnyPoolOptions::new()
+            .max_connections(nr_conn as _)
             .connect(uri)
             .await
-            .map_err(QueryError::ConnectionFailed)?;
+            .map_err(QueryError::ConnectionFailed)
+            .with_context(|| format!("connecting to {}", uri))?;
+
         let conn_uri = uri.to_owned();
 
         Ok(Self {
@@ -56,9 +60,9 @@ impl DbConnection {
         })
     }
 
-    pub(crate) async fn local_connection(&self) -> Result<Self> {
+    pub(crate) async fn local_connection(&self, nr_conn: usize) -> Result<Self> {
         match self.kind {
-            Kind::Postgres => Self::connect(&self.conn_uri).await,
+            Kind::Postgres => Self::connect(&self.conn_uri, nr_conn).await,
             Kind::Sqlite => Ok(self.clone()),
         }
     }
