@@ -1,6 +1,97 @@
 // SPDX-FileCopyrightText: © 2022 ChiselStrike <info@chiselstrike.com>
 
 (function () {
+    const host = {
+        useCaseSensitiveFileNames() {
+            return true;
+        },
+        getCanonicalFileName(name) {
+            return name;
+        },
+        getSourceFile(
+            fileName,
+            languageVersion,
+            onError,
+            _shouldCreateNewSourceFile,
+        ) {
+            let text;
+            try {
+                text = host.readFile(fileName);
+            } catch (e) {
+                onError(e.message);
+            }
+            return text === undefined ? undefined : ts.createSourceFile(
+                fileName,
+                text,
+                languageVersion,
+                false,
+            );
+        },
+        getNewLine() {
+            return "\n";
+        },
+        directoryExists(path) {
+            return Deno.core.opSync("dir_exists", path);
+        },
+        fileExists(path) {
+            return Deno.core.opSync("file_exists", path);
+        },
+        getCurrentDirectory() {
+            return Deno.core.opSync("get_cwd");
+        },
+        getDefaultLibLocation() {
+            return "/default/lib/location";
+        },
+        getDefaultLibFileName() {
+            return undefined;
+        },
+        writeFile(fileName, contents) {
+            Deno.core.opSync("write", fileName, contents);
+        },
+        resolveModuleNames(moduleNames, containingFile) {
+            const ret = [];
+            for (const name of moduleNames) {
+                const fname = Deno.core.opSync(
+                    "fetch",
+                    name,
+                    containingFile,
+                );
+                // FIXME: Not every file is typescript. We say it is to
+                // handle user libraries that don't end in .ts
+                // (like @foo/bar). We should probably get the extension
+                // from rust.
+                ret.push({ resolvedFileName: fname, extension: ".ts" });
+            }
+            return ret;
+        },
+        resolveTypeReferenceDirectives(
+            typeReferenceDirectiveNames,
+            containingFile,
+            _redirectedReference,
+            _options,
+        ) {
+            const ret = [];
+            for (const name of typeReferenceDirectiveNames) {
+                const fname = Deno.core.opSync(
+                    "fetch",
+                    name,
+                    containingFile,
+                );
+                ret.push({ resolvedFileName: fname });
+            }
+            return ret;
+        },
+        readFile(specifier) {
+            let v = readCache[specifier];
+            if (v !== undefined) {
+                return v;
+            }
+            v = Deno.core.opSync("read", specifier);
+            readCache[specifier] = v;
+            return v;
+        },
+    };
+
     const readCache = {};
     function compile(file, lib) {
         // FIXME: This is probably not exactly what we want. Deno uses
@@ -36,97 +127,6 @@
             strict: true,
             target: ts.ScriptTarget.ESNext,
             types: [],
-        };
-
-        const host = {
-            useCaseSensitiveFileNames() {
-                return true;
-            },
-            getCanonicalFileName(name) {
-                return name;
-            },
-            getSourceFile(
-                fileName,
-                languageVersion,
-                onError,
-                _shouldCreateNewSourceFile,
-            ) {
-                let text;
-                try {
-                    text = host.readFile(fileName);
-                } catch (e) {
-                    onError(e.message);
-                }
-                return text === undefined ? undefined : ts.createSourceFile(
-                    fileName,
-                    text,
-                    languageVersion,
-                    false,
-                );
-            },
-            getNewLine() {
-                return "\n";
-            },
-            directoryExists(path) {
-                return Deno.core.opSync("dir_exists", path);
-            },
-            fileExists(path) {
-                return Deno.core.opSync("file_exists", path);
-            },
-            getCurrentDirectory() {
-                return Deno.core.opSync("get_cwd");
-            },
-            getDefaultLibLocation() {
-                return "/default/lib/location";
-            },
-            getDefaultLibFileName() {
-                return undefined;
-            },
-            writeFile(fileName, contents) {
-                Deno.core.opSync("write", fileName, contents);
-            },
-            resolveModuleNames(moduleNames, containingFile) {
-                const ret = [];
-                for (const name of moduleNames) {
-                    const fname = Deno.core.opSync(
-                        "fetch",
-                        name,
-                        containingFile,
-                    );
-                    // FIXME: Not every file is typescript. We say it is to
-                    // handle user libraries that don't end in .ts
-                    // (like @foo/bar). We should probably get the extension
-                    // from rust.
-                    ret.push({ resolvedFileName: fname, extension: ".ts" });
-                }
-                return ret;
-            },
-            resolveTypeReferenceDirectives(
-                typeReferenceDirectiveNames,
-                containingFile,
-                _redirectedReference,
-                _options,
-            ) {
-                const ret = [];
-                for (const name of typeReferenceDirectiveNames) {
-                    const fname = Deno.core.opSync(
-                        "fetch",
-                        name,
-                        containingFile,
-                    );
-                    ret.push({ resolvedFileName: fname });
-                }
-                return ret;
-            },
-            readFile(specifier) {
-                let v = readCache[specifier];
-                if (v !== undefined) {
-                    return v;
-                }
-                v = Deno.core.opSync("read", specifier);
-                readCache[specifier] = v;
-                return v;
-            },
         };
 
         const program = ts.createProgram([file], options, host);
