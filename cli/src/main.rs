@@ -631,6 +631,7 @@ async fn apply<S: ToString>(
                 let opts = CompileOptions {
                     extra_default_lib: Some(import_temp.path().to_str().unwrap()),
                     extra_libs: mods.clone(),
+                    ..Default::default()
                 };
                 let mut code = compile_ts_code(path, opts)
                     .with_context(|| format!("parsing endpoint /{}/{}", version, f.name))?;

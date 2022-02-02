@@ -93,7 +93,7 @@
     };
 
     const readCache = {};
-    function compile(file, lib) {
+    function compile(file, lib, emitDeclarations) {
         // FIXME: This is probably not exactly what we want. Deno uses
         // deno.window. This is the subset of deno.window that is
         // compatible with lib.dom.d.ts + lib.dom.d.ts. It should probably
@@ -112,7 +112,7 @@
 
         const options = {
             allowJs: true,
-            declaration: true,
+            declaration: emitDeclarations,
             emitDecoratorMetadata: false,
             experimentalDecorators: true,
             isolatedModules: true,

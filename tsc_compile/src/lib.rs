@@ -204,6 +204,7 @@ static SNAPSHOT: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/SNAPSHOT.bin"
 pub struct CompileOptions<'a> {
     pub extra_default_lib: Option<&'a str>,
     pub extra_libs: HashMap<String, String>,
+    pub emit_declarations: bool,
 }
 
 pub fn compile_ts_code(file_name: &str, opts: CompileOptions) -> Result<HashMap<String, String>> {
@@ -245,8 +246,9 @@ pub fn compile_ts_code(file_name: &str, opts: CompileOptions) -> Result<HashMap<
 
     let compile: v8::Local<v8::Function> = get_member(global_proxy, scope, "compile").unwrap();
 
+    let emit_declarations = v8::Boolean::new(scope, opts.emit_declarations).into();
     if !compile
-        .call(scope, global_proxy.into(), &[file, lib])
+        .call(scope, global_proxy.into(), &[file, lib, emit_declarations])
         .map_or(false, |x| x.is_true())
     {
         return Err(FILES.with(|m| anyhow!("Compilation failed:\n{}", m.borrow().diagnostics)));
@@ -328,6 +330,21 @@ mod tests {
 export function foo<R>(bar: ReadableStream<R>): AsyncIterableIterator<R> {
     return bar[Symbol.asyncIterator]();
 }
+"#,
+        )?;
+        compile_ts_code(f.path().to_str().unwrap(), Default::default())?;
+        Ok(())
+    }
+
+    #[test]
+    fn fails_with_emit() -> Result<()> {
+        let mut f = Builder::new().suffix(".js").tempfile()?;
+        f.write_all(
+            br#"
+var foo = function() {};
+foo.prototype = {};
+foo.prototype.bar = foo;
+export default foo;
 "#,
         )?;
         compile_ts_code(f.path().to_str().unwrap(), Default::default())?;
