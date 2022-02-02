@@ -571,9 +571,7 @@ async fn apply<S: ToString>(
                     "--format=esm",
                     "--tree-shaking=true",
                     "--tsconfig=./tsconfig.json",
-                    // flip this to true when we have the deno-side polyfills. We can't really
-                    // do it now, as it will look for the "module" import unconditionally and fail
-                    //.arg("--platform=node")
+                    "--platform=node",
                     &format!("--outfile={}", bundler_output_file),
                 ],
             ));

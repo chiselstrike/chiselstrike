@@ -10,10 +10,8 @@
     "license": "ISC",
     "dependencies": {
         "@chiselstrike/api": "latest",
-        "typescript": "^4.5.4",
-        "webpack": "^5.66.0",
-        "webpack-cli": "^4.9.1",
-        "ts-loader": "^9.2.6"
+        "esbuild": "^0.14.14",
+        "typescript": "^4.5.4"
     },
     "devDependencies": {
         "@chiselstrike/cli": "latest"
