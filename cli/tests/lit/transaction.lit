@@ -30,12 +30,11 @@ cat << EOF > "$TEMPDIR/endpoints/retrieve_all.ts"
 import { Person } from "../models/types.ts";
 
 export default async function chisel(req: Request) {
-    let resp = "[";
+    let names: string[] = [];
     for await (let p of Person.cursor()) {
-        resp += p.name + " ";
+        names.push(p.name);
     }
-    resp += "]";
-    return new Response(resp);
+    return new Response("[" + names.join(", ") + "]");
 }
 EOF
 
@@ -47,13 +46,11 @@ export default async function chisel(req: Request) {
     p.name = "ThisIsTheBestName";
     await p.save();
 
-    let resp = "[";
+    let names: string[] = [];
     for await (let p of Person.cursor()) {
-        resp += p.name + " ";
+        names.push(p.name);
     }
-    resp += "]";
-
-    return new Response(resp);
+    return new Response("[" + names.join(", ") + "]");
 }
 EOF
 
@@ -65,7 +62,7 @@ $CURL -X POST --data '{ "name": "Adalbrecht" }' $CHISELD_HOST/dev/store_person
 
 $CURL $CHISELD_HOST/dev/retrieve_all
 # CHECK: HTTP/1.1 200 OK
-# CHECK: [Adalbrecht ]
+# CHECK: [Adalbrecht]
 
 $CURL -X POST --data '{
     "name": "Ruprt",
@@ -75,8 +72,32 @@ $CURL -X POST --data '{
 
 $CURL $CHISELD_HOST/dev/retrieve_all
 # CHECK: HTTP/1.1 200 OK
-# CHECK: [Adalbrecht ]
+# CHECK: [Adalbrecht]
 
 $CURL -X POST $CHISELD_HOST/dev/write_and_read
 # CHECK: HTTP/1.1 200 OK
-# CHECK: [Adalbrecht ThisIsTheBestName ]
+# CHECK: [Adalbrecht, ThisIsTheBestName]
+
+## -----------------------------------------------------------------------------
+## Test transaction completion on 501 returned by endpoint.
+## -----------------------------------------------------------------------------
+
+cat << EOF > "$TEMPDIR/endpoints/write_and_501.ts"
+import { Person } from "../models/types.ts";
+
+export default async function chisel(req: Request) {
+    let p = new Person();
+    p.name = "501st commander";
+    await p.save();
+    return new Response("", { status: 501 });
+}
+EOF
+
+$CHISEL apply
+
+$CURL -X POST $CHISELD_HOST/dev/write_and_501
+# CHECK: HTTP/1.1 501 Not Implemented
+
+$CURL $CHISELD_HOST/dev/retrieve_all
+# CHECK: HTTP/1.1 200 OK
+# CHECK: [Adalbrecht, ThisIsTheBestName, 501st commander]
