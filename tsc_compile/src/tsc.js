@@ -3,32 +3,6 @@
 (function () {
     const readCache = {};
     function compile(file, lib) {
-        // Add the deno libraries
-        // FIXME: get this list from build.rs
-        const libs = {
-            "deno.broadcast_channel": "deno_broadcast_channel",
-            "deno.console": "deno_console",
-            "deno.core": "deno_core",
-            "deno.crypto": "deno_crypto",
-            "deno.fetch": "deno_fetch",
-            "deno.net": "deno_net",
-            "deno.ns": "deno.ns",
-            "deno.shared_globals": "deno.shared_globals",
-            "deno.url": "deno_url",
-            "deno.web": "deno_web",
-            "deno.webgpu": "deno_webgpu",
-            "deno.websocket": "deno_websocket",
-            "deno.webstorage": "deno_webstorage",
-        };
-
-        for (const k in libs) {
-            v = libs[k];
-            if (!ts.libs.includes(k)) {
-                ts.libs.push(k);
-                ts.libMap.set(k, `lib.${v}.d.ts`);
-            }
-        }
-
         // FIXME: This is probably not exactly what we want. Deno uses
         // deno.window. This is the subset of deno.window that is
         // compatible with lib.dom.d.ts + lib.dom.d.ts. It should probably
@@ -141,6 +115,32 @@
             Deno.core.opSync("diagnostic", diag);
         }
         return !emitResult.emitSkipped;
+    }
+
+    // Add the deno libraries
+    // FIXME: get this list from build.rs
+    const libs = {
+        "deno.broadcast_channel": "deno_broadcast_channel",
+        "deno.console": "deno_console",
+        "deno.core": "deno_core",
+        "deno.crypto": "deno_crypto",
+        "deno.fetch": "deno_fetch",
+        "deno.net": "deno_net",
+        "deno.ns": "deno.ns",
+        "deno.shared_globals": "deno.shared_globals",
+        "deno.url": "deno_url",
+        "deno.web": "deno_web",
+        "deno.webgpu": "deno_webgpu",
+        "deno.websocket": "deno_websocket",
+        "deno.webstorage": "deno_webstorage",
+    };
+
+    for (const k in libs) {
+        v = libs[k];
+        if (!ts.libs.includes(k)) {
+            ts.libs.push(k);
+            ts.libMap.set(k, `lib.${v}.d.ts`);
+        }
     }
 
     compile("bootstrap.ts", undefined);
