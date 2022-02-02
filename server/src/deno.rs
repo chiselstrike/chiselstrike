@@ -58,6 +58,7 @@ use tokio::fs;
 // compile modules, the server should not get code out of the
 // internet.
 use tsc_compile::compile_ts_code;
+use tsc_compile::CompileOptions;
 
 use url::Url;
 
@@ -117,9 +118,11 @@ fn compile(code: &str, lib: Option<&str>) -> Result<String> {
     inner.write_all(code.as_bytes())?;
     inner.flush()?;
     let path = f.path().to_str().unwrap();
-    Ok(compile_ts_code(path, lib, Default::default())?
-        .remove(path)
-        .unwrap())
+    let opts = CompileOptions {
+        extra_default_lib: lib,
+        ..Default::default()
+    };
+    Ok(compile_ts_code(path, opts)?.remove(path).unwrap())
 }
 
 async fn load_code(specifier: ModuleSpecifier) -> Result<ModuleSource> {

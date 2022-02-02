@@ -27,6 +27,7 @@ use tempfile::NamedTempFile;
 use tokio::task::{spawn_blocking, JoinHandle};
 use tonic::transport::Channel;
 use tsc_compile::compile_ts_code;
+use tsc_compile::CompileOptions;
 
 mod ts;
 
@@ -629,12 +630,12 @@ async fn apply<S: ToString>(
             let path = f.file_path.to_str().unwrap();
 
             let code = if ext == "ts" {
-                let mut code = compile_ts_code(
-                    path,
-                    Some(import_temp.path().to_str().unwrap()),
-                    mods.clone(),
-                )
-                .with_context(|| format!("parsing endpoint /{}/{}", version, f.name))?;
+                let opts = CompileOptions {
+                    extra_default_lib: Some(import_temp.path().to_str().unwrap()),
+                    extra_libs: mods.clone(),
+                };
+                let mut code = compile_ts_code(path, opts)
+                    .with_context(|| format!("parsing endpoint /{}/{}", version, f.name))?;
                 code.remove(path).unwrap()
             } else {
                 read_to_string(&f.file_path)?
