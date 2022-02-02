@@ -198,7 +198,7 @@ fn without_extension(path: &str) -> &str {
     path.rsplit_once('.').map_or(path, |p| p.0)
 }
 
-pub static SNAPSHOT: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/SNAPSHOT.bin"));
+static SNAPSHOT: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/SNAPSHOT.bin"));
 
 pub fn compile_ts_code(
     file_name: &str,
