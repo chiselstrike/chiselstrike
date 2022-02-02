@@ -38,7 +38,30 @@
             types: [],
         };
 
-        const host = ts.createCompilerHostWorker(options, false, {});
+        const host = {};
+        host.useCaseSensitiveFileNames = () => {
+            return true;
+        };
+        host.getCanonicalFileName = (name) => {
+            return name;
+        };
+        host.getSourceFile = (
+            fileName,
+            languageVersion,
+            onError,
+            _shouldCreateNewSourceFile,
+        ) => {
+            let text;
+            try {
+                text = host.readFile(fileName);
+            } catch (e) {
+                onError(e.message);
+            }
+            return text === undefined
+                ? undefined
+                : ts.createSourceFile(fileName, text, languageVersion, false);
+        };
+
         host.getNewLine = () => {
             return "\n";
         };
