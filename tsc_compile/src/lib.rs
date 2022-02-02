@@ -200,14 +200,16 @@ fn without_extension(path: &str) -> &str {
 
 static SNAPSHOT: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/SNAPSHOT.bin"));
 
-pub fn compile_ts_code(
-    file_name: &str,
-    extra_default_lib: Option<&str>,
-    extra_libs: HashMap<String, String>,
-) -> Result<HashMap<String, String>> {
+#[derive(Default)]
+pub struct CompileOptions<'a> {
+    pub extra_default_lib: Option<&'a str>,
+    pub extra_libs: HashMap<String, String>,
+}
+
+pub fn compile_ts_code(file_name: &str, opts: CompileOptions) -> Result<HashMap<String, String>> {
     FILES.with(|m| {
         let mut borrow = m.borrow_mut();
-        borrow.extra_libs = extra_libs;
+        borrow.extra_libs = opts.extra_libs;
         borrow.path_to_url_content.clear();
         borrow.url_to_path.clear();
         borrow.written.clear();
@@ -234,7 +236,7 @@ pub fn compile_ts_code(
     let global_context = runtime.global_context();
     let scope = &mut runtime.handle_scope();
     let file = v8::String::new(scope, &abs(file_name)).unwrap().into();
-    let lib = match extra_default_lib {
+    let lib = match opts.extra_default_lib {
         Some(v) => v8::String::new(scope, &abs(v)).unwrap().into(),
         None => v8::undefined(scope).into(),
     };
@@ -259,6 +261,7 @@ pub fn compile_ts_code(
 #[cfg(test)]
 mod tests {
     use super::compile_ts_code;
+    use super::CompileOptions;
     use anyhow::Result;
     use std::io::Write;
     use tempfile::Builder;
@@ -270,7 +273,11 @@ mod tests {
         let libs = [("@foo/bar".to_string(), "export {}".to_string())]
             .into_iter()
             .collect();
-        compile_ts_code(f.path().to_str().unwrap(), None, libs)?;
+        let opts = CompileOptions {
+            extra_libs: libs,
+            ..Default::default()
+        };
+        compile_ts_code(f.path().to_str().unwrap(), opts)?;
         Ok(())
     }
 
@@ -279,7 +286,7 @@ mod tests {
         for _ in 0..2 {
             let mut f = Builder::new().suffix(".ts").tempfile()?;
             f.write_all(b"export {}; zed;")?;
-            let err = compile_ts_code(f.path().to_str().unwrap(), None, Default::default());
+            let err = compile_ts_code(f.path().to_str().unwrap(), Default::default());
             let err = err.unwrap_err().to_string();
             assert!(err.contains("Cannot find name 'zed'"));
         }
@@ -290,13 +297,13 @@ mod tests {
     fn property_constructor_not_strict() -> Result<()> {
         let mut f = Builder::new().suffix(".ts").tempfile()?;
         f.write_all(b"export class Foo { a: number };")?;
-        compile_ts_code(f.path().to_str().unwrap(), None, Default::default())?;
+        compile_ts_code(f.path().to_str().unwrap(), Default::default())?;
         Ok(())
     }
 
     #[test]
     fn missing_file() -> Result<()> {
-        let err = compile_ts_code("/no/such/file.ts", None, Default::default())
+        let err = compile_ts_code("/no/such/file.ts", Default::default())
             .unwrap_err()
             .to_string();
         assert!(err.contains("Cannot read file '/no/such/file.ts': Reading /no/such/file.ts."));
@@ -305,7 +312,7 @@ mod tests {
 
     #[test]
     fn no_extension() -> Result<()> {
-        let err = compile_ts_code("/no/such/file", None, Default::default())
+        let err = compile_ts_code("/no/such/file", Default::default())
             .unwrap_err()
             .to_string();
         // FIXME: Something is adding a .ts extension
@@ -323,7 +330,7 @@ export function foo<R>(bar: ReadableStream<R>): AsyncIterableIterator<R> {
 }
 "#,
         )?;
-        compile_ts_code(f.path().to_str().unwrap(), None, Default::default())?;
+        compile_ts_code(f.path().to_str().unwrap(), Default::default())?;
         Ok(())
     }
 }
