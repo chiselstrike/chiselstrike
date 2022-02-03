@@ -1,8 +1,8 @@
 // SPDX-FileCopyrightText: © 2021 ChiselStrike <info@chiselstrike.com>
 
 use crate::api::{response_template, ApiService, Body};
-use crate::db::SqlValue;
 use crate::query::engine::SqlWithArguments;
+use crate::query::expr::SqlValue;
 use crate::runtime;
 use crate::types::{ObjectType, Type, OAUTHUSER_TYPE_NAME};
 use crate::JsonObject;

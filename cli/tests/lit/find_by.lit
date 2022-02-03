@@ -92,4 +92,4 @@ $CURL --data '{
 }' -o - $CHISELD_HOST/dev/find_by
 
 # CHECK: HTTP/1.1 500 Internal Server Error
-# CHECK Uncaught Error: error returned from database: no such column: misspelled_field_name
+# CHECK Uncaught Error: trying to filter by non-existent field `foo` misspelled_field_name
