@@ -66,7 +66,8 @@ fn fetch_aux(map: &mut DownloadMap, path: String, mut base: String) -> Result<St
         assert!(base.as_bytes()[0] == b'/');
         base = "file://".to_string() + &base;
     }
-    let resolved = deno_core::resolve_import(&path, &base)?;
+    let resolved = deno_core::resolve_import(&path, &base)
+        .with_context(|| format!("Resolving {} from {}", path, base))?;
     if let Some(path) = map.url_to_path.get(&resolved) {
         return Ok(path.clone());
     }
@@ -95,7 +96,6 @@ fn fetch(_op_state: &mut OpState, path: String, base: String) -> Result<String> 
     FILES.with(|m| {
         let mut map = m.borrow_mut();
         fetch_aux(&mut map, path.clone(), base.clone())
-            .with_context(|| format!("Resolving {} from {}", path, base))
     })
 }
 
@@ -354,12 +354,17 @@ export default foo;
 
     #[test]
     fn bad_import() -> Result<()> {
-        let mut f = Builder::new().suffix(".ts").tempfile()?;
+        let mut f = Builder::new()
+            .prefix("bad_import")
+            .suffix(".ts")
+            .tempfile()?;
         f.write_all(b"import foo from \"bar\";")?;
-        let err = compile_ts_code(f.path().to_str().unwrap(), Default::default())
+        let path = f.path().to_str().unwrap();
+        let err = compile_ts_code(path, Default::default())
             .unwrap_err()
             .to_string();
-        assert!(err.contains("Resolving bar"));
+        let expected = format!("Resolving bar from file://{}", path);
+        assert!(err.contains(&expected));
         assert!(err.contains("at Object.resolveModuleNames"));
         Ok(())
     }
