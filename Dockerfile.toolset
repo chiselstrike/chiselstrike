@@ -1,6 +1,9 @@
 FROM ubuntu:20.04
 
 COPY target/release/chisel /usr/local/bin/chisel
+ARG DEBIAN_FRONTEND=noninteractive
+RUN apt update && \
+    apt-get install -y --no-install-recommends git npm nodejs  
 
 RUN \
   groupadd -g 345 -r chiseld && \
