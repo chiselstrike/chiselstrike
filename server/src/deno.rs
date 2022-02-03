@@ -1,16 +1,16 @@
 // SPDX-FileCopyrightText: © 2021 ChiselStrike <info@chiselstrike.com>
 
 use crate::api::{response_template, Body, RequestPath};
-use crate::db::{convert, convert_restrictions};
 use crate::policies::FieldPolicies;
 use crate::query::engine::SqlStream;
 use crate::query::engine::TransactionStatic;
+use crate::query::expr::{json_to_expression, DeleteExpr};
 use crate::rcmut::RcMut;
 use crate::runtime;
 use crate::runtime::Runtime;
 use crate::types::{ObjectType, Type};
 use crate::JsonObject;
-use anyhow::{anyhow, Result};
+use anyhow::{anyhow, Context as AnyhowContext, Result};
 use api::chisel_js;
 use deno_core::error::AnyError;
 use deno_core::v8;
@@ -326,29 +326,16 @@ async fn op_chisel_entity_delete(
         current_method() != Method::GET,
         "Mutating the backend is not allowed during GET"
     );
-    let type_name = content["type_name"].as_str().ok_or_else(|| {
-        anyhow!("The `type_name` field passed to `op_chisel_entity_delete` is not a JSON string.")
-    })?;
-    let restrictions = content["restrictions"].as_object().ok_or_else(|| {
-        anyhow!("The `restrictions` passed to `op_chisel_entity_delete` is not a JSON object.")
-    })?;
-    let (query_engine, ty, restrictions) = {
-        let runtime = runtime::get();
-        let api_version = current_api_version();
-        let ty = match runtime
-            .type_system
-            .lookup_custom_type(type_name, &api_version)
-        {
-            Err(_) => anyhow::bail!("Cannot delete from type `{}`", type_name),
-            Ok(ty) => ty,
-        };
-        let restrictions = convert_restrictions(restrictions)?;
-        let query_engine = runtime.query_engine.clone();
-        (query_engine, ty, restrictions)
-    };
 
+    let delete_expr = DeleteExpr::new_from_json(&content).context(
+        "failed to construct delete expression from JSON passed to `op_chisel_entity_delete`",
+    )?;
+    let query_engine = {
+        let runtime = runtime::get();
+        runtime.query_engine.clone()
+    };
     Ok(serde_json::json!(
-        query_engine.delete(&ty, restrictions).await?
+        query_engine.execute_delete(delete_expr).await?
     ))
 }
 
@@ -371,6 +358,24 @@ struct QueryStreamResource {
 }
 
 impl Resource for QueryStreamResource {}
+
+fn make_fields_json(ty: &Arc<ObjectType>) -> serde_json::Value {
+    let mut columns = vec![];
+    for f in ty.all_fields() {
+        let c = match &f.type_ {
+            Type::Object(nested_ty) => {
+                let nested_json = serde_json::json!({
+                    "field_name": f.name.to_owned(),
+                    "columns": make_fields_json(nested_ty)
+                });
+                serde_json::json!(vec![nested_json, serde_json::json!(f.type_.name())])
+            }
+            _ => serde_json::json!(vec![f.name.to_owned(), f.type_.name().to_string()]),
+        };
+        columns.push(c);
+    }
+    serde_json::json!(columns)
+}
 
 fn op_chisel_introspect(
     _op_state: &mut OpState,
@@ -395,12 +400,7 @@ fn op_chisel_introspect(
             _ => anyhow::bail!("Invalid to introspect {}", type_name),
         },
     };
-
-    let vec: Vec<serde_json::Value> = ty
-        .all_fields()
-        .map(|f| serde_json::json!(vec![f.name.clone(), f.type_.name().to_string()]))
-        .collect();
-    Ok(serde_json::json!(vec))
+    Ok(make_fields_json(&ty))
 }
 
 fn op_chisel_get_secret(
@@ -430,12 +430,12 @@ fn op_chisel_relational_query_create(
     // is no way to access it from here. We would have to replace
     // op_chisel_relational_query_create with a closure that has an
     // Rc<DenoService>.
-    let relation = convert(&relation)?;
+    let query_expr = json_to_expression(&relation)?;
     let mut runtime = runtime::get();
     let query_engine = &mut runtime.query_engine;
 
     let transaction = current_transaction()?;
-    let stream = Box::pin(query_engine.query_relation(relation, transaction));
+    let stream = Box::pin(query_engine.execute(transaction, query_expr)?);
     let resource = QueryStreamResource {
         stream: RefCell::new(stream),
     };

@@ -1,6 +1,6 @@
 // SPDX-FileCopyrightText: © 2021 ChiselStrike <info@chiselstrike.com>
 
-use crate::db::backing_store_from_type;
+use crate::query::expr::type_to_expression;
 use crate::query::QueryEngine;
 use anyhow::Context;
 use derive_new::new;
@@ -309,9 +309,9 @@ impl TypeSystem {
                         )
                     })?;
 
-                let ty_obj_rel = backing_store_from_type(self, ty_obj).await?;
                 let tr = engine.clone().start_transaction_static().await?;
-                let mut row_streams = engine.query_relation(ty_obj_rel, tr.clone());
+                let expr = type_to_expression(ty_obj)?;
+                let mut row_streams = engine.execute(tr.clone(), expr)?;
 
                 while let Some(row) = row_streams.next().await {
                     // FIXME: basic rate limit?

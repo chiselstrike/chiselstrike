@@ -1,6 +1,7 @@
 // SPDX-FileCopyrightText: © 2021 ChiselStrike <info@chiselstrike.com>
 
-use crate::db::{sql, sql_restrictions, Relation, Restriction, SqlValue};
+use crate::policies::FieldPolicies;
+use crate::query::expr::{DeleteExpr, QueryExpression, SelectField, SqlValue};
 use crate::query::{DbConnection, Kind, QueryError};
 use crate::types::{Field, ObjectDelta, ObjectType, Type, OAUTHUSER_TYPE_NAME};
 use crate::JsonObject;
@@ -9,13 +10,14 @@ use futures::stream::BoxStream;
 use futures::stream::Stream;
 use futures::FutureExt;
 use futures::StreamExt;
-use itertools::{zip, Itertools};
+use itertools::Itertools;
 use pin_project::pin_project;
 use sea_query::{Alias, ColumnDef, Table};
 use serde_json::json;
 use sqlx::any::{Any, AnyArguments, AnyPool, AnyRow};
-use sqlx::{Column, Executor, Row, Transaction};
-use std::collections::HashMap;
+use sqlx::Row;
+use sqlx::{Executor, Transaction};
+use std::collections::{HashMap, HashSet};
 use std::pin::Pin;
 use std::sync::Arc;
 use std::task::{Context, Poll};
@@ -312,8 +314,111 @@ impl QueryEngine {
         Ok(())
     }
 
-    pub(crate) fn query_relation(&self, rel: Relation, tr: TransactionStatic) -> SqlStream {
-        sql(tr, rel)
+    fn row_to_json(fields: &[SelectField], row: &AnyRow) -> Result<JsonObject> {
+        let mut ret = JsonObject::default();
+        for s_field in fields {
+            match s_field {
+                SelectField::Scalar {
+                    name,
+                    type_,
+                    column_idx,
+                    ..
+                } => {
+                    let i = column_idx;
+                    // FIXME: consider result_column.type_info().is_null() too
+                    macro_rules! to_json {
+                        ($value_type:ty) => {{
+                            let val = row.get::<$value_type, _>(i);
+                            json!(val)
+                        }};
+                    }
+                    let val = match type_ {
+                        Type::Float => {
+                            // https://github.com/launchbadge/sqlx/issues/1596
+                            // sqlx gets confused if the float doesn't have decimal points.
+                            let val: &str = row.get_unchecked(i);
+                            json!(val.parse::<f64>()?)
+                        }
+                        Type::String => to_json!(&str),
+                        Type::Id => to_json!(&str),
+                        Type::Boolean => {
+                            // Similarly to the float issue, type information is not filled in
+                            // *if* this value was put in as a result of coalesce() (default).
+                            //
+                            // Also the database has integers, and we need to map it back to a
+                            // boolean type on json.
+                            let val: &str = row.get_unchecked(i);
+                            let x: bool = val.parse::<usize>()? == 1;
+                            json!(x)
+                        }
+                        Type::Object(_) => anyhow::bail!("object is not a builtin"),
+                    };
+                    ret.insert(name.clone(), val);
+                }
+                SelectField::Entity { name, children } => {
+                    let val = json!(Self::row_to_json(children, row)?);
+                    ret.insert(name.clone(), val);
+                }
+            }
+        }
+        Ok(ret)
+    }
+
+    fn filter_columns(
+        o: Result<JsonObject>,
+        allowed_columns: &Option<HashSet<String>>,
+    ) -> Result<JsonObject> {
+        let mut o = o?;
+        if let Some(allowed_columns) = &allowed_columns {
+            let removed_keys = o
+                .iter()
+                .map(|(k, _)| k.to_owned())
+                .filter(|k| !allowed_columns.contains(k))
+                .collect::<Vec<String>>();
+            for k in &removed_keys {
+                o.remove(k);
+            }
+        }
+        Ok(o)
+    }
+
+    /// FIXME: This function should perform recursive descend into nested fields.
+    fn apply_policies(o: Result<JsonObject>, policies: &FieldPolicies) -> Result<JsonObject> {
+        let mut o = o?;
+        for (k, v) in o.iter_mut() {
+            if let Some(xform) = policies.transforms.get(k) {
+                *v = xform(v.take());
+            }
+        }
+        Ok(o)
+    }
+
+    pub(crate) fn execute(
+        &self,
+        tr: TransactionStatic,
+        expr: QueryExpression,
+    ) -> anyhow::Result<SqlStream> {
+        let policies = expr.policies;
+        let allowed_columns = expr.allowed_columns;
+
+        let stream = new_query_results(expr.raw_sql, tr);
+        let stream = stream.map(move |row| Self::row_to_json(&expr.fields, &row?));
+        let stream = Box::pin(stream.map(move |o| {
+            let o = Self::filter_columns(o, &allowed_columns);
+            Self::apply_policies(o, &policies)
+        }));
+        Ok(stream)
+    }
+
+    pub(crate) async fn execute_delete(&self, expr: DeleteExpr) -> Result<()> {
+        let mut transaction = self.start_transaction().await?;
+        let query = sqlx::query(&expr.raw_sql);
+        transaction
+            .execute(query)
+            .await
+            .map_err(QueryError::ExecuteFailed)?;
+        QueryEngine::commit_transaction(transaction).await?;
+        Ok(())
     }
 
     /// Inserts object of type `ty` and value `ty_value` into the database.
@@ -334,26 +439,6 @@ impl QueryEngine {
         let (inserts, id_tree) = self.prepare_insertion(ty, ty_value)?;
         self.run_sql_queries(&inserts, transaction).await?;
         Ok(id_tree.to_json())
-    }
-
-    pub(crate) async fn delete(
-        &self,
-        ty: &ObjectType,
-        restrictions: Vec<Restriction>,
-    ) -> Result<()> {
-        let sql = format!(
-            "DELETE FROM {} {}",
-            &ty.backing_table(),
-            sql_restrictions(restrictions)
-        );
-        let mut transaction = self.start_transaction().await?;
-        let query = sqlx::query(&sql);
-        transaction
-            .execute(query)
-            .await
-            .map_err(QueryError::ExecuteFailed)?;
-        QueryEngine::commit_transaction(transaction).await?;
-        Ok(())
     }
 
     pub(crate) async fn add_row_shallow(
@@ -577,44 +662,4 @@ impl QueryEngine {
             args: query_args,
         })
     }
-}
-
-pub(crate) fn relational_row_to_json(
-    columns: &[(String, Type)],
-    row: &AnyRow,
-) -> Result<JsonObject> {
-    let mut ret = JsonObject::default();
-    for (query_column, result_column) in zip(columns, row.columns()) {
-        let i = result_column.ordinal();
-        // FIXME: consider result_column.type_info().is_null() too
-        macro_rules! to_json {
-            ($value_type:ty) => {{
-                let val = row.get::<$value_type, _>(i);
-                json!(val)
-            }};
-        }
-        let val = match query_column.1 {
-            Type::Float => {
-                // https://github.com/launchbadge/sqlx/issues/1596
-                // sqlx gets confused if the float doesn't have decimal points.
-                let val: &str = row.get_unchecked(i);
-                json!(val.parse::<f64>()?)
-            }
-            Type::String => to_json!(&str),
-            Type::Id => to_json!(&str),
-            Type::Boolean => {
-                // Similarly to the float issue, type information is not filled in
-                // *if* this value was put in as a result of coalesce() (default).
-                //
-                // Also the database has integers ,and we need to map it back to a boolean
-                // type on json.
-                let val: &str = row.get_unchecked(i);
-                let x: bool = val.parse::<usize>()? == 1;
-                json!(x)
-            }
-            Type::Object(_) => anyhow::bail!("Relations aren't supported yet"),
-        };
-        ret.insert(result_column.name().to_string(), val);
-    }
-    Ok(ret)
 }

@@ -56,7 +56,9 @@ import { Company } from "../models/types.ts";
 export default async function chisel(req: Request) {
     let ret = "[";
     for await (let company of Company.cursor()) {
-        ret += "(" + company.name + " " + company.ceo + ") ";
+        if (company.ceo) {
+            ret += "(" + company.name + " " + company.ceo.firstName + ") ";
+        }
     }
     return new Response(ret + "]");
 }
@@ -80,4 +82,4 @@ $CURL -o - $CHISELD_HOST/dev/query_people
 
 $CURL -o - $CHISELD_HOST/dev/query_companies
 # CHECK: HTTP/1.1 200 OK
-# CHECK: [(Bananas inc. undefined) ]
+# CHECK: [(Bananas inc. Adalbrecht) ]
