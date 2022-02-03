@@ -11,6 +11,8 @@ jobs:
     steps:
     - name: checkout repo
       uses: actions/checkout@v2
+      with:
+        submodules: true
 
     # FIXME: Stop using secrets when https://github.com/github/roadmap/issues/249 is released.
     - name: Configure AWS credentials
