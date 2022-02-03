@@ -249,7 +249,8 @@ pub fn compile_ts_code(file_name: &str, opts: CompileOptions) -> Result<HashMap<
     let emit_declarations = v8::Boolean::new(scope, opts.emit_declarations).into();
     if !compile
         .call(scope, global_proxy.into(), &[file, lib, emit_declarations])
-        .map_or(false, |x| x.is_true())
+        .unwrap()
+        .is_true()
     {
         return Err(FILES.with(|m| anyhow!("Compilation failed:\n{}", m.borrow().diagnostics)));
     }
@@ -348,6 +349,18 @@ export default foo;
 "#,
         )?;
         compile_ts_code(f.path().to_str().unwrap(), Default::default())?;
+        Ok(())
+    }
+
+    #[test]
+    fn bad_import() -> Result<()> {
+        let mut f = Builder::new().suffix(".ts").tempfile()?;
+        f.write_all(b"import foo from \"bar\";")?;
+        let err = compile_ts_code(f.path().to_str().unwrap(), Default::default())
+            .unwrap_err()
+            .to_string();
+        assert!(err.contains("Resolving bar"));
+        assert!(err.contains("at Object.resolveModuleNames"));
         Ok(())
     }
 }

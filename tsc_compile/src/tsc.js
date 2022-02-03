@@ -93,7 +93,7 @@
     };
 
     const readCache = {};
-    function compile(file, lib, emitDeclarations) {
+    function compileAux(file, lib, emitDeclarations) {
         // FIXME: This is probably not exactly what we want. Deno uses
         // deno.window. This is the subset of deno.window that is
         // compatible with lib.dom.d.ts + lib.dom.d.ts. It should probably
@@ -145,6 +145,15 @@
             Deno.core.opSync("diagnostic", diag);
         }
         return !emitResult.emitSkipped;
+    }
+
+    function compile(file, lib, emitDeclarations) {
+        try {
+            return compileAux(file, lib, emitDeclarations);
+        } catch (e) {
+            Deno.core.opSync("diagnostic", e.stack + "\n");
+            return false;
+        }
     }
 
     // Add the deno libraries
