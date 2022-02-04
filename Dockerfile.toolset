@@ -11,9 +11,13 @@ RUN apt update && apt-get install -y --no-install-recommends curl && \
     node --version && \
     npm --version
 
-RUN \
-  groupadd -g 345 -r chiseld && \
-  useradd -r -u 345 -g chiseld -d /home/chiseld -G chiseld -m -s /bin/bash chiseld
+RUN groupadd -g 345 -r chiseld && \
+    useradd -r -u 345 -g chiseld -d /home/chiseld -G chiseld -m -s /bin/bash chiseld
 
 USER chiseld
+RUN mkdir -p $HOME/node && \
+    cd $HOME/node && \
+    npm install jsonwebtoken sync-fetch node-fetch-commonjs isomorphic-git
+COPY --chown=chiseld:chiseld infra/chiselclone.js /home/chiseld/node/chiselclone.js
+
 CMD ["/bin/bash","-c", "sleep infinity"] 
