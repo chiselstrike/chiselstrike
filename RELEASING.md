@@ -2,6 +2,12 @@
 
 ## Releasing binaries
 
+**CentOS:** You need the following prerequisites:
+
+```
+yum install gcc git make
+```
+
 First, install Rust on your machine with [rustup](https://rustup.rs):
 
 ```
