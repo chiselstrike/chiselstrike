@@ -56,6 +56,8 @@ thread_local! {
     static FILES: RefCell<DownloadMap> = RefCell::new(DownloadMap::default());
 }
 
+static MISSING_DEPENDENCY: &str = "/path/to/a/missing_dependency.d.ts";
+
 fn fetch_aux(map: &mut DownloadMap, path: String, mut base: String) -> Result<String> {
     if map.extra_libs.contains_key(&path) {
         return Ok(path);
@@ -66,8 +68,12 @@ fn fetch_aux(map: &mut DownloadMap, path: String, mut base: String) -> Result<St
         assert!(base.as_bytes()[0] == b'/');
         base = "file://".to_string() + &base;
     }
-    let resolved = deno_core::resolve_import(&path, &base)
-        .with_context(|| format!("Resolving {} from {}", path, base))?;
+    let resolved = match deno_core::resolve_import(&path, &base) {
+        Ok(v) => v,
+        Err(_) => {
+            return Ok(MISSING_DEPENDENCY.to_string());
+        }
+    };
     if let Some(path) = map.url_to_path.get(&resolved) {
         return Ok(path.clone());
     }
@@ -100,6 +106,9 @@ fn fetch(_op_state: &mut OpState, path: String, base: String) -> Result<String> 
 }
 
 fn read_aux(map: &mut DownloadMap, path: String) -> Result<String> {
+    if path == MISSING_DEPENDENCY {
+        return Ok("export default function(): unknown;\n".to_string());
+    }
     if let Some(v) = map.extra_libs.get(&path) {
         return Ok(v.to_string());
     }
@@ -358,14 +367,15 @@ export default foo;
             .prefix("bad_import")
             .suffix(".ts")
             .tempfile()?;
-        f.write_all(b"import foo from \"bar\";")?;
+        f.write_all(b"import {foo} from \"bar\";")?;
         let path = f.path().to_str().unwrap();
         let err = compile_ts_code(path, Default::default())
             .unwrap_err()
             .to_string();
-        let expected = format!("Resolving bar from file://{}", path);
-        assert!(err.contains(&expected));
-        assert!(err.contains("at Object.resolveModuleNames"));
+        // Unfortunately we don't report errors on module resolution,
+        // so we only get an error about there being no 'foo' in
+        // 'bar'.
+        assert!(err.contains("Module '\"bar\"' has no exported member 'foo'"));
         Ok(())
     }
 }
