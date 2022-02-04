@@ -271,7 +271,7 @@ The `ChiselCursor` interface is still work-in-progress. For example, methods suc
 Also, the current implementation of `filter()` takes a _restriction object_, but future ChiselStrike runtimes will allow you to write filter functions using TypeScript, which are automatically converted to efficient database queries in many cases.
 :::
 
-## Transacitons
+## Transactions
 
 We currently support implicit transactional evaluation. The transaction is created before ChiselStrike
 starts evaluating your endpoint and is automatically committed after your endpoint ends and we generate
