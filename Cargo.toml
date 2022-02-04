@@ -8,6 +8,3 @@ members = [
     "server",
     "tsc_compile",
 ]
-
-[profile.release]
-debug = true
