@@ -4,7 +4,7 @@ use crate::api::{response_template, Body, RequestPath};
 use crate::policies::FieldPolicies;
 use crate::query::engine::QueryResults;
 use crate::query::engine::TransactionStatic;
-use crate::query::expr::{json_to_expression, Mutation};
+use crate::query::expr::{json_to_query, Mutation};
 use crate::rcmut::RcMut;
 use crate::runtime;
 use crate::runtime::Runtime;
@@ -428,7 +428,7 @@ fn op_chisel_relational_query_create(
     // is no way to access it from here. We would have to replace
     // op_chisel_relational_query_create with a closure that has an
     // Rc<DenoService>.
-    let query = json_to_expression(&relation)?;
+    let query = json_to_query(&relation)?;
     let mut runtime = runtime::get();
     let query_engine = &mut runtime.query_engine;
 

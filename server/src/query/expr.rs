@@ -460,7 +460,7 @@ pub(crate) fn type_to_expression(ty: &Arc<ObjectType>) -> Result<Query> {
     Ok(builder.build())
 }
 
-pub(crate) fn json_to_expression(val: &serde_json::Value) -> Result<Query> {
+pub(crate) fn json_to_query(val: &serde_json::Value) -> Result<Query> {
     let builder = convert_to_query_builder(val)?;
     Ok(builder.build())
 }
