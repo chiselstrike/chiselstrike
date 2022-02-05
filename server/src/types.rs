@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: © 2021 ChiselStrike <info@chiselstrike.com>
 
-use crate::query::expr::type_to_expression;
-use crate::query::QueryEngine;
+use crate::datastore::query::type_to_query;
+use crate::datastore::QueryEngine;
 use anyhow::Context;
 use derive_new::new;
 use futures::StreamExt;
@@ -310,7 +310,7 @@ impl TypeSystem {
                     })?;
 
                 let tr = engine.clone().start_transaction_static().await?;
-                let query = type_to_expression(ty_obj)?;
+                let query = type_to_query(ty_obj)?;
                 let mut row_streams = engine.query(tr.clone(), query)?;
 
                 while let Some(row) = row_streams.next().await {

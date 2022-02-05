@@ -1,6 +1,6 @@
 // SPDX-FileCopyrightText: © 2021 ChiselStrike <info@chiselstrike.com>
 
-use crate::query::QueryError;
+use crate::datastore::QueryError;
 use anyhow::Context;
 use anyhow::Result;
 use sea_query::{PostgresQueryBuilder, SchemaBuilder, SqliteQueryBuilder};

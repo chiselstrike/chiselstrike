@@ -2,9 +2,9 @@ pub(crate) mod schema;
 
 // SPDX-FileCopyrightText: © 2021 ChiselStrike <info@chiselstrike.com>
 
+use crate::datastore::{DbConnection, Kind, QueryError};
 use crate::policies::Policies;
 use crate::prefix_map::PrefixMap;
-use crate::query::{DbConnection, Kind, QueryError};
 use crate::types::{
     ExistingField, ExistingObject, Field, FieldDelta, ObjectDelta, ObjectType, TypeSystem,
 };

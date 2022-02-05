@@ -1,8 +1,8 @@
 // SPDX-FileCopyrightText: © 2021 ChiselStrike <info@chiselstrike.com>
 
+use crate::datastore::query::{Mutation, Query, SelectField, SqlValue};
+use crate::datastore::{DbConnection, Kind, QueryError};
 use crate::policies::FieldPolicies;
-use crate::query::expr::{Mutation, Query, SelectField, SqlValue};
-use crate::query::{DbConnection, Kind, QueryError};
 use crate::types::{Field, ObjectDelta, ObjectType, Type, OAUTHUSER_TYPE_NAME};
 use crate::JsonObject;
 use anyhow::{anyhow, Context as AnyhowContext, Result};
