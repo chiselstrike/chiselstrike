@@ -4,7 +4,7 @@ use crate::api::{response_template, Body, RequestPath};
 use crate::policies::FieldPolicies;
 use crate::query::engine::SqlStream;
 use crate::query::engine::TransactionStatic;
-use crate::query::expr::{json_to_expression, DeleteExpr};
+use crate::query::expr::{json_to_expression, Mutation};
 use crate::rcmut::RcMut;
 use crate::runtime;
 use crate::runtime::Runtime;
@@ -327,7 +327,7 @@ async fn op_chisel_entity_delete(
         "Mutating the backend is not allowed during GET"
     );
 
-    let delete_expr = DeleteExpr::new_from_json(&content).context(
+    let delete_expr = Mutation::parse_delete(&content).context(
         "failed to construct delete expression from JSON passed to `op_chisel_entity_delete`",
     )?;
     let query_engine = {

@@ -461,15 +461,16 @@ pub(crate) fn json_to_expression(val: &serde_json::Value) -> Result<Query> {
     Ok(builder.build_query_expression())
 }
 
-/// `DeleteExpr` is a structure representing a delete expression ready to be fired.
+/// `Mutation` represents a statement that mutates the database state.
 #[derive(Debug, Clone)]
-pub(crate) struct DeleteExpr {
-    /// SQL query text
+pub(crate) struct Mutation {
+    /// SQL statement text
     pub(crate) raw_sql: String,
 }
 
-impl DeleteExpr {
-    pub(crate) fn new_from_json(val: &serde_json::Value) -> Result<Self> {
+impl Mutation {
+    /// Parses a delete statement from JSON.
+    pub(crate) fn parse_delete(val: &serde_json::Value) -> Result<Self> {
         let type_name = val["type_name"]
             .as_str()
             .ok_or_else(|| anyhow!("The `type_name` field is not a JSON string."))?;

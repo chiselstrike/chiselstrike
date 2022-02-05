@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: © 2021 ChiselStrike <info@chiselstrike.com>
 
 use crate::policies::FieldPolicies;
-use crate::query::expr::{DeleteExpr, Query, SelectField, SqlValue};
+use crate::query::expr::{Mutation, Query, SelectField, SqlValue};
 use crate::query::{DbConnection, Kind, QueryError};
 use crate::types::{Field, ObjectDelta, ObjectType, Type, OAUTHUSER_TYPE_NAME};
 use crate::JsonObject;
@@ -410,7 +410,7 @@ impl QueryEngine {
         Ok(stream)
     }
 
-    pub(crate) async fn execute_delete(&self, expr: DeleteExpr) -> Result<()> {
+    pub(crate) async fn execute_delete(&self, expr: Mutation) -> Result<()> {
         let mut transaction = self.start_transaction().await?;
         let query = sqlx::query(&expr.raw_sql);
         transaction
