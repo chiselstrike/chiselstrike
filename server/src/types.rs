@@ -310,8 +310,8 @@ impl TypeSystem {
                     })?;
 
                 let tr = engine.clone().start_transaction_static().await?;
-                let expr = type_to_expression(ty_obj)?;
-                let mut row_streams = engine.execute(tr.clone(), expr)?;
+                let query = type_to_expression(ty_obj)?;
+                let mut row_streams = engine.query(tr.clone(), query)?;
 
                 while let Some(row) = row_streams.next().await {
                     // FIXME: basic rate limit?

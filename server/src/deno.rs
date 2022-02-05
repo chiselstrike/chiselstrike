@@ -2,9 +2,9 @@
 
 use crate::api::{response_template, Body, RequestPath};
 use crate::policies::FieldPolicies;
-use crate::query::engine::SqlStream;
+use crate::query::engine::QueryResults;
 use crate::query::engine::TransactionStatic;
-use crate::query::expr::{json_to_expression, DeleteExpr};
+use crate::query::expr::{json_to_expression, Mutation};
 use crate::rcmut::RcMut;
 use crate::runtime;
 use crate::runtime::Runtime;
@@ -327,19 +327,17 @@ async fn op_chisel_entity_delete(
         "Mutating the backend is not allowed during GET"
     );
 
-    let delete_expr = DeleteExpr::new_from_json(&content).context(
+    let mutation = Mutation::parse_delete(&content).context(
         "failed to construct delete expression from JSON passed to `op_chisel_entity_delete`",
     )?;
     let query_engine = {
         let runtime = runtime::get();
         runtime.query_engine.clone()
     };
-    Ok(serde_json::json!(
-        query_engine.execute_delete(delete_expr).await?
-    ))
+    Ok(serde_json::json!(query_engine.mutate(mutation).await?))
 }
 
-type DbStream = RefCell<SqlStream>;
+type DbStream = RefCell<QueryResults>;
 
 /// Calculates field policies for the request being processed.
 pub(crate) fn make_field_policies(runtime: &Runtime, ty: &ObjectType) -> FieldPolicies {
@@ -430,12 +428,12 @@ fn op_chisel_relational_query_create(
     // is no way to access it from here. We would have to replace
     // op_chisel_relational_query_create with a closure that has an
     // Rc<DenoService>.
-    let query_expr = json_to_expression(&relation)?;
+    let query = json_to_expression(&relation)?;
     let mut runtime = runtime::get();
     let query_engine = &mut runtime.query_engine;
 
     let transaction = current_transaction()?;
-    let stream = Box::pin(query_engine.execute(transaction, query_expr)?);
+    let stream = Box::pin(query_engine.query(transaction, query)?);
     let resource = QueryStreamResource {
         stream: RefCell::new(stream),
     };
@@ -452,7 +450,7 @@ impl Future for QueryNextFuture {
     type Output = Option<Result<JsonObject>>;
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         let mut stream = self.resource.stream.borrow_mut();
-        let stream: &mut SqlStream = &mut stream;
+        let stream: &mut QueryResults = &mut stream;
         Pin::new(stream).poll_next(cx)
     }
 }

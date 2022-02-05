@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: © 2021 ChiselStrike <info@chiselstrike.com>
 
 use crate::policies::FieldPolicies;
-use crate::query::expr::{DeleteExpr, QueryExpression, SelectField, SqlValue};
+use crate::query::expr::{Mutation, Query, SelectField, SqlValue};
 use crate::query::{DbConnection, Kind, QueryError};
 use crate::types::{Field, ObjectDelta, ObjectType, Type, OAUTHUSER_TYPE_NAME};
 use crate::JsonObject;
@@ -26,12 +26,14 @@ use tokio::sync::OwnedMutexGuard;
 use uuid::Uuid;
 
 // Results with policies applied
-pub(crate) type SqlStream = BoxStream<'static, Result<JsonObject>>;
+pub(crate) type QueryResults = BoxStream<'static, Result<JsonObject>>;
 
 pub(crate) type TransactionStatic = Arc<Mutex<Transaction<'static, Any>>>;
 
+/// `RawQueryResults` represents the raw query results from the backing stor
+///  before policies are applied.
 #[pin_project]
-struct QueryResults<T> {
+struct RawQueryResults<T> {
     raw_query: String,
     tr: OwnedMutexGuard<Transaction<'static, Any>>,
     #[pin]
@@ -51,7 +53,7 @@ async fn make_transactioned_stream(
     let tr_ref = unsafe { &mut *tr_ptr };
     let stream = query.fetch(tr_ref).map(|i| i.map_err(anyhow::Error::new));
 
-    QueryResults {
+    RawQueryResults {
         tr,
         raw_query,
         stream,
@@ -65,7 +67,7 @@ pub(crate) fn new_query_results(
     make_transactioned_stream(tr, raw_query).flatten_stream()
 }
 
-impl<T: Stream<Item = Result<AnyRow>>> Stream for QueryResults<T> {
+impl<T: Stream<Item = Result<AnyRow>>> Stream for RawQueryResults<T> {
     type Item = Result<AnyRow>;
 
     fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
@@ -152,8 +154,15 @@ impl IdTree {
 
 /// Query engine.
 ///
-/// The query engine provides a way to persist objects and retrieve them from
-/// a backing store for ChiselStrike endpoints.
+/// The query engine provides a way to transactionally mutate entities and
+/// retrieve them from a backing store for ChiselStrike endpoints.
+///
+/// The query engine works on `Mutation` and `Query` objects that represent
+/// how to mutate the underlying backing store or how to retrieve entities.
+/// The query engine attempts to perform as much of the query logic in the
+/// backing store database to take advantage of the query optimizer. However,
+/// some parts of a mutation or query need to run through the policy engine,
+/// which is not always offloadable to a database.
 #[derive(Clone)]
 pub(crate) struct QueryEngine {
     kind: Kind,
@@ -393,16 +402,17 @@ impl QueryEngine {
         Ok(o)
     }
 
-    pub(crate) fn execute(
+    /// Execute the given `query` and return a stream to the results.
+    pub(crate) fn query(
         &self,
         tr: TransactionStatic,
-        expr: QueryExpression,
-    ) -> anyhow::Result<SqlStream> {
-        let policies = expr.policies;
-        let allowed_columns = expr.allowed_columns;
+        query: Query,
+    ) -> anyhow::Result<QueryResults> {
+        let policies = query.policies;
+        let allowed_columns = query.allowed_columns;
 
-        let stream = new_query_results(expr.raw_sql, tr);
-        let stream = stream.map(move |row| Self::row_to_json(&expr.fields, &row?));
+        let stream = new_query_results(query.raw_sql, tr);
+        let stream = stream.map(move |row| Self::row_to_json(&query.fields, &row?));
         let stream = Box::pin(stream.map(move |o| {
             let o = Self::filter_columns(o, &allowed_columns);
             Self::apply_policies(o, &policies)
@@ -410,9 +420,10 @@ impl QueryEngine {
         Ok(stream)
     }
 
-    pub(crate) async fn execute_delete(&self, expr: DeleteExpr) -> Result<()> {
+    /// Execute the given `mutation`.
+    pub(crate) async fn mutate(&self, mutation: Mutation) -> Result<()> {
         let mut transaction = self.start_transaction().await?;
-        let query = sqlx::query(&expr.raw_sql);
+        let query = sqlx::query(&mutation.raw_sql);
         transaction
             .execute(query)
             .await
