@@ -30,8 +30,10 @@ pub(crate) type SqlStream = BoxStream<'static, Result<JsonObject>>;
 
 pub(crate) type TransactionStatic = Arc<Mutex<Transaction<'static, Any>>>;
 
+/// `RawQueryResults` represents the raw query results from the backing stor
+///  before policies are applied.
 #[pin_project]
-struct QueryResults<T> {
+struct RawQueryResults<T> {
     raw_query: String,
     tr: OwnedMutexGuard<Transaction<'static, Any>>,
     #[pin]
@@ -51,7 +53,7 @@ async fn make_transactioned_stream(
     let tr_ref = unsafe { &mut *tr_ptr };
     let stream = query.fetch(tr_ref).map(|i| i.map_err(anyhow::Error::new));
 
-    QueryResults {
+    RawQueryResults {
         tr,
         raw_query,
         stream,
@@ -65,7 +67,7 @@ pub(crate) fn new_query_results(
     make_transactioned_stream(tr, raw_query).flatten_stream()
 }
 
-impl<T: Stream<Item = Result<AnyRow>>> Stream for QueryResults<T> {
+impl<T: Stream<Item = Result<AnyRow>>> Stream for RawQueryResults<T> {
     type Item = Result<AnyRow>;
 
     fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
