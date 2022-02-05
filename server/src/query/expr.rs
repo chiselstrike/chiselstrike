@@ -408,7 +408,7 @@ pub(crate) fn make_restriction_string(restrictions: &[Restriction]) -> String {
     })
 }
 
-fn convert_to_expression_builder(val: &serde_json::Value) -> Result<QueryBuilder> {
+fn convert_to_query_builder(val: &serde_json::Value) -> Result<QueryBuilder> {
     let kind = val["kind"].as_str().ok_or_else(|| {
         anyhow!(
             "internal error: `kind` field is either missing or not a string: {}",
@@ -420,7 +420,7 @@ fn convert_to_expression_builder(val: &serde_json::Value) -> Result<QueryBuilder
         "BackingStore" => QueryBuilder::new_from_json(val),
         "Join" => anyhow::bail!("join is not supported"),
         "Filter" => {
-            let mut builder = convert_to_expression_builder(&val["inner"])?;
+            let mut builder = convert_to_query_builder(&val["inner"])?;
             builder.load_restrictions(val)?;
             Ok(builder)
         }
@@ -461,7 +461,7 @@ pub(crate) fn type_to_expression(ty: &Arc<ObjectType>) -> Result<Query> {
 }
 
 pub(crate) fn json_to_expression(val: &serde_json::Value) -> Result<Query> {
-    let builder = convert_to_expression_builder(val)?;
+    let builder = convert_to_query_builder(val)?;
     Ok(builder.build())
 }
 
