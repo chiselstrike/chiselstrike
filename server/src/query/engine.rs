@@ -154,8 +154,15 @@ impl IdTree {
 
 /// Query engine.
 ///
-/// The query engine provides a way to persist objects and retrieve them from
-/// a backing store for ChiselStrike endpoints.
+/// The query engine provides a way to transactionally mutate entities and
+/// retrieve them from a backing store for ChiselStrike endpoints.
+///
+/// The query engine works on `Mutation` and `Query` objects that represent
+/// how to mutate the underlying backing store or how to retrieve entities.
+/// The query engine attempts to perform as much of the query logic in the
+/// backing store database to take advantage of the query optimizer. However,
+/// some parts of a mutation or query need to run through the policy engine,
+/// which is not always offloadable to a database.
 #[derive(Clone)]
 pub(crate) struct QueryEngine {
     kind: Kind,
