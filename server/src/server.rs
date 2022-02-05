@@ -1,10 +1,10 @@
 // SPDX-FileCopyrightText: © 2021 ChiselStrike <info@chiselstrike.com>
 
 use crate::api::ApiService;
+use crate::datastore::{DbConnection, MetaService, QueryEngine};
 use crate::deno;
 use crate::deno::init_deno;
 use crate::deno::{activate_endpoint, compile_endpoint};
-use crate::query::{DbConnection, MetaService, QueryEngine};
 use crate::rpc::{GlobalRpcState, RpcService};
 use crate::runtime;
 use crate::runtime::Runtime;

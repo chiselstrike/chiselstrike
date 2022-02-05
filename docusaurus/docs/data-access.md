@@ -261,7 +261,6 @@ The methods provided by `ChiselCursor` are outlined in the following table.
 | --------------------- | ----------- |
 | `filter(restriction)` | Restrict this cursor to contain only entities matching the given `restrictions`. |
 | `forEach(function)`   | Execute `function` for every entity in this cursor. |
-| `join(right)`         | Join this cursor with the `right` cursor. |
 | `select(...fields)`   | Return another cursor with a projection of each entity by `fields`.      |
 | `take(count)`         | Take `count` entities from this cursor. |
 | `toArray()`           | Convert this cursor to an array.  |

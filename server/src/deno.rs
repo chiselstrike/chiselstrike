@@ -1,10 +1,10 @@
 // SPDX-FileCopyrightText: © 2021 ChiselStrike <info@chiselstrike.com>
 
 use crate::api::{response_template, Body, RequestPath};
+use crate::datastore::engine::QueryResults;
+use crate::datastore::engine::TransactionStatic;
+use crate::datastore::query::{json_to_query, Mutation};
 use crate::policies::FieldPolicies;
-use crate::query::engine::QueryResults;
-use crate::query::engine::TransactionStatic;
-use crate::query::expr::{json_to_expression, Mutation};
 use crate::rcmut::RcMut;
 use crate::runtime;
 use crate::runtime::Runtime;
@@ -357,6 +357,15 @@ struct QueryStreamResource {
 
 impl Resource for QueryStreamResource {}
 
+/// Recursively builds an array representing fields of potentially nested `ty`.
+/// E.g. for types X{x: Float}, and Y{a: Float, b: X} make_fields_json(Y) will
+/// return [
+///     ["a", "Float"],
+///     [
+///         {field_name": "b", "columns": ["x", "Float"]},
+///         "X"
+///     ]
+/// ]
 fn make_fields_json(ty: &Arc<ObjectType>) -> serde_json::Value {
     let mut columns = vec![];
     for f in ty.all_fields() {
@@ -428,7 +437,7 @@ fn op_chisel_relational_query_create(
     // is no way to access it from here. We would have to replace
     // op_chisel_relational_query_create with a closure that has an
     // Rc<DenoService>.
-    let query = json_to_expression(&relation)?;
+    let query = json_to_query(&relation)?;
     let mut runtime = runtime::get();
     let query_engine = &mut runtime.query_engine;
 
@@ -945,7 +954,7 @@ pub(crate) async fn run_js(path: String, mut req: Request<hyper::Body>) -> Resul
     // Defer committing of the transaction to the last possible moment. It would be better
     // to commit the transaction after the response stream is closed, but it would be a lot
     // of work and this will do for now.
-    crate::query::QueryEngine::commit_transaction_static(transaction).await?;
+    crate::datastore::QueryEngine::commit_transaction_static(transaction).await?;
     Ok(body)
 }
 

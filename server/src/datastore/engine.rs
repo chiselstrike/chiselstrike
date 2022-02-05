@@ -1,8 +1,8 @@
 // SPDX-FileCopyrightText: © 2021 ChiselStrike <info@chiselstrike.com>
 
+use crate::datastore::query::{Mutation, Query, SelectField, SqlValue};
+use crate::datastore::{DbConnection, Kind, QueryError};
 use crate::policies::FieldPolicies;
-use crate::query::expr::{Mutation, Query, SelectField, SqlValue};
-use crate::query::{DbConnection, Kind, QueryError};
 use crate::types::{Field, ObjectDelta, ObjectType, Type, OAUTHUSER_TYPE_NAME};
 use crate::JsonObject;
 use anyhow::{anyhow, Context as AnyhowContext, Result};
@@ -333,11 +333,10 @@ impl QueryEngine {
                     column_idx,
                     ..
                 } => {
-                    let i = column_idx;
                     // FIXME: consider result_column.type_info().is_null() too
                     macro_rules! to_json {
                         ($value_type:ty) => {{
-                            let val = row.get::<$value_type, _>(i);
+                            let val = row.get::<$value_type, _>(column_idx);
                             json!(val)
                         }};
                     }
@@ -345,7 +344,7 @@ impl QueryEngine {
                         Type::Float => {
                             // https://github.com/launchbadge/sqlx/issues/1596
                             // sqlx gets confused if the float doesn't have decimal points.
-                            let val: &str = row.get_unchecked(i);
+                            let val: &str = row.get_unchecked(column_idx);
                             json!(val.parse::<f64>()?)
                         }
                         Type::String => to_json!(&str),
@@ -356,11 +355,11 @@ impl QueryEngine {
                             //
                             // Also the database has integers, and we need to map it back to a
                             // boolean type on json.
-                            let val: &str = row.get_unchecked(i);
+                            let val: &str = row.get_unchecked(column_idx);
                             let x: bool = val.parse::<usize>()? == 1;
                             json!(x)
                         }
-                        Type::Object(_) => anyhow::bail!("object is not a builtin"),
+                        Type::Object(_) => anyhow::bail!("object is not a scalar"),
                     };
                     ret.insert(name.clone(), val);
                 }
@@ -373,16 +372,16 @@ impl QueryEngine {
         Ok(ret)
     }
 
-    fn filter_columns(
+    fn filter_fields(
         o: Result<JsonObject>,
-        allowed_columns: &Option<HashSet<String>>,
+        allowed_fields: &Option<HashSet<String>>,
     ) -> Result<JsonObject> {
         let mut o = o?;
-        if let Some(allowed_columns) = &allowed_columns {
+        if let Some(allowed_fields) = &allowed_fields {
             let removed_keys = o
                 .iter()
                 .map(|(k, _)| k.to_owned())
-                .filter(|k| !allowed_columns.contains(k))
+                .filter(|k| !allowed_fields.contains(k))
                 .collect::<Vec<String>>();
             for k in &removed_keys {
                 o.remove(k);
@@ -409,12 +408,12 @@ impl QueryEngine {
         query: Query,
     ) -> anyhow::Result<QueryResults> {
         let policies = query.policies;
-        let allowed_columns = query.allowed_columns;
+        let allowed_fields = query.allowed_fields;
 
         let stream = new_query_results(query.raw_sql, tr);
         let stream = stream.map(move |row| Self::row_to_json(&query.fields, &row?));
         let stream = Box::pin(stream.map(move |o| {
-            let o = Self::filter_columns(o, &allowed_columns);
+            let o = Self::filter_fields(o, &allowed_fields);
             Self::apply_policies(o, &policies)
         }));
         Ok(stream)
