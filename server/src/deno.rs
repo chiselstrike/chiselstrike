@@ -327,16 +327,14 @@ async fn op_chisel_entity_delete(
         "Mutating the backend is not allowed during GET"
     );
 
-    let delete_expr = Mutation::parse_delete(&content).context(
+    let mutation = Mutation::parse_delete(&content).context(
         "failed to construct delete expression from JSON passed to `op_chisel_entity_delete`",
     )?;
     let query_engine = {
         let runtime = runtime::get();
         runtime.query_engine.clone()
     };
-    Ok(serde_json::json!(
-        query_engine.execute_delete(delete_expr).await?
-    ))
+    Ok(serde_json::json!(query_engine.mutate(mutation).await?))
 }
 
 type DbStream = RefCell<SqlStream>;

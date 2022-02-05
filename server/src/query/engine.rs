@@ -410,9 +410,10 @@ impl QueryEngine {
         Ok(stream)
     }
 
-    pub(crate) async fn execute_delete(&self, expr: Mutation) -> Result<()> {
+    /// Execute the given `mutation`.
+    pub(crate) async fn mutate(&self, mutation: Mutation) -> Result<()> {
         let mut transaction = self.start_transaction().await?;
-        let query = sqlx::query(&expr.raw_sql);
+        let query = sqlx::query(&mutation.raw_sql);
         transaction
             .execute(query)
             .await
