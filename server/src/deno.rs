@@ -3,7 +3,7 @@
 use crate::api::{response_template, Body, RequestPath};
 use crate::datastore::engine::QueryResults;
 use crate::datastore::engine::TransactionStatic;
-use crate::datastore::expr::{json_to_query, Mutation};
+use crate::datastore::query::{json_to_query, Mutation};
 use crate::policies::FieldPolicies;
 use crate::rcmut::RcMut;
 use crate::runtime;

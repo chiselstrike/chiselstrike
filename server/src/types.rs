@@ -1,6 +1,6 @@
 // SPDX-FileCopyrightText: © 2021 ChiselStrike <info@chiselstrike.com>
 
-use crate::datastore::expr::type_to_query;
+use crate::datastore::query::type_to_query;
 use crate::datastore::QueryEngine;
 use anyhow::Context;
 use derive_new::new;

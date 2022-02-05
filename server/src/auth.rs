@@ -2,7 +2,7 @@
 
 use crate::api::{response_template, ApiService, Body};
 use crate::datastore::engine::SqlWithArguments;
-use crate::datastore::expr::SqlValue;
+use crate::datastore::query::SqlValue;
 use crate::runtime;
 use crate::types::{ObjectType, Type, OAUTHUSER_TYPE_NAME};
 use crate::JsonObject;
