@@ -88,7 +88,7 @@ struct Join {
 /// The json part recursively descends through selected fields and captures all
 /// joins necessary for nested types retrieval.
 /// Once constructed, it can be further restricted by calling load_restrictions method.
-/// When we are done with that, `build_query_expression` is called which creates a `Query`
+/// When we are done with that, `build` is called which creates a `Query`
 /// structure that contains raw SQL query string and additional data necessary for
 /// JSON response reconstruction and filtering.
 struct QueryBuilder {
@@ -375,7 +375,7 @@ impl QueryBuilder {
         raw_sql
     }
 
-    fn build_query_expression(&self) -> Query {
+    fn build(&self) -> Query {
         Query {
             raw_sql: self.make_raw_query(),
             fields: self.fields.clone(),
@@ -457,12 +457,12 @@ pub(crate) fn convert_restrictions(
 
 pub(crate) fn type_to_expression(ty: &Arc<ObjectType>) -> Result<Query> {
     let builder = QueryBuilder::new_from_type(ty)?;
-    Ok(builder.build_query_expression())
+    Ok(builder.build())
 }
 
 pub(crate) fn json_to_expression(val: &serde_json::Value) -> Result<Query> {
     let builder = convert_to_expression_builder(val)?;
-    Ok(builder.build_query_expression())
+    Ok(builder.build())
 }
 
 /// `Mutation` represents a statement that mutates the database state.
