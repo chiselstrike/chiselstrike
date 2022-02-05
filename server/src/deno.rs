@@ -2,7 +2,7 @@
 
 use crate::api::{response_template, Body, RequestPath};
 use crate::policies::FieldPolicies;
-use crate::query::engine::SqlStream;
+use crate::query::engine::QueryResults;
 use crate::query::engine::TransactionStatic;
 use crate::query::expr::{json_to_expression, Mutation};
 use crate::rcmut::RcMut;
@@ -337,7 +337,7 @@ async fn op_chisel_entity_delete(
     Ok(serde_json::json!(query_engine.mutate(mutation).await?))
 }
 
-type DbStream = RefCell<SqlStream>;
+type DbStream = RefCell<QueryResults>;
 
 /// Calculates field policies for the request being processed.
 pub(crate) fn make_field_policies(runtime: &Runtime, ty: &ObjectType) -> FieldPolicies {
@@ -450,7 +450,7 @@ impl Future for QueryNextFuture {
     type Output = Option<Result<JsonObject>>;
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         let mut stream = self.resource.stream.borrow_mut();
-        let stream: &mut SqlStream = &mut stream;
+        let stream: &mut QueryResults = &mut stream;
         Pin::new(stream).poll_next(cx)
     }
 }

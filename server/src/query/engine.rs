@@ -26,7 +26,7 @@ use tokio::sync::OwnedMutexGuard;
 use uuid::Uuid;
 
 // Results with policies applied
-pub(crate) type SqlStream = BoxStream<'static, Result<JsonObject>>;
+pub(crate) type QueryResults = BoxStream<'static, Result<JsonObject>>;
 
 pub(crate) type TransactionStatic = Arc<Mutex<Transaction<'static, Any>>>;
 
@@ -399,7 +399,7 @@ impl QueryEngine {
         &self,
         tr: TransactionStatic,
         expr: Query,
-    ) -> anyhow::Result<SqlStream> {
+    ) -> anyhow::Result<QueryResults> {
         let policies = expr.policies;
         let allowed_columns = expr.allowed_columns;
 
