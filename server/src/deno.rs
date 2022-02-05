@@ -1,10 +1,10 @@
 // SPDX-FileCopyrightText: © 2021 ChiselStrike <info@chiselstrike.com>
 
 use crate::api::{response_template, Body, RequestPath};
+use crate::datastore::engine::QueryResults;
+use crate::datastore::engine::TransactionStatic;
+use crate::datastore::expr::{json_to_query, Mutation};
 use crate::policies::FieldPolicies;
-use crate::query::engine::QueryResults;
-use crate::query::engine::TransactionStatic;
-use crate::query::expr::{json_to_query, Mutation};
 use crate::rcmut::RcMut;
 use crate::runtime;
 use crate::runtime::Runtime;
@@ -945,7 +945,7 @@ pub(crate) async fn run_js(path: String, mut req: Request<hyper::Body>) -> Resul
     // Defer committing of the transaction to the last possible moment. It would be better
     // to commit the transaction after the response stream is closed, but it would be a lot
     // of work and this will do for now.
-    crate::query::QueryEngine::commit_transaction_static(transaction).await?;
+    crate::datastore::QueryEngine::commit_transaction_static(transaction).await?;
     Ok(body)
 }
 

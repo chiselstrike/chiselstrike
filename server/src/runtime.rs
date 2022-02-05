@@ -1,8 +1,8 @@
 // SPDX-FileCopyrightText: © 2021 ChiselStrike <info@chiselstrike.com>
 
 use crate::api::ApiService;
+use crate::datastore::{MetaService, QueryEngine};
 use crate::policies::{FieldPolicies, Kind, Policies};
-use crate::query::{MetaService, QueryEngine};
 use crate::rcmut::RcMut;
 use crate::secrets::SecretManager;
 use crate::types::{ObjectType, TypeSystem};

@@ -1,10 +1,10 @@
 // SPDX-FileCopyrightText: © 2021 ChiselStrike <info@chiselstrike.com>
 
 use crate::chisel;
+use crate::datastore::{MetaService, QueryEngine};
 use crate::deno;
 use crate::policies::{Policies, VersionPolicy};
 use crate::prefix_map::PrefixMap;
-use crate::query::{MetaService, QueryEngine};
 use crate::runtime;
 use crate::server::CommandTrait;
 use crate::server::CoordinatorChannel;
