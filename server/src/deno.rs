@@ -428,12 +428,12 @@ fn op_chisel_relational_query_create(
     // is no way to access it from here. We would have to replace
     // op_chisel_relational_query_create with a closure that has an
     // Rc<DenoService>.
-    let query_expr = json_to_expression(&relation)?;
+    let query = json_to_expression(&relation)?;
     let mut runtime = runtime::get();
     let query_engine = &mut runtime.query_engine;
 
     let transaction = current_transaction()?;
-    let stream = Box::pin(query_engine.execute(transaction, query_expr)?);
+    let stream = Box::pin(query_engine.query(transaction, query)?);
     let resource = QueryStreamResource {
         stream: RefCell::new(stream),
     };

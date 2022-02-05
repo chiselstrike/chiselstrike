@@ -395,16 +395,17 @@ impl QueryEngine {
         Ok(o)
     }
 
-    pub(crate) fn execute(
+    /// Execute the given `query` and return a stream to the results.
+    pub(crate) fn query(
         &self,
         tr: TransactionStatic,
-        expr: Query,
+        query: Query,
     ) -> anyhow::Result<QueryResults> {
-        let policies = expr.policies;
-        let allowed_columns = expr.allowed_columns;
+        let policies = query.policies;
+        let allowed_columns = query.allowed_columns;
 
-        let stream = new_query_results(expr.raw_sql, tr);
-        let stream = stream.map(move |row| Self::row_to_json(&expr.fields, &row?));
+        let stream = new_query_results(query.raw_sql, tr);
+        let stream = stream.map(move |row| Self::row_to_json(&query.fields, &row?));
         let stream = Box::pin(stream.map(move |o| {
             let o = Self::filter_columns(o, &allowed_columns);
             Self::apply_policies(o, &policies)
