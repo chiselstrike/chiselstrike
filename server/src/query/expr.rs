@@ -54,6 +54,10 @@ pub(crate) enum SelectField {
 }
 
 /// `Query` is a structure that represents an executable query.
+///  
+/// A query represents a full query including filtering, projection, joins,
+/// and so on. The `execute` method of `QueryEngine` executes these queries
+/// using SQL and the policy engine.
 #[derive(Debug, Clone)]
 pub(crate) struct Query {
     /// SQL query text
