@@ -455,7 +455,7 @@ pub(crate) fn convert_restrictions(
     Ok(sql_restrictions)
 }
 
-pub(crate) fn type_to_expression(ty: &Arc<ObjectType>) -> Result<Query> {
+pub(crate) fn type_to_query(ty: &Arc<ObjectType>) -> Result<Query> {
     let builder = QueryBuilder::new_from_type(ty)?;
     Ok(builder.build())
 }
