@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: © 2021 ChiselStrike <info@chiselstrike.com>
 
 use crate::policies::FieldPolicies;
-use crate::query::expr::{DeleteExpr, QueryExpression, SelectField, SqlValue};
+use crate::query::expr::{DeleteExpr, Query, SelectField, SqlValue};
 use crate::query::{DbConnection, Kind, QueryError};
 use crate::types::{Field, ObjectDelta, ObjectType, Type, OAUTHUSER_TYPE_NAME};
 use crate::JsonObject;
@@ -396,7 +396,7 @@ impl QueryEngine {
     pub(crate) fn execute(
         &self,
         tr: TransactionStatic,
-        expr: QueryExpression,
+        expr: Query,
     ) -> anyhow::Result<SqlStream> {
         let policies = expr.policies;
         let allowed_columns = expr.allowed_columns;

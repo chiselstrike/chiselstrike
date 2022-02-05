@@ -53,9 +53,9 @@ pub(crate) enum SelectField {
     },
 }
 
-/// `QueryExpression` is a structure representing a query ready to be fired.
+/// `Query` is a structure that represents an executable query.
 #[derive(Debug, Clone)]
-pub(crate) struct QueryExpression {
+pub(crate) struct Query {
     /// SQL query text
     pub(crate) raw_sql: String,
     /// Nested structure representing a blueprint which is used to reconstruct
@@ -80,14 +80,14 @@ struct Join {
     ralias: String,
 }
 
-/// Class used to build `QueryExpression` from either JSON query or `ObjectType`.
+/// Class used to build `Query` from either JSON query or `ObjectType`.
 /// The json part recursively descends through selected fields and captures all
 /// joins necessary for nested types retrieval.
 /// Once constructed, it can be further restricted by calling load_restrictions method.
-/// When we are done with that, `build_query_expression` is called which creates a `QueryExpression`
+/// When we are done with that, `build_query_expression` is called which creates a `Query`
 /// structure that contains raw SQL query string and additional data necessary for
 /// JSON response reconstruction and filtering.
-struct QueryExpressionBuilder {
+struct QueryBuilder {
     fields: Vec<SelectField>,
     columns: Vec<(String, Field)>,
     base_type: Arc<ObjectType>,
@@ -98,7 +98,7 @@ struct QueryExpressionBuilder {
     limit: Option<u64>,
 }
 
-impl QueryExpressionBuilder {
+impl QueryBuilder {
     /// Constructs a query builder ready to build an expression querying all fields of a
     /// given type `ty`. This is done in a shallow manner. Columns representing foreign
     /// key are returned as string, not as the related Entity.
@@ -371,8 +371,8 @@ impl QueryExpressionBuilder {
         raw_sql
     }
 
-    fn build_query_expression(&self) -> QueryExpression {
-        QueryExpression {
+    fn build_query_expression(&self) -> Query {
+        Query {
             raw_sql: self.make_raw_query(),
             fields: self.fields.clone(),
             allowed_columns: self.allowed_columns.clone(),
@@ -404,7 +404,7 @@ pub(crate) fn make_restriction_string(restrictions: &[Restriction]) -> String {
     })
 }
 
-fn convert_to_expression_builder(val: &serde_json::Value) -> Result<QueryExpressionBuilder> {
+fn convert_to_expression_builder(val: &serde_json::Value) -> Result<QueryBuilder> {
     let kind = val["kind"].as_str().ok_or_else(|| {
         anyhow!(
             "internal error: `kind` field is either missing or not a string: {}",
@@ -413,7 +413,7 @@ fn convert_to_expression_builder(val: &serde_json::Value) -> Result<QueryExpress
     })?;
 
     match kind {
-        "BackingStore" => QueryExpressionBuilder::new_from_json(val),
+        "BackingStore" => QueryBuilder::new_from_json(val),
         "Join" => anyhow::bail!("join is not supported"),
         "Filter" => {
             let mut builder = convert_to_expression_builder(&val["inner"])?;
@@ -451,12 +451,12 @@ pub(crate) fn convert_restrictions(
     Ok(sql_restrictions)
 }
 
-pub(crate) fn type_to_expression(ty: &Arc<ObjectType>) -> Result<QueryExpression> {
-    let builder = QueryExpressionBuilder::new_from_type(ty)?;
+pub(crate) fn type_to_expression(ty: &Arc<ObjectType>) -> Result<Query> {
+    let builder = QueryBuilder::new_from_type(ty)?;
     Ok(builder.build_query_expression())
 }
 
-pub(crate) fn json_to_expression(val: &serde_json::Value) -> Result<QueryExpression> {
+pub(crate) fn json_to_expression(val: &serde_json::Value) -> Result<Query> {
     let builder = convert_to_expression_builder(val)?;
     Ok(builder.build_query_expression())
 }
