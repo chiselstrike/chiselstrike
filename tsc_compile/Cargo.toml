@@ -12,6 +12,7 @@ url = "2.2.2"
 
 [dev-dependencies]
 tempfile = "3.2.0"
+tokio = { version = "1.11.0", features = ["rt-multi-thread", "macros"] }
 
 [package.metadata.cargo-udeps.ignore]
 # Used only to update the submodules

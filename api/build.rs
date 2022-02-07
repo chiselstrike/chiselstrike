@@ -7,7 +7,8 @@ use std::path::PathBuf;
 use tsc_compile::compile_ts_code;
 use tsc_compile::CompileOptions;
 
-fn main() -> Result<()> {
+#[tokio::main]
+async fn main() -> Result<()> {
     let chisel_ts = "src/chisel.ts";
 
     // Every other file we use comes from the snapshot, so these
@@ -19,7 +20,7 @@ fn main() -> Result<()> {
         emit_declarations: true,
         ..Default::default()
     };
-    let mut map = compile_ts_code(chisel_ts, opts)?;
+    let mut map = compile_ts_code(chisel_ts, opts).await?;
     let code = map.remove(chisel_ts).unwrap();
 
     let out = PathBuf::from(env::var_os("OUT_DIR").unwrap());

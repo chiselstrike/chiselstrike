@@ -187,6 +187,7 @@ pub(crate) async fn apply<S: ToString>(
                     ..Default::default()
                 };
                 let mut code = compile_ts_code(path, opts)
+                    .await
                     .with_context(|| format!("parsing endpoint /{}/{}", version, f.name))?;
                 code.remove(path).unwrap()
             } else {

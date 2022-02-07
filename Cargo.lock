@@ -136,6 +136,7 @@ name = "api"
 version = "0.7.0-dev.0"
 dependencies = [
  "anyhow",
+ "tokio",
  "tsc_compile",
 ]
 
@@ -4507,6 +4508,7 @@ dependencies = [
  "deno_core",
  "tempfile",
  "third_party",
+ "tokio",
  "ureq",
  "url",
 ]

@@ -216,7 +216,10 @@ pub struct CompileOptions<'a> {
     pub emit_declarations: bool,
 }
 
-pub fn compile_ts_code(file_name: &str, opts: CompileOptions) -> Result<HashMap<String, String>> {
+pub async fn compile_ts_code(
+    file_name: &str,
+    opts: CompileOptions<'_>,
+) -> Result<HashMap<String, String>> {
     FILES.with(|m| {
         let mut borrow = m.borrow_mut();
         borrow.extra_libs = opts.extra_libs;
@@ -278,8 +281,8 @@ mod tests {
     use std::io::Write;
     use tempfile::Builder;
 
-    #[test]
-    fn test() -> Result<()> {
+    #[tokio::test]
+    async fn test() -> Result<()> {
         let mut f = Builder::new().suffix(".ts").tempfile()?;
         f.write_all(b"import * as zed from \"@foo/bar\";")?;
         let libs = [("@foo/bar".to_string(), "export {}".to_string())]
@@ -289,42 +292,44 @@ mod tests {
             extra_libs: libs,
             ..Default::default()
         };
-        compile_ts_code(f.path().to_str().unwrap(), opts)?;
+        compile_ts_code(f.path().to_str().unwrap(), opts).await?;
         Ok(())
     }
 
-    #[test]
-    fn dignostics() -> Result<()> {
+    #[tokio::test]
+    async fn diagnostics() -> Result<()> {
         for _ in 0..2 {
             let mut f = Builder::new().suffix(".ts").tempfile()?;
             f.write_all(b"export {}; zed;")?;
-            let err = compile_ts_code(f.path().to_str().unwrap(), Default::default());
+            let err = compile_ts_code(f.path().to_str().unwrap(), Default::default()).await;
             let err = err.unwrap_err().to_string();
             assert!(err.contains("Cannot find name 'zed'"));
         }
         Ok(())
     }
 
-    #[test]
-    fn property_constructor_not_strict() -> Result<()> {
+    #[tokio::test]
+    async fn property_constructor_not_strict() -> Result<()> {
         let mut f = Builder::new().suffix(".ts").tempfile()?;
         f.write_all(b"export class Foo { a: number };")?;
-        compile_ts_code(f.path().to_str().unwrap(), Default::default())?;
+        compile_ts_code(f.path().to_str().unwrap(), Default::default()).await?;
         Ok(())
     }
 
-    #[test]
-    fn missing_file() -> Result<()> {
+    #[tokio::test]
+    async fn missing_file() -> Result<()> {
         let err = compile_ts_code("/no/such/file.ts", Default::default())
+            .await
             .unwrap_err()
             .to_string();
         assert!(err.contains("Cannot read file '/no/such/file.ts': Reading /no/such/file.ts."));
         Ok(())
     }
 
-    #[test]
-    fn no_extension() -> Result<()> {
+    #[tokio::test]
+    async fn no_extension() -> Result<()> {
         let err = compile_ts_code("/no/such/file", Default::default())
+            .await
             .unwrap_err()
             .to_string();
         // FIXME: Something is adding a .ts extension
@@ -332,8 +337,8 @@ mod tests {
         Ok(())
     }
 
-    #[test]
-    fn async_iter_readable_stream() -> Result<()> {
+    #[tokio::test]
+    async fn async_iter_readable_stream() -> Result<()> {
         let mut f = Builder::new().suffix(".ts").tempfile()?;
         f.write_all(
             br#"
@@ -342,12 +347,12 @@ export function foo<R>(bar: ReadableStream<R>): AsyncIterableIterator<R> {
 }
 "#,
         )?;
-        compile_ts_code(f.path().to_str().unwrap(), Default::default())?;
+        compile_ts_code(f.path().to_str().unwrap(), Default::default()).await?;
         Ok(())
     }
 
-    #[test]
-    fn fails_with_emit() -> Result<()> {
+    #[tokio::test]
+    async fn fails_with_emit() -> Result<()> {
         let mut f = Builder::new().suffix(".js").tempfile()?;
         f.write_all(
             br#"
@@ -357,12 +362,12 @@ foo.prototype.bar = foo;
 export default foo;
 "#,
         )?;
-        compile_ts_code(f.path().to_str().unwrap(), Default::default())?;
+        compile_ts_code(f.path().to_str().unwrap(), Default::default()).await?;
         Ok(())
     }
 
-    #[test]
-    fn bad_import() -> Result<()> {
+    #[tokio::test]
+    async fn bad_import() -> Result<()> {
         let mut f = Builder::new()
             .prefix("bad_import")
             .suffix(".ts")
@@ -370,6 +375,7 @@ export default foo;
         f.write_all(b"import {foo} from \"bar\";")?;
         let path = f.path().to_str().unwrap();
         let err = compile_ts_code(path, Default::default())
+            .await
             .unwrap_err()
             .to_string();
         // Unfortunately we don't report errors on module resolution,
