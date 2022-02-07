@@ -25,6 +25,10 @@ fn chisel() -> String {
 }
 
 fn main() {
+    // install the current packages in our package.json. This will make things like esbuild
+    // generally available. Tests that want a specific extra package can then install on top
+    run("npm", ["install"]);
+
     let opt = Opt::from_args();
 
     let repo = repo_dir();
