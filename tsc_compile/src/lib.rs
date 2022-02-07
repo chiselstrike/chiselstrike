@@ -2,11 +2,14 @@
 
 use anyhow::{anyhow, Context, Result};
 use deno_core::op_sync;
+use deno_core::serde;
 use deno_core::v8;
 use deno_core::JsRuntime;
-use deno_core::OpState;
+use deno_core::OpFn;
 use deno_core::RuntimeOptions;
 use deno_core::Snapshot;
+use serde::de::DeserializeOwned;
+use serde::Serialize;
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::env;
@@ -58,7 +61,7 @@ thread_local! {
 
 static MISSING_DEPENDENCY: &str = "/path/to/a/missing_dependency.d.ts";
 
-fn fetch_aux(map: &mut DownloadMap, path: String, mut base: String) -> Result<String> {
+fn fetch(map: &mut DownloadMap, path: String, mut base: String) -> Result<String> {
     if map.extra_libs.contains_key(&path) {
         return Ok(path);
     }
@@ -98,14 +101,22 @@ fn fetch_aux(map: &mut DownloadMap, path: String, mut base: String) -> Result<St
     Ok(path)
 }
 
-fn fetch(_op_state: &mut OpState, path: String, base: String) -> Result<String> {
-    FILES.with(|m| {
-        let mut map = m.borrow_mut();
-        fetch_aux(&mut map, path.clone(), base.clone())
+fn op<T1, T2, R, F>(func: F) -> Box<OpFn>
+where
+    T1: DeserializeOwned,
+    T2: DeserializeOwned,
+    R: Serialize + 'static,
+    F: Fn(&mut DownloadMap, T1, T2) -> Result<R> + 'static,
+{
+    op_sync(move |_s, a1, a2| {
+        FILES.with(|m| {
+            let mut map = m.borrow_mut();
+            func(&mut map, a1, a2)
+        })
     })
 }
 
-fn read_aux(map: &mut DownloadMap, path: String) -> Result<String> {
+fn read(map: &mut DownloadMap, path: String, _: ()) -> Result<String> {
     if path == MISSING_DEPENDENCY {
         return Ok("export default function(): unknown;\n".to_string());
     }
@@ -115,17 +126,10 @@ fn read_aux(map: &mut DownloadMap, path: String) -> Result<String> {
     if let Some(c) = map.path_to_url_content.get(&path) {
         return Ok(c.content.clone());
     }
-    Ok(fs::read_to_string(path)?)
+    fs::read_to_string(&path).with_context(|| format!("Reading {}", path))
 }
 
-fn read(_op_state: &mut OpState, path: String, _: ()) -> Result<String> {
-    FILES.with(|m| {
-        let mut map = m.borrow_mut();
-        read_aux(&mut map, path.clone()).with_context(|| format!("Reading {}", path))
-    })
-}
-
-fn write_aux(map: &mut DownloadMap, mut path: String, content: String) {
+fn write(map: &mut DownloadMap, mut path: String, content: String) -> Result<()> {
     path = path.strip_prefix("chisel:/").unwrap().to_string();
     if let Some(url) = map.path_to_url_content.get(&path) {
         path = url.url.to_string();
@@ -136,39 +140,31 @@ fn write_aux(map: &mut DownloadMap, mut path: String, content: String) {
         };
         path = match map.input_files.get(prefix) {
             Some(path) => path.clone(),
-            None => return,
+            None => return Ok(()),
         };
         if is_dts {
             path = without_extension(&path).to_string() + ".d.ts";
         }
     }
     map.written.insert(path, content);
-}
-
-fn write(_op_state: &mut OpState, path: String, content: String) -> Result<()> {
-    FILES.with(|m| write_aux(&mut m.borrow_mut(), path, content));
     Ok(())
 }
 
-fn get_cwd(_op_state: &mut OpState, _: (), _: ()) -> Result<String> {
+fn get_cwd(_map: &mut DownloadMap, _: (), _: ()) -> Result<String> {
     let cwd = std::env::current_dir()?;
     Ok(cwd.into_os_string().into_string().unwrap())
 }
 
-fn dir_exists(_op_state: &mut OpState, path: String, _: ()) -> Result<bool> {
+fn dir_exists(_map: &mut DownloadMap, path: String, _: ()) -> Result<bool> {
     return Ok(Path::new(&path).is_dir());
 }
 
-fn file_exists(_op_state: &mut OpState, path: String, _: ()) -> Result<bool> {
+fn file_exists(_map: &mut DownloadMap, path: String, _: ()) -> Result<bool> {
     return Ok(Path::new(&path).is_file());
 }
 
-fn diagnostic(_op_state: &mut OpState, msg: String, _: ()) -> Result<()> {
-    FILES.with(|m| {
-        let mut borrow = m.borrow_mut();
-        assert!(borrow.diagnostics.is_empty());
-        borrow.diagnostics = msg;
-    });
+fn diagnostic(map: &mut DownloadMap, msg: String, _: ()) -> Result<()> {
+    map.diagnostics = msg;
     Ok(())
 }
 
@@ -237,13 +233,13 @@ pub async fn compile_ts_code(
         startup_snapshot: Some(Snapshot::Static(SNAPSHOT)),
         ..Default::default()
     });
-    runtime.register_op("fetch", op_sync(fetch));
-    runtime.register_op("read", op_sync(read));
-    runtime.register_op("write", op_sync(write));
-    runtime.register_op("get_cwd", op_sync(get_cwd));
-    runtime.register_op("dir_exists", op_sync(dir_exists));
-    runtime.register_op("file_exists", op_sync(file_exists));
-    runtime.register_op("diagnostic", op_sync(diagnostic));
+    runtime.register_op("fetch", op(fetch));
+    runtime.register_op("read", op(read));
+    runtime.register_op("write", op(write));
+    runtime.register_op("get_cwd", op(get_cwd));
+    runtime.register_op("dir_exists", op(dir_exists));
+    runtime.register_op("file_exists", op(file_exists));
+    runtime.register_op("diagnostic", op(diagnostic));
     runtime.sync_ops_cache();
 
     let global_context = runtime.global_context();
