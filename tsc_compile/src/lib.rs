@@ -297,7 +297,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn dignostics() -> Result<()> {
+    async fn diagnostics() -> Result<()> {
         for _ in 0..2 {
             let mut f = Builder::new().suffix(".ts").tempfile()?;
             f.write_all(b"export {}; zed;")?;
