@@ -99,14 +99,15 @@ pub(crate) async fn apply<S: ToString>(
             TypeChecking::No => None,
         };
 
-        let f = Builder::new().suffix(".ts").tempfile()?;
-        let bundler_output_file = f.path().to_str().unwrap();
-        let cwd = env::current_dir()?;
-
         let mut endpoint_futures = vec![];
         let mut keep_tmp_alive = vec![];
 
+        let cwd = env::current_dir()?;
+
         for endpoint in endpoints.iter() {
+            let out = Builder::new().suffix(".ts").tempfile()?;
+            let bundler_output_file = out.path().to_str().unwrap().to_owned();
+
             let mut f = Builder::new().suffix(".ts").tempfile()?;
             let inner = f.as_file_mut();
             let mut import_path = endpoint.file_path.to_owned();
@@ -121,25 +122,30 @@ pub(crate) async fn apply<S: ToString>(
             inner.flush()?;
             let bundler_entry_fname = f.path().to_str().unwrap().to_owned();
             keep_tmp_alive.push(f);
+            keep_tmp_alive.push(out);
 
-            endpoint_futures.push(npx(
-                "esbuild",
-                &[
-                    &bundler_entry_fname,
-                    "--bundle",
-                    "--color=true",
-                    "--target=esnext",
-                    "--external:@chiselstrike",
-                    "--format=esm",
-                    "--tree-shaking=true",
-                    "--tsconfig=./tsconfig.json",
-                    "--platform=node",
-                    &format!("--outfile={}", bundler_output_file),
-                ],
+            endpoint_futures.push((
+                bundler_output_file.clone(),
+                npx(
+                    "esbuild",
+                    &[
+                        &bundler_entry_fname,
+                        "--bundle",
+                        "--color=true",
+                        "--target=esnext",
+                        "--external:@chiselstrike",
+                        "--format=esm",
+                        "--tree-shaking=true",
+                        "--tsconfig=./tsconfig.json",
+                        "--platform=node",
+                        &format!("--outfile={}", bundler_output_file),
+                    ],
+                ),
             ));
         }
 
-        for (endpoint, res) in endpoints.iter().zip(endpoint_futures.into_iter()) {
+        for (endpoint, execution) in endpoints.iter().zip(endpoint_futures.into_iter()) {
+            let (bundler_output_file, res) = execution;
             let res = res.await.unwrap()?;
 
             if !res.status.success() {
