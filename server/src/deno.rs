@@ -112,7 +112,7 @@ fn wrap(specifier: &ModuleSpecifier, code: String) -> Result<ModuleSource> {
     })
 }
 
-fn compile(code: &str, lib: Option<&str>) -> Result<String> {
+async fn compile(code: &str, lib: Option<&str>) -> Result<String> {
     let mut f = Builder::new().suffix(".ts").tempfile()?;
     let inner = f.as_file_mut();
     inner.write_all(code.as_bytes())?;
@@ -122,7 +122,7 @@ fn compile(code: &str, lib: Option<&str>) -> Result<String> {
         extra_default_lib: lib,
         ..Default::default()
     };
-    Ok(compile_ts_code(path, opts)?.remove(path).unwrap())
+    Ok(compile_ts_code(path, opts).await?.remove(path).unwrap())
 }
 
 async fn load_code(specifier: ModuleSpecifier) -> Result<ModuleSource> {
@@ -133,7 +133,7 @@ async fn load_code(specifier: ModuleSpecifier) -> Result<ModuleSource> {
     };
     let last = specifier.path_segments().unwrap().rev().next().unwrap();
     if last.ends_with(".ts") {
-        code = compile(&code, None)?;
+        code = compile(&code, None).await?;
     }
     wrap(&specifier, code)
 }
