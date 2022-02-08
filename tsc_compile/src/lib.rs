@@ -2,6 +2,7 @@
 
 use anyhow::{anyhow, Context, Result};
 use deno_core::anyhow;
+use deno_core::futures::future;
 use deno_core::op_sync;
 use deno_core::serde;
 use deno_core::url::Url;
@@ -10,23 +11,23 @@ use deno_core::JsRuntime;
 use deno_core::OpFn;
 use deno_core::RuntimeOptions;
 use deno_core::Snapshot;
+use deno_graph::source::LoadFuture;
+use deno_graph::source::LoadResponse;
+use deno_graph::source::Loader;
+use deno_graph::Module;
+use deno_graph::ModuleGraph;
 use serde::de::DeserializeOwned;
 use serde::Serialize;
 use std::collections::HashMap;
 use std::env;
 use std::fs;
 use std::path::Path;
-
-#[derive(Debug)]
-struct UrlAndContent {
-    url: Url,
-    content: String,
-}
+use std::sync::Arc;
 
 #[derive(Debug)]
 struct DownloadMap {
     // map download path to urls and content
-    path_to_url_content: HashMap<String, UrlAndContent>,
+    path_to_url: HashMap<String, Url>,
 
     // maps url to the download path.
     url_to_path: HashMap<Url, String>,
@@ -40,26 +41,32 @@ struct DownloadMap {
     // User provided libraries
     extra_libs: HashMap<String, String>,
 
+    // Precomputed module graph
+    graph: ModuleGraph,
+
     diagnostics: String,
 }
 
 impl DownloadMap {
     fn len(&self) -> usize {
-        self.path_to_url_content.len()
+        self.path_to_url.len()
     }
-    fn insert(&mut self, path: String, url: Url, content: String) {
-        let url_and_content = UrlAndContent { url, content };
-        self.url_to_path
-            .insert(url_and_content.url.clone(), path.clone());
-        self.path_to_url_content.insert(path, url_and_content);
+    fn insert(&mut self, path: String, url: Url) {
+        self.url_to_path.insert(url.clone(), path.clone());
+        self.path_to_url.insert(path, url);
     }
-    fn new(file_name: &str, extra_libs: HashMap<String, String>) -> DownloadMap {
+    fn new(
+        file_name: &str,
+        extra_libs: HashMap<String, String>,
+        graph: ModuleGraph,
+    ) -> DownloadMap {
         let mut input_files = HashMap::new();
         input_files.insert(abs(without_extension(file_name)), file_name.to_string());
         DownloadMap {
             input_files,
             extra_libs,
-            path_to_url_content: Default::default(),
+            graph,
+            path_to_url: Default::default(),
             url_to_path: Default::default(),
             written: Default::default(),
             diagnostics: Default::default(),
@@ -73,8 +80,8 @@ fn fetch(map: &mut DownloadMap, path: String, mut base: String) -> Result<String
     if map.extra_libs.contains_key(&path) {
         return Ok(path);
     }
-    if let Some(url_and_content) = map.path_to_url_content.get(&base) {
-        base = url_and_content.url.to_string();
+    if let Some(url) = map.path_to_url.get(&base) {
+        base = url.to_string();
     } else {
         assert!(base.as_bytes()[0] == b'/');
         base = "file://".to_string() + &base;
@@ -89,12 +96,6 @@ fn fetch(map: &mut DownloadMap, path: String, mut base: String) -> Result<String
         return Ok(path.clone());
     }
 
-    let text = if resolved.scheme() == "file" {
-        fs::read_to_string(resolved.to_file_path().unwrap())?
-    } else {
-        ureq::get(&resolved.to_string()).call()?.into_string()?
-    };
-
     let n = map.len();
     let extension = if path.ends_with(".d.ts") {
         "d.ts"
@@ -105,7 +106,7 @@ fn fetch(map: &mut DownloadMap, path: String, mut base: String) -> Result<String
     };
 
     let path = format!("/path/to/downloaded/files/{}.{}", n, extension);
-    map.insert(path.clone(), resolved, text);
+    map.insert(path.clone(), resolved);
     Ok(path)
 }
 
@@ -129,16 +130,20 @@ fn read(map: &mut DownloadMap, path: String, _: ()) -> Result<String> {
     if let Some(v) = map.extra_libs.get(&path) {
         return Ok(v.to_string());
     }
-    if let Some(c) = map.path_to_url_content.get(&path) {
-        return Ok(c.content.clone());
+    if let Some(url) = map.path_to_url.get(&path) {
+        let module = match map.graph.get(url).unwrap() {
+            Module::Es(m) => m,
+            Module::Synthetic(_) => anyhow::bail!("Was not expecting a synthetic module"),
+        };
+        return Ok((*module.source).clone());
     }
     fs::read_to_string(&path).with_context(|| format!("Reading {}", path))
 }
 
 fn write(map: &mut DownloadMap, mut path: String, content: String) -> Result<()> {
     path = path.strip_prefix("chisel:/").unwrap().to_string();
-    if let Some(url) = map.path_to_url_content.get(&path) {
-        path = url.url.to_string();
+    if let Some(url) = map.path_to_url.get(&path) {
+        path = url.to_string();
     } else {
         let (prefix, is_dts) = match path.strip_suffix(".d.ts") {
             None => (without_extension(&path), false),
@@ -218,10 +223,38 @@ pub struct CompileOptions<'a> {
     pub emit_declarations: bool,
 }
 
+struct ModuleLoader {}
+
+fn load_url(specifier: &Url) -> Result<Option<LoadResponse>> {
+    let text = if specifier.scheme() == "file" {
+        fs::read_to_string(specifier.to_file_path().unwrap())?
+    } else {
+        ureq::get(&specifier.to_string()).call()?.into_string()?
+    };
+    let response = LoadResponse {
+        specifier: specifier.clone(),
+        maybe_headers: None,
+        content: Arc::new(text),
+    };
+    Ok(Some(response))
+}
+
+impl Loader for ModuleLoader {
+    fn load(&mut self, specifier: &Url, _is_dynamic: bool) -> LoadFuture {
+        Box::pin(future::ready(load_url(specifier)))
+    }
+}
+
 pub async fn compile_ts_code(
     file_name: &str,
     opts: CompileOptions<'_>,
 ) -> Result<HashMap<String, String>> {
+    let url = "file://".to_string() + &abs(file_name);
+    let url = Url::parse(&url)?;
+    let mut loader = ModuleLoader {};
+    let graph =
+        deno_graph::create_graph(vec![url], false, None, &mut loader, None, None, None, None).await;
+
     let mut runtime = JsRuntime::new(RuntimeOptions {
         startup_snapshot: Some(Snapshot::Static(SNAPSHOT)),
         ..Default::default()
@@ -238,7 +271,7 @@ pub async fn compile_ts_code(
     runtime
         .op_state()
         .borrow_mut()
-        .put(DownloadMap::new(file_name, opts.extra_libs));
+        .put(DownloadMap::new(file_name, opts.extra_libs, graph));
 
     let global_context = runtime.global_context();
     let ok = {

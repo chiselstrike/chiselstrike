@@ -52,8 +52,13 @@ uuid = { version = "0.8.2", features = ["v4"] }
 yaml-rust = "0.4"
 
 [build-dependencies]
+# FIXME: We have additional dependencies here to work around
+# https://github.com/rust-lang/cargo/issues/6313
 anyhow = "1.0"
+libc = { version = "0.2.99", features = [ "extra_traits", "align" ] }
+log = { version = "0.4.14", features = ["std"] }
 tonic-build = "0.5.2"
+tracing = { version = "0.1.30", features = ["log"] }
 vergen = { version = "6", default-features = false, features = ["git"] }
 
 [lib]
