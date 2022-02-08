@@ -6,9 +6,12 @@ cd "$TEMPDIR"
 
 cat << EOF > "$TEMPDIR/models/t.ts"
 import { ChiselEntity } from "@chiselstrike/api";
+export class Bar extends ChiselEntity {
+    c: number;
+}
 export class Foo extends ChiselEntity {
     a?: number;
-    b?: number;
+    b?: Bar;
 }
 EOF
 
@@ -23,6 +26,7 @@ export default async function (req: Request) {
 EOF
 
 $CHISEL apply
+# CHECK: Model defined: Bar
 # CHECK: Model defined: Foo
 # CHECK: End point defined: /dev/save
 
@@ -32,12 +36,12 @@ $CURL -d '{}' $CHISELD_HOST/dev/save
 $CURL -d '{"a":142}' $CHISELD_HOST/dev/save
 # CHECK: HTTP/1.1 200 OK
 # CHECK: "a":142
-$CURL -d '{"b":241}' $CHISELD_HOST/dev/save
+$CURL -d '{"b":{"c":241}}' $CHISELD_HOST/dev/save
 # CHECK: HTTP/1.1 200 OK
-# CHECK: "b":241
-$CURL -d '{"a":142, "b":241}' $CHISELD_HOST/dev/save
+# CHECK: "c":241
+$CURL -d '{"a":142, "b":{"c":241}}' $CHISELD_HOST/dev/save
 # CHECK: HTTP/1.1 200 OK
-# CHECK: "b":241
+# CHECK: "c":241
 
 cat << EOF > "$TEMPDIR/models/t.ts"
 import { ChiselEntity } from "@chiselstrike/api";
