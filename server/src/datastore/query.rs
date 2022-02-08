@@ -54,7 +54,7 @@ pub(crate) enum SelectField {
 }
 
 /// `Query` is a structure that represents an executable query.
-///  
+///
 /// A query represents a full query including filtering, projection, joins,
 /// and so on. The `execute` method of `QueryEngine` executes these queries
 /// using SQL and the policy engine.
@@ -67,14 +67,17 @@ pub(crate) struct Query {
     /// sql response row. Each element represents a selected field (potentially nested)
     /// of the selected base type.
     pub(crate) fields: Vec<SelectField>,
-    /// JSON fields to be sent to user. It's used to filter columns that come out of the database.
-    /// This filtering could be done when generating the expression, but it's complicated
-    /// and we will do it later.
-    pub(crate) allowed_columns: Option<HashSet<String>>,
+    /// Entity fields selected by the user. This field is used to post-filter fields that
+    /// shall be returned to the user in JSON.
+    /// FIXME: The post-filtering is suboptimal solution and selection should happen when
+    /// we build the raw_sql query.
+    pub(crate) allowed_fields: Option<HashSet<String>>,
     /// Field policies to be applied on the resulting response.
     pub(crate) policies: FieldPolicies,
 }
 
+/// Represents JOIN operator joining `lalias` table using `lkey` with Entity of `rtype`
+/// whose data are stored in `ralias` table and joined using `rkey`.
 #[derive(Debug, Clone)]
 struct Join {
     rtype: Arc<ObjectType>,
@@ -92,13 +95,19 @@ struct Join {
 /// structure that contains raw SQL query string and additional data necessary for
 /// JSON response reconstruction and filtering.
 struct QueryBuilder {
+    /// Recursive vector used to reconstruct nested entities based on flat vector of columns
+    /// returned by the database.
     fields: Vec<SelectField>,
+    /// Vector of SQL column aliases that will be selected from the database and corresponding
+    /// scalar fields.
     columns: Vec<(String, Field)>,
     base_type: Arc<ObjectType>,
     joins: Vec<Join>,
     restrictions: Vec<Restriction>,
-    allowed_columns: Option<HashSet<String>>,
+    /// List of fields to be returned to the user.
+    allowed_fields: Option<HashSet<String>>,
     policies: FieldPolicies,
+    /// Limits how many rows/entries will be returned to the user.
     limit: Option<u64>,
 }
 
@@ -106,14 +115,14 @@ impl QueryBuilder {
     /// Constructs a query builder ready to build an expression querying all fields of a
     /// given type `ty`. This is done in a shallow manner. Columns representing foreign
     /// key are returned as string, not as the related Entity.
-    fn new_from_type(ty: &Arc<ObjectType>) -> Result<Self> {
+    fn new_from_type(ty: &Arc<ObjectType>) -> Self {
         let mut builder = Self {
             fields: vec![],
             columns: vec![],
             base_type: ty.clone(),
             joins: vec![],
             restrictions: vec![],
-            allowed_columns: None,
+            allowed_fields: None,
             policies: FieldPolicies::default(),
             limit: None,
         };
@@ -124,14 +133,19 @@ impl QueryBuilder {
                 Type::Object(_) => Type::String, // This is actually a foreign key.
                 ty => ty,
             };
-            let field = builder.make_builtin_field(&field, field.name.as_str());
+            let field = builder.make_scalar_field(&field, field.name.as_str());
             builder.fields.push(field)
         }
-        Ok(builder)
+        builder
     }
 
     /// Constructs a builder from the `BackingStore` JSON object.
     fn new_from_json(val: &serde_json::Value) -> Result<Self> {
+        anyhow::ensure!(
+            val["kind"] == "BackingStore",
+            "unexpected object kind. Expected `BackingStore`, got {:?}",
+            val["kind"]
+        );
         let name = val["name"].as_str().ok_or_else(|| {
             anyhow!(
                 "internal error: `name` field is either missing or not a string: {}",
@@ -156,7 +170,7 @@ impl QueryBuilder {
             base_type: ty.clone(),
             joins: vec![],
             restrictions: vec![],
-            allowed_columns: None,
+            allowed_fields: None,
             policies,
             limit: val["limit"].as_u64(),
         };
@@ -164,7 +178,7 @@ impl QueryBuilder {
         Ok(builder)
     }
 
-    fn make_builtin_field(&mut self, field: &Field, column_name: &str) -> SelectField {
+    fn make_scalar_field(&mut self, field: &Field, column_name: &str) -> SelectField {
         let select_field = SelectField::Scalar {
             name: field.name.clone(),
             type_: field.type_.clone(),
@@ -208,7 +222,7 @@ impl QueryBuilder {
                         )
                     })?;
                     let column_name = format!("{}.{}", current_table, field_name);
-                    let field = self.make_builtin_field(field, column_name.as_str());
+                    let field = self.make_scalar_field(field, column_name.as_str());
                     fields.push(field);
                 }
                 Value::Object(nested_fields) => {
@@ -255,9 +269,9 @@ impl QueryBuilder {
         Ok(fields)
     }
 
-    fn update_allowed_columns(&mut self, columns_json: &serde_json::Value) -> Result<()> {
+    fn update_allowed_fields(&mut self, columns_json: &serde_json::Value) -> Result<()> {
         if let Some(columns) = columns_json.as_array() {
-            let mut allowed_columns = HashSet::<String>::default();
+            let mut allowed_fields = HashSet::<String>::default();
             for c in columns {
                 let c = &c.as_array().ok_or_else(|| {
                     // FIXME: This is ugly and the internal part is not necessary.
@@ -267,10 +281,10 @@ impl QueryBuilder {
                     )
                 })?[0];
                 if let Value::String(field_name) = c {
-                    allowed_columns.insert(field_name.to_owned());
+                    allowed_fields.insert(field_name.to_owned());
                 }
             }
-            self.allowed_columns = Some(allowed_columns);
+            self.allowed_fields = Some(allowed_fields);
         }
         Ok(())
     }
@@ -279,7 +293,7 @@ impl QueryBuilder {
         if let Some(limit) = rest_json["limit"].as_u64() {
             self.limit = Some(limit);
         }
-        self.update_allowed_columns(&rest_json["columns"])?;
+        self.update_allowed_fields(&rest_json["columns"])?;
         let restrictions = rest_json["restrictions"]
             .as_object()
             .ok_or_else(|| anyhow!("Missing restrictions in filter"))?;
@@ -379,7 +393,7 @@ impl QueryBuilder {
         Query {
             raw_sql: self.make_raw_query(),
             fields: self.fields.clone(),
-            allowed_columns: self.allowed_columns.clone(),
+            allowed_fields: self.allowed_fields.clone(),
             policies: self.policies.clone(),
         }
     }
@@ -455,9 +469,9 @@ pub(crate) fn convert_restrictions(
     Ok(sql_restrictions)
 }
 
-pub(crate) fn type_to_query(ty: &Arc<ObjectType>) -> Result<Query> {
-    let builder = QueryBuilder::new_from_type(ty)?;
-    Ok(builder.build())
+pub(crate) fn type_to_query(ty: &Arc<ObjectType>) -> Query {
+    let builder = QueryBuilder::new_from_type(ty);
+    builder.build()
 }
 
 pub(crate) fn json_to_query(val: &serde_json::Value) -> Result<Query> {

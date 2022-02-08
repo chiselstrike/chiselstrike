@@ -357,6 +357,15 @@ struct QueryStreamResource {
 
 impl Resource for QueryStreamResource {}
 
+/// Recursively builds an array representing fields of potentially nested `ty`.
+/// E.g. for types X{x: Float}, and Y{a: Float, b: X} make_fields_json(Y) will
+/// return [
+///     ["a", "Float"],
+///     [
+///         {field_name": "b", "columns": ["x", "Float"]},
+///         "X"
+///     ]
+/// ]
 fn make_fields_json(ty: &Arc<ObjectType>) -> serde_json::Value {
     let mut columns = vec![];
     for f in ty.all_fields() {
