@@ -45,27 +45,17 @@ $CURL -d '{"a":142, "b":{"c":241}}' $CHISELD_HOST/dev/save
 
 cat << EOF > "$TEMPDIR/models/t.ts"
 import { ChiselEntity } from "@chiselstrike/api";
+export class Bar extends ChiselEntity {
+    c: number;
+}
 export class Foo extends ChiselEntity {
     a?: number;
-    b?: number;
-    c?: string;
+    b?: Bar;
+    d?: number;
 }
 EOF
 
-cat << EOF > "$TEMPDIR/endpoints/list.ts"
-import { Foo } from "../models/t.ts";
-import { responseFromJson } from "@chiselstrike/api";
-export default async function (req: Request) {
-    return responseFromJson(await Foo.findMany(await req.json()));
-}
-EOF
-
-$CHISEL apply --version=v2
+$CHISEL apply
+# CHECK: Model defined: Bar
 # CHECK: Model defined: Foo
-# CHECK: End point defined: /v2/list
-# CHECK: End point defined: /v2/save
-
-## TODO : re-enable when populate is fixed:
-exit
-$CHISEL populate --version=v2 --from=dev
-$CURL $CHISELD_HOST/v2/list
+# CHECK: End point defined: /dev/save
