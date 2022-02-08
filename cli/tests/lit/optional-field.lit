@@ -1,0 +1,67 @@
+# SPDX-FileCopyrightText: © 2021 ChiselStrike <info@chiselstrike.com>
+
+# RUN: sh -e @file
+
+cd "$TEMPDIR"
+
+cat << EOF > "$TEMPDIR/models/t.ts"
+import { ChiselEntity } from "@chiselstrike/api";
+export class Foo extends ChiselEntity {
+    a?: number;
+    b?: number;
+}
+EOF
+
+cat << EOF > "$TEMPDIR/endpoints/save.ts"
+import { Foo } from "../models/t.ts";
+import { responseFromJson } from "@chiselstrike/api";
+export default async function (req: Request) {
+    let f = Foo.build(await req.json());
+    await f.save();
+    return responseFromJson(f);
+}
+EOF
+
+$CHISEL apply
+# CHECK: Model defined: Foo
+# CHECK: End point defined: /dev/save
+
+$CURL -d '{}' $CHISELD_HOST/dev/save
+# CHECK: HTTP/1.1 200 OK
+# CHECK: {"id":
+$CURL -d '{"a":142}' $CHISELD_HOST/dev/save
+# CHECK: HTTP/1.1 200 OK
+# CHECK: "a":142
+$CURL -d '{"b":241}' $CHISELD_HOST/dev/save
+# CHECK: HTTP/1.1 200 OK
+# CHECK: "b":241
+$CURL -d '{"a":142, "b":241}' $CHISELD_HOST/dev/save
+# CHECK: HTTP/1.1 200 OK
+# CHECK: "b":241
+
+cat << EOF > "$TEMPDIR/models/t.ts"
+import { ChiselEntity } from "@chiselstrike/api";
+export class Foo extends ChiselEntity {
+    a?: number;
+    b?: number;
+    c?: string;
+}
+EOF
+
+cat << EOF > "$TEMPDIR/endpoints/list.ts"
+import { Foo } from "../models/t.ts";
+import { responseFromJson } from "@chiselstrike/api";
+export default async function (req: Request) {
+    return responseFromJson(await Foo.findMany(await req.json()));
+}
+EOF
+
+$CHISEL apply --version=v2
+# CHECK: Model defined: Foo
+# CHECK: End point defined: /v2/list
+# CHECK: End point defined: /v2/save
+
+## TODO : re-enable when populate is fixed:
+exit
+$CHISEL populate --version=v2 --from=dev
+$CURL $CHISELD_HOST/v2/list
