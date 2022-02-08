@@ -10,7 +10,6 @@ use deno_core::RuntimeOptions;
 use deno_core::Snapshot;
 use serde::de::DeserializeOwned;
 use serde::Serialize;
-use std::cell::RefCell;
 use std::collections::HashMap;
 use std::env;
 use std::fs;
@@ -23,7 +22,7 @@ struct UrlAndContent {
     content: String,
 }
 
-#[derive(Default, Debug)]
+#[derive(Debug)]
 struct DownloadMap {
     // map download path to urls and content
     path_to_url_content: HashMap<String, UrlAndContent>,
@@ -53,10 +52,18 @@ impl DownloadMap {
             .insert(url_and_content.url.clone(), path.clone());
         self.path_to_url_content.insert(path, url_and_content);
     }
-}
-
-thread_local! {
-    static FILES: RefCell<DownloadMap> = RefCell::new(DownloadMap::default());
+    fn new(file_name: &str, extra_libs: HashMap<String, String>) -> DownloadMap {
+        let mut input_files = HashMap::new();
+        input_files.insert(abs(without_extension(file_name)), file_name.to_string());
+        DownloadMap {
+            input_files,
+            extra_libs,
+            path_to_url_content: Default::default(),
+            url_to_path: Default::default(),
+            written: Default::default(),
+            diagnostics: Default::default(),
+        }
+    }
 }
 
 static MISSING_DEPENDENCY: &str = "/path/to/a/missing_dependency.d.ts";
@@ -108,11 +115,9 @@ where
     R: Serialize + 'static,
     F: Fn(&mut DownloadMap, T1, T2) -> Result<R> + 'static,
 {
-    op_sync(move |_s, a1, a2| {
-        FILES.with(|m| {
-            let mut map = m.borrow_mut();
-            func(&mut map, a1, a2)
-        })
+    op_sync(move |s, a1, a2| {
+        let map = s.borrow_mut::<DownloadMap>();
+        func(map, a1, a2)
     })
 }
 
@@ -205,7 +210,7 @@ fn without_extension(path: &str) -> &str {
 
 static SNAPSHOT: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/SNAPSHOT.bin"));
 
-#[derive(Default)]
+#[derive(Default, Clone)]
 pub struct CompileOptions<'a> {
     pub extra_default_lib: Option<&'a str>,
     pub extra_libs: HashMap<String, String>,
@@ -216,19 +221,6 @@ pub async fn compile_ts_code(
     file_name: &str,
     opts: CompileOptions<'_>,
 ) -> Result<HashMap<String, String>> {
-    FILES.with(|m| {
-        let mut borrow = m.borrow_mut();
-        borrow.extra_libs = opts.extra_libs;
-        borrow.path_to_url_content.clear();
-        borrow.url_to_path.clear();
-        borrow.written.clear();
-        borrow.input_files.clear();
-        borrow.diagnostics.clear();
-        borrow
-            .input_files
-            .insert(abs(without_extension(file_name)), file_name.to_string());
-    });
-
     let mut runtime = JsRuntime::new(RuntimeOptions {
         startup_snapshot: Some(Snapshot::Static(SNAPSHOT)),
         ..Default::default()
@@ -242,31 +234,36 @@ pub async fn compile_ts_code(
     runtime.register_op("diagnostic", op(diagnostic));
     runtime.sync_ops_cache();
 
+    runtime
+        .op_state()
+        .borrow_mut()
+        .put(DownloadMap::new(file_name, opts.extra_libs));
+
     let global_context = runtime.global_context();
-    let scope = &mut runtime.handle_scope();
-    let file = v8::String::new(scope, &abs(file_name)).unwrap().into();
-    let lib = match opts.extra_default_lib {
-        Some(v) => v8::String::new(scope, &abs(v)).unwrap().into(),
-        None => v8::undefined(scope).into(),
+    let ok = {
+        let scope = &mut runtime.handle_scope();
+        let file = v8::String::new(scope, &abs(file_name)).unwrap().into();
+        let lib = match opts.extra_default_lib {
+            Some(v) => v8::String::new(scope, &abs(v)).unwrap().into(),
+            None => v8::undefined(scope).into(),
+        };
+        let global_proxy = global_context.open(scope).global(scope);
+        let compile: v8::Local<v8::Function> = get_member(global_proxy, scope, "compile").unwrap();
+        let emit_declarations = v8::Boolean::new(scope, opts.emit_declarations).into();
+        compile
+            .call(scope, global_proxy.into(), &[file, lib, emit_declarations])
+            .unwrap()
+            .is_true()
     };
 
-    let global_proxy = global_context.open(scope).global(scope);
-
-    let compile: v8::Local<v8::Function> = get_member(global_proxy, scope, "compile").unwrap();
-
-    let emit_declarations = v8::Boolean::new(scope, opts.emit_declarations).into();
-    if !compile
-        .call(scope, global_proxy.into(), &[file, lib, emit_declarations])
-        .unwrap()
-        .is_true()
-    {
-        return Err(FILES.with(|m| anyhow!("Compilation failed:\n{}", m.borrow().diagnostics)));
+    let op_state = runtime.op_state();
+    let op_state = op_state.borrow();
+    let map = op_state.borrow::<DownloadMap>();
+    if ok {
+        Ok(map.written.clone())
+    } else {
+        Err(anyhow!("Compilation failed:\n{}", map.diagnostics))
     }
-
-    FILES.with(|m| {
-        let borrow = m.borrow();
-        Ok(borrow.written.clone())
-    })
 }
 
 #[cfg(test)]
