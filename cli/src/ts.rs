@@ -7,6 +7,7 @@ use swc_common::{
     errors::{emitter, Handler},
     SourceMap, Spanned,
 };
+use swc_ecma_ast::PropName;
 use swc_ecma_ast::{
     ClassMember, ClassProp, Decl, Decorator, Expr, Ident, Lit, ModuleDecl, ModuleItem,
     TsEntityName, TsKeywordTypeKind, TsType, TsTypeAnn,
@@ -29,9 +30,9 @@ fn ident_to_string(id: &Ident) -> String {
     id.sym.to_string()
 }
 
-fn get_field_info(handler: &Handler, x: &Expr) -> Result<(String, bool)> {
+fn get_field_info(handler: &Handler, x: &PropName) -> Result<(String, bool)> {
     match x {
-        Expr::Ident(id) => Ok((ident_to_string(id), id.optional)),
+        PropName::Ident(id) => Ok((ident_to_string(id), id.optional)),
         z => Err(swc_err(handler, z, "expected an identifier")),
     }
 }
