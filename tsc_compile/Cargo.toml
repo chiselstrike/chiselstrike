@@ -6,6 +6,7 @@ edition = "2021"
 
 [dependencies]
 deno_core = { path = "../third_party/deno/core" }
+deno_graph = "0.18.0"
 ureq = "2.4.0"
 
 [dev-dependencies]

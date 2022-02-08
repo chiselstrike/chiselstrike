@@ -504,7 +504,7 @@ dependencies = [
  "structopt",
  "swc_common",
  "swc_ecma_ast",
- "swc_ecma_parser",
+ "swc_ecma_parser 0.88.3",
  "tempfile",
  "tokio",
  "toml",
@@ -531,7 +531,7 @@ dependencies = [
  "anyhow",
  "swc_common",
  "swc_ecma_codegen",
- "swc_ecma_parser",
+ "swc_ecma_parser 0.88.3",
  "swc_ecma_transforms_typescript",
  "swc_ecma_visit",
 ]
@@ -772,6 +772,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "deno_ast"
+version = "0.9.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e81ceec755f9e4e270e8d7ef4ade1921eddc1717dea092c726b088f9c074721b"
+dependencies = [
+ "data-url",
+ "serde",
+ "swc_atoms",
+ "swc_common",
+ "swc_ecmascript",
+ "text_lines",
+ "url",
+]
+
+[[package]]
 name = "deno_broadcast_channel"
 version = "0.29.0"
 dependencies = [
@@ -863,6 +878,27 @@ dependencies = [
  "serde",
  "tokio",
  "winapi",
+]
+
+[[package]]
+name = "deno_graph"
+version = "0.18.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5b2a21feedd2fde8846a8b94855498ff7e1c59bdf972a06a6faf228999c1f7fd"
+dependencies = [
+ "anyhow",
+ "cfg-if 1.0.0",
+ "data-url",
+ "deno_ast",
+ "futures",
+ "lazy_static",
+ "parking_lot",
+ "regex",
+ "ring",
+ "serde",
+ "serde_json",
+ "termcolor",
+ "url",
 ]
 
 [[package]]
@@ -1904,6 +1940,9 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7a5bbe824c507c5da5956355e86a746d82e0e1464f65d862cc5e71da70e94b2c"
 dependencies = [
  "cfg-if 1.0.0",
+ "js-sys",
+ "wasm-bindgen",
+ "web-sys",
 ]
 
 [[package]]
@@ -3457,6 +3496,7 @@ dependencies = [
  "http",
  "hyper",
  "itertools 0.10.3",
+ "libc",
  "log",
  "nix",
  "once_cell",
@@ -3479,6 +3519,7 @@ dependencies = [
  "tokio",
  "tonic",
  "tonic-build",
+ "tracing",
  "tsc_compile",
  "url",
  "urldecode",
@@ -3895,7 +3936,7 @@ dependencies = [
  "swc_common",
  "swc_ecma_ast",
  "swc_ecma_codegen_macros",
- "swc_ecma_parser",
+ "swc_ecma_parser 0.88.3",
  "tracing",
 ]
 
@@ -3910,6 +3951,38 @@ dependencies = [
  "quote 1.0.15",
  "swc_macros_common",
  "syn 1.0.65",
+]
+
+[[package]]
+name = "swc_ecma_dep_graph"
+version = "0.58.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "bf46c8d3c4b34072e2e958b259781d9a94a00f23806c402eba40b8e9865f9dda"
+dependencies = [
+ "swc_atoms",
+ "swc_common",
+ "swc_ecma_ast",
+ "swc_ecma_visit",
+]
+
+[[package]]
+name = "swc_ecma_parser"
+version = "0.87.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f032c57793a287a8b374e92a2b606e5eb890539285e4723fe6acb9be1fadcec6"
+dependencies = [
+ "either",
+ "enum_kind",
+ "lexical",
+ "num-bigint",
+ "serde",
+ "smallvec",
+ "swc_atoms",
+ "swc_common",
+ "swc_ecma_ast",
+ "tracing",
+ "typed-arena",
+ "unicode-xid 0.2.2",
 ]
 
 [[package]]
@@ -3946,7 +4019,7 @@ dependencies = [
  "swc_atoms",
  "swc_common",
  "swc_ecma_ast",
- "swc_ecma_parser",
+ "swc_ecma_parser 0.88.3",
  "swc_ecma_utils",
  "swc_ecma_visit",
  "tracing",
@@ -3983,7 +4056,7 @@ dependencies = [
  "swc_atoms",
  "swc_common",
  "swc_ecma_ast",
- "swc_ecma_parser",
+ "swc_ecma_parser 0.88.3",
  "swc_ecma_transforms_base",
  "swc_ecma_transforms_macros",
  "swc_ecma_utils",
@@ -4000,7 +4073,7 @@ dependencies = [
  "swc_atoms",
  "swc_common",
  "swc_ecma_ast",
- "swc_ecma_parser",
+ "swc_ecma_parser 0.88.3",
  "swc_ecma_transforms_base",
  "swc_ecma_transforms_react",
  "swc_ecma_utils",
@@ -4034,6 +4107,17 @@ dependencies = [
  "swc_ecma_ast",
  "swc_visit",
  "tracing",
+]
+
+[[package]]
+name = "swc_ecmascript"
+version = "0.108.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5feaed38d2e24849c1b1bb725ea455855ebe4bff52332a491cabc07d107db322"
+dependencies = [
+ "swc_ecma_ast",
+ "swc_ecma_dep_graph",
+ "swc_ecma_parser 0.87.1",
 ]
 
 [[package]]
@@ -4169,6 +4253,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2dfed899f0eb03f32ee8c6a0aabdb8a7949659e3466561fc0adf54e26d88c5f4"
 dependencies = [
  "winapi-util",
+]
+
+[[package]]
+name = "text_lines"
+version = "0.4.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e49e3c53dd04de8b8e8390bc4fab57f6db7af7d33b086fe411803e6351c9f9f9"
+dependencies = [
+ "serde",
 ]
 
 [[package]]
@@ -4419,9 +4512,9 @@ checksum = "360dfd1d6d30e05fda32ace2c8c70e9c0a9da713275777f5a4dbb8a1893930c6"
 
 [[package]]
 name = "tracing"
-version = "0.1.29"
+version = "0.1.30"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "375a639232caf30edfc78e8d89b2d4c375515393e7af7e16f01cd96917fb2105"
+checksum = "2d8d93354fe2a8e50d5953f5ae2e47a3fc2ef03292e7ea46e3cc38f549525fb9"
 dependencies = [
  "cfg-if 1.0.0",
  "log",
@@ -4432,9 +4525,9 @@ dependencies = [
 
 [[package]]
 name = "tracing-attributes"
-version = "0.1.18"
+version = "0.1.19"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f4f480b8f81512e825f337ad51e94c1eb5d3bbdf2b363dcd01e2b19a9ffe3f8e"
+checksum = "8276d9a4a3a558d7b7ad5303ad50b53d58264641b82914b7ada36bd762e7a716"
 dependencies = [
  "proc-macro2 1.0.36",
  "quote 1.0.15",
@@ -4443,9 +4536,9 @@ dependencies = [
 
 [[package]]
 name = "tracing-core"
-version = "0.1.21"
+version = "0.1.22"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1f4ed65637b8390770814083d20756f87bfa2c21bf2f110babdc5438351746e4"
+checksum = "03cfcb51380632a72d3111cb8d3447a8d908e577d31beeac006f836383d29a23"
 dependencies = [
  "lazy_static",
 ]
@@ -4518,6 +4611,7 @@ name = "tsc_compile"
 version = "0.7.0-dev.0"
 dependencies = [
  "deno_core",
+ "deno_graph",
  "tempfile",
  "third_party",
  "tokio",
