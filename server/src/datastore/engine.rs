@@ -506,12 +506,15 @@ impl QueryEngine {
         let mut inserts = Vec::<SqlWithArguments>::new();
 
         for field in ty.all_fields() {
+            let field_value = ty_value.get(&field.name);
+            if field_value.is_none() && field.is_optional {
+                continue;
+            }
             let incompatible_data =
                 || QueryError::IncompatibleData(field.name.to_owned(), ty.name().to_owned());
             let arg = match &field.type_ {
                 Type::Object(nested_type) => {
-                    let nested_value = ty_value
-                        .get(&field.name)
+                    let nested_value = field_value
                         .context("json object doesn't have required field")
                         .with_context(incompatible_data)?
                         .as_object()
@@ -613,13 +616,17 @@ impl QueryEngine {
         let mut id_bind = String::new();
 
         for (i, f) in ty.all_fields().enumerate() {
+            let val = ty_value.get(&f.name);
+            if val.is_none() && f.is_optional {
+                continue;
+            }
             let bind = std::format!("${}", i + 1);
             field_binds.push_str(&bind);
             field_binds.push(',');
 
             field_names.push(f.name.clone());
             if f.type_ == Type::Id {
-                if let Some(idstr) = ty_value.get(&f.name) {
+                if let Some(idstr) = val {
                     let idstr = idstr
                         .as_str()
                         .ok_or_else(|| QueryError::InvalidId("not a string".into()))?;
@@ -662,6 +669,9 @@ impl QueryEngine {
     ) -> Result<SqlWithArguments> {
         let mut query_args = Vec::<SqlValue>::new();
         for field in ty.all_fields() {
+            if ty_value.get(&field.name).is_none() && field.is_optional {
+                continue;
+            }
             let arg = self.convert_to_argument(field, ty_value).with_context(|| {
                 QueryError::IncompatibleData(field.name.to_owned(), ty.name().to_owned())
             })?;
