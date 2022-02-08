@@ -2,6 +2,9 @@
 
 use anyhow::{anyhow, Result};
 use std::sync::Arc;
+use swc_common::Globals;
+use swc_common::Mark;
+use swc_common::GLOBALS;
 use swc_common::{
     errors::{emitter, Handler},
     source_map::FileName,
@@ -79,7 +82,11 @@ pub fn compile_ts_code(code: String) -> Result<String> {
     })?;
 
     // Remove typescript types
-    let module = module.fold_with(&mut swc_ecma_transforms_typescript::strip());
+    let globals = Globals::default();
+    let module = GLOBALS.set(&globals, || {
+        let top_level_mark = Mark::fresh(Mark::root());
+        module.fold_with(&mut swc_ecma_transforms_typescript::strip(top_level_mark))
+    });
 
     let mut buf = vec![];
     {
