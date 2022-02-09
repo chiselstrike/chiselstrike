@@ -40,12 +40,20 @@ fn main() {
     run("cargo", args);
 
     let chiseld = bd.join("chiseld").to_str().unwrap().to_string();
+
+    let create_app = repo
+        .join("packages/create-chiselstrike-app")
+        .to_str()
+        .unwrap()
+        .to_string();
+
     env::set_var("CHISELD", chiseld);
     env::set_var("CHISEL", chisel());
     env::set_var("RMCOLOR", "sed s/\x1B\\[[0-9;]*[A-Za-z]//g");
     env::set_var("CHISELD_HOST", "localhost:8080");
     env::set_var("CHISELD_LOCALHOST", "localhost:9090");
     env::set_var("CURL", "curl -S -s -i -w '\\n'");
+    env::set_var("CREATE_APP", create_app);
 
     let search_path = Path::new("tests/lit")
         .join(opt.test.unwrap_or_else(|| "".to_string()))
@@ -56,6 +64,7 @@ fn main() {
     lit::run::tests(lit::event_handler::Default::default(), |config| {
         config.add_search_path(search_path.to_owned());
         config.add_extension("lit");
+        config.add_extension("node");
         config.constants.insert("chisel".to_owned(), chisel());
         config.truncate_output_context_to_number_of_lines = Some(80);
         let mut path = repo.clone();
