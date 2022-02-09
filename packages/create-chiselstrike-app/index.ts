@@ -7,22 +7,30 @@ import packageJson from "./package.json";
 import path from "path";
 import spawn from "cross-spawn";
 
+function isDirEmpty(dirname: string) {
+    return fs.readdirSync(dirname).length === 0;
+}
+
 function run(projectDirectory: string) {
     projectDirectory = path.resolve(projectDirectory);
     if (fs.existsSync(projectDirectory)) {
-        console.log(
-            `Cannot create ChiselStrike project: directory ${
-                chalk.red(projectDirectory)
-            } already exists.`,
-        );
-        process.exit(1);
+        if (!isDirEmpty(projectDirectory)) {
+            console.log(
+                `Cannot create ChiselStrike project: directory ${
+                    chalk.red(projectDirectory)
+                } already exists.`,
+            );
+            process.exit(1);
+        }
+    } else {
+        fs.mkdirSync(projectDirectory);
     }
     console.log(
         `Creating a new ChiselStrike project in ${
             chalk.green(projectDirectory)
         } ...`,
     );
-    fs.mkdirSync(projectDirectory);
+
     fs.mkdirSync(path.join(projectDirectory, ".vscode"));
     fs.mkdirSync(path.join(projectDirectory, "endpoints"));
     fs.mkdirSync(path.join(projectDirectory, "models"));
