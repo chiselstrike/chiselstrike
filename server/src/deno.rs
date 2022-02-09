@@ -27,6 +27,8 @@ use deno_core::Resource;
 use deno_core::ResourceId;
 use deno_core::ZeroCopyBuf;
 use deno_core::{op_async, op_sync};
+use deno_fetch::reqwest;
+use deno_runtime::deno_fetch;
 use deno_runtime::inspector_server::InspectorServer;
 use deno_runtime::permissions::Permissions;
 use deno_runtime::worker::{MainWorker, WorkerOptions};

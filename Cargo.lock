@@ -3464,7 +3464,6 @@ dependencies = [
  "prost",
  "rand 0.8.4",
  "regex",
- "reqwest",
  "rsa",
  "sea-query",
  "serde",
