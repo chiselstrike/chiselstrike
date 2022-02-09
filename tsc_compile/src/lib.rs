@@ -2,7 +2,6 @@
 
 use anyhow::{anyhow, Context, Result};
 use deno_core::anyhow;
-use deno_core::futures::future;
 use deno_core::op_sync;
 use deno_core::serde;
 use deno_core::url::Url;
@@ -225,14 +224,14 @@ pub struct CompileOptions<'a> {
 
 struct ModuleLoader {}
 
-fn load_url(specifier: &Url) -> Result<Option<LoadResponse>> {
+async fn load_url(specifier: Url) -> Result<Option<LoadResponse>> {
     let text = if specifier.scheme() == "file" {
         fs::read_to_string(specifier.to_file_path().unwrap())?
     } else {
-        ureq::get(&specifier.to_string()).call()?.into_string()?
+        reqwest::get(specifier.clone()).await?.text().await?
     };
     let response = LoadResponse {
-        specifier: specifier.clone(),
+        specifier,
         maybe_headers: None,
         content: Arc::new(text),
     };
@@ -241,7 +240,7 @@ fn load_url(specifier: &Url) -> Result<Option<LoadResponse>> {
 
 impl Loader for ModuleLoader {
     fn load(&mut self, specifier: &Url, _is_dynamic: bool) -> LoadFuture {
-        Box::pin(future::ready(load_url(specifier)))
+        Box::pin(load_url(specifier.clone()))
     }
 }
 
