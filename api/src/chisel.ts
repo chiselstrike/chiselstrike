@@ -177,10 +177,10 @@ export class ChiselCursor<T> {
                 if (properties) {
                     if (ctor) {
                         const result = new ctor();
-                        Object.assign(result, properties);
+                        Object.assign(result, properties[0]);
                         return { value: result, done: false };
                     } else {
-                        return { value: properties, done: false };
+                        return { value: properties[0], done: false };
                     }
                 } else {
                     Deno.core.opSync("op_close", rid);
@@ -309,6 +309,15 @@ export class ChiselEntity {
     }
 
     /**
+     * Maps an entity type to a enumerable of every entity of that type.
+     */
+    static every<T extends ChiselEntity>(
+        this: ObjectType<T>,
+    ): Enumerable<T, readonly [T]> {
+        return new Enumerable<T, readonly [T]>(this, []);
+    }
+
+    /**
      * Deletes all entities that match the `restrictions` object.
      *
      * @example
@@ -403,4 +412,432 @@ export function labels(..._val: string[]) {
 export async function loggedInUser(): Promise<OAuthUser | null> {
     const id = await Deno.core.opAsync("chisel_user", {});
     return id == null ? null : await OAuthUser.findOne({ id });
+}
+
+type ObjectType<T> = { new (): T };
+type ValueOf<T extends readonly unknown[]> = T[number];
+type ProjectTuple<Args> = Args extends readonly [infer T] ? T : Args;
+type Tuplify<T> = T extends readonly unknown[] ? T : readonly [T];
+
+enum OpType {
+    Take = "Take",
+    Filter = "Filter",
+    Map = "Map",
+    Sort = "Sort",
+}
+
+/**
+ * Base class for various Operators applicable on `Enumerable`. Each operator
+ * should extend this class and pass on its type identifier from the `OpType`
+ * enum.
+ */
+class Operator {
+    constructor(public readonly type: OpType) {}
+}
+
+/**
+ * Take operator takes first `count` elements from Enumerable collection.
+ * The rest is ignored.
+ */
+class TakeOp extends Operator {
+    constructor(public readonly count: number) {
+        super(OpType.Take);
+    }
+}
+
+/**
+ * Filter operator applies `predicate` on each element of Enumerable collection
+ * and keeps only the elements for which the predicate returns true. The rest
+ * is ignored.
+ */
+class FilterOp<ArgTypes extends readonly unknown[]> extends Operator {
+    constructor(
+        public readonly predicate: (...args: [...ArgTypes]) => boolean,
+    ) {
+        super(OpType.Filter);
+    }
+}
+
+/**
+ * Sort operator sorts elements of Enumerable collection using `comparator` which
+ * for two elements of the enumerable returns
+ *     -1 if `lhs` is considered less than `rhs`
+ *     1 if `lhs` is considered greater than `rhs`
+ *     0 otherwise
+ */
+class SortOp<ArgTypes extends readonly unknown[]> extends Operator {
+    constructor(
+        public readonly comparator: (
+            lhs: ProjectTuple<ArgTypes>,
+            rhs: ProjectTuple<ArgTypes>,
+        ) => number,
+    ) {
+        super(OpType.Sort);
+    }
+}
+
+/**
+ * Map operator applies provided `map` function to every element of Enumerable collection
+ * creating a new Enumerable populated with the results of calling the provided `map` function
+ * on every element of the original Enumerable collection.
+ */
+class MapOp<ArgTypes extends readonly unknown[]> extends Operator {
+    constructor(
+        public readonly map: (
+            ...args: [...ArgTypes]
+        ) => unknown | readonly unknown[],
+    ) {
+        super(OpType.Map);
+    }
+}
+
+
+/**
+ * An enumerable represents a collection of object tuples transformed from Entity.
+ * `OutputTypes` is a tuple of types representing the current output value type of
+ * the Enumerable. It is the type of elements you would get if you converted
+ * the Enumerable to array using `toArray` method or iterated using async iterator.
+ * `BaseEntity` is Entity that was the first Entity used in the call chain.
+ */
+export class Enumerable<
+    BaseEntity extends ChiselEntity,
+    OutputTypes extends readonly unknown[],
+> {
+    constructor(
+        private readonly baseEntityCtor: new () => BaseEntity,
+        private readonly ops: readonly Operator[],
+    ) {}
+    /**
+     * Filter returns an enumerable that contains all the elements that match the given @predicate.
+     */
+    filter(
+        predicate: (...args: [...OutputTypes]) => boolean,
+    ): Enumerable<BaseEntity, OutputTypes> {
+        const ops: Operator[] = [...this.ops, new FilterOp(predicate)];
+        return new Enumerable<BaseEntity, OutputTypes>(
+            this.baseEntityCtor,
+            ops,
+        );
+    }
+    /**
+     * Sort elements using compare function.
+     */
+    sort(
+        cmp: (
+            lhs: ProjectTuple<OutputTypes>,
+            rhs: ProjectTuple<OutputTypes>,
+        ) => number,
+    ): Enumerable<BaseEntity, OutputTypes> {
+        const ops: Operator[] = [...this.ops, new SortOp(cmp)];
+        return new Enumerable<BaseEntity, OutputTypes>(
+            this.baseEntityCtor,
+            ops,
+        );
+    }
+    /**
+     * Take first `n` elements, discard the rest.
+     */
+    take(n: number): Enumerable<BaseEntity, OutputTypes> {
+        const ops: Operator[] = [...this.ops, new TakeOp(n)];
+        return new Enumerable<BaseEntity, OutputTypes>(
+            this.baseEntityCtor,
+            ops,
+        );
+    }
+    /**
+     * Maps the entities of this enumeration to another enumerable of different OutputTypes type.
+     */
+    map<NewValues>(
+        map: (...args: [...OutputTypes]) => NewValues,
+    ): Enumerable<BaseEntity, Tuplify<NewValues>> {
+        const ops: Operator[] = [...this.ops, new MapOp(map)];
+        return new Enumerable<BaseEntity, Tuplify<NewValues>>(
+            this.baseEntityCtor,
+            ops,
+        );
+    }
+
+    /**
+     * Reduces all elements of this enumerable to a value.
+     */
+    async reduce(
+        fn: (
+            previousValue: ProjectTuple<OutputTypes>,
+            currentValue: ProjectTuple<OutputTypes>,
+        ) => ProjectTuple<OutputTypes>,
+    ): Promise<undefined | ProjectTuple<OutputTypes>> {
+        let result;
+        for await (const current of this) {
+            if (result === undefined) {
+                result = current;
+            } else {
+                result = fn(result, current);
+            }
+        }
+        return result;
+    }
+    /**
+     * Iterate over all the elements in this enumerable.
+     */
+    async forEach(fn: (...args: [...OutputTypes]) => void): Promise<void> {
+        const iter = this.makeIterable();
+        for await (const val of iter) {
+            fn(...val);
+        }
+    }
+    /**
+     * Convert this enumerable into an array.
+     *
+     * Be careful not to convert an enumerable with a lot of elements into an array!
+     */
+    async toArray(): Promise<ProjectTuple<OutputTypes>[]> {
+        const arr = [];
+        for await (const val of this) {
+            arr.push(val);
+        }
+        return arr;
+    }
+
+    /**
+     * Enumerable implements asyncIterator, meaning you can use it in any asynchronous context.
+     * The iterator will yield values of type `OutputType`. If `OutputType` is a
+     * single-element tuple [T], it will yield just T for convenience.
+     */
+    async *[Symbol.asyncIterator]() {
+        const iter = this.makeIterable();
+        for await (const args of iter) {
+            // Convenience unwrapping for single-element value tuples.
+            if (args.length == 1) {
+                yield args[0] as ProjectTuple<OutputTypes>;
+            } else {
+                yield args as ProjectTuple<OutputTypes>;
+            }
+        }
+    }
+
+    private makeIterable(): AsyncIterable<OutputTypes> {
+        const [query, ctors, transforms] = this.prepareEvaluation();
+        const rid = Deno.core.opSync(
+            "chisel_relational_query_create",
+            query,
+        );
+
+        let iter: AsyncIterable<readonly unknown[]> = {
+            [Symbol.asyncIterator]: async function* () {
+                try {
+                    while (true) {
+                        const propertiesTuple = await queryFetchNext(rid);
+                        if (propertiesTuple == undefined) {
+                            break;
+                        }
+                        if (ctors.length != propertiesTuple.length) {
+                            throw new Error(
+                                "Internal error: constructor and property count mismatch, please file a bug report.",
+                            );
+                        }
+
+                        const results = [];
+                        const zipped = ctors.map((e, i) => {
+                            return [e, propertiesTuple[i]] as const;
+                        });
+                        for (const [ctor, propertyMap] of zipped) {
+                            const r = new ctor();
+                            Object.assign(r, propertyMap);
+                            results.push(r);
+                        }
+                        yield results;
+                    }
+                } finally {
+                    Deno.core.opSync("op_close", rid);
+                }
+            },
+        };
+
+        for (const trans of transforms) {
+            iter = trans.applyIter(iter);
+        }
+        return iter as AsyncIterable<OutputTypes>;
+    }
+
+    private baseEntity(): string {
+        return this.baseEntityCtor.name;
+    }
+
+    /**
+     * `prepareEvaluation` considers `this` Enumerable and prepares backend
+     * JSON query and consequent TypeScript transformations.
+     * This is done in a few steps. First we consider all operations applied
+     * to `this` Enumerable and find a first operation that is not sendable
+     * to the backend for evaluation directly in the database (`split` index).
+     *
+     * Everything up to a split we call `convertibleOps`. The remaining operations
+     * get sorted into either `transforms`, which get applied after we get data
+     * from the database, or into `convertibleOps`, if it's a Take.
+     */
+    private prepareEvaluation(): readonly [
+        Record<string, unknown>,
+        (new () => ChiselEntity)[],
+        Transformation[],
+    ] {
+        const idx = this.ops.findIndex((op) => {
+            return op.type != OpType.Take;
+        });
+        const split = idx != -1 ? idx : this.ops.length;
+        const convertibleOps = this.ops.slice(0, split);
+        const transforms: Transformation[] = [];
+        const constructors: (new () => ChiselEntity)[] = [
+            this.baseEntityCtor
+        ];
+
+        for (const op of this.ops.slice(split)) {
+            transforms.push(new Transformation(op));
+        }
+
+        const query = {
+            "version": "v2",
+            "base_entity": this.baseEntity(),
+            "operations": convertibleOps,
+        };
+        return [query, constructors, transforms] as const;
+    }
+}
+
+async function queryFetchNext(
+    rid: unknown,
+): Promise<undefined | readonly Record<string, unknown>[]> {
+    return await Deno.core.opAsync("chisel_relational_query_next", rid);
+}
+
+/**
+ * Transformation is a helper class used to apply an Operator `op`
+ * on an `AsyncIterable` stream of tuples while using `ignoredArgs`
+ * count to ignore resp. bypass the last `ignoredArgs` elements of the tuple
+ * for operators like `Filter` resp. `Map`.
+ */
+class Transformation {
+    private readonly op: Operator;
+    ignoredArgs: number;
+
+    constructor(op: Operator) {
+        this.op = op;
+        this.ignoredArgs = 0;
+    }
+
+    applyIter(
+        iter: AsyncIterable<readonly unknown[]>,
+    ): AsyncIterable<readonly unknown[]> {
+        switch (this.op.type) {
+            case OpType.Take: {
+                return this.applyTake(this.op as TakeOp, iter);
+            }
+            case OpType.Filter: {
+                return this.applyFilter(
+                    this.op as FilterOp<readonly unknown[]>,
+                    iter,
+                );
+            }
+            case OpType.Map: {
+                return this.applyMap(
+                    this.op as MapOp<readonly unknown[]>,
+                    iter,
+                );
+            }
+            case OpType.Sort: {
+                return this.applySort(
+                    this.op as SortOp<readonly unknown[]>,
+                    iter,
+                );
+            }
+            default: {
+                throw new Error(
+                    `can't apply transformation operator of type '${this.op.type}'`,
+                );
+            }
+        }
+    }
+
+    private applyTake(
+        takeOp: TakeOp,
+        iter: AsyncIterable<readonly unknown[]>,
+    ): AsyncIterable<readonly unknown[]> {
+        return {
+            [Symbol.asyncIterator]: async function* () {
+                if (takeOp.count == 0) {
+                    return;
+                }
+                let i = 0;
+                for await (const e of iter) {
+                    yield e;
+                    if (++i >= takeOp.count) {
+                        break;
+                    }
+                }
+            },
+        };
+    }
+
+    private applyFilter(
+        filterOp: FilterOp<readonly unknown[]>,
+        iter: AsyncIterable<readonly unknown[]>,
+    ): AsyncIterable<readonly unknown[]> {
+        const ignoredArgs = this.ignoredArgs;
+        return {
+            [Symbol.asyncIterator]: async function* () {
+                for await (const args of iter) {
+                    if (
+                        filterOp.predicate(
+                            ...args.slice(0, args.length - ignoredArgs),
+                        )
+                    ) {
+                        yield args;
+                    }
+                }
+            },
+        };
+    }
+
+    private applyMap(
+        mapOp: MapOp<readonly unknown[]>,
+        iter: AsyncIterable<readonly unknown[]>,
+    ): AsyncIterable<readonly unknown[]> {
+        const ignoredArgs = this.ignoredArgs;
+        return {
+            [Symbol.asyncIterator]: async function* () {
+                for await (const args of iter) {
+                    const split = args.length - ignoredArgs;
+                    const val = mapOp.map(...args.slice(0, split));
+                    if (Array.isArray(val)) {
+                        yield [...val, ...args.slice(split)];
+                    } else {
+                        yield [val, ...args.slice(split)];
+                    }
+                }
+            },
+        };
+    }
+
+    private applySort(
+        sortOp: SortOp<readonly unknown[]>,
+        iter: AsyncIterable<readonly unknown[]>,
+    ): AsyncIterable<readonly unknown[]> {
+        const ignoredArgs = this.ignoredArgs;
+        return {
+            [Symbol.asyncIterator]: async function* () {
+                let elements = [];
+                for await (const e of iter) {
+                    elements.push(e);
+                }
+                elements = elements.sort((lhs, rhs) => {
+                    const split = lhs.length - ignoredArgs;
+                    return sortOp.comparator(
+                        lhs.slice(0, split),
+                        rhs.slice(0, split),
+                    );
+                });
+                for (const e of elements) {
+                    yield e;
+                }
+            },
+        };
+    }
 }

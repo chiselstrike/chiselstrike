@@ -317,7 +317,8 @@ impl TypeSystem {
                     // FIXME: basic rate limit?
                     let row = row
                         .with_context(|| format!("population can't proceed as reading from the underlying database for type {} failed", ty_obj_to.name))?;
-                    engine.add_row_shallow(ty_obj_to, &row).await?;
+
+                    engine.add_row_shallow(ty_obj_to, &row[0]).await?;
                 }
                 drop(row_streams);
                 QueryEngine::commit_transaction_static(tr).await?;

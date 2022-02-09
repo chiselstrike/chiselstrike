@@ -24,8 +24,8 @@ use tokio::sync::Mutex;
 use tokio::sync::OwnedMutexGuard;
 use uuid::Uuid;
 
-/// A query row is a JSON object that represent the queried entities.
-pub(crate) type ResultRow = JsonObject;
+/// A query row is a vector of JSON objects that represent the queried entities.
+pub(crate) type ResultRow = Vec<JsonObject>;
 
 /// A query results is a stream of query rows after policies have been applied.
 pub(crate) type QueryResults = BoxStream<'static, Result<ResultRow>>;
@@ -317,7 +317,24 @@ impl QueryEngine {
         Ok(())
     }
 
-    fn row_to_json(fields: &[SelectField], row: &AnyRow) -> Result<ResultRow> {
+    /// Converts database `row` into resulting `ResultRow` using vector `fields`.
+    /// The `fields` vector has two levels. Each of the first level elements
+    /// of type `Vec<SelectField>` correspond to individual joined entities from
+    /// the query. The vector `Vec<SelectField>` is a nested structured used to
+    /// reconstruct individual potentially nested Entities.
+    ///
+    /// Example TS call `Person.every().join(Nickname, ...)` will result in
+    /// fields being two-element vector `[[..Person fields..], [..Nickname fields..]]`
+    /// and the ResultRow response will be roughly `[{"firstName": ...}, {"nickName": ...}]`.
+    fn row_to_json(fields: &[Vec<SelectField>], row: &AnyRow) -> Result<ResultRow> {
+        let mut ret = vec![];
+        for entity_fields in fields {
+            ret.push(Self::row_to_json_entity(entity_fields, row)?);
+        }
+        Ok(ret)
+    }
+
+    fn row_to_json_entity(fields: &[SelectField], row: &AnyRow) -> Result<JsonObject> {
         let mut ret = JsonObject::default();
         for s_field in fields {
             match s_field {
@@ -368,7 +385,7 @@ impl QueryEngine {
                     if *is_optional && column_is_null(row, id_idx(children)) {
                         continue;
                     }
-                    let val = json!(Self::row_to_json(children, row)?);
+                    let val = json!(Self::row_to_json_entity(children, row)?);
                     ret.insert(name.clone(), val);
                 }
             }
@@ -376,33 +393,25 @@ impl QueryEngine {
         Ok(ret)
     }
 
-    fn project(
-        o: Result<ResultRow>,
-        allowed_fields: &Option<HashSet<String>>,
-    ) -> Result<JsonObject> {
-        let mut o = o?;
-        if let Some(allowed_fields) = &allowed_fields {
-            let removed_keys = o
-                .iter()
-                .map(|(k, _)| k.to_owned())
-                .filter(|k| !allowed_fields.contains(k))
-                .collect::<Vec<String>>();
-            for k in &removed_keys {
-                o.remove(k);
+    /// Projects the fields of @row by given @fields in-place.
+    fn project(objects: &mut ResultRow, fields: &Option<HashSet<String>>) {
+        if let Some(fields) = &fields {
+            for obj in objects {
+                obj.retain(|k, _| fields.contains(k));
             }
         }
-        Ok(o)
     }
 
     /// FIXME: This function should perform recursive descend into nested fields.
-    fn apply_policies(o: Result<ResultRow>, policies: &FieldPolicies) -> Result<ResultRow> {
-        let mut o = o?;
-        for (k, v) in o.iter_mut() {
-            if let Some(xform) = policies.transforms.get(k) {
-                *v = xform(v.take());
+    fn apply_policies(mut v: ResultRow, policies: &FieldPolicies) -> Result<ResultRow> {
+        for obj in &mut v {
+            for (key, val) in obj.iter_mut() {
+                if let Some(xform) = policies.transforms.get(key) {
+                    *val = xform(val.take());
+                }
             }
         }
-        Ok(o)
+        Ok(v)
     }
 
     /// Execute the given `query` and return a stream to the results.
@@ -416,9 +425,10 @@ impl QueryEngine {
 
         let stream = new_query_results(query.raw_sql, tr);
         let stream = stream.map(move |row| Self::row_to_json(&query.fields, &row?));
-        let stream = Box::pin(stream.map(move |o| {
-            let o = Self::project(o, &allowed_fields);
-            Self::apply_policies(o, &policies)
+        let stream = Box::pin(stream.map(move |v| {
+            let mut v = v?;
+            Self::project(&mut v, &allowed_fields);
+            Self::apply_policies(v, &policies)
         }));
         Ok(stream)
     }

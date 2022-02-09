@@ -66,9 +66,12 @@ pub(crate) struct Query {
     pub(crate) raw_sql: String,
     /// Nested structure representing a blueprint which is used to reconstruct
     /// multi-dimensional (=potentialy nested) JSON response from a linear
-    /// sql response row. Each element represents a selected field (potentially nested)
-    /// of the selected base type.
-    pub(crate) fields: Vec<SelectField>,
+    /// sql response row. Each element (Vec<SelectField>) represents a recipe
+    /// used to reconstruct one Entity object. Each Entity object corresponds to either
+    /// base Entity (type) or one of the joined entities (once we support joins).
+    /// Each element of Vec<SelectField> represents a selected field (potentially nested)
+    /// of given Entity (type).
+    pub(crate) fields: Vec<Vec<SelectField>>,
     /// Entity fields selected by the user. This field is used to post-filter fields that
     /// shall be returned to the user in JSON.
     /// FIXME: The post-filtering is suboptimal solution and selection should happen when
@@ -89,17 +92,20 @@ struct Join {
     ralias: String,
 }
 
-/// Class used to build `Query` from either JSON query or `ObjectType`.
-/// The json part recursively descends through selected fields and captures all
+/// Query builder is used to construct a `Query` object.
+///
+/// The query builder works either from a JSON representation or an `ObjectType`.
+/// The JSON builder recursively descends through selected fields and captures all
 /// joins necessary for nested types retrieval.
-/// Once constructed, it can be further restricted by calling load_restrictions method.
 /// When we are done with that, `build` is called which creates a `Query`
 /// structure that contains raw SQL query string and additional data necessary for
 /// JSON response reconstruction and filtering.
 struct QueryBuilder {
     /// Recursive vector used to reconstruct nested entities based on flat vector of columns
-    /// returned by the database.
-    fields: Vec<SelectField>,
+    /// returned by the database. Each element (Vec<SelectField>) represents a recipe
+    /// used to reconstruct one Entity object. Each Entity object corresponds to either
+    /// base Entity (type) or one of the joined entities (once we support joins).
+    fields: Vec<Vec<SelectField>>,
     /// Vector of SQL column aliases that will be selected from the database and corresponding
     /// scalar fields.
     columns: Vec<(String, Field)>,
@@ -126,12 +132,12 @@ impl QueryBuilder {
             limit,
         }
     }
-
     /// Constructs a query builder ready to build an expression querying all fields of a
     /// given type `ty`. This is done in a shallow manner. Columns representing foreign
     /// key are returned as string, not as the related Entity.
     fn from_type(ty: &Arc<ObjectType>) -> Self {
         let mut builder = Self::new(ty.clone(), FieldPolicies::default(), None);
+        let mut fields = vec![];
         for field in ty.all_fields() {
             let mut field = field.clone();
             field.type_ = match field.type_ {
@@ -139,13 +145,106 @@ impl QueryBuilder {
                 ty => ty,
             };
             let field = builder.make_scalar_field(&field, field.name.as_str());
-            builder.fields.push(field)
+            fields.push(field)
         }
+        builder.fields = vec![fields];
         builder
     }
 
+    /// Constructs a builder from the query expression JSON object.
+    fn parse_from_json_v2(val: &serde_json::Value) -> Result<Self> {
+        let entity_name = val["base_entity"].as_str().ok_or_else(|| {
+            anyhow!(
+                "internal error: `base_entity` field is either missing or not a string: {}",
+                val
+            )
+        })?;
+        let runtime = runtime::get();
+        let ts = &runtime.type_system;
+        let api_version = current_api_version();
+        let ty = match ts.lookup_builtin_type(entity_name) {
+            Ok(Type::Object(ty)) => ty,
+            Err(TypeSystemError::NotABuiltinType(_)) => {
+                ts.lookup_custom_type(entity_name, &api_version)?
+            }
+            _ => anyhow::bail!("Unexpected type name as query base type: {}", entity_name),
+        };
+        let policies = make_field_policies(&runtime, &ty);
+
+        let mut builder = Self::new(ty.clone(), policies, None);
+        builder.fields = vec![builder.parse_fields_v2(&ty, ty.backing_table())];
+
+        let ops = val["operations"].as_array().ok_or_else(|| {
+            anyhow!(
+                "internal error: `operations` field is either missing or not an array: {}",
+                val
+            )
+        })?;
+        builder.parse_operations_v2(ops)?;
+        Ok(builder)
+    }
+
+    fn parse_fields_v2(&mut self, ty: &Arc<ObjectType>, current_table: &str) -> Vec<SelectField> {
+        let mut fields = vec![];
+        for field in ty.all_fields() {
+            if let Type::Object(nested_ty) = &field.type_ {
+                let nested_table = format!(
+                    "{}_JOIN{}_{}",
+                    current_table,
+                    self.joins.len(),
+                    nested_ty.backing_table()
+                );
+                self.joins.push(Join {
+                    rtype: nested_ty.clone(),
+                    lkey: field.name.to_owned(),
+                    rkey: "id".to_owned(),
+                    lalias: current_table.to_owned(),
+                    ralias: nested_table.to_owned(),
+                });
+
+                fields.push(SelectField::Entity {
+                    name: field.name.clone(),
+                    is_optional: field.is_optional,
+                    children: self.parse_fields_v2(ty, &nested_table),
+                });
+            } else {
+                let column_name = format!("{}.{}", current_table, field.name);
+                let field = self.make_scalar_field(field, &column_name);
+                fields.push(field)
+            }
+        }
+        fields
+    }
+
+    fn parse_operations_v2(&mut self, ops: &[serde_json::Value]) -> Result<()> {
+        for op in ops {
+            macro_rules! get_key {
+                ($key:expr) => {{
+                    get_key!($key, as_str)
+                }};
+                ($key:expr, $as_type:ident) => {{
+                    op[$key].$as_type().ok_or_else(|| {
+                        anyhow!(
+                            "internal error: `{}` field is either missing or has invalid type.",
+                            $key
+                        )
+                    })
+                }};
+            }
+
+            let op_type = get_key!("type")?;
+            if op_type == "Take" {
+                let limit = get_key!("count", as_u64)?;
+                self.limit = Some(std::cmp::min(limit, self.limit.unwrap_or(limit)));
+            } else {
+                anyhow::bail!("unexpected operation type `{}`", op_type);
+            }
+        }
+        Ok(())
+    }
+
     /// Constructs a builder from the `BackingStore` JSON object.
-    fn new_from_json(val: &serde_json::Value) -> Result<Self> {
+    fn parse_from_json_v1(val: &serde_json::Value) -> Result<Self> {
         anyhow::ensure!(
             val["kind"] == "BackingStore",
             "unexpected object kind. Expected `BackingStore`, got {:?}",
@@ -170,7 +269,7 @@ impl QueryBuilder {
         let policies = make_field_policies(&runtime, &ty);
 
         let mut builder = Self::new(ty.clone(), policies, val["limit"].as_u64());
-        builder.fields = builder.load_fields(&ty, ty.backing_table(), &val["columns"])?;
+        builder.fields = vec![builder.parse_fields_v1(&ty, ty.backing_table(), &val["columns"])?];
         Ok(builder)
     }
 
@@ -188,7 +287,7 @@ impl QueryBuilder {
     /// Recursively loads Fields to be retrieved from the database, as specified
     /// by the JSON object's array `columns`. For fields that represent a nested
     /// Entity a join is generated and we attempt to retrieve it as well.
-    fn load_fields(
+    fn parse_fields_v1(
         &mut self,
         ty: &Arc<ObjectType>,
         current_table: &str,
@@ -248,8 +347,11 @@ impl QueryBuilder {
                             ralias: nested_table.to_owned(),
                         });
 
-                        let nested_fields =
-                            self.load_fields(nested_ty, &nested_table, &nested_fields["columns"])?;
+                        let nested_fields = self.parse_fields_v1(
+                            nested_ty,
+                            &nested_table,
+                            &nested_fields["columns"],
+                        )?;
                         fields.push(SelectField::Entity {
                             name: field.name.clone(),
                             is_optional: field.is_optional,
@@ -287,7 +389,7 @@ impl QueryBuilder {
         Ok(())
     }
 
-    fn load_restrictions(&mut self, rest_json: &serde_json::Value) -> Result<()> {
+    fn parse_restrictions_v1(&mut self, rest_json: &serde_json::Value) -> Result<()> {
         if let Some(limit) = rest_json["limit"].as_u64() {
             self.limit = Some(limit);
         }
@@ -429,11 +531,11 @@ fn convert_to_query_builder(val: &serde_json::Value) -> Result<QueryBuilder> {
     })?;
 
     match kind {
-        "BackingStore" => QueryBuilder::new_from_json(val),
+        "BackingStore" => QueryBuilder::parse_from_json_v1(val),
         "Join" => anyhow::bail!("join is not supported"),
         "Filter" => {
             let mut builder = convert_to_query_builder(&val["inner"])?;
-            builder.load_restrictions(val)?;
+            builder.parse_restrictions_v1(val)?;
             Ok(builder)
         }
         _ => anyhow::bail!("unexpected relation kind `{}`", kind),
@@ -472,8 +574,13 @@ pub(crate) fn type_to_query(ty: &Arc<ObjectType>) -> Query {
     builder.build()
 }
 
-pub(crate) fn json_to_query(val: &serde_json::Value) -> Result<Query> {
+pub(crate) fn json_to_query_v1(val: &serde_json::Value) -> Result<Query> {
     let builder = convert_to_query_builder(val)?;
+    Ok(builder.build())
+}
+
+pub(crate) fn json_to_query_v2(val: &serde_json::Value) -> Result<Query> {
+    let builder = QueryBuilder::parse_from_json_v2(val)?;
     Ok(builder.build())
 }
 
