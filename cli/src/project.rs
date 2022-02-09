@@ -132,8 +132,18 @@ fn ignore_path(path: &str) -> bool {
     false
 }
 
-fn read_dir<P: AsRef<Path>>(dir: P) -> anyhow::Result<fs::ReadDir> {
-    fs::read_dir(dir.as_ref()).with_context(|| format!("Could not open {}", dir.as_ref().display()))
+fn read_dir<P: AsRef<Path>>(dir: P) -> anyhow::Result<Vec<std::io::Result<fs::DirEntry>>> {
+    match fs::read_dir(dir.as_ref()) {
+        Ok(x) => Ok(x.collect()),
+        Err(x) => {
+            if x.kind() == std::io::ErrorKind::NotFound {
+                Ok(vec![])
+            } else {
+                Err(x)
+            }
+        }
+    }
+    .with_context(|| format!("Could not open {}", dir.as_ref().display()))
 }
 
 pub(crate) fn read_manifest() -> Result<Manifest> {
@@ -152,33 +162,6 @@ pub(crate) fn read_manifest() -> Result<Manifest> {
             );
         }
     };
-    for dir in &manifest.models {
-        if !Path::new(dir).exists() {
-            anyhow::bail!(
-                "Manifest at `{}` has models directory `{}` that does not exist.",
-                cwd.join(MANIFEST_FILE).display(),
-                cwd.join(dir).display()
-            );
-        }
-    }
-    for dir in &manifest.endpoints {
-        if !Path::new(dir).exists() {
-            anyhow::bail!(
-                "Manifest at `{}` has endpoints directory `{}` that does not exist.",
-                cwd.join(MANIFEST_FILE).display(),
-                cwd.join(dir).display()
-            );
-        }
-    }
-    for dir in &manifest.policies {
-        if !Path::new(dir).exists() {
-            anyhow::bail!(
-                "Manifest at `{}` has policies directory `{}` that does not exist.",
-                cwd.join(MANIFEST_FILE).display(),
-                cwd.join(dir).display()
-            );
-        }
-    }
     Ok(manifest)
 }
 
