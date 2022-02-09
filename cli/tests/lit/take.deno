@@ -46,7 +46,7 @@ import { Person } from "../models/types.ts";
 
 export default async function chisel(req: Request) {
     let response = "begin";
-    for await (let p of Person.cursor().take(1)) {
+    for await (let p of Person.every().take(1)) {
         response += p.name
     }
     response += "end";
@@ -59,7 +59,7 @@ import { Person } from "../models/types.ts";
 
 export default async function chisel(req: Request) {
     let response = "begin";
-    for await (let p of Person.cursor().take(4).take(1)) {
+    for await (let p of Person.every().take(4).take(1)) {
         response += p.name
     }
     response += "end";
@@ -72,7 +72,7 @@ import { Person } from "../models/types.ts";
 
 export default async function chisel(req: Request) {
     let response = "begin";
-    for await (let p of Person.cursor().take(1).take(4)) {
+    for await (let p of Person.every().take(1).take(4)) {
         response += p.name
     }
     response += "end";
@@ -85,7 +85,7 @@ import { Person } from "../models/types.ts";
 
 export default async function chisel(req: Request) {
     let response = "begin";
-    let base = Person.cursor();
+    let base = Person.every();
 
     let first = base.take(2);
 
@@ -106,8 +106,9 @@ import { Person } from "../models/types.ts";
 
 export default async function chisel(req: Request) {
     let response = "begin";
-    for await (let p of Person.cursor().filter({"company" : "ChiselStrike"}).take(1)) {
-        response += p.name
+    const people = Person.every().filter(p => p.company == "ChiselStrike").take(1);
+    for await (let p of people) {
+        response += p.name;
     }
     response += "end";
     return new Response(response);

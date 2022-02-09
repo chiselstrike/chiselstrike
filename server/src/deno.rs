@@ -3,7 +3,7 @@
 use crate::api::{response_template, Body, RequestPath};
 use crate::datastore::engine::TransactionStatic;
 use crate::datastore::engine::{QueryResults, ResultRow};
-use crate::datastore::query::{json_to_query, Mutation};
+use crate::datastore::query::{json_to_query_v1, json_to_query_v2, Mutation};
 use crate::policies::FieldPolicies;
 use crate::rcmut::RcMut;
 use crate::runtime;
@@ -423,9 +423,32 @@ fn op_chisel_get_secret(
     Ok(runtime.secrets.get_secret(key))
 }
 
+/// `op_chisel_relational_query_create` is used to initialize a new query
+/// intended for data retrieval. It accepts a JSON `json_query` in the
+/// format of
+/// {
+///     "version": <version>,
+///     "base_entity": <base_entity>,
+///     "operations": [<operation>, ...]
+/// }
+/// where
+/// <base_entity> is a name of the type/entity whose backing table will
+/// be used to retrieve data to construct instances of given entity and forwarded
+/// for further processing.
+/// <operation> represents an operation to be applied on the stream of entities.
+/// Currently only one operation is possible:
+/// <operation> = {
+///     "type": "Take",
+///     "count": <count>
+/// }
+/// where <count> is the maximum number of Entity instances to be returned.
+///
+/// if <version> != "v2" or the field isn't present, the function treats the
+/// call as an older v1 call which we shall not discuss as it will be removed
+/// soon.
 fn op_chisel_relational_query_create(
     op_state: &mut OpState,
-    relation: serde_json::Value,
+    json_query: serde_json::Value,
     _: (),
 ) -> Result<ResourceId> {
     // FIXME: It is silly do create a serde_json::Value just to
@@ -438,7 +461,12 @@ fn op_chisel_relational_query_create(
     // is no way to access it from here. We would have to replace
     // op_chisel_relational_query_create with a closure that has an
     // Rc<DenoService>.
-    let query = json_to_query(&relation)?;
+    let api_version = json_query["version"].as_str().unwrap_or("v1");
+    let query = if api_version == "v2" {
+        json_to_query_v2(&json_query)?
+    } else {
+        json_to_query_v1(&json_query)?
+    };
     let mut runtime = runtime::get();
     let query_engine = &mut runtime.query_engine;
 
@@ -465,6 +493,13 @@ impl Future for QueryNextFuture {
     }
 }
 
+/// `op_chisel_relational_query_next` is used to fetch element of a query stream.
+/// It returns a single `ResultRow` serialized to JSON in a format of
+/// [<Entity>, ...], where <Entity> is an Entity serialized to JSON.
+/// The first element of the array is the <base_entity> specified by the query and
+/// the remaining elements correspond to individual joined entities which will
+/// be supported in the future
+///
 async fn op_chisel_relational_query_next(
     state: Rc<RefCell<OpState>>,
     query_stream_rid: ResourceId,
