@@ -41,6 +41,7 @@ policies = ["policies"]
 modules = "node"
 EOF
 
+npm i
 $CHISEL apply
 
 # CHECK: End point defined: /dev/bar
