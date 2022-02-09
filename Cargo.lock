@@ -4517,13 +4517,11 @@ checksum = "59547bce71d9c38b83d9c0e92b6066c4253371f15005def0c30d9657f50c7642"
 name = "tsc_compile"
 version = "0.7.0-dev.0"
 dependencies = [
- "anyhow",
  "deno_core",
  "tempfile",
  "third_party",
  "tokio",
  "ureq",
- "url",
 ]
 
 [[package]]

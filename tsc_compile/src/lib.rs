@@ -1,8 +1,10 @@
 // SPDX-FileCopyrightText: © 2022 ChiselStrike <info@chiselstrike.com>
 
 use anyhow::{anyhow, Context, Result};
+use deno_core::anyhow;
 use deno_core::op_sync;
 use deno_core::serde;
+use deno_core::url::Url;
 use deno_core::v8;
 use deno_core::JsRuntime;
 use deno_core::OpFn;
@@ -14,7 +16,6 @@ use std::collections::HashMap;
 use std::env;
 use std::fs;
 use std::path::Path;
-use url::Url;
 
 #[derive(Debug)]
 struct UrlAndContent {
@@ -271,6 +272,7 @@ mod tests {
     use super::compile_ts_code;
     use super::CompileOptions;
     use anyhow::Result;
+    use deno_core::anyhow;
     use std::io::Write;
     use tempfile::Builder;
 
