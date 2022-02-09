@@ -3,6 +3,8 @@
 use crate::JsonObject;
 use anyhow::Context;
 use anyhow::{anyhow, Result};
+use deno_fetch::reqwest;
+use deno_runtime::deno_fetch;
 use rsa::{PaddingScheme, RsaPrivateKey};
 use url::Url;
 
