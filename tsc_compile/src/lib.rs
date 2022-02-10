@@ -13,8 +13,8 @@ use deno_core::Snapshot;
 use deno_graph::source::LoadFuture;
 use deno_graph::source::LoadResponse;
 use deno_graph::source::Loader;
-use deno_graph::Module;
 use deno_graph::ModuleGraph;
+use deno_graph::ModuleKind;
 use serde::de::DeserializeOwned;
 use serde::Serialize;
 use std::collections::HashMap;
@@ -130,11 +130,8 @@ fn read(map: &mut DownloadMap, path: String, _: ()) -> Result<String> {
         return Ok(v.to_string());
     }
     if let Some(url) = map.path_to_url.get(&path) {
-        let module = match map.graph.get(url).unwrap() {
-            Module::Es(m) => m,
-            Module::Synthetic(_) => anyhow::bail!("Was not expecting a synthetic module"),
-        };
-        return Ok((*module.source).clone());
+        let module = map.graph.get(url).unwrap();
+        return Ok((**module.maybe_source.as_ref().unwrap()).clone());
     }
     fs::read_to_string(&path).with_context(|| format!("Reading {}", path))
 }
@@ -258,8 +255,17 @@ pub async fn compile_ts_code(
     let url = "file://".to_string() + &abs(file_name);
     let url = Url::parse(&url)?;
     let mut loader = ModuleLoader {};
-    let graph =
-        deno_graph::create_graph(vec![url], false, None, &mut loader, None, None, None, None).await;
+    let graph = deno_graph::create_graph(
+        vec![(url, ModuleKind::Esm)],
+        false,
+        None,
+        &mut loader,
+        None,
+        None,
+        None,
+        None,
+    )
+    .await;
 
     let mut runtime = JsRuntime::new(RuntimeOptions {
         startup_snapshot: Some(Snapshot::Static(SNAPSHOT)),
