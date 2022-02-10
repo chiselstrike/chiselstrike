@@ -11,8 +11,14 @@ cwd=$(pwd)
 
 export CHISEL_SECRET_LOCATION="file://$TEMPDIR/.env"
 
+EXTENSION=`basename "$2" | cut -d'.' -f2`
+
 cd $TEMPDIR
-$CHISEL init --no-examples
+if [ "x$EXTENSION" == "xnode" ]; then
+    npx $CREATE_APP ./
+else
+    $CHISEL init --no-examples
+fi
 cd $cwd
 
 $CHISELD --webui -m "sqlite://$TEMPDIR/chiseld.db?mode=rwc" -d "sqlite://$TEMPDIR/chiseld-data.db?mode=rwc" &

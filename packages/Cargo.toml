@@ -1,0 +1,8 @@
+[package]
+name = "packages"
+version = "0.7.0-dev.0"
+authors = ["ChiselStrike"]
+edition = "2021"
+
+[lib]
+name = "packages"
