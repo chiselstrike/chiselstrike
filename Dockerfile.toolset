@@ -3,10 +3,12 @@ FROM ubuntu:20.04
 COPY target/release/chisel /usr/local/bin/chisel
 ARG DEBIAN_FRONTEND=noninteractive
 
-RUN apt update && apt-get install -y --no-install-recommends curl && \
-    curl -fsSLOk --compressed https://nodejs.org/dist/latest-v17.x/node-v17.4.0-linux-x64.tar.gz && \
-    tar -zxvf node-v17.4.0-linux-x64.tar.gz -C /usr/local --strip-components=1 --no-same-owner && \
-    rm -f node-v17.4.0-linux-x64.tar.gz && \
+RUN apt-get update && \
+    apt-get install -y curl && \
+    N=$(curl -XGET https://nodejs.org/dist/latest/|grep linux-x64.tar.gz|awk -F'>' '{ print $2 }'|awk -F'<' '{ print $1 }') && \
+    curl -fsSLOk --compressed https://nodejs.org/dist/latest-v17.x/$N && \
+    tar -zxvf $N -C /usr/local --strip-components=1 --no-same-owner && \
+    rm -f $N && \
     ln -s /usr/local/bin/node /usr/local/bin/nodejs && \
     node --version && \
     npm --version
