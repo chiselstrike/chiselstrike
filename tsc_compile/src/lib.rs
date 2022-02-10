@@ -314,11 +314,25 @@ mod tests {
     use deno_core::anyhow;
     use std::io::Write;
     use tempfile::Builder;
+    use tempfile::NamedTempFile;
+
+    struct TestTemp(NamedTempFile);
+
+    fn write_temp(text: &[u8]) -> Result<TestTemp> {
+        let mut f = Builder::new().suffix(".ts").tempfile()?;
+        f.write_all(text)?;
+        Ok(TestTemp(f))
+    }
+
+    impl TestTemp {
+        fn path(&self) -> &str {
+            self.0.path().to_str().unwrap()
+        }
+    }
 
     #[tokio::test]
     async fn test() -> Result<()> {
-        let mut f = Builder::new().suffix(".ts").tempfile()?;
-        f.write_all(b"import * as zed from \"@foo/bar\";")?;
+        let f = write_temp(b"import * as zed from \"@foo/bar\";")?;
         let libs = [("@foo/bar".to_string(), "export {}".to_string())]
             .into_iter()
             .collect();
@@ -326,16 +340,15 @@ mod tests {
             extra_libs: libs,
             ..Default::default()
         };
-        compile_ts_code(f.path().to_str().unwrap(), opts).await?;
+        compile_ts_code(f.path(), opts).await?;
         Ok(())
     }
 
     #[tokio::test]
     async fn diagnostics() -> Result<()> {
         for _ in 0..2 {
-            let mut f = Builder::new().suffix(".ts").tempfile()?;
-            f.write_all(b"export {}; zed;")?;
-            let err = compile_ts_code(f.path().to_str().unwrap(), Default::default()).await;
+            let f = write_temp(b"export {}; zed;")?;
+            let err = compile_ts_code(f.path(), Default::default()).await;
             let err = err.unwrap_err().to_string();
             assert!(err.contains("Cannot find name 'zed'"));
         }
@@ -344,9 +357,8 @@ mod tests {
 
     #[tokio::test]
     async fn property_constructor_not_strict() -> Result<()> {
-        let mut f = Builder::new().suffix(".ts").tempfile()?;
-        f.write_all(b"export class Foo { a: number };")?;
-        compile_ts_code(f.path().to_str().unwrap(), Default::default()).await?;
+        let f = write_temp(b"export class Foo { a: number };")?;
+        compile_ts_code(f.path(), Default::default()).await?;
         Ok(())
     }
 
@@ -373,22 +385,20 @@ mod tests {
 
     #[tokio::test]
     async fn async_iter_readable_stream() -> Result<()> {
-        let mut f = Builder::new().suffix(".ts").tempfile()?;
-        f.write_all(
+        let f = write_temp(
             br#"
 export function foo<R>(bar: ReadableStream<R>): AsyncIterableIterator<R> {
     return bar[Symbol.asyncIterator]();
 }
 "#,
         )?;
-        compile_ts_code(f.path().to_str().unwrap(), Default::default()).await?;
+        compile_ts_code(f.path(), Default::default()).await?;
         Ok(())
     }
 
     #[tokio::test]
     async fn fails_with_emit() -> Result<()> {
-        let mut f = Builder::new().suffix(".js").tempfile()?;
-        f.write_all(
+        let f = write_temp(
             br#"
 var foo = function() {};
 foo.prototype = {};
@@ -396,7 +406,7 @@ foo.prototype.bar = foo;
 export default foo;
 "#,
         )?;
-        compile_ts_code(f.path().to_str().unwrap(), Default::default()).await?;
+        compile_ts_code(f.path(), Default::default()).await?;
         Ok(())
     }
 
@@ -421,12 +431,8 @@ export default foo;
 
     #[tokio::test]
     async fn handlebars() -> Result<()> {
-        let mut f = Builder::new().suffix(".ts").tempfile()?;
-        f.write_all(b"import handlebars from \"https://cdn.skypack.dev/handlebars\";")
-            .unwrap();
-        compile_ts_code(f.path().to_str().unwrap(), Default::default())
-            .await
-            .unwrap();
+        let f = write_temp(b"import handlebars from \"https://cdn.skypack.dev/handlebars\";")?;
+        compile_ts_code(f.path(), Default::default()).await?;
         Ok(())
     }
 }
