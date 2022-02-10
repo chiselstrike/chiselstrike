@@ -225,14 +225,21 @@ pub struct CompileOptions<'a> {
 struct ModuleLoader {}
 
 async fn load_url(specifier: Url) -> Result<Option<LoadResponse>> {
+    let mut maybe_headers = None;
     let text = if specifier.scheme() == "file" {
         fs::read_to_string(specifier.to_file_path().unwrap())?
     } else {
-        reqwest::get(specifier.clone()).await?.text().await?
+        let res = reqwest::get(specifier.clone()).await?;
+        let mut headers = HashMap::new();
+        for (key, value) in res.headers().iter() {
+            headers.insert(key.as_str().to_string(), value.to_str()?.to_string());
+        }
+        maybe_headers = Some(headers);
+        res.text().await?
     };
     let response = LoadResponse {
         specifier,
-        maybe_headers: None,
+        maybe_headers,
         content: Arc::new(text),
     };
     Ok(Some(response))
@@ -409,6 +416,17 @@ export default foo;
         // so we only get an error about there being no 'foo' in
         // 'bar'.
         assert!(err.contains("Module '\"bar\"' has no exported member 'foo'"));
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn handlebars() -> Result<()> {
+        let mut f = Builder::new().suffix(".ts").tempfile()?;
+        f.write_all(b"import handlebars from \"https://cdn.skypack.dev/handlebars\";")
+            .unwrap();
+        compile_ts_code(f.path().to_str().unwrap(), Default::default())
+            .await
+            .unwrap();
         Ok(())
     }
 }
