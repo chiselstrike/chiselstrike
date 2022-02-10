@@ -5,6 +5,7 @@ members = [
     "api",
     "cli",
     "compile",
+    "packages",
     "server",
     "tsc_compile",
 ]

@@ -1,0 +1,25 @@
+# SPDX-FileCopyrightText: © 2021 ChiselStrike <info@chiselstrike.com>
+
+# RUN: sh -e @file
+
+cat << EOF > "$TEMPDIR/endpoints/pad.ts"
+import * as handlebars from 'handlebars';
+const template = handlebars.compile('foo: {{ FOO }}');
+
+export default async function (req: Request) : Promise<Response> {
+    const obj = { FOO : 'bar' };
+    const final = template(obj);
+    return new Response(btoa(final));
+}
+EOF
+
+cd "$TEMPDIR"
+npm i handlebars
+$CHISEL apply
+
+# CHECK: End point defined: /dev/pad
+
+$CURL -o - $CHISELD_HOST/dev/pad
+
+# CHECK: HTTP/1.1 200 OK
+# CHECK: Zm9vOiBiYXI=
