@@ -41,6 +41,7 @@ pub(crate) enum SelectField {
         name: String,
         /// Type of the field
         type_: Type,
+        is_optional: bool,
         /// Index of a column containing this field in the resulting row we get from
         /// the database.
         column_idx: usize,
@@ -48,6 +49,7 @@ pub(crate) enum SelectField {
     Entity {
         /// Name of the original Type field
         name: String,
+        is_optional: bool,
         /// Nested fields of the Entity object.
         children: Vec<SelectField>,
     },
@@ -182,6 +184,7 @@ impl QueryBuilder {
         let select_field = SelectField::Scalar {
             name: field.name.clone(),
             type_: field.type_.clone(),
+            is_optional: field.is_optional,
             column_idx: self.columns.len(),
         };
         self.columns.push((column_name.to_owned(), field.clone()));
@@ -255,6 +258,7 @@ impl QueryBuilder {
                             self.load_fields(nested_ty, &nested_table, &nested_fields["columns"])?;
                         fields.push(SelectField::Entity {
                             name: field.name.clone(),
+                            is_optional: field.is_optional,
                             children: nested_fields,
                         });
                     } else {
@@ -331,7 +335,7 @@ impl QueryBuilder {
         let mut join_string = String::new();
         for join in &self.joins {
             join_string += &format!(
-                "JOIN ({}) AS {} ON {}.{}={}.{}\n",
+                "LEFT JOIN ({}) AS {} ON {}.{}={}.{}\n",
                 join.rtype.backing_table(),
                 join.ralias,
                 join.lalias,

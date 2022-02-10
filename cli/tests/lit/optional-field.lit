@@ -25,11 +25,24 @@ export default async function (req: Request) {
 }
 EOF
 
+cat << EOF > "$TEMPDIR/endpoints/sum.ts"
+import { Foo } from "../models/t.ts";
+export default async function (_: Request) {
+    let sum = 0;
+    for await (let f of Foo.cursor()) {
+        sum += f.a ?? 0;
+        sum += (f.b ? f.b.c : 0);
+    }
+    return new Response('the sum is: ' + sum + ';');
+}
+EOF
+
 $CHISEL apply
 # CHECK: Model defined: Bar
 # CHECK: Model defined: Foo
 # CHECK: End point defined: /dev/save
 
+## Accept payload without optional values:
 $CURL -d '{}' $CHISELD_HOST/dev/save
 # CHECK: HTTP/1.1 200 OK
 # CHECK: {"id":
@@ -42,7 +55,11 @@ $CURL -d '{"b":{"c":241}}' $CHISELD_HOST/dev/save
 $CURL -d '{"a":142, "b":{"c":241}}' $CHISELD_HOST/dev/save
 # CHECK: HTTP/1.1 200 OK
 # CHECK: "c":241
+$CURL $CHISELD_HOST/dev/sum
+# CHECK: HTTP/1.1 200 OK
+# CHECK: the sum is: 766;
 
+## Allow adding an optional field:
 cat << EOF > "$TEMPDIR/models/t.ts"
 import { ChiselEntity } from "@chiselstrike/api";
 export class Bar extends ChiselEntity {
