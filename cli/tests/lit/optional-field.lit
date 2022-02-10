@@ -76,3 +76,14 @@ $CHISEL apply
 # CHECK: Model defined: Bar
 # CHECK: Model defined: Foo
 # CHECK: End point defined: /dev/save
+
+## Correctly populate from optional fields
+$CHISEL apply --version=v2
+# CHECK: Model defined: Bar
+# CHECK: Model defined: Foo
+# CHECK: End point defined: /v2/save
+# CHECK: End point defined: /v2/sum
+$CHISEL populate --version=v2 --from=dev
+$CURL $CHISELD_HOST/v2/sum
+# CHECK: HTTP/1.1 200 OK
+# CHECK: the sum is: 766;
