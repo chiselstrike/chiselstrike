@@ -10,9 +10,12 @@ use deno_core::JsRuntime;
 use deno_core::OpFn;
 use deno_core::RuntimeOptions;
 use deno_core::Snapshot;
+use deno_graph::resolve_import;
 use deno_graph::source::LoadFuture;
 use deno_graph::source::LoadResponse;
 use deno_graph::source::Loader;
+use deno_graph::source::ResolveResponse;
+use deno_graph::source::Resolver;
 use deno_graph::ModuleGraph;
 use deno_graph::ModuleKind;
 use serde::de::DeserializeOwned;
@@ -20,6 +23,7 @@ use serde::Serialize;
 use std::collections::HashMap;
 use std::env;
 use std::fs;
+use std::future::Future;
 use std::path::Path;
 use std::sync::Arc;
 
@@ -219,32 +223,60 @@ pub struct CompileOptions<'a> {
     pub emit_declarations: bool,
 }
 
-struct ModuleLoader {}
+struct ModuleLoader {
+    extra_libs: HashMap<Url, String>,
+}
 
-async fn load_url(specifier: Url) -> Result<Option<LoadResponse>> {
+fn load_url(
+    extra_libs: &HashMap<Url, String>,
+    specifier: Url,
+) -> impl Future<Output = Result<Option<LoadResponse>>> {
+    let sync_text = match specifier.scheme() {
+        "file" => fs::read_to_string(specifier.to_file_path().unwrap()),
+        "chisel" => Ok(extra_libs.get(&specifier).unwrap().clone()),
+        _ => Ok("".to_string()),
+    };
     let mut maybe_headers = None;
-    let text = if specifier.scheme() == "file" {
-        fs::read_to_string(specifier.to_file_path().unwrap())?
-    } else {
-        let res = reqwest::get(specifier.clone()).await?;
-        let mut headers = HashMap::new();
-        for (key, value) in res.headers().iter() {
-            headers.insert(key.as_str().to_string(), value.to_str()?.to_string());
-        }
-        maybe_headers = Some(headers);
-        res.text().await?
-    };
-    let response = LoadResponse {
-        specifier,
-        maybe_headers,
-        content: Arc::new(text),
-    };
-    Ok(Some(response))
+
+    async {
+        let text = match specifier.scheme() {
+            "file" | "chisel" => sync_text?,
+            _ => {
+                let res = reqwest::get(specifier.clone()).await?;
+                let mut headers = HashMap::new();
+                for (key, value) in res.headers().iter() {
+                    headers.insert(key.as_str().to_string(), value.to_str()?.to_string());
+                }
+                maybe_headers = Some(headers);
+                res.text().await?
+            }
+        };
+        let response = LoadResponse {
+            specifier,
+            maybe_headers,
+            content: Arc::new(text),
+        };
+        Ok(Some(response))
+    }
 }
 
 impl Loader for ModuleLoader {
     fn load(&mut self, specifier: &Url, _is_dynamic: bool) -> LoadFuture {
-        Box::pin(load_url(specifier.clone()))
+        Box::pin(load_url(&self.extra_libs, specifier.clone()))
+    }
+}
+
+#[derive(Debug)]
+struct ModuleResolver {
+    extra_libs: HashMap<String, Url>,
+}
+
+impl Resolver for ModuleResolver {
+    fn resolve(&self, specifier: &str, referrer: &Url) -> ResolveResponse {
+        if let Some(u) = self.extra_libs.get(specifier) {
+            return ResolveResponse::Esm(u.clone());
+        }
+        resolve_import(specifier, referrer).into()
     }
 }
 
@@ -254,18 +286,30 @@ pub async fn compile_ts_code(
 ) -> Result<HashMap<String, String>> {
     let url = "file://".to_string() + &abs(file_name);
     let url = Url::parse(&url)?;
-    let mut loader = ModuleLoader {};
+
+    let mut extra_libs = HashMap::new();
+    let mut to_url = HashMap::new();
+    for (k, v) in &opts.extra_libs {
+        let u = Url::parse(&("chisel:///".to_string() + k + ".ts")).unwrap();
+        extra_libs.insert(u.clone(), v.clone());
+        to_url.insert(k.clone(), u);
+    }
+
+    let mut loader = ModuleLoader { extra_libs };
+    let resolver = ModuleResolver { extra_libs: to_url };
     let graph = deno_graph::create_graph(
         vec![(url, ModuleKind::Esm)],
         false,
         None,
         &mut loader,
-        None,
+        Some(&resolver),
         None,
         None,
         None,
     )
     .await;
+
+    graph.valid()?;
 
     let mut runtime = JsRuntime::new(RuntimeOptions {
         startup_snapshot: Some(Snapshot::Static(SNAPSHOT)),
@@ -374,7 +418,7 @@ mod tests {
             .await
             .unwrap_err()
             .to_string();
-        assert!(err.contains("Cannot read file '/no/such/file.ts': Reading /no/such/file.ts."));
+        assert_eq!(err, "No such file or directory (os error 2)");
         Ok(())
     }
 
@@ -384,8 +428,7 @@ mod tests {
             .await
             .unwrap_err()
             .to_string();
-        // FIXME: Something is adding a .ts extension
-        assert!(err.contains("Cannot read file '/no/such/file.ts': Reading /no/such/file.ts."));
+        assert_eq!(err, "No such file or directory (os error 2)");
         Ok(())
     }
 
@@ -428,10 +471,10 @@ export default foo;
             .await
             .unwrap_err()
             .to_string();
-        // Unfortunately we don't report errors on module resolution,
-        // so we only get an error about there being no 'foo' in
-        // 'bar'.
-        assert!(err.contains("Module '\"bar\"' has no exported member 'foo'"));
+        assert_eq!(
+            err,
+            "Relative import path \"bar\" not prefixed with / or ./ or ../"
+        );
         Ok(())
     }
 

@@ -15,8 +15,7 @@ cd "$TEMPDIR"
 $CHISEL apply 2>&1 | $RMCOLOR || true
 # CHECK: Error: parsing endpoint /dev/error
 # CHECK: Caused by:
-# CHECK:     Compilation failed:
-# CHECK:     endpoints/error.ts:2:31 - error TS1005: ',' expected.
+# CHECK:     The module's source code could not be parsed: Expected ',', got 'string literal (bar)' at file:///[[.*]]/endpoints/error.ts:2:31
 
 cat << EOF > "$TEMPDIR/endpoints/error.ts"
 const xyz = foo();
