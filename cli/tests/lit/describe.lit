@@ -37,3 +37,16 @@ $CHISEL describe
 # CHECK: }
 # CHECK: Endpoint: /dev/hello
 # CHECK: Label policy: pii
+
+## check that an endpoint-only scenario works
+rm -rf "$TEMPDIR/models"
+rm -rf "$TEMPDIR/policies"
+$CHISEL apply --allow-type-deletion
+
+$CHISEL describe
+# CHECK Endpoint: /dev/hello
+
+$CHISEL restart
+
+$CHISEL describe
+# CHECK Endpoint: /dev/hello

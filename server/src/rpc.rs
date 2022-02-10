@@ -1,5 +1,6 @@
 // SPDX-FileCopyrightText: © 2021 ChiselStrike <info@chiselstrike.com>
 
+use crate::api::RequestPath;
 use crate::chisel;
 use crate::datastore::{MetaService, QueryEngine};
 use crate::deno;
@@ -40,6 +41,7 @@ pub(crate) struct GlobalRpcState {
     routes: PrefixMap<String>, // For globally keeping track of routes
     commands: Vec<CoordinatorChannel>,
     policies: Policies,
+    versions: BTreeSet<String>,
 }
 
 impl GlobalRpcState {
@@ -52,6 +54,15 @@ impl GlobalRpcState {
         let routes = meta.load_endpoints().await?;
         let policies = meta.load_policies().await?;
 
+        let mut versions = BTreeSet::new();
+        for v in type_system.versions.keys() {
+            versions.insert(v.to_owned());
+        }
+        for (p, _) in routes.iter() {
+            let rp = RequestPath::try_from(p.to_str().unwrap()).unwrap();
+            versions.insert(rp.api_version().to_owned());
+        }
+
         Ok(Self {
             type_system,
             meta,
@@ -59,6 +70,7 @@ impl GlobalRpcState {
             commands,
             routes,
             policies,
+            versions,
         })
     }
 
@@ -107,6 +119,7 @@ impl RpcService {
             "__chiselstrike" != &api_version,
             "__chiselstrike is a reserved version name"
         );
+        state.versions.remove(&api_version);
 
         let version_types = state.type_system.get_version(&api_version)?;
         let to_remove: Vec<&Arc<ObjectType>> =
@@ -217,6 +230,10 @@ impl RpcService {
             "__chiselstrike" != &api_version,
             "__chiselstrike is a reserved version name"
         );
+
+        // so that an empty apply removes the version.
+        // We'll add it back as soon as we notice this is not empty
+        state.versions.remove(&api_version);
 
         let mut type_names = BTreeSet::new();
         let mut type_names_user_order = vec![];
@@ -376,6 +393,10 @@ impl RpcService {
         let endpoints = endpoint_routes.clone();
         let types_global = state.type_system.clone();
 
+        if !endpoints.is_empty() || types_global.get_version(&api_version).is_ok() {
+            state.versions.insert(api_version.clone());
+        }
+
         let cmd = send_command!({
             let mut runtime = runtime::get();
             let type_system = &mut runtime.type_system;
@@ -459,34 +480,32 @@ impl ChiselRpc for RpcService {
     ) -> Result<tonic::Response<DescribeResponse>, tonic::Status> {
         let state = self.state.lock().await;
 
-        // FIXME: Versions should be in `state`, not in inside type system and policies.
-        let versions = state.type_system.versions.keys();
         let mut version_defs = vec![];
-        for api_version in versions {
-            // FIXME: don't unwrap.
-            let version_types = state.type_system.versions.get(api_version).unwrap();
+        for api_version in state.versions.iter() {
             let mut type_defs = vec![];
-            use itertools::Itertools;
-            for ty in version_types
-                .custom_types
-                .values()
-                .sorted_by(|x, y| x.name().cmp(y.name()))
-            {
-                let mut field_defs = vec![];
-                for field in ty.user_fields() {
-                    field_defs.push(chisel::FieldDefinition {
-                        name: field.name.to_owned(),
-                        field_type: field.type_.name().to_string(),
-                        labels: field.labels.clone(),
-                        default_value: field.user_provided_default().clone(),
-                        is_optional: field.is_optional,
-                    });
+            if let Some(version_types) = state.type_system.versions.get(api_version) {
+                use itertools::Itertools;
+                for ty in version_types
+                    .custom_types
+                    .values()
+                    .sorted_by(|x, y| x.name().cmp(y.name()))
+                {
+                    let mut field_defs = vec![];
+                    for field in ty.user_fields() {
+                        field_defs.push(chisel::FieldDefinition {
+                            name: field.name.to_owned(),
+                            field_type: field.type_.name().to_string(),
+                            labels: field.labels.clone(),
+                            default_value: field.user_provided_default().clone(),
+                            is_optional: field.is_optional,
+                        });
+                    }
+                    let type_def = chisel::TypeDefinition {
+                        name: ty.name().to_string(),
+                        field_defs,
+                    };
+                    type_defs.push(type_def);
                 }
-                let type_def = chisel::TypeDefinition {
-                    name: ty.name().to_string(),
-                    field_defs,
-                };
-                type_defs.push(type_def);
             }
             let mut endpoint_defs = vec![];
             let version_path_str = format!("/{}/", api_version);
