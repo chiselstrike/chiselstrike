@@ -10,6 +10,7 @@ deno_graph = "0.22.0"
 reqwest = { version = "=0.11.7", features = ["rustls-tls"], default-features = false } # strict = because of https://github.com/seanmonstar/reqwest/issues/1403
 
 [dev-dependencies]
+console = "0.15.0"
 tempfile = "3.2.0"
 tokio = { version = "1.11.0", features = ["rt-multi-thread", "macros"] }
 

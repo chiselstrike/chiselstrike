@@ -314,6 +314,7 @@ pub async fn compile_ts_code(
 
 #[cfg(test)]
 mod tests {
+    use super::abs;
     use super::compile_ts_code;
     use super::CompileOptions;
     use anyhow::Result;
@@ -334,6 +335,101 @@ mod tests {
         fn path(&self) -> &str {
             self.0.path().to_str().unwrap()
         }
+    }
+
+    async fn check_test_ts(path: &str) {
+        let opts = CompileOptions {
+            emit_declarations: true,
+            ..Default::default()
+        };
+        let written = compile_ts_code(path, opts).await.unwrap();
+        let mut keys: Vec<_> = written.keys().collect();
+        keys.sort();
+
+        let dts = path.strip_suffix(".ts").unwrap().to_string() + ".d.ts";
+        let mut expected = vec![
+            "https://cdn.skypack.dev/-/indent-string@v5.0.0-VgKPSgi4hUX5NbF4n3aC/dist=es2020,mode=imports,min/optimized/indent-string.js",
+            "https://cdn.skypack.dev/pin/indent-string@v5.0.0-VgKPSgi4hUX5NbF4n3aC/mode=imports,min/optimized/indent-string.js",
+            path,
+            &dts,
+        ];
+        expected.sort_unstable();
+        assert_eq!(keys, expected);
+        let body = written[path].clone();
+        assert!(body.starts_with("import indent from"));
+        assert!(!body.contains("undefined"));
+    }
+
+    async fn check_test2_ts(path: &str) {
+        let written = compile_ts_code(path, Default::default()).await.unwrap();
+        let body = written[path].clone();
+        assert!(body.starts_with("import { zed } from"));
+    }
+
+    #[tokio::test]
+    async fn test1() {
+        let p = "tests/test1.ts";
+        check_test_ts(p).await;
+        check_test_ts(&abs(p)).await;
+    }
+
+    #[tokio::test]
+    async fn test2() {
+        let p = "tests/test2.ts";
+        check_test2_ts(p).await;
+        check_test2_ts(&abs(p)).await;
+    }
+
+    #[tokio::test]
+    async fn test3() -> Result<()> {
+        compile_ts_code("tests/test3.ts", Default::default()).await?;
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test4() {
+        let err = compile_ts_code("tests/test4.ts", Default::default())
+            .await
+            .unwrap_err()
+            .to_string();
+        let err = console::strip_ansi_codes(&err);
+        assert!(err.starts_with("Compilation failed:\ntests/test4.ts:1:1 - error TS1435: Unknown keyword or identifier. Did you mean 'let'?"));
+        let num_lines = err.split('\n').count();
+        assert_eq!(num_lines, 14);
+    }
+
+    fn opts_lib1() -> CompileOptions<'static> {
+        CompileOptions {
+            extra_default_lib: Some("tests/test5-lib1.d.ts"),
+            ..Default::default()
+        }
+    }
+
+    fn opts_lib2() -> CompileOptions<'static> {
+        CompileOptions {
+            extra_default_lib: Some("tests/test5-lib2.d.ts"),
+            ..Default::default()
+        }
+    }
+
+    #[tokio::test]
+    async fn test5() -> Result<()> {
+        compile_ts_code("tests/test5.ts", opts_lib1()).await?;
+        compile_ts_code("tests/test5.ts", opts_lib2()).await?;
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test6() -> Result<()> {
+        compile_ts_code("tests/test6.ts", opts_lib1()).await?;
+        compile_ts_code("tests/test6.ts", opts_lib2()).await?;
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test7() -> Result<()> {
+        compile_ts_code("tests/test7.ts", Default::default()).await?;
+        Ok(())
     }
 
     #[tokio::test]
