@@ -18,6 +18,7 @@ module.exports = {
         "packages/chiselstrike-api/lib/chisel.d.ts",
         "packages/chiselstrike-api/lib/lib.deno_core.d.ts",
         "packages/chiselstrike-api/src/lib.deno_core.d.ts",
+        "packages/create-chiselstrike-app/dist",
         "target/",
         "template/",
         "third_party/"
