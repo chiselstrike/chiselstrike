@@ -15,8 +15,7 @@ use pin_project::pin_project;
 use sea_query::{Alias, ColumnDef, Table};
 use serde_json::json;
 use sqlx::any::{Any, AnyArguments, AnyPool, AnyRow};
-use sqlx::Row;
-use sqlx::{Executor, Transaction};
+use sqlx::{Executor, Row, Transaction, ValueRef};
 use std::collections::{HashMap, HashSet};
 use std::pin::Pin;
 use std::sync::Arc;
@@ -150,6 +149,22 @@ impl IdTree {
         }
         ids_json
     }
+}
+
+fn column_is_null(row: &AnyRow, column_idx: usize) -> bool {
+    row.try_get_raw(column_idx).unwrap().is_null()
+}
+
+fn id_idx(fields: &[SelectField]) -> usize {
+    for f in fields {
+        match f {
+            SelectField::Scalar {
+                name, column_idx, ..
+            } if name == "id" => return *column_idx,
+            _ => (),
+        }
+    }
+    panic!("No id field among Entity children");
 }
 
 /// Query engine.
@@ -331,9 +346,12 @@ impl QueryEngine {
                     name,
                     type_,
                     column_idx,
+                    is_optional,
                     ..
                 } => {
-                    // FIXME: consider result_column.type_info().is_null() too
+                    if *is_optional && column_is_null(row, *column_idx) {
+                        continue;
+                    }
                     macro_rules! to_json {
                         ($value_type:ty) => {{
                             let val = row.get::<$value_type, _>(column_idx);
@@ -363,7 +381,14 @@ impl QueryEngine {
                     };
                     ret.insert(name.clone(), val);
                 }
-                SelectField::Entity { name, children } => {
+                SelectField::Entity {
+                    name,
+                    children,
+                    is_optional,
+                } => {
+                    if *is_optional && column_is_null(row, id_idx(children)) {
+                        continue;
+                    }
                     let val = json!(Self::row_to_json(children, row)?);
                     ret.insert(name.clone(), val);
                 }
@@ -614,12 +639,14 @@ impl QueryEngine {
         let mut update_binds = String::new();
         let mut id_bind = String::new();
 
-        for (i, f) in ty.all_fields().enumerate() {
+        let mut i = 0;
+        for f in ty.all_fields() {
             let val = ty_value.get(&f.name);
             if val.is_none() && f.is_optional {
                 continue;
             }
-            let bind = std::format!("${}", i + 1);
+            i += 1;
+            let bind = std::format!("${}", i);
             field_binds.push_str(&bind);
             field_binds.push(',');
 
