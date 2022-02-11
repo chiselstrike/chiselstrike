@@ -9,6 +9,7 @@
                 "tsc_compile"
             ],
             "exclude": [
+                "tsc_compile/tests/",
                 "server/docs",
                 "third_party",
                 "packages/create-chiselstrike-app/node_modules/",
@@ -29,6 +30,7 @@
         "files": {
             "include": ["api", "server", "packages", "tsc_compile"],
             "exclude": [
+                "tsc_compile/tests/",
                 "third_party",
                 "packages/create-chiselstrike-app/node_modules/",
                 "packages/chiselstrike-cli/node_modules/",
