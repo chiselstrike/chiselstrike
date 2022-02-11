@@ -50,8 +50,9 @@ jobs:
         ECR_REPOSITORY: chiseld
         IMAGE_TAG: ${{ github.sha }}
       run: |
-        docker build -f Dockerfile.chiseld -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG -t $ECR_REGISTRY/$ECR_REPOSITORY:latest .
-        docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
+        TAG=$(git describe --tags)
+        docker build -f Dockerfile.chiseld -t $ECR_REGISTRY/$ECR_REPOSITORY:$TAG -t $ECR_REGISTRY/$ECR_REPOSITORY:latest .
+        docker push $ECR_REGISTRY/$ECR_REPOSITORY:$TAG
         docker push $ECR_REGISTRY/$ECR_REPOSITORY:latest
 
     - name: push image ECR toolset
@@ -60,12 +61,8 @@ jobs:
         ECR_REPOSITORY: toolset
         IMAGE_TAG: ${{ github.sha }}
       run: |
-        docker build -f Dockerfile.toolset -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG -t $ECR_REGISTRY/$ECR_REPOSITORY:latest .
-        docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
+        TAG=$(git describe --tags)
+        docker build -f Dockerfile.toolset -t $ECR_REGISTRY/$ECR_REPOSITORY:$TAG -t $ECR_REGISTRY/$ECR_REPOSITORY:latest .
+        docker push $ECR_REGISTRY/$ECR_REPOSITORY:$TAG
         docker push $ECR_REGISTRY/$ECR_REPOSITORY:latest
-
-    - name: print details
-      run: |
-        env
-        git describe --tags --abbrev=0 
 
