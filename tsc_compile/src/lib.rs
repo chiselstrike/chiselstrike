@@ -1,6 +1,6 @@
 // SPDX-FileCopyrightText: © 2022 ChiselStrike <info@chiselstrike.com>
 
-use anyhow::{anyhow, Context, Result};
+use anyhow::{anyhow, Result};
 use deno_core::anyhow;
 use deno_core::op_sync;
 use deno_core::serde;
@@ -133,11 +133,19 @@ fn read(map: &mut DownloadMap, path: String, _: ()) -> Result<String> {
     if let Some(v) = map.extra_libs.get(&path) {
         return Ok(v.to_string());
     }
-    if let Some(url) = map.path_to_url.get(&path) {
-        let module = map.graph.get(url).unwrap();
-        return Ok((**module.maybe_source.as_ref().unwrap()).clone());
-    }
-    fs::read_to_string(&path).with_context(|| format!("Reading {}", path))
+
+    let url = if let Some(url) = map.path_to_url.get(&path) {
+        url.clone()
+    } else {
+        let url = "file://".to_string() + &path;
+        Url::parse(&url)?
+    };
+    let module = match map.graph.try_get(&url) {
+        Ok(Some(m)) => m,
+        Ok(None) => anyhow::bail!("URL was not loaded"),
+        Err(e) => return Err(e.into()),
+    };
+    Ok((**module.maybe_source.as_ref().unwrap()).clone())
 }
 
 fn write(map: &mut DownloadMap, mut path: String, content: String) -> Result<()> {
@@ -297,10 +305,19 @@ pub async fn compile_ts_code(
 
     let mut loader = ModuleLoader { extra_libs };
     let resolver = ModuleResolver { extra_libs: to_url };
+
+    let maybe_imports = if let Some(path) = opts.extra_default_lib {
+        let dummy_url = Url::parse("chisel://std").unwrap();
+        let path = "file://".to_string() + &abs(path);
+        Some(vec![(dummy_url, vec![path])])
+    } else {
+        None
+    };
+
     let graph = deno_graph::create_graph(
         vec![(url, ModuleKind::Esm)],
         false,
-        None,
+        maybe_imports,
         &mut loader,
         Some(&resolver),
         None,
