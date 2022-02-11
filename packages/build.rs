@@ -12,10 +12,16 @@ fn run_in<T: IntoIterator<Item = &'static str>>(cmd: &str, args: T, dir: PathBuf
     assert!(dir.is_dir(), "{:?} is not a directory", dir);
     let status = Command::new(cmd)
         .args(args)
-        .current_dir(dir)
-        .status()
-        .unwrap();
-    assert!(status.success());
+        .current_dir(dir.clone())
+        .status();
+    assert!(
+        status.is_ok(),
+        "failed to run command `{}` in dir {:?}, error: {:?}",
+        cmd,
+        dir,
+        status.err().unwrap()
+    );
+    assert!(status.unwrap().success());
 }
 
 fn main() {
