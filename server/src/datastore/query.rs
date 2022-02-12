@@ -117,7 +117,7 @@ impl QueryBuilder {
     /// Constructs a query builder ready to build an expression querying all fields of a
     /// given type `ty`. This is done in a shallow manner. Columns representing foreign
     /// key are returned as string, not as the related Entity.
-    fn new_from_type(ty: &Arc<ObjectType>) -> Self {
+    fn from_type(ty: &Arc<ObjectType>) -> Self {
         let mut builder = Self {
             fields: vec![],
             columns: vec![],
@@ -474,7 +474,7 @@ pub(crate) fn convert_restrictions(
 }
 
 pub(crate) fn type_to_query(ty: &Arc<ObjectType>) -> Query {
-    let builder = QueryBuilder::new_from_type(ty);
+    let builder = QueryBuilder::from_type(ty);
     builder.build()
 }
 
