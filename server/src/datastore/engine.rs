@@ -400,7 +400,7 @@ impl QueryEngine {
         Ok(ret)
     }
 
-    fn filter_fields(
+    fn project(
         o: Result<ResultRow>,
         allowed_fields: &Option<HashSet<String>>,
     ) -> Result<JsonObject> {
@@ -441,7 +441,7 @@ impl QueryEngine {
         let stream = new_query_results(query.raw_sql, tr);
         let stream = stream.map(move |row| Self::row_to_json(&query.fields, &row?));
         let stream = Box::pin(stream.map(move |o| {
-            let o = Self::filter_fields(o, &allowed_fields);
+            let o = Self::project(o, &allowed_fields);
             Self::apply_policies(o, &policies)
         }));
         Ok(stream)
