@@ -1,15 +1,14 @@
 // SPDX-FileCopyrightText: © 2021 ChiselStrike <info@chiselstrike.com>
 
 use crate::api::{response_template, Body, RequestPath};
-use crate::datastore::engine::QueryResults;
 use crate::datastore::engine::TransactionStatic;
+use crate::datastore::engine::{QueryResults, ResultRow};
 use crate::datastore::query::{json_to_query, Mutation};
 use crate::policies::FieldPolicies;
 use crate::rcmut::RcMut;
 use crate::runtime;
 use crate::runtime::Runtime;
 use crate::types::{ObjectType, Type};
-use crate::JsonObject;
 use anyhow::{anyhow, Context as AnyhowContext, Result};
 use api::chisel_js;
 use deno_core::error::AnyError;
@@ -458,7 +457,7 @@ struct QueryNextFuture {
 }
 
 impl Future for QueryNextFuture {
-    type Output = Option<Result<JsonObject>>;
+    type Output = Option<Result<ResultRow>>;
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         let mut stream = self.resource.stream.borrow_mut();
         let stream: &mut QueryResults = &mut stream;
@@ -470,7 +469,7 @@ async fn op_chisel_relational_query_next(
     state: Rc<RefCell<OpState>>,
     query_stream_rid: ResourceId,
     _: (),
-) -> Result<Option<JsonObject>> {
+) -> Result<Option<ResultRow>> {
     let resource: Rc<QueryStreamResource> = state.borrow().resource_table.get(query_stream_rid)?;
     let fut = QueryNextFuture { resource };
     if let Some(row) = fut.await {
