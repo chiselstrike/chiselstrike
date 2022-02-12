@@ -63,7 +63,7 @@ fn main() {
 
     lit::run::tests(lit::event_handler::Default::default(), |config| {
         config.add_search_path(search_path.to_owned());
-        config.add_extension("lit");
+        config.add_extension("deno");
         config.add_extension("node");
         config.constants.insert("chisel".to_owned(), chisel());
         config.truncate_output_context_to_number_of_lines = Some(80);
