@@ -437,9 +437,10 @@ mod tests {
             .unwrap_err()
             .to_string();
         let err = console::strip_ansi_codes(&err);
-        assert!(err.starts_with("Compilation failed:\ntests/test4.ts:1:1 - error TS1435: Unknown keyword or identifier. Did you mean 'let'?"));
-        let num_lines = err.split('\n').count();
-        assert_eq!(num_lines, 14);
+        assert!(err.starts_with(
+            "The module's source code could not be parsed: Expected ';', '}' or <eof> at file:///"
+        ));
+        assert!(err.contains("/test4.ts:1:6"));
     }
 
     fn opts_lib1() -> CompileOptions<'static> {
