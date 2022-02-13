@@ -24,8 +24,11 @@ use tokio::sync::Mutex;
 use tokio::sync::OwnedMutexGuard;
 use uuid::Uuid;
 
-// Results with policies applied
-pub(crate) type QueryResults = BoxStream<'static, Result<JsonObject>>;
+/// A query row is a JSON object that represent the queried entities.
+pub(crate) type ResultRow = JsonObject;
+
+/// A query results is a stream of query rows after policies have been applied.
+pub(crate) type QueryResults = BoxStream<'static, Result<ResultRow>>;
 
 pub(crate) type TransactionStatic = Arc<Mutex<Transaction<'static, Any>>>;
 
@@ -338,7 +341,7 @@ impl QueryEngine {
         Ok(())
     }
 
-    fn row_to_json(fields: &[SelectField], row: &AnyRow) -> Result<JsonObject> {
+    fn row_to_json(fields: &[SelectField], row: &AnyRow) -> Result<ResultRow> {
         let mut ret = JsonObject::default();
         for s_field in fields {
             match s_field {
@@ -397,8 +400,8 @@ impl QueryEngine {
         Ok(ret)
     }
 
-    fn filter_fields(
-        o: Result<JsonObject>,
+    fn project(
+        o: Result<ResultRow>,
         allowed_fields: &Option<HashSet<String>>,
     ) -> Result<JsonObject> {
         let mut o = o?;
@@ -416,7 +419,7 @@ impl QueryEngine {
     }
 
     /// FIXME: This function should perform recursive descend into nested fields.
-    fn apply_policies(o: Result<JsonObject>, policies: &FieldPolicies) -> Result<JsonObject> {
+    fn apply_policies(o: Result<ResultRow>, policies: &FieldPolicies) -> Result<ResultRow> {
         let mut o = o?;
         for (k, v) in o.iter_mut() {
             if let Some(xform) = policies.transforms.get(k) {
@@ -438,7 +441,7 @@ impl QueryEngine {
         let stream = new_query_results(query.raw_sql, tr);
         let stream = stream.map(move |row| Self::row_to_json(&query.fields, &row?));
         let stream = Box::pin(stream.map(move |o| {
-            let o = Self::filter_fields(o, &allowed_fields);
+            let o = Self::project(o, &allowed_fields);
             Self::apply_policies(o, &policies)
         }));
         Ok(stream)

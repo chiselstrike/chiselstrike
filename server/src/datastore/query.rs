@@ -114,21 +114,24 @@ struct QueryBuilder {
 }
 
 impl QueryBuilder {
-    /// Constructs a query builder ready to build an expression querying all fields of a
-    /// given type `ty`. This is done in a shallow manner. Columns representing foreign
-    /// key are returned as string, not as the related Entity.
-    fn new_from_type(ty: &Arc<ObjectType>) -> Self {
-        let mut builder = Self {
+    fn new(base_type: Arc<ObjectType>, policies: FieldPolicies, limit: Option<u64>) -> Self {
+        Self {
             fields: vec![],
             columns: vec![],
-            base_type: ty.clone(),
+            base_type,
             joins: vec![],
             restrictions: vec![],
             allowed_fields: None,
-            policies: FieldPolicies::default(),
-            limit: None,
-        };
+            policies,
+            limit,
+        }
+    }
 
+    /// Constructs a query builder ready to build an expression querying all fields of a
+    /// given type `ty`. This is done in a shallow manner. Columns representing foreign
+    /// key are returned as string, not as the related Entity.
+    fn from_type(ty: &Arc<ObjectType>) -> Self {
+        let mut builder = Self::new(ty.clone(), FieldPolicies::default(), None);
         for field in ty.all_fields() {
             let mut field = field.clone();
             field.type_ = match field.type_ {
@@ -166,16 +169,7 @@ impl QueryBuilder {
         };
         let policies = make_field_policies(&runtime, &ty);
 
-        let mut builder = Self {
-            fields: vec![],
-            columns: vec![],
-            base_type: ty.clone(),
-            joins: vec![],
-            restrictions: vec![],
-            allowed_fields: None,
-            policies,
-            limit: val["limit"].as_u64(),
-        };
+        let mut builder = Self::new(ty.clone(), policies, val["limit"].as_u64());
         builder.fields = builder.load_fields(&ty, ty.backing_table(), &val["columns"])?;
         Ok(builder)
     }
@@ -474,7 +468,7 @@ pub(crate) fn convert_restrictions(
 }
 
 pub(crate) fn type_to_query(ty: &Arc<ObjectType>) -> Query {
-    let builder = QueryBuilder::new_from_type(ty);
+    let builder = QueryBuilder::from_type(ty);
     builder.build()
 }
 
