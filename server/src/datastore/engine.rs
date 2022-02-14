@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: © 2021 ChiselStrike <info@chiselstrike.com>
 
 use crate::datastore::query::{Mutation, Query, SelectField, SqlValue};
-use crate::datastore::{DbConnection, Kind, QueryError};
+use crate::datastore::{DbConnection, Kind};
 use crate::policies::FieldPolicies;
 use crate::types::{Field, ObjectDelta, ObjectType, Type, OAUTHUSER_TYPE_NAME};
 use crate::JsonObject;
@@ -208,35 +208,20 @@ impl QueryEngine {
         let drop_table = drop_table.build_any(DbConnection::get_query_builder(&self.kind));
         let drop_table = sqlx::query(&drop_table);
 
-        transaction
-            .execute(drop_table)
-            .await
-            .map_err(QueryError::ExecuteFailed)?;
+        transaction.execute(drop_table).await?;
         Ok(())
     }
 
     pub(crate) async fn start_transaction_static(self: Arc<Self>) -> Result<TransactionStatic> {
-        Ok(Arc::new(Mutex::new(
-            self.pool
-                .begin()
-                .await
-                .map_err(QueryError::ConnectionFailed)?,
-        )))
+        Ok(Arc::new(Mutex::new(self.pool.begin().await?)))
     }
 
     pub(crate) async fn start_transaction(&self) -> Result<Transaction<'static, Any>> {
-        Ok(self
-            .pool
-            .begin()
-            .await
-            .map_err(QueryError::ConnectionFailed)?)
+        Ok(self.pool.begin().await?)
     }
 
     pub(crate) async fn commit_transaction(transaction: Transaction<'static, Any>) -> Result<()> {
-        transaction
-            .commit()
-            .await
-            .map_err(QueryError::ExecuteFailed)?;
+        transaction.commit().await?;
         Ok(())
     }
 
@@ -245,10 +230,7 @@ impl QueryEngine {
             .map_err(|_| anyhow!("Transaction still have references held!"))?;
         let transaction = transaction.into_inner();
 
-        transaction
-            .commit()
-            .await
-            .map_err(QueryError::ExecuteFailed)?;
+        transaction.commit().await?;
         Ok(())
     }
 
@@ -269,10 +251,7 @@ impl QueryEngine {
         let create_table = create_table.build_any(DbConnection::get_query_builder(&self.kind));
 
         let create_table = sqlx::query(&create_table);
-        transaction
-            .execute(create_table)
-            .await
-            .map_err(QueryError::ExecuteFailed)?;
+        transaction.execute(create_table).await?;
         Ok(())
     }
 
@@ -288,10 +267,7 @@ impl QueryEngine {
                 let table = $table.build_any(DbConnection::get_query_builder(&Kind::Postgres));
                 let table = sqlx::query(&table);
 
-                transaction
-                    .execute(table)
-                    .await
-                    .map_err(QueryError::ExecuteFailed)
+                transaction.execute(table).await
             }};
         }
 
@@ -451,10 +427,7 @@ impl QueryEngine {
     pub(crate) async fn mutate(&self, mutation: Mutation) -> Result<()> {
         let mut transaction = self.start_transaction().await?;
         let query = sqlx::query(&mutation.raw_sql);
-        transaction
-            .execute(query)
-            .await
-            .map_err(QueryError::ExecuteFailed)?;
+        transaction.execute(query).await?;
         QueryEngine::commit_transaction(transaction).await?;
         Ok(())
     }
@@ -500,22 +473,24 @@ impl QueryEngine {
     ) -> Result<()> {
         if let Some(transaction) = transaction {
             for q in queries {
-                transaction
-                    .fetch_one(q.get_sqlx())
-                    .await
-                    .map_err(QueryError::ExecuteFailed)?;
+                transaction.fetch_one(q.get_sqlx()).await?;
             }
         } else {
             let mut transaction = self.start_transaction().await?;
             for q in queries {
-                transaction
-                    .fetch_one(q.get_sqlx())
-                    .await
-                    .map_err(QueryError::ExecuteFailed)?;
+                transaction.fetch_one(q.get_sqlx()).await?;
             }
             QueryEngine::commit_transaction(transaction).await?;
         }
         Ok(())
+    }
+
+    fn incompatible(field: &Field, ty: &ObjectType) -> anyhow::Error {
+        anyhow!(
+            "provided data for field `{}` are incompatibble with given type `{}`",
+            field.name,
+            ty.name()
+        )
     }
 
     /// Recursively generates insert SQL queries necessary to insert object of type `ty`
@@ -537,8 +512,7 @@ impl QueryEngine {
             if field_value.is_none() && field.is_optional {
                 continue;
             }
-            let incompatible_data =
-                || QueryError::IncompatibleData(field.name.to_owned(), ty.name().to_owned());
+            let incompatible_data = || QueryEngine::incompatible(field, ty);
             let arg = match &field.type_ {
                 Type::Object(nested_type) => {
                     let nested_value = field_value
@@ -658,8 +632,8 @@ impl QueryEngine {
                 if let Some(idstr) = val {
                     let idstr = idstr
                         .as_str()
-                        .ok_or_else(|| QueryError::InvalidId("not a string".into()))?;
-                    Uuid::parse_str(idstr).map_err(|_| QueryError::InvalidId(idstr.into()))?;
+                        .ok_or_else(|| anyhow!("invalid ID: It is not a string"))?;
+                    Uuid::parse_str(idstr).map_err(|_| anyhow!("invalid ID '{}'", idstr))?;
                 }
                 anyhow::ensure!(id_bind.is_empty(), "More than one ID??");
                 id_name = f.name.to_string();
@@ -701,9 +675,9 @@ impl QueryEngine {
             if ty_value.get(&field.name).is_none() && field.is_optional {
                 continue;
             }
-            let arg = self.convert_to_argument(field, ty_value).with_context(|| {
-                QueryError::IncompatibleData(field.name.to_owned(), ty.name().to_owned())
-            })?;
+            let arg = self
+                .convert_to_argument(field, ty_value)
+                .with_context(|| QueryEngine::incompatible(field, ty))?;
             query_args.push(arg);
         }
 
