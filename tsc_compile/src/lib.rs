@@ -89,25 +89,19 @@ fn fetch(map: &mut DownloadMap, path: String, mut base: String) -> Result<String
         assert!(base.as_bytes()[0] == b'/');
         base = "file://".to_string() + &base;
     }
-    let resolved = match deno_core::resolve_import(&path, &base) {
-        Ok(v) => v,
-        Err(_) => {
-            return Ok(MISSING_DEPENDENCY.to_string());
-        }
-    };
+    let url = Url::parse(&base).unwrap();
+    let resolved = map
+        .graph
+        .resolve_dependency(&path, &url, true)
+        .unwrap()
+        .clone();
     if let Some(path) = map.url_to_path.get(&resolved) {
         return Ok(path.clone());
     }
 
     let n = map.len();
-    let extension = if path.ends_with(".d.ts") {
-        "d.ts"
-    } else if path.ends_with(".js") {
-        "js"
-    } else {
-        "ts"
-    };
-
+    let module = map.graph.get(&resolved).unwrap();
+    let extension = module.media_type.as_ts_extension();
     let path = format!("/path/to/downloaded/files/{}.{}", n, extension);
     map.insert(path.clone(), resolved);
     Ok(path)
@@ -596,6 +590,12 @@ export default foo;
     async fn handlebars() -> Result<()> {
         let f = write_temp(b"import handlebars from \"https://cdn.skypack.dev/handlebars\";")?;
         compile_ts_code(f.path(), Default::default()).await?;
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn deno_types() -> Result<()> {
+        compile_ts_code("tests/deno_types.ts", Default::default()).await?;
         Ok(())
     }
 }
