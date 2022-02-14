@@ -1,6 +1,5 @@
 // SPDX-FileCopyrightText: © 2021 ChiselStrike <info@chiselstrike.com>
 
-use crate::datastore::QueryError;
 use anyhow::Context;
 use anyhow::Result;
 use sea_query::{PostgresQueryBuilder, SchemaBuilder, SqliteQueryBuilder};
@@ -43,12 +42,11 @@ pub(crate) struct DbConnection {
 
 impl DbConnection {
     pub(crate) async fn connect(uri: &str, nr_conn: usize) -> Result<Self> {
-        let opts = AnyConnectOptions::from_str(uri).map_err(QueryError::ConnectionFailed)?;
+        let opts = AnyConnectOptions::from_str(uri)?;
         let pool = AnyPoolOptions::new()
             .max_connections(nr_conn as _)
             .connect(uri)
             .await
-            .map_err(QueryError::ConnectionFailed)
             .with_context(|| format!("connecting to {}", uri))?;
 
         let conn_uri = uri.to_owned();

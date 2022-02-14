@@ -2,7 +2,7 @@ pub(crate) mod schema;
 
 // SPDX-FileCopyrightText: © 2021 ChiselStrike <info@chiselstrike.com>
 
-use crate::datastore::{DbConnection, Kind, QueryError};
+use crate::datastore::{DbConnection, Kind};
 use crate::policies::Policies;
 use crate::prefix_map::PrefixMap;
 use crate::types::{
@@ -30,7 +30,6 @@ macro_rules! execute {
         $transaction
             .execute($query)
             .await
-            .map_err(QueryError::ExecuteFailed)
             .with_context(|| format!("Executing query {}", qstr))
     }};
 }
@@ -41,7 +40,6 @@ macro_rules! fetch_one {
         $transaction
             .fetch_one($query)
             .await
-            .map_err(QueryError::FetchFailed)
             .with_context(|| format!("Executing query {}", qstr))
     }};
 }
@@ -52,7 +50,6 @@ macro_rules! fetch_all {
         $query
             .fetch_all($pool)
             .await
-            .map_err(QueryError::FetchFailed)
             .with_context(|| format!("Executing query {}", qstr))
     }};
 }
@@ -183,17 +180,11 @@ impl MetaService {
     pub(crate) async fn create_schema(&self) -> anyhow::Result<()> {
         let query_builder = DbConnection::get_query_builder(&self.kind);
         let tables = schema::tables();
-        let mut conn = self
-            .pool
-            .acquire()
-            .await
-            .map_err(QueryError::ConnectionFailed)?;
+        let mut conn = self.pool.acquire().await?;
         for table in tables {
             let query = table.build_any(query_builder);
             let query = sqlx::query(&query);
-            conn.execute(query)
-                .await
-                .map_err(QueryError::ExecuteFailed)?;
+            conn.execute(query).await?;
         }
         Ok(())
     }
@@ -214,11 +205,7 @@ impl MetaService {
     }
 
     pub(crate) async fn persist_endpoints(&self, routes: &PrefixMap<String>) -> anyhow::Result<()> {
-        let mut transaction = self
-            .pool
-            .begin()
-            .await
-            .map_err(QueryError::ConnectionFailed)?;
+        let mut transaction = self.pool.begin().await?;
 
         let drop = sqlx::query("DELETE from endpoints");
         execute!(transaction, drop)?;
@@ -230,10 +217,7 @@ impl MetaService {
 
             execute!(transaction, new_route)?;
         }
-        transaction
-            .commit()
-            .await
-            .map_err(QueryError::ExecuteFailed)?;
+        transaction.commit().await?;
         Ok(())
     }
 
@@ -341,20 +325,13 @@ impl MetaService {
     }
 
     pub(crate) async fn start_transaction(&self) -> anyhow::Result<Transaction<'_, Any>> {
-        Ok(self
-            .pool
-            .begin()
-            .await
-            .map_err(QueryError::ConnectionFailed)?)
+        Ok(self.pool.begin().await?)
     }
 
     pub(crate) async fn commit_transaction(
         transaction: Transaction<'_, Any>,
     ) -> anyhow::Result<()> {
-        transaction
-            .commit()
-            .await
-            .map_err(QueryError::ConnectionFailed)?;
+        transaction.commit().await?;
         Ok(())
     }
 
@@ -429,18 +406,11 @@ impl MetaService {
         let insert = sqlx::query("INSERT INTO sessions(token, user_id) VALUES($1, $2)")
             .bind(&token)
             .bind(userid);
-        let mut transaction = self
-            .pool
-            .begin()
-            .await
-            .map_err(QueryError::ConnectionFailed)?;
+        let mut transaction = self.pool.begin().await?;
 
         execute!(transaction, insert)?;
 
-        transaction
-            .commit()
-            .await
-            .map_err(QueryError::ExecuteFailed)?;
+        transaction.commit().await?;
         Ok(token)
     }
 
@@ -450,7 +420,7 @@ impl MetaService {
         let mut rows = fetch_all!(&self.pool, query)?;
         let row = rows
             .pop()
-            .ok_or_else(|| QueryError::TokenNotFound(token.into()))?;
+            .ok_or_else(|| anyhow!("token {} not found", token))?;
         let id: &str = row.get("user_id");
         Ok(id.into())
     }
