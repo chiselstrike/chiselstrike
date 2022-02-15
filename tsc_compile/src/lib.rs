@@ -600,6 +600,13 @@ export default foo;
     }
 
     #[tokio::test]
+    async fn random_uuid() -> Result<()> {
+        let f = write_temp(b"export const foo = crypto.randomUUID();")?;
+        compile_ts_code(f.path(), Default::default()).await?;
+        Ok(())
+    }
+
+    #[tokio::test]
     async fn synthetic_default() -> Result<()> {
         compile_ts_code("tests/synthetic_default.ts", Default::default()).await?;
         Ok(())
