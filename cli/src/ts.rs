@@ -100,8 +100,9 @@ fn get_field_value(handler: &Handler, x: &Option<Box<Expr>>) -> Result<Option<(S
     }
 }
 
-fn get_type_decorators(handler: &Handler, x: &[Decorator]) -> Result<Vec<String>> {
+fn get_type_decorators(handler: &Handler, x: &[Decorator]) -> Result<(Vec<String>, bool)> {
     let mut output = vec![];
+    let mut is_unique = false;
     for dec in x.iter() {
         match &*dec.expr {
             Expr::Call(call) => {
@@ -111,7 +112,7 @@ fn get_type_decorators(handler: &Handler, x: &[Decorator]) -> Result<Vec<String>
                 let name = get_ident_string(handler, &callee)?;
                 ensure!(
                     name == "labels",
-                    "Only the 'labels' decorator is supported by ChiselStrike"
+                    format!("decorator '{}' is not supported by ChiselStrike", name)
                 );
                 for arg in &call.args {
                     if let Some((label, ty)) = get_field_value(handler, &Some(arg.expr.clone()))? {
@@ -120,12 +121,22 @@ fn get_type_decorators(handler: &Handler, x: &[Decorator]) -> Result<Vec<String>
                     }
                 }
             }
+            Expr::Ident(x) => {
+                let name = ident_to_string(x);
+                ensure!(name != "labels", "expected a call-like decorator");
+
+                ensure!(
+                    name == "unique",
+                    format!("decorator '{}' is not supported by ChiselStrike", name)
+                );
+                is_unique = true;
+            }
             z => {
                 return Err(swc_err(handler, z, "expected a call-like decorator"));
             }
         };
     }
-    Ok(output)
+    Ok((output, is_unique))
 }
 
 fn validate_type_vec(type_vec: &[AddTypeRequest], valid_types: &BTreeSet<String>) -> Result<()> {
@@ -158,11 +169,12 @@ fn parse_class_prop(x: &ClassProp, class_name: &str, handler: &Handler) -> Resul
 
     anyhow::ensure!(field_name != "id", "Creating a field with the name `id` is not supported. 😟\nBut don't worry! ChiselStrike creates an id field automatically, and you can access it in your endpoints as {}.id 🤩", class_name);
 
-    let labels = get_type_decorators(handler, &x.decorators)?;
+    let (labels, is_unique) = get_type_decorators(handler, &x.decorators)?;
 
     Ok(FieldDefinition {
         name: field_name,
         is_optional,
+        is_unique,
         default_value,
         field_type,
         labels,

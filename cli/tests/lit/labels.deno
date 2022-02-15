@@ -30,4 +30,4 @@ $CHISEL apply 2>&1 || echo -
 echo 'export class TestLabels extends ChiselEntity {@not_a_label("labels") foo: string; }' > "$TEMPDIR/models/types.ts"
 cd "$TEMPDIR"
 $CHISEL apply 2>&1 || echo -
-# CHECK: Error: Only the 'labels' decorator is supported by ChiselStrike
+# CHECK: Error: decorator 'not_a_label' is not supported by ChiselStrike

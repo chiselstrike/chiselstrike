@@ -159,10 +159,11 @@ async fn main() -> Result<()> {
                             // so for the last element we pop them both.
                             labels.pop();
                             labels.pop();
-                            format!("@labels({})", labels)
+                            format!("@labels({}) ", labels)
                         };
                         println!(
-                            "    {} {}{}: {}{};",
+                            "    {}{}{}{}: {}{};",
+                            if field.is_unique { "@unique " } else { "" },
                             labels,
                             field.name,
                             if field.is_optional { "?" } else { "" },

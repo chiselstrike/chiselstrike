@@ -307,6 +307,7 @@ impl RpcService {
                     field.labels,
                     field.default_value,
                     field.is_optional,
+                    field.is_unique,
                 ));
             }
 
@@ -498,6 +499,7 @@ impl ChiselRpc for RpcService {
                             labels: field.labels.clone(),
                             default_value: field.user_provided_default().clone(),
                             is_optional: field.is_optional,
+                            is_unique: field.is_unique,
                         });
                     }
                     let type_def = chisel::TypeDefinition {

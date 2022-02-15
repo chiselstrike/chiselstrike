@@ -64,11 +64,11 @@ async fn update_field_query(
         let default_stmt = if field.default.is_none() {
             ""
         } else {
-            ", default_value = $4"
+            ", default_value = $5"
         };
 
         let querystr = format!(
-            "UPDATE fields SET field_type = $1, is_optional = $2 {} WHERE field_id = $3",
+            "UPDATE fields SET field_type = $1, is_optional = $2, is_unique = $4 {} WHERE field_id = $4",
             default_stmt
         );
         let mut query = sqlx::query(&querystr);
@@ -76,6 +76,7 @@ async fn update_field_query(
         query = query
             .bind(field.type_.name())
             .bind(field.is_optional)
+            .bind(field.is_unique)
             .bind(field_id);
 
         if let Some(value) = &field.default {
@@ -129,19 +130,21 @@ async fn insert_field_query(
 
     let add_field = match &field.user_provided_default() {
         None => {
-            let query = sqlx::query("INSERT INTO fields (field_type, type_id, is_optional) VALUES ($1, $2, $3) RETURNING *");
+            let query = sqlx::query("INSERT INTO fields (field_type, type_id, is_optional, is_unique) VALUES ($1, $2, $3, $4) RETURNING *");
             query
                 .bind(field.type_.name())
                 .bind(type_id)
                 .bind(field.is_optional)
+                .bind(field.is_unique)
         }
         Some(value) => {
-            let query = sqlx::query("INSERT INTO fields (field_type, type_id, default_value, is_optional) VALUES ($1, $2, $3, $4) RETURNING *");
+            let query = sqlx::query("INSERT INTO fields (field_type, type_id, default_value, is_optional, is_unique) VALUES ($1, $2, $3, $4, $5) RETURNING *");
             query
                 .bind(field.type_.name())
                 .bind(type_id)
                 .bind(value.to_owned())
                 .bind(field.is_optional)
+                .bind(field.is_unique)
         }
     };
     let add_field_name =
@@ -176,16 +179,69 @@ impl MetaService {
         Ok(Self::new(local.kind, local.pool))
     }
 
+    async fn get_version(transaction: &mut Transaction<'_, Any>) -> anyhow::Result<String> {
+        let query = sqlx::query(
+            "SELECT version FROM chisel_version where version_id = \"chiselstrike\" limit 1",
+        );
+        match fetch_all!(transaction, query) {
+            Err(_) => Ok("0".to_string()),
+            Ok(rows) => {
+                if let Some(row) = rows.into_iter().next() {
+                    let v: &str = row.get("version");
+                    Ok(v.to_string())
+                } else {
+                    Ok("0".into())
+                }
+            }
+        }
+    }
+
     /// Create the schema of the underlying metadata store.
     pub(crate) async fn create_schema(&self) -> anyhow::Result<()> {
         let query_builder = DbConnection::get_query_builder(&self.kind);
         let tables = schema::tables();
-        let mut conn = self.pool.acquire().await?;
+
+        let mut transaction = self.start_transaction().await?;
+        // The chisel_version table is relatively new, so if it doesn't exist
+        // it could be that this is either a new installation, or an upgrade. So
+        // we query something that was with us from the beginning to tell those apart
+        let probe = sqlx::query("SELECT type_id from type_names");
+        let new_install = transaction.fetch_optional(probe).await.is_err();
+
         for table in tables {
             let query = table.build_any(query_builder);
             let query = sqlx::query(&query);
-            conn.execute(query).await?;
+            execute!(transaction, query)?;
         }
+
+        if new_install {
+            let query =
+                sqlx::query("INSERT INTO chisel_version (version, version_id) VALUES ($1, $2)")
+                    .bind(schema::CURRENT_VERSION)
+                    .bind("chiselstrike");
+            execute!(transaction, query)?;
+        }
+
+        let mut version = Self::get_version(&mut transaction).await?;
+
+        while version != schema::CURRENT_VERSION {
+            let (statements, new_version) = schema::evolve_from(&version).await?;
+
+            for statement in statements {
+                let query = statement.build_any(query_builder);
+                let query = sqlx::query(&query);
+                execute!(transaction, query)?;
+            }
+
+            let query = sqlx::query("INSERT INTO chisel_version (version, version_id) VALUES ($1, $2) ON CONFLICT(version_id) DO UPDATE SET version = $1 WHERE version_id = $2")
+                .bind(new_version.as_str())
+                .bind("chiselstrike");
+
+            execute!(transaction, query)?;
+            version = new_version;
+        }
+
+        Self::commit_transaction(transaction).await?;
         Ok(())
     }
 
@@ -241,7 +297,7 @@ impl MetaService {
     }
 
     async fn load_type_fields(&self, ts: &TypeSystem, type_id: i32) -> anyhow::Result<Vec<Field>> {
-        let query = sqlx::query("SELECT fields.field_id AS field_id, field_names.field_name AS field_name, fields.field_type AS field_type, fields.default_value as default_value, fields.is_optional as is_optional FROM field_names INNER JOIN fields ON fields.type_id = $1 AND field_names.field_id = fields.field_id;");
+        let query = sqlx::query("SELECT fields.field_id AS field_id, field_names.field_name AS field_name, fields.field_type AS field_type, fields.default_value as default_value, fields.is_optional as is_optional, fields.is_unique as is_unique FROM field_names INNER JOIN fields ON fields.type_id = $1 AND field_names.field_id = fields.field_id;");
         let query = query.bind(type_id);
         let rows = fetch_all!(&self.pool, query)?;
 
@@ -264,6 +320,7 @@ impl MetaService {
 
             let field_def: Option<String> = row.get("default_value");
             let is_optional: bool = row.get("is_optional");
+            let is_unique: bool = row.get("is_unique");
 
             let labels_query =
                 sqlx::query("SELECT label_name FROM field_labels WHERE field_id = $1");
@@ -277,7 +334,7 @@ impl MetaService {
                 .map(|r| r.get("label_name"))
                 .collect::<Vec<String>>();
 
-            fields.push(Field::new(desc, labels, field_def, is_optional));
+            fields.push(Field::new(desc, labels, field_def, is_optional, is_unique));
         }
         Ok(fields)
     }
@@ -423,5 +480,47 @@ impl MetaService {
             .ok_or_else(|| anyhow!("token {} not found", token))?;
         let id: &str = row.get("user_id");
         Ok(id.into())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use anyhow::Result;
+    use tempdir::TempDir;
+
+    // test that we can open and successfully evolve 0.6 to the current version
+    #[tokio::test]
+    async fn evolve_0_6() -> Result<()> {
+        let tmp_dir = TempDir::new("evolve_0_6")?;
+        let file_path = tmp_dir.path().join("chisel.db");
+        tokio::fs::copy("./test_files/chiseld-0.6.db", &file_path)
+            .await
+            .unwrap();
+
+        let conn_str = format!("sqlite://{}?mode=rwc", file_path.display());
+
+        let meta_conn = DbConnection::connect(&conn_str, 1).await?;
+        let meta = MetaService::local_connection(&meta_conn, 1).await.unwrap();
+
+        let mut transaction = meta.start_transaction().await.unwrap();
+        let version = MetaService::get_version(&mut transaction).await.unwrap();
+        MetaService::commit_transaction(transaction).await.unwrap();
+        assert_eq!(version, "0");
+
+        meta.create_schema().await.unwrap();
+        let mut transaction = meta.start_transaction().await.unwrap();
+        let version = MetaService::get_version(&mut transaction).await.unwrap();
+        MetaService::commit_transaction(transaction).await.unwrap();
+        assert_eq!(version, schema::CURRENT_VERSION);
+
+        // evolving again works (idempotency, we don't fail)
+        meta.create_schema().await.unwrap();
+        let mut transaction = meta.start_transaction().await.unwrap();
+        let version = MetaService::get_version(&mut transaction).await.unwrap();
+        MetaService::commit_transaction(transaction).await.unwrap();
+        assert_eq!(version, schema::CURRENT_VERSION);
+
+        Ok(())
     }
 }
