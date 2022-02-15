@@ -410,7 +410,7 @@ impl MetaService {
         version: &str,
         policy: &str,
     ) -> anyhow::Result<()> {
-        let add_policy = sqlx::query("INSERT INTO policies (policy_str, version) VALUES ($1, $2) ON CONFLICT(version) DO UPDATE SET policy_str = $1 WHERE version = $2").bind(policy.to_owned()).bind(version.to_owned());
+        let add_policy = sqlx::query("INSERT INTO policies (policy_str, version) VALUES ($1, $2) ON CONFLICT(version) DO UPDATE SET policy_str = $1 WHERE policies.version = $2").bind(policy.to_owned()).bind(version.to_owned());
         execute!(transaction, add_policy)?;
         Ok(())
     }

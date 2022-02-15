@@ -657,12 +657,13 @@ impl QueryEngine {
         }
 
         Ok(std::format!(
-            "INSERT INTO {} ({}) VALUES ({}) ON CONFLICT ({}) DO UPDATE SET {} WHERE {} = {} RETURNING *",
+            "INSERT INTO {} ({}) VALUES ({}) ON CONFLICT ({}) DO UPDATE SET {} WHERE {}.{} = {} RETURNING *",
             &ty.backing_table(),
             field_names.into_iter().join(","),
             field_binds,
             id_name,
             update_binds,
+            &ty.backing_table(),
             id_name,
             id_bind,
         ))
