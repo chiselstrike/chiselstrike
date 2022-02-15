@@ -5,12 +5,12 @@ use crate::deno::make_field_policies;
 use crate::policies::FieldPolicies;
 
 use crate::runtime;
-use crate::types::{Field, ObjectType, Type, TypeSystemError, OAUTHUSER_TYPE_NAME};
+use crate::types::{Field, ObjectType, Type, TypeSystem, TypeSystemError, OAUTHUSER_TYPE_NAME};
 
 use anyhow::{anyhow, Result};
 use enum_as_inner::EnumAsInner;
 use serde_json::value::Value;
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
 #[derive(Debug, Clone, EnumAsInner)]
@@ -68,7 +68,7 @@ pub(crate) struct Query {
     /// multi-dimensional (=potentialy nested) JSON response from a linear
     /// sql response row. Each element (Vec<SelectField>) represents a recipe
     /// used to reconstruct one Entity object. Each Entity object corresponds to either
-    /// base Entity (type) or one of the joined entities (once we support joins).
+    /// base Entity (type) or one of the joined entities.
     /// Each element of Vec<SelectField> represents a selected field (potentially nested)
     /// of given Entity (type).
     pub(crate) fields: Vec<Vec<SelectField>>,
@@ -104,7 +104,7 @@ struct QueryBuilder {
     /// Recursive vector used to reconstruct nested entities based on flat vector of columns
     /// returned by the database. Each element (Vec<SelectField>) represents a recipe
     /// used to reconstruct one Entity object. Each Entity object corresponds to either
-    /// base Entity (type) or one of the joined entities (once we support joins).
+    /// base Entity (type) or one of the joined entities.
     fields: Vec<Vec<SelectField>>,
     /// Vector of SQL column aliases that will be selected from the database and corresponding
     /// scalar fields.
@@ -180,7 +180,7 @@ impl QueryBuilder {
                 val
             )
         })?;
-        builder.parse_operations_v2(ops)?;
+        builder.parse_operations_v2(ts, api_version.as_str(), ops)?;
         Ok(builder)
     }
 
@@ -216,7 +216,17 @@ impl QueryBuilder {
         fields
     }
 
-    fn parse_operations_v2(&mut self, ops: &[serde_json::Value]) -> Result<()> {
+    fn parse_operations_v2(
+        &mut self,
+        ts: &TypeSystem,
+        api_version: &str,
+        ops: &[serde_json::Value],
+    ) -> Result<()> {
+        let mut table_aliases = HashMap::from([(
+            self.base_type.name().to_owned(),
+            self.base_type.backing_table().to_owned(),
+        )]);
+
         for op in ops {
             macro_rules! get_key {
                 ($key:expr) => {{
@@ -236,6 +246,34 @@ impl QueryBuilder {
             if op_type == "Take" {
                 let limit = get_key!("count", as_u64)?;
                 self.limit = Some(std::cmp::min(limit, self.limit.unwrap_or(limit)));
+            } else if op_type == "Join" {
+                let ltype = ts.lookup_custom_type(get_key!("lType")?, api_version)?;
+                let rtype = ts.lookup_custom_type(get_key!("rType")?, api_version)?;
+                let lalias = table_aliases.get(ltype.name()).ok_or_else(|| {
+                    anyhow!(
+                        "internal error: failed to locate table alias of type `{}`",
+                        ltype.name()
+                    )
+                })?;
+
+                let nested_table = format!(
+                    "{}_JOIN{}_{}",
+                    ltype.backing_table(),
+                    self.joins.len(),
+                    rtype.backing_table()
+                );
+                self.joins.push(Join {
+                    rtype: rtype.clone(),
+                    lkey: get_key!("lKey")?.to_owned(),
+                    rkey: get_key!("rKey")?.to_owned(),
+                    lalias: lalias.to_owned(),
+                    ralias: nested_table.to_owned(),
+                });
+
+                table_aliases.insert(rtype.name().to_owned(), nested_table.to_owned());
+
+                let entity_fields = self.parse_fields_v2(&rtype, &nested_table);
+                self.fields.push(entity_fields);
             } else {
                 anyhow::bail!("unexpected operation type `{}`", op_type);
             }

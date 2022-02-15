@@ -435,9 +435,22 @@ fn op_chisel_get_secret(
 /// <base_entity> is a name of the type/entity whose backing table will
 /// be used to retrieve data to construct instances of given entity and forwarded
 /// for further processing.
-/// <operation> represents an operation to be applied on the stream of entities.
-/// Currently only one operation is possible:
-/// <operation> = {
+/// <operation> represents an operation to be applied on the stream of entities or
+/// a join operation. Currently only two operations are possible:
+/// 1) <operation> = {
+///     "type": "Join",
+///     "lType": <ltype>,
+///     "lKey": <lkey>,
+///     "rtype": <rtype>,
+///     "lType": <rkey>,
+/// }
+/// where
+/// <ltype> is a string identifying an entity which is either a <base_entity>
+/// or entity joined by a previous operation,
+/// <lkey> is a string identifying a field of <ltype> used to join on,
+/// <rtype> is a string identifying an entity which is to be joined,
+/// <rkey> is a string identifying a field of <rtype> used to join on.
+/// 2) <operation> = {
 ///     "type": "Take",
 ///     "count": <count>
 /// }
@@ -497,8 +510,8 @@ impl Future for QueryNextFuture {
 /// It returns a single `ResultRow` serialized to JSON in a format of
 /// [<Entity>, ...], where <Entity> is an Entity serialized to JSON.
 /// The first element of the array is the <base_entity> specified by the query and
-/// the remaining elements correspond to individual joined entities which will
-/// be supported in the future
+/// the remaining elements correspond to individual joined entities as specified
+/// by the query.
 ///
 async fn op_chisel_relational_query_next(
     state: Rc<RefCell<OpState>>,

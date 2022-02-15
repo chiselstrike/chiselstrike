@@ -19,9 +19,6 @@ There are also other potential issues with Node imports that are [well-known](ht
 While we do plan to provide you with a better experience in the future, for now if you do
 want to use external modules, browser-style should work.
 
-* **Joins:** We currently don't support explicit Joins. Implicitly the joins are partially supported
-by nested Types (`class Y {z: int}; class X {y: Y}`). Support for explicit joins is coming soon.
-
 * **Multi-file models:** All models have to go in the same file for now. We envision models
 being put in different files (like `Person.ts`, `User.ts`, etc). But because those files are
 essentially modules (and see the first bullet), this will only work at the moment if they are

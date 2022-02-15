@@ -313,8 +313,8 @@ export class ChiselEntity {
      */
     static every<T extends ChiselEntity>(
         this: ObjectType<T>,
-    ): Enumerable<T, readonly [T]> {
-        return new Enumerable<T, readonly [T]>(this, []);
+    ): Enumerable<[T], readonly [T]> {
+        return new Enumerable<[T], readonly [T]>(this, []);
     }
 
     /**
@@ -424,6 +424,7 @@ enum OpType {
     Filter = "Filter",
     Map = "Map",
     Sort = "Sort",
+    Join = "Join",
 }
 
 /**
@@ -491,17 +492,49 @@ class MapOp<ArgTypes extends readonly unknown[]> extends Operator {
     }
 }
 
+/**
+ * Join operator represents an attachment of a new Entity to Enumerable collection.
+ * It requires 4 parameters to be specified.
+ * `lType` is an Entity already present in the source Enumerable.
+ * `lKey` is an attribute of `lType` entity which will be used to join the entities together.
+ * `rType` is a (possibly) new Entity to be introduced into the Enumerable collection.
+ * `rKey` is an attribute of `rType` which will be matched on `lKey` to create the joining connection.
+ */
+class JoinOp<RType extends ChiselEntity> extends Operator {
+    readonly lType: string;
+    readonly lKey: string;
+    readonly rType: string;
+    readonly rKey: string;
+    readonly rTypeCtor: new () => RType;
+
+    constructor(
+        lType: string,
+        lKey: string,
+        rType: new () => RType,
+        rKey: string,
+    ) {
+        super(OpType.Join);
+        this.lType = lType;
+        this.lKey = lKey;
+        this.rType = rType.name;
+        this.rKey = rKey;
+        this.rTypeCtor = rType;
+    }
+}
 
 /**
- * An enumerable represents a collection of object tuples transformed from Entity.
+ * An enumerable represents a collection of object tuples transformed from Entity/Entities.
+ * `JoinTypes` type is a Tuple containing BaseEntity and all Entities that were joined
+ * together on a call-path leading to the creation of this entity.
  * `OutputTypes` is a tuple of types representing the current output value type of
  * the Enumerable. It is the type of elements you would get if you converted
  * the Enumerable to array using `toArray` method or iterated using async iterator.
  * `BaseEntity` is Entity that was the first Entity used in the call chain.
  */
 export class Enumerable<
-    BaseEntity extends ChiselEntity,
+    JoinTypes extends readonly ChiselEntity[],
     OutputTypes extends readonly unknown[],
+    BaseEntity extends ChiselEntity = JoinTypes[0],
 > {
     constructor(
         private readonly baseEntityCtor: new () => BaseEntity,
@@ -512,9 +545,9 @@ export class Enumerable<
      */
     filter(
         predicate: (...args: [...OutputTypes]) => boolean,
-    ): Enumerable<BaseEntity, OutputTypes> {
+    ): Enumerable<JoinTypes, OutputTypes> {
         const ops: Operator[] = [...this.ops, new FilterOp(predicate)];
-        return new Enumerable<BaseEntity, OutputTypes>(
+        return new Enumerable<JoinTypes, OutputTypes>(
             this.baseEntityCtor,
             ops,
         );
@@ -527,9 +560,9 @@ export class Enumerable<
             lhs: ProjectTuple<OutputTypes>,
             rhs: ProjectTuple<OutputTypes>,
         ) => number,
-    ): Enumerable<BaseEntity, OutputTypes> {
+    ): Enumerable<JoinTypes, OutputTypes> {
         const ops: Operator[] = [...this.ops, new SortOp(cmp)];
-        return new Enumerable<BaseEntity, OutputTypes>(
+        return new Enumerable<JoinTypes, OutputTypes>(
             this.baseEntityCtor,
             ops,
         );
@@ -537,9 +570,9 @@ export class Enumerable<
     /**
      * Take first `n` elements, discard the rest.
      */
-    take(n: number): Enumerable<BaseEntity, OutputTypes> {
+    take(n: number): Enumerable<JoinTypes, OutputTypes> {
         const ops: Operator[] = [...this.ops, new TakeOp(n)];
-        return new Enumerable<BaseEntity, OutputTypes>(
+        return new Enumerable<JoinTypes, OutputTypes>(
             this.baseEntityCtor,
             ops,
         );
@@ -549,9 +582,89 @@ export class Enumerable<
      */
     map<NewValues>(
         map: (...args: [...OutputTypes]) => NewValues,
-    ): Enumerable<BaseEntity, Tuplify<NewValues>> {
+    ): Enumerable<JoinTypes, Tuplify<NewValues>> {
         const ops: Operator[] = [...this.ops, new MapOp(map)];
-        return new Enumerable<BaseEntity, Tuplify<NewValues>>(
+        return new Enumerable<JoinTypes, Tuplify<NewValues>>(
+            this.baseEntityCtor,
+            ops,
+        );
+    }
+    /**
+     * Joins this enumerable using `BaseEntity` with a different Entity (`rightEntity`).
+     * The join will be performed by matching on `leftAttr` (attribute name of `BaseEntity`)
+     * and `rightAttribute` (attribute name of `rightEntity`). This makes it convenient
+     * to write `Ent1.every().join(field1, Ent2, field2)` instead of
+     * `Ent1.every().join(Ent1, field1, Ent2, field2)`. The implied BaseEntity lets us
+     * avoid repeating Ent1 redundantly. For further documentation, please refer to
+     * the general join method.
+     * @returns An enumerable whose JoinTypes are extended by the `RightEntity` type and
+     * `OutputTypes` are extended the same way. This means that the output of this entity
+     * will be a tuple containing everything it contained before plus the joined entity.
+     */
+    join<L extends BaseEntity, R extends ChiselEntity>(
+        leftAttr: keyof L,
+        rightEntity: new () => R,
+        rightAttr: keyof R,
+    ): Enumerable<readonly [...JoinTypes, R], readonly [...OutputTypes, R]>;
+    /**
+     * Joins this enumerable using `leftEntity` (which is already part of this enumerable)
+     * with a different Entity (`rightEntity`). The join will be performed by matching on
+     * `leftAttr` (attribute name of `leftEntity`) and `rightAttribute` (attribute name of
+     * `rightEntity`).
+     * If `leftEntity` occurs in `JoinTypes` multiple times, the join will be performed on
+     * the latest joined Entity of that type.
+     *  * @returns An enumerable whose JoinTypes are extended by the `RightEntity` type and
+     * `OutputTypes` are extended the same way. This means that the output of this entity
+     * will be a tuple containing everything it contained before plus the joined entity.
+     */
+    join<L extends ValueOf<JoinTypes>, R extends ChiselEntity>(
+        leftEntity: new () => L,
+        leftAttr: keyof L,
+        rightEntity: new () => R,
+        rightAttr: keyof R,
+    ): Enumerable<readonly [...JoinTypes, R], readonly [...OutputTypes, R]>;
+
+    // Implementation for both join overloads ^^
+    join<L extends ValueOf<JoinTypes>, R extends ChiselEntity>(
+        arg1: (new () => L) | (keyof L),
+        arg2: (keyof L) | (new () => R),
+        arg3: (new () => R) | keyof R,
+        rightAttr?: keyof R,
+    ): Enumerable<
+        readonly [...JoinTypes, R],
+        readonly [...OutputTypes, R],
+        BaseEntity
+    > {
+        let join: JoinOp<R>;
+        if (rightAttr === undefined) {
+            const leftAttr = arg1 as string;
+            const rightEntity = arg2 as (new () => R);
+            const rightAttr = arg3 as string;
+            // FIXME: The base entity hack works, but it's a bit ugly.
+            join = new JoinOp(
+                this.baseEntity(),
+                leftAttr,
+                rightEntity,
+                rightAttr,
+            );
+        } else {
+            const leftEntity = arg1 as (new () => L);
+            const leftAttr = arg2 as string;
+            const rightEntity = arg3 as (new () => R);
+            join = new JoinOp(
+                leftEntity.name,
+                leftAttr,
+                rightEntity,
+                rightAttr as string,
+            );
+        }
+
+        const ops: Operator[] = [...this.ops, join];
+        return new Enumerable<
+            readonly [...JoinTypes, R],
+            readonly [...OutputTypes, R],
+            BaseEntity
+        >(
             this.baseEntityCtor,
             ops,
         );
@@ -672,7 +785,7 @@ export class Enumerable<
      *
      * Everything up to a split we call `convertibleOps`. The remaining operations
      * get sorted into either `transforms`, which get applied after we get data
-     * from the database, or into `convertibleOps`, if it's a Take.
+     * from the database, or into `convertibleOps`, if it's a Join.
      */
     private prepareEvaluation(): readonly [
         Record<string, unknown>,
@@ -680,19 +793,30 @@ export class Enumerable<
         Transformation[],
     ] {
         const idx = this.ops.findIndex((op) => {
-            return op.type != OpType.Take;
+            return op.type != OpType.Take &&
+                op.type != OpType.Join;
         });
         const split = idx != -1 ? idx : this.ops.length;
         const convertibleOps = this.ops.slice(0, split);
         const transforms: Transformation[] = [];
         const constructors: (new () => ChiselEntity)[] = [
-            this.baseEntityCtor
+            this.baseEntityCtor,
+            ...this.ops
+                .filter((op) => op.type == OpType.Join)
+                .map((op) => (op as JoinOp<ChiselEntity>).rTypeCtor),
         ];
 
+        // Propagate joins
         for (const op of this.ops.slice(split)) {
-            transforms.push(new Transformation(op));
+            if (op.type == OpType.Join) {
+                convertibleOps.push(op);
+                for (const postOp of transforms) {
+                    postOp.ignoredArgs += 1;
+                }
+            } else {
+                transforms.push(new Transformation(op));
+            }
         }
-
         const query = {
             "version": "v2",
             "base_entity": this.baseEntity(),
