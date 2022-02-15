@@ -81,9 +81,12 @@ impl TryFrom<&Field> for ColumnDef {
     type Error = anyhow::Error;
     fn try_from(field: &Field) -> Result<Self> {
         let mut column_def = ColumnDef::new(Alias::new(&field.name));
+        if field.is_unique {
+            column_def.unique_key();
+        }
         match field.type_ {
             Type::String => column_def.text(),
-            Type::Id => column_def.text().unique_key().primary_key(),
+            Type::Id => column_def.text().primary_key(),
             Type::Float => column_def.double(),
             Type::Boolean => column_def.integer(),
             Type::Object(_) => column_def.text(), // Foreign key, must the be same type as Type::Id

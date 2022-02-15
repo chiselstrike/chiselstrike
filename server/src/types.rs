@@ -73,6 +73,7 @@ thread_local! {
                 effective_default: None,
                 is_optional: false,
                 api_version: "__chiselstrike".into(),
+                is_unique: false,
         }];
 
         let desc = InternalObject {
@@ -162,14 +163,30 @@ impl TypeSystem {
                         ));
                     }
 
+                    if field.is_unique && !old.is_unique {
+                        // FIXME: it should be possible to do it by issuing a select count() and
+                        // then a select count distinct and comparing both results. But to do this
+                        // safely this needs to be protected by a transaction, so we won't allow it
+                        // for now
+                        return Err(TypeSystemError::UnsafeReplacement(
+                            new_type.name.clone(),
+                            format!(
+                                "adding uniqueness to field {}. Incompatible change",
+                                field.name,
+                            ),
+                        ));
+                    }
+
                     let attrs = if field.default != old.default
                         || field.type_ != old.type_
                         || field.is_optional != old.is_optional
+                        || field.is_unique != old.is_unique
                     {
                         Some(FieldAttrDelta {
                             type_: field.type_.clone(),
                             default: field.default.clone(),
                             is_optional: field.is_optional,
+                            is_unique: field.is_unique,
                         })
                     } else {
                         None
@@ -531,6 +548,7 @@ impl ObjectType {
             effective_default: None,
             is_optional: false,
             api_version: "__chiselstrike".into(),
+            is_unique: true,
         };
         let mut obj = Self {
             meta_id: desc.id(),
@@ -719,6 +737,7 @@ pub(crate) struct Field {
     pub(crate) type_: Type,
     pub(crate) labels: Vec<String>,
     pub(crate) is_optional: bool,
+    pub(crate) is_unique: bool,
     // We want to keep the default the user gave us so we can
     // return it in `chisel describe`. That's the default that is
     // valid in typescriptland.
@@ -738,6 +757,7 @@ impl Field {
         labels: Vec<String>,
         default: Option<String>,
         is_optional: bool,
+        is_unique: bool,
     ) -> Self {
         let effective_default = if let Type::Boolean = &desc.ty() {
             default
@@ -757,6 +777,7 @@ impl Field {
             default,
             effective_default,
             is_optional,
+            is_unique,
         }
     }
 
@@ -790,6 +811,7 @@ pub(crate) struct FieldAttrDelta {
     pub(crate) type_: Type,
     pub(crate) default: Option<String>,
     pub(crate) is_optional: bool,
+    pub(crate) is_unique: bool,
 }
 
 #[derive(Clone, Debug, PartialEq)]

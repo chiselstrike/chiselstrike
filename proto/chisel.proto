@@ -37,6 +37,7 @@ message FieldDefinition {
   repeated string labels = 3;
   bool is_optional = 4;
   optional string default_value = 5;
+  bool is_unique = 6;
 }
 
 message EndpointDefinition {
