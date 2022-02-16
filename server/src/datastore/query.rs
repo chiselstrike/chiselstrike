@@ -244,7 +244,7 @@ impl QueryBuilder {
         for (column_name, field) in &self.columns {
             let col = match field.default_value() {
                 Some(dfl) => format!(
-                    "coalesce({},\"{}\") AS {},",
+                    "coalesce({},'{}') AS {},",
                     column_name,
                     dfl,
                     column_name.replace(".", "_")
