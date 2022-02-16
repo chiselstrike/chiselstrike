@@ -111,7 +111,7 @@ impl SqlWithArguments {
         let mut sqlx_query = sqlx::query(&self.sql);
         for arg in &self.args {
             match arg {
-                SqlValue::Bool(arg) => sqlx_query = sqlx_query.bind(arg),
+                SqlValue::Bool(arg) => sqlx_query = sqlx_query.bind(*arg as i64),
                 SqlValue::U64(arg) => sqlx_query = sqlx_query.bind(*arg as i64),
                 SqlValue::I64(arg) => sqlx_query = sqlx_query.bind(arg),
                 SqlValue::F64(arg) => sqlx_query = sqlx_query.bind(arg),
