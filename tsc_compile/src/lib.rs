@@ -91,7 +91,7 @@ fn fetch(map: &mut DownloadMap, path: String, mut base: String) -> Result<String
     let resolved = map
         .graph
         .resolve_dependency(&path, &url, true)
-        .unwrap()
+        .ok_or_else(|| anyhow!("Could not resolve '{}' in '{}'", path, url))?
         .clone();
     if let Some(path) = map.url_to_path.get(&resolved) {
         return Ok(path.clone());
@@ -604,6 +604,16 @@ export default foo;
     #[tokio::test]
     async fn synthetic_default() -> Result<()> {
         compile_ts_code("tests/synthetic_default.ts", Default::default()).await?;
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn missing_deno_types() -> Result<()> {
+        let err = compile_ts_code("tests/missing_deno_types.ts", Default::default())
+            .await
+            .unwrap_err()
+            .to_string();
+        assert!(err.contains("Could not resolve './deno_types_imp.js' in 'file:///"));
         Ok(())
     }
 }
