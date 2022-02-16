@@ -112,6 +112,7 @@
 
         const options = {
             allowJs: true,
+            allowSyntheticDefaultImports: true,
             declaration: emitDeclarations,
             emitDecoratorMetadata: false,
             experimentalDecorators: true,

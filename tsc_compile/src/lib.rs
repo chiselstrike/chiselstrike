@@ -598,4 +598,10 @@ export default foo;
         compile_ts_code("tests/deno_types.ts", Default::default()).await?;
         Ok(())
     }
+
+    #[tokio::test]
+    async fn synthetic_default() -> Result<()> {
+        compile_ts_code("tests/synthetic_default.ts", Default::default()).await?;
+        Ok(())
+    }
 }
