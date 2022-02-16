@@ -344,8 +344,8 @@ impl QueryEngine {
                         Type::Float => {
                             // https://github.com/launchbadge/sqlx/issues/1596
                             // sqlx gets confused if the float doesn't have decimal points.
-                            let val: &str = row.get_unchecked(column_idx);
-                            json!(val.parse::<f64>()?)
+                            let val: f64 = row.get_unchecked(column_idx);
+                            json!(val)
                         }
                         Type::String => to_json!(&str),
                         Type::Id => to_json!(&str),
@@ -355,9 +355,8 @@ impl QueryEngine {
                             //
                             // Also the database has integers, and we need to map it back to a
                             // boolean type on json.
-                            let val: &str = row.get_unchecked(column_idx);
-                            let x: bool = val.parse::<usize>()? == 1;
-                            json!(x)
+                            let val: i32 = row.get_unchecked(column_idx);
+                            json!(val != 0)
                         }
                         Type::Object(_) => anyhow::bail!("object is not a scalar"),
                     };
