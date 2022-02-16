@@ -338,7 +338,7 @@ fn escape_string(s: &str) -> String {
 pub(crate) fn make_restriction_string(restrictions: &[Restriction]) -> String {
     restrictions.iter().fold(String::new(), |acc, rest| {
         let str_v = match &rest.v {
-            SqlValue::Bool(v) => format!("{}", v),
+            SqlValue::Bool(v) => (if *v { "1" } else { "0" }).to_string(),
             SqlValue::U64(v) => format!("{}", v),
             SqlValue::I64(v) => format!("{}", v),
             SqlValue::F64(v) => format!("{}", v),
