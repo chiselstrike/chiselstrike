@@ -468,7 +468,7 @@ impl MetaService {
     pub(crate) async fn new_session_token(&self, userid: &str) -> anyhow::Result<String> {
         let token = Uuid::new_v4().to_string();
         // TODO: Expire tokens.
-        let insert = sqlx::query("INSERT INTO sessions(token, user_id) VALUES($1, $2)")
+        let insert = sqlx::query("INSERT INTO sessions(token, user_id) VALUES($1::uuid, $2)")
             .bind(&token)
             .bind(userid);
         let mut transaction = self.pool.begin().await?;
