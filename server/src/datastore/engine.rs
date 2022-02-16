@@ -641,7 +641,7 @@ impl QueryEngine {
                 id_name = f.name.to_string();
                 id_bind = bind.clone();
             }
-            update_binds.push_str(&std::format!("{} = {},", &f.name, &bind));
+            update_binds.push_str(&std::format!("\"{}\" = {},", &f.name, &bind));
         }
         field_binds.pop();
         update_binds.pop();
@@ -656,9 +656,9 @@ impl QueryEngine {
         }
 
         Ok(std::format!(
-            "INSERT INTO {} ({}) VALUES ({}) ON CONFLICT ({}) DO UPDATE SET {} WHERE {}.{} = {} RETURNING *",
+            "INSERT INTO \"{}\" ({}) VALUES ({}) ON CONFLICT ({}) DO UPDATE SET {} WHERE \"{}\".\"{}\" = {} RETURNING *",
             &ty.backing_table(),
-            field_names.into_iter().join(","),
+            field_names.into_iter().map(|f| format!("\"{}\"", f)).join(","),
             field_binds,
             id_name,
             update_binds,

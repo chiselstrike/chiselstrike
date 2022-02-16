@@ -51,7 +51,7 @@ async fn insert_user_into_db(username: &str) -> Result<String> {
     match query_engine
         .fetch_one(SqlWithArguments {
             sql: format!(
-                "SELECT id FROM {} WHERE username=$1",
+                "SELECT id FROM \"{}\" WHERE username=$1",
                 oauth_user_type.backing_table()
             ),
             args: vec![username.into()],
@@ -156,7 +156,7 @@ pub(crate) async fn get_username(req: &Request<hyper::Body>) -> Option<String> {
             match qeng
                 .fetch_one(SqlWithArguments {
                     sql: format!(
-                        "SELECT username FROM {} WHERE id=$1",
+                        "SELECT username FROM \"{}\" WHERE id=$1",
                         user_type.backing_table()
                     ),
                     args: vec![SqlValue::String(id)],
