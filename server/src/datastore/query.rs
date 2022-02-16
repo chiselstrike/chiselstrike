@@ -261,7 +261,7 @@ impl QueryBuilder {
         let mut join_string = String::new();
         for join in &self.joins {
             join_string += &format!(
-                "LEFT JOIN ({}) AS {} ON {}.{}={}.{}\n",
+                "LEFT JOIN {} AS {} ON {}.{}={}.{}\n",
                 join.rtype.backing_table(),
                 join.ralias,
                 join.lalias,
