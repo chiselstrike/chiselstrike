@@ -332,6 +332,89 @@ export class ChiselEntity {
             restrictions: restrictions,
         });
     }
+
+    static crud<T extends ChiselEntity>(
+        this: {
+            new (): T;
+            findOne: (_: { id: string }) => Promise<T | null>;
+            findMany: (_: Partial<T>) => Promise<Partial<T>[]>;
+            build: (...properties: Record<string, unknown>[]) => T;
+            delete: (restrictions: Partial<T>) => Promise<void>;
+        },
+        path: string,
+        customMethods: Partial<
+            Record<
+                "get" | "put" | "post" | "delete" | "options",
+                (_: Request) => Promise<Response>
+            >
+        > = {},
+    ): (req: Request) => Promise<Response> {
+        function getId(req: Request) {
+            const suffix = req.url.substring(
+                req.url.indexOf(path) + path.length,
+            );
+            return (suffix.length > 1 && suffix[0] == "/")
+                ? suffix.substring(1)
+                : "";
+        }
+
+        return async (req: Request) => {
+            switch (req.method) {
+                case "GET": {
+                    if (customMethods.get) return customMethods.get(req);
+                    const id = getId(req);
+                    if (id == "") {
+                        const f = new URL(req.url).searchParams.get("f") ??
+                            "{}";
+                        return responseFromJson(
+                            await this.findMany(JSON.parse(decodeURI(f))),
+                        );
+                    }
+                    const u = await this.findOne({ id });
+                    return responseFromJson(u ?? "Not found", u ? 200 : 404);
+                }
+                case "POST": {
+                    if (customMethods.post) return customMethods.post(req);
+                    const u = this.build(await req.json());
+                    u.id = undefined;
+                    await u.save();
+                    return responseFromJson(u);
+                }
+                case "PUT": {
+                    if (customMethods.put) return customMethods.put(req);
+                    const id = getId(req);
+                    if (id == "") {
+                        return responseFromJson(
+                            "PUT requires item ID in the URL",
+                            400,
+                        );
+                    }
+                    const u = this.build(await req.json());
+                    u.id = id;
+                    await u.save();
+                    return responseFromJson(u);
+                }
+                case "DELETE": {
+                    if (customMethods.delete) return customMethods.delete(req);
+                    const id = getId(req);
+                    const restrictions = (id == "")
+                        ? JSON.parse(
+                            decodeURI(
+                                new URL(req.url).searchParams.get("f") ?? "{}",
+                            ),
+                        )
+                        : { id };
+                    await this.delete(restrictions);
+                    return new Response("Deletion successful!");
+                }
+                default:
+                    return responseFromJson(
+                        "Unsupported HTTP method: " + req.method,
+                        405,
+                    );
+            }
+        };
+    }
 }
 
 export class OAuthUser extends ChiselEntity {

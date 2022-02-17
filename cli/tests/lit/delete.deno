@@ -15,29 +15,7 @@ EOF
 
 cat << EOF > "$TEMPDIR/endpoints/user.ts"
 import { User } from "../models/user.ts";
-import { responseFromJson } from "@chiselstrike/api";
-
-export default async function (req: Request) {
-    switch (req.method) {
-    case 'GET': {
-        let users = await User.findMany({});
-        return responseFromJson(users.map(user => user.username));
-    }
-    case 'POST': {
-        const json = await req.json();
-        const user = await User.build(json);
-        await user.save();
-        return responseFromJson(user.username);
-    }
-    case 'DELETE': {
-        const json = await req.json();
-        await User.delete(json);
-        return responseFromJson("ok");
-    }
-    default:
-        return responseFromJson("Unsupported HTTP method: " + req.method, 405);
-    }
-}
+export default User.crud('/user');
 EOF
 
 $CHISEL apply
@@ -50,11 +28,12 @@ $CURL -X POST -d '{"username": "alice", "email": "alice@example.org"}' $CHISELD_
 $CURL -X POST -d '{"username": "bob", "email": "bob@bob.me"}' $CHISELD_HOST/dev/user
 # CHECK: "bob"
 
-$CURL $CHISELD_HOST/dev/user
-# CHECK: ["alice","bob"]
+$CURL $CHISELD_HOST/dev/user | tr , \\n | sort
+# CHECK: "username":"alice"
+# CHECK: "username":"bob"
 
-$CURL -X DELETE -d '{"email": "bob@bob.me"}' $CHISELD_HOST/dev/user
-# CHECK: "ok"
+$CURL -X DELETE "$CHISELD_HOST/dev/user?f=\\{%22email%22:%22bob@bob.me%22\\}"
+# CHECK: Deletion successful!
 
 $CURL $CHISELD_HOST/dev/user
-# CHECK: ["alice"]
+# CHECK: "username":"alice"
