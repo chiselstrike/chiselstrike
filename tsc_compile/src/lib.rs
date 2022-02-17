@@ -77,8 +77,6 @@ impl DownloadMap {
     }
 }
 
-static MISSING_DEPENDENCY: &str = "/path/to/a/missing_dependency.d.ts";
-
 fn fetch(map: &mut DownloadMap, path: String, mut base: String) -> Result<String> {
     if map.extra_libs.contains_key(&path) {
         return Ok(path);
@@ -121,9 +119,6 @@ where
 }
 
 fn read(map: &mut DownloadMap, path: String, _: ()) -> Result<String> {
-    if path == MISSING_DEPENDENCY {
-        return Ok("export default function(): unknown;\n".to_string());
-    }
     if let Some(v) = map.extra_libs.get(&path) {
         return Ok(v.to_string());
     }
