@@ -9,8 +9,11 @@ $CURL $CHISELD_HOST/__chiselstrike/auth/callback?user=charlie
 cat << EOF > "$TEMPDIR/endpoints/users.ts"
 export default async function chisel(req: Request) {
     let response = "";
-    for await (let u of Chisel.OAuthUser.cursor()) {
-        response += u.username + " ";
+    let users = await Chisel.OAuthUser.cursor().toArray();
+    let usernames = users.map(user => user.username);
+    usernames.sort();
+    for (let u of usernames) {
+        response += u + " ";
     }
     return new Response(response + '.');
 }
