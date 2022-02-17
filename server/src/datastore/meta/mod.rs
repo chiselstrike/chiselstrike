@@ -480,7 +480,7 @@ impl MetaService {
     }
 
     pub(crate) async fn get_user_id(&self, token: &str) -> anyhow::Result<String> {
-        let query = sqlx::query("SELECT user_id FROM sessions WHERE token=$1").bind(token);
+        let query = sqlx::query("SELECT user_id FROM sessions WHERE token=$1::uuid").bind(token);
 
         let mut rows = fetch_all!(&self.pool, query)?;
         let row = rows
