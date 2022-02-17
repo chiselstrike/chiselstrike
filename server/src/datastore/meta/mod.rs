@@ -181,7 +181,7 @@ impl MetaService {
 
     async fn get_version(transaction: &mut Transaction<'_, Any>) -> anyhow::Result<String> {
         let query = sqlx::query(
-            "SELECT version FROM chisel_version where version_id = \"chiselstrike\" limit 1",
+            "SELECT version FROM chisel_version where version_id = 'chiselstrike' limit 1",
         );
         match fetch_all!(transaction, query) {
             Err(_) => Ok("0".to_string()),
@@ -196,6 +196,15 @@ impl MetaService {
         }
     }
 
+    async fn count_tables(&self, transaction: &mut Transaction<'_, Any>) -> anyhow::Result<usize> {
+        let query = match self.kind {
+            Kind::Sqlite => sqlx::query("SELECT name FROM sqlite_schema WHERE type ='table' AND name NOT LIKE 'sqlite_%'"),
+            Kind::Postgres => sqlx::query("SELECT tablename as name FROM pg_catalog.pg_tables where schemaname != 'pg_catalog' and schemaname != 'information_schema'"),
+        };
+        let rows = fetch_all!(transaction, query)?;
+        Ok(rows.len())
+    }
+
     /// Create the schema of the underlying metadata store.
     pub(crate) async fn create_schema(&self) -> anyhow::Result<()> {
         let query_builder = DbConnection::get_query_builder(&self.kind);
@@ -205,8 +214,7 @@ impl MetaService {
         // The chisel_version table is relatively new, so if it doesn't exist
         // it could be that this is either a new installation, or an upgrade. So
         // we query something that was with us from the beginning to tell those apart
-        let probe = sqlx::query("SELECT type_id from type_names");
-        let new_install = transaction.fetch_optional(probe).await.is_err();
+        let new_install = self.count_tables(&mut transaction).await? == 0;
 
         for table in tables {
             let query = table.build_any(query_builder);
@@ -233,7 +241,7 @@ impl MetaService {
                 execute!(transaction, query)?;
             }
 
-            let query = sqlx::query("INSERT INTO chisel_version (version, version_id) VALUES ($1, $2) ON CONFLICT(version_id) DO UPDATE SET version = $1 WHERE version_id = $2")
+            let query = sqlx::query("INSERT INTO chisel_version (version, version_id) VALUES ($1, $2) ON CONFLICT(version_id) DO UPDATE SET version = $1 WHERE chisel_version.version_id = $2")
                 .bind(new_version.as_str())
                 .bind("chiselstrike");
 
