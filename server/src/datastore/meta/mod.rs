@@ -68,7 +68,7 @@ async fn update_field_query(
         };
 
         let querystr = format!(
-            "UPDATE fields SET field_type = $1, is_optional = $2, is_unique = $4 {} WHERE field_id = $4",
+            "UPDATE fields SET field_type = $1, is_optional = $2::bool, is_unique = $4::bool {} WHERE field_id = $4",
             default_stmt
         );
         let mut query = sqlx::query(&querystr);
