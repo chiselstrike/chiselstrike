@@ -6,6 +6,7 @@ use crate::policies::FieldPolicies;
 
 use crate::runtime;
 use crate::types::{Field, ObjectType, Type, TypeSystemError, OAUTHUSER_TYPE_NAME};
+use crate::JsonObject;
 
 use anyhow::{anyhow, Result};
 use enum_as_inner::EnumAsInner;
@@ -114,7 +115,7 @@ struct QueryBuilder {
 }
 
 impl QueryBuilder {
-    fn new(base_type: Arc<ObjectType>, policies: FieldPolicies, limit: Option<u64>) -> Self {
+    fn new(base_type: Arc<ObjectType>, policies: FieldPolicies) -> Self {
         Self {
             fields: vec![],
             columns: vec![],
@@ -123,7 +124,7 @@ impl QueryBuilder {
             restrictions: vec![],
             allowed_fields: None,
             policies,
-            limit,
+            limit: None,
         }
     }
 
@@ -131,7 +132,7 @@ impl QueryBuilder {
     /// given type `ty`. This is done in a shallow manner. Columns representing foreign
     /// key are returned as string, not as the related Entity.
     fn from_type(ty: &Arc<ObjectType>) -> Self {
-        let mut builder = Self::new(ty.clone(), FieldPolicies::default(), None);
+        let mut builder = Self::new(ty.clone(), FieldPolicies::default());
         for field in ty.all_fields() {
             let mut field = field.clone();
             field.type_ = match field.type_ {
@@ -145,32 +146,21 @@ impl QueryBuilder {
     }
 
     /// Constructs a builder from the `BackingStore` JSON object.
-    fn new_from_json(val: &serde_json::Value) -> Result<Self> {
-        anyhow::ensure!(
-            val["kind"] == "BackingStore",
-            "unexpected object kind. Expected `BackingStore`, got {:?}",
-            val["kind"]
-        );
-        let name = val["name"].as_str().ok_or_else(|| {
-            anyhow!(
-                "internal error: `name` field is either missing or not a string: {}",
-                val
-            )
-        })?;
+    fn new_from_entity_name(ty_name: &str) -> Result<Self> {
         let runtime = runtime::get();
         let ts = &runtime.type_system;
         let api_version = current_api_version();
-        let ty = match ts.lookup_builtin_type(name) {
+        let ty = match ts.lookup_builtin_type(ty_name) {
             Ok(Type::Object(ty)) => ty,
             Err(TypeSystemError::NotABuiltinType(_)) => {
-                ts.lookup_custom_type(name, &api_version)?
+                ts.lookup_custom_type(ty_name, &api_version)?
             }
-            _ => anyhow::bail!("Unexpected type name as select base type: {}", name),
+            _ => anyhow::bail!("Unexpected type name as select base type: {}", ty_name),
         };
         let policies = make_field_policies(&runtime, &ty);
 
-        let mut builder = Self::new(ty.clone(), policies, val["limit"].as_u64());
-        builder.fields = builder.load_fields(&ty, ty.backing_table(), &val["columns"])?;
+        let mut builder = Self::new(ty.clone(), policies);
+        builder.fields = builder.load_fields(&ty, ty.backing_table());
         Ok(builder)
     }
 
@@ -185,116 +175,58 @@ impl QueryBuilder {
         select_field
     }
 
-    /// Recursively loads Fields to be retrieved from the database, as specified
-    /// by the JSON object's array `columns`. For fields that represent a nested
-    /// Entity a join is generated and we attempt to retrieve it as well.
-    fn load_fields(
-        &mut self,
-        ty: &Arc<ObjectType>,
-        current_table: &str,
-        columns: &serde_json::Value,
-    ) -> Result<Vec<SelectField>> {
-        let columns = columns.as_array().ok_or_else(|| {
-            anyhow!(
-                "internal error: `columns` object must be an array, got `{}`",
-                columns
-            )
-        })?;
-        let mut fields: Vec<SelectField> = vec![];
-        for c in columns {
-            let c = &c.as_array().ok_or_else(|| {
-                // FIXME: This is ugly and the internal part is not necessary.
-                anyhow!(
-                    "internal error: column object must be an array, got `{}`",
-                    c
-                )
-            })?[0];
-            match c {
-                Value::String(field_name) => {
-                    let field = ty.field_by_name(field_name).ok_or_else(|| {
-                        anyhow!(
-                            "unknown field name `{}` in type `{}`",
-                            field_name,
-                            ty.name()
-                        )
-                    })?;
-                    let column_name = format!("{}.{}", current_table, field_name);
-                    let field = self.make_scalar_field(field, column_name.as_str());
-                    fields.push(field);
-                }
-                Value::Object(nested_fields) => {
-                    let field_name = nested_fields["field_name"]
-                        .as_str()
-                        .ok_or_else(|| anyhow!("name should be a string"))?;
-                    let field = ty.field_by_name(field_name).ok_or_else(|| {
-                        anyhow!(
-                            "unknown field name `{}` in type `{}`",
-                            field_name,
-                            ty.name()
-                        )
-                    })?;
-                    if let Type::Object(nested_ty) = &field.type_ {
-                        let nested_table = format!(
-                            "{}_JOIN{}_{}",
-                            current_table,
-                            self.joins.len(),
-                            nested_ty.backing_table()
-                        );
-                        self.joins.push(Join {
-                            rtype: nested_ty.clone(),
-                            lkey: field_name.to_owned(),
-                            rkey: "id".to_owned(),
-                            lalias: current_table.to_owned(),
-                            ralias: nested_table.to_owned(),
-                        });
+    /// Loads all Fields of a given type `ty` to be retrieved from the
+    /// database. For fields that represent a nested Entity a join is
+    /// generated and we attempt to retrieve them recursivelly as well.
+    fn load_fields(&mut self, ty: &Arc<ObjectType>, current_table: &str) -> Vec<SelectField> {
+        let mut fields = vec![];
+        for field in ty.all_fields() {
+            if let Type::Object(nested_ty) = &field.type_ {
+                let nested_table = format!(
+                    "{}_JOIN{}_{}",
+                    current_table,
+                    self.joins.len(),
+                    nested_ty.backing_table()
+                );
+                self.joins.push(Join {
+                    rtype: nested_ty.clone(),
+                    lkey: field.name.to_owned(),
+                    rkey: "id".to_owned(),
+                    lalias: current_table.to_owned(),
+                    ralias: nested_table.to_owned(),
+                });
 
-                        let nested_fields =
-                            self.load_fields(nested_ty, &nested_table, &nested_fields["columns"])?;
-                        fields.push(SelectField::Entity {
-                            name: field.name.clone(),
-                            is_optional: field.is_optional,
-                            children: nested_fields,
-                        });
-                    } else {
-                        anyhow::bail!(
-                            "found nested column selection on field that is not an object"
-                        )
-                    }
-                }
-                _ => anyhow::bail!("expected String or Object, got `{}`", c),
+                fields.push(SelectField::Entity {
+                    name: field.name.clone(),
+                    is_optional: field.is_optional,
+                    children: self.load_fields(nested_ty, &nested_table),
+                });
+            } else {
+                let column_name = format!("{}.{}", current_table, field.name);
+                let field = self.make_scalar_field(field, &column_name);
+                fields.push(field)
             }
         }
-        Ok(fields)
+        fields
     }
 
-    fn update_allowed_fields(&mut self, columns_json: &serde_json::Value) -> Result<()> {
-        if let Some(columns) = columns_json.as_array() {
-            let mut allowed_fields = HashSet::<String>::default();
-            for c in columns {
-                let c = &c.as_array().ok_or_else(|| {
-                    // FIXME: This is ugly and the internal part is not necessary.
-                    anyhow!(
-                        "internal error: column object must be an array, got `{}`",
-                        c
-                    )
-                })?[0];
-                if let Value::String(field_name) = c {
-                    allowed_fields.insert(field_name.to_owned());
-                }
-            }
-            self.allowed_fields = Some(allowed_fields);
+    fn update_limit(&mut self, limit: u64) {
+        self.limit = Some(std::cmp::min(limit, self.limit.unwrap_or(limit)));
+    }
+
+    fn update_allowed_fields(&mut self, columns: &[serde_json::Value]) -> Result<()> {
+        let mut allowed_fields = HashSet::<String>::default();
+        for c in columns {
+            let field_name = c
+                .as_str()
+                .ok_or_else(|| anyhow!("internal error: got column unexpected type: `{}`", c))?;
+            allowed_fields.insert(field_name.to_owned());
         }
+        self.allowed_fields = Some(allowed_fields);
         Ok(())
     }
 
-    fn load_restrictions(&mut self, rest_json: &serde_json::Value) -> Result<()> {
-        if let Some(limit) = rest_json["limit"].as_u64() {
-            self.limit = Some(limit);
-        }
-        self.update_allowed_fields(&rest_json["columns"])?;
-        let restrictions = rest_json["restrictions"]
-            .as_object()
-            .ok_or_else(|| anyhow!("Missing restrictions in filter"))?;
+    fn load_restrictions(&mut self, restrictions: &JsonObject) -> Result<()> {
         let restrictions = convert_restrictions(restrictions)?;
         for r in restrictions {
             anyhow::ensure!(
@@ -421,29 +353,41 @@ pub(crate) fn make_restriction_string(restrictions: &[Restriction]) -> String {
 }
 
 fn convert_to_query_builder(val: &serde_json::Value) -> Result<QueryBuilder> {
-    let kind = val["kind"].as_str().ok_or_else(|| {
-        anyhow!(
-            "internal error: `kind` field is either missing or not a string: {}",
-            val
-        )
-    })?;
-
-    match kind {
-        "BackingStore" => QueryBuilder::new_from_json(val),
-        "Join" => anyhow::bail!("join is not supported"),
-        "Filter" => {
-            let mut builder = convert_to_query_builder(&val["inner"])?;
-            builder.load_restrictions(val)?;
-            Ok(builder)
-        }
-        _ => anyhow::bail!("unexpected relation kind `{}`", kind),
+    macro_rules! get_key {
+        ($key:expr, $as_type:ident) => {{
+            val[$key].$as_type().ok_or_else(|| {
+                anyhow!(
+                    "internal error: `{}` field is either missing or has invalid type.",
+                    $key
+                )
+            })
+        }};
     }
+    let op_type = get_key!("type", as_str)?;
+    if op_type == "BaseEntity" {
+        let entity_name = get_key!("name", as_str)?;
+        return QueryBuilder::new_from_entity_name(entity_name);
+    }
+
+    let mut builder = convert_to_query_builder(&val["inner"])?;
+    match op_type {
+        "Filter" => {
+            builder.load_restrictions(get_key!("restrictions", as_object)?)?;
+        }
+        "ColumnsSelect" => {
+            builder.update_allowed_fields(get_key!("columns", as_array)?)?;
+        }
+        "Take" => {
+            let count = get_key!("count", as_u64)?;
+            builder.update_limit(count);
+        }
+        _ => anyhow::bail!("unexpected relation type `{}`", op_type),
+    }
+    Ok(builder)
 }
 
 /// Convert JSON restrictions into vector of `Restriction` objects.
-pub(crate) fn convert_restrictions(
-    restrictions: &serde_json::Map<std::string::String, serde_json::Value>,
-) -> Result<Vec<Restriction>> {
+pub(crate) fn convert_restrictions(restrictions: &JsonObject) -> Result<Vec<Restriction>> {
     let mut sql_restrictions = vec![];
     for (k, v) in restrictions.iter() {
         let v = match v {
