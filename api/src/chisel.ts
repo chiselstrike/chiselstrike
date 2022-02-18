@@ -17,47 +17,73 @@
 //
 // Where ChiselCursor<T>::Attribute represents attribute (field) of type (table) T.
 
-type column = [string, string]; // name and type
-
-class Base {
-    limit?: number;
-    constructor(public columns: column[]) {}
+enum OpType {
+    BaseEntity = "BaseEntity",
+    Take = "Take",
+    ColumnsSelect = "ColumnsSelect",
+    Filter = "Filter",
 }
 
-// This represents a selection of some columns of a table in a DB.
-class BackingStore extends Base {
-    // The kind member is use to implement fully covered switch statements.
-    readonly kind = "BackingStore";
-    constructor(columns: column[], public name: string) {
-        super(columns);
-    }
+/**
+ * Base class for various Operators applicable on `ChiselCursor`. Each operator
+ * should extend this class and pass on its `type` identifier from the `OpType`
+ * enum.
+ */
+class Operator {
+    constructor(public readonly type: OpType) {}
 }
 
-// This represents an inner join between two chiselIterators.
-// FIXME: Add support for ON.
-class Join extends Base {
-    readonly kind = "Join";
+type Inner = BaseEntity | Take | ColumnsSelect | Filter;
+
+/**
+ * Specifies Entity whose elements are to be fetched.
+ */
+class BaseEntity extends Operator {
     constructor(
-        columns: column[],
-        public left: Inner,
-        public right: Inner,
+        public name: string,
     ) {
-        super(columns);
+        super(OpType.BaseEntity);
     }
 }
 
-class Filter extends Base {
-    readonly kind = "Filter";
+/**
+ * Take operator takes first `count` elements from a collection.
+ * The rest is ignored.
+ */
+class Take extends Operator {
     constructor(
-        columns: column[],
+        public readonly count: number,
+        public readonly inner: Inner,
+    ) {
+        super(OpType.Take);
+    }
+}
+
+/**
+ * Forces fetch of just the `columns` (fields) of a given entity.
+ */
+class ColumnsSelect extends Operator {
+    constructor(
+        public columns: string[],
+        public readonly inner: Inner,
+    ) {
+        super(OpType.ColumnsSelect);
+    }
+}
+
+/**
+ * Filter operator applies `restrictions` on each element
+ * and keep only those where field value of a field, specified
+ * by restriction key, equals to restriction value.
+ */
+class Filter extends Operator {
+    constructor(
         public restrictions: Record<string, unknown>,
-        public inner: Inner,
+        public readonly inner: Inner,
     ) {
-        super(columns);
+        super(OpType.Filter);
     }
 }
-
-type Inner = BackingStore | Join | Filter;
 
 /** ChiselCursor is a lazy iterator that will be used by ChiselStrike to construct an optimized query. */
 export class ChiselCursor<T> {
@@ -67,79 +93,26 @@ export class ChiselCursor<T> {
     ) {}
     /** Force ChiselStrike to fetch just the `...columns` that are part of the colums list. */
     select(...columns: (keyof T)[]): ChiselCursor<Pick<T, (keyof T)>> {
-        const names = columns as string[];
-        const cs = this.inner.columns.filter((c) => names.includes(c[0]));
-        switch (this.inner.kind) {
-            case "BackingStore": {
-                const b = new BackingStore(cs, this.inner.name);
-                return new ChiselCursor<T>(undefined, b);
-            }
-            case "Join": {
-                const i = new Join(cs, this.inner.left, this.inner.right);
-                return new ChiselCursor(undefined, i);
-            }
-            case "Filter": {
-                const i = new Filter(
-                    cs,
-                    this.inner.restrictions,
-                    this.inner.inner,
-                );
-                return new ChiselCursor(undefined, i);
-            }
-        }
+        return new ChiselCursor(
+            undefined,
+            new ColumnsSelect(columns as string[], this.inner),
+        );
     }
 
-    /** Restricts this cursor to contain only at most `limit_` elements */
-    take(limit_: number): ChiselCursor<T> {
-        const limit = (this.inner.limit == null)
-            ? limit_
-            : Math.min(limit_, this.inner.limit);
-
-        // shallow copy okay because this is an array of strings
-        const cs = [...this.inner.columns];
-        // FIXME: refactor to use the same path as select
-        switch (this.inner.kind) {
-            case "BackingStore": {
-                const i = new BackingStore(cs, this.inner.name);
-                i.limit = limit;
-                return new ChiselCursor(this.type, i);
-            }
-            case "Join": {
-                const i = new Join(cs, this.inner.left, this.inner.right);
-                i.limit = limit;
-                return new ChiselCursor(this.type, i);
-            }
-            case "Filter": {
-                const i = new Filter(
-                    cs,
-                    this.inner.restrictions,
-                    this.inner.inner,
-                );
-                i.limit = limit;
-                return new ChiselCursor(this.type, i);
-            }
-        }
+    /** Restricts this cursor to contain only at most `count` elements */
+    take(count: number): ChiselCursor<T> {
+        return new ChiselCursor(
+            this.type,
+            new Take(count, this.inner),
+        );
     }
 
     /** Restricts this cursor to contain just the objects that match the `Partial` object `restrictions`. */
     filter(restrictions: Partial<T>): ChiselCursor<T> {
-        const i = new Filter(this.inner.columns, restrictions, this.inner);
-        return new ChiselCursor(this.type, i);
-    }
-
-    /** Joins two ChiselCursors, by matching on the properties of the elements in their cursors. */
-    join<U>(right: ChiselCursor<U>) {
-        const s = new Set();
-        const columns = [];
-        for (const c of this.inner.columns.concat(right.inner.columns)) {
-            if (s.has(c[0])) {
-                continue;
-            }
-            s.add(c[0]);
-            columns.push(c);
-        }
-        const i = new Join(columns, this.inner, right.inner);
-        return new ChiselCursor<T & U>(undefined, i);
+        return new ChiselCursor(
+            this.type,
+            new Filter(restrictions, this.inner),
+        );
     }
 
     /** Executes the function `func` for each element of this cursor. */
@@ -195,11 +168,8 @@ export class ChiselCursor<T> {
     }
 }
 
-export function chiselIterator<T>(type: { new (): T }, c?: column[]) {
-    const columns = (c != undefined)
-        ? c
-        : Deno.core.opSync("chisel_introspect", { "name": type.name });
-    const b = new BackingStore(columns, type.name);
+export function chiselIterator<T>(type: { new (): T }) {
+    const b = new BaseEntity(type.name);
     return new ChiselCursor<T>(type, b);
 }
 
