@@ -374,7 +374,7 @@ fn convert_to_query_builder(val: &serde_json::Value) -> Result<QueryBuilder> {
 
     let mut builder = convert_to_query_builder(&val["inner"])?;
     match op_type {
-        "Filter" => {
+        "RestrictionFilter" => {
             builder.load_restrictions(get_key!("restrictions", as_object)?)?;
         }
         "ColumnsSelect" => {

@@ -7,7 +7,8 @@ enum OpType {
     BaseEntity = "BaseEntity",
     Take = "Take",
     ColumnsSelect = "ColumnsSelect",
-    Filter = "Filter",
+    RestrictionFilter = "RestrictionFilter",
+    PredicateFilter = "PredicateFilter",
 }
 
 /**
@@ -15,11 +16,19 @@ enum OpType {
  * should extend this class and pass on its `type` identifier from the `OpType`
  * enum.
  */
-class Operator {
-    constructor(public readonly type: OpType) {}
-}
+abstract class Operator {
+    constructor(
+        public readonly type: OpType,
+        public readonly inner: Operator | undefined,
+    ) {}
 
-type Inner = BaseEntity | Take | ColumnsSelect | Filter;
+    /** Applies specified Operator `op` on each element of passed iterable
+     * `iter` creating a new iterable.
+     */
+    public abstract apply(
+        iter: AsyncIterable<Record<string, unknown>>,
+    ): AsyncIterable<Record<string, unknown>>;
+}
 
 /**
  * Specifies Entity whose elements are to be fetched.
@@ -28,7 +37,13 @@ class BaseEntity extends Operator {
     constructor(
         public name: string,
     ) {
-        super(OpType.BaseEntity);
+        super(OpType.BaseEntity, undefined);
+    }
+
+    apply(
+        _iter: AsyncIterable<Record<string, unknown>>,
+    ): AsyncIterable<Record<string, unknown>> {
+        throw new Error("can't apply BaseEntity operator on an iterable");
     }
 }
 
@@ -39,9 +54,29 @@ class BaseEntity extends Operator {
 class Take extends Operator {
     constructor(
         public readonly count: number,
-        public readonly inner: Inner,
+        inner: Operator,
     ) {
-        super(OpType.Take);
+        super(OpType.Take, inner);
+    }
+
+    apply(
+        iter: AsyncIterable<Record<string, unknown>>,
+    ): AsyncIterable<Record<string, unknown>> {
+        const count = this.count;
+        return {
+            [Symbol.asyncIterator]: async function* () {
+                if (count == 0) {
+                    return;
+                }
+                let i = 0;
+                for await (const e of iter) {
+                    yield e;
+                    if (++i >= count) {
+                        break;
+                    }
+                }
+            },
+        };
     }
 }
 
@@ -51,36 +86,103 @@ class Take extends Operator {
 class ColumnsSelect extends Operator {
     constructor(
         public columns: string[],
-        public readonly inner: Inner,
+        inner: Operator,
     ) {
-        super(OpType.ColumnsSelect);
+        super(OpType.ColumnsSelect, inner);
+    }
+
+    apply(
+        iter: AsyncIterable<Record<string, unknown>>,
+    ): AsyncIterable<Record<string, unknown>> {
+        const columns = this.columns;
+        return {
+            [Symbol.asyncIterator]: async function* () {
+                for await (const arg of iter) {
+                    const newObj: Record<string, unknown> = {};
+                    for (const key of columns) {
+                        if (arg[key] !== undefined) {
+                            newObj[key] = arg[key];
+                        }
+                    }
+                    yield newObj;
+                }
+            },
+        };
     }
 }
 
 /**
- * Filter operator applies `restrictions` on each element
- * and keep only those where field value of a field, specified
+ * PredicateFilter operator applies @predicate on each element and keeps
+ * only those for which the @predicate returns true.
+ */
+class PredicateFilter extends Operator {
+    constructor(
+        public predicate: (arg: unknown) => boolean,
+        inner: Operator,
+    ) {
+        super(OpType.PredicateFilter, inner);
+    }
+
+    apply(
+        iter: AsyncIterable<Record<string, unknown>>,
+    ): AsyncIterable<Record<string, unknown>> {
+        const predicate = this.predicate;
+        return {
+            [Symbol.asyncIterator]: async function* () {
+                for await (const arg of iter) {
+                    if (predicate(arg)) {
+                        yield arg;
+                    }
+                }
+            },
+        };
+    }
+}
+
+/**
+ * RestrictionFilter operator applies `restrictions` on each element
+ * and keeps only those where field value of a field, specified
  * by restriction key, equals to restriction value.
  */
-class Filter extends Operator {
+class RestrictionFilter extends Operator {
     constructor(
         public restrictions: Record<string, unknown>,
-        public readonly inner: Inner,
+        inner: Operator,
     ) {
-        super(OpType.Filter);
+        super(OpType.RestrictionFilter, inner);
+    }
+
+    apply(
+        iter: AsyncIterable<Record<string, unknown>>,
+    ): AsyncIterable<Record<string, unknown>> {
+        const restrictions = Object.entries(this.restrictions);
+        return {
+            [Symbol.asyncIterator]: async function* () {
+                for await (const arg of iter) {
+                    verifyMatch: {
+                        for (const [key, value] of restrictions) {
+                            if (arg[key] != value) {
+                                break verifyMatch;
+                            }
+                        }
+                        yield arg;
+                    }
+                }
+            },
+        };
     }
 }
 
 /** ChiselCursor is a lazy iterator that will be used by ChiselStrike to construct an optimized query. */
 export class ChiselCursor<T> {
     constructor(
-        private type: { new (): T } | undefined,
-        private inner: Inner,
+        private baseConstructor: { new (): T },
+        private inner: Operator,
     ) {}
     /** Force ChiselStrike to fetch just the `...columns` that are part of the colums list. */
     select(...columns: (keyof T)[]): ChiselCursor<Pick<T, (keyof T)>> {
         return new ChiselCursor(
-            undefined,
+            this.baseConstructor,
             new ColumnsSelect(columns as string[], this.inner),
         );
     }
@@ -88,17 +190,39 @@ export class ChiselCursor<T> {
     /** Restricts this cursor to contain only at most `count` elements */
     take(count: number): ChiselCursor<T> {
         return new ChiselCursor(
-            this.type,
+            this.baseConstructor,
             new Take(count, this.inner),
         );
     }
 
-    /** Restricts this cursor to contain just the objects that match the `Partial` object `restrictions`. */
-    filter(restrictions: Partial<T>): ChiselCursor<T> {
-        return new ChiselCursor(
-            this.type,
-            new Filter(restrictions, this.inner),
-        );
+    /**
+     * Restricts this cursor to contain only elements that match the given @predicate.
+     */
+    filter(
+        predicate: (arg: T) => boolean,
+    ): ChiselCursor<T>;
+    /**
+     * Restricts this cursor to contain just the objects that match the `Partial`
+     * object `restrictions`.
+     */
+    filter(restrictions: Partial<T>): ChiselCursor<T>;
+
+    // Common implementation for filter overloads.
+    filter(arg1: ((arg: T) => boolean) | Partial<T>): ChiselCursor<T> {
+        if (typeof arg1 == "function") {
+            return new ChiselCursor(
+                this.baseConstructor,
+                new PredicateFilter(
+                    arg1 as ((arg: unknown) => boolean),
+                    this.inner,
+                ),
+            );
+        } else {
+            return new ChiselCursor(
+                this.baseConstructor,
+                new RestrictionFilter(arg1, this.inner),
+            );
+        }
     }
 
     /** Executes the function `func` for each element of this cursor. */
@@ -121,36 +245,89 @@ export class ChiselCursor<T> {
     }
 
     /** ChiselCursor implements asyncIterator, meaning you can use it in any asynchronous context. */
-    [Symbol.asyncIterator]() {
-        const rid = Deno.core.opSync(
-            "chisel_relational_query_create",
-            this.inner,
-        );
-        const ctor = this.type;
+    async *[Symbol.asyncIterator]() {
+        let iter = this.makeTransformedQueryIter(this.inner);
+        if (iter === undefined) {
+            iter = this.makeQueryIter(this.inner);
+        }
+        for await (const it of iter) {
+            yield it as T;
+        }
+    }
+
+    /** Performs recursive descent via Operator.inner examining the whole operator
+     * chain. If PredicateFilter is encountered, a backend query is generated and all consecutive
+     * operations are applied on the resulting async iterable in TypeScript. In such a
+     * case, the function returns the resulting AsyncIterable.
+     * If no PredicateFilter is found, undefined is returned.
+     */
+    private makeTransformedQueryIter(
+        op: Operator,
+    ): AsyncIterable<Record<string, unknown>> | undefined {
+        if (op.type == OpType.BaseEntity) {
+            return undefined;
+        } else if (op.inner === undefined) {
+            throw new Error(
+                "internal error: expected inner operator, got undefined",
+            );
+        }
+        let iter = this.makeTransformedQueryIter(op.inner);
+        if (iter !== undefined) {
+            return op.apply(iter);
+        } else if (op.type == OpType.PredicateFilter) {
+            iter = this.makeQueryIter(op.inner);
+            return op.apply(iter);
+        } else {
+            return undefined;
+        }
+    }
+
+    private makeQueryIter(
+        op: Operator,
+    ): AsyncIterable<Record<string, unknown>> {
+        const ctor = this.containsSelect(op) ? undefined : this.baseConstructor;
         return {
-            async next(): Promise<{ value: T; done: false } | { done: true }> {
-                const properties = await Deno.core.opAsync(
-                    "chisel_relational_query_next",
-                    rid,
+            [Symbol.asyncIterator]: async function* () {
+                const rid = Deno.core.opSync(
+                    "chisel_relational_query_create",
+                    op,
                 );
-                if (properties) {
-                    if (ctor) {
-                        const result = new ctor();
-                        Object.assign(result, properties);
-                        return { value: result, done: false };
-                    } else {
-                        return { value: properties, done: false };
+                try {
+                    while (true) {
+                        const properties = await Deno.core.opAsync(
+                            "chisel_relational_query_next",
+                            rid,
+                        );
+
+                        if (properties == undefined) {
+                            break;
+                        }
+                        if (ctor !== undefined) {
+                            const result = new ctor();
+                            Object.assign(result, properties);
+                            yield result;
+                        } else {
+                            yield properties;
+                        }
                     }
-                } else {
+                } finally {
                     Deno.core.opSync("op_close", rid);
-                    return { done: true };
                 }
             },
-            return(): { value: T; done: false } | { done: true } {
-                Deno.core.opSync("op_close", rid);
-                return { done: true };
-            },
         };
+    }
+
+    /** Recursively examines operator chain searching for ColumnsSelect operator.
+     * Returns true if found, false otherwise.
+     */
+    private containsSelect(op: Operator): boolean {
+        if (op.type == OpType.ColumnsSelect) {
+            return true;
+        } else if (op.inner === undefined) {
+            return false;
+        } else {
+            return this.containsSelect(op.inner);
+        }
     }
 }
 
