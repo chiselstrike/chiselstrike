@@ -398,3 +398,52 @@ and see the following:
 🎉 Ta-da!  POST now inserts a comment, as you would expect.  The site can
 now persist comments by sending POST requests to the `comments`
 endpoint.
+
+### Easily generating the full RESTful API
+
+The POST and GET methods we handled above are a part of a standard
+called [the RESTful
+API](https://en.wikipedia.org/wiki/Representational_state_transfer).
+This standard describes how an endpoint can handle various HTTP verbs
+to provide basic operations on a collection of entities: create, read,
+update, and delete
+([CRUD](https://en.wikipedia.org/wiki/Create,_read,_update_and_delete)).
+For each entity you define, you could provide a RESTful API by
+creating an endpoint that checks the method, parses the relevant parts
+of the URL, performs the corresponding CRUD action, and handles all
+corner cases.  It would look something like this:
+
+```typescript title="my-backend/endpoints/comments.ts"
+import { BlogComment } from "../models/models"
+
+export default async function chisel(req) {
+    if (req.method == 'POST') {
+        // Create a new BlogComment.
+    } else if (req.method == 'GET') {
+        // Read the BlogComment whose ID is in the URL.
+    } else if (req.method == 'PUT') {
+        // Update the BlogComment whose ID is in the URL.
+    } else if (req.method == 'DELETE') {
+        // Delete the BlogComment whose ID is in the URL.
+    }
+}
+```
+
+This is quite a bit of code, which only handles one entity --
+`BlogComment`.  Other entities would need their own copies of this,
+substantially identical.
+
+ChiselStrike saves you from that repetitive tedium by providing a
+method named `ChiselEntity.crud`.  This method takes the endpoint path
+as a parameter and returns a handler function that implements all REST
+operations, making it trivial to implement a RESTful endpoint.  The
+above example becomes simply:
+
+```typescript title="my-backend/endpoints/comments.ts"
+import { BlogComment } from "../models/models"
+export default BlogComment.crud('/models');
+```
+
+This endpoint handles GET, POST, PUT, and DELETE on `BlogComment`,
+instantly allowing clients to perform CRUD operations on the persisted
+collection of blog comments.

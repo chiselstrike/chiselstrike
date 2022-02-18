@@ -333,6 +333,20 @@ export class ChiselEntity {
         });
     }
 
+    /**
+     * Generates endpoint code to handle REST methods GET/PUT/POST/DELETE for this entity.
+     * @example
+     * Put this in the file 'endpoints/comments.ts':
+     * ```typescript
+     * import { Comment } from "../models/comment";
+     * export default Comment.crud('/comments');
+     * ```
+     * This results in a /comments endpoint that correctly handles all REST methods over Comment.
+     * @param this Entity type
+     * @param path The endpoint's URL path from the root, eg, "/users". No trailing slash.
+     * @param customMethods Custom request handlers overriding the defaults. Each present property overrides that method's handler.
+     * @returns A request-handling function suitable as a default export in and endpoint.
+     */
     static crud<T extends ChiselEntity>(
         this: {
             new (): T;
