@@ -1,0 +1,183 @@
+# SPDX-FileCopyrightText: © 2021 ChiselStrike <info@chiselstrike.com>
+
+# RUN: sh -e @file
+
+cd "$TEMPDIR"
+
+
+cat << EOF > "$TEMPDIR/models/types.ts"
+export class Person extends Chisel.ChiselEntity {
+  name: string = "bob";
+  age: number = 0;
+}
+EOF
+
+cat << EOF > "$TEMPDIR/endpoints/store.ts"
+import { Person } from "../models/types.ts";
+
+export default async function chisel(req: Request) {
+    const glauber = new Person();
+    glauber.name = "Glauber";
+    glauber.age = 89;
+    await glauber.save();
+
+    const pekka = new Person();
+    pekka.name = "Pekka";
+    pekka.age = 144;
+    await pekka.save();
+    return new Response("Ok");
+}
+EOF
+
+cat << EOF > "$TEMPDIR/endpoints/findall.ts"
+import { Person } from "../models/types.ts";
+
+function reverse(s: string): string {
+    return [...s].reverse().join("");
+}
+
+/// Computes the n-th number of fibonacci sequence using golden ratio.
+function fib(n: number) {
+    let phi = (1 + Math.sqrt(5))/2;
+    let a = Math.pow(phi, n) / Math.sqrt(5);
+    return Math.round(a);
+}
+
+export default async function chisel(req: Request) {
+    const url = new URL(req.url);
+
+    const name = url.searchParams.get("name") ?? undefined;
+    const reversedName = url.searchParams.get("reversedName") ?? undefined;
+    const fiboAge = url.searchParams.get("fibonacciAge") ?? undefined;
+
+    const filtered = Person.cursor().filter((p: Person) => {
+        if (name !== undefined) {
+            return p.name == name;
+        } else if (reversedName !== undefined) {
+            return reverse(p.name) == reversedName;
+        } else if (fiboAge !== undefined) {
+            return fib(Number(fiboAge)) == p.age;
+        } else {
+            throw new Error("No parameter");
+        }
+    });
+
+    let results: string[] = [];
+    for await (let p of filtered) {
+        results.push(p.name);
+    }
+    return new Response("[" + results.join(", ") + "]");
+}
+EOF
+
+
+cd "$TEMPDIR"
+$CHISEL apply
+
+# CHECK: Model defined: Person
+# CHECK: End point defined: /dev/findall
+
+$CHISEL apply
+$CURL -X POST -o - $CHISELD_HOST/dev/store
+# CHECK: Ok
+
+$CURL -o - $CHISELD_HOST/dev/findall?name="Glauber"
+# CHECK: [Glauber]
+
+$CURL -o - $CHISELD_HOST/dev/findall?name="Pekka"
+# CHECK: [Pekka]
+
+$CURL -o - $CHISELD_HOST/dev/findall?name="123"
+# CHECK: []
+
+## Try filtering using non-trivial functions
+$CURL -o - $CHISELD_HOST/dev/findall?reversedName="rebualG"
+# CHECK: [Glauber]
+
+$CURL -o - $CHISELD_HOST/dev/findall?reversedName="akkeP"
+# CHECK: [Pekka]
+
+## Try filtering using mathematical function.
+$CURL -o - $CHISELD_HOST/dev/findall?fibonacciAge=11
+# CHECK: [Glauber]
+
+$CURL -o - $CHISELD_HOST/dev/findall?fibonacciAge=12
+# CHECK: [Pekka]
+
+
+
+## Check that take gets applied after filtering with predicate.
+
+cat << EOF > "$TEMPDIR/endpoints/filter_and_take.ts"
+import { Person } from "../models/types.ts";
+
+export default async function chisel(req: Request) {
+    const filtered = Person.cursor().filter((p: Person) => {
+       return p.name == "Glauber" || p.name == "Pekka";
+    }).take(1);
+
+    let results: string[] = [];
+    for await (let p of filtered) {
+        results.push(p.name);
+    }
+    return new Response("[" + results.join(", ") + "]");
+}
+EOF
+
+cd "$TEMPDIR"
+$CHISEL apply
+
+$CURL -o - $CHISELD_HOST/dev/filter_and_take
+# CHECK: [Glauber]
+
+
+
+## Check that restriction gets applied after filtering with predicate.
+
+cat << EOF > "$TEMPDIR/endpoints/filter_and_restrict.ts"
+import { Person } from "../models/types.ts";
+
+export default async function chisel(req: Request) {
+    const filtered = Person.cursor().filter((p: Person) => {
+       return true;
+    }).filter({"name": "Pekka"});
+
+    let results: string[] = [];
+    for await (let p of filtered) {
+        results.push(p.name);
+    }
+    return new Response("[" + results.join(", ") + "]");
+}
+EOF
+
+cd "$TEMPDIR"
+$CHISEL apply
+
+$CURL -o - $CHISELD_HOST/dev/filter_and_restrict
+# CHECK: [Pekka]
+
+
+
+## Check that column selection gets applied after filtering with predicate.
+
+cat << EOF > "$TEMPDIR/endpoints/filter_and_select.ts"
+import { Person } from "../models/types.ts";
+
+export default async function chisel(req: Request) {
+    const filtered = Person.cursor().filter((p: Person) => {
+       return p.name == "Glauber";
+    }).select("age");
+
+    let results: string[] = [];
+    for await (let p of filtered) {
+        results.push(JSON.stringify(p));
+    }
+    return new Response("[" + results.join(", ") + "]");
+}
+EOF
+
+cd "$TEMPDIR"
+$CHISEL apply
+
+$CURL -o - $CHISELD_HOST/dev/filter_and_select
+# CHECK: [{"age":89}]
