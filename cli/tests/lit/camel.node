@@ -1,0 +1,30 @@
+# SPDX-FileCopyrightText: © 2021 ChiselStrike <info@chiselstrike.com>
+
+# RUN: sh -e @file
+
+# Used in the docs. If you have to change this file, you likely have to change
+# the docs too
+cat << EOF > "$TEMPDIR/models/camel.ts"
+import { ChiselEntity } from "@chiselstrike/api"
+
+export class Camel extends ChiselEntity {
+   camelCase: string;
+}
+EOF
+cat << EOF > "$TEMPDIR/endpoints/camel.ts"
+import { Camel } from "../models/camel";
+
+export default async function chisel(req) {
+    const camel = Camel.build({"camelCase": "works"});
+    await camel.save();
+    const oneCamel = await Camel.findOne(camel);
+    const manyCamels = await Camel.findOne(camel);
+    return new Response("ok");
+}
+EOF
+
+cd "$TEMPDIR"
+$CHISEL apply
+$CURL -X POST http://localhost:8080/dev/camel
+# CHECK: HTTP/1.1 200 OK
+# CHECK: ok

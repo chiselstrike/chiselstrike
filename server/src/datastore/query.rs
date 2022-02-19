@@ -348,9 +348,9 @@ pub(crate) fn make_restriction_string(restrictions: &[Restriction]) -> String {
             SqlValue::String(v) => escape_string(v),
         };
         if acc.is_empty() {
-            format!("WHERE {}={}", rest.k, str_v)
+            format!("WHERE \"{}\"={}", rest.k, str_v)
         } else {
-            format!("{} AND {}={}", acc, rest.k, str_v)
+            format!("{} AND \"{}\"={}", acc, rest.k, str_v)
         }
     })
 }
