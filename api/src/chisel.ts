@@ -377,7 +377,7 @@ export class ChiselEntity {
                 case "GET": {
                     if (customMethods.get) return customMethods.get(req);
                     const id = getId(req);
-                    if (id == "") {
+                    if (id === "") {
                         const f = new URL(req.url).searchParams.get("f") ??
                             "{}";
                         return responseFromJson(
@@ -397,7 +397,7 @@ export class ChiselEntity {
                 case "PUT": {
                     if (customMethods.put) return customMethods.put(req);
                     const id = getId(req);
-                    if (id == "") {
+                    if (id === "") {
                         return responseFromJson(
                             "PUT requires item ID in the URL",
                             400,
@@ -411,7 +411,7 @@ export class ChiselEntity {
                 case "DELETE": {
                     if (customMethods.delete) return customMethods.delete(req);
                     const id = getId(req);
-                    const restrictions = (id == "")
+                    const restrictions = (id === "")
                         ? JSON.parse(
                             decodeURI(
                                 new URL(req.url).searchParams.get("f") ?? "{}",
