@@ -204,10 +204,10 @@ dependencies = [
 ]
 
 [[package]]
-name = "async-mutex"
-version = "1.4.0"
+name = "async-lock"
+version = "2.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "479db852db25d9dbf6204e6cb6253698f175c15726470f78af0d918e99d6156e"
+checksum = "e97a171d191782fba31bb902b14ad94e24a68145032b7eedf871ab0bc0d077b6"
 dependencies = [
  "event-listener",
 ]
@@ -3502,7 +3502,7 @@ dependencies = [
  "anyhow",
  "api",
  "async-channel",
- "async-mutex",
+ "async-lock",
  "base64 0.13.0",
  "deno_core",
  "deno_runtime",
