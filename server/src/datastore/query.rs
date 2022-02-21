@@ -145,8 +145,8 @@ impl QueryBuilder {
         builder
     }
 
-    /// Constructs a builder from the `BackingStore` JSON object.
-    fn new_from_entity_name(ty_name: &str) -> Result<Self> {
+    /// Constructs a builder from a type name `ty_name`.
+    fn new_from_type_name(ty_name: &str) -> Result<Self> {
         let runtime = runtime::get();
         let ts = &runtime.type_system;
         let api_version = current_api_version();
@@ -365,8 +365,8 @@ fn convert_to_query_builder(val: &serde_json::Value) -> Result<QueryBuilder> {
     }
     let op_type = get_key!("type", as_str)?;
     if op_type == "BaseEntity" {
-        let entity_name = get_key!("name", as_str)?;
-        return QueryBuilder::new_from_entity_name(entity_name);
+        let type_name = get_key!("name", as_str)?;
+        return QueryBuilder::new_from_type_name(type_name);
     }
 
     let mut builder = convert_to_query_builder(&val["inner"])?;
