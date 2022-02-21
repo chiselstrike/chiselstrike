@@ -12,7 +12,7 @@ use crate::server::CoordinatorChannel;
 use crate::server::ModulesDirectory;
 use crate::types::{Field, NewField, NewObject, ObjectType, Type, TypeSystem, TypeSystemError};
 use anyhow::{Context, Result};
-use async_mutex::Mutex;
+use async_lock::Mutex;
 use chisel::chisel_rpc_server::{ChiselRpc, ChiselRpcServer};
 use chisel::{
     ChiselApplyRequest, ChiselApplyResponse, ChiselDeleteRequest, ChiselDeleteResponse,

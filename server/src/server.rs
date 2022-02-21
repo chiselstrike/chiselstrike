@@ -12,7 +12,7 @@ use crate::secrets::{get_private_key, get_secrets, SecretManager};
 use crate::types::{Type, OAUTHUSER_TYPE_NAME};
 use crate::JsonObject;
 use anyhow::Result;
-use async_mutex::Mutex;
+use async_lock::Mutex;
 use futures::future::LocalBoxFuture;
 use futures::FutureExt;
 use futures::StreamExt;

@@ -6,6 +6,8 @@ use crate::policies::FieldPolicies;
 use crate::types::{Field, ObjectDelta, ObjectType, Type, OAUTHUSER_TYPE_NAME};
 use crate::JsonObject;
 use anyhow::{anyhow, Context as AnyhowContext, Result};
+use async_lock::Mutex;
+use async_lock::MutexGuardArc;
 use futures::stream::BoxStream;
 use futures::stream::Stream;
 use futures::FutureExt;
@@ -20,8 +22,6 @@ use std::collections::{HashMap, HashSet};
 use std::pin::Pin;
 use std::sync::Arc;
 use std::task::{Context, Poll};
-use tokio::sync::Mutex;
-use tokio::sync::OwnedMutexGuard;
 use uuid::Uuid;
 
 /// A query row is a JSON object that represent the queried entities.
@@ -37,7 +37,7 @@ pub(crate) type TransactionStatic = Arc<Mutex<Transaction<'static, Any>>>;
 #[pin_project]
 struct RawQueryResults<T> {
     raw_query: String,
-    tr: OwnedMutexGuard<Transaction<'static, Any>>,
+    tr: MutexGuardArc<Transaction<'static, Any>>,
     #[pin]
     stream: T,
 }
@@ -46,7 +46,7 @@ async fn make_transactioned_stream(
     tr: TransactionStatic,
     raw_query: String,
 ) -> impl Stream<Item = anyhow::Result<AnyRow>> {
-    let mut tr = tr.lock_owned().await;
+    let mut tr = tr.lock_arc().await;
 
     // The string data and Transaction will not move anymore.
     let raw_query_ptr = raw_query.as_ref() as *const str;
