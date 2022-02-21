@@ -3,20 +3,6 @@
 /// <reference types="./lib.deno_core.d.ts" />
 /// <reference lib="dom" />
 
-// In the beginning, we shall implement the following querying logic (with the sole exception of the lambdas,
-// which can be replaced by simple Attribute compare logic):
-//
-// select(ChiselCursor<T>, ChiselCursor<T>::Attribute attributes...) -> ChiselCursor<attributes...>
-// filter(ChiselCursor<T>, fn(T)->bool) -> ChiselCursor<T>
-// sort(ChiselCursor<T>, fn(T)->Sortable) -> ChiselCursor<T>
-// take(ChiselCursor<T>, int) -> ChiselCursor<T>  (takes first n rows)
-// join(ChiselCursor<T>, ChiselCursor<U>, ChiselCursor<T>::Attribute, ChiselCursor<U>::Attribute) -> ChiselCursor<Composite<T, U>> (Joins chiselIterators T and U, based on their columns ChiselCursor<T>::Attribute and ChiselCursor<U>::Attribute)
-// left_join(ChiselCursor<T>, ChiselCursor<U>, ChiselCursor<T>::Attribute, ChiselCursor<U>::Attribute) -> ChiselCursor<Composite<T, Option<U>>>
-// right_join(ChiselCursor<T>, ChiselCursor<U>, ChiselCursor<T>::Attribute, ChiselCursor<U>::Attribute) -> ChiselCursor<Composite<Option<T>, U>>
-// transform(ChiselCursor<T>, fn(T)->U)->ChiselCursor<U> (ambitious, maybe later)
-//
-// Where ChiselCursor<T>::Attribute represents attribute (field) of type (table) T.
-
 enum OpType {
     BaseEntity = "BaseEntity",
     Take = "Take",
