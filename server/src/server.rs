@@ -51,7 +51,7 @@ pub struct Opt {
     #[structopt(long)]
     inspect_brk: bool,
     /// size of database connection pool.
-    #[structopt(short, long, default_value = "1000")]
+    #[structopt(short, long, default_value = "10")]
     nr_connections: usize,
     /// How many executor threads to create
     #[structopt(short, long, default_value = "1")]
