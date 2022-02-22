@@ -724,12 +724,10 @@ fn set_current_context(c: RequestContext) {
     });
 }
 
-fn clear_current_context() -> Option<TransactionStatic> {
+fn clear_current_context() {
     CURRENT_CONTEXT.with(|c| {
         let mut ctx = c.borrow_mut();
-        let transaction = ctx.transaction.clone();
         *ctx = RequestContext::default();
-        transaction
     })
 }
 
@@ -903,11 +901,11 @@ pub(crate) async fn run_js(path: String, mut req: Request<hyper::Body>) -> Resul
     };
 
     let transaction = qe.start_transaction_static().await?;
-    let result = get_result(request_handler, &mut req, path, transaction).await;
+    let result = get_result(request_handler, &mut req, path, transaction.clone()).await;
     // FIXME: maybe defer creating the transaction until we need one, to avoid doing it for
     // endpoints that don't do any data access. For now, because we always create it above,
     // it should be safe to unwrap.
-    let transaction = clear_current_context().unwrap();
+    clear_current_context();
     let result = result?;
 
     let body = {
