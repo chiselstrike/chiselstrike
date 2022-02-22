@@ -229,12 +229,21 @@ impl QueryEngine {
     }
 
     pub(crate) async fn commit_transaction_static(transaction: TransactionStatic) -> Result<()> {
-        let transaction = Arc::try_unwrap(transaction)
-            .map_err(|_| anyhow!("Transaction still have references held!"))?;
-        let transaction = transaction.into_inner();
-
+        let transaction = Self::wait_until_exclusive(transaction).await;
         transaction.commit().await?;
         Ok(())
+    }
+
+    /// Wait until the caller has exclusive ownership of the transaction.
+    async fn wait_until_exclusive(transaction: TransactionStatic) -> Transaction<'static, Any> {
+        loop {
+            let _ = transaction.lock().await;
+            if Arc::strong_count(&transaction) == 1 {
+                break;
+            }
+        }
+        let transaction = Arc::try_unwrap(transaction).unwrap();
+        transaction.into_inner()
     }
 
     pub(crate) async fn create_table(
