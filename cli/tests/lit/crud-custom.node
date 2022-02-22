@@ -1,0 +1,221 @@
+# SPDX-FileCopyrightText: © 2022 ChiselStrike <info@chiselstrike.com>
+
+# RUN: sh -e @file
+
+cp examples/person.ts "$TEMPDIR/models"
+
+cat << EOF > "$TEMPDIR/endpoints/persons.ts"
+import { crud, standardCRUDMethods } from "@chiselstrike/api";
+import { Person } from "../models/person";
+
+const scalarTypes = new Set(["string", "number", "boolean"]);
+function isScalar(data: unknown): boolean {
+    return scalarTypes.has(typeof data);
+}
+
+function sortObjectEntries([a]: [string, unknown], [b]: [string, unknown]): number {
+    if (a < b) return -1;
+    else if (a > b) return 1;
+    return 0;
+}
+
+const indentString = "  ";
+
+function toYAML(data: unknown, level = 0): string {
+    if (isScalar(data)) {
+        return JSON.stringify(data);
+    }
+
+    if (data === null) {
+        return "null";
+    }
+
+    const nextLevel = level + 1;
+    const indent = indentString.repeat(level);
+    const nextIndent = indentString.repeat(nextLevel);
+    const lines = Array.isArray(data)
+        ? data.map(it => "- " + toYAML(it, nextLevel))
+        : Object.entries(data as object).sort(sortObjectEntries).map(([key, value]) => {
+            if (isScalar(value)) {
+                return key + ": " + JSON.stringify(value);
+            }
+            return key + ":\n" + nextIndent + toYAML(value, nextLevel);
+        });
+    return lines.join("\n" + indent) + "\n";
+}
+
+function isNullBody(status: number): boolean {
+    return status == 101 || status == 204 || status == 205 || status == 304;
+}
+
+function responseFromYAML(body: unknown, status: number) {
+    const payload = isNullBody(status) ? null : toYAML(body);
+    return new Response(payload, {
+        status: status,
+        headers: [
+            ["content-type", "text/yaml"],
+        ],
+    });
+
+}
+
+function createResponse(body: unknown, status: number) {
+    if (status < 400) {
+        return responseFromYAML({ data: body, status }, status);
+    }
+    return responseFromYAML({ error: body, status }, status);
+}
+export default crud(
+    Person,
+    "/persons/:id", /* :id can be explicitly provided */
+    {
+        customMethods: {
+            "DELETE": standardCRUDMethods.methodNotAllowed,
+            "PUT": standardCRUDMethods.forbidden,
+        },
+        createResponses: {
+            "DELETE": createResponse,
+            "GET": createResponse,
+            "POST": createResponse,
+        },
+        defaultCreateResponse: (body: unknown, status: number) => { // used by PUT
+            return responseFromYAML({ body: body }, status);
+        },
+    },
+);
+EOF
+
+cd "$TEMPDIR"
+$CHISEL apply
+# CHECK: Model defined: Person
+# CHECK: End point defined: /dev/persons
+
+$CURL -d '{"first_name":"Alice","last_name":"Anderson","age":30,"human":true,"height":10}' $CHISELD_HOST/dev/persons
+# CHECK: HTTP/1.1 200 OK
+# CHECK: content-type: text/yaml
+# CHECK: data:
+# CHECK: last_name: "Anderson"
+# CHECK: status: 200
+$CURL -d '{"first_name":"Bob","last_name":"Brown","age":40,"human":true,"height":9}' $CHISELD_HOST/dev/persons
+# CHECK: HTTP/1.1 200 OK
+# CHECK: content-type: text/yaml
+# CHECK: data:
+# CHECK: last_name: "Brown"
+# CHECK: status: 200
+$CURL -d '{"first_name":"Charlie","last_name":"Chong","age":20,"human":true,"height":8}' $CHISELD_HOST/dev/persons
+# CHECK: HTTP/1.1 200 OK
+# CHECK: content-type: text/yaml
+# CHECK: data:
+# CHECK: last_name: "Chong"
+# CHECK: status: 200
+$CURL -d '{"first_name":"Dawn","last_name":"Draper","age":10,"human":true,"height":7}' $CHISELD_HOST/dev/persons
+# CHECK: HTTP/1.1 200 OK
+# CHECK: content-type: text/yaml
+# CHECK: data:
+# CHECK: last_name: "Draper"
+# CHECK: status: 200
+$CURL -d '{"first_name":"Eve","last_name":"Elgin","age":50,"human":true,"height":6}' $CHISELD_HOST/dev/persons
+# CHECK: HTTP/1.1 200 OK
+# CHECK: content-type: text/yaml
+# CHECK: data:
+# CHECK: last_name: "Elgin"
+# CHECK: status: 200
+
+$CURL $CHISELD_HOST/dev/persons # GET all
+# CHECK: HTTP/1.1 200 OK
+# CHECK: content-type: text/yaml
+# CHECK: data:
+# CHECK: last_name: "Anderson"
+# CHECK: last_name: "Brown"
+# CHECK: last_name: "Chong"
+# CHECK: last_name: "Draper"
+# CHECK: last_name: "Elgin"
+# CHECK: status: 200
+
+$CURL "$CHISELD_HOST/dev/persons?f=\\{%22age%22:40\\}" # Filtered GET
+# CHECK: HTTP/1.1 200 OK
+# CHECK: content-type: text/yaml
+# CHECK: data:
+# CHECK: last_name: "Brown"
+# CHECK: status: 200
+
+id=`$CURL "$CHISELD_HOST/dev/persons?f=\\{%22age%22:10\\}" | sed -ne 's/.*id: "\([^"]*\).*/\1/p'`
+$CURL $CHISELD_HOST/dev/persons/$id # GET by id
+# CHECK: HTTP/1.1 200 OK
+# CHECK: content-type: text/yaml
+# CHECK: data:
+# CHECK: first_name: "Dawn"
+# CHECK: status: 200
+$CURL $CHISELD_HOST/dev/persons/i-will-never-exist-ya-know # GET by invalid id
+# CHECK: HTTP/1.1 404 Not Found
+# CHECK: content-type: text/yaml
+# CHECK: error: "Not found"
+# CHECK: status: 404
+
+$CURL -X DELETE $CHISELD_HOST/dev/persons/$id # DELETE by id
+# CHECK: HTTP/1.1 405 Method Not Allowed
+# CHECK: content-type: text/yaml
+# CHECK: error: "Method Not Allowed"
+# CHECK: status: 405
+$CURL $CHISELD_HOST/dev/persons/$id
+# CHECK: HTTP/1.1 200 OK
+# CHECK: content-type: text/yaml
+# CHECK: data:
+# CHECK: first_name: "Dawn"
+# CHECK: status: 200
+
+$CURL -X DELETE "$CHISELD_HOST/dev/persons?f=\\{%22age%22:40\\}" # Filtered DELETE
+# CHECK: HTTP/1.1 405 Method Not Allowed
+# CHECK: content-type: text/yaml
+# CHECK: error: "Method Not Allowed"
+# CHECK: status: 405
+$CURL $CHISELD_HOST/dev/persons
+# CHECK: data:
+# CHECK: last_name: "Anderson"
+# CHECK: last_name: "Brown"
+# CHECK: last_name: "Chong"
+# CHECK: last_name: "Draper"
+# CHECK: last_name: "Elgin"
+# CHECK: status: 200
+
+$CURL -X DELETE $CHISELD_HOST/dev/persons # DELETE all
+# CHECK: HTTP/1.1 405 Method Not Allowed
+# CHECK: content-type: text/yaml
+# CHECK: error: "Method Not Allowed"
+# CHECK: status: 405
+$CURL $CHISELD_HOST/dev/persons
+# CHECK: data:
+# CHECK: last_name: "Anderson"
+# CHECK: last_name: "Brown"
+# CHECK: last_name: "Chong"
+# CHECK: last_name: "Draper"
+# CHECK: last_name: "Elgin"
+# CHECK: status: 200
+
+$CURL -d '{"id":"abcd","first_name":"Repeated"}' $CHISELD_HOST/dev/persons
+# CHECK: HTTP/1.1 200 OK
+# CHECK: content-type: text/yaml
+# CHECK: data:
+# CHECK: first_name: "Repeated"
+# CHECK: status: 200
+$CURL -d '{"id":"abcd","first_name":"Repeated"}' $CHISELD_HOST/dev/persons # Repeated POST of the same entry.
+# CHECK: HTTP/1.1 200 OK
+# CHECK: content-type: text/yaml
+# CHECK: data:
+# CHECK: first_name: "Repeated"
+# CHECK: status: 200
+echo there are `$CURL $CHISELD_HOST/dev/persons | grep -c 'first_name: "Repeated"'` Repeated entries
+# CHECK: there are 2 Repeated entries
+$CURL $CHISELD_HOST/dev/persons | grep first_name
+# CHECK: first_name: "Repeated"
+# CHECK: first_name: "Repeated"
+
+$CURL -X PUT -d '{"age":98422}' $CHISELD_HOST/dev/persons/cef5d492-d7e3-4c45-9a55-5929b9ab8292
+# CHECK: HTTP/1.1 403 Forbidden
+# CHECK: content-type: text/yaml
+# CHECK: body: "Forbidden"
+
+$CURL -X PUT -d '{"age":98422}' $CHISELD_HOST/dev/persons/ # PUT without ID.
+# CHECK: HTTP/1.1 403 Forbidden
+# CHECK: content-type: text/yaml
+# CHECK: body: "Forbidden"

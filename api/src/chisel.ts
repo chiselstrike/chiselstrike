@@ -332,103 +332,6 @@ export class ChiselEntity {
             restrictions: restrictions,
         });
     }
-
-    /**
-     * Generates endpoint code to handle REST methods GET/PUT/POST/DELETE for this entity.
-     * @example
-     * Put this in the file 'endpoints/comments.ts':
-     * ```typescript
-     * import { Comment } from "../models/comment";
-     * export default Comment.crud('/comments');
-     * ```
-     * This results in a /comments endpoint that correctly handles all REST methods over Comment.
-     * @param this Entity type
-     * @param path The endpoint's URL path from the root, eg, "/users". No trailing slash.
-     * @param customMethods Custom request handlers overriding the defaults. Each present property overrides that method's handler.
-     * @returns A request-handling function suitable as a default export in and endpoint.
-     */
-    static crud<T extends ChiselEntity>(
-        this: {
-            new (): T;
-            findOne: (_: { id: string }) => Promise<T | null>;
-            findMany: (_: Partial<T>) => Promise<Partial<T>[]>;
-            build: (...properties: Record<string, unknown>[]) => T;
-            delete: (restrictions: Partial<T>) => Promise<void>;
-        },
-        path: string,
-        customMethods: Partial<
-            Record<
-                "get" | "put" | "post" | "delete" | "options",
-                (_: Request) => Promise<Response>
-            >
-        > = {},
-    ): (req: Request) => Promise<Response> {
-        function getId(req: Request) {
-            const suffix = req.url.substring(
-                req.url.indexOf(path) + path.length,
-            );
-            return (suffix.length > 1 && suffix[0] == "/")
-                ? suffix.substring(1)
-                : "";
-        }
-
-        return async (req: Request) => {
-            switch (req.method) {
-                case "GET": {
-                    if (customMethods.get) return customMethods.get(req);
-                    const id = getId(req);
-                    if (id === "") {
-                        const f = new URL(req.url).searchParams.get("f") ??
-                            "{}";
-                        return responseFromJson(
-                            await this.findMany(JSON.parse(decodeURI(f))),
-                        );
-                    }
-                    const u = await this.findOne({ id });
-                    return responseFromJson(u ?? "Not found", u ? 200 : 404);
-                }
-                case "POST": {
-                    if (customMethods.post) return customMethods.post(req);
-                    const u = this.build(await req.json());
-                    u.id = undefined;
-                    await u.save();
-                    return responseFromJson(u);
-                }
-                case "PUT": {
-                    if (customMethods.put) return customMethods.put(req);
-                    const id = getId(req);
-                    if (id === "") {
-                        return responseFromJson(
-                            "PUT requires item ID in the URL",
-                            400,
-                        );
-                    }
-                    const u = this.build(await req.json());
-                    u.id = id;
-                    await u.save();
-                    return responseFromJson(u);
-                }
-                case "DELETE": {
-                    if (customMethods.delete) return customMethods.delete(req);
-                    const id = getId(req);
-                    const restrictions = (id === "")
-                        ? JSON.parse(
-                            decodeURI(
-                                new URL(req.url).searchParams.get("f") ?? "{}",
-                            ),
-                        )
-                        : { id };
-                    await this.delete(restrictions);
-                    return new Response("Deletion successful!");
-                }
-                default:
-                    return responseFromJson(
-                        "Unsupported HTTP method: " + req.method,
-                        405,
-                    );
-            }
-        };
-    }
 }
 
 export class OAuthUser extends ChiselEntity {
@@ -505,3 +408,345 @@ export async function loggedInUser(): Promise<OAuthUser | null> {
     const id = await Deno.core.opAsync("chisel_user", {});
     return id == null ? null : await OAuthUser.findOne({ id });
 }
+
+// TODO: BEGIN: this should be in another file: crud.ts
+
+// TODO: BEGIN: when module import is fixed:
+//     import { parse as regExParamParse } from "regexparam";
+// or:
+//     import { parse as regExParamParse } from "regexparam";
+// copied from https://deno.land/x/regexparam@v2.0.0/src/index.js and added TS signature, fixed warnings
+// and minor cleanups
+export function regExParamParse(str: string, loose: boolean) {
+    let tmp, pattern = "";
+    const keys = [], arr = str.split("/");
+    arr[0] || arr.shift();
+
+    while ((tmp = arr.shift())) {
+        const c = tmp[0];
+        if (c === "*") {
+            keys.push("wild");
+            pattern += "/(.*)";
+        } else if (c === ":") {
+            const o = tmp.indexOf("?", 1);
+            const ext = tmp.indexOf(".", 1);
+            keys.push(tmp.substring(1, ~o ? o : ~ext ? ext : tmp.length));
+            pattern += !!~o && !~ext ? "(?:/([^/]+?))?" : "/([^/]+?)";
+            if (~ext) pattern += (~o ? "?" : "") + "\\" + tmp.substring(ext);
+        } else {
+            pattern += "/" + tmp;
+        }
+    }
+
+    return {
+        keys: keys,
+        pattern: new RegExp("^" + pattern + (loose ? "(?=$|/)" : "/?$"), "i"),
+    };
+}
+// TODO: END: when module import is fixed
+
+type ChiselEntityClass<T extends ChiselEntity> = {
+    new (): T;
+    findOne: (_: { id: string }) => Promise<T | null>;
+    findMany: (_: Partial<T>) => Promise<Partial<T>[]>;
+    build: (...properties: Record<string, unknown>[]) => T;
+    delete: (restrictions: Partial<T>) => Promise<void>;
+};
+
+type GenericChiselEntityClass = ChiselEntityClass<ChiselEntity>;
+
+/**
+ * Get the filters to be used with a ChiselEntity from an URL.
+ *
+ * This will get the URL search parameter "f" and assume it's JSON object.
+ * @param _entity the entity class that will be filtered
+ * @param url the url that provides the search parameters
+ * @returns the partial filters, note that it may return an empty object, meaning all objects will be returned/deleted.
+ */
+export function getEntityFiltersFromURL<
+    T extends ChiselEntity,
+    E extends ChiselEntityClass<T>,
+>(_entity: E, url: URL): Partial<T> | undefined {
+    // TODO: it's more common to have filters as regular query parameters, URI-encoded,
+    // then entity may be used to get such field names
+    // TODO: validate if unknown filters where given?
+    const f = url.searchParams.get("f");
+    if (!f) {
+        return undefined;
+    }
+    const o = JSON.parse(decodeURI(f));
+    if (o && typeof o === "object") {
+        return o;
+    }
+    throw new Error(`provided search parameter 'f=${f}' is not a JSON object.`);
+}
+
+/**
+ * Creates a path parser from a template using regexparam.
+ *
+ * @param pathTemplate the path template such as `/static`, `/param/:id/:otherParam`...
+ * @param loose if true, it can match longer paths. False by default
+ * @returns function that can parse paths given as string.
+ * @see https://deno.land/x/regexparam@v2.0.0
+ */
+export function createPathParser<T extends Record<string, unknown>>(
+    pathTemplate: string,
+    loose = false,
+): ((path: string) => T) {
+    const { pattern, keys: keysOrFalse } = regExParamParse(pathTemplate, loose);
+    if (typeof keysOrFalse === "boolean") {
+        throw new Error(
+            `invalid pathTemplate=${pathTemplate}, expected string`,
+        );
+    }
+    const keys = keysOrFalse;
+    return function pathParser(path: string): T {
+        const matches = pattern.exec(path);
+        return keys.reduce(
+            (acc: Record<string, unknown>, key: string, index: number) => {
+                acc[key] = matches?.[index + 1];
+                return acc;
+            },
+            {},
+        ) as T;
+    };
+}
+
+/**
+ * Creates a path parser from a template using regexparam.
+ *
+ * @param pathTemplate the path template such as `/static`, `/param/:id/:otherParam`...
+ * @param loose if true, it can match longer paths. False by default
+ * @returns function that can parse paths given in URL.pathname.
+ * @see https://deno.land/x/regexparam@v2.0.0
+ */
+export function createURLPathParser<T extends Record<string, unknown>>(
+    pathTemplate: string,
+    loose = false,
+): ((url: URL) => T) {
+    const pathParser = createPathParser<T>(pathTemplate, loose);
+    return function urlPathParser(url: URL): T {
+        return pathParser(url.pathname);
+    };
+}
+
+export type CRUDCreateResponse = (
+    body: unknown,
+    status: number,
+) => (Promise<Response> | Response);
+
+export type CRUDBaseParams = {
+    /** identifier of the object being manipulated, if any */
+    id?: string;
+    /** ChiselStrike's version/branch the server is running,
+     * such as 'dev' for endpoint '/dev/example'
+     * when using 'chisel apply --version dev'
+     */
+    chiselVersion: string;
+};
+export type CRUDMethodSignature<
+    T extends ChiselEntity,
+    E extends ChiselEntityClass<T>,
+    P extends CRUDBaseParams = CRUDBaseParams,
+> = (
+    entity: E,
+    req: Request,
+    params: P,
+    url: URL,
+    createResponse: CRUDCreateResponse,
+) => Promise<Response>;
+export type CRUDMethods<
+    T extends ChiselEntity,
+    E extends ChiselEntityClass<T>,
+    P extends CRUDBaseParams = CRUDBaseParams,
+> = {
+    GET: CRUDMethodSignature<T, E, P>;
+    POST: CRUDMethodSignature<T, E, P>;
+    PUT: CRUDMethodSignature<T, E, P>;
+    DELETE: CRUDMethodSignature<T, E, P>;
+};
+export type CRUDCreateResponses<
+    T extends ChiselEntity,
+    E extends ChiselEntityClass<T>,
+    P extends CRUDBaseParams = CRUDBaseParams,
+> = {
+    [K in keyof CRUDMethods<T, E, P>]: CRUDCreateResponse;
+};
+
+const defaultCrudMethods: CRUDMethods<ChiselEntity, GenericChiselEntityClass> =
+    {
+        GET: async (
+            entity: GenericChiselEntityClass,
+            _req: Request,
+            params: CRUDBaseParams,
+            url: URL,
+            createResponse: CRUDCreateResponse,
+        ) => {
+            const { id } = params;
+            if (!id) {
+                return createResponse(
+                    await entity.findMany(
+                        getEntityFiltersFromURL(entity, url) || {},
+                    ),
+                    200,
+                );
+            }
+            const u = await entity.findOne({ id });
+            return createResponse(u ?? "Not found", u ? 200 : 404);
+        },
+        POST: async (
+            entity: GenericChiselEntityClass,
+            req: Request,
+            _params: CRUDBaseParams,
+            _url: URL,
+            createResponse: CRUDCreateResponse,
+        ) => {
+            const u = entity.build(await req.json());
+            u.id = undefined;
+            await u.save();
+            return createResponse(u, 200);
+        },
+        PUT: async (
+            entity: GenericChiselEntityClass,
+            req: Request,
+            params: CRUDBaseParams,
+            _url: URL,
+            createResponse: CRUDCreateResponse,
+        ) => {
+            const { id } = params;
+            if (!id) {
+                return createResponse(
+                    "PUT requires item ID in the URL",
+                    400,
+                );
+            }
+            const u = entity.build(await req.json());
+            u.id = id;
+            await u.save();
+            return createResponse(u, 200);
+        },
+        DELETE: async (
+            entity: GenericChiselEntityClass,
+            _req: Request,
+            params: CRUDBaseParams,
+            url: URL,
+            createResponse: CRUDCreateResponse,
+        ) => {
+            const { id } = params;
+            const restrictions = !id
+                ? getEntityFiltersFromURL(entity, url)
+                : { id };
+            await entity.delete(restrictions || {}); // TODO: should a missing filter really remove all entities?
+            return createResponse("Deletion successful!", 200);
+        },
+    } as const;
+
+/**
+ * These methods can be used as `customMethods` in `ChiselStrike.crud()`.
+ *
+ * @example
+ * Put this in the file 'endpoints/comments.ts':
+ * ```typescript
+ * import { Comment } from "../models/comment";
+ * export default crud(
+ *   Comment,
+ *   '/comments/:id',
+ *   {
+ *     PUT: standardCRUDMethods.notFound, // do not update, instead returns 404
+ *     DELETE: standardCRUDMethods.methodNotAllowed, // do not delete, instead returns 405
+ *   },
+ * );
+ * ```
+ */
+export const standardCRUDMethods = {
+    forbidden: (
+        _entity: GenericChiselEntityClass,
+        _req: Request,
+        _params: CRUDBaseParams,
+        _url: URL,
+        createResponse: CRUDCreateResponse,
+    ) => Promise.resolve(createResponse("Forbidden", 403)),
+    notFound: (
+        _entity: GenericChiselEntityClass,
+        _req: Request,
+        _params: CRUDBaseParams,
+        _url: URL,
+        createResponse: CRUDCreateResponse,
+    ) => Promise.resolve(createResponse("Not Found", 404)),
+    methodNotAllowed: (
+        _entity: GenericChiselEntityClass,
+        _req: Request,
+        _params: CRUDBaseParams,
+        _url: URL,
+        createResponse: CRUDCreateResponse,
+    ) => Promise.resolve(createResponse("Method Not Allowed", 405)),
+} as const;
+
+/**
+ * Generates endpoint code to handle REST methods GET/PUT/POST/DELETE for this entity.
+ * @example
+ * Put this in the file 'endpoints/comments.ts':
+ * ```typescript
+ * import { Comment } from "../models/comment";
+ * export default crud(Comment, "/comments/:id");
+ * ```
+ * This results in a /comments endpoint that correctly handles all REST methods over Comment.
+ * @param this Entity type
+ * @param path The path with parameters such as `/prefix/:id`, see https://deno.land/x/regexparam
+ * @param config Configure the CRUD behavior:
+ *  - `customMethods`: custom request handlers overriding the defaults.
+ *     Each present property overrides that method's handler. To remove a certain CRUD operation,
+ *     say DELETE, you may provide a `{ customMethods: { DELETE: standardCRUDMethods.methodNotAllowed }}`
+ *  - `defaultCreateResponse`: default function to create responses if `createResponse` entry is not provided.
+ *     defaults to `responseFromJson()`.
+ *  - `createResponses`: replaces `defaultCreateResponse()` and may reformat the response
+ *  - `parseParams`: parse the URL parameters instead of using https://deno.land/x/regexparam
+ * @returns A request-handling function suitable as a default export in and endpoint.
+ */
+export function crud<
+    T extends ChiselEntity,
+    E extends ChiselEntityClass<T>,
+    P extends CRUDBaseParams = CRUDBaseParams,
+>(
+    entity: E,
+    path: string, // "/prefix/:id", see https://deno.land/x/regexparam
+    config?: {
+        createResponses?: Partial<
+            CRUDCreateResponses<T, ChiselEntityClass<T>, P>
+        >;
+        customMethods?: Partial<CRUDMethods<T, ChiselEntityClass<T>, P>>;
+        defaultCreateResponse?: CRUDCreateResponse;
+        parseParams?: (url: URL) => P;
+    },
+): (req: Request) => Promise<Response> {
+    const pathTemplate = "/:chiselVersion" +
+        (path.startsWith("/") ? "" : "/") +
+        (path.includes(":id") ? path : `${path}/:id`);
+
+    const defaultCreateResponse = config?.defaultCreateResponse ||
+        responseFromJson;
+    const parseParams = config?.parseParams ||
+        createURLPathParser(pathTemplate);
+    const localDefaultCrudMethods =
+        defaultCrudMethods as unknown as CRUDMethods<T, E, P>;
+    const methods = config?.customMethods
+        ? { ...localDefaultCrudMethods, ...config?.customMethods }
+        : localDefaultCrudMethods;
+
+    return (req: Request): Promise<Response> => {
+        const methodName = req.method as keyof typeof methods; // assume valid, will be handled gracefully
+        const createResponse = config?.createResponses?.[methodName] ||
+            defaultCreateResponse;
+        const method = methods[methodName];
+        if (!method) {
+            return Promise.resolve(
+                createResponse(`Unsupported HTTP method: ${methodName}`, 405),
+            );
+        }
+
+        const url = new URL(req.url);
+        const params = parseParams(url);
+        return method(entity, req, params, url, createResponse);
+    };
+}
+// TODO: END: this should be in another file: crud.ts

@@ -5,8 +5,9 @@
 cp examples/person.ts "$TEMPDIR/models"
 
 cat << EOF > "$TEMPDIR/endpoints/persons.ts"
+import { crud } from "@chiselstrike/api";
 import { Person } from "../models/person";
-export default Person.crud('/persons');
+export default crud(Person, "/persons");
 EOF
 
 cd "$TEMPDIR"
