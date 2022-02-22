@@ -288,7 +288,7 @@ where
     op_async(move |s, a1, a2| {
         let inner = f(s, a1, a2);
         with_current_context(move |c| {
-            let context = c.borrow().clone();
+            let context = c.clone();
             RequestFuture { context, inner }
         })
     })
@@ -363,10 +363,7 @@ type DbStream = RefCell<QueryResults>;
 /// Calculates field policies for the request being processed.
 pub(crate) fn make_field_policies(runtime: &Runtime, ty: &ObjectType) -> FieldPolicies {
     let mut policies = FieldPolicies::default();
-    let (path, userid) = with_current_context(|p| {
-        let p = p.borrow();
-        (p.path.path().to_string(), p.userid.clone())
-    });
+    let (path, userid) = with_current_context(|p| (p.path.path().to_string(), p.userid.clone()));
     policies.current_userid = userid;
     runtime.add_field_policies(ty, &mut policies, &path);
     policies
@@ -500,7 +497,7 @@ async fn op_chisel_relational_query_next(
 }
 
 async fn op_chisel_user(_: Rc<RefCell<OpState>>, _: (), _: ()) -> Result<serde_json::Value> {
-    match with_current_context(|path| path.borrow().userid.clone()) {
+    match with_current_context(|path| path.userid.clone()) {
         None => Ok(serde_json::Value::Null),
         Some(id) => Ok(serde_json::Value::String(id)),
     }
@@ -731,45 +728,45 @@ mod context {
     use crate::deno::RequestContext;
     use std::cell::RefCell;
     thread_local! {
-        static CURRENT_CONTEXT : RefCell<RequestContext> = RefCell::new(Default::default());
+        static CURRENT_CONTEXT : RefCell<Option<RequestContext>> = RefCell::new(None);
     }
     pub(super) fn with_current_context<F, R>(f: F) -> R
     where
-        F: FnOnce(&RefCell<RequestContext>) -> R,
+        F: FnOnce(&RequestContext) -> R,
     {
-        CURRENT_CONTEXT.with(f)
+        CURRENT_CONTEXT.with(|cx| {
+            let b = cx.borrow();
+            f(b.as_ref().unwrap())
+        })
+    }
+
+    pub(super) fn with_new_context<F, R>(nc: RequestContext, f: F) -> R
+    where
+        F: FnOnce() -> R,
+    {
+        CURRENT_CONTEXT.with(|cx| {
+            let old = cx.borrow().clone();
+            cx.replace(Some(nc));
+            let ret = f();
+            cx.replace(old);
+            ret
+        })
     }
 }
 use context::with_current_context;
+use context::with_new_context;
 
 pub(crate) fn current_api_version() -> String {
-    with_current_context(|p| {
-        let x = p.borrow();
-        x.path.api_version().to_string()
-    })
-}
-
-fn set_current_context(c: RequestContext) {
-    with_current_context(|path| {
-        *path.borrow_mut() = c;
-    });
-}
-
-fn clear_current_context() {
-    with_current_context(|c| {
-        let mut ctx = c.borrow_mut();
-        *ctx = RequestContext::default();
-    })
+    with_current_context(|p| p.path.api_version().to_string())
 }
 
 fn current_method() -> Method {
-    with_current_context(|path| path.borrow().method.clone())
+    with_current_context(|path| path.method.clone())
 }
 
 fn current_transaction() -> Result<TransactionStatic> {
     with_current_context(|path| {
-        path.borrow()
-            .transaction
+        path.transaction
             .clone()
             .ok_or_else(|| anyhow!("no active transaction"))
     })
@@ -787,13 +784,7 @@ impl<F: Future> Future for RequestFuture<F> {
 
     fn poll(self: Pin<&mut Self>, c: &mut Context<'_>) -> Poll<Self::Output> {
         let this = self.project();
-
-        let old = with_current_context(|ctx| ctx.borrow().clone());
-        set_current_context(this.context.clone());
-        let ret = this.inner.poll(c);
-        set_current_context(old);
-
-        ret
+        with_new_context(this.context.clone(), || this.inner.poll(c))
     }
 }
 
@@ -879,8 +870,7 @@ async fn get_result(
     // Set the current path to cover JS code that runs before
     // blocking. This in particular covers code that doesn't block at
     // all.
-    set_current_context(context.clone());
-    let result = get_result_aux(request_handler, req)?;
+    let result = with_new_context(context.clone(), || get_result_aux(request_handler, req))?;
     // We got here without blocking and now have a future representing
     // pending work for the endpoint. We might not get to that future
     // before the current path is changed, so wrap the future in a
@@ -941,7 +931,6 @@ pub(crate) async fn run_js(path: String, mut req: Request<hyper::Body>) -> Resul
     // FIXME: maybe defer creating the transaction until we need one, to avoid doing it for
     // endpoints that don't do any data access. For now, because we always create it above,
     // it should be safe to unwrap.
-    clear_current_context();
     let result = result?;
 
     let body = {
