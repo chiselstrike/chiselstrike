@@ -20,6 +20,7 @@ use deno_core::ModuleSource;
 use deno_core::ModuleSourceFuture;
 use deno_core::ModuleSpecifier;
 use deno_core::ModuleType;
+use deno_core::OpFn;
 use deno_core::OpState;
 use deno_core::RcRef;
 use deno_core::Resource;
@@ -41,6 +42,8 @@ use hyper::{Request, Response, StatusCode};
 use log::debug;
 use once_cell::unsync::OnceCell;
 use pin_project::pin_project;
+use serde::de::DeserializeOwned;
+use serde::Serialize;
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::convert::TryInto;
@@ -276,6 +279,23 @@ async fn op_chisel_read_body(
     Ok(fut.await?.transpose()?.map(|x| x.to_vec().into()))
 }
 
+fn op_req<T1, T2, R, F, Fut>(f: F) -> Box<OpFn>
+where
+    T1: DeserializeOwned,
+    T2: DeserializeOwned,
+    R: Serialize + 'static,
+    Fut: Future<Output = anyhow::Result<R>> + 'static,
+    F: Fn(Rc<RefCell<OpState>>, T1, T2) -> Fut + 'static,
+{
+    op_async(move |s, a1, a2| {
+        let inner = f(s, a1, a2);
+        with_current_context(move |c| {
+            let context = c.clone();
+            RequestFuture { context, inner }
+        })
+    })
+}
+
 async fn op_chisel_store(
     _state: Rc<RefCell<OpState>>,
     content: serde_json::Value,
@@ -497,9 +517,9 @@ async fn create_deno<P: AsRef<Path>>(base_directory: P, inspect_brk: bool) -> Re
 
     // FIXME: Turn this into a deno extension
     runtime.register_op("op_format_file_name", op_sync(op_format_file_name));
-    runtime.register_op("chisel_read_body", op_async(op_chisel_read_body));
-    runtime.register_op("chisel_store", op_async(op_chisel_store));
-    runtime.register_op("chisel_entity_delete", op_async(op_chisel_entity_delete));
+    runtime.register_op("chisel_read_body", op_req(op_chisel_read_body));
+    runtime.register_op("chisel_store", op_req(op_chisel_store));
+    runtime.register_op("chisel_entity_delete", op_req(op_chisel_entity_delete));
     runtime.register_op("chisel_get_secret", op_sync(op_chisel_get_secret));
     runtime.register_op(
         "chisel_relational_query_create",
@@ -507,10 +527,10 @@ async fn create_deno<P: AsRef<Path>>(base_directory: P, inspect_brk: bool) -> Re
     );
     runtime.register_op(
         "chisel_relational_query_next",
-        op_async(op_chisel_relational_query_next),
+        op_req(op_chisel_relational_query_next),
     );
     runtime.register_op("chisel_introspect", op_sync(op_chisel_introspect));
-    runtime.register_op("chisel_user", op_async(op_chisel_user));
+    runtime.register_op("chisel_user", op_req(op_chisel_user));
     runtime.sync_ops_cache();
 
     // FIXME: Include these files in the snapshop
