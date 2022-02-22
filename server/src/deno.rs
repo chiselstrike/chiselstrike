@@ -767,8 +767,13 @@ impl<F: Future> Future for RequestFuture<F> {
 
     fn poll(self: Pin<&mut Self>, c: &mut Context<'_>) -> Poll<Self::Output> {
         let this = self.project();
+
+        let old = with_current_context(|ctx| ctx.borrow().clone());
         set_current_context(this.context.clone());
-        this.inner.poll(c)
+        let ret = this.inner.poll(c);
+        set_current_context(old);
+
+        ret
     }
 }
 
