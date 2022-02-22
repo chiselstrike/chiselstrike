@@ -343,7 +343,7 @@ type DbStream = RefCell<QueryResults>;
 /// Calculates field policies for the request being processed.
 pub(crate) fn make_field_policies(runtime: &Runtime, ty: &ObjectType) -> FieldPolicies {
     let mut policies = FieldPolicies::default();
-    let (path, userid) = CURRENT_CONTEXT.with(|p| {
+    let (path, userid) = with_current_context(|p| {
         let p = p.borrow();
         (p.path.path().to_string(), p.userid.clone())
     });
@@ -480,7 +480,7 @@ async fn op_chisel_relational_query_next(
 }
 
 async fn op_chisel_user(_: Rc<RefCell<OpState>>, _: (), _: ()) -> Result<serde_json::Value> {
-    match CURRENT_CONTEXT.with(|path| path.borrow().userid.clone()) {
+    match with_current_context(|path| path.borrow().userid.clone()) {
         None => Ok(serde_json::Value::Null),
         Some(id) => Ok(serde_json::Value::String(id)),
     }
@@ -707,36 +707,47 @@ struct RequestContext {
     transaction: Option<TransactionStatic>,
 }
 
-thread_local! {
-    static CURRENT_CONTEXT : RefCell<RequestContext> = RefCell::new(Default::default());
+mod context {
+    use crate::deno::RequestContext;
+    use std::cell::RefCell;
+    thread_local! {
+        static CURRENT_CONTEXT : RefCell<RequestContext> = RefCell::new(Default::default());
+    }
+    pub(super) fn with_current_context<F, R>(f: F) -> R
+    where
+        F: FnOnce(&RefCell<RequestContext>) -> R,
+    {
+        CURRENT_CONTEXT.with(f)
+    }
 }
+use context::with_current_context;
 
 pub(crate) fn current_api_version() -> String {
-    CURRENT_CONTEXT.with(|p| {
+    with_current_context(|p| {
         let x = p.borrow();
         x.path.api_version().to_string()
     })
 }
 
 fn set_current_context(c: RequestContext) {
-    CURRENT_CONTEXT.with(|path| {
+    with_current_context(|path| {
         *path.borrow_mut() = c;
     });
 }
 
 fn clear_current_context() {
-    CURRENT_CONTEXT.with(|c| {
+    with_current_context(|c| {
         let mut ctx = c.borrow_mut();
         *ctx = RequestContext::default();
     })
 }
 
 fn current_method() -> Method {
-    CURRENT_CONTEXT.with(|path| path.borrow().method.clone())
+    with_current_context(|path| path.borrow().method.clone())
 }
 
 fn current_transaction() -> Result<TransactionStatic> {
-    CURRENT_CONTEXT.with(|path| {
+    with_current_context(|path| {
         path.borrow()
             .transaction
             .clone()
