@@ -756,14 +756,14 @@ fn current_transaction() -> Result<TransactionStatic> {
 }
 
 #[pin_project]
-struct RequestFuture {
+struct RequestFuture<F: Future> {
     context: RequestContext,
     #[pin]
-    inner: ResolveFuture,
+    inner: F,
 }
 
-impl Future for RequestFuture {
-    type Output = Result<v8::Global<v8::Value>>;
+impl<F: Future> Future for RequestFuture<F> {
+    type Output = F::Output;
 
     fn poll(self: Pin<&mut Self>, c: &mut Context<'_>) -> Poll<Self::Output> {
         let this = self.project();
