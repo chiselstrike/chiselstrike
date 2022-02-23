@@ -37,8 +37,8 @@ set +e
 $CHISEL apply --allow-type-deletion 2>&1
 set -e
 
-# CHECK: UNIQUE constraint failed: field_names.field_name
-#
+# CHECK: [[(UNIQUE constraint failed|unique constraint)]]
+
 cat << EOF > "$TEMPDIR/models/types.ts"
 export class Bad extends ChiselEntity { a: SomeType; }
 EOF

@@ -52,7 +52,7 @@ $CURL http://localhost:8080/dev/post
 
 $CURL -d '{ "relUrl": "post.html", "content": "We at ChiselStrike are so happy to have you with us!" }' -X POST http://localhost:8080/dev/post
 # CHECK: HTTP/1.1 500 Internal Server Error
-# CHECK: error returned from database: UNIQUE constraint failed
+# CHECK: [[(UNIQUE constraint failed|unique constraint)]]
 
 # evolving types now
 cat << EOF > "$TEMPDIR/models/post.ts"

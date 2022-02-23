@@ -68,7 +68,7 @@ async fn update_field_query(
         };
 
         let querystr = format!(
-            "UPDATE fields SET field_type = $1, is_optional = $2, is_unique = $4 {} WHERE field_id = $4",
+            "UPDATE fields SET field_type = $1, is_optional = $2::bool, is_unique = $4::bool {} WHERE field_id = $4",
             default_stmt
         );
         let mut query = sqlx::query(&querystr);
@@ -410,7 +410,7 @@ impl MetaService {
         version: &str,
         policy: &str,
     ) -> anyhow::Result<()> {
-        let add_policy = sqlx::query("INSERT INTO policies (policy_str, version) VALUES ($1, $2) ON CONFLICT(version) DO UPDATE SET policy_str = $1 WHERE version = $2").bind(policy.to_owned()).bind(version.to_owned());
+        let add_policy = sqlx::query("INSERT INTO policies (policy_str, version) VALUES ($1, $2) ON CONFLICT(version) DO UPDATE SET policy_str = $1 WHERE policies.version = $2").bind(policy.to_owned()).bind(version.to_owned());
         execute!(transaction, add_policy)?;
         Ok(())
     }
@@ -468,7 +468,7 @@ impl MetaService {
     pub(crate) async fn new_session_token(&self, userid: &str) -> anyhow::Result<String> {
         let token = Uuid::new_v4().to_string();
         // TODO: Expire tokens.
-        let insert = sqlx::query("INSERT INTO sessions(token, user_id) VALUES($1, $2)")
+        let insert = sqlx::query("INSERT INTO sessions(token, user_id) VALUES($1::uuid, $2)")
             .bind(&token)
             .bind(userid);
         let mut transaction = self.pool.begin().await?;
@@ -480,7 +480,7 @@ impl MetaService {
     }
 
     pub(crate) async fn get_user_id(&self, token: &str) -> anyhow::Result<String> {
-        let query = sqlx::query("SELECT user_id FROM sessions WHERE token=$1").bind(token);
+        let query = sqlx::query("SELECT user_id FROM sessions WHERE token=$1::uuid").bind(token);
 
         let mut rows = fetch_all!(&self.pool, query)?;
         let row = rows

@@ -111,7 +111,7 @@ impl SqlWithArguments {
         let mut sqlx_query = sqlx::query(&self.sql);
         for arg in &self.args {
             match arg {
-                SqlValue::Bool(arg) => sqlx_query = sqlx_query.bind(arg),
+                SqlValue::Bool(arg) => sqlx_query = sqlx_query.bind(*arg as i64),
                 SqlValue::U64(arg) => sqlx_query = sqlx_query.bind(*arg as i64),
                 SqlValue::I64(arg) => sqlx_query = sqlx_query.bind(arg),
                 SqlValue::F64(arg) => sqlx_query = sqlx_query.bind(arg),
@@ -344,8 +344,8 @@ impl QueryEngine {
                         Type::Float => {
                             // https://github.com/launchbadge/sqlx/issues/1596
                             // sqlx gets confused if the float doesn't have decimal points.
-                            let val: &str = row.get_unchecked(column_idx);
-                            json!(val.parse::<f64>()?)
+                            let val: f64 = row.get_unchecked(column_idx);
+                            json!(val)
                         }
                         Type::String => to_json!(&str),
                         Type::Id => to_json!(&str),
@@ -355,9 +355,8 @@ impl QueryEngine {
                             //
                             // Also the database has integers, and we need to map it back to a
                             // boolean type on json.
-                            let val: &str = row.get_unchecked(column_idx);
-                            let x: bool = val.parse::<usize>()? == 1;
-                            json!(x)
+                            let val: i32 = row.get_unchecked(column_idx);
+                            json!(val != 0)
                         }
                         Type::Object(_) => anyhow::bail!("object is not a scalar"),
                     };
@@ -642,7 +641,7 @@ impl QueryEngine {
                 id_name = f.name.to_string();
                 id_bind = bind.clone();
             }
-            update_binds.push_str(&std::format!("{} = {},", &f.name, &bind));
+            update_binds.push_str(&std::format!("\"{}\" = {},", &f.name, &bind));
         }
         field_binds.pop();
         update_binds.pop();
@@ -657,12 +656,13 @@ impl QueryEngine {
         }
 
         Ok(std::format!(
-            "INSERT INTO {} ({}) VALUES ({}) ON CONFLICT ({}) DO UPDATE SET {} WHERE {} = {} RETURNING *",
+            "INSERT INTO \"{}\" ({}) VALUES ({}) ON CONFLICT ({}) DO UPDATE SET {} WHERE \"{}\".\"{}\" = {} RETURNING *",
             &ty.backing_table(),
-            field_names.into_iter().join(","),
+            field_names.into_iter().map(|f| format!("\"{}\"", f)).join(","),
             field_binds,
             id_name,
             update_binds,
+            &ty.backing_table(),
             id_name,
             id_bind,
         ))

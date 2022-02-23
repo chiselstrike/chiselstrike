@@ -103,7 +103,7 @@ struct QueryBuilder {
     fields: Vec<SelectField>,
     /// Vector of SQL column aliases that will be selected from the database and corresponding
     /// scalar fields.
-    columns: Vec<(String, Field)>,
+    columns: Vec<(String, String, Field)>,
     base_type: Arc<ObjectType>,
     joins: Vec<Join>,
     restrictions: Vec<Restriction>,
@@ -139,7 +139,7 @@ impl QueryBuilder {
                 Type::Object(_) => Type::String, // This is actually a foreign key.
                 ty => ty,
             };
-            let field = builder.make_scalar_field(&field, field.name.as_str());
+            let field = builder.make_scalar_field(&field, ty.backing_table(), field.name.as_str());
             builder.fields.push(field)
         }
         builder
@@ -164,14 +164,20 @@ impl QueryBuilder {
         Ok(builder)
     }
 
-    fn make_scalar_field(&mut self, field: &Field, column_name: &str) -> SelectField {
+    fn make_scalar_field(
+        &mut self,
+        field: &Field,
+        table_name: &str,
+        column_name: &str,
+    ) -> SelectField {
         let select_field = SelectField::Scalar {
             name: field.name.clone(),
             type_: field.type_.clone(),
             is_optional: field.is_optional,
             column_idx: self.columns.len(),
         };
-        self.columns.push((column_name.to_owned(), field.clone()));
+        self.columns
+            .push((table_name.to_owned(), column_name.to_owned(), field.clone()));
         select_field
     }
 
@@ -202,8 +208,7 @@ impl QueryBuilder {
                     children: self.load_fields(nested_ty, &nested_table),
                 });
             } else {
-                let column_name = format!("{}.{}", current_table, field.name);
-                let field = self.make_scalar_field(field, &column_name);
+                let field = self.make_scalar_field(field, current_table, &field.name);
                 fields.push(field)
             }
         }
@@ -241,15 +246,13 @@ impl QueryBuilder {
 
     fn make_column_string(&self) -> String {
         let mut column_string = String::new();
-        for (column_name, field) in &self.columns {
+        for (table_name, column_name, field) in &self.columns {
             let col = match field.default_value() {
                 Some(dfl) => format!(
-                    "coalesce({},\"{}\") AS {},",
-                    column_name,
-                    dfl,
-                    column_name.replace(".", "_")
+                    "coalesce(\"{}\".\"{}\",'{}') AS \"{}_{}\",",
+                    table_name, column_name, dfl, table_name, column_name
                 ),
-                None => format!("{},", column_name),
+                None => format!("\"{}\".\"{}\",", table_name, column_name),
             };
             column_string += &col;
         }
@@ -261,7 +264,7 @@ impl QueryBuilder {
         let mut join_string = String::new();
         for join in &self.joins {
             join_string += &format!(
-                "LEFT JOIN ({}) AS {} ON {}.{}={}.{}\n",
+                "LEFT JOIN \"{}\" AS \"{}\" ON \"{}\".\"{}\"=\"{}\".\"{}\"\n",
                 join.rtype.backing_table(),
                 join.ralias,
                 join.lalias,
@@ -307,7 +310,7 @@ impl QueryBuilder {
         };
 
         let mut raw_sql = format!(
-            "SELECT {} FROM {} {} {}",
+            "SELECT {} FROM \"{}\" {} {}",
             column_string,
             self.base_type.backing_table(),
             join_string,
@@ -338,16 +341,16 @@ fn escape_string(s: &str) -> String {
 pub(crate) fn make_restriction_string(restrictions: &[Restriction]) -> String {
     restrictions.iter().fold(String::new(), |acc, rest| {
         let str_v = match &rest.v {
-            SqlValue::Bool(v) => format!("{}", v),
+            SqlValue::Bool(v) => (if *v { "1" } else { "0" }).to_string(),
             SqlValue::U64(v) => format!("{}", v),
             SqlValue::I64(v) => format!("{}", v),
             SqlValue::F64(v) => format!("{}", v),
             SqlValue::String(v) => escape_string(v),
         };
         if acc.is_empty() {
-            format!("WHERE {}={}", rest.k, str_v)
+            format!("WHERE \"{}\"={}", rest.k, str_v)
         } else {
-            format!("{} AND {}={}", acc, rest.k, str_v)
+            format!("{} AND \"{}\"={}", acc, rest.k, str_v)
         }
     })
 }
@@ -451,7 +454,7 @@ impl Mutation {
             (ty, restrictions)
         };
         let sql = format!(
-            "DELETE FROM {} {}",
+            "DELETE FROM \"{}\" {}",
             &ty.backing_table(),
             make_restriction_string(&restrictions)
         );

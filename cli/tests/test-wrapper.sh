@@ -21,13 +21,27 @@ else
 fi
 cd $cwd
 
-$CHISELD --webui -m "sqlite://$TEMPDIR/chiseld.db?mode=rwc" -d "sqlite://$TEMPDIR/chiseld-data.db?mode=rwc" &
+if [ "x$TEST_DATABASE" == "xpostgres" ]; then
+    DATADB="datadb_$(echo $RANDOM | shasum | head -c 40)"
+
+    psql -c "CREATE DATABASE $DATADB"
+
+    DATADB_URL="postgresql://localhost/$DATADB"
+else
+    METADB_URL="sqlite://$TEMPDIR/chiseld.db?mode=rwc"
+    DATADB_URL="sqlite://$TEMPDIR/chiseld-data.db?mode=rwc"
+fi
+
+$CHISELD --webui -m "$DATADB_URL" -d "$DATADB_URL" &
 PID=$!
 
 function cleanup() {
     kill $PID
     wait
     rm -rf "$TEMPDIR"
+    if [ "x$TEST_DATABASE" == "xpostgres" ]; then
+        psql -c "DROP DATABASE $DATADB"
+    fi
 }
 
 trap cleanup EXIT

@@ -6,11 +6,41 @@ use crate::common::bin_dir;
 use crate::common::repo_dir;
 use crate::common::run;
 use std::env;
-
+use std::fmt::{Display, Formatter};
 use std::path::Path;
+use std::str::FromStr;
 use structopt::StructOpt;
 
 mod common;
+
+#[derive(Debug)]
+enum Database {
+    Postgres,
+    Sqlite,
+}
+
+impl Display for Database {
+    fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
+        match self {
+            Database::Postgres => write!(f, "postgres"),
+            Database::Sqlite => write!(f, "sqlite"),
+        }
+    }
+}
+
+type ParseError = &'static str;
+
+impl FromStr for Database {
+    type Err = ParseError;
+
+    fn from_str(database: &str) -> Result<Self, Self::Err> {
+        match database {
+            "postgres" => Ok(Database::Postgres),
+            "sqlite" => Ok(Database::Sqlite),
+            _ => Err("Unsupported database"),
+        }
+    }
+}
 
 #[derive(Debug, StructOpt)]
 #[structopt(name = "lit_test", about = "Runs integration tests")]
@@ -18,6 +48,9 @@ struct Opt {
     /// Name of a signle lit test to run (e.g. `populate.lit`)
     #[structopt(short, long)]
     test: Option<String>,
+    /// Database system to test with. Supported values: `sqlite` (default) and `postgres`.
+    #[structopt(short, long, default_value = "sqlite")]
+    database: Database,
 }
 
 fn chisel() -> String {
@@ -54,6 +87,7 @@ fn main() {
     env::set_var("CHISELD_LOCALHOST", "localhost:9090");
     env::set_var("CURL", "curl -S -s -i -w '\\n'");
     env::set_var("CREATE_APP", create_app);
+    env::set_var("TEST_DATABASE", opt.database.to_string());
 
     let search_path = Path::new("tests/lit")
         .join(opt.test.unwrap_or_else(|| "".to_string()))
