@@ -34,6 +34,7 @@ use deno_runtime::worker::{MainWorker, WorkerOptions};
 use deno_runtime::BootstrapOptions;
 use futures::stream::{try_unfold, Stream};
 use futures::FutureExt;
+use futures::StreamExt;
 use hyper::body::HttpBody;
 use hyper::Method;
 use hyper::{Request, Response, StatusCode};
@@ -43,6 +44,7 @@ use pin_project::pin_project;
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::convert::TryInto;
+use std::fmt::Debug;
 use std::future::Future;
 use std::io::Write;
 use std::net::SocketAddr;
@@ -867,6 +869,13 @@ async fn get_result(
     .await
 }
 
+async fn commit_transaction(
+    transaction: TransactionStatic,
+) -> Result<Option<(Box<[u8]>, TransactionStatic)>, anyhow::Error> {
+    crate::datastore::QueryEngine::commit_transaction_static(transaction).await?;
+    Ok(None)
+}
+
 pub(crate) async fn run_js(path: String, mut req: Request<hyper::Body>) -> Result<Response<Body>> {
     let qe = {
         let runtime = runtime::get();
@@ -925,6 +934,9 @@ pub(crate) async fn run_js(path: String, mut req: Request<hyper::Body>) -> Resul
         let runtime = &mut service.worker.js_runtime;
 
         let stream = get_read_stream(runtime, result.clone())?;
+        let commit_stream = try_unfold(transaction.clone(), commit_transaction);
+        let stream = stream.chain(commit_stream);
+
         let scope = &mut runtime.handle_scope();
         let response = result
             .open(scope)
@@ -961,10 +973,6 @@ pub(crate) async fn run_js(path: String, mut req: Request<hyper::Body>) -> Resul
 
         builder.body(Body::Stream(Box::pin(stream)))?
     };
-    // Defer committing of the transaction to the last possible moment. It would be better
-    // to commit the transaction after the response stream is closed, but it would be a lot
-    // of work and this will do for now.
-    crate::datastore::QueryEngine::commit_transaction_static(transaction).await?;
     Ok(body)
 }
 
