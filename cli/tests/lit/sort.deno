@@ -1,0 +1,112 @@
+# SPDX-FileCopyrightText: © 2021 ChiselStrike <info@chiselstrike.com>
+
+# RUN: sh -e @file
+
+cd "$TEMPDIR"
+
+
+cat << EOF > "$TEMPDIR/models/types.ts"
+export class Person extends Chisel.ChiselEntity {
+  name: string = "";
+  age: number = 0;
+}
+EOF
+
+cat << EOF > "$TEMPDIR/endpoints/store.ts"
+import { Person } from "../models/types.ts";
+
+export default async function chisel(req: Request) {
+    const glauber = new Person();
+    glauber.name = "Glauber";
+    glauber.age = 144;
+    await glauber.save();
+
+    const pekka = new Person();
+    pekka.name = "Pekka";
+    pekka.age = 89;
+    await pekka.save();
+    return new Response("Ok");
+}
+EOF
+
+cat << EOF > "$TEMPDIR/endpoints/get_sorted.ts"
+import { Person } from "../models/types.ts";
+
+export default async function chisel(req: Request) {
+    const url = new URL(req.url);
+
+    const key = url.searchParams.get("key");
+    const order = url.searchParams.get("order") ?? "ascending";
+    const asc = order == "ascending";
+
+    const sorted = Person.cursor().sort((lhs: Person, rhs: Person) => {
+        if (key == "name") {
+            return asc === lhs.name < rhs.name; // This works as XNOR
+        } else {
+            return asc === lhs.age < rhs.age;
+        }
+    });
+
+    const results = (await sorted.toArray()).map(p => p.name);
+    return new Response("[" + results.join(", ") + "]");
+}
+EOF
+
+
+
+cd "$TEMPDIR"
+$CHISEL apply
+
+# CHECK: Model defined: Person
+# CHECK: End point defined: /dev/get_sorted
+# CHECK: End point defined: /dev/store
+
+$CURL -X POST -o - $CHISELD_HOST/dev/store
+# CHECK: Ok
+
+$CURL -o - "$CHISELD_HOST/dev/get_sorted?key=name&order=ascending"
+# CHECK: [Glauber, Pekka]
+
+$CURL -o - "$CHISELD_HOST/dev/get_sorted?key=name&order=descending"
+# CHECK: [Pekka, Glauber]
+
+$CURL -o - "$CHISELD_HOST/dev/get_sorted?key=age&order=ascending"
+# CHECK: [Pekka, Glauber]
+
+$CURL -o - "$CHISELD_HOST/dev/get_sorted?key=age&order=descending"
+# CHECK: [Glauber, Pekka]
+
+
+
+cat << EOF > "$TEMPDIR/endpoints/get_sorted_by.ts"
+import { Person } from "../models/types.ts";
+
+export default async function chisel(req: Request) {
+    const url = new URL(req.url);
+
+    const key = url.searchParams.get("key") ?? "";
+    if (key != "name" && key != "age") {
+        throw new Error(`unexpected entity property '${key}'`);
+    }
+    const order = url.searchParams.get("order") ?? "ascending";
+
+    const sorted = Person.cursor().sortBy(key, order == "ascending");
+    const results = (await sorted.toArray()).map(p => p.name);
+    return new Response("[" + results.join(", ") + "]");
+}
+EOF
+
+$CHISEL apply
+# CHECK: End point defined: /dev/get_sorted_by
+
+$CURL -o - "$CHISELD_HOST/dev/get_sorted_by?key=name&order=ascending"
+# CHECK: [Glauber, Pekka]
+
+$CURL -o - "$CHISELD_HOST/dev/get_sorted_by?key=name&order=descending"
+# CHECK: [Pekka, Glauber]
+
+$CURL -o - "$CHISELD_HOST/dev/get_sorted_by?key=age&order=ascending"
+# CHECK: [Pekka, Glauber]
+
+$CURL -o - "$CHISELD_HOST/dev/get_sorted_by?key=age&order=descending"
+# CHECK: [Glauber, Pekka]

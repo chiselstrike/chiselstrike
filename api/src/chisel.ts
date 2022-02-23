@@ -9,6 +9,7 @@ enum OpType {
     ColumnsSelect = "ColumnsSelect",
     RestrictionFilter = "RestrictionFilter",
     PredicateFilter = "PredicateFilter",
+    Sort = "Sort",
 }
 
 /**
@@ -112,8 +113,8 @@ class ColumnsSelect extends Operator {
 }
 
 /**
- * PredicateFilter operator applies @predicate on each element and keeps
- * only those for which the @predicate returns true.
+ * PredicateFilter operator applies `predicate` on each element and keeps
+ * only those for which the `predicate` returns true.
  */
 class PredicateFilter extends Operator {
     constructor(
@@ -173,6 +174,42 @@ class RestrictionFilter extends Operator {
     }
 }
 
+/**
+ * Sort operator sorts elements using `comparator` which
+ * for two elements of the iterable returns true if `lhs`
+ * is considered less than `rhs`, false otherwise.
+ */
+class Sort extends Operator {
+    constructor(
+        public comparator: (lhs: unknown, rhs: unknown) => boolean,
+        inner: Operator,
+    ) {
+        super(OpType.Sort, inner);
+    }
+
+    apply(
+        iter: AsyncIterable<Record<string, unknown>>,
+    ): AsyncIterable<Record<string, unknown>> {
+        const cmp = this.comparator;
+        return {
+            [Symbol.asyncIterator]: async function* () {
+                let elements = [];
+                for await (const e of iter) {
+                    elements.push(e);
+                }
+                elements = elements.sort(
+                    (lhs: unknown, rhs: unknown) => {
+                        return cmp(lhs, rhs) ? -1 : 1;
+                    },
+                );
+                for (const e of elements) {
+                    yield e;
+                }
+            },
+        };
+    }
+}
+
 /** ChiselCursor is a lazy iterator that will be used by ChiselStrike to construct an optimized query. */
 export class ChiselCursor<T> {
     constructor(
@@ -225,6 +262,48 @@ export class ChiselCursor<T> {
         }
     }
 
+    /**
+     * Sorts cursor elements.
+     *
+     * @param comparator determines the sorting order. For two elements of the
+     * iterable returns true if `lhs` is considered less than `rhs`,
+     * false otherwise.
+     *
+     * Note: the sort is not guaranteed to be stable.
+     */
+    sort(
+        comparator: (lhs: T, rhs: T) => boolean,
+    ): ChiselCursor<T> {
+        return new ChiselCursor(
+            this.baseConstructor,
+            new Sort(
+                comparator as ((lhs: unknown, rhs: unknown) => boolean),
+                this.inner,
+            ),
+        );
+    }
+
+    /**
+     * Sorts cursor elements.
+     *
+     * @param key specifies which attribute of `T` is to be used as a sort key.
+     * @param ascending if true, the sort will be ascending. Descending otherwise.
+     *
+     * Note: the sort is not guaranteed to be stable.
+     */
+    sortBy(key: keyof T, ascending = true): ChiselCursor<T> {
+        const cmp = (lhs: T, rhs: T) => {
+            return ascending === lhs[key] < rhs[key];
+        };
+        return new ChiselCursor(
+            this.baseConstructor,
+            new Sort(
+                cmp as ((lhs: unknown, rhs: unknown) => boolean),
+                this.inner,
+            ),
+        );
+    }
+
     /** Executes the function `func` for each element of this cursor. */
     async forEach(func: (arg: T) => void): Promise<void> {
         for await (const t of this) {
@@ -256,10 +335,10 @@ export class ChiselCursor<T> {
     }
 
     /** Performs recursive descent via Operator.inner examining the whole operator
-     * chain. If PredicateFilter is encountered, a backend query is generated and all consecutive
-     * operations are applied on the resulting async iterable in TypeScript. In such a
-     * case, the function returns the resulting AsyncIterable.
-     * If no PredicateFilter is found, undefined is returned.
+     * chain. If PredicateFilter or Sort is encountered, a backend query is generated
+     * and all consecutive operations are applied on the resulting async iterable
+     * in TypeScript. In such a case, the function returns the resulting AsyncIterable.
+     * If no PredicateFilter or Sort is found, undefined is returned.
      */
     private makeTransformedQueryIter(
         op: Operator,
@@ -274,7 +353,9 @@ export class ChiselCursor<T> {
         let iter = this.makeTransformedQueryIter(op.inner);
         if (iter !== undefined) {
             return op.apply(iter);
-        } else if (op.type == OpType.PredicateFilter) {
+        } else if (
+            op.type == OpType.PredicateFilter || op.type == OpType.Sort
+        ) {
             iter = this.makeQueryIter(op.inner);
             return op.apply(iter);
         } else {
