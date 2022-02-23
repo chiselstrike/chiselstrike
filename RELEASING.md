@@ -14,6 +14,13 @@ First, install Rust on your machine with [rustup](https://rustup.rs):
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 ```
 
+You also need to install Node.js:
+
+```
+curl -fsSL https://rpm.nodesource.com/setup_16.x | bash -
+yum install nodejs
+```
+
 Then build the tarball with `scripts/build-tarball.sh` script, which generates a `chiselstrike-<version>-<target>.tar.gz` file for you.
 
 **Mac/Intel:**
