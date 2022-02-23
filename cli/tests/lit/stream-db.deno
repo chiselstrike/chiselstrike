@@ -1,0 +1,60 @@
+# SPDX-FileCopyrightText: © 2022 ChiselStrike <info@chiselstrike.com>
+
+# RUN: sh -e @file
+
+# This is a demo of how to stream data from a DB to the client. This
+# avoids loading all the data in memory.
+
+# FIXME, We should probably add some of this code to the library to
+# make it easier.
+
+cat << EOF > "$TEMPDIR/models/types.ts"
+import { ChiselEntity } from "@chiselstrike/api";
+
+export class Data extends ChiselEntity {
+    num: number = 0;
+}
+EOF
+
+cat << EOF > "$TEMPDIR/endpoints/stream.js"
+import { Data } from "../models/types.ts";
+
+export default async function chisel(req: Request) {
+    const promises = [];
+    for (let i = 0; i < 10; i += 1) {
+        promises.push(Data.build({ 'num': i}).save());
+    }
+    await Promise.all(promises);
+
+    let cursor = Data.cursor();
+    let asyncIter = cursor[Symbol.asyncIterator]();
+    let stream = new ReadableStream({
+        async pull(controller) {
+            let item = await asyncIter.next();
+            let string;
+            if (item.done) {
+                string = '\n';
+            } else {
+                string = String(item.value.num);
+            }
+            const textEncoder = new TextEncoder();
+            const utf8 = new Uint8Array(string.length);
+            textEncoder.encodeInto(string, utf8);
+            controller.enqueue(utf8);
+            if (item.done) {
+                controller.close();
+            }
+        }
+    })
+
+    return new Response(stream);
+}
+EOF
+
+cd "$TEMPDIR"
+
+$CHISEL apply
+
+$CURL --data '' $CHISELD_HOST/dev/stream
+
+# CHECK: 0123456789
