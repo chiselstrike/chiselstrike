@@ -22,11 +22,6 @@ want to use external modules, browser-style should work.
 * **Joins:** We currently don't support explicit Joins. Implicitly the joins are partially supported
 by nested Types (`class Y {z: int}; class X {y: Y}`). Support for explicit joins is coming soon.
 
-* **Multi-file models:** All models have to go in the same file for now. We envision models
-being put in different files (like `Person.ts`, `User.ts`, etc). But because those files are
-essentially modules (and see the first bullet), this will only work at the moment if they are
-all in the same file.
-
 * **Changing types:** It is possible to evolve a model by adding and removing fields that have
 default values without writing any migration file (how awesome is that???), but you can't
 change types of existing fields. We intend to allow some of them to happen automatically, like
