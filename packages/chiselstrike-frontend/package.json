@@ -1,6 +1,6 @@
 {
     "name": "@chiselstrike/frontend",
-    "version": "0.7.0-dev.0",
+    "version": "0.7.0",
     "description": "A library of handy functions to call in frontend code to interact with your ChiselStrike backend.",
     "main": "index.mjs",
     "keywords": [
