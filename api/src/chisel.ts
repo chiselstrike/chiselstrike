@@ -532,9 +532,7 @@ export function createURLPathParser<T extends Record<string, unknown>>(
     loose = false,
 ): ((url: URL) => T) {
     const pathParser = createPathParser<T>(pathTemplate, loose);
-    return function urlPathParser(url: URL): T {
-        return pathParser(url.pathname);
-    };
+    return (url: URL): T => pathParser(url.pathname);
 }
 
 export type CRUDCreateResponse = (
