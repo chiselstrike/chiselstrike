@@ -259,6 +259,7 @@ The methods provided by `ChiselCursor` are outlined in the following table.
 
 | Method                | Description |
 | --------------------- | ----------- |
+| `filter(predicate)`   | Restrict this cursor to contain only entities matching the given function `predicate`. |
 | `filter(restriction)` | Restrict this cursor to contain only entities matching the given `restrictions`. |
 | `forEach(function)`   | Execute `function` for every entity in this cursor. |
 | `select(...fields)`   | Return another cursor with a projection of each entity by `fields`.      |
@@ -267,8 +268,27 @@ The methods provided by `ChiselCursor` are outlined in the following table.
 
 :::note
 The `ChiselCursor` interface is still work-in-progress. For example, methods such as `skip()`,  `map()`, and `reduce()` are planned for future releases.
-Also, the current implementation of `filter()` takes a _restriction object_, but future ChiselStrike runtimes will allow you to write filter functions using TypeScript, which are automatically converted to efficient database queries in many cases.
+Also, the current implementation of `filter()` takes either a _restriction object_ or a function predicate. Filtering using restriction object is already quite efficient and done directly in the database. Predicate filtering can be slower as it's evaluated in TypeScript, but future releases of Chisel runtime will translate most TypeScript predicates to efficient database expressions.
 :::
+
+### `filter`
+
+ChiselCursor supports two overloads of the `filter` method. First accepts a predicate identifying elements to be kept or ignored. As an example, let's find all gmail users:
+
+```typescript
+  const gmailUsers = await User.cursor()
+    .filter((user: User) => {
+      return user.email.endsWith("@gmail.com");
+    });
+}
+```
+
+For convenience, we provide a restriction object filtering. It allows you to filter by *equality* based on an object whose keys correspond to attributes of an Entity matching on respective values. For example, let's find Alice by email:
+
+```typescript
+  const users = await User.cursor().filter({"email": "alice@mit.edu"});
+```
+
 
 ## Transactions
 
