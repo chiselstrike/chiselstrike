@@ -332,6 +332,13 @@ export class ChiselEntity {
             restrictions: restrictions,
         });
     }
+
+    /**
+     * Convenience method for crud() below.
+     */
+    static crud(p: string) {
+        return crud(this, p);
+    }
 }
 
 export class OAuthUser extends ChiselEntity {

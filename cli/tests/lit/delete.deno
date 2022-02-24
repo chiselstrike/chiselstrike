@@ -14,9 +14,8 @@ export class User extends ChiselEntity {
 EOF
 
 cat << EOF > "$TEMPDIR/endpoints/user.ts"
-import { crud } from "@chiselstrike/api";
 import { User } from "../models/user.ts";
-export default crud(User, '/user');
+export default User.crud('/user');
 EOF
 
 $CHISEL apply
