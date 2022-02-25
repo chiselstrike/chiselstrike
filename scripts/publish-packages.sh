@@ -6,7 +6,7 @@
 
 cwd=$(pwd)
 
-cd "$cwd/packages/chiselstrike-api" && npm publish
-cd "$cwd/packages/chiselstrike-cli" && npm publish
-cd "$cwd/packages/chiselstrike-frontend" && npm publish
-cd "$cwd/packages/create-chiselstrike-app" && npm publish
+cd "$cwd/packages/chiselstrike-api" && npm i && npm publish
+cd "$cwd/packages/chiselstrike-cli" && npm i && npm publish
+cd "$cwd/packages/chiselstrike-frontend" && npm i && npm publish
+cd "$cwd/packages/create-chiselstrike-app" && npm i && npm publish
