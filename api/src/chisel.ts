@@ -570,6 +570,7 @@ export type CRUDBaseParams = {
      */
     chiselVersion: string;
 };
+
 export type CRUDMethodSignature<
     T extends ChiselEntity,
     E extends ChiselEntityClass<T>,
@@ -581,6 +582,10 @@ export type CRUDMethodSignature<
     url: URL,
     createResponse: CRUDCreateResponse,
 ) => Promise<Response>;
+
+/**
+ * A dictionary mapping HTTP verbs into corresponding REST methods that process a Request and return a Response.
+ */
 export type CRUDMethods<
     T extends ChiselEntity,
     E extends ChiselEntityClass<T>,
@@ -591,6 +596,7 @@ export type CRUDMethods<
     PUT: CRUDMethodSignature<T, E, P>;
     DELETE: CRUDMethodSignature<T, E, P>;
 };
+
 export type CRUDCreateResponses<
     T extends ChiselEntity,
     E extends ChiselEntityClass<T>,
@@ -601,6 +607,7 @@ export type CRUDCreateResponses<
 
 const defaultCrudMethods: CRUDMethods<ChiselEntity, GenericChiselEntityClass> =
     {
+        // Returns a specific entity matching params.id (if present) or all entities matching the filter in the `f` URL parameter.
         GET: async (
             entity: GenericChiselEntityClass,
             _req: Request,
@@ -620,6 +627,7 @@ const defaultCrudMethods: CRUDMethods<ChiselEntity, GenericChiselEntityClass> =
             const u = await entity.findOne({ id });
             return createResponse(u ?? "Not found", u ? 200 : 404);
         },
+        // Creates and returns a new entity from the `req` payload. Ignores the payload's id property and assigns a fresh one.
         POST: async (
             entity: GenericChiselEntityClass,
             req: Request,
@@ -632,6 +640,7 @@ const defaultCrudMethods: CRUDMethods<ChiselEntity, GenericChiselEntityClass> =
             await u.save();
             return createResponse(u, 200);
         },
+        // Updates and returns the entity matching params.id (which must be set) from the `req` payload.
         PUT: async (
             entity: GenericChiselEntityClass,
             req: Request,
@@ -651,6 +660,8 @@ const defaultCrudMethods: CRUDMethods<ChiselEntity, GenericChiselEntityClass> =
             await u.save();
             return createResponse(u, 200);
         },
+        // Deletes the entity matching params.id (if present) or all entities matching the filter in the `f` URL parameter.
+        // IF `f` IS ABSENT, DELETES ALL ENTITIES!
         DELETE: async (
             entity: GenericChiselEntityClass,
             _req: Request,
@@ -730,8 +741,11 @@ export const standardCRUDMethods = {
  *   defaults to ensure that the created RESTful API works as you would expect.
  * @param config Configure the CRUD behavior:
  *  - `customMethods`: custom request handlers overriding the defaults.
- *     Each present property overrides that method's handler. To remove a certain CRUD operation,
- *     say DELETE, you may provide a `{ customMethods: { DELETE: standardCRUDMethods.methodNotAllowed }}`
+ *     Each present property overrides that method's handler. You can use `standardCRUDMethods` members here to
+ *     conveniently reject some actions. When `customMethods` is absent, we use methods from `defaultCrudMethods`.
+ *     Note that these default methods look for the `id` property in their `params` argument; if set, its value is
+ *     the id of the entity to process. Conveniently, the default `urlTemplate` parser sets this property from the
+ *     `:id` pattern.
  *  - `defaultCreateResponse`: default function to create responses if `createResponse` entry is not provided.
  *     defaults to `responseFromJson()`.
  *  - `createResponses`: replaces `defaultCreateResponse()` and may reformat the response
@@ -746,10 +760,10 @@ export function crud<
     entity: E,
     urlTemplate: string,
     config?: {
+        customMethods?: Partial<CRUDMethods<T, ChiselEntityClass<T>, P>>;
         createResponses?: Partial<
             CRUDCreateResponses<T, ChiselEntityClass<T>, P>
         >;
-        customMethods?: Partial<CRUDMethods<T, ChiselEntityClass<T>, P>>;
         defaultCreateResponse?: CRUDCreateResponse;
         parseParams?: (url: URL) => P;
     },
