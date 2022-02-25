@@ -697,7 +697,16 @@ export const standardCRUDMethods = {
  * ```
  * This results in a /comments endpoint that correctly handles all REST methods over Comment.
  * @param entity Entity type
- * @param path The path with parameters such as `/prefix/:id`, see https://deno.land/x/regexparam
+ * @param urlTemplate Request URL must match this template (see https://deno.land/x/regexparam for syntax).
+ *   Some CRUD methods rely on parts of the URL to identify the resource to apply to. Eg, GET /comments/1234
+ *   returns the comment entity with id=1234, while GET /comments returns all comments. This parameter describes
+ *   how to find the relevant parts in the URL. Default CRUD methods (see `defaultCrudMethods`) look for the :id
+ *   part in this template to identify specific entity instances. If there is no :id in the template, then '/:id'
+ *   is automatically added to its end. Custom methods can use other named parts. NOTE: because of file-based
+ *   routing, `urlTemplate` must necessarily begin with the path of the endpoint invoking this function; it's the
+ *   only way for the request URL to match it. Eg, if `crud()` is invoked by the file `endpoints/a/b/foo.ts`, the
+ *   `urlTemplate` must begin with 'a/b/foo'; in fact, it can be exactly 'a/b/foo', taking advantage of reasonable
+ *   defaults to ensure that the created RESTful API works as you would expect.
  * @param config Configure the CRUD behavior:
  *  - `customMethods`: custom request handlers overriding the defaults.
  *     Each present property overrides that method's handler. To remove a certain CRUD operation,
@@ -714,7 +723,7 @@ export function crud<
     P extends CRUDBaseParams = CRUDBaseParams,
 >(
     entity: E,
-    path: string, // "/prefix/:id", see https://deno.land/x/regexparam
+    urlTemplate: string,
     config?: {
         createResponses?: Partial<
             CRUDCreateResponses<T, ChiselEntityClass<T>, P>
@@ -725,8 +734,8 @@ export function crud<
     },
 ): (req: Request) => Promise<Response> {
     const pathTemplate = "/:chiselVersion" +
-        (path.startsWith("/") ? "" : "/") +
-        (path.includes(":id") ? path : `${path}/:id`);
+        (urlTemplate.startsWith("/") ? "" : "/") +
+        (urlTemplate.includes(":id") ? urlTemplate : `${urlTemplate}/:id`);
 
     const defaultCreateResponse = config?.defaultCreateResponse ||
         responseFromJson;
