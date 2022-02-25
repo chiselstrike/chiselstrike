@@ -872,8 +872,13 @@ async fn get_result(
 async fn commit_transaction(
     transaction: TransactionStatic,
 ) -> Result<Option<(Box<[u8]>, TransactionStatic)>, anyhow::Error> {
-    crate::datastore::QueryEngine::commit_transaction_static(transaction).await?;
-    Ok(None)
+    match crate::datastore::QueryEngine::commit_transaction_static(transaction).await {
+        Ok(()) => Ok(None),
+        Err(e) => {
+            warn!("Commit failed: {}", e);
+            Err(e)
+        }
+    }
 }
 
 pub(crate) async fn run_js(path: String, mut req: Request<hyper::Body>) -> Result<Response<Body>> {
