@@ -696,7 +696,7 @@ export const standardCRUDMethods = {
  * export default crud(Comment, "/comments/:id");
  * ```
  * This results in a /comments endpoint that correctly handles all REST methods over Comment.
- * @param this Entity type
+ * @param entity Entity type
  * @param path The path with parameters such as `/prefix/:id`, see https://deno.land/x/regexparam
  * @param config Configure the CRUD behavior:
  *  - `customMethods`: custom request handlers overriding the defaults.
