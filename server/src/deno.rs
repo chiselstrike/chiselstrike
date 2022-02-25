@@ -615,10 +615,22 @@ impl Future for ResolveFuture {
     }
 }
 
+fn resolve_promise(
+    context: RequestContext,
+    js_promise: v8::Global<v8::Value>,
+) -> impl Future<Output = Result<v8::Global<v8::Value>>> {
+    let inner = ResolveFuture { js_promise };
+    RequestFuture { context, inner }
+}
+
 async fn get_read_future(
-    read_tpl: Option<(v8::Global<v8::Value>, v8::Global<v8::Function>)>,
+    read_tpl: Option<(
+        v8::Global<v8::Value>,
+        v8::Global<v8::Function>,
+        RequestContext,
+    )>,
 ) -> Result<Option<(Box<[u8]>, ())>> {
-    let (reader, read) = match read_tpl {
+    let (reader, read, context) = match read_tpl {
         Some(x) => x,
         None => {
             return Ok(None);
@@ -636,8 +648,7 @@ async fn get_read_future(
             .ok_or(Error::NotAResponse)?;
         v8::Global::new(scope, res)
     };
-    let read_result = ResolveFuture { js_promise };
-    let read_result = read_result.await?;
+    let read_result = resolve_promise(context, js_promise).await?;
     let mut service = get();
     let runtime = &mut service.worker.js_runtime;
     let scope = &mut runtime.handle_scope();
@@ -662,6 +673,7 @@ async fn get_read_future(
 fn get_read_stream(
     runtime: &mut JsRuntime,
     global_response: v8::Global<v8::Value>,
+    context: RequestContext,
 ) -> Result<impl Stream<Item = Result<Box<[u8]>>>> {
     let scope = &mut runtime.handle_scope();
     let response = global_response
@@ -678,7 +690,7 @@ fn get_read_stream(
             let reader: v8::Local<v8::Value> = reader.into();
             let reader: v8::Global<v8::Value> = v8::Global::new(scope, reader);
             let read = v8::Global::new(scope, read);
-            Some((reader, read))
+            Some((reader, read, context))
         }
         Err(_) => None,
     };
@@ -751,6 +763,9 @@ fn current_transaction() -> Result<TransactionStatic> {
     })
 }
 
+// This is a wrapper future that sets the context before polling. This
+// is necessary, since future execution can interleave steps from
+// different requests.
 #[pin_project]
 struct RequestFuture<F: Future> {
     context: RequestContext,
@@ -836,29 +851,13 @@ fn get_result_aux(
 async fn get_result(
     request_handler: v8::Global<v8::Function>,
     req: &mut Request<hyper::Body>,
-    path: String,
-    transaction: TransactionStatic,
+    context: RequestContext,
 ) -> Result<v8::Global<v8::Value>> {
-    let context = RequestContext {
-        method: req.method().clone(),
-        path: RequestPath::try_from(path.as_ref()).unwrap(),
-        userid: crate::auth::get_user(req).await?,
-        transaction: Some(transaction.clone()),
-    };
-
     // Set the current path to cover JS code that runs before
     // blocking. This in particular covers code that doesn't block at
     // all.
     let result = with_context(context.clone(), || get_result_aux(request_handler, req))?;
-    // We got here without blocking and now have a future representing
-    // pending work for the endpoint. We might not get to that future
-    // before the current path is changed, so wrap the future in a
-    // RequestFuture that will reset the current path before polling.
-    RequestFuture {
-        context,
-        inner: ResolveFuture { js_promise: result },
-    }
-    .await
+    resolve_promise(context, result).await
 }
 
 async fn commit_transaction(
@@ -918,7 +917,13 @@ pub(crate) async fn run_js(path: String, mut req: Request<hyper::Body>) -> Resul
     };
 
     let transaction = qe.start_transaction_static().await?;
-    let result = get_result(request_handler, &mut req, path, transaction.clone()).await;
+    let context = RequestContext {
+        method: req.method().clone(),
+        path: RequestPath::try_from(path.as_ref()).unwrap(),
+        userid: crate::auth::get_user(&req).await?,
+        transaction: Some(transaction.clone()),
+    };
+    let result = get_result(request_handler, &mut req, context.clone()).await;
     // FIXME: maybe defer creating the transaction until we need one, to avoid doing it for
     // endpoints that don't do any data access. For now, because we always create it above,
     // it should be safe to unwrap.
@@ -929,7 +934,7 @@ pub(crate) async fn run_js(path: String, mut req: Request<hyper::Body>) -> Resul
         let service: &mut DenoService = &mut service;
         let runtime = &mut service.worker.js_runtime;
 
-        let stream = get_read_stream(runtime, result.clone())?;
+        let stream = get_read_stream(runtime, result.clone(), context)?;
         let commit_stream = try_unfold(transaction.clone(), commit_transaction);
         let stream = stream.chain(commit_stream);
 
@@ -1014,10 +1019,13 @@ pub(crate) async fn compile_endpoint<P: AsRef<Path>>(
         runtime.execute_script(&path, &format!("import(\"{}\")", url))?
     };
 
-    let module = ResolveFuture {
-        js_promise: promise,
+    let context = RequestContext {
+        method: Method::GET,
+        path: RequestPath::try_from(path.as_ref()).unwrap(),
+        userid: None,
+        transaction: None,
     };
-    let module = module.await?;
+    let module = resolve_promise(context, promise).await?;
 
     let mut service = get();
     let service: &mut DenoService = &mut service;
