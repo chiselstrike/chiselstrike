@@ -34,7 +34,7 @@ export default async function chisel(req: Request) {
     ceo.firstName = "Adalbrecht";
     await company.save();
 
-    return new Response('ok');
+    return new Response('Successfully stored data');
 }
 EOF
 
@@ -42,11 +42,11 @@ cat << EOF > "$TEMPDIR/endpoints/query_people.ts"
 import { Person } from "../models/types.ts";
 
 export default async function chisel(req: Request) {
-    let ret = "[";
-    for await (let person of Person.cursor()) {
-        ret += "(" + person.firstName + " " + person.lastName + ") ";
-    }
-    return new Response(ret + "]");
+    const results = (await Person.cursor().toArray())
+        .map(p => {
+            return "(" + p.firstName + ", " + p.lastName + ")";
+        });
+    return new Response("[" + results.join(", ") + "]");
 }
 EOF
 
@@ -54,13 +54,13 @@ cat << EOF > "$TEMPDIR/endpoints/query_companies.ts"
 import { Company } from "../models/types.ts";
 
 export default async function chisel(req: Request) {
-    let ret = "[";
+    const results: string[] = [];
     for await (let company of Company.cursor()) {
         if (company.ceo) {
-            ret += "(" + company.name + " " + company.ceo.firstName + ") ";
+            results.push("(" + company.name + ", " + company.ceo.firstName + ")");
         }
     }
-    return new Response(ret + "]");
+    return new Response("[" + results.join(", ") + "]");
 }
 EOF
 
@@ -74,12 +74,38 @@ $CHISEL apply
 # CHECK: End point defined: /dev/store_adalbrecht
 
 $CURL -X POST $CHISELD_HOST/dev/store_adalbrecht
-# CHECK: ok
+# CHECK: Successfully stored data
 
 $CURL -o - $CHISELD_HOST/dev/query_people
 # CHECK: HTTP/1.1 200 OK
-# CHECK: [(Adalbrecht Neuer) ]
+# CHECK: [(Adalbrecht, Neuer)]
 
 $CURL -o - $CHISELD_HOST/dev/query_companies
 # CHECK: HTTP/1.1 200 OK
-# CHECK: [(Bananas inc. Adalbrecht) ]
+# CHECK: [(Bananas inc., Adalbrecht)]
+
+
+
+## Test find + update
+
+cat << EOF > "$TEMPDIR/endpoints/update.js"
+import { Company, Person } from "../models/types.ts";
+
+export default async function chisel(req: Request) {
+    const company = await Company.findOne({"name": "Bananas inc."})
+    company.ceo.lastName = "Someone completely different";
+
+    await company.save();
+
+    return new Response('Successfully updated');
+}
+EOF
+
+$CHISEL apply
+
+$CURL -X POST $CHISELD_HOST/dev/update
+# CHECK: Successfully updated
+
+$CURL -o - $CHISELD_HOST/dev/query_people
+# CHECK: HTTP/1.1 200 OK
+# CHECK: [(Adalbrecht, Someone completely different)]
