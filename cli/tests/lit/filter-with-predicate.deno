@@ -25,6 +25,12 @@ export default async function chisel(req: Request) {
     pekka.name = "Pekka";
     pekka.age = 144;
     await pekka.save();
+
+    const jan = new Person();
+    jan.name = "Jan";
+    jan.age = 144;
+    await jan.save();
+
     return new Response("Ok");
 }
 EOF
@@ -50,22 +56,21 @@ export default async function chisel(req: Request) {
     const reversedName = url.searchParams.get("reversedName") ?? undefined;
     const fiboAge = url.searchParams.get("fibonacciAge") ?? undefined;
 
-    const filtered = Person.cursor().filter((p: Person) => {
-        if (name !== undefined) {
-            return p.name == name;
-        } else if (reversedName !== undefined) {
-            return reverse(p.name) == reversedName;
-        } else if (fiboAge !== undefined) {
-            return fib(Number(fiboAge)) == p.age;
-        } else {
-            throw new Error("No parameter");
-        }
-    });
+    const filtered = Person.cursor()
+        .sortBy("name")
+        .filter((p: Person) => {
+            if (name !== undefined) {
+                return p.name == name;
+            } else if (reversedName !== undefined) {
+                return reverse(p.name) == reversedName;
+            } else if (fiboAge !== undefined) {
+                return fib(Number(fiboAge)) == p.age;
+            } else {
+                throw new Error("No parameter");
+            }
+        });
 
-    let results: string[] = [];
-    for await (let p of filtered) {
-        results.push(p.name);
-    }
+    const results = (await filtered.toArray()).map(p => p.name);
     return new Response("[" + results.join(", ") + "]");
 }
 EOF
@@ -87,6 +92,9 @@ $CURL -o - $CHISELD_HOST/dev/findall?name="Glauber"
 $CURL -o - $CHISELD_HOST/dev/findall?name="Pekka"
 # CHECK: [Pekka]
 
+$CURL -o - $CHISELD_HOST/dev/findall?name="Jan"
+# CHECK: [Jan]
+
 $CURL -o - $CHISELD_HOST/dev/findall?name="123"
 # CHECK: []
 
@@ -102,7 +110,7 @@ $CURL -o - $CHISELD_HOST/dev/findall?fibonacciAge=11
 # CHECK: [Glauber]
 
 $CURL -o - $CHISELD_HOST/dev/findall?fibonacciAge=12
-# CHECK: [Pekka]
+# CHECK: [Jan, Pekka]
 
 
 
@@ -112,14 +120,39 @@ cat << EOF > "$TEMPDIR/endpoints/filter_and_take.ts"
 import { Person } from "../models/types.ts";
 
 export default async function chisel(req: Request) {
-    const filtered = Person.cursor().filter((p: Person) => {
-       return p.name == "Glauber" || p.name == "Pekka";
-    }).take(1);
+    const filtered = Person.cursor()
+        .sortBy("name")
+        .filter((p: Person) => {
+            return p.name == "Glauber" || p.name == "Pekka";
+        })
+        .take(1);
 
-    let results: string[] = [];
-    for await (let p of filtered) {
-        results.push(p.name);
-    }
+    const results = (await filtered.toArray()).map(p => p.name);
+    return new Response("[" + results.join(", ") + "]");
+}
+EOF
+
+cd "$TEMPDIR"
+$CHISEL apply
+
+$CURL -o - $CHISELD_HOST/dev/filter_and_take
+# CHECK: [Glauber]
+
+
+
+## Filter after take
+
+cat << EOF > "$TEMPDIR/endpoints/filter_and_take.ts"
+import { Person } from "../models/types.ts";
+
+export default async function chisel(req: Request) {
+    const filtered = Person.cursor()
+        .take(2)
+        .filter((p: Person) => {
+            return p.name == "Glauber";
+        });
+
+    const results = (await filtered.toArray()).map(p => p.name);
     return new Response("[" + results.join(", ") + "]");
 }
 EOF
@@ -138,14 +171,38 @@ cat << EOF > "$TEMPDIR/endpoints/filter_and_restrict.ts"
 import { Person } from "../models/types.ts";
 
 export default async function chisel(req: Request) {
-    const filtered = Person.cursor().filter((p: Person) => {
-       return true;
-    }).filter({"name": "Pekka"});
+    const filtered = Person.cursor()
+        .filter((p: Person) => {
+            return p.name == "Pekka" || p.name == "Jan";
+        })
+        .filter({"name": "Pekka"});
 
-    let results: string[] = [];
-    for await (let p of filtered) {
-        results.push(p.name);
-    }
+    const results = (await filtered.toArray()).map(p => p.name);
+    return new Response("[" + results.join(", ") + "]");
+}
+EOF
+
+cd "$TEMPDIR"
+$CHISEL apply
+
+$CURL -o - $CHISELD_HOST/dev/filter_and_restrict
+# CHECK: [Pekka]
+
+
+
+## Filter after restriction
+
+cat << EOF > "$TEMPDIR/endpoints/filter_and_restrict.ts"
+import { Person } from "../models/types.ts";
+
+export default async function chisel(req: Request) {
+    const filtered = Person.cursor()
+        .filter({"age": 144})
+        .filter((p: Person) => {
+            return p.name == "Pekka";
+        });
+
+    const results = (await filtered.toArray()).map(p => p.name);
     return new Response("[" + results.join(", ") + "]");
 }
 EOF
@@ -168,10 +225,32 @@ export default async function chisel(req: Request) {
        return p.name == "Glauber";
     }).select("age");
 
-    let results: string[] = [];
-    for await (let p of filtered) {
-        results.push(JSON.stringify(p));
-    }
+    const results = (await filtered.toArray()).map(p => JSON.stringify(p));
+    return new Response("[" + results.join(", ") + "]");
+}
+EOF
+
+cd "$TEMPDIR"
+$CHISEL apply
+
+$CURL -o - $CHISELD_HOST/dev/filter_and_select
+# CHECK: [{"age":89}]
+
+
+
+## Filter after select
+
+cat << EOF > "$TEMPDIR/endpoints/filter_and_select.ts"
+import { Person } from "../models/types.ts";
+
+export default async function chisel(req: Request) {
+    const filtered = Person.cursor()
+        .select("age")
+        .filter((p) => {
+            return p.age == 89;
+        });
+
+    const results = (await filtered.toArray()).map(p => JSON.stringify(p));
     return new Response("[" + results.join(", ") + "]");
 }
 EOF
