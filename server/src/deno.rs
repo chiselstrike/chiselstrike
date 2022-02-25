@@ -710,13 +710,13 @@ mod context {
     use crate::deno::RequestContext;
     use std::cell::RefCell;
     thread_local! {
-        static CURRENT_CONTEXT : RefCell<RequestContext> = RefCell::new(Default::default());
+        static CURRENT_CONTEXT : RefCell<Option<RequestContext>> = RefCell::new(None);
     }
     pub(super) fn with_current_context<F, R>(f: F) -> R
     where
         F: FnOnce(&RequestContext) -> R,
     {
-        CURRENT_CONTEXT.with(|cx| f(&*cx.borrow()))
+        CURRENT_CONTEXT.with(|cx| f(cx.borrow().as_ref().unwrap()))
     }
 
     pub(super) fn with_context<F, R>(nc: RequestContext, f: F) -> R
@@ -725,7 +725,7 @@ mod context {
     {
         CURRENT_CONTEXT.with(|cx| {
             let old = cx.borrow().clone();
-            cx.replace(nc);
+            cx.replace(Some(nc));
             let ret = f();
             cx.replace(old);
             ret
