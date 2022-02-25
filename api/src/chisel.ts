@@ -750,7 +750,8 @@ export const standardCRUDMethods = {
  *  - `createResponses`: if present, a dictionary of method-specific Response creators.
  *  - `defaultCreateResponse`: default function to create all responses if `createResponses` entry is not provided.
  *     Defaults to `responseFromJson()`.
- *  - `parseParams`: parse the URL parameters instead of using https://deno.land/x/regexparam
+ *  - `parsePath`: parses the URL path instead of https://deno.land/x/regexparam. The parsing result is passed to
+ *     CRUD methods as the `params` argument.
  * @returns A request-handling function suitable as a default export in and endpoint.
  */
 export function crud<
@@ -766,7 +767,7 @@ export function crud<
             CRUDCreateResponses<T, ChiselEntityClass<T>, P>
         >;
         defaultCreateResponse?: CRUDCreateResponse;
-        parseParams?: (url: URL) => P;
+        parsePath?: (url: URL) => P;
     },
 ): (req: Request) => Promise<Response> {
     const pathTemplate = "/:chiselVersion" +
@@ -775,7 +776,7 @@ export function crud<
 
     const defaultCreateResponse = config?.defaultCreateResponse ||
         responseFromJson;
-    const parseParams = config?.parseParams ||
+    const parsePath = config?.parsePath ||
         createURLPathParser(pathTemplate);
     const localDefaultCrudMethods =
         defaultCrudMethods as unknown as CRUDMethods<T, E, P>;
@@ -795,7 +796,7 @@ export function crud<
         }
 
         const url = new URL(req.url);
-        const params = parseParams(url);
+        const params = parsePath(url);
         return method(entity, req, params, url, createResponse);
     };
 }
