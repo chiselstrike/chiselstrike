@@ -556,6 +556,7 @@ export function createURLPathParser<T extends Record<string, unknown>>(
     return (url: URL): T => pathParser(url.pathname);
 }
 
+/** Creates a Response object from response body and status. */
 export type CRUDCreateResponse = (
     body: unknown,
     status: number,
@@ -746,9 +747,9 @@ export const standardCRUDMethods = {
  *     Note that these default methods look for the `id` property in their `params` argument; if set, its value is
  *     the id of the entity to process. Conveniently, the default `urlTemplate` parser sets this property from the
  *     `:id` pattern.
- *  - `defaultCreateResponse`: default function to create responses if `createResponse` entry is not provided.
- *     defaults to `responseFromJson()`.
- *  - `createResponses`: replaces `defaultCreateResponse()` and may reformat the response
+ *  - `createResponses`: if present, a dictionary of method-specific Response creators.
+ *  - `defaultCreateResponse`: default function to create all responses if `createResponses` entry is not provided.
+ *     Defaults to `responseFromJson()`.
  *  - `parseParams`: parse the URL parameters instead of using https://deno.land/x/regexparam
  * @returns A request-handling function suitable as a default export in and endpoint.
  */
