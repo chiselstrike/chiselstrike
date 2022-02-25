@@ -912,7 +912,8 @@ async fn resolve_promise(js_promise: v8::Global<v8::Value>) -> Result<v8::Global
     anyhow::bail!(obj.get(scope, key).unwrap().to_rust_string_lossy(scope));
 }
 
-async fn get_read_future(read: v8::Global<v8::Function>) -> Result<Option<(Box<[u8]>, ())>> {
+type ReadFutureState = v8::Global<v8::Function>;
+async fn get_read_future(read: ReadFutureState) -> Result<Option<(Box<[u8]>, ReadFutureState)>> {
     let read_result = {
         let mut service = get();
         let runtime = &mut service.worker.js_runtime;
@@ -938,7 +939,7 @@ async fn get_read_future(read: v8::Global<v8::Function>) -> Result<Option<(Box<[
     let copied = value.copy_contents(&mut buffer);
     // FIXME: Check in V8 to see when this might fail
     assert!(copied == size);
-    Ok(Some((buffer.into_boxed_slice(), ())))
+    Ok(Some((buffer.into_boxed_slice(), read)))
 }
 
 fn get_read_stream(
@@ -953,7 +954,7 @@ fn get_read_stream(
 
     let read = get_member::<v8::Local<v8::Function>>(response, scope, "read")?;
     let read = v8::Global::new(scope, read);
-    Ok(try_unfold((), move |_| get_read_future(read.clone())))
+    Ok(try_unfold(read, get_read_future))
 }
 
 struct BodyResource {
