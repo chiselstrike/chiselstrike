@@ -484,9 +484,9 @@ type ChiselEntityClass<T extends ChiselEntity> = {
 type GenericChiselEntityClass = ChiselEntityClass<ChiselEntity>;
 
 /**
- * Get the filters to be used with a ChiselEntity from an URL.
+ * Get the filters to be used with a ChiselEntity from a URL.
  *
- * This will get the URL search parameter "f" and assume it's JSON object.
+ * This will get the URL search parameter "f" and assume it's a JSON object.
  * @param _entity the entity class that will be filtered
  * @param url the url that provides the search parameters
  * @returns the partial filters, note that it may return an empty object, meaning all objects will be returned/deleted.
@@ -752,7 +752,7 @@ export const standardCRUDMethods = {
  *     Defaults to `responseFromJson()`.
  *  - `parsePath`: parses the URL path instead of https://deno.land/x/regexparam. The parsing result is passed to
  *     CRUD methods as the `params` argument.
- * @returns A request-handling function suitable as a default export in and endpoint.
+ * @returns A request-handling function suitable as a default export in an endpoint.
  */
 export function crud<
     T extends ChiselEntity,
