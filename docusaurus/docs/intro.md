@@ -441,9 +441,38 @@ above example becomes simply:
 
 ```typescript title="my-backend/endpoints/comments.ts"
 import { BlogComment } from "../models/models"
-export default BlogComment.crud('/models');
+export default BlogComment.crud('comments'); // Argument must match endpoint path.
 ```
 
 This endpoint handles GET, POST, PUT, and DELETE on `BlogComment`,
 instantly allowing clients to perform CRUD operations on the persisted
-collection of blog comments.
+collection of blog comments.  (In just two lines of code!)
+
+CRUD generation is infinitely customizable; please see its JSDoc for
+an extensive description.  Here is an example that forbids DELETE,
+POST, and PUT while extending the GET result with either `{"data":
+VALUE}` or `{"error": "message"}`:
+
+```typescript title="my-backend/endpoints/comments-readonly.ts"
+import { crud, standardCRUDMethods, responseFromJson } from "@chiselstrike/api";
+import { BlogComment } from "../models/models";
+export default crud(
+    BlogComment,
+    "/comments/:id", /* :id can be explicitly provided */
+    {
+        customMethods: {
+            DELETE: standardCRUDMethods.methodNotAllowed,
+            POST: standardCRUDMethods.methodNotAllowed,
+            PUT: standardCRUDMethods.methodNotAllowed,
+        },
+        createResponses: {
+            GET: (body: unknown, status: number) => {
+                if (status < 400) {
+                    return responseFromJson({ data: body }, status);
+                }
+                return responseFromJson({ error: body }, status);
+            },
+        }
+    },
+);
+```
