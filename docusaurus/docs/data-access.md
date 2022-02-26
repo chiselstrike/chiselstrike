@@ -223,7 +223,7 @@ provides a cursor-based API for writing composable queries.
 
 A cursor can be thought of as an index to an array of entities in the data store.
 The `ChiselEntity` base class provides a `cursor()` method to obtain a `ChiselCursor`.
-The `ChiselCursor` class provides variety of composable operations, such as `filter()`, `take()`, `select`, and so on for writing complex queries.
+The `ChiselCursor` class provides variety of composable operations, such as `filter()`, `take()`, `select()`, and so on for writing complex queries.
 The actual query uses _deferred execution_, which allows the ChiselStrike runtime to optimize the query.
 
 :::note
@@ -273,17 +273,14 @@ Also, the current implementation of `filter()` takes either a _restriction objec
 
 ### `filter`
 
-ChiselCursor supports two overloads of the `filter` method. First accepts a predicate identifying elements to be kept or ignored. As an example, let's find all gmail users:
+ChiselCursor supports two overloads of the `filter` method. The first accepts a predicate identifying elements to be kept or ignored. As an example, let's find all Gmail users:
 
 ```typescript
   const gmailUsers = await User.cursor()
-    .filter((user: User) => {
-      return user.email.endsWith("@gmail.com");
-    });
-}
+    .filter((user: User) => user.email.endsWith("@gmail.com"));
 ```
 
-For convenience, we provide a restriction object filtering. It allows you to filter by *equality* based on an object whose keys correspond to attributes of an Entity matching on respective values. For example, let's find Alice by email:
+The second overload takes a restriction-object parameter. It allows you to filter by *equality* based on an object whose keys correspond to attributes of an Entity matching on respective values. For example, let's find Alice by email:
 
 ```typescript
   const users = await User.cursor().filter({"email": "alice@mit.edu"});
