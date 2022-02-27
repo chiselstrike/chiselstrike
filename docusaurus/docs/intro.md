@@ -89,12 +89,6 @@ change.  To stop it, run `pkill chisel` in a terminal.  For full
 reference of `chisel` command usage, please see [this
 page](Reference/chisel-cli) or run `chisel --help`.
 
-:::tip
-By default, ChiselStrike doesn't check your types (we assume your IDE did that for you!), which results
-in faster loading of your endpoints. Our cli can bundle type checking by calling `tsc` directly, which can
-be achieved by passing the `--type-check` option to `npm run dev`, or to the apply command `npx chisel apply`
-:::
-
 ## Generating Endpoints
 
 Now that ChiselStrike is running, we can attempt to access our
@@ -184,6 +178,12 @@ export class BlogComment extends ChiselEntity {
 }
 ```
 
+:::tip
+You are able to specify default values in your type properties, like you would for a normal typescript
+class. Properties can be added or removed as you go if they have default values, so it is always recommended
+you add them.
+:::
+
 When you save this file, you should see this line in the `chisel dev`
 output:
 
@@ -191,16 +191,17 @@ output:
 Model defined: BlogComment
 ```
 
-:::tip
-You are able to specify default values in your type properties, like you would for a normal typescript
-class. Properties can be added or removed as you go if they have default values, so it is always recommended
-you add them.
-:::
-
 What this does is define an entity named `BlogComment` with one string
 field named `content`.  ChiselStrike will process this and begin
-storing `BlogComment` objects in its database.  To populate it, add the
-following file:
+storing `BlogComment` objects in its database.
+
+:::tip
+By default, ChiselStrike doesn't check your types (we assume your IDE did that for you!), which results
+in faster loading of your endpoints. Our cli can bundle type checking by calling `tsc` directly, which can
+be achieved by passing the `--type-check` option to `npm run dev`, or to the apply command `npx chisel apply`
+:::
+
+To populate `BlogComment` in the database, add the following file:
 
 ```typescript title="my-backend/endpoints/populate-comments.ts"
 import { BlogComment } from "../models/models";
