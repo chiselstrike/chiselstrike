@@ -191,14 +191,6 @@ output:
 Model defined: BlogComment
 ```
 
-:::info Feedback Requested! We could use your help!
-Currently, we don't support relations (models as part of other models). We expect
-to add support for that in the next version of the beta.
-
-* Would you prefer to just add a property that references another type, or provide type decorators to guide the process?
-* What kind of complicated relationships do you want to handle, and what is challenging about them in your current solutions?
-:::
-
 :::tip
 You are able to specify default values in your type properties, like you would for a normal typescript
 class. Properties can be added or removed as you go if they have default values, so it is always recommended
