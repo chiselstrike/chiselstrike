@@ -2,7 +2,6 @@
 
 use crate::datastore::query::{Mutation, Query, SelectField, SqlValue};
 use crate::datastore::{DbConnection, Kind};
-use crate::policies::FieldPolicies;
 use crate::types::{Field, ObjectDelta, ObjectType, Type, OAUTHUSER_TYPE_NAME};
 use crate::JsonObject;
 use anyhow::{anyhow, Context as AnyhowContext, Result};
@@ -329,6 +328,7 @@ impl QueryEngine {
                     type_,
                     column_idx,
                     is_optional,
+                    transform,
                     ..
                 } => {
                     if *is_optional && column_is_null(row, *column_idx) {
@@ -340,7 +340,7 @@ impl QueryEngine {
                             json!(val)
                         }};
                     }
-                    let val = match type_ {
+                    let mut val = match type_ {
                         Type::Float => {
                             // https://github.com/launchbadge/sqlx/issues/1596
                             // sqlx gets confused if the float doesn't have decimal points.
@@ -360,17 +360,26 @@ impl QueryEngine {
                         }
                         Type::Object(_) => anyhow::bail!("object is not a scalar"),
                     };
+                    if let Some(tr) = transform {
+                        // Apply policy transformation
+                        val = tr(val);
+                    }
                     ret.insert(name.clone(), val);
                 }
                 SelectField::Entity {
                     name,
                     children,
                     is_optional,
+                    transform,
                 } => {
                     if *is_optional && column_is_null(row, id_idx(children)) {
                         continue;
                     }
-                    let val = json!(Self::row_to_json(children, row)?);
+                    let mut val = json!(Self::row_to_json(children, row)?);
+                    if let Some(tr) = transform {
+                        // Apply policy transformation
+                        val = tr(val);
+                    }
                     ret.insert(name.clone(), val);
                 }
             }
@@ -396,32 +405,17 @@ impl QueryEngine {
         Ok(o)
     }
 
-    /// FIXME: This function should perform recursive descend into nested fields.
-    fn apply_policies(o: Result<ResultRow>, policies: &FieldPolicies) -> Result<ResultRow> {
-        let mut o = o?;
-        for (k, v) in o.iter_mut() {
-            if let Some(xform) = policies.transforms.get(k) {
-                *v = xform(v.take());
-            }
-        }
-        Ok(o)
-    }
-
     /// Execute the given `query` and return a stream to the results.
     pub(crate) fn query(
         &self,
         tr: TransactionStatic,
         query: Query,
     ) -> anyhow::Result<QueryResults> {
-        let policies = query.policies;
         let allowed_fields = query.allowed_fields;
 
         let stream = new_query_results(query.raw_sql, tr);
         let stream = stream.map(move |row| Self::row_to_json(&query.fields, &row?));
-        let stream = Box::pin(stream.map(move |o| {
-            let o = Self::project(o, &allowed_fields);
-            Self::apply_policies(o, &policies)
-        }));
+        let stream = Box::pin(stream.map(move |o| Self::project(o, &allowed_fields)));
         Ok(stream)
     }
 

@@ -31,7 +31,11 @@ impl From<&str> for SqlValue {
 
 #[derive(Debug, Clone)]
 pub struct Restriction {
-    k: String,
+    /// Table in which `column` can be found. If unspecified, base select table will be used.
+    table: Option<String>,
+    /// Database column name used for equality restriction.
+    column: String,
+    /// The value used to restrict the results.
     v: SqlValue,
 }
 
@@ -46,6 +50,8 @@ pub(crate) enum SelectField {
         /// Index of a column containing this field in the resulting row we get from
         /// the database.
         column_idx: usize,
+        /// Policy transformation to be applied on the resulting JSON value.
+        transform: Option<fn(Value) -> Value>,
     },
     Entity {
         /// Name of the original Type field
@@ -53,6 +59,8 @@ pub(crate) enum SelectField {
         is_optional: bool,
         /// Nested fields of the Entity object.
         children: Vec<SelectField>,
+        /// Policy transformation to be applied on the resulting JSON value.
+        transform: Option<fn(Value) -> Value>,
     },
 }
 
@@ -75,8 +83,6 @@ pub(crate) struct Query {
     /// FIXME: The post-filtering is suboptimal solution and selection should happen when
     /// we build the raw_sql query.
     pub(crate) allowed_fields: Option<HashSet<String>>,
-    /// Field policies to be applied on the resulting response.
-    pub(crate) policies: FieldPolicies,
 }
 
 /// Represents JOIN operator joining `lalias` table using `lkey` with Entity of `rtype`
@@ -109,13 +115,12 @@ struct QueryBuilder {
     restrictions: Vec<Restriction>,
     /// List of fields to be returned to the user.
     allowed_fields: Option<HashSet<String>>,
-    policies: FieldPolicies,
     /// Limits how many rows/entries will be returned to the user.
     limit: Option<u64>,
 }
 
 impl QueryBuilder {
-    fn new(base_type: Arc<ObjectType>, policies: FieldPolicies) -> Self {
+    fn new(base_type: Arc<ObjectType>) -> Self {
         Self {
             fields: vec![],
             columns: vec![],
@@ -123,7 +128,6 @@ impl QueryBuilder {
             joins: vec![],
             restrictions: vec![],
             allowed_fields: None,
-            policies,
             limit: None,
         }
     }
@@ -132,14 +136,15 @@ impl QueryBuilder {
     /// given type `ty`. This is done in a shallow manner. Columns representing foreign
     /// key are returned as string, not as the related Entity.
     fn from_type(ty: &Arc<ObjectType>) -> Self {
-        let mut builder = Self::new(ty.clone(), FieldPolicies::default());
+        let mut builder = Self::new(ty.clone());
         for field in ty.all_fields() {
             let mut field = field.clone();
             field.type_ = match field.type_ {
                 Type::Object(_) => Type::String, // This is actually a foreign key.
                 ty => ty,
             };
-            let field = builder.make_scalar_field(&field, ty.backing_table(), field.name.as_str());
+            let field =
+                builder.make_scalar_field(&field, ty.backing_table(), field.name.as_str(), None);
             builder.fields.push(field)
         }
         builder
@@ -157,10 +162,9 @@ impl QueryBuilder {
             }
             _ => anyhow::bail!("Unexpected type name as select base type: {}", ty_name),
         };
-        let policies = make_field_policies(&runtime, &ty);
 
-        let mut builder = Self::new(ty.clone(), policies);
-        builder.fields = builder.load_fields(&ty, ty.backing_table());
+        let mut builder = Self::new(ty.clone());
+        builder.fields = builder.load_fields(&runtime, &ty, ty.backing_table());
         Ok(builder)
     }
 
@@ -169,12 +173,14 @@ impl QueryBuilder {
         field: &Field,
         table_name: &str,
         column_name: &str,
+        transform: Option<fn(Value) -> Value>,
     ) -> SelectField {
         let select_field = SelectField::Scalar {
             name: field.name.clone(),
             type_: field.type_.clone(),
             is_optional: field.is_optional,
             column_idx: self.columns.len(),
+            transform,
         };
         self.columns
             .push((table_name.to_owned(), column_name.to_owned(), field.clone()));
@@ -184,7 +190,15 @@ impl QueryBuilder {
     /// Loads all Fields of a given type `ty` to be retrieved from the
     /// database. For fields that represent a nested Entity a join is
     /// generated and we attempt to retrieve them recursivelly as well.
-    fn load_fields(&mut self, ty: &Arc<ObjectType>, current_table: &str) -> Vec<SelectField> {
+    fn load_fields(
+        &mut self,
+        runtime: &runtime::Runtime,
+        ty: &Arc<ObjectType>,
+        current_table: &str,
+    ) -> Vec<SelectField> {
+        let policies = make_field_policies(runtime, ty);
+        self.add_login_restrictions(ty, current_table, &policies);
+
         let mut fields = vec![];
         for field in ty.all_fields() {
             if let Type::Object(nested_ty) = &field.type_ {
@@ -201,18 +215,48 @@ impl QueryBuilder {
                     lalias: current_table.to_owned(),
                     ralias: nested_table.to_owned(),
                 });
+                let field_policy = policies.transforms.get(&field.name).cloned();
 
                 fields.push(SelectField::Entity {
                     name: field.name.clone(),
                     is_optional: field.is_optional,
-                    children: self.load_fields(nested_ty, &nested_table),
+                    children: self.load_fields(runtime, nested_ty, &nested_table),
+                    transform: field_policy,
                 });
             } else {
-                let field = self.make_scalar_field(field, current_table, &field.name);
+                let field_policy = policies.transforms.get(&field.name).cloned();
+                let field = self.make_scalar_field(field, current_table, &field.name, field_policy);
                 fields.push(field)
             }
         }
         fields
+    }
+
+    fn add_login_restrictions(
+        &mut self,
+        ty: &Arc<ObjectType>,
+        current_table: &str,
+        policies: &FieldPolicies,
+    ) {
+        let current_userid = match &policies.current_userid {
+            None => "NULL".to_owned(),
+            Some(id) => id.to_owned(),
+        };
+        for field_name in &policies.match_login {
+            match ty.field_by_name(field_name) {
+                Some(Field {
+                    type_: Type::Object(obj),
+                    ..
+                }) if obj.name() == OAUTHUSER_TYPE_NAME => {
+                    self.restrictions.push(Restriction {
+                        table: Some(current_table.to_owned()),
+                        column: field_name.to_owned(),
+                        v: SqlValue::String(current_userid.clone()),
+                    });
+                }
+                _ => {}
+            }
+        }
     }
 
     fn update_limit(&mut self, limit: u64) {
@@ -235,9 +279,9 @@ impl QueryBuilder {
         let restrictions = convert_restrictions(restrictions)?;
         for r in restrictions {
             anyhow::ensure!(
-                self.base_type.field_by_name(&r.k).is_some(),
+                self.base_type.field_by_name(&r.column).is_some(),
                 "trying to filter by non-existent field `{}`",
-                r.k
+                r.column
             );
             self.restrictions.push(r);
         }
@@ -276,38 +320,10 @@ impl QueryBuilder {
         join_string
     }
 
-    // FIXME: This needs to be done for nested objects as well.
-    fn make_login_restrictions(&self) -> Vec<Restriction> {
-        let current_userid = match &self.policies.current_userid {
-            None => "NULL".to_owned(),
-            Some(id) => id.to_owned(),
-        };
-        let mut restrictions = vec![];
-        for field_name in &self.policies.match_login {
-            match self.base_type.field_by_name(field_name) {
-                Some(Field {
-                    type_: Type::Object(obj),
-                    ..
-                }) if obj.name() == OAUTHUSER_TYPE_NAME => {
-                    restrictions.push(Restriction {
-                        k: field_name.to_owned(),
-                        v: SqlValue::String(current_userid.clone()),
-                    });
-                }
-                _ => {}
-            }
-        }
-        restrictions
-    }
-
     fn make_raw_query(&self) -> String {
         let column_string = self.make_column_string();
         let join_string = self.make_join_string();
-        let raw_restrictions = {
-            let mut restrictions = self.make_login_restrictions();
-            restrictions.extend(self.restrictions.clone());
-            make_restriction_string(&restrictions)
-        };
+        let raw_restrictions = make_restriction_string(&self.restrictions);
 
         let mut raw_sql = format!(
             "SELECT {} FROM \"{}\" {} {}",
@@ -327,7 +343,6 @@ impl QueryBuilder {
             raw_sql: self.make_raw_query(),
             fields: self.fields.clone(),
             allowed_fields: self.allowed_fields.clone(),
-            policies: self.policies.clone(),
         }
     }
 }
@@ -347,10 +362,15 @@ pub(crate) fn make_restriction_string(restrictions: &[Restriction]) -> String {
             SqlValue::F64(v) => format!("{}", v),
             SqlValue::String(v) => escape_string(v),
         };
-        if acc.is_empty() {
-            format!("WHERE \"{}\"={}", rest.k, str_v)
+        let equality = if let Some(table) = &rest.table {
+            format!("\"{}\".\"{}\"={}", table, rest.column, str_v)
         } else {
-            format!("{} AND \"{}\"={}", acc, rest.k, str_v)
+            format!("\"{}\"={}", rest.column, str_v)
+        };
+        if acc.is_empty() {
+            format!("WHERE {}", equality)
+        } else {
+            format!("{} AND {}", acc, equality)
         }
     })
 }
@@ -409,7 +429,11 @@ pub(crate) fn convert_restrictions(restrictions: &JsonObject) -> Result<Vec<Rest
             Value::Array(v) => anyhow::bail!("Array restriction {:?}", v),
             Value::Object(v) => anyhow::bail!("Object restriction {:?}", v),
         };
-        sql_restrictions.push(Restriction { k: k.clone(), v });
+        sql_restrictions.push(Restriction {
+            table: None,
+            column: k.clone(),
+            v,
+        });
     }
     Ok(sql_restrictions)
 }
