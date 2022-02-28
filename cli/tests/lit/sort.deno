@@ -36,14 +36,17 @@ export default async function chisel(req: Request) {
     const url = new URL(req.url);
 
     const key = url.searchParams.get("key");
+    if (key != "name" && key != "age") {
+        throw new Error(`unexpected entity property '${key}'`);
+    }
     const order = url.searchParams.get("order") ?? "ascending";
     const asc = order == "ascending";
 
     const sorted = Person.cursor().sort((lhs: Person, rhs: Person) => {
-        if (key == "name") {
-            return asc === lhs.name < rhs.name; // This works as XNOR
+        if (asc) {
+            return lhs[key] < rhs[key];
         } else {
-            return asc === lhs.age < rhs.age;
+            return lhs[key] > rhs[key];
         }
     });
 
