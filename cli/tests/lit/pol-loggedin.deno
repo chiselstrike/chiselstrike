@@ -83,7 +83,7 @@ export default async function chisel(req: Request) {
     if (req.method == 'POST') {
         let p = Post.build(await req.json());
         let author = await loggedInUser();
-        if (author == null) return responseFromJson('Must be logged in', 401);
+        if (author === undefined) return responseFromJson('Must be logged in', 401);
         p.author = author;
         await p.save();
         return new Response('saved post successfully');

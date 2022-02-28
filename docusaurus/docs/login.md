@@ -127,7 +127,7 @@ This makes it easy to link a `BlogComment` to the user who created it:
 you simply provide a special `author` value when creating it.  The
 ChiselStrike API includes a function named `loggedInUser`, which
 returns the OAuthUser object corresponding to the user currently
-logged in (or `null` if no one is logged in).  This works, for
+logged in (or `undefined` if no one is logged in).  This works, for
 example:
 
 ```typescript title="my-backend/endpoints/example.ts"
@@ -136,7 +136,7 @@ import { loggedInUser, responseFromJson } from '@chiselstrike/api';
 export default async function (req) {
     let c = BlogComment.build(await req.json());
     c.author = await loggedInUser();
-    if (c.author == null) { return responseFromJson('Must be logged in', 401) }
+    if (c.author === undefined) { return responseFromJson('Must be logged in', 401) }
     await c.save();
     return responseFromJson('saved successfully');
 }

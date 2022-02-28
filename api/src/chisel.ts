@@ -514,12 +514,12 @@ export class ChiselEntity {
     static async findOne<T extends ChiselEntity>(
         this: { new (): T },
         restrictions: Partial<T>,
-    ): Promise<T | null> {
+    ): Promise<T | undefined> {
         const it = chiselIterator<T>(this).filter(restrictions).take(1);
         for await (const value of it) {
             return value;
         }
-        return null;
+        return undefined;
     }
 
     /**
@@ -625,9 +625,12 @@ export function unique(): void {
 }
 
 /** Returns the currently logged-in user or null if no one is logged in. */
-export async function loggedInUser(): Promise<OAuthUser | null> {
+export async function loggedInUser(): Promise<OAuthUser | undefined> {
     const id = await Deno.core.opAsync("chisel_user", {});
-    return id == null ? null : await OAuthUser.findOne({ id });
+    if (id == null) {
+        return undefined;
+    }
+    return await OAuthUser.findOne({ id });
 }
 
 // TODO: BEGIN: this should be in another file: crud.ts
@@ -689,7 +692,7 @@ export function regExParamParse(str: string, loose: boolean) {
 
 type ChiselEntityClass<T extends ChiselEntity> = {
     new (): T;
-    findOne: (_: { id: string }) => Promise<T | null>;
+    findOne: (_: { id: string }) => Promise<T | undefined>;
     findMany: (_: Partial<T>) => Promise<Partial<T>[]>;
     build: (...properties: Record<string, unknown>[]) => T;
     delete: (restrictions: Partial<T>) => Promise<void>;
