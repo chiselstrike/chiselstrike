@@ -193,11 +193,11 @@ class Sort extends Operator {
         const cmp = this.comparator;
         return {
             [Symbol.asyncIterator]: async function* () {
-                let elements = [];
+                const elements = [];
                 for await (const e of iter) {
                     elements.push(e);
                 }
-                elements = elements.sort(
+                elements.sort(
                     (lhs: unknown, rhs: unknown) => {
                         return cmp(lhs, rhs) ? -1 : 1;
                     },
@@ -293,7 +293,7 @@ export class ChiselCursor<T> {
      */
     sortBy(key: keyof T, ascending = true): ChiselCursor<T> {
         const cmp = (lhs: T, rhs: T) => {
-            return ascending === lhs[key] < rhs[key];
+            return ascending === (lhs[key] < rhs[key]);
         };
         return new ChiselCursor(
             this.baseConstructor,
