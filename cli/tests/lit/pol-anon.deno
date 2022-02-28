@@ -14,10 +14,10 @@ $CHISEL apply
 # CHECK: End point defined: /dev/ins
 
 $CURL --data '{
-    "first_name":"hello", 
-    "last_name":"world", 
-    "age": 2147483647, 
-    "human": false, 
+    "first_name":"hello",
+    "last_name":"world",
+    "age": 2147483647,
+    "human": false,
     "height": 12742333
 }' -o - $CHISELD_HOST/dev/ins
 
@@ -101,3 +101,70 @@ $CHISEL apply
 $CURL -o - $CHISELD_HOST/dev/find
 # CHECK: HTTP/1.1 200 OK
 # CHECK: xxxxx xxxxx
+
+
+
+## Test anonymization of related entities.
+
+cat << EOF > "$TEMPDIR/policies/pol.yaml"
+labels:
+  - name: pii
+    transform: anonymize
+EOF
+
+cat << EOF > "$TEMPDIR/models/company.ts"
+import { labels } from "@chiselstrike/api";
+
+export class Human extends Chisel.ChiselEntity {
+  @labels("pii") firstName: string = "";
+  lastName: string = "";
+}
+export class Company extends Chisel.ChiselEntity {
+  name: string = "";
+  ceo: Human;
+  @labels("pii") accountant: Human;
+  @labels("pii") secretSauce: string = "AAAA";
+}
+EOF
+
+cat << EOF > "$TEMPDIR/endpoints/companies.ts"
+import { crud } from "@chiselstrike/api";
+import { Company } from "../models/company.ts";
+
+export default crud(
+  Company,
+  "/companies",
+  {
+    defaultCreateResponse: (body: unknown, status: number) => {
+      return new Response(
+        JSON.stringify(
+          body,
+          ["name", "ceo", "accountant", "firstName", "lastName", "secretSauce"],
+          4
+        ), { status }
+      );
+    }
+  }
+);
+EOF
+
+$CHISEL apply
+
+$CURL -d '{
+  "name": "Chiselstrike",
+  "ceo": {"firstName": "Glauber", "lastName": "Costa"},
+  "accountant": {"firstName": "Edward", "lastName": "Ohare"},
+  "secretSauce": "pumpkin"
+}' $CHISELD_HOST/dev/companies
+
+# CHECK: HTTP/1.1 200 OK
+# CHECK: "name": "Chiselstrike"
+
+$CURL $CHISELD_HOST/dev/companies
+# CHECK: HTTP/1.1 200 OK
+# CHECK: "name": "Chiselstrike"
+# CHECK: "ceo":
+# CHECK: "firstName": "xxxxx"
+# CHECK: "lastName": "Costa"
+# CHECK: "accountant": "xxxxx"
+# CHECK: "secretSauce": "xxxxx"

@@ -73,6 +73,10 @@ export class Post extends ChiselEntity {
     text: string = "Lorem Ipsum";
     @labels("protect") author: OAuthUser;
 }
+
+export class Blog extends ChiselEntity {
+  post1?: Post;
+}
 EOF
 
 # FIXME, This should be po.ts once we can import labels in post.ts
@@ -115,3 +119,66 @@ $CHISEL apply
 $CURL -H "ChiselStrikeToken:$token_al" $CHISELD_HOST/dev/po
 # CHECK: HTTP/1.1 200 OK
 # CHECK: [{"text":"first post by al"},{"text":"second post by al"}]
+
+
+
+
+## --------- Test auth with relations ---------
+
+cat << EOF > "$TEMPDIR/endpoints/blogs.js"
+import { Post } from '../models/post.ts';
+import { loggedInUser, responseFromJson } from '@chiselstrike/api';
+export default async function chisel(req: Request) {
+    if (req.method == 'POST') {
+        const b = Blog.build(await req.json());
+        const author = await loggedInUser();
+        if (author == null) return responseFromJson('Must be logged in', 401);
+        b.post1.author = author;
+        await b.save();
+        return new Response('saved post successfully');
+    } else if (req.method == 'GET') {
+        const r = (await Blog.cursor().toArray()).map(b => b.post1.text);
+        return responseFromJson(r);
+    }
+}
+EOF
+
+rm "$TEMPDIR/policies/pol.yaml"
+$CHISEL apply
+# CHECK: End point defined: /dev/blogs
+
+$CURL -H "ChiselStrikeToken:$token_al" -d '{
+  "post1": {"text": "first blog post by al"}
+}' $CHISELD_HOST/dev/blogs
+# CHECK: HTTP/1.1 200 OK
+# CHECK: saved post successfully
+
+$CURL -H "ChiselStrikeToken:$token_als" -d '{
+  "post1": {"text": "first blog post by als"}
+}' $CHISELD_HOST/dev/blogs
+# CHECK: HTTP/1.1 200 OK
+# CHECK: saved post successfully
+
+$CURL -H "ChiselStrikeToken:$token_al" -d '{
+  "post1": {"text": "second blog post by al"}
+}' $CHISELD_HOST/dev/blogs
+# CHECK: HTTP/1.1 200 OK
+# CHECK: saved post successfully
+
+
+$CURL -H "ChiselStrikeToken:$token_al" $CHISELD_HOST/dev/blogs
+# CHECK: HTTP/1.1 200 OK
+# CHECK: ["first blog post by al","first blog post by als","second blog post by al"]
+
+cat << EOF > "$TEMPDIR/policies/pol.yaml"
+labels:
+  - name: protect
+    transform: match_login
+EOF
+$CHISEL apply
+# CHECK:Policy defined for label protect
+
+
+$CURL -H "ChiselStrikeToken:$token_al" $CHISELD_HOST/dev/blogs
+# CHECK: HTTP/1.1 200 OK
+# CHECK: ["first blog post by al","second blog post by al"]
