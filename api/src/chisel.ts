@@ -703,7 +703,7 @@ type GenericChiselEntityClass = ChiselEntityClass<ChiselEntity>;
  * This will get the URL search parameter "f" and assume it's a JSON object.
  * @param _entity the entity class that will be filtered
  * @param url the url that provides the search parameters
- * @returns the partial filters, note that it may return an empty object, meaning all objects will be returned/deleted.
+ * @returns the filter object, if found and successfully parsed; undefined if not found; throws if parsing failed
  */
 export function getEntityFiltersFromURL<
     T extends ChiselEntity,
@@ -875,8 +875,7 @@ const defaultCrudMethods: CRUDMethods<ChiselEntity, GenericChiselEntityClass> =
             await u.save();
             return createResponse(u, 200);
         },
-        // Deletes the entity matching params.id (if present) or all entities matching the filter in the `f` URL parameter.
-        // IF `f` IS ABSENT, DELETES ALL ENTITIES!
+        // Deletes the entity matching params.id (if present) or all entities matching the filter in the `f` URL parameter. One of the two must be present.
         DELETE: async (
             entity: GenericChiselEntityClass,
             _req: Request,
@@ -885,11 +884,19 @@ const defaultCrudMethods: CRUDMethods<ChiselEntity, GenericChiselEntityClass> =
             createResponse: CRUDCreateResponse,
         ) => {
             const { id } = params;
-            const restrictions = !id
-                ? getEntityFiltersFromURL(entity, url)
-                : { id };
-            await entity.delete(restrictions || {}); // TODO: should a missing filter really remove all entities?
-            return createResponse("Deletion successful!", 200);
+            if (id) {
+                await entity.delete({ id });
+                return createResponse(`Deleted ID ${id}`, 200);
+            }
+            const restrictions = getEntityFiltersFromURL(entity, url);
+            if (restrictions) {
+                await entity.delete(restrictions);
+                return createResponse(
+                    `Deleted entities matching ${JSON.stringify(restrictions)}`,
+                    200,
+                );
+            }
+            return createResponse("Neither ID nor filter found", 422);
         },
     } as const;
 
