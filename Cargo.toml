@@ -5,6 +5,7 @@ members = [
     "api",
     "cli",
     "compile",
+    "dbgarc",
     "packages",
     "server",
     "tsc_compile",

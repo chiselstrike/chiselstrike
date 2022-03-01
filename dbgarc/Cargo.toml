@@ -1,0 +1,10 @@
+[package]
+name = "dbgarc"
+version = "0.8.0-dev.0"
+authors = ["ChiselStrike"]
+edition = "2021"
+
+[dependencies]
+backtrace = "0.3.64"
+
+[lib]
