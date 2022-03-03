@@ -32,7 +32,7 @@ abstract class Operator {
 }
 
 /**
- * Specifies Entity whose elements are to be fetched.
+ * Specifies ChiselEntity whose elements are to be fetched.
  */
 class BaseEntity extends Operator {
     constructor(
@@ -422,7 +422,7 @@ export function chiselIterator<T>(type: { new (): T }) {
  * It provides properties that are inherent to a ChiselStrike entity, like an id, and static
  * methods that can be used to obtain a `ChiselCursor`.
  */
-export class ChiselEntity {
+export class Entity {
     /** UUID identifying this object. */
     id?: string;
 
@@ -434,7 +434,7 @@ export class ChiselEntity {
      *
      * @example
      * ```typescript
-     * export class User extends ChiselEntity {
+     * export class User extends Entity {
      *   username: string,
      *   email: string,
      * }
@@ -455,7 +455,7 @@ export class ChiselEntity {
      * ```
      * @returns The persisted entity with given properties and the `id` property set.
      */
-    static build<T extends ChiselEntity>(
+    static build<T extends Entity>(
         this: { new (): T },
         ...properties: Record<string, unknown>[]
     ): T {
@@ -471,7 +471,7 @@ export class ChiselEntity {
             value: this,
         });
         type IdsJson = Map<string, IdsJson>;
-        function backfillIds(this_: ChiselEntity, jsonIds: IdsJson) {
+        function backfillIds(this_: Entity, jsonIds: IdsJson) {
             for (const [fieldName, value] of Object.entries(jsonIds)) {
                 if (fieldName == "id") {
                     this_.id = value as string;
@@ -479,7 +479,7 @@ export class ChiselEntity {
                     const child = (this_ as unknown as Record<string, unknown>)[
                         fieldName
                     ];
-                    backfillIds(child as ChiselEntity, value);
+                    backfillIds(child as Entity, value);
                 }
             }
         }
@@ -511,7 +511,7 @@ export class ChiselEntity {
     /** Returns a single object that matches the `Partial` object `restrictions` passed as its parameter.
      *
      * If more than one match is found, any is returned. */
-    static async findOne<T extends ChiselEntity>(
+    static async findOne<T extends Entity>(
         this: { new (): T },
         restrictions: Partial<T>,
     ): Promise<T | undefined> {
@@ -527,7 +527,7 @@ export class ChiselEntity {
      *
      * @example
      * ```typescript
-     * export class User extends ChiselEntity {
+     * export class User extends Entity {
      *   username: string,
      *   email: string,
      * }
@@ -537,7 +537,7 @@ export class ChiselEntity {
      * await User.delete({ email: "alice@example.com"})
      * ```
      */
-    static async delete<T extends ChiselEntity>(
+    static async delete<T extends Entity>(
         this: { new (): T },
         restrictions: Partial<T>,
     ): Promise<void> {
@@ -554,6 +554,11 @@ export class ChiselEntity {
         return crud(this, p);
     }
 }
+
+/**
+ * @deprecated The `ChiselEntity` has been deprecated in favor of `Entity` and is a subject to removal in future versions of ChiselStrike.
+ */
+export class ChiselEntity extends Entity {}
 
 export class OAuthUser extends ChiselEntity {
     username: string | undefined = undefined;
@@ -708,7 +713,7 @@ type GenericChiselEntityClass = ChiselEntityClass<ChiselEntity>;
  * @param url the url that provides the search parameters
  * @returns the filter object, if found and successfully parsed; undefined if not found; throws if parsing failed
  */
-export function getEntityFiltersFromURL<
+export function getChiselEntityFiltersFromURL<
     T extends ChiselEntity,
     E extends ChiselEntityClass<T>,
 >(_entity: E, url: URL): Partial<T> | undefined {
@@ -837,7 +842,7 @@ const defaultCrudMethods: CRUDMethods<ChiselEntity, GenericChiselEntityClass> =
             if (!id) {
                 return createResponse(
                     await entity.findMany(
-                        getEntityFiltersFromURL(entity, url) || {},
+                        getChiselEntityFiltersFromURL(entity, url) || {},
                     ),
                     200,
                 );
@@ -891,7 +896,7 @@ const defaultCrudMethods: CRUDMethods<ChiselEntity, GenericChiselEntityClass> =
                 await entity.delete({ id });
                 return createResponse(`Deleted ID ${id}`, 200);
             }
-            const restrictions = getEntityFiltersFromURL(entity, url);
+            const restrictions = getChiselEntityFiltersFromURL(entity, url);
             if (restrictions) {
                 await entity.delete(restrictions);
                 return createResponse(
@@ -953,7 +958,7 @@ export const standardCRUDMethods = {
  * export default crud(Comment, "/comments/:id");
  * ```
  * This results in a /comments endpoint that correctly handles all REST methods over Comment.
- * @param entity Entity type
+ * @param entity ChiselEntity type
  * @param urlTemplate Request URL must match this template (see https://deno.land/x/regexparam for syntax).
  *   Some CRUD methods rely on parts of the URL to identify the resource to apply to. Eg, GET /comments/1234
  *   returns the comment entity with id=1234, while GET /comments returns all comments. This parameter describes

@@ -115,9 +115,9 @@ One interesting thing to do is have OAuthUser-typed fields in your
 entities.  For example:
 
 ```typescript title="my-backend/models/models.ts"
-import { ChiselEntity } from "@chiselstrike/api"
+import { Entity } from "@chiselstrike/api"
 
-export class BlogComment extends ChiselEntity {
+export class BlogComment extends Entity {
     content: string = "";
     author: OAuthUser;
 }

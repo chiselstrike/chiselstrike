@@ -25,9 +25,9 @@ the fields of your models.  To illustrate, please edit the file
 `models/models.ts` like this:
 
 ```typescript title="my-backend/models/models.ts"
-import { ChiselEntity, labels } from "@chiselstrike/api"
+import { Entity, labels } from "@chiselstrike/api"
 
-export class BlogComment extends ChiselEntity {
+export class BlogComment extends Entity {
     content: string;
     @labels("pii") by: string;
 }
@@ -201,9 +201,9 @@ example from that link here.  Please edit the file `models/models.ts`
 like this:
 
 ```typescript title="my-backend/models/models.ts"
-import { ChiselEntity } from "@chiselstrike/api"
+import { Entity } from "@chiselstrike/api"
 
-export class BlogComment extends ChiselEntity {
+export class BlogComment extends Entity {
     content: string = "";
     @labels("protect") author: OAuthUser;
 }

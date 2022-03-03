@@ -12,14 +12,14 @@ The set of entities in your application represents the domain model, which is wh
 For example, to define an entity `User` that represents a user in your application, you can add the following TypeScript class to your existing models file:
 
 ```typescript title="models/models.ts"
-import { ChiselEntity, labels } from "@chiselstrike/api"
+import { Entity, labels } from "@chiselstrike/api"
 
-export class BlogComment extends ChiselEntity {
+export class BlogComment extends Entity {
     content: string = "";
     @labels("pii") by: string = "";
 }
 
-export class User extends ChiselEntity {
+export class User extends Entity {
     username: string;
     email: string;
     city: string;
@@ -35,7 +35,7 @@ The ChiselStrike runtime picks up this entity definition in the `models` directo
 
 ## Persisting Entities
 
-The `ChiselEntity` base class that our `User` entity extends provides a `save()` method, which you can use to persist your entity.
+The `Entity` base class that our `User` entity extends provides a `save()` method, which you can use to persist your entity.
 
 We can, for example, write the following endpoint that takes input as JSON, builds a `User` entity, and persists it with the `save()` method as follows:
 
@@ -117,7 +117,7 @@ which would both produce the following `curl` report:
 
 We have now seen how to define entities and how to persist them, but also saw a glimpse of how to query them with the `User.findOne()` method call when we updated the entity.
 
-The `ChiselEntity` base class provides two convenience methods, `findOne()` and `findMany()`, which you can use to query for entities of that type. Both of the method take an object as an argument, which represents the filtering restrictions.
+The `Entity` base class provides two convenience methods, `findOne()` and `findMany()`, which you can use to query for entities of that type. Both of the method take an object as an argument, which represents the filtering restrictions.
 
 For example, to query one entity with a given `username`, you could define the following endpoint:
 
@@ -222,7 +222,7 @@ composable, and can become hard to use for more complex queries. ChiselStrike
 provides a cursor-based API for writing composable queries.
 
 A cursor can be thought of as an index to an array of entities in the data store.
-The `ChiselEntity` base class provides a `cursor()` method to obtain a `ChiselCursor`.
+The `Entity` base class provides a `cursor()` method to obtain a `ChiselCursor`.
 The `ChiselCursor` class provides variety of composable operations, such as `filter()`, `take()`, `select()`, and so on for writing complex queries.
 The actual query uses _deferred execution_, which allows the ChiselStrike runtime to optimize the query.
 

@@ -170,9 +170,9 @@ ChiselStrike the data you want it to store for you by defining some
 TypeScript classes.  Put a file in `my-backend/models/models.ts` like this:
 
 ```typescript title="my-backend/models/models.ts"
-import { ChiselEntity } from "@chiselstrike/api"
+import { Entity } from "@chiselstrike/api"
 
-export class BlogComment extends ChiselEntity {
+export class BlogComment extends Entity {
     content: string = "";
     by: string = "";
 }
@@ -427,7 +427,7 @@ This is quite a bit of code, which only handles one entity --
 substantially identical.
 
 ChiselStrike saves you from that repetitive tedium by providing a
-method named `ChiselEntity.crud`.  This method takes the endpoint path
+method named `Entity.crud`.  This method takes the endpoint path
 as a parameter and returns a handler function that implements all REST
 operations, making it trivial to implement a RESTful endpoint.  The
 above example becomes simply:

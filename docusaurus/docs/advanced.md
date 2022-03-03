@@ -25,9 +25,9 @@ be added.
 Here is one example of it in practice:
 
 ```typescript title="models/post.ts"
-import { ChiselEntity, unique } from "@chiselstrike/api"
+import { Entity, unique } from "@chiselstrike/api"
 
-export class BlogPost extends ChiselEntity {
+export class BlogPost extends Entity {
     @unique relUrl: string;
     content: string;
 }
