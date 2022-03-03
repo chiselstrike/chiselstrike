@@ -62,3 +62,23 @@ $CHISEL apply 2>&1 | $RMCOLOR|| true
 #CHECK: Caused by:
 #CHECK:     Compilation failed:
 #CHECK:      endpoints/error.ts:4:32 - error TS2339: Property 'first_name' does not exist on type 'typeof Person'.
+
+
+cat << EOF > "$TEMPDIR/endpoints/error.ts"
+import { Person } from "../models/person.ts";
+
+export default async function chisel(req: Request) {
+    const filtered = await Person.cursor().select("last_name");
+    let ret = "";
+    for await (let row of filtered) {
+        ret += row.first_name + "\n";
+    }
+    return new Response(ret);
+}
+EOF
+
+$CHISEL apply 2>&1 | $RMCOLOR|| true
+#CHECK: Error: parsing endpoint /dev/error
+#CHECK: Caused by:
+#CHECK:     Compilation failed:
+#CHECK:     endpoints/error.ts:7:20 - error TS2339: Property 'first_name' does not exist on type 'Pick<Person, "last_name">'.

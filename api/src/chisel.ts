@@ -217,7 +217,9 @@ export class ChiselCursor<T> {
         private inner: Operator,
     ) {}
     /** Force ChiselStrike to fetch just the `...columns` that are part of the colums list. */
-    select(...columns: (keyof T)[]): ChiselCursor<Pick<T, (keyof T)>> {
+    select<C extends (keyof T)[]>(
+        ...columns: C
+    ): ChiselCursor<Pick<T, C[number]>> {
         return new ChiselCursor(
             this.baseConstructor,
             new ColumnsSelect(columns as string[], this.inner),
