@@ -249,7 +249,7 @@ import { BlogComment } from "../models/models"
 
 export default async function chisel(_req) {
     let comments = [];
-    await BlogComment.cursor().forEach(c => {
+    await BlogComment.enumerate().forEach(c => {
         comments.push(c);
     });
     return responseFromJson(comments);
@@ -328,7 +328,7 @@ export default async function chisel(req) {
         return responseFromJson('inserted ' + created.id);
     } else if (req.method == 'GET') {
         let comments = [];
-        await BlogComment.cursor().forEach(c => {
+        await BlogComment.enumerate().forEach(c => {
             comments.push(c);
         });
         return responseFromJson(comments);

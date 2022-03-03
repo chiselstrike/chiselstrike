@@ -13,7 +13,7 @@ enum OpType {
 }
 
 /**
- * Base class for various Operators applicable on `ChiselCursor`. Each operator
+ * Base class for various Operators applicable on `Enumerable`. Each operator
  * should extend this class and pass on its `type` identifier from the `OpType`
  * enum.
  */
@@ -210,44 +210,44 @@ class Sort extends Operator {
     }
 }
 
-/** ChiselCursor is a lazy iterator that will be used by ChiselStrike to construct an optimized query. */
-export class ChiselCursor<T> {
+/** Enumerable is a lazy iterator that will be used by ChiselStrike to construct an optimized query. */
+export class Enumerable<T> {
     constructor(
         private baseConstructor: { new (): T },
         private inner: Operator,
     ) {}
     /** Force ChiselStrike to fetch just the `...columns` that are part of the colums list. */
-    select(...columns: (keyof T)[]): ChiselCursor<Pick<T, (keyof T)>> {
-        return new ChiselCursor(
+    select(...columns: (keyof T)[]): Enumerable<Pick<T, (keyof T)>> {
+        return new Enumerable(
             this.baseConstructor,
             new ColumnsSelect(columns as string[], this.inner),
         );
     }
 
-    /** Restricts this cursor to contain only at most `count` elements */
-    take(count: number): ChiselCursor<T> {
-        return new ChiselCursor(
+    /** Restricts this enumerable to contain only at most `count` elements */
+    take(count: number): Enumerable<T> {
+        return new Enumerable(
             this.baseConstructor,
             new Take(count, this.inner),
         );
     }
 
     /**
-     * Restricts this cursor to contain only elements that match the given @predicate.
+     * Restricts this enumerable to contain only elements that match the given @predicate.
      */
     filter(
         predicate: (arg: T) => boolean,
-    ): ChiselCursor<T>;
+    ): Enumerable<T>;
     /**
-     * Restricts this cursor to contain just the objects that match the `Partial`
+     * Restricts this enumerable to contain just the objects that match the `Partial`
      * object `restrictions`.
      */
-    filter(restrictions: Partial<T>): ChiselCursor<T>;
+    filter(restrictions: Partial<T>): Enumerable<T>;
 
     // Common implementation for filter overloads.
-    filter(arg1: ((arg: T) => boolean) | Partial<T>): ChiselCursor<T> {
+    filter(arg1: ((arg: T) => boolean) | Partial<T>): Enumerable<T> {
         if (typeof arg1 == "function") {
-            return new ChiselCursor(
+            return new Enumerable(
                 this.baseConstructor,
                 new PredicateFilter(
                     arg1 as ((arg: unknown) => boolean),
@@ -255,7 +255,7 @@ export class ChiselCursor<T> {
                 ),
             );
         } else {
-            return new ChiselCursor(
+            return new Enumerable(
                 this.baseConstructor,
                 new RestrictionFilter(arg1, this.inner),
             );
@@ -263,7 +263,7 @@ export class ChiselCursor<T> {
     }
 
     /**
-     * Sorts cursor elements.
+     * Sorts enumerable elements.
      *
      * @param comparator determines the sorting order. For two elements of the
      * iterable returns true if `lhs` is considered less than `rhs`,
@@ -273,8 +273,8 @@ export class ChiselCursor<T> {
      */
     sort(
         comparator: (lhs: T, rhs: T) => boolean,
-    ): ChiselCursor<T> {
-        return new ChiselCursor(
+    ): Enumerable<T> {
+        return new Enumerable(
             this.baseConstructor,
             new Sort(
                 comparator as ((lhs: unknown, rhs: unknown) => boolean),
@@ -284,18 +284,18 @@ export class ChiselCursor<T> {
     }
 
     /**
-     * Sorts cursor elements.
+     * Sorts enumerable elements.
      *
      * @param key specifies which attribute of `T` is to be used as a sort key.
      * @param ascending if true, the sort will be ascending. Descending otherwise.
      *
      * Note: the sort is not guaranteed to be stable.
      */
-    sortBy(key: keyof T, ascending = true): ChiselCursor<T> {
+    sortBy(key: keyof T, ascending = true): Enumerable<T> {
         const cmp = (lhs: T, rhs: T) => {
             return ascending === (lhs[key] < rhs[key]);
         };
-        return new ChiselCursor(
+        return new Enumerable(
             this.baseConstructor,
             new Sort(
                 cmp as ((lhs: unknown, rhs: unknown) => boolean),
@@ -304,14 +304,14 @@ export class ChiselCursor<T> {
         );
     }
 
-    /** Executes the function `func` for each element of this cursor. */
+    /** Executes the function `func` for each element of this enumerable. */
     async forEach(func: (arg: T) => void): Promise<void> {
         for await (const t of this) {
             func(t);
         }
     }
 
-    /** Converts this cursor to an Array.
+    /** Converts this enumerable to an Array.
      *
      * Use this with caution as the result set can be very big.
      * It is recommended that you take() first to cap the maximum number of elements. */
@@ -323,7 +323,7 @@ export class ChiselCursor<T> {
         return arr;
     }
 
-    /** ChiselCursor implements asyncIterator, meaning you can use it in any asynchronous context. */
+    /** Enumerable implements asyncIterator, meaning you can use it in any asynchronous context. */
     async *[Symbol.asyncIterator]() {
         let iter = this.makeTransformedQueryIter(this.inner);
         if (iter === undefined) {
@@ -412,15 +412,20 @@ export class ChiselCursor<T> {
     }
 }
 
+/**
+ * @deprecated The `ChiselCursor` has been deprecated in favor of `Enumerable` and is a subject to removal in future versions of ChiselStrike.
+ */
+export class ChiselCursor<T> extends Enumerable<T> {}
+
 export function chiselIterator<T>(type: { new (): T }) {
     const b = new BaseEntity(type.name);
-    return new ChiselCursor<T>(type, b);
+    return new Enumerable<T>(type, b);
 }
 
 /** ChiselEntity is a class that ChiselStrike user-defined entities are expected to extend.
  *
  * It provides properties that are inherent to a ChiselStrike entity, like an id, and static
- * methods that can be used to obtain a `ChiselCursor`.
+ * methods that can be used to obtain a `Enumerable`.
  */
 export class Entity {
     /** UUID identifying this object. */
@@ -486,12 +491,21 @@ export class Entity {
         backfillIds(this, jsonIds);
     }
 
-    /** Returns a `ChiselCursor` containing all elements of type T known to ChiselStrike.
+    /** Returns a `Enumerable` containing all elements of type T known to ChiselStrike.
      *
-     * Note that `ChiselCursor` is a lazy iterator, so this doesn't mean a query will be generating fetching all elements at this point. */
+     * Note that `Enumerable` is a lazy iterator, so this doesn't mean a query will be generating fetching all elements at this point. */
+    static enumerate<T>(
+        this: { new (): T },
+    ): Enumerable<T> {
+        return chiselIterator<T>(this);
+    }
+
+    /**
+     * @deprecated The `cursor` has been deprecated in favor of `enumerate` and is a subject to removal in future versions of ChiselStrike.
+     */
     static cursor<T>(
         this: { new (): T },
-    ): ChiselCursor<T> {
+    ): Enumerable<T> {
         return chiselIterator<T>(this);
     }
 

@@ -215,38 +215,38 @@ releases of ChiselStrike, the runtime will enforce a maximum number of entities
 runtime will also provide optional pagination for the `findMany()` method.
 :::
 
-## Cursors
+## Enumerable and composable queries
 
 The `findOne` and `findMany()` methods are convenient, but the interface is not
 composable, and can become hard to use for more complex queries. ChiselStrike
-provides a cursor-based API for writing composable queries.
+provides a enumerable-based API for writing composable queries.
 
-A cursor can be thought of as an index to an array of entities in the data store.
-The `Entity` base class provides a `cursor()` method to obtain a `ChiselCursor`.
-The `ChiselCursor` class provides variety of composable operations, such as `filter()`, `take()`, `select()`, and so on for writing complex queries.
+An enumerable can be thought of a set of entities in a data store.
+The `Entity` base class provides a `enumerate()` method to obtain a `Enumerable`.
+The `Enumerable` class provides variety of composable operations, such as `filter()`, `take()`, `select()`, and so on for writing complex queries.
 The actual query uses _deferred execution_, which allows the ChiselStrike runtime to optimize the query.
 
 :::note
 The ChiselStrike runtime does not perform query optimizations in the current release, but will do that in future releases.
 :::
 
-For example, the `findOne()` example could be written using the cursor-based API as follows:
+For example, the `findOne()` example could be written using the enumerable-based API as follows:
 
-```typescript title="endpoints/find-one-cursor.ts"
+```typescript title="endpoints/find-one-enumerable.ts"
 import { responseFromJson } from "@chiselstrike/api"
 import { User } from "../models/models"
 
 export default async function (req) {
   const payload = await req.json();
-  const users = await User.cursor().filter(payload).take(1).toArray();
+  const users = await User.enumerate().filter(payload).take(1).toArray();
   return responseFromJson('Found ' + users.map(user => user.username));
 }
 ```
 
-You can invoke the `/dev/find-one-cursor` endpoint with:
+You can invoke the `/dev/find-one-enumerable` endpoint with:
 
 ```bash
-curl -d '{ "email": "alice@mit.edu" }' localhost:8080/dev/find-one-cursor
+curl -d '{ "email": "alice@mit.edu" }' localhost:8080/dev/find-one-enumerable
 ```
 
 and see `curl` report:
@@ -255,35 +255,35 @@ and see `curl` report:
 "Found alice"
 ```
 
-The methods provided by `ChiselCursor` are outlined in the following table.
+The methods provided by `Enumerable` are outlined in the following table.
 
 | Method                | Description |
 | --------------------- | ----------- |
-| `filter(predicate)`   | Restrict this cursor to contain only entities matching the given function `predicate`. |
-| `filter(restriction)` | Restrict this cursor to contain only entities matching the given `restrictions`. |
-| `forEach(function)`   | Execute `function` for every entity in this cursor. |
-| `select(...fields)`   | Return another cursor with a projection of each entity by `fields`.      |
-| `take(count)`         | Take `count` entities from this cursor. |
-| `toArray()`           | Convert this cursor to an array.  |
+| `filter(predicate)`   | Restrict this enumerable to contain only entities matching the given function `predicate`. |
+| `filter(restriction)` | Restrict this enumerable to contain only entities matching the given `restrictions`. |
+| `forEach(function)`   | Execute `function` for every entity in this enumerable. |
+| `select(...fields)`   | Return another enumerable with a projection of each entity by `fields`.      |
+| `take(count)`         | Take `count` entities from this enumerable. |
+| `toArray()`           | Convert this enumerable to an array.  |
 
 :::note
-The `ChiselCursor` interface is still work-in-progress. For example, methods such as `skip()`,  `map()`, and `reduce()` are planned for future releases.
+The `Enumerable` interface is still work-in-progress. For example, methods such as `skip()`,  `map()`, and `reduce()` are planned for future releases.
 Also, the current implementation of `filter()` takes either a _restriction object_ or a function predicate. Filtering using restriction object is already quite efficient and done directly in the database. Predicate filtering can be slower as it's evaluated in TypeScript, but future releases of Chisel runtime will translate most TypeScript predicates to efficient database expressions.
 :::
 
 ### `filter`
 
-ChiselCursor supports two overloads of the `filter` method. The first accepts a predicate identifying elements to be kept or ignored. As an example, let's find all Gmail users:
+Enumerable supports two overloads of the `filter` method. The first accepts a predicate identifying elements to be kept or ignored. As an example, let's find all Gmail users:
 
 ```typescript
-  const gmailUsers = await User.cursor()
+  const gmailUsers = await User.enumerate()
     .filter((user: User) => user.email.endsWith("@gmail.com"));
 ```
 
 The second overload takes a restriction-object parameter. It allows you to filter by *equality* based on an object whose keys correspond to attributes of an Entity matching on respective values. For example, let's find Alice by email:
 
 ```typescript
-  const users = await User.cursor().filter({"email": "alice@mit.edu"});
+  const users = await User.enumerate().filter({"email": "alice@mit.edu"});
 ```
 
 
