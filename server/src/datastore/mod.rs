@@ -54,6 +54,7 @@
 
 mod dbconn;
 pub(crate) mod engine;
+pub(crate) mod expr;
 pub(crate) mod meta;
 pub(crate) mod query;
 

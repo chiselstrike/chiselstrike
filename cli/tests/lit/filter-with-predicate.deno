@@ -6,29 +6,46 @@ cd "$TEMPDIR"
 
 
 cat << EOF > "$TEMPDIR/models/types.ts"
+export class Biography extends Chisel.ChiselEntity {
+    title: string = "";
+}
+
 export class Person extends Chisel.ChiselEntity {
-  name: string = "bob";
-  age: number = 0;
+    name: string = "bob";
+    age: number = 0;
+    biography: Biography;
 }
 EOF
 
 cat << EOF > "$TEMPDIR/endpoints/store.ts"
-import { Person } from "../models/types.ts";
+import { Person, Biography } from "../models/types.ts";
 
 export default async function chisel(req: Request) {
-    const glauber = new Person();
-    glauber.name = "Glauber";
-    glauber.age = 89;
+    const glauber = Person.build({
+        name: "Glauber",
+        age: 89,
+        biography: Biography.build({
+            title: "My life with elephants"
+        })
+    });
     await glauber.save();
 
-    const pekka = new Person();
-    pekka.name = "Pekka";
-    pekka.age = 144;
+    const pekka = Person.build({
+        name: "Pekka",
+        age: 144,
+        biography: Biography.build({
+            title: "How sports didn't affect my life"
+        })
+    });
     await pekka.save();
 
-    const jan = new Person();
-    jan.name = "Jan";
-    jan.age = 144;
+    const jan = Person.build({
+        name: "Jan",
+        age: 144,
+        biography: Biography.build({
+            title: "The importance of being erinaceous"
+        })
+    });
     await jan.save();
 
     return new Response("Ok");
@@ -260,3 +277,84 @@ $CHISEL apply
 
 $CURL -o - $CHISELD_HOST/dev/filter_and_select
 # CHECK: [{"age":89}]
+
+
+
+## Filter with expression - simple
+
+cat << EOF > "$TEMPDIR/endpoints/filter_with_expression.ts"
+import { Person } from "../models/types.ts";
+
+export default async function chisel(req: Request) {
+    const filtered = Person.cursor()
+        .__filterWithExpression((p) => {
+            return p.age == 89;
+        }, {
+            expr_type: "Binary",
+            left: {
+              expr_type: "Property",
+              property: "age",
+              object: {
+                expr_type: "Parameter",
+                position: 0
+              }
+            },
+            op: "Eq",
+            right: {
+              expr_type: "Literal",
+              value: 89
+            }
+        });
+
+    const results = (await filtered.toArray()).map(p => p.name);
+    return new Response("[" + results.join(", ") + "]");
+}
+EOF
+
+cd "$TEMPDIR"
+$CHISEL apply
+
+$CURL -o - $CHISELD_HOST/dev/filter_with_expression
+# CHECK: [Glauber]
+
+
+## Filter with expression - nested Entities
+
+cat << EOF > "$TEMPDIR/endpoints/filter_with_expression.ts"
+import { Person } from "../models/types.ts";
+
+export default async function chisel(req: Request) {
+    const filtered = Person.cursor()
+        .__filterWithExpression((p) => {
+            return p.biography.title == "The importance of being erinaceous";
+        }, {
+            expr_type: "Binary",
+            left: {
+              expr_type: "Property",
+              property: "title",
+              object: {
+                expr_type: "Property",
+                property: "biography",
+                object: {
+                  expr_type: "Parameter",
+                  position: 0
+                }
+              }
+            },
+            op: "Eq",
+            right: {
+              expr_type: "Literal",
+              value: "The importance of being erinaceous"
+            }
+        });
+
+    const results = (await filtered.toArray()).map(p => p.name);
+    return new Response("[" + results.join(", ") + "]");
+}
+EOF
+
+cd "$TEMPDIR"
+$CHISEL apply
+
+$CURL -o - $CHISELD_HOST/dev/filter_with_expression
+# CHECK: [Jan]
