@@ -340,7 +340,7 @@ async fn op_chisel_entity_delete(
     Ok(serde_json::json!(query_engine.mutate(mutation).await?))
 }
 
-type DbStream = RefCell<QueryResults>;
+type DbStream = RefCell<Option<QueryResults>>;
 
 /// Calculates field policies for the request being processed.
 pub(crate) fn make_field_policies(runtime: &Runtime, ty: &ObjectType) -> FieldPolicies {
@@ -355,7 +355,12 @@ struct QueryStreamResource {
     stream: DbStream,
 }
 
-impl Resource for QueryStreamResource {}
+impl Resource for QueryStreamResource {
+    fn close(self: Rc<Self>) {
+        // Effectively assert that the stream is not used from now own.
+        self.stream.replace(None);
+    }
+}
 
 /// Recursively builds an array representing fields of potentially nested `ty`.
 /// E.g. for types X{x: Float}, and Y{a: Float, b: X} make_fields_json(Y) will
@@ -444,7 +449,7 @@ fn op_chisel_relational_query_create(
     let transaction = current_transaction()?;
     let stream = query_engine.query(transaction, query)?;
     let resource = QueryStreamResource {
-        stream: RefCell::new(stream),
+        stream: RefCell::new(Some(stream)),
     };
     let rid = op_state.resource_table.add(resource);
     Ok(rid)
@@ -459,7 +464,7 @@ impl Future for QueryNextFuture {
     type Output = Option<Result<ResultRow>>;
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         let mut stream = self.resource.stream.borrow_mut();
-        let stream: &mut QueryResults = &mut stream;
+        let stream: &mut QueryResults = stream.as_mut().unwrap();
         Pin::new(stream).poll_next(cx)
     }
 }
