@@ -857,6 +857,9 @@ async fn get_result(
     // blocking. This in particular covers code that doesn't block at
     // all.
     let result = with_context(context.clone(), || get_result_aux(request_handler, req))?;
+    // We got here without blocking and now have a future representing
+    // pending work for the endpoint. The future returned by
+    // resolve_promise takes care of setting the context.
     resolve_promise(context, result).await
 }
 
