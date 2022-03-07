@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: © 2022 ChiselStrike <info@chiselstrike.com>
 use backtrace::Backtrace;
 use std::ops::Deref;
-use std::sync::Arc;
+use std::sync;
 use std::sync::Mutex;
 use std::sync::Weak;
 
@@ -19,15 +19,15 @@ struct DbgArcData {
 // * There has to be an Arc<T> somewhere so that we can expose it.
 // * The extra info has to be in an Arc too so that we can clone it
 //   and it has a stable address.
-pub struct DbgArc<T> {
-    data: Arc<DbgArcData>,
+pub struct Arc<T> {
+    data: sync::Arc<DbgArcData>,
     // Public to provide an escape hatch for APIs that use Arc.
-    pub inner: Arc<T>,
+    pub inner: sync::Arc<T>,
 }
 
 pub struct Iter {
-    cur: Arc<DbgArcData>,
-    end: Arc<DbgArcData>,
+    cur: sync::Arc<DbgArcData>,
+    end: sync::Arc<DbgArcData>,
 }
 
 impl Iterator for Iter {
@@ -37,7 +37,7 @@ impl Iterator for Iter {
     fn next(&mut self) -> std::option::Option<Self::Item> {
         let next = self.cur.pn.lock().unwrap().next.upgrade().unwrap();
         self.cur = next;
-        if Arc::ptr_eq(&self.cur, &self.end) {
+        if sync::Arc::ptr_eq(&self.cur, &self.end) {
             None
         } else {
             Some(self.cur.bt.clone())
@@ -45,9 +45,9 @@ impl Iterator for Iter {
     }
 }
 
-fn insert(data: &Arc<DbgArcData>, new: &Arc<DbgArcData>) {
-    let cur_w = Arc::downgrade(data);
-    let new_w = Arc::downgrade(new);
+fn insert(data: &sync::Arc<DbgArcData>, new: &sync::Arc<DbgArcData>) {
+    let cur_w = sync::Arc::downgrade(data);
+    let new_w = sync::Arc::downgrade(new);
     let mut new = new.pn.lock().unwrap();
 
     let next_w = {
@@ -65,7 +65,7 @@ fn insert(data: &Arc<DbgArcData>, new: &Arc<DbgArcData>) {
     next.prev = new_w;
 }
 
-fn remove(data: &Arc<DbgArcData>) {
+fn remove(data: &sync::Arc<DbgArcData>) {
     let (prev_w, next_w) = {
         let mut this = data.pn.lock().unwrap();
         let prev = this.prev.clone();
@@ -80,30 +80,30 @@ fn remove(data: &Arc<DbgArcData>) {
     next.pn.lock().unwrap().prev = prev_w;
 }
 
-impl<T> DbgArc<T> {
-    pub fn new(v: T) -> DbgArc<T> {
+impl<T> Arc<T> {
+    pub fn new(v: T) -> Arc<T> {
         let bt = Backtrace::new();
         let pn = Mutex::new(PrevNext {
             prev: Weak::new(),
             next: Weak::new(),
         });
         let data = DbgArcData { bt, pn };
-        let data = Arc::new(data);
+        let data = sync::Arc::new(data);
         {
             let mut pn = data.pn.lock().unwrap();
-            pn.prev = Arc::downgrade(&data);
-            pn.next = Arc::downgrade(&data);
+            pn.prev = sync::Arc::downgrade(&data);
+            pn.next = sync::Arc::downgrade(&data);
         }
-        let inner = Arc::new(v);
-        DbgArc { data, inner }
+        let inner = sync::Arc::new(v);
+        Arc { data, inner }
     }
 
-    fn insert(&self, bt: Backtrace) -> Arc<DbgArcData> {
+    fn insert(&self, bt: Backtrace) -> sync::Arc<DbgArcData> {
         let pn = Mutex::new(PrevNext {
             prev: Weak::new(),
             next: Weak::new(),
         });
-        let new = Arc::new(DbgArcData { bt, pn });
+        let new = sync::Arc::new(DbgArcData { bt, pn });
         insert(&self.data, &new);
         new
     }
@@ -116,45 +116,45 @@ impl<T> DbgArc<T> {
         }
     }
 
-    pub fn try_unwrap(this: DbgArc<T>) -> Result<T, DbgArc<T>> {
+    pub fn try_unwrap(this: Arc<T>) -> Result<T, Arc<T>> {
         let inner = this.inner.clone();
         let data = this.data.clone();
         let prev = this.data.pn.lock().unwrap().prev.clone().upgrade().unwrap();
         // Drop this, otherwise Arc::try_unwrap always fails. This
         // will remove this from the list.
         drop(this);
-        match Arc::try_unwrap(inner) {
+        match sync::Arc::try_unwrap(inner) {
             Ok(v) => Ok(v),
             Err(e) => {
                 // Add it back to the list, unless it was the only
                 // element in the list.
-                if !Arc::ptr_eq(&prev, &data) {
+                if !sync::Arc::ptr_eq(&prev, &data) {
                     insert(&prev, &data);
                 }
-                Err(DbgArc { data, inner: e })
+                Err(Arc { data, inner: e })
             }
         }
     }
 }
 
-impl<T> Drop for DbgArc<T> {
+impl<T> Drop for Arc<T> {
     fn drop(&mut self) {
         remove(&self.data);
     }
 }
 
-impl<T> Deref for DbgArc<T> {
+impl<T> Deref for Arc<T> {
     type Target = T;
     fn deref(&self) -> &Self::Target {
         &*self.inner
     }
 }
 
-impl<T> Clone for DbgArc<T> {
+impl<T> Clone for Arc<T> {
     fn clone(&self) -> Self {
         let data = self.insert(Backtrace::new());
         let inner = self.inner.clone();
-        DbgArc { data, inner }
+        Arc { data, inner }
     }
 }
 
@@ -164,12 +164,12 @@ mod tests {
 
     #[test]
     fn test() {
-        let n1 = DbgArc::new(42);
+        let n1 = Arc::new(42);
         let n1d = n1.data.clone();
-        let n1w = Arc::downgrade(&n1d);
+        let n1w = sync::Arc::downgrade(&n1d);
         let n2 = n1.clone();
         let n2d = n2.data.clone();
-        let n2w = Arc::downgrade(&n2d);
+        let n2w = sync::Arc::downgrade(&n2d);
         {
             let n1 = n1d.pn.lock().unwrap();
             let n2 = n2d.pn.lock().unwrap();
@@ -182,7 +182,7 @@ mod tests {
 
         let n3 = n1.clone();
         let n3d = n3.data.clone();
-        let n3w = Arc::downgrade(&n3d);
+        let n3w = sync::Arc::downgrade(&n3d);
         {
             let n1 = n1d.pn.lock().unwrap();
             let n2 = n2d.pn.lock().unwrap();
@@ -209,7 +209,7 @@ mod tests {
             assert!(Weak::ptr_eq(&n1.prev, &n2w));
         }
 
-        let n1 = DbgArc::try_unwrap(n1).unwrap_err();
+        let n1 = Arc::try_unwrap(n1).unwrap_err();
         {
             let n1 = n1d.pn.lock().unwrap();
             let n2 = n2d.pn.lock().unwrap();
@@ -227,7 +227,7 @@ mod tests {
         drop(n2);
 
         let external = n1.inner.clone();
-        let n1 = DbgArc::try_unwrap(n1).unwrap_err();
+        let n1 = Arc::try_unwrap(n1).unwrap_err();
         {
             let n1 = n1d.pn.lock().unwrap();
             assert!(Weak::ptr_eq(&n1.next, &n1w));
@@ -236,7 +236,7 @@ mod tests {
 
         drop(external);
 
-        let v = DbgArc::try_unwrap(n1)
+        let v = Arc::try_unwrap(n1)
             .map_err(|_| "try_unwrap failed")
             .unwrap();
         assert_eq!(v, 42);
