@@ -17,24 +17,24 @@ enum OpType {
  * should extend this class and pass on its `type` identifier from the `OpType`
  * enum.
  */
-abstract class Operator {
+abstract class Operator<T> {
     constructor(
         public readonly type: OpType,
-        public readonly inner: Operator | undefined,
+        public readonly inner: Operator<T> | undefined,
     ) {}
 
     /** Applies specified Operator `op` on each element of passed iterable
      * `iter` creating a new iterable.
      */
     public abstract apply(
-        iter: AsyncIterable<Record<string, unknown>>,
-    ): AsyncIterable<Record<string, unknown>>;
+        iter: AsyncIterable<T>,
+    ): AsyncIterable<T>;
 }
 
 /**
  * Specifies Entity whose elements are to be fetched.
  */
-class BaseEntity extends Operator {
+class BaseEntity<T> extends Operator<T> {
     constructor(
         public name: string,
     ) {
@@ -42,8 +42,8 @@ class BaseEntity extends Operator {
     }
 
     apply(
-        _iter: AsyncIterable<Record<string, unknown>>,
-    ): AsyncIterable<Record<string, unknown>> {
+        _iter: AsyncIterable<T>,
+    ): AsyncIterable<T> {
         throw new Error("can't apply BaseEntity operator on an iterable");
     }
 }
@@ -52,17 +52,17 @@ class BaseEntity extends Operator {
  * Take operator takes first `count` elements from a collection.
  * The rest is ignored.
  */
-class Take extends Operator {
+class Take<T> extends Operator<T> {
     constructor(
         public readonly count: number,
-        inner: Operator,
+        inner: Operator<T>,
     ) {
         super(OpType.Take, inner);
     }
 
     apply(
-        iter: AsyncIterable<Record<string, unknown>>,
-    ): AsyncIterable<Record<string, unknown>> {
+        iter: AsyncIterable<T>,
+    ): AsyncIterable<T> {
         const count = this.count;
         return {
             [Symbol.asyncIterator]: async function* () {
@@ -84,28 +84,29 @@ class Take extends Operator {
 /**
  * Forces fetch of just the `columns` (fields) of a given entity.
  */
-class ColumnsSelect extends Operator {
+class ColumnsSelect<T, C extends (keyof T)[]>
+    extends Operator<Pick<T, C[number]>> {
     constructor(
-        public columns: string[],
-        inner: Operator,
+        public columns: C,
+        inner: Operator<T>,
     ) {
         super(OpType.ColumnsSelect, inner);
     }
 
     apply(
-        iter: AsyncIterable<Record<string, unknown>>,
-    ): AsyncIterable<Record<string, unknown>> {
+        iter: AsyncIterable<T>,
+    ): AsyncIterable<Pick<T, C[number]>> {
         const columns = this.columns;
         return {
             [Symbol.asyncIterator]: async function* () {
                 for await (const arg of iter) {
-                    const newObj: Record<string, unknown> = {};
+                    const newObj: Partial<T> = {};
                     for (const key of columns) {
                         if (arg[key] !== undefined) {
                             newObj[key] = arg[key];
                         }
                     }
-                    yield newObj;
+                    yield newObj as Pick<T, C[number]>;
                 }
             },
         };
@@ -116,17 +117,17 @@ class ColumnsSelect extends Operator {
  * PredicateFilter operator applies `predicate` on each element and keeps
  * only those for which the `predicate` returns true.
  */
-class PredicateFilter extends Operator {
+class PredicateFilter<T> extends Operator<T> {
     constructor(
-        public predicate: (arg: unknown) => boolean,
-        inner: Operator,
+        public predicate: (arg: T) => boolean,
+        inner: Operator<T>,
     ) {
         super(OpType.PredicateFilter, inner);
     }
 
     apply(
-        iter: AsyncIterable<Record<string, unknown>>,
-    ): AsyncIterable<Record<string, unknown>> {
+        iter: AsyncIterable<T>,
+    ): AsyncIterable<T> {
         const predicate = this.predicate;
         return {
             [Symbol.asyncIterator]: async function* () {
@@ -145,24 +146,24 @@ class PredicateFilter extends Operator {
  * and keeps only those where field value of a field, specified
  * by restriction key, equals to restriction value.
  */
-class RestrictionFilter extends Operator {
+class RestrictionFilter<T> extends Operator<T> {
     constructor(
-        public restrictions: Record<string, unknown>,
-        inner: Operator,
+        public restrictions: Partial<T>,
+        inner: Operator<T>,
     ) {
         super(OpType.RestrictionFilter, inner);
     }
 
     apply(
-        iter: AsyncIterable<Record<string, unknown>>,
-    ): AsyncIterable<Record<string, unknown>> {
-        const restrictions = Object.entries(this.restrictions);
+        iter: AsyncIterable<T>,
+    ): AsyncIterable<T> {
+        const restrictions = this.restrictions;
         return {
             [Symbol.asyncIterator]: async function* () {
                 for await (const arg of iter) {
                     verifyMatch: {
-                        for (const [key, value] of restrictions) {
-                            if (arg[key] != value) {
+                        for (const key in restrictions) {
+                            if (arg[key] != restrictions[key]) {
                                 break verifyMatch;
                             }
                         }
@@ -179,17 +180,17 @@ class RestrictionFilter extends Operator {
  * for two elements of the iterable returns true if `lhs`
  * is considered less than `rhs`, false otherwise.
  */
-class Sort extends Operator {
+class Sort<T> extends Operator<T> {
     constructor(
-        public comparator: (lhs: unknown, rhs: unknown) => boolean,
-        inner: Operator,
+        public comparator: (lhs: T, rhs: T) => boolean,
+        inner: Operator<T>,
     ) {
         super(OpType.Sort, inner);
     }
 
     apply(
-        iter: AsyncIterable<Record<string, unknown>>,
-    ): AsyncIterable<Record<string, unknown>> {
+        iter: AsyncIterable<T>,
+    ): AsyncIterable<T> {
         const cmp = this.comparator;
         return {
             [Symbol.asyncIterator]: async function* () {
@@ -198,7 +199,7 @@ class Sort extends Operator {
                     elements.push(e);
                 }
                 elements.sort(
-                    (lhs: unknown, rhs: unknown) => {
+                    (lhs: T, rhs: T) => {
                         return cmp(lhs, rhs) ? -1 : 1;
                     },
                 );
@@ -214,7 +215,7 @@ class Sort extends Operator {
 export class ChiselCursor<T> {
     constructor(
         private baseConstructor: { new (): T },
-        private inner: Operator,
+        private inner: Operator<T>,
     ) {}
     /** Force ChiselStrike to fetch just the `...columns` that are part of the colums list. */
     select<C extends (keyof T)[]>(
@@ -222,7 +223,7 @@ export class ChiselCursor<T> {
     ): ChiselCursor<Pick<T, C[number]>> {
         return new ChiselCursor(
             this.baseConstructor,
-            new ColumnsSelect(columns as string[], this.inner),
+            new ColumnsSelect(columns, this.inner),
         );
     }
 
@@ -252,7 +253,7 @@ export class ChiselCursor<T> {
             return new ChiselCursor(
                 this.baseConstructor,
                 new PredicateFilter(
-                    arg1 as ((arg: unknown) => boolean),
+                    arg1,
                     this.inner,
                 ),
             );
@@ -279,7 +280,7 @@ export class ChiselCursor<T> {
         return new ChiselCursor(
             this.baseConstructor,
             new Sort(
-                comparator as ((lhs: unknown, rhs: unknown) => boolean),
+                comparator,
                 this.inner,
             ),
         );
@@ -300,7 +301,7 @@ export class ChiselCursor<T> {
         return new ChiselCursor(
             this.baseConstructor,
             new Sort(
-                cmp as ((lhs: unknown, rhs: unknown) => boolean),
+                cmp,
                 this.inner,
             ),
         );
@@ -326,14 +327,12 @@ export class ChiselCursor<T> {
     }
 
     /** ChiselCursor implements asyncIterator, meaning you can use it in any asynchronous context. */
-    async *[Symbol.asyncIterator]() {
+    [Symbol.asyncIterator](): AsyncIterator<T> {
         let iter = this.makeTransformedQueryIter(this.inner);
         if (iter === undefined) {
             iter = this.makeQueryIter(this.inner);
         }
-        for await (const it of iter) {
-            yield it as T;
-        }
+        return iter[Symbol.asyncIterator]();
     }
 
     /** Performs recursive descent via Operator.inner examining the whole operator
@@ -343,8 +342,8 @@ export class ChiselCursor<T> {
      * If no PredicateFilter or Sort is found, undefined is returned.
      */
     private makeTransformedQueryIter(
-        op: Operator,
-    ): AsyncIterable<Record<string, unknown>> | undefined {
+        op: Operator<T>,
+    ): AsyncIterable<T> | undefined {
         if (op.type == OpType.BaseEntity) {
             return undefined;
         } else if (op.inner === undefined) {
@@ -366,8 +365,8 @@ export class ChiselCursor<T> {
     }
 
     private makeQueryIter(
-        op: Operator,
-    ): AsyncIterable<Record<string, unknown>> {
+        op: Operator<T>,
+    ): AsyncIterable<T> {
         const ctor = this.containsSelect(op) ? undefined : this.baseConstructor;
         return {
             [Symbol.asyncIterator]: async function* () {
@@ -403,7 +402,7 @@ export class ChiselCursor<T> {
     /** Recursively examines operator chain searching for ColumnsSelect operator.
      * Returns true if found, false otherwise.
      */
-    private containsSelect(op: Operator): boolean {
+    private containsSelect(op: Operator<T>): boolean {
         if (op.type == OpType.ColumnsSelect) {
             return true;
         } else if (op.inner === undefined) {
@@ -414,8 +413,10 @@ export class ChiselCursor<T> {
     }
 }
 
-export function chiselIterator<T>(type: { new (): T }) {
-    const b = new BaseEntity(type.name);
+export function chiselIterator<T>(
+    type: { new (): T },
+) {
+    const b = new BaseEntity<T>(type.name);
     return new ChiselCursor<T>(type, b);
 }
 
