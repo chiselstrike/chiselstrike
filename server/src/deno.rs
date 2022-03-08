@@ -30,7 +30,11 @@ use deno_core::{op_async, op_sync};
 use deno_fetch::reqwest;
 use deno_runtime::deno_fetch;
 use deno_runtime::inspector_server::InspectorServer;
+use deno_runtime::ops::worker_host::CreateWebWorkerCb;
+use deno_runtime::ops::worker_host::PreloadModuleCb;
 use deno_runtime::permissions::Permissions;
+use deno_runtime::web_worker::WebWorker;
+use deno_runtime::web_worker::WebWorkerOptions;
 use deno_runtime::worker::{MainWorker, WorkerOptions};
 use deno_runtime::BootstrapOptions;
 use futures::stream::{try_unfold, Stream};
@@ -179,18 +183,67 @@ impl deno_core::ModuleLoader for ModuleLoader {
     }
 }
 
+fn create_web_worker(
+    base_directory: PathBuf,
+    bootstrap: BootstrapOptions,
+    preload_module_cb: Arc<PreloadModuleCb>,
+    maybe_inspector_server: Option<Arc<InspectorServer>>,
+) -> Arc<CreateWebWorkerCb> {
+    Arc::new(move |args| {
+        let create_web_worker_cb = create_web_worker(
+            base_directory.clone(),
+            bootstrap.clone(),
+            preload_module_cb.clone(),
+            maybe_inspector_server.clone(),
+        );
+
+        let code_map = RefCell::new(HashMap::new());
+        let module_loader = Rc::new(ModuleLoader {
+            code_map,
+            base_directory: base_directory.clone(),
+        });
+
+        // FIXME: Send a patch refactoring WebWorkerOptions and WorkerOptions
+        let options = WebWorkerOptions {
+            bootstrap: bootstrap.clone(),
+            extensions: vec![],
+            unsafely_ignore_certificate_errors: None,
+            root_cert_store: None,
+            user_agent: "hello_runtime".to_string(),
+            seed: None,
+            module_loader,
+            create_web_worker_cb,
+            preload_module_cb: preload_module_cb.clone(),
+            js_error_create_fn: None,
+            use_deno_namespace: args.use_deno_namespace,
+            worker_type: args.worker_type,
+            maybe_inspector_server: maybe_inspector_server.clone(),
+            get_error_class_fn: None,
+            blob_store: Default::default(),
+            broadcast_channel: Default::default(),
+            shared_array_buffer_store: None,
+            compiled_wasm_module_store: None,
+            maybe_exit_code: args.maybe_exit_code,
+        };
+        WebWorker::bootstrap_from_options(
+            args.name,
+            args.permissions,
+            args.main_module,
+            args.worker_id,
+            options,
+        )
+    })
+}
+
 impl DenoService {
     pub(crate) fn new(base_directory: PathBuf, inspect_brk: bool) -> Self {
-        let create_web_worker_cb = Arc::new(|_| {
-            todo!("Web workers are not supported");
-        });
         let web_worker_preload_module_cb = Arc::new(|_| {
             todo!("Web workers are not supported in the example");
         });
         let code_map = RefCell::new(HashMap::new());
         let module_loader = Rc::new(ModuleLoader {
             code_map,
-            base_directory,
+            base_directory: base_directory.clone(),
         });
 
         let mut inspector = None;
@@ -199,21 +252,28 @@ impl DenoService {
             inspector = Some(Arc::new(InspectorServer::new(addr, "chisel".to_string())));
         }
 
+        let bootstrap = BootstrapOptions {
+            apply_source_maps: false,
+            args: vec![],
+            cpu_count: 1,
+            debug_flag: false,
+            enable_testing_features: false,
+            is_tty: false,
+            // FIXME: make location a configuration parameter
+            location: Some(Url::parse("http://chiselstrike.com").unwrap()),
+            no_color: true,
+            runtime_version: "x".to_string(),
+            ts_version: "x".to_string(),
+            unstable: false,
+        };
+        let create_web_worker_cb = create_web_worker(
+            base_directory,
+            bootstrap.clone(),
+            web_worker_preload_module_cb.clone(),
+            inspector.clone(),
+        );
         let opts = WorkerOptions {
-            bootstrap: BootstrapOptions {
-                apply_source_maps: false,
-                args: vec![],
-                cpu_count: 1,
-                debug_flag: false,
-                enable_testing_features: false,
-                is_tty: false,
-                // FIXME: make location a configuration parameter
-                location: Some(Url::parse("http://chiselstrike.com").unwrap()),
-                no_color: true,
-                runtime_version: "x".to_string(),
-                ts_version: "x".to_string(),
-                unstable: false,
-            },
+            bootstrap,
             extensions: vec![],
             unsafely_ignore_certificate_errors: None,
             root_cert_store: None,
