@@ -184,6 +184,9 @@ impl DenoService {
         let create_web_worker_cb = Arc::new(|_| {
             todo!("Web workers are not supported");
         });
+        let web_worker_preload_module_cb = Arc::new(|_| {
+            todo!("Web workers are not supported in the example");
+        });
         let code_map = RefCell::new(HashMap::new());
         let module_loader = Rc::new(ModuleLoader {
             code_map,
@@ -203,6 +206,7 @@ impl DenoService {
                 cpu_count: 1,
                 debug_flag: false,
                 enable_testing_features: false,
+                is_tty: false,
                 // FIXME: make location a configuration parameter
                 location: Some(Url::parse("http://chiselstrike.com").unwrap()),
                 no_color: true,
@@ -226,6 +230,7 @@ impl DenoService {
             broadcast_channel: Default::default(),
             shared_array_buffer_store: None,
             compiled_wasm_module_store: None,
+            web_worker_preload_module_cb,
         };
 
         let path = "file:///no/such/file";
