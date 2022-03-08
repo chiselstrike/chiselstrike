@@ -42,7 +42,7 @@ pub struct Restriction {
 }
 
 #[derive(Debug, Clone)]
-pub(crate) enum SelectField {
+pub(crate) enum QueryField {
     Scalar {
         /// Name of the original Type field
         name: String,
@@ -59,8 +59,6 @@ pub(crate) enum SelectField {
         /// Name of the original Type field
         name: String,
         is_optional: bool,
-        /// Nested fields of the Entity object.
-        children: Vec<SelectField>,
         /// Policy transformation to be applied on the resulting JSON value.
         transform: Option<fn(Value) -> Value>,
     },
@@ -79,7 +77,8 @@ pub(crate) struct Query {
     /// multi-dimensional (=potentialy nested) JSON response from a linear
     /// sql response row. Each element represents a selected field (potentially nested)
     /// of the selected base type.
-    pub(crate) fields: Vec<SelectField>,
+    // pub(crate) fields: Vec<SelectField>,
+    pub(crate) entity: QueryEntity,
     /// Entity fields selected by the user. This field is used to post-filter fields that
     /// shall be returned to the user in JSON.
     /// FIXME: The post-filtering is suboptimal solution and selection should happen when
@@ -90,7 +89,9 @@ pub(crate) struct Query {
 /// QueryEntity represents queried Entity of type `ty` which is to be aliased as
 /// `table_alias` in the SQL query and joined with other Entities using `joins`.
 #[derive(Debug, Clone)]
-struct QueryEntity {
+pub(crate) struct QueryEntity {
+    /// Entity fields to be returned in JSON response
+    pub(crate) fields: Vec<QueryField>,
     /// Type of the entity.
     ty: Arc<ObjectType>,
     /// Alias name of this entity to be used in SQL query.
@@ -98,6 +99,16 @@ struct QueryEntity {
     /// Map from Entity field name to joined Entities which correspond to the entities
     /// stored under the field name.
     joins: HashMap<String, Join>,
+}
+
+impl QueryEntity {
+    pub(crate) fn get_child_entity<'a>(&'a self, child_name: &str) -> Option<&'a QueryEntity> {
+        if let Some(join) = self.joins.get(child_name) {
+            Some(&join.entity)
+        } else {
+            None
+        }
+    }
 }
 
 /// Represents JOIN operator joining `entity` to a previous QueryEntity which holds the
@@ -118,14 +129,14 @@ struct Join {
 /// structure that contains raw SQL query string and additional data necessary for
 /// JSON response reconstruction and filtering.
 struct QueryBuilder {
-    /// Recursive vector used to reconstruct nested entities based on flat vector of columns
-    /// returned by the database.
-    fields: Vec<SelectField>,
     /// Vector of SQL column aliases that will be selected from the database and corresponding
     /// scalar fields.
     columns: Vec<(String, String, Field)>,
+    /// Entity object representing entity that is being retrieved along with necessary joins
+    /// and nested entities
     entity: QueryEntity,
     restrictions: Vec<Restriction>,
+    /// Expression used to filter the entities that are to be returned.
     filter_expr: Option<expr::Expr>,
     /// List of fields to be returned to the user.
     allowed_fields: Option<HashSet<String>>,
@@ -139,10 +150,10 @@ struct QueryBuilder {
 impl QueryBuilder {
     fn new(base_type: Arc<ObjectType>) -> Self {
         Self {
-            fields: vec![],
             columns: vec![],
             entity: QueryEntity {
                 ty: base_type.clone(),
+                fields: vec![],
                 table_alias: base_type.backing_table().to_owned(),
                 joins: HashMap::default(),
             },
@@ -154,7 +165,7 @@ impl QueryBuilder {
         }
     }
 
-    fn base_type<'a>(&'a self) -> &'a Arc<ObjectType> {
+    fn base_type(&self) -> &Arc<ObjectType> {
         &self.entity.ty
     }
 
@@ -171,7 +182,7 @@ impl QueryBuilder {
             };
             let field =
                 builder.make_scalar_field(&field, ty.backing_table(), field.name.as_str(), None);
-            builder.fields.push(field)
+            builder.entity.fields.push(field)
         }
         builder
     }
@@ -190,9 +201,7 @@ impl QueryBuilder {
         };
 
         let mut builder = Self::new(ty.clone());
-        let (entity, fields) = builder.load_fields(&runtime, &ty, ty.backing_table());
-        builder.entity = entity;
-        builder.fields = fields;
+        builder.entity = builder.load_entity(&runtime, &ty, ty.backing_table());
         Ok(builder)
     }
 
@@ -202,8 +211,8 @@ impl QueryBuilder {
         table_name: &str,
         column_name: &str,
         transform: Option<fn(Value) -> Value>,
-    ) -> SelectField {
-        let select_field = SelectField::Scalar {
+    ) -> QueryField {
+        let select_field = QueryField::Scalar {
             name: field.name.clone(),
             type_: field.type_.clone(),
             is_optional: field.is_optional,
@@ -215,15 +224,15 @@ impl QueryBuilder {
         select_field
     }
 
-    /// Loads all Fields of a given type `ty` to be retrieved from the
+    /// QueryEntity for a given type `ty` to be retrieved from the
     /// database. For fields that represent a nested Entity a join is
-    /// generated and we attempt to retrieve them recursivelly as well.
-    fn load_fields(
+    /// generated and we attempt to retrieve them recursively as well.
+    fn load_entity(
         &mut self,
         runtime: &runtime::Runtime,
         ty: &Arc<ObjectType>,
         current_table: &str,
-    ) -> (QueryEntity, Vec<SelectField>) {
+    ) -> QueryEntity {
         let policies = make_field_policies(runtime, ty);
         self.add_login_restrictions(ty, current_table, &policies);
 
@@ -232,7 +241,7 @@ impl QueryBuilder {
         for field in ty.all_fields() {
             let field_policy = policies.transforms.get(&field.name).cloned();
 
-            if let Type::Object(nested_ty) = &field.type_ {
+            let query_field = if let Type::Object(nested_ty) = &field.type_ {
                 let nested_table = format!(
                     "{}_JOIN{}_{}",
                     current_table,
@@ -241,36 +250,30 @@ impl QueryBuilder {
                 );
                 self.join_counter += 1;
 
-                let (nested_entity, child_fields) =
-                    self.load_fields(runtime, nested_ty, &nested_table);
-
                 joins.insert(
                     field.name.to_owned(),
                     Join {
-                        entity: nested_entity,
+                        entity: self.load_entity(runtime, nested_ty, &nested_table),
                         lkey: field.name.to_owned(),
                         rkey: "id".to_owned(),
                     },
                 );
-                fields.push(SelectField::Entity {
+                QueryField::Entity {
                     name: field.name.clone(),
                     is_optional: field.is_optional,
-                    children: child_fields,
                     transform: field_policy,
-                });
+                }
             } else {
-                let field = self.make_scalar_field(field, current_table, &field.name, field_policy);
-                fields.push(field)
-            }
+                self.make_scalar_field(field, current_table, &field.name, field_policy)
+            };
+            fields.push(query_field);
         }
-        (
-            QueryEntity {
-                ty: ty.clone(),
-                table_alias: current_table.to_owned(),
-                joins,
-            },
+        QueryEntity {
+            ty: ty.clone(),
             fields,
-        )
+            table_alias: current_table.to_owned(),
+            joins,
+        }
     }
 
     fn add_login_restrictions(
@@ -471,7 +474,7 @@ impl QueryBuilder {
     fn build(&self) -> Result<Query> {
         Ok(Query {
             raw_sql: self.make_raw_query()?,
-            fields: self.fields.clone(),
+            entity: self.entity.clone(),
             allowed_fields: self.allowed_fields.clone(),
         })
     }

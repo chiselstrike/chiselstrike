@@ -1,6 +1,6 @@
 // SPDX-FileCopyrightText: © 2021 ChiselStrike <info@chiselstrike.com>
 
-use crate::datastore::query::{Mutation, Query, SelectField, SqlValue};
+use crate::datastore::query::{Mutation, Query, QueryEntity, QueryField, SqlValue};
 use crate::datastore::{DbConnection, Kind};
 use crate::types::{Field, ObjectDelta, ObjectType, Type, OAUTHUSER_TYPE_NAME};
 use crate::JsonObject;
@@ -160,10 +160,10 @@ fn column_is_null(row: &AnyRow, column_idx: usize) -> bool {
     row.try_get_raw(column_idx).unwrap().is_null()
 }
 
-fn id_idx(fields: &[SelectField]) -> usize {
-    for f in fields {
+fn id_idx(entity: &QueryEntity) -> usize {
+    for f in &entity.fields {
         match f {
-            SelectField::Scalar {
+            QueryField::Scalar {
                 name, column_idx, ..
             } if name == "id" => return *column_idx,
             _ => (),
@@ -319,11 +319,11 @@ impl QueryEngine {
         Ok(())
     }
 
-    fn row_to_json(fields: &[SelectField], row: &AnyRow) -> Result<ResultRow> {
+    fn row_to_json(entity: &QueryEntity, row: &AnyRow) -> Result<ResultRow> {
         let mut ret = JsonObject::default();
-        for s_field in fields {
+        for s_field in &entity.fields {
             match s_field {
-                SelectField::Scalar {
+                QueryField::Scalar {
                     name,
                     type_,
                     column_idx,
@@ -366,16 +366,16 @@ impl QueryEngine {
                     }
                     ret.insert(name.clone(), val);
                 }
-                SelectField::Entity {
+                QueryField::Entity {
                     name,
-                    children,
                     is_optional,
                     transform,
                 } => {
-                    if *is_optional && column_is_null(row, id_idx(children)) {
+                    let child_entity = entity.get_child_entity(name).unwrap();
+                    if *is_optional && column_is_null(row, id_idx(child_entity)) {
                         continue;
                     }
-                    let mut val = json!(Self::row_to_json(children, row)?);
+                    let mut val = json!(Self::row_to_json(child_entity, row)?);
                     if let Some(tr) = transform {
                         // Apply policy transformation
                         val = tr(val);
@@ -414,7 +414,7 @@ impl QueryEngine {
         let allowed_fields = query.allowed_fields;
 
         let stream = new_query_results(query.raw_sql, tr);
-        let stream = stream.map(move |row| Self::row_to_json(&query.fields, &row?));
+        let stream = stream.map(move |row| Self::row_to_json(&query.entity, &row?));
         let stream = Box::pin(stream.map(move |o| Self::project(o, &allowed_fields)));
         Ok(stream)
     }
