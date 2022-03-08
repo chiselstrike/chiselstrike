@@ -1,0 +1,20 @@
+# SPDX-FileCopyrightText: © 2022 ChiselStrike <info@chiselstrike.com>
+
+# RUN: sh -e @file
+
+cat << EOF > "$TEMPDIR/endpoints/worker.js"
+export default async function chisel(req) {
+    const worker = new Worker('./bar.js', {type: 'module'});
+    return new Response("worker");
+}
+EOF
+
+cd "$TEMPDIR"
+$CHISEL apply
+
+# CHECK: End point defined: /dev/worker
+
+$CURL -o - $CHISELD_HOST/dev/worker
+
+# CHECK: HTTP/1.1 200 OK
+# CHECK: worker
