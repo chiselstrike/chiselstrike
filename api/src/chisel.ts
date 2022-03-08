@@ -402,6 +402,8 @@ export class ChiselCursor<T> {
         let iter = this.makeTransformedQueryIter(op.inner);
         if (iter !== undefined) {
             return op.apply(iter);
+        } else if (op.type == OpType.Take) {
+            return this.makeQueryIter(op);
         } else if (
             op.type == OpType.PredicateFilter || op.type == OpType.Sort
         ) {

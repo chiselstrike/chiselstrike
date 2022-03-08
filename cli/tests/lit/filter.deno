@@ -68,3 +68,52 @@ $CURL -o - $CHISELD_HOST/dev/query?first_name="123"
 ## filter with undefined values, in the presence of policies
 $CURL -o - $CHISELD_HOST/dev/query
 # CHECK: [xxxxxxxxxx]
+
+
+## Test take and filter permutability
+
+cat << EOF > "$TEMPDIR/models/post.ts"
+import { ChiselEntity } from "@chiselstrike/api";
+export class Post extends ChiselEntity {
+    a: string = "";
+    b: number = 0;
+}
+EOF
+
+cat << EOF > "$TEMPDIR/endpoints/take_filter.ts"
+import { responseFromJson } from "@chiselstrike/api"
+import { Post } from '../models/post.ts';
+
+export default async (req: Request) => {
+    await Post.build({ a: "x", b: 1 }).save();
+    await Post.build({ a: "y", b: 2 }).save();
+    await Post.build({ a: "z", b: 3 }).save();
+
+    const simple_take = (await Post.cursor()
+        .take(1)
+        .toArray())
+        .map(p => [p.a, p.b]);
+    const take_filter = (await Post.cursor()
+        .take(1)
+        .filter({ a: "z" })
+        .toArray())
+        .map(p => [p.a, p.b]);
+    const filter_take = (await Post.cursor()
+        .filter({ a: "z" })
+        .take(1)
+        .toArray())
+        .map(p => [p.a, p.b]);
+    return responseFromJson({
+        simple_take: simple_take[0],
+        take_filter: take_filter[0],
+        filter_take: filter_take[0]
+    });
+}
+EOF
+$CHISEL apply
+# CHECK: Model defined: Post
+# CHECK: End point defined: /dev/take_filter
+
+$CURL -X POST -o - $CHISELD_HOST/dev/take_filter
+# CHECK: {"simple_take":["x",1],"filter_take":["z",3]}
+
