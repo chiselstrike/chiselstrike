@@ -117,3 +117,73 @@ $CHISEL apply
 $CURL -X POST -o - $CHISELD_HOST/dev/take_filter
 # CHECK: {"simple_take":["x",1],"filter_take":["z",3]}
 
+
+# Test sql keywords
+
+cat << EOF > "$TEMPDIR/models/types.ts"
+
+export class TestingEntity extends Chisel.ChiselEntity {
+    limit: string = "limit";
+    group: string = "group";
+    where: string = "where";
+    select: string = "select";
+    delete: string = "delete";
+    insert?: string;
+    alter?: string;
+}
+EOF
+
+cat << EOF > "$TEMPDIR/endpoints/store_testing_entity.ts"
+import { TestingEntity } from "../models/types.ts";
+
+export default async function chisel(req: Request) {
+    await TestingEntity.build({insert: "insert"}).save();
+    return new Response("Ok");
+}
+EOF
+
+cat << EOF > "$TEMPDIR/endpoints/findall.ts"
+import { TestingEntity } from "../models/types.ts";
+
+export default async function chisel(req: Request) {
+    const url = new URL(req.url);
+    const property = url.searchParams.get("property");
+    if (property === null) {
+        throw Error("You must specify property");
+    }
+
+    const filtered = await TestingEntity.findMany(
+        {[property]: property} as Partial<TestingEntity>
+    );
+
+    return new Response("[" + filtered[0][property as keyof TestingEntity] + "]");
+}
+EOF
+
+
+cd "$TEMPDIR"
+$CHISEL apply
+
+# CHECK: Model defined: TestingEntity
+# CHECK: End point defined: /dev/findall
+
+$CURL -X POST -o - $CHISELD_HOST/dev/store_testing_entity
+# CHECK: Ok
+
+$CURL -o - $CHISELD_HOST/dev/findall?property="limit"
+# CHECK: [limit]
+
+$CURL -o - $CHISELD_HOST/dev/findall?property="group"
+# CHECK: [group]
+
+$CURL -o - $CHISELD_HOST/dev/findall?property="where"
+# CHECK: [where]
+
+$CURL -o - $CHISELD_HOST/dev/findall?property="select"
+# CHECK: [select]
+
+$CURL -o - $CHISELD_HOST/dev/findall?property="delete"
+# CHECK: [delete]
+
+$CURL -o - $CHISELD_HOST/dev/findall?property="insert"
+# CHECK: [insert]
