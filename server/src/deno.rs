@@ -37,7 +37,9 @@ use deno_runtime::web_worker::WebWorker;
 use deno_runtime::web_worker::WebWorkerOptions;
 use deno_runtime::worker::{MainWorker, WorkerOptions};
 use deno_runtime::BootstrapOptions;
+use futures::future;
 use futures::stream::{try_unfold, Stream};
+use futures::task::LocalFutureObj;
 use futures::FutureExt;
 use futures::StreamExt;
 use hyper::body::HttpBody;
@@ -237,9 +239,8 @@ fn create_web_worker(
 
 impl DenoService {
     pub(crate) fn new(base_directory: PathBuf, inspect_brk: bool) -> Self {
-        let web_worker_preload_module_cb = Arc::new(|_| {
-            todo!("Web workers are not supported in the example");
-        });
+        let web_worker_preload_module_cb =
+            Arc::new(|worker| LocalFutureObj::new(Box::new(future::ready(Ok(worker)))));
         let code_map = RefCell::new(HashMap::new());
         let module_loader = Rc::new(ModuleLoader {
             code_map,
