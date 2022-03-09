@@ -1,5 +1,6 @@
 // SPDX-FileCopyrightText: © 2021 ChiselStrike <info@chiselstrike.com>
 
+use crate::datastore::expr;
 use crate::deno::current_api_version;
 use crate::deno::make_field_policies;
 use crate::policies::FieldPolicies;
@@ -11,6 +12,7 @@ use crate::JsonObject;
 use anyhow::{anyhow, Result};
 use enum_as_inner::EnumAsInner;
 use serde_json::value::Value;
+use std::collections::HashMap;
 use std::collections::HashSet;
 use std::sync::Arc;
 
@@ -40,7 +42,7 @@ pub struct Restriction {
 }
 
 #[derive(Debug, Clone)]
-pub(crate) enum SelectField {
+pub(crate) enum QueryField {
     Scalar {
         /// Name of the original Type field
         name: String,
@@ -57,8 +59,6 @@ pub(crate) enum SelectField {
         /// Name of the original Type field
         name: String,
         is_optional: bool,
-        /// Nested fields of the Entity object.
-        children: Vec<SelectField>,
         /// Policy transformation to be applied on the resulting JSON value.
         transform: Option<fn(Value) -> Value>,
     },
@@ -77,7 +77,8 @@ pub(crate) struct Query {
     /// multi-dimensional (=potentialy nested) JSON response from a linear
     /// sql response row. Each element represents a selected field (potentially nested)
     /// of the selected base type.
-    pub(crate) fields: Vec<SelectField>,
+    // pub(crate) fields: Vec<SelectField>,
+    pub(crate) entity: QueryEntity,
     /// Entity fields selected by the user. This field is used to post-filter fields that
     /// shall be returned to the user in JSON.
     /// FIXME: The post-filtering is suboptimal solution and selection should happen when
@@ -85,15 +86,39 @@ pub(crate) struct Query {
     pub(crate) allowed_fields: Option<HashSet<String>>,
 }
 
-/// Represents JOIN operator joining `lalias` table using `lkey` with Entity of `rtype`
-/// whose data are stored in `ralias` table and joined using `rkey`.
+/// QueryEntity represents queried Entity of type `ty` which is to be aliased as
+/// `table_alias` in the SQL query and joined with other Entities using `joins`.
+#[derive(Debug, Clone)]
+pub(crate) struct QueryEntity {
+    /// Entity fields to be returned in JSON response
+    pub(crate) fields: Vec<QueryField>,
+    /// Type of the entity.
+    ty: Arc<ObjectType>,
+    /// Alias name of this entity to be used in SQL query.
+    table_alias: String,
+    /// Map from Entity field name to joined Entities which correspond to the entities
+    /// stored under the field name.
+    joins: HashMap<String, Join>,
+}
+
+impl QueryEntity {
+    pub(crate) fn get_child_entity<'a>(&'a self, child_name: &str) -> Option<&'a QueryEntity> {
+        if let Some(join) = self.joins.get(child_name) {
+            Some(&join.entity)
+        } else {
+            None
+        }
+    }
+}
+
+/// Represents JOIN operator joining `entity` to a previous QueryEntity which holds the
+/// join. The join is done using equality on `lkey` of the previous QueryEntity and `rkey`
+/// on the current `entity`.
 #[derive(Debug, Clone)]
 struct Join {
-    rtype: Arc<ObjectType>,
+    entity: QueryEntity,
     lkey: String,
     rkey: String,
-    lalias: String,
-    ralias: String,
 }
 
 /// Class used to build `Query` from either JSON query or `ObjectType`.
@@ -104,32 +129,44 @@ struct Join {
 /// structure that contains raw SQL query string and additional data necessary for
 /// JSON response reconstruction and filtering.
 struct QueryBuilder {
-    /// Recursive vector used to reconstruct nested entities based on flat vector of columns
-    /// returned by the database.
-    fields: Vec<SelectField>,
     /// Vector of SQL column aliases that will be selected from the database and corresponding
     /// scalar fields.
     columns: Vec<(String, String, Field)>,
-    base_type: Arc<ObjectType>,
-    joins: Vec<Join>,
+    /// Entity object representing entity that is being retrieved along with necessary joins
+    /// and nested entities
+    entity: QueryEntity,
     restrictions: Vec<Restriction>,
+    /// Expression used to filter the entities that are to be returned.
+    filter_expr: Option<expr::Expr>,
     /// List of fields to be returned to the user.
     allowed_fields: Option<HashSet<String>>,
     /// Limits how many rows/entries will be returned to the user.
     limit: Option<u64>,
+    /// Counts the total number of joins the builder encountered. It's used to
+    /// uniquely identify joined tables.
+    join_counter: usize,
 }
 
 impl QueryBuilder {
     fn new(base_type: Arc<ObjectType>) -> Self {
         Self {
-            fields: vec![],
             columns: vec![],
-            base_type,
-            joins: vec![],
+            entity: QueryEntity {
+                ty: base_type.clone(),
+                fields: vec![],
+                table_alias: base_type.backing_table().to_owned(),
+                joins: HashMap::default(),
+            },
             restrictions: vec![],
+            filter_expr: None,
             allowed_fields: None,
             limit: None,
+            join_counter: 0,
         }
+    }
+
+    fn base_type(&self) -> &Arc<ObjectType> {
+        &self.entity.ty
     }
 
     /// Constructs a query builder ready to build an expression querying all fields of a
@@ -145,7 +182,7 @@ impl QueryBuilder {
             };
             let field =
                 builder.make_scalar_field(&field, ty.backing_table(), field.name.as_str(), None);
-            builder.fields.push(field)
+            builder.entity.fields.push(field)
         }
         builder
     }
@@ -164,7 +201,7 @@ impl QueryBuilder {
         };
 
         let mut builder = Self::new(ty.clone());
-        builder.fields = builder.load_fields(&runtime, &ty, ty.backing_table());
+        builder.entity = builder.load_entity(&runtime, &ty, ty.backing_table());
         Ok(builder)
     }
 
@@ -174,8 +211,8 @@ impl QueryBuilder {
         table_name: &str,
         column_name: &str,
         transform: Option<fn(Value) -> Value>,
-    ) -> SelectField {
-        let select_field = SelectField::Scalar {
+    ) -> QueryField {
+        let select_field = QueryField::Scalar {
             name: field.name.clone(),
             type_: field.type_.clone(),
             is_optional: field.is_optional,
@@ -187,49 +224,56 @@ impl QueryBuilder {
         select_field
     }
 
-    /// Loads all Fields of a given type `ty` to be retrieved from the
+    /// QueryEntity for a given type `ty` to be retrieved from the
     /// database. For fields that represent a nested Entity a join is
-    /// generated and we attempt to retrieve them recursivelly as well.
-    fn load_fields(
+    /// generated and we attempt to retrieve them recursively as well.
+    fn load_entity(
         &mut self,
         runtime: &runtime::Runtime,
         ty: &Arc<ObjectType>,
         current_table: &str,
-    ) -> Vec<SelectField> {
+    ) -> QueryEntity {
         let policies = make_field_policies(runtime, ty);
         self.add_login_restrictions(ty, current_table, &policies);
 
         let mut fields = vec![];
+        let mut joins = HashMap::default();
         for field in ty.all_fields() {
-            if let Type::Object(nested_ty) = &field.type_ {
+            let field_policy = policies.transforms.get(&field.name).cloned();
+
+            let query_field = if let Type::Object(nested_ty) = &field.type_ {
                 let nested_table = format!(
                     "{}_JOIN{}_{}",
                     current_table,
-                    self.joins.len(),
+                    self.join_counter,
                     nested_ty.backing_table()
                 );
-                self.joins.push(Join {
-                    rtype: nested_ty.clone(),
-                    lkey: field.name.to_owned(),
-                    rkey: "id".to_owned(),
-                    lalias: current_table.to_owned(),
-                    ralias: nested_table.to_owned(),
-                });
-                let field_policy = policies.transforms.get(&field.name).cloned();
+                self.join_counter += 1;
 
-                fields.push(SelectField::Entity {
+                joins.insert(
+                    field.name.to_owned(),
+                    Join {
+                        entity: self.load_entity(runtime, nested_ty, &nested_table),
+                        lkey: field.name.to_owned(),
+                        rkey: "id".to_owned(),
+                    },
+                );
+                QueryField::Entity {
                     name: field.name.clone(),
                     is_optional: field.is_optional,
-                    children: self.load_fields(runtime, nested_ty, &nested_table),
                     transform: field_policy,
-                });
+                }
             } else {
-                let field_policy = policies.transforms.get(&field.name).cloned();
-                let field = self.make_scalar_field(field, current_table, &field.name, field_policy);
-                fields.push(field)
-            }
+                self.make_scalar_field(field, current_table, &field.name, field_policy)
+            };
+            fields.push(query_field);
         }
-        fields
+        QueryEntity {
+            ty: ty.clone(),
+            fields,
+            table_alias: current_table.to_owned(),
+            joins,
+        }
     }
 
     fn add_login_restrictions(
@@ -279,13 +323,26 @@ impl QueryBuilder {
         let restrictions = convert_restrictions(restrictions)?;
         for r in restrictions {
             anyhow::ensure!(
-                self.base_type.field_by_name(&r.column).is_some(),
+                self.base_type().field_by_name(&r.column).is_some(),
                 "trying to filter by non-existent field `{}`",
                 r.column
             );
             self.restrictions.push(r);
         }
         Ok(())
+    }
+
+    fn add_expression_filter(&mut self, expr: expr::Expr) {
+        if let Some(filter_expr) = &self.filter_expr {
+            let new_expr = expr::Expr::Binary(expr::BinaryExpr {
+                left: Box::new(expr),
+                op: expr::BinaryOp::And,
+                right: Box::new(filter_expr.clone()),
+            });
+            self.filter_expr = Some(new_expr);
+        } else {
+            self.filter_expr = Some(expr);
+        }
     }
 
     fn make_column_string(&self) -> String {
@@ -305,45 +362,121 @@ impl QueryBuilder {
     }
 
     fn make_join_string(&self) -> String {
-        let mut join_string = String::new();
-        for join in &self.joins {
-            join_string += &format!(
-                "LEFT JOIN \"{}\" AS \"{}\" ON \"{}\".\"{}\"=\"{}\".\"{}\"\n",
-                join.rtype.backing_table(),
-                join.ralias,
-                join.lalias,
-                join.lkey,
-                join.ralias,
-                join.rkey
-            );
+        fn gather_joins(entity: &QueryEntity) -> String {
+            let mut join_string = String::new();
+            for join in entity.joins.values() {
+                join_string += &format!(
+                    "LEFT JOIN \"{}\" AS \"{}\" ON \"{}\".\"{}\"=\"{}\".\"{}\"\n",
+                    join.entity.ty.backing_table(),
+                    join.entity.table_alias,
+                    entity.table_alias,
+                    join.lkey,
+                    join.entity.table_alias,
+                    join.rkey
+                );
+                join_string += gather_joins(&join.entity).as_str();
+            }
+            join_string
         }
-        join_string
+        gather_joins(&self.entity)
     }
 
-    fn make_raw_query(&self) -> String {
+    fn make_filter_string(&self) -> Result<String> {
+        let mut rest_filter = make_restriction_string(&self.restrictions);
+        if let Some(expr) = &self.filter_expr {
+            let condition = self.filter_expr_to_string(expr)?;
+            if rest_filter.is_empty() {
+                rest_filter = format!("WHERE {}", condition);
+            } else {
+                rest_filter = format!("{} AND ({})", rest_filter, condition);
+            }
+        }
+        Ok(rest_filter)
+    }
+
+    fn filter_expr_to_string(&self, expr: &expr::Expr) -> Result<String> {
+        let expr_str = match &expr {
+            expr::Expr::Literal { value } => {
+                let lit_str = match &value {
+                    expr::Literal::Bool(lit) => (if *lit { "1" } else { "0" }).to_string(),
+                    expr::Literal::U64(lit) => lit.to_string(),
+                    expr::Literal::I64(lit) => lit.to_string(),
+                    expr::Literal::F64(lit) => lit.to_string(),
+                    expr::Literal::String(lit) => lit.to_string(),
+                };
+                escape_string(lit_str.as_str())
+            }
+            expr::Expr::Binary(binary_exp) => {
+                format!(
+                    "({} {} {})",
+                    self.filter_expr_to_string(&binary_exp.left)?,
+                    binary_exp.op.to_sql_string(),
+                    self.filter_expr_to_string(&binary_exp.right)?,
+                )
+            }
+            expr::Expr::Property(property) => self.property_expr_to_string(property)?,
+            expr::Expr::Parameter { .. } => anyhow::bail!("unexpected standalone parameter usage"),
+        };
+        Ok(expr_str)
+    }
+
+    fn property_expr_to_string(&self, prop_access: &expr::PropertyAccess) -> Result<String> {
+        fn get_property_chain(prop_access: &expr::PropertyAccess) -> Result<Vec<String>> {
+            match &*prop_access.object {
+                expr::Expr::Property(obj) => {
+                    let mut properties = get_property_chain(obj)?;
+                    properties.push(prop_access.property.to_owned());
+                    Ok(properties)
+                }
+                expr::Expr::Parameter { .. } => Ok(vec![prop_access.property.to_owned()]),
+                _ => anyhow::bail!("unexpected expression in property chain!"),
+            }
+        }
+        let properties = get_property_chain(prop_access)?;
+        assert!(!properties.is_empty());
+
+        let mut field = &properties[0];
+        let mut entity = &self.entity;
+        for next_field in &properties[1..] {
+            entity = &entity
+                .joins
+                .get(field)
+                .ok_or_else(|| {
+                    anyhow!(
+                        "expression error: unable to locate joined entity on field {}",
+                        field
+                    )
+                })?
+                .entity;
+            field = next_field;
+        }
+        Ok(format!("\"{}\".\"{}\"", entity.table_alias, field))
+    }
+
+    fn make_raw_query(&self) -> Result<String> {
         let column_string = self.make_column_string();
         let join_string = self.make_join_string();
-        let raw_restrictions = make_restriction_string(&self.restrictions);
+        let filter_string = self.make_filter_string()?;
 
         let mut raw_sql = format!(
             "SELECT {} FROM \"{}\" {} {}",
             column_string,
-            self.base_type.backing_table(),
+            self.base_type().backing_table(),
             join_string,
-            raw_restrictions
+            filter_string
         );
         if let Some(limit) = self.limit {
             raw_sql += format!(" LIMIT {}", limit).as_str();
         }
-        raw_sql
+        Ok(raw_sql)
     }
 
-    fn build(&self) -> Query {
-        Query {
-            raw_sql: self.make_raw_query(),
-            fields: self.fields.clone(),
+    fn build(&self) -> Result<Query> {
+        Ok(Query {
+            raw_sql: self.make_raw_query()?,
+            entity: self.entity.clone(),
             allowed_fields: self.allowed_fields.clone(),
-        }
+        })
     }
 }
 
@@ -397,6 +530,10 @@ fn convert_to_query_builder(val: &serde_json::Value) -> Result<QueryBuilder> {
         "RestrictionFilter" => {
             builder.load_restrictions(get_key!("restrictions", as_object)?)?;
         }
+        "ExpressionFilter" => {
+            let expr = expr::from_json(val["expression"].clone())?;
+            builder.add_expression_filter(expr);
+        }
         "ColumnsSelect" => {
             builder.update_allowed_fields(get_key!("columns", as_array)?)?;
         }
@@ -438,14 +575,14 @@ pub(crate) fn convert_restrictions(restrictions: &JsonObject) -> Result<Vec<Rest
     Ok(sql_restrictions)
 }
 
-pub(crate) fn type_to_query(ty: &Arc<ObjectType>) -> Query {
+pub(crate) fn type_to_query(ty: &Arc<ObjectType>) -> Result<Query> {
     let builder = QueryBuilder::from_type(ty);
     builder.build()
 }
 
 pub(crate) fn json_to_query(val: &serde_json::Value) -> Result<Query> {
     let builder = convert_to_query_builder(val)?;
-    Ok(builder.build())
+    builder.build()
 }
 
 /// `Mutation` represents a statement that mutates the database state.

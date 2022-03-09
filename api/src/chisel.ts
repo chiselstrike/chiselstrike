@@ -9,6 +9,7 @@ enum OpType {
     ColumnsSelect = "ColumnsSelect",
     RestrictionFilter = "RestrictionFilter",
     PredicateFilter = "PredicateFilter",
+    ExpressionFilter = "ExpressionFilter",
     Sort = "Sort",
 }
 
@@ -176,6 +177,38 @@ class RestrictionFilter<T> extends Operator<T> {
 }
 
 /**
+ * ExpressionFilter operator is intended only to be used by Chisel compiler.
+ * It applies `predicate` on each element and keeps only those for which
+ * the `predicate` returns true. The Chisel compiler provides an `expression`
+ * as well which is to be equivalent to the predicate and which is sent to
+ * the Rust backend for direct Database evaluation if possible.
+ */
+class ExpressionFilter<T> extends Operator<T> {
+    constructor(
+        public predicate: (arg: T) => boolean,
+        public expression: Record<string, unknown>,
+        inner: Operator<T>,
+    ) {
+        super(OpType.ExpressionFilter, inner);
+    }
+
+    apply(
+        iter: AsyncIterable<T>,
+    ): AsyncIterable<T> {
+        const predicate = this.predicate;
+        return {
+            [Symbol.asyncIterator]: async function* () {
+                for await (const arg of iter) {
+                    if (predicate(arg)) {
+                        yield arg;
+                    }
+                }
+            },
+        };
+    }
+}
+
+/**
  * Sort operator sorts elements using `comparator` which
  * for two elements of the iterable returns true if `lhs`
  * is considered less than `rhs`, false otherwise.
@@ -263,6 +296,21 @@ export class ChiselCursor<T> {
                 new RestrictionFilter(arg1, this.inner),
             );
         }
+    }
+
+    // Filtering function used by Chisel Compiler. Not intended for direct usage.
+    __filterWithExpression(
+        predicate: (arg: T) => boolean,
+        expression: Record<string, unknown>,
+    ) {
+        return new ChiselCursor(
+            this.baseConstructor,
+            new ExpressionFilter(
+                predicate,
+                expression,
+                this.inner,
+            ),
+        );
     }
 
     /**
