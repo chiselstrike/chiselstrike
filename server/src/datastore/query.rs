@@ -73,11 +73,8 @@ pub(crate) enum QueryField {
 pub(crate) struct Query {
     /// SQL query text
     pub(crate) raw_sql: String,
-    /// Nested structure representing a blueprint which is used to reconstruct
-    /// multi-dimensional (=potentialy nested) JSON response from a linear
-    /// sql response row. Each element represents a selected field (potentially nested)
-    /// of the selected base type.
-    // pub(crate) fields: Vec<SelectField>,
+    /// Entity that is being queries. Contains information necessary to reconstruct
+    /// the JSON response.
     pub(crate) entity: QueryEntity,
     /// Entity fields selected by the user. This field is used to post-filter fields that
     /// shall be returned to the user in JSON.
@@ -87,7 +84,7 @@ pub(crate) struct Query {
 }
 
 /// QueryEntity represents queried Entity of type `ty` which is to be aliased as
-/// `table_alias` in the SQL query and joined with other Entities using `joins`.
+/// `table_alias` in the SQL query and joined with nested Entities using `joins`.
 #[derive(Debug, Clone)]
 pub(crate) struct QueryEntity {
     /// Entity fields to be returned in JSON response
@@ -103,11 +100,7 @@ pub(crate) struct QueryEntity {
 
 impl QueryEntity {
     pub(crate) fn get_child_entity<'a>(&'a self, child_name: &str) -> Option<&'a QueryEntity> {
-        if let Some(join) = self.joins.get(child_name) {
-            Some(&join.entity)
-        } else {
-            None
-        }
+        self.joins.get(child_name).map(|c| &c.entity)
     }
 }
 
