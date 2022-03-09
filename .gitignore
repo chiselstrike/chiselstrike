@@ -1,3 +1,5 @@
 /target
 /cli/docs/_build
 /node_modules
+.vscode
+*.code-workspace
