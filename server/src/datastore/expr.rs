@@ -98,17 +98,9 @@ mod tests {
         assert!(matches!(
             expr,
             Expr::Literal {
-                value: Literal::Bool(_)
+                value: Literal::Bool(true)
             }
         ));
-        if let Expr::Literal {
-            value: Literal::Bool(v),
-        } = expr
-        {
-            assert!(v);
-        } else {
-            panic!("failed to match the literal");
-        }
     }
 
     #[test]
@@ -124,17 +116,9 @@ mod tests {
         assert!(matches!(
             expr,
             Expr::Literal {
-                value: Literal::U64(_)
+                value: Literal::U64(42)
             }
         ));
-        if let Expr::Literal {
-            value: Literal::U64(v),
-        } = expr
-        {
-            assert_eq!(v, 42);
-        } else {
-            panic!("failed to match the literal");
-        }
     }
 
     #[test]
@@ -150,17 +134,9 @@ mod tests {
         assert!(matches!(
             expr,
             Expr::Literal {
-                value: Literal::I64(_)
+                value: Literal::I64(-42)
             }
         ));
-        if let Expr::Literal {
-            value: Literal::I64(v),
-        } = expr
-        {
-            assert_eq!(v, -42);
-        } else {
-            panic!("failed to match the literal");
-        }
     }
 
     #[test]
