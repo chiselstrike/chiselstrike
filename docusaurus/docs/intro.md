@@ -72,14 +72,17 @@ and see the ChiselStrike start up:
 > hello@1.0.0 dev
 > chisel dev
 
-🙇‍♂️ Thank you for your interest in the ChiselStrike private beta! (Beta-Jan22.2)
-⚠️  This is provided to you for evaluation purposes and should not be used to host production at this time
-Docs with a description of expected functionality and command references at https://docs.chiselstrike.com
-For any question, concerns, or early feedback, contact us at beta@chiselstrike.com
+🚀 Thank you for your interest in the ChiselStrike beta! 🚀
 
- 🍾 We hope you have a great 2022! 🥂
+⚠️  This software is for evaluation purposes only. Do not use it in production. ⚠️
 
-INFO - ChiselStrike is ready 🚀 - URL: http://127.0.0.1:8080
+📚 Docs:    https://docs.chiselstrike.com
+💬 Discord: https://discord.gg/4B5D7hYwub
+📧 Email:   beta@chiselstrike.com
+
+For any question, concerns, or early feedback, please contact us via email or Discord!
+
+INFO - ChiselStrike is ready 🚀 - URL: http://localhost:8080
 End point defined: /dev/hello
 ```
 
