@@ -3,8 +3,6 @@
 use crate::JsonObject;
 use anyhow::Context;
 use anyhow::{anyhow, Result};
-use deno_fetch::reqwest;
-use deno_runtime::deno_fetch;
 use rsa::{PaddingScheme, RsaPrivateKey};
 use url::Url;
 
@@ -37,7 +35,7 @@ async fn read_url(url: &Url) -> Result<String> {
         }
         .map_err(|x| anyhow!("reading file {}: {:?}", url.as_str(), x)),
         _ => {
-            let req = reqwest::get(url.clone())
+            let req = utils::get_ok(url.clone())
                 .await
                 .map_err(|x| anyhow!("reading URL {}: {:?}", url.as_str(), x))?;
             req.text()

@@ -9,6 +9,7 @@ members = [
     "packages",
     "server",
     "tsc_compile",
+    "utils",
 ]
 
 # This is required to nest workspaces https://github.com/rust-lang/cargo/issues/5042
