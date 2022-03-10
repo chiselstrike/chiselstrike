@@ -7,7 +7,6 @@ enum OpType {
     BaseEntity = "BaseEntity",
     Take = "Take",
     ColumnsSelect = "ColumnsSelect",
-    RestrictionFilter = "RestrictionFilter",
     PredicateFilter = "PredicateFilter",
     ExpressionFilter = "ExpressionFilter",
     Sort = "Sort",
@@ -143,40 +142,6 @@ class PredicateFilter<T> extends Operator<T> {
 }
 
 /**
- * RestrictionFilter operator applies `restrictions` on each element
- * and keeps only those where field value of a field, specified
- * by restriction key, equals to restriction value.
- */
-class RestrictionFilter<T> extends Operator<T> {
-    constructor(
-        public restrictions: Partial<T>,
-        inner: Operator<T>,
-    ) {
-        super(OpType.RestrictionFilter, inner);
-    }
-
-    apply(
-        iter: AsyncIterable<T>,
-    ): AsyncIterable<T> {
-        const restrictions = this.restrictions;
-        return {
-            [Symbol.asyncIterator]: async function* () {
-                for await (const arg of iter) {
-                    verifyMatch: {
-                        for (const key in restrictions) {
-                            if (arg[key] != restrictions[key]) {
-                                break verifyMatch;
-                            }
-                        }
-                        yield arg;
-                    }
-                }
-            },
-        };
-    }
-}
-
-/**
  * ExpressionFilter operator is intended only to be used by Chisel compiler.
  * It applies `predicate` on each element and keeps only those for which
  * the `predicate` returns true. The Chisel compiler provides an `expression`
@@ -291,9 +256,58 @@ export class ChiselCursor<T> {
                 ),
             );
         } else {
+            const restrictions = arg1;
+            let expr = undefined;
+            for (const key in restrictions) {
+                if (restrictions[key] === undefined) {
+                    continue;
+                }
+                const cmpExpr = {
+                    "expr_type": "Binary",
+                    left: {
+                        "expr_type": "Property",
+                        object: { "expr_type": "Parameter", position: 0 },
+                        property: key,
+                    },
+                    op: "Eq",
+                    right: {
+                        "expr_type": "Literal",
+                        value: restrictions[key],
+                    },
+                };
+                if (expr === undefined) {
+                    expr = cmpExpr;
+                } else {
+                    expr = {
+                        "expr_type": "Binary",
+                        left: cmpExpr,
+                        op: "And",
+                        right: expr,
+                    };
+                }
+            }
+            if (expr === undefined) {
+                // If it's an empty restriction, no need to create an empty filter.
+                return this;
+            }
+            const predicate = (arg: T) => {
+                for (const key in restrictions) {
+                    if (restrictions[key] === undefined) {
+                        continue;
+                    }
+                    if (arg[key] != restrictions[key]) {
+                        return false;
+                    }
+                }
+                return true;
+            };
             return new ChiselCursor(
                 this.baseConstructor,
-                new RestrictionFilter(arg1, this.inner),
+                new ExpressionFilter(
+                    predicate,
+                    expr,
+                    this.inner,
+                ),
             );
         }
     }

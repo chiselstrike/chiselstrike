@@ -117,7 +117,6 @@ struct Join {
 /// Class used to build `Query` from either JSON query or `ObjectType`.
 /// The json part recursively descends through selected fields and captures all
 /// joins necessary for nested types retrieval.
-/// Once constructed, it can be further restricted by calling load_restrictions method.
 /// When we are done with that, `build` is called which creates a `Query`
 /// structure that contains raw SQL query string and additional data necessary for
 /// JSON response reconstruction and filtering.
@@ -309,19 +308,6 @@ impl QueryBuilder {
             allowed_fields.insert(field_name.to_owned());
         }
         self.allowed_fields = Some(allowed_fields);
-        Ok(())
-    }
-
-    fn load_restrictions(&mut self, restrictions: &JsonObject) -> Result<()> {
-        let restrictions = convert_restrictions(restrictions)?;
-        for r in restrictions {
-            anyhow::ensure!(
-                self.base_type().field_by_name(&r.column).is_some(),
-                "trying to filter by non-existent field `{}`",
-                r.column
-            );
-            self.restrictions.push(r);
-        }
         Ok(())
     }
 
@@ -520,9 +506,6 @@ fn convert_to_query_builder(val: &serde_json::Value) -> Result<QueryBuilder> {
 
     let mut builder = convert_to_query_builder(&val["inner"])?;
     match op_type {
-        "RestrictionFilter" => {
-            builder.load_restrictions(get_key!("restrictions", as_object)?)?;
-        }
         "ExpressionFilter" => {
             let expr = expr::from_json(val["expression"].clone())?;
             builder.add_expression_filter(expr);
