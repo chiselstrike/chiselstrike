@@ -182,7 +182,7 @@ fn try_into_or<'s, T: std::convert::TryFrom<v8::Local<'s, v8::Value>>>(
 where
     T::Error: std::error::Error + Send + Sync + 'static,
 {
-    Ok(val.ok_or(anyhow!("None"))?.try_into()?)
+    Ok(val.ok_or_else(|| anyhow!("None"))?.try_into()?)
 }
 
 fn get_member<'a, T: std::convert::TryFrom<v8::Local<'a, v8::Value>>>(
