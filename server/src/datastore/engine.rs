@@ -1,6 +1,6 @@
 // SPDX-FileCopyrightText: © 2021 ChiselStrike <info@chiselstrike.com>
 
-use crate::datastore::query::{Mutation, Query, QueryEntity, QueryField, SqlValue};
+use crate::datastore::query::{Mutation, QueriedEntity, Query, QueryField, SqlValue};
 use crate::datastore::{DbConnection, Kind};
 use crate::types::{Field, ObjectDelta, ObjectType, Type, OAUTHUSER_TYPE_NAME};
 use crate::JsonObject;
@@ -160,7 +160,7 @@ fn column_is_null(row: &AnyRow, column_idx: usize) -> bool {
     row.try_get_raw(column_idx).unwrap().is_null()
 }
 
-fn id_idx(entity: &QueryEntity) -> usize {
+fn id_idx(entity: &QueriedEntity) -> usize {
     for f in &entity.fields {
         match f {
             QueryField::Scalar {
@@ -319,7 +319,7 @@ impl QueryEngine {
         Ok(())
     }
 
-    fn row_to_json(entity: &QueryEntity, row: &AnyRow) -> Result<ResultRow> {
+    fn row_to_json(entity: &QueriedEntity, row: &AnyRow) -> Result<ResultRow> {
         let mut ret = JsonObject::default();
         for s_field in &entity.fields {
             match s_field {
