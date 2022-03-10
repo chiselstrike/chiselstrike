@@ -95,7 +95,7 @@ struct DenoService {
     // We need a copy to keep it alive
     inspector: Option<Arc<InspectorServer>>,
 
-    module_loader: Rc<ModuleLoader>,
+    module_loader: Arc<std::sync::Mutex<ModuleLoaderInner>>,
     handlers: HashMap<String, v8::Global<v8::Function>>,
 
     // Handlers that have been compiled but are not yet serving requests.
@@ -108,9 +108,13 @@ enum Error {
     NotAResponse,
 }
 
-struct ModuleLoader {
-    code_map: RefCell<HashMap<String, VersionedCode>>,
+struct ModuleLoaderInner {
+    code_map: HashMap<String, VersionedCode>,
     base_directory: PathBuf,
+}
+
+struct ModuleLoader {
+    inner: Arc<std::sync::Mutex<ModuleLoaderInner>>,
 }
 
 fn wrap(specifier: &ModuleSpecifier, code: String) -> Result<ModuleSource> {
@@ -157,7 +161,8 @@ impl deno_core::ModuleLoader for ModuleLoader {
     ) -> Result<ModuleSpecifier, AnyError> {
         debug!("Deno resolving {:?}", specifier);
         if specifier == "@chiselstrike/api" {
-            let api_path = self
+            let handle = self.inner.lock().unwrap();
+            let api_path = handle
                 .base_directory
                 .join("chisel.js")
                 .to_str()
@@ -184,23 +189,21 @@ impl deno_core::ModuleLoader for ModuleLoader {
 }
 
 fn create_web_worker(
-    base_directory: PathBuf,
     bootstrap: BootstrapOptions,
     preload_module_cb: Arc<PreloadModuleCb>,
     maybe_inspector_server: Option<Arc<InspectorServer>>,
+    module_loader_inner: Arc<std::sync::Mutex<ModuleLoaderInner>>,
 ) -> Arc<CreateWebWorkerCb> {
     Arc::new(move |args| {
         let create_web_worker_cb = create_web_worker(
-            base_directory.clone(),
             bootstrap.clone(),
             preload_module_cb.clone(),
             maybe_inspector_server.clone(),
+            module_loader_inner.clone(),
         );
 
-        let code_map = RefCell::new(HashMap::new());
         let module_loader = Rc::new(ModuleLoader {
-            code_map,
-            base_directory: base_directory.clone(),
+            inner: module_loader_inner.clone(),
         });
 
         // FIXME: Send a patch refactoring WebWorkerOptions and WorkerOptions
@@ -239,10 +242,12 @@ impl DenoService {
     pub(crate) fn new(base_directory: PathBuf, inspect_brk: bool) -> Self {
         let web_worker_preload_module_cb =
             Arc::new(|worker| LocalFutureObj::new(Box::new(future::ready(Ok(worker)))));
-        let code_map = RefCell::new(HashMap::new());
+        let inner = Arc::new(std::sync::Mutex::new(ModuleLoaderInner {
+            code_map: HashMap::new(),
+            base_directory,
+        }));
         let module_loader = Rc::new(ModuleLoader {
-            code_map,
-            base_directory: base_directory.clone(),
+            inner: inner.clone(),
         });
 
         let mut inspector = None;
@@ -266,10 +271,10 @@ impl DenoService {
             unstable: false,
         };
         let create_web_worker_cb = create_web_worker(
-            base_directory,
             bootstrap.clone(),
             web_worker_preload_module_cb.clone(),
             inspector.clone(),
+            inner.clone(),
         );
         let opts = WorkerOptions {
             bootstrap,
@@ -282,7 +287,7 @@ impl DenoService {
             create_web_worker_cb,
             maybe_inspector_server: inspector.clone(),
             should_break_on_first_statement: false,
-            module_loader: module_loader.clone(),
+            module_loader,
             get_error_class_fn: None,
             origin_storage_dir: None,
             blob_store: Default::default(),
@@ -308,7 +313,7 @@ impl DenoService {
         Self {
             worker,
             inspector,
-            module_loader,
+            module_loader: inner,
             handlers: HashMap::new(),
             next_handlers: HashMap::new(),
         }
@@ -612,7 +617,8 @@ async fn create_deno<P: AsRef<Path>>(base_directory: P, inspect_brk: bool) -> Re
     let main_path = main_path.to_str().unwrap().to_string();
 
     {
-        let mut code_map = d.module_loader.code_map.borrow_mut();
+        let mut handle = d.module_loader.lock().unwrap();
+        let code_map = &mut handle.code_map;
         code_map.insert(
             main_path.clone(),
             VersionedCode {
@@ -1080,7 +1086,8 @@ pub(crate) async fn compile_endpoint<P: AsRef<Path>>(
         let mut service = get();
         let service: &mut DenoService = &mut service;
 
-        let mut code_map = service.module_loader.code_map.borrow_mut();
+        let mut handle = service.module_loader.lock().unwrap();
+        let code_map = &mut handle.code_map;
         let mut entry = code_map
             .entry(path.clone())
             .and_modify(|v| v.version += 1)
@@ -1101,7 +1108,7 @@ pub(crate) async fn compile_endpoint<P: AsRef<Path>>(
         );
         let url = Url::parse(&url).unwrap();
 
-        drop(code_map);
+        drop(handle);
         let runtime = &mut service.worker.js_runtime;
         runtime.execute_script(&path, &format!("import(\"{}\")", url))?
     };
