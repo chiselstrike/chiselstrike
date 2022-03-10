@@ -73,9 +73,9 @@ pub(crate) enum QueryField {
 pub(crate) struct Query {
     /// SQL query text
     pub(crate) raw_sql: String,
-    /// Entity that is being queries. Contains information necessary to reconstruct
+    /// Entity that is being queried. Contains information necessary to reconstruct
     /// the JSON response.
-    pub(crate) entity: QueryEntity,
+    pub(crate) entity: QueriedEntity,
     /// Entity fields selected by the user. This field is used to post-filter fields that
     /// shall be returned to the user in JSON.
     /// FIXME: The post-filtering is suboptimal solution and selection should happen when
@@ -83,10 +83,10 @@ pub(crate) struct Query {
     pub(crate) allowed_fields: Option<HashSet<String>>,
 }
 
-/// QueryEntity represents queried Entity of type `ty` which is to be aliased as
+/// QueriedEntity represents queried Entity of type `ty` which is to be aliased as
 /// `table_alias` in the SQL query and joined with nested Entities using `joins`.
 #[derive(Debug, Clone)]
-pub(crate) struct QueryEntity {
+pub(crate) struct QueriedEntity {
     /// Entity fields to be returned in JSON response
     pub(crate) fields: Vec<QueryField>,
     /// Type of the entity.
@@ -98,18 +98,18 @@ pub(crate) struct QueryEntity {
     joins: HashMap<String, Join>,
 }
 
-impl QueryEntity {
-    pub(crate) fn get_child_entity<'a>(&'a self, child_name: &str) -> Option<&'a QueryEntity> {
+impl QueriedEntity {
+    pub(crate) fn get_child_entity<'a>(&'a self, child_name: &str) -> Option<&'a QueriedEntity> {
         self.joins.get(child_name).map(|c| &c.entity)
     }
 }
 
-/// Represents JOIN operator joining `entity` to a previous QueryEntity which holds the
-/// join. The join is done using equality on `lkey` of the previous QueryEntity and `rkey`
+/// Represents JOIN operator joining `entity` to a previous QueriedEntity which holds the
+/// join. The join is done using equality on `lkey` of the previous QueriedEntity and `rkey`
 /// on the current `entity`.
 #[derive(Debug, Clone)]
 struct Join {
-    entity: QueryEntity,
+    entity: QueriedEntity,
     lkey: String,
     rkey: String,
 }
@@ -126,7 +126,7 @@ struct QueryBuilder {
     columns: Vec<(String, String, Field)>,
     /// Entity object representing entity that is being retrieved along with necessary joins
     /// and nested entities
-    entity: QueryEntity,
+    entity: QueriedEntity,
     restrictions: Vec<Restriction>,
     /// Expression used to filter the entities that are to be returned.
     filter_expr: Option<expr::Expr>,
@@ -143,7 +143,7 @@ impl QueryBuilder {
     fn new(base_type: Arc<ObjectType>) -> Self {
         Self {
             columns: vec![],
-            entity: QueryEntity {
+            entity: QueriedEntity {
                 ty: base_type.clone(),
                 fields: vec![],
                 table_alias: base_type.backing_table().to_owned(),
@@ -216,7 +216,7 @@ impl QueryBuilder {
         select_field
     }
 
-    /// QueryEntity for a given type `ty` to be retrieved from the
+    /// QueriedEntity for a given type `ty` to be retrieved from the
     /// database. For fields that represent a nested Entity a join is
     /// generated and we attempt to retrieve them recursively as well.
     fn load_entity(
@@ -224,7 +224,7 @@ impl QueryBuilder {
         runtime: &runtime::Runtime,
         ty: &Arc<ObjectType>,
         current_table: &str,
-    ) -> QueryEntity {
+    ) -> QueriedEntity {
         let policies = make_field_policies(runtime, ty);
         self.add_login_restrictions(ty, current_table, &policies);
 
@@ -260,7 +260,7 @@ impl QueryBuilder {
             };
             fields.push(query_field);
         }
-        QueryEntity {
+        QueriedEntity {
             ty: ty.clone(),
             fields,
             table_alias: current_table.to_owned(),
@@ -341,7 +341,7 @@ impl QueryBuilder {
     }
 
     fn make_join_string(&self) -> String {
-        fn gather_joins(entity: &QueryEntity) -> String {
+        fn gather_joins(entity: &QueriedEntity) -> String {
             let mut join_string = String::new();
             for join in entity.joins.values() {
                 join_string += &format!(
