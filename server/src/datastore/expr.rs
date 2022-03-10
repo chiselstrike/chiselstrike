@@ -24,6 +24,16 @@ pub(crate) enum Literal {
     I64(i64),
     F64(f64),
     String(String),
+    Null,
+}
+
+impl From<Option<Literal>> for Literal {
+    fn from(opt: Option<Literal>) -> Literal {
+        match opt {
+            Some(literal) => literal,
+            None => Literal::Null,
+        }
+    }
 }
 
 /// Expression of a property access on an Entity
@@ -189,5 +199,34 @@ mod tests {
         } else {
             panic!("failed to match the literal");
         }
+    }
+
+    #[test]
+    fn test_literal_parsing_null() {
+        let expr = serde_json::from_str(
+            r#"{
+            "expr_type": "Literal",
+            "value": null
+        }"#,
+        )
+        .unwrap();
+
+        assert!(matches!(
+            expr,
+            Expr::Literal {
+                value: Literal::Null
+            }
+        ));
+    }
+
+    #[test]
+    #[should_panic(expected = "missing field `value`")]
+    fn test_literal_parsing_value_missing_panic() {
+        let _expr: Expr = serde_json::from_str(
+            r#"{
+            "expr_type": "Literal"
+        }"#,
+        )
+        .unwrap();
     }
 }
