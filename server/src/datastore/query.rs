@@ -396,6 +396,7 @@ impl QueryBuilder {
                     expr::Literal::I64(lit) => lit.to_string(),
                     expr::Literal::F64(lit) => lit.to_string(),
                     expr::Literal::String(lit) => lit.to_string(),
+                    expr::Literal::Null => "NULL".to_owned(),
                 };
                 escape_string(lit_str.as_str())
             }
