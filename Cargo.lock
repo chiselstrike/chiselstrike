@@ -124,9 +124,9 @@ dependencies = [
 
 [[package]]
 name = "anyhow"
-version = "1.0.55"
+version = "1.0.56"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "159bb86af3a200e19a068f4224eae4c8bb2d0fa054c7e5d1cacd5cef95e684cd"
+checksum = "4361135be9122e0870de935d7c439aef945b9f9ddd4199a553b5270b49c82a27"
 dependencies = [
  "backtrace",
 ]
@@ -3599,6 +3599,7 @@ dependencies = [
  "tsc_compile",
  "url",
  "urldecode",
+ "utils",
  "uuid",
  "vergen",
  "yaml-rust",
@@ -4706,10 +4707,10 @@ dependencies = [
  "console",
  "deno_core",
  "deno_graph",
- "reqwest",
  "tempfile",
  "third_party",
  "tokio",
+ "utils",
 ]
 
 [[package]]
@@ -4893,6 +4894,14 @@ name = "utf-8"
 version = "0.7.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "09cc8ee72d2a9becf2f2febe0205bbed8fc6615b7cb429ad062dc7b7ddd036a9"
+
+[[package]]
+name = "utils"
+version = "0.9.0-dev.0"
+dependencies = [
+ "anyhow",
+ "reqwest",
+]
 
 [[package]]
 name = "uuid"

@@ -27,8 +27,6 @@ use deno_core::Resource;
 use deno_core::ResourceId;
 use deno_core::ZeroCopyBuf;
 use deno_core::{op_async, op_sync};
-use deno_fetch::reqwest;
-use deno_runtime::deno_fetch;
 use deno_runtime::inspector_server::InspectorServer;
 use deno_runtime::ops::worker_host::CreateWebWorkerCb;
 use deno_runtime::ops::worker_host::PreloadModuleCb;
@@ -141,7 +139,7 @@ async fn load_code(specifier: ModuleSpecifier) -> Result<ModuleSource> {
     let mut code = if specifier.scheme() == "file" {
         fs::read_to_string(specifier.to_file_path().unwrap()).await?
     } else {
-        reqwest::get(specifier.clone()).await?.text().await?
+        utils::get_ok(specifier.clone()).await?.text().await?
     };
     let last = specifier.path_segments().unwrap().rev().next().unwrap();
     if last.ends_with(".ts") {

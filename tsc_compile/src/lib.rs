@@ -239,7 +239,7 @@ fn load_url(
         let text = match specifier.scheme() {
             "file" | "chisel" => sync_text?,
             _ => {
-                let res = reqwest::get(specifier.clone()).await?;
+                let res = utils::get_ok(specifier.clone()).await?;
                 let mut headers = HashMap::new();
                 for (key, value) in res.headers().iter() {
                     headers.insert(key.as_str().to_string(), value.to_str()?.to_string());

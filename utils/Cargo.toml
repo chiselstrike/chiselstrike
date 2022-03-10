@@ -1,0 +1,11 @@
+[package]
+name = "utils"
+version = "0.9.0-dev.0"
+authors = ["ChiselStrike"]
+edition = "2021"
+
+[dependencies]
+anyhow = "1.0.56"
+reqwest = { version = "=0.11.7", features = ["rustls-tls"], default-features = false } # strict = because of https://github.com/seanmonstar/reqwest/issues/1403
+
+[lib]
