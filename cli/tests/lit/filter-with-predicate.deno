@@ -292,12 +292,8 @@ export default async function chisel(req: Request) {
         }, {
             exprType: "Binary",
             left: {
-              exprType: "Property",
-              property: "age",
-              object: {
-                exprType: "Parameter",
-                position: 0
-              }
+              exprType: "Field",
+              names: ["age"]
             },
             op: "Eq",
             right: {
@@ -330,16 +326,8 @@ export default async function chisel(req: Request) {
         }, {
             exprType: "Binary",
             left: {
-              exprType: "Property",
-              property: "title",
-              object: {
-                exprType: "Property",
-                property: "biography",
-                object: {
-                  exprType: "Parameter",
-                  position: 0
-                }
-              }
+              exprType: "Field",
+              names: ["biography", "title"]
             },
             op: "Eq",
             right: {

@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: © 2021 ChiselStrike <info@chiselstrike.com>
 
 use crate::datastore::expr;
-use crate::datastore::expr::{BinaryExpr, BinaryOp, Expr, Literal, PropertyAccess};
+use crate::datastore::expr::{BinaryExpr, BinaryOp, Expr, Literal};
 use crate::deno::current_api_version;
 use crate::deno::make_field_policies;
 use crate::policies::FieldPolicies;
@@ -395,30 +395,15 @@ impl QueryBuilder {
                     self.filter_expr_to_string(&binary_exp.right)?,
                 )
             }
-            Expr::Property(property) => self.property_expr_to_string(property)?,
-            Expr::Parameter { .. } => anyhow::bail!("unexpected standalone parameter usage"),
+            expr::Expr::Field { names } => self.field_chain_to_string(names)?,
         };
         Ok(expr_str)
     }
 
-    fn property_expr_to_string(&self, prop_access: &PropertyAccess) -> Result<String> {
-        fn get_property_chain(prop_access: &PropertyAccess) -> Result<Vec<String>> {
-            match &*prop_access.object {
-                Expr::Property(obj) => {
-                    let mut properties = get_property_chain(obj)?;
-                    properties.push(prop_access.property.to_owned());
-                    Ok(properties)
-                }
-                Expr::Parameter { .. } => Ok(vec![prop_access.property.to_owned()]),
-                _ => anyhow::bail!("unexpected expression in property chain!"),
-            }
-        }
-        let properties = get_property_chain(prop_access)?;
-        assert!(!properties.is_empty());
-
-        let mut field = &properties[0];
+    fn field_chain_to_string(&self, field_chain: &[String]) -> Result<String> {
+        let mut field = &field_chain[0];
         let mut entity = &self.entity;
-        for next_field in &properties[1..] {
+        for next_field in &field_chain[1..] {
             entity = &entity
                 .joins
                 .get(field)

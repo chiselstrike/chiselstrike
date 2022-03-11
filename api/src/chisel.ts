@@ -265,9 +265,8 @@ export class ChiselCursor<T> {
                 const cmpExpr = {
                     exprType: "Binary",
                     left: {
-                        exprType: "Property",
-                        object: { exprType: "Parameter", position: 0 },
-                        property: key,
+                        exprType: "Field",
+                        names: [key],
                     },
                     op: "Eq",
                     right: {

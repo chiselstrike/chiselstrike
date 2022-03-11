@@ -7,10 +7,10 @@ use serde_derive::{Deserialize, Serialize};
 pub(crate) enum Expr {
     /// A literal expression.
     Literal { value: Literal },
-    /// Expression for addressing function parameters of the current expression
-    Parameter { position: usize },
-    /// Expression for addressing entity property
-    Property(PropertyAccess),
+    /// A reference to an entity (sub)field (eg: BlogPost.author.birthplace.country). We currently support
+    /// properties of only one entity: the filter-predicate's single parameter. We therefore only need to
+    /// track the chain of nested field names (eg: ["author", "birthplace", "country"] per above).
+    Field { names: Vec<String> },
     /// A binary expression.
     Binary(BinaryExpr),
 }
@@ -27,9 +27,9 @@ impl From<BinaryExpr> for Expr {
     }
 }
 
-impl From<PropertyAccess> for Expr {
-    fn from(prop_access: PropertyAccess) -> Self {
-        Expr::Property(prop_access)
+impl From<Vec<String>> for Expr {
+    fn from(names: Vec<String>) -> Self {
+        Expr::Field { names }
     }
 }
 
@@ -82,17 +82,6 @@ impl From<Option<Literal>> for Literal {
             None => Literal::Null,
         }
     }
-}
-
-/// Expression of a property access on an Entity
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub(crate) struct PropertyAccess {
-    /// Name of a property that will be accessed.
-    pub property: String,
-    /// Expression whose property will be accessed. The expression
-    /// can be either another Property access or a Parameter representing
-    /// an entity.
-    pub object: Box<Expr>,
 }
 
 /// A binary operator.
