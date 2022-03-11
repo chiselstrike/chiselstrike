@@ -948,8 +948,11 @@ async fn get_result(
     // all.
     let result = with_context(context.clone(), || get_result_aux(request_handler, req))?;
     // We got here without blocking and now have a future representing
-    // pending work for the endpoint. The future returned by
-    // resolve_promise takes care of setting the context.
+    // pending work for the endpoint. resolve_promise() sets the context
+    // for safe execution of request_handler; we MUST NOT block (ie,
+    // `await`) between with_context() above and resolve_promise()
+    // below. Otherwise, request_handler may begin executing with another,
+    // wrong context.
     resolve_promise(context, result).await
 }
 
