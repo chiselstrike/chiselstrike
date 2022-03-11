@@ -4,7 +4,6 @@ use crate::datastore::expr;
 use crate::datastore::expr::{BinaryExpr, BinaryOp, Expr, Literal, PropertyAccess};
 use crate::deno::current_api_version;
 use crate::deno::make_field_policies;
-use crate::policies::FieldPolicies;
 
 use crate::runtime;
 use crate::types::{Field, ObjectType, Type, TypeSystemError, OAUTHUSER_TYPE_NAME};
@@ -128,7 +127,6 @@ struct QueryBuilder {
     /// Entity object representing entity that is being retrieved along with necessary joins
     /// and nested entities
     entity: QueriedEntity,
-    restrictions: Vec<Restriction>,
     /// Expression used to filter the entities that are to be returned.
     filter_expr: Option<Expr>,
     /// List of fields to be returned to the user.
@@ -150,7 +148,6 @@ impl QueryBuilder {
                 table_alias: base_type.backing_table().to_owned(),
                 joins: HashMap::default(),
             },
-            restrictions: vec![],
             filter_expr: None,
             allowed_fields: None,
             limit: None,
@@ -194,6 +191,7 @@ impl QueryBuilder {
         };
 
         let mut builder = Self::new(ty.clone());
+        builder.add_login_filters(&runtime, &ty);
         builder.entity = builder.load_entity(&runtime, &ty, ty.backing_table());
         Ok(builder)
     }
@@ -227,7 +225,6 @@ impl QueryBuilder {
         current_table: &str,
     ) -> QueriedEntity {
         let policies = make_field_policies(runtime, ty);
-        self.add_login_restrictions(ty, current_table, &policies);
 
         let mut fields = vec![];
         let mut joins = HashMap::default();
@@ -269,29 +266,43 @@ impl QueryBuilder {
         }
     }
 
-    fn add_login_restrictions(
+    fn add_login_filters(&mut self, runtime: &runtime::Runtime, ty: &Arc<ObjectType>) {
+        self.add_login_filters_recursive(runtime, ty, Expr::Parameter { position: 0 });
+    }
+
+    fn add_login_filters_recursive(
         &mut self,
+        runtime: &runtime::Runtime,
         ty: &Arc<ObjectType>,
-        current_table: &str,
-        policies: &FieldPolicies,
+        property_chain: Expr,
     ) {
-        let current_userid = match &policies.current_userid {
-            None => "NULL".to_owned(),
-            Some(id) => id.to_owned(),
-        };
-        for field_name in &policies.match_login {
-            match ty.field_by_name(field_name) {
-                Some(Field {
-                    type_: Type::Object(obj),
-                    ..
-                }) if obj.name() == OAUTHUSER_TYPE_NAME => {
-                    self.restrictions.push(Restriction {
-                        table: Some(current_table.to_owned()),
-                        column: field_name.to_owned(),
-                        v: SqlValue::String(current_userid.clone()),
-                    });
+        let policies = make_field_policies(runtime, ty);
+        let user_id: Literal = match &policies.current_userid {
+            None => "NULL",
+            Some(id) => id.as_str(),
+        }
+        .into();
+
+        for field in ty.all_fields() {
+            if let Type::Object(nested_ty) = &field.type_ {
+                let property_access = PropertyAccess {
+                    property: field.name.to_owned(),
+                    object: property_chain.clone().into(),
+                };
+                if nested_ty.name() == OAUTHUSER_TYPE_NAME {
+                    if policies.match_login.contains(&field.name) {
+                        self.add_expression_filter(
+                            BinaryExpr {
+                                left: Box::new(property_access.into()),
+                                op: BinaryOp::Eq,
+                                right: Box::new(user_id.clone().into()),
+                            }
+                            .into(),
+                        )
+                    }
+                } else {
+                    self.add_login_filters_recursive(runtime, nested_ty, property_access.into());
                 }
-                _ => {}
             }
         }
     }
@@ -362,16 +373,13 @@ impl QueryBuilder {
     }
 
     fn make_filter_string(&self) -> Result<String> {
-        let mut rest_filter = make_restriction_string(&self.restrictions);
-        if let Some(expr) = &self.filter_expr {
+        let where_cond = if let Some(expr) = &self.filter_expr {
             let condition = self.filter_expr_to_string(expr)?;
-            if rest_filter.is_empty() {
-                rest_filter = format!("WHERE {}", condition);
-            } else {
-                rest_filter = format!("{} AND ({})", rest_filter, condition);
-            }
-        }
-        Ok(rest_filter)
+            format!("WHERE {}", condition)
+        } else {
+            "".to_owned()
+        };
+        Ok(where_cond)
     }
 
     fn filter_expr_to_string(&self, expr: &Expr) -> Result<String> {
