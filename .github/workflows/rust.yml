@@ -55,6 +55,10 @@ jobs:
         tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.findimg.outputs.img_name }}
         labels: ${{ steps.meta.outputs.labels }}
 
+    - name: Install lld
+      id: lld
+      run: "sudo apt-get -y install lld"
+
     - name: Install rust toolchain
       uses: actions-rs/toolchain@v1
       with:
