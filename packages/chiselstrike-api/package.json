@@ -8,7 +8,7 @@
     "prepare": "npm run build",
     "scripts": {
         "prepare": "npm run build",
-        "build": "rimraf ./lib && tsc --noResolve && cp -La ../../api/src/lib.deno_core.d.ts lib/"
+        "build": "rimraf ./lib && tsc --noResolve --module es2022 && cp -La ../../api/src/lib.deno_core.d.ts lib/"
     },
     "dependencies": {
         "typescript": "^4.5.4"

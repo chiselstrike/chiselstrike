@@ -96,10 +96,6 @@ struct DenoService {
     inspector: Option<Arc<InspectorServer>>,
 
     module_loader: Arc<std::sync::Mutex<ModuleLoaderInner>>,
-    handlers: HashMap<String, v8::Global<v8::Function>>,
-
-    // Handlers that have been compiled but are not yet serving requests.
-    next_handlers: HashMap<String, v8::Global<v8::Function>>,
 }
 
 #[derive(thiserror::Error, Debug)]
@@ -314,8 +310,6 @@ impl DenoService {
             worker,
             inspector,
             module_loader: inner,
-            handlers: HashMap::new(),
-            next_handlers: HashMap::new(),
         }
     }
 }
@@ -872,10 +866,7 @@ impl<F: Future> Future for RequestFuture<F> {
     }
 }
 
-fn get_result_aux(
-    request_handler: v8::Global<v8::Function>,
-    req: &mut Request<hyper::Body>,
-) -> Result<v8::Global<v8::Value>> {
+fn get_result_aux(path: String, req: Request<hyper::Body>) -> Result<v8::Global<v8::Value>> {
     let mut service = get();
     let runtime = &mut service.worker.js_runtime;
 
@@ -885,15 +876,9 @@ fn get_result_aux(
     let global_proxy = global_context.open(scope).global(scope);
 
     // FIXME: this request conversion is probably simplistic. Check deno/ext/http/lib.rs
-    let request: v8::Local<v8::Function> = get_member(global_proxy, scope, "Request")?;
     let url = v8::String::new(scope, &req.uri().to_string()).unwrap();
-    let init = v8::Object::new(scope);
-
     let method = req.method();
-    let method_key = v8::String::new(scope, "method").unwrap().into();
     let method_value = v8::String::new(scope, method.as_str()).unwrap().into();
-    init.set(scope, method_key, method_value)
-        .ok_or(Error::NotAResponse)?;
 
     let headers = v8::Object::new(scope);
     for (k, v) in req.headers().iter() {
@@ -903,50 +888,41 @@ fn get_result_aux(
             .set(scope, k.into(), v.into())
             .ok_or(Error::NotAResponse)?;
     }
-    let headers_key = v8::String::new(scope, "headers").unwrap().into();
-    init.set(scope, headers_key, headers.into())
-        .ok_or(Error::NotAResponse)?;
 
-    if method != Method::GET && method != Method::HEAD {
-        let body = hyper::Body::empty();
-        let body = std::mem::replace(req.body_mut(), body);
+    let chisel: v8::Local<v8::Object> = get_member(global_proxy, scope, "Chisel")?;
+    let rid = if method != Method::GET && method != Method::HEAD {
+        let body = req.into_body();
         let resource = BodyResource {
             body: RefCell::new(body),
             cancel: Default::default(),
         };
         let rid = op_state.borrow_mut().resource_table.add(resource);
-        let rid = v8::Integer::new_from_unsigned(scope, rid).into();
+        v8::Integer::new_from_unsigned(scope, rid).into()
+    } else {
+        v8::undefined(scope).into()
+    };
 
-        let chisel: v8::Local<v8::Object> = get_member(global_proxy, scope, "Chisel")?;
-        let build: v8::Local<v8::Function> =
-            get_member(chisel, scope, "buildReadableStreamForBody")?;
-        let body = build.call(scope, chisel.into(), &[rid]).unwrap();
-        let body_key = v8::String::new(scope, "body")
-            .ok_or(Error::NotAResponse)?
-            .into();
-        init.set(scope, body_key, body).ok_or(Error::NotAResponse)?;
-    }
-
-    let request = request
-        .new_instance(scope, &[url.into(), init.into()])
-        .ok_or(Error::NotAResponse)?;
-
-    let result = request_handler
-        .open(scope)
-        .call(scope, global_proxy.into(), &[request.into()])
+    let path = v8::String::new(scope, &path).unwrap().into();
+    let call_handler: v8::Local<v8::Function> = get_member(chisel, scope, "callHandler").unwrap();
+    let result = call_handler
+        .call(
+            scope,
+            global_proxy.into(),
+            &[path, url.into(), method_value, headers.into(), rid],
+        )
         .ok_or(Error::NotAResponse)?;
     Ok(v8::Global::new(scope, result))
 }
 
 async fn get_result(
-    request_handler: v8::Global<v8::Function>,
-    req: &mut Request<hyper::Body>,
+    path: String,
+    req: Request<hyper::Body>,
     context: RequestContext,
 ) -> Result<v8::Global<v8::Value>> {
     // Set the current path to cover JS code that runs before
     // blocking. This in particular covers code that doesn't block at
     // all.
-    let result = with_context(context.clone(), || get_result_aux(request_handler, req))?;
+    let result = with_context(context.clone(), || get_result_aux(path, req))?;
     // We got here without blocking and now have a future representing
     // pending work for the endpoint. resolve_promise() sets the context
     // for safe execution of request_handler; we MUST NOT block (ie,
@@ -968,44 +944,19 @@ async fn commit_transaction(
     }
 }
 
-pub(crate) async fn run_js(path: String, mut req: Request<hyper::Body>) -> Result<Response<Body>> {
+pub(crate) async fn run_js(path: String, req: Request<hyper::Body>) -> Result<Response<Body>> {
     let qe = runtime::get().query_engine.clone();
 
-    // The rust borrow checker can track fields independently, but
-    // only in very simple cases. For example,
-    //
-    //   let mut f = (1, 2);
-    //   let g = &mut f.0;
-    //   foo(g, f.1);
-    //
-    // compiles, but the following doesn't
-    //
-    //   let mut f = (1, 2);
-    //   let g = &mut (&mut f).0;
-    //   foo(g, f.1);
-    //
-    // The use of two service variables is to help the borrow checker
-    // by accessing both fields via the same variable. In the above
-    // example it would be
-    //
-    //   let mut f = (1, 2);
-    //   let f = &mut f;
-    //   let g = &mut f.0;
-    //   foo(g, f.1);
-    let request_handler = {
+    {
         let mut service = get();
         let service: &mut DenoService = &mut service;
-
-        let request_handler = service.handlers.get(&path).unwrap().clone();
         let runtime = &mut service.worker.js_runtime;
-
         if service.inspector.is_some() {
             runtime
                 .inspector()
                 .wait_for_session_and_break_on_next_statement();
         }
-        request_handler
-    };
+    }
 
     let transaction = qe.start_transaction_static().await?;
     let context = RequestContext {
@@ -1014,17 +965,38 @@ pub(crate) async fn run_js(path: String, mut req: Request<hyper::Body>) -> Resul
         userid: crate::auth::get_user(&req).await?,
         transaction: Some(transaction.clone()),
     };
-    let result = get_result(request_handler, &mut req, context.clone()).await;
+    let result = get_result(path, req, context.clone()).await;
     // FIXME: maybe defer creating the transaction until we need one, to avoid doing it for
     // endpoints that don't do any data access. For now, because we always create it above,
     // it should be safe to unwrap.
     let result = result?;
 
     let body = {
+        // The rust borrow checker can track fields independently, but
+        // only in very simple cases. For example,
+        //
+        //   let mut f = (1, 2);
+        //   let g = &mut f.0;
+        //   foo(g, f.1);
+        //
+        // compiles, but the following doesn't
+        //
+        //   let mut f = (1, 2);
+        //   let g = &mut (&mut f).0;
+        //   foo(g, f.1);
+        //
+        // The use of two service variables is to help the borrow checker
+        // by accessing both fields via the same variable. In the above
+        // example it would be
+        //
+        //   let mut f = (1, 2);
+        //   let f = &mut f;
+        //   let g = &mut f.0;
+        //   foo(g, f.1);
         let mut service = get();
         let service: &mut DenoService = &mut service;
-        let runtime = &mut service.worker.js_runtime;
 
+        let runtime = &mut service.worker.js_runtime;
         let stream = get_read_stream(runtime, result.clone(), context)?;
         let commit_stream = try_unfold(transaction.clone(), commit_transaction);
         let stream = stream.chain(commit_stream);
@@ -1080,6 +1052,13 @@ pub(crate) async fn compile_endpoint<P: AsRef<Path>>(
     path: String,
     code: String,
 ) -> Result<()> {
+    let context = RequestContext {
+        method: Method::GET,
+        path: RequestPath::try_from(path.as_ref()).unwrap(),
+        userid: None,
+        transaction: None,
+    };
+
     let promise = {
         let mut service = get();
         let service: &mut DenoService = &mut service;
@@ -1095,47 +1074,34 @@ pub(crate) async fn compile_endpoint<P: AsRef<Path>>(
             });
         entry.code = code;
 
-        // Modules are never unloaded, so we need to create an unique
-        // path. This will not be a problem once we publish the entire app
-        // at once, since then we can create a new isolate for it.
-        let url = format!(
-            "file://{}/{}.js?ver={}",
-            base_directory.as_ref().display(),
-            path,
-            entry.version
-        );
-        let url = Url::parse(&url).unwrap();
-
-        drop(handle);
         let runtime = &mut service.worker.js_runtime;
-        runtime.execute_script(&path, &format!("import(\"{}\")", url))?
+        let global_context = runtime.global_context();
+        let scope = &mut runtime.handle_scope();
+        let global_proxy = global_context.open(scope).global(scope);
+        let chisel: v8::Local<v8::Object> = get_member(global_proxy, scope, "Chisel")?;
+        let import_endpoint: v8::Local<v8::Function> = get_member(chisel, scope, "importEndpoint")?;
+        let base_directory = format!("{}", base_directory.as_ref().display());
+        let base_directory = v8::String::new(scope, &base_directory).unwrap().into();
+        let path = v8::String::new(scope, &path).unwrap().into();
+        let version = v8::Number::new(scope, entry.version as f64).into();
+        let promise = import_endpoint
+            .call(scope, chisel.into(), &[base_directory, path, version])
+            .unwrap();
+        v8::Global::new(scope, promise)
     };
-
-    let context = RequestContext {
-        method: Method::GET,
-        path: RequestPath::try_from(path.as_ref()).unwrap(),
-        userid: None,
-        transaction: None,
-    };
-    let module = resolve_promise(context, promise).await?;
-
-    let mut service = get();
-    let service: &mut DenoService = &mut service;
-    let runtime = &mut service.worker.js_runtime;
-    let scope = &mut runtime.handle_scope();
-    let module = module
-        .open(scope)
-        .to_object(scope)
-        .ok_or(Error::NotAResponse)?;
-    let request_handler: v8::Local<v8::Function> = get_member(module, scope, "default")?;
-    service
-        .next_handlers
-        .insert(path, v8::Global::new(scope, request_handler));
+    resolve_promise(context, promise).await?;
     Ok(())
 }
 
 pub(crate) fn activate_endpoint(path: &str) {
     let mut service = get();
-    let (path, handler) = service.next_handlers.remove_entry(path).unwrap();
-    service.handlers.insert(path, handler);
+    let runtime = &mut service.worker.js_runtime;
+    let global_context = runtime.global_context();
+    let scope = &mut runtime.handle_scope();
+    let global_proxy = global_context.open(scope).global(scope);
+    let chisel: v8::Local<v8::Object> = get_member(global_proxy, scope, "Chisel").unwrap();
+    let activate_endpoint: v8::Local<v8::Function> =
+        get_member(chisel, scope, "activateEndpoint").unwrap();
+    let path = v8::String::new(scope, path).unwrap().into();
+    activate_endpoint.call(scope, chisel.into(), &[path]);
 }
