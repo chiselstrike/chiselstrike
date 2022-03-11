@@ -15,6 +15,24 @@ pub(crate) enum Expr {
     Binary(BinaryExpr),
 }
 
+impl From<Literal> for Expr {
+    fn from(literal: Literal) -> Self {
+        Expr::Literal { value: literal }
+    }
+}
+
+impl From<BinaryExpr> for Expr {
+    fn from(expr: BinaryExpr) -> Self {
+        Expr::Binary(expr)
+    }
+}
+
+impl From<PropertyAccess> for Expr {
+    fn from(prop_access: PropertyAccess) -> Self {
+        Expr::Property(prop_access)
+    }
+}
+
 /// Various literals.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(untagged)]
@@ -25,6 +43,36 @@ pub(crate) enum Literal {
     F64(f64),
     String(String),
     Null,
+}
+
+impl From<bool> for Literal {
+    fn from(val: bool) -> Self {
+        Literal::Bool(val)
+    }
+}
+
+impl From<u64> for Literal {
+    fn from(val: u64) -> Self {
+        Literal::U64(val)
+    }
+}
+
+impl From<i64> for Literal {
+    fn from(val: i64) -> Self {
+        Literal::I64(val)
+    }
+}
+
+impl From<f64> for Literal {
+    fn from(val: f64) -> Self {
+        Literal::F64(val)
+    }
+}
+
+impl From<String> for Literal {
+    fn from(val: String) -> Self {
+        Literal::String(val)
+    }
 }
 
 impl From<Option<Literal>> for Literal {

@@ -313,12 +313,12 @@ impl QueryBuilder {
 
     fn add_expression_filter(&mut self, expr: expr::Expr) {
         if let Some(filter_expr) = &self.filter_expr {
-            let new_expr = expr::Expr::Binary(expr::BinaryExpr {
+            let new_expr = expr::BinaryExpr {
                 left: Box::new(expr),
                 op: expr::BinaryOp::And,
                 right: Box::new(filter_expr.clone()),
-            });
-            self.filter_expr = Some(new_expr);
+            };
+            self.filter_expr = Some(new_expr.into());
         } else {
             self.filter_expr = Some(expr);
         }
