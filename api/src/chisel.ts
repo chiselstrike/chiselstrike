@@ -700,6 +700,51 @@ export async function loggedInUser(): Promise<OAuthUser | undefined> {
     return await OAuthUser.findOne({ id });
 }
 
+// Handlers that have been compiled but are not yet serving requests.
+type requestHandler = (req: Request) => Response;
+const nextHandlers: Record<string, requestHandler> = {};
+const handlers: Record<string, requestHandler> = {};
+
+export async function importEndpoint(
+    baseDirectory: string,
+    path: string,
+    version: number,
+) {
+    // Modules are never unloaded, so we need to create an unique
+    // path. This will not be a problem once we publish the entire app
+    // at once, since then we can create a new isolate for it.
+    const url = `file://${baseDirectory}/${path}.js?ver=${version}`;
+    const mod = await import(url);
+    const handler = mod.default;
+    if (typeof handler !== "function") {
+        throw new Error(
+            "expected type `v8::data::Function`, got `v8::data::Value`",
+        );
+    }
+    nextHandlers[path] = handler;
+}
+
+export function activateEndpoint(path: string) {
+    handlers[path] = nextHandlers[path];
+    delete nextHandlers[path];
+}
+
+export function callHandler(
+    path: string,
+    url: string,
+    method: string,
+    headers: HeadersInit,
+    rid?: number,
+) {
+    const init: RequestInit = { method: method, headers: headers };
+    if (rid !== undefined) {
+        const body = buildReadableStreamForBody(rid);
+        init.body = body;
+    }
+    const req = new Request(url, init);
+    return handlers[path](req);
+}
+
 // TODO: BEGIN: this should be in another file: crud.ts
 
 // TODO: BEGIN: when module import is fixed:
