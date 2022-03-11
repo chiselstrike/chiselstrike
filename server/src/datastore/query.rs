@@ -1,6 +1,7 @@
 // SPDX-FileCopyrightText: © 2021 ChiselStrike <info@chiselstrike.com>
 
 use crate::datastore::expr;
+use crate::datastore::expr::{BinaryExpr, BinaryOp, Expr, Literal, PropertyAccess};
 use crate::deno::current_api_version;
 use crate::deno::make_field_policies;
 use crate::policies::FieldPolicies;
@@ -129,7 +130,7 @@ struct QueryBuilder {
     entity: QueriedEntity,
     restrictions: Vec<Restriction>,
     /// Expression used to filter the entities that are to be returned.
-    filter_expr: Option<expr::Expr>,
+    filter_expr: Option<Expr>,
     /// List of fields to be returned to the user.
     allowed_fields: Option<HashSet<String>>,
     /// Limits how many rows/entries will be returned to the user.
@@ -311,14 +312,14 @@ impl QueryBuilder {
         Ok(())
     }
 
-    fn add_expression_filter(&mut self, expr: expr::Expr) {
+    fn add_expression_filter(&mut self, expr: Expr) {
         if let Some(filter_expr) = &self.filter_expr {
-            let new_expr = expr::Expr::Binary(expr::BinaryExpr {
+            let new_expr = BinaryExpr {
                 left: Box::new(expr),
-                op: expr::BinaryOp::And,
+                op: BinaryOp::And,
                 right: Box::new(filter_expr.clone()),
-            });
-            self.filter_expr = Some(new_expr);
+            };
+            self.filter_expr = Some(new_expr.into());
         } else {
             self.filter_expr = Some(expr);
         }
@@ -373,20 +374,20 @@ impl QueryBuilder {
         Ok(rest_filter)
     }
 
-    fn filter_expr_to_string(&self, expr: &expr::Expr) -> Result<String> {
+    fn filter_expr_to_string(&self, expr: &Expr) -> Result<String> {
         let expr_str = match &expr {
-            expr::Expr::Literal { value } => {
+            Expr::Literal { value } => {
                 let lit_str = match &value {
-                    expr::Literal::Bool(lit) => (if *lit { "1" } else { "0" }).to_string(),
-                    expr::Literal::U64(lit) => lit.to_string(),
-                    expr::Literal::I64(lit) => lit.to_string(),
-                    expr::Literal::F64(lit) => lit.to_string(),
-                    expr::Literal::String(lit) => lit.to_string(),
-                    expr::Literal::Null => "NULL".to_owned(),
+                    Literal::Bool(lit) => (if *lit { "1" } else { "0" }).to_string(),
+                    Literal::U64(lit) => lit.to_string(),
+                    Literal::I64(lit) => lit.to_string(),
+                    Literal::F64(lit) => lit.to_string(),
+                    Literal::String(lit) => lit.to_string(),
+                    Literal::Null => "NULL".to_owned(),
                 };
                 escape_string(lit_str.as_str())
             }
-            expr::Expr::Binary(binary_exp) => {
+            Expr::Binary(binary_exp) => {
                 format!(
                     "({} {} {})",
                     self.filter_expr_to_string(&binary_exp.left)?,
@@ -394,21 +395,21 @@ impl QueryBuilder {
                     self.filter_expr_to_string(&binary_exp.right)?,
                 )
             }
-            expr::Expr::Property(property) => self.property_expr_to_string(property)?,
-            expr::Expr::Parameter { .. } => anyhow::bail!("unexpected standalone parameter usage"),
+            Expr::Property(property) => self.property_expr_to_string(property)?,
+            Expr::Parameter { .. } => anyhow::bail!("unexpected standalone parameter usage"),
         };
         Ok(expr_str)
     }
 
-    fn property_expr_to_string(&self, prop_access: &expr::PropertyAccess) -> Result<String> {
-        fn get_property_chain(prop_access: &expr::PropertyAccess) -> Result<Vec<String>> {
+    fn property_expr_to_string(&self, prop_access: &PropertyAccess) -> Result<String> {
+        fn get_property_chain(prop_access: &PropertyAccess) -> Result<Vec<String>> {
             match &*prop_access.object {
-                expr::Expr::Property(obj) => {
+                Expr::Property(obj) => {
                     let mut properties = get_property_chain(obj)?;
                     properties.push(prop_access.property.to_owned());
                     Ok(properties)
                 }
-                expr::Expr::Parameter { .. } => Ok(vec![prop_access.property.to_owned()]),
+                Expr::Parameter { .. } => Ok(vec![prop_access.property.to_owned()]),
                 _ => anyhow::bail!("unexpected expression in property chain!"),
             }
         }
