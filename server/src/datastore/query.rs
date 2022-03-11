@@ -32,16 +32,6 @@ impl From<&str> for SqlValue {
 }
 
 #[derive(Debug, Clone)]
-pub struct Restriction {
-    /// Table in which `column` can be found. If unspecified, base select table will be used.
-    table: Option<String>,
-    /// Database column name used for equality restriction.
-    column: String,
-    /// The value used to restrict the results.
-    v: SqlValue,
-}
-
-#[derive(Debug, Clone)]
 pub(crate) enum QueryField {
     Scalar {
         /// Name of the original Type field
@@ -474,29 +464,6 @@ fn escape_string(s: &str) -> String {
     format!("{}", format_sql_query::QuotedData(s))
 }
 
-/// Convert a vector of `Restriction` objects into a SQL `WHERE` clause.
-pub(crate) fn make_restriction_string(restrictions: &[Restriction]) -> String {
-    restrictions.iter().fold(String::new(), |acc, rest| {
-        let str_v = match &rest.v {
-            SqlValue::Bool(v) => (if *v { "1" } else { "0" }).to_string(),
-            SqlValue::U64(v) => format!("{}", v),
-            SqlValue::I64(v) => format!("{}", v),
-            SqlValue::F64(v) => format!("{}", v),
-            SqlValue::String(v) => escape_string(v),
-        };
-        let equality = if let Some(table) = &rest.table {
-            format!("\"{}\".\"{}\"={}", table, rest.column, str_v)
-        } else {
-            format!("\"{}\"={}", rest.column, str_v)
-        };
-        if acc.is_empty() {
-            format!("WHERE {}", equality)
-        } else {
-            format!("{} AND {}", acc, equality)
-        }
-    })
-}
-
 fn convert_to_query_builder(val: &serde_json::Value) -> Result<QueryBuilder> {
     macro_rules! get_key {
         ($key:expr, $as_type:ident) => {{
@@ -532,8 +499,28 @@ fn convert_to_query_builder(val: &serde_json::Value) -> Result<QueryBuilder> {
     Ok(builder)
 }
 
+pub(crate) fn type_to_query(ty: &Arc<ObjectType>) -> Result<Query> {
+    let builder = QueryBuilder::from_type(ty);
+    builder.build()
+}
+
+pub(crate) fn json_to_query(val: &serde_json::Value) -> Result<Query> {
+    let builder = convert_to_query_builder(val)?;
+    builder.build()
+}
+
+#[derive(Debug, Clone)]
+struct Restriction {
+    /// Table in which `column` can be found. If unspecified, base select table will be used.
+    table: Option<String>,
+    /// Database column name used for equality restriction.
+    column: String,
+    /// The value used to restrict the results.
+    v: SqlValue,
+}
+
 /// Convert JSON restrictions into vector of `Restriction` objects.
-pub(crate) fn convert_restrictions(restrictions: &JsonObject) -> Result<Vec<Restriction>> {
+fn convert_restrictions(restrictions: &JsonObject) -> Result<Vec<Restriction>> {
     let mut sql_restrictions = vec![];
     for (k, v) in restrictions.iter() {
         let v = match v {
@@ -561,14 +548,27 @@ pub(crate) fn convert_restrictions(restrictions: &JsonObject) -> Result<Vec<Rest
     Ok(sql_restrictions)
 }
 
-pub(crate) fn type_to_query(ty: &Arc<ObjectType>) -> Result<Query> {
-    let builder = QueryBuilder::from_type(ty);
-    builder.build()
-}
-
-pub(crate) fn json_to_query(val: &serde_json::Value) -> Result<Query> {
-    let builder = convert_to_query_builder(val)?;
-    builder.build()
+/// Convert a vector of `Restriction` objects into a SQL `WHERE` clause.
+fn make_restriction_string(restrictions: &[Restriction]) -> String {
+    restrictions.iter().fold(String::new(), |acc, rest| {
+        let str_v = match &rest.v {
+            SqlValue::Bool(v) => (if *v { "1" } else { "0" }).to_string(),
+            SqlValue::U64(v) => format!("{}", v),
+            SqlValue::I64(v) => format!("{}", v),
+            SqlValue::F64(v) => format!("{}", v),
+            SqlValue::String(v) => escape_string(v),
+        };
+        let equality = if let Some(table) = &rest.table {
+            format!("\"{}\".\"{}\"={}", table, rest.column, str_v)
+        } else {
+            format!("\"{}\"={}", rest.column, str_v)
+        };
+        if acc.is_empty() {
+            format!("WHERE {}", equality)
+        } else {
+            format!("{} AND {}", acc, equality)
+        }
+    })
 }
 
 /// `Mutation` represents a statement that mutates the database state.
