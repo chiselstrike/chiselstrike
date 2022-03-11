@@ -3,7 +3,7 @@ use serde_derive::{Deserialize, Serialize};
 
 /// An expression.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(tag = "expr_type")]
+#[serde(tag = "exprType")]
 pub(crate) enum Expr {
     /// A literal expression.
     Literal { value: Literal },
@@ -99,7 +99,7 @@ mod tests {
     fn test_literal_parsing_bool() {
         let expr: Expr = serde_json::from_str(
             r#"{
-            "expr_type": "Literal",
+            "exprType": "Literal",
             "value": true
         }"#,
         )
@@ -117,7 +117,7 @@ mod tests {
     fn test_literal_parsing_u64() {
         let expr = serde_json::from_str(
             r#"{
-            "expr_type": "Literal",
+            "exprType": "Literal",
             "value": 42
         }"#,
         )
@@ -135,7 +135,7 @@ mod tests {
     fn test_literal_parsing_i64() {
         let expr = serde_json::from_str(
             r#"{
-            "expr_type": "Literal",
+            "exprType": "Literal",
             "value": -42
         }"#,
         )
@@ -153,7 +153,7 @@ mod tests {
     fn test_literal_parsing_f64() {
         let expr = serde_json::from_str(
             r#"{
-            "expr_type": "Literal",
+            "exprType": "Literal",
             "value": 42.0
         }"#,
         )
@@ -179,7 +179,7 @@ mod tests {
     fn test_literal_parsing_string() {
         let expr: Expr = serde_json::from_str(
             r#"{
-            "expr_type": "Literal",
+            "exprType": "Literal",
             "value": "I'm the best literal"
         }"#,
         )
@@ -205,7 +205,7 @@ mod tests {
     fn test_literal_parsing_null() {
         let expr = serde_json::from_str(
             r#"{
-            "expr_type": "Literal",
+            "exprType": "Literal",
             "value": null
         }"#,
         )
@@ -224,7 +224,7 @@ mod tests {
     fn test_literal_parsing_value_missing_panic() {
         let _expr: Expr = serde_json::from_str(
             r#"{
-            "expr_type": "Literal"
+            "exprType": "Literal"
         }"#,
         )
         .unwrap();
