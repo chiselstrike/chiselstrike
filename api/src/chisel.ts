@@ -263,15 +263,15 @@ export class ChiselCursor<T> {
                     continue;
                 }
                 const cmpExpr = {
-                    "expr_type": "Binary",
+                    exprType: "Binary",
                     left: {
-                        "expr_type": "Property",
-                        object: { "expr_type": "Parameter", position: 0 },
+                        exprType: "Property",
+                        object: { exprType: "Parameter", position: 0 },
                         property: key,
                     },
                     op: "Eq",
                     right: {
-                        "expr_type": "Literal",
+                        exprType: "Literal",
                         value: restrictions[key],
                     },
                 };
@@ -279,7 +279,7 @@ export class ChiselCursor<T> {
                     expr = cmpExpr;
                 } else {
                     expr = {
-                        "expr_type": "Binary",
+                        exprType: "Binary",
                         left: cmpExpr,
                         op: "And",
                         right: expr,

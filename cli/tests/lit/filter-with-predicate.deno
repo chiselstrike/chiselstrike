@@ -290,18 +290,18 @@ export default async function chisel(req: Request) {
         .__filterWithExpression((p) => {
             return p.age == 89;
         }, {
-            expr_type: "Binary",
+            exprType: "Binary",
             left: {
-              expr_type: "Property",
+              exprType: "Property",
               property: "age",
               object: {
-                expr_type: "Parameter",
+                exprType: "Parameter",
                 position: 0
               }
             },
             op: "Eq",
             right: {
-              expr_type: "Literal",
+              exprType: "Literal",
               value: 89
             }
         });
@@ -328,22 +328,22 @@ export default async function chisel(req: Request) {
         .__filterWithExpression((p) => {
             return p.biography.title == "The importance of being erinaceous";
         }, {
-            expr_type: "Binary",
+            exprType: "Binary",
             left: {
-              expr_type: "Property",
+              exprType: "Property",
               property: "title",
               object: {
-                expr_type: "Property",
+                exprType: "Property",
                 property: "biography",
                 object: {
-                  expr_type: "Parameter",
+                  exprType: "Parameter",
                   position: 0
                 }
               }
             },
             op: "Eq",
             right: {
-              expr_type: "Literal",
+              exprType: "Literal",
               value: "The importance of being erinaceous"
             }
         });
