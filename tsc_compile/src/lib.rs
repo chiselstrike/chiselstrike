@@ -549,6 +549,19 @@ export function foo<R>(bar: ReadableStream<R>): AsyncIterableIterator<R> {
     }
 
     #[tokio::test]
+    async fn header_entries() -> Result<()> {
+        let f = write_temp(
+            br#"
+export function foo(h: Headers) {
+    return h.entries;
+}
+"#,
+        )?;
+        compile_ts_code(f.path(), Default::default()).await?;
+        Ok(())
+    }
+
+    #[tokio::test]
     async fn fails_with_emit() -> Result<()> {
         let f = write_temp(
             br#"

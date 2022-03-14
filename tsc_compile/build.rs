@@ -64,6 +64,7 @@ fn read(_op_state: &mut OpState, path: String, _: ()) -> Result<String> {
                 "lib.deno.shared_globals.d.ts",
                 "lib.deno.window.d.ts",
                 "lib.dom.asynciterable.d.ts",
+                "lib.dom.iterable.d.ts",
                 "lib.dom.d.ts",
                 "lib.es2015.collection.d.ts",
                 "lib.es2015.core.d.ts",
