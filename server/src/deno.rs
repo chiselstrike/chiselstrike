@@ -644,13 +644,9 @@ fn resolve_promise(
 }
 
 async fn get_read_future(
-    read_tpl: Option<(
-        v8::Global<v8::Value>,
-        v8::Global<v8::Function>,
-        RequestContext,
-    )>,
+    read_tpl: Option<(v8::Global<v8::Function>, RequestContext)>,
 ) -> Result<Option<(Box<[u8]>, ())>> {
-    let (reader, read, context) = match read_tpl {
+    let (read, context) = match read_tpl {
         Some(x) => x,
         None => {
             return Ok(None);
@@ -661,10 +657,10 @@ async fn get_read_future(
         let mut service = get();
         let runtime = &mut service.worker.js_runtime;
         let scope = &mut runtime.handle_scope();
-        let reader = v8::Local::new(scope, reader.clone());
+        let und = v8::undefined(scope).into();
         let res = read
             .open(scope)
-            .call(scope, reader, &[])
+            .call(scope, und, &[])
             .ok_or(Error::NotAResponse)?;
         v8::Global::new(scope, res)
     };
@@ -672,15 +668,11 @@ async fn get_read_future(
     let mut service = get();
     let runtime = &mut service.worker.js_runtime;
     let scope = &mut runtime.handle_scope();
-    let read_result = read_result
-        .open(scope)
-        .to_object(scope)
-        .ok_or(Error::NotAResponse)?;
-    let done: v8::Local<v8::Boolean> = get_member(read_result, scope, "done")?;
-    if done.is_true() {
-        return Ok(None);
-    }
-    let value: v8::Local<v8::ArrayBufferView> = get_member(read_result, scope, "value")?;
+    let read_result = v8::Local::new(scope, read_result);
+    let value: v8::Local<v8::ArrayBufferView> = match read_result.try_into() {
+        Ok(v) => v,
+        Err(_) => return Ok(None),
+    };
     let size = value.byte_length();
     // FIXME: We might want to use an uninitialized buffer.
     let mut buffer = vec![0; size];
@@ -701,16 +693,10 @@ fn get_read_stream(
         .to_object(scope)
         .ok_or(Error::NotAResponse)?;
 
-    let read = match get_member::<v8::Local<v8::Object>>(response, scope, "body") {
-        Ok(body) => {
-            let get_reader: v8::Local<v8::Function> = get_member(body, scope, "getReader")?;
-            let reader: v8::Local<v8::Object> =
-                try_into_or(get_reader.call(scope, body.into(), &[]))?;
-            let read: v8::Local<v8::Function> = get_member(reader, scope, "read")?;
-            let reader: v8::Local<v8::Value> = reader.into();
-            let reader: v8::Global<v8::Value> = v8::Global::new(scope, reader);
+    let read = match get_member::<v8::Local<v8::Function>>(response, scope, "read") {
+        Ok(read) => {
             let read = v8::Global::new(scope, read);
-            Some((reader, read, context))
+            Some((read, context))
         }
         Err(_) => None,
     };
@@ -937,24 +923,16 @@ pub(crate) async fn run_js(path: String, req: Request<hyper::Body>) -> Result<Re
             .to_object(scope)
             .ok_or(Error::NotAResponse)?;
 
+        let headers: v8::Local<v8::Array> = get_member(response, scope, "headers")?;
+        let num_headers = headers.length();
+
         let status: v8::Local<v8::Number> = get_member(response, scope, "status")?;
         let status = status.value() as u16;
 
-        let headers: v8::Local<v8::Object> = get_member(response, scope, "headers")?;
-        let entries: v8::Local<v8::Function> = get_member(headers, scope, "entries")?;
-        let iter: v8::Local<v8::Object> = try_into_or(entries.call(scope, headers.into(), &[]))?;
-
-        let next: v8::Local<v8::Function> = get_member(iter, scope, "next")?;
         let mut builder = response_template().status(StatusCode::from_u16(status)?);
 
-        loop {
-            let item: v8::Local<v8::Object> = try_into_or(next.call(scope, iter.into(), &[]))?;
-
-            let done: v8::Local<v8::Value> = get_member(item, scope, "done")?;
-            if done.is_true() {
-                break;
-            }
-            let value: v8::Local<v8::Array> = get_member(item, scope, "value")?;
+        for i in 0..num_headers {
+            let value: v8::Local<v8::Array> = try_into_or(headers.get_index(scope, i))?;
             let key: v8::Local<v8::String> = try_into_or(value.get_index(scope, 0))?;
             let value: v8::Local<v8::String> = try_into_or(value.get_index(scope, 1))?;
 

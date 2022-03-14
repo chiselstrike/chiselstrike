@@ -2,6 +2,7 @@
 
 /// <reference types="./lib.deno_core.d.ts" />
 /// <reference lib="dom" />
+/// <reference lib="dom.iterable" />
 
 enum OpType {
     BaseEntity = "BaseEntity",
@@ -703,7 +704,7 @@ export async function loggedInUser(): Promise<OAuthUser | undefined> {
 }
 
 // Handlers that have been compiled but are not yet serving requests.
-type requestHandler = (req: Request) => Response;
+type requestHandler = (req: Request) => Promise<Response>;
 const nextHandlers: Record<string, requestHandler> = {};
 const handlers: Record<string, requestHandler> = {};
 
@@ -738,7 +739,7 @@ function ensureNotGet() {
     }
 }
 
-export function callHandler(
+export async function callHandler(
     path: string,
     url: string,
     method: string,
@@ -752,7 +753,23 @@ export function callHandler(
         init.body = body;
     }
     const req = new Request(url, init);
-    return handlers[path](req);
+    const res = await handlers[path](req);
+    const resHeaders: [string, string][] = [];
+    for (const h of res.headers) {
+        resHeaders.push(h);
+    }
+    const reader = res.body?.getReader();
+    const read = reader
+        ? async function () {
+            const v = await reader.read();
+            return v.done ? undefined : v.value;
+        }
+        : undefined;
+    return {
+        "status": res.status,
+        "headers": resHeaders,
+        "read": read,
+    };
 }
 
 // TODO: BEGIN: this should be in another file: crud.ts
