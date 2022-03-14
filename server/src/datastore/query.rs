@@ -104,6 +104,12 @@ struct Join {
     rkey: String,
 }
 
+#[derive(Debug, Clone)]
+struct SortBy {
+    field_name: String,
+    ascending: bool,
+}
+
 /// Class used to build `Query` from either JSON query or `ObjectType`.
 /// The json part recursively descends through selected fields and captures all
 /// joins necessary for nested types retrieval.
@@ -121,6 +127,8 @@ struct QueryBuilder {
     filter_expr: Option<Expr>,
     /// List of fields to be returned to the user.
     allowed_fields: Option<HashSet<String>>,
+    /// If Some, it will be used to sort the queried results.
+    sort: Option<SortBy>,
     /// Limits how many rows/entries will be returned to the user.
     limit: Option<u64>,
     /// Counts the total number of joins the builder encountered. It's used to
@@ -140,6 +148,7 @@ impl QueryBuilder {
             },
             filter_expr: None,
             allowed_fields: None,
+            sort: None,
             limit: None,
             join_counter: 0,
         }
@@ -326,6 +335,13 @@ impl QueryBuilder {
         }
     }
 
+    fn set_sort(&mut self, field_name: &str, ascending: bool) {
+        self.sort = Some(SortBy {
+            field_name: field_name.to_owned(),
+            ascending,
+        });
+    }
+
     fn make_column_string(&self) -> String {
         let mut column_string = String::new();
         for (table_name, column_name, field) in &self.columns {
@@ -432,17 +448,28 @@ impl QueryBuilder {
         Ok(format!("\"{}\".\"{}\"", entity.table_alias, field))
     }
 
+    fn make_sort_string(&self) -> String {
+        if let Some(sort) = &self.sort {
+            let order = if sort.ascending { "ASC" } else { "DESC" };
+            format!("ORDER BY \"{}\" {}", sort.field_name, order)
+        } else {
+            "".into()
+        }
+    }
+
     fn make_raw_query(&self) -> Result<String> {
         let column_string = self.make_column_string();
         let join_string = self.make_join_string();
         let filter_string = self.make_filter_string()?;
+        let sort_string = self.make_sort_string();
 
         let mut raw_sql = format!(
-            "SELECT {} FROM \"{}\" {} {}",
+            "SELECT {} FROM \"{}\" {} {} {}",
             column_string,
             self.base_type().backing_table(),
             join_string,
-            filter_string
+            filter_string,
+            sort_string
         );
         if let Some(limit) = self.limit {
             raw_sql += format!(" LIMIT {}", limit).as_str();
@@ -493,6 +520,11 @@ fn convert_to_query_builder(val: &serde_json::Value) -> Result<QueryBuilder> {
         "Take" => {
             let count = get_key!("count", as_u64)?;
             builder.update_limit(count);
+        }
+        "SortBy" => {
+            let key = get_key!("key", as_str)?;
+            let ascending = get_key!("ascending", as_bool)?;
+            builder.set_sort(key, ascending);
         }
         _ => anyhow::bail!("unexpected relation type `{}`", op_type),
     }

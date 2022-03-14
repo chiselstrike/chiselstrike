@@ -25,6 +25,12 @@ export default async function chisel(req: Request) {
     pekka.name = "Pekka";
     pekka.age = 89;
     await pekka.save();
+
+    const jan = new Person();
+    jan.name = "Jan";
+    jan.age = 233;
+    await jan.save();
+
     return new Response("Ok");
 }
 EOF
@@ -68,16 +74,16 @@ $CURL -X POST -o - $CHISELD_HOST/dev/store
 # CHECK: Ok
 
 $CURL -o - "$CHISELD_HOST/dev/get_sorted?key=name&order=ascending"
-# CHECK: [Glauber, Pekka]
+# CHECK: [Glauber, Jan, Pekka]
 
 $CURL -o - "$CHISELD_HOST/dev/get_sorted?key=name&order=descending"
-# CHECK: [Pekka, Glauber]
+# CHECK: [Pekka, Jan, Glauber]
 
 $CURL -o - "$CHISELD_HOST/dev/get_sorted?key=age&order=ascending"
-# CHECK: [Pekka, Glauber]
+# CHECK: [Pekka, Glauber, Jan]
 
 $CURL -o - "$CHISELD_HOST/dev/get_sorted?key=age&order=descending"
-# CHECK: [Glauber, Pekka]
+# CHECK: [Jan, Glauber, Pekka]
 
 
 
@@ -103,13 +109,83 @@ $CHISEL apply
 # CHECK: End point defined: /dev/get_sorted_by
 
 $CURL -o - "$CHISELD_HOST/dev/get_sorted_by?key=name&order=ascending"
-# CHECK: [Glauber, Pekka]
+# CHECK: [Glauber, Jan, Pekka]
 
 $CURL -o - "$CHISELD_HOST/dev/get_sorted_by?key=name&order=descending"
-# CHECK: [Pekka, Glauber]
+# CHECK: [Pekka, Jan, Glauber]
 
 $CURL -o - "$CHISELD_HOST/dev/get_sorted_by?key=age&order=ascending"
-# CHECK: [Pekka, Glauber]
+# CHECK: [Pekka, Glauber, Jan]
 
 $CURL -o - "$CHISELD_HOST/dev/get_sorted_by?key=age&order=descending"
+# CHECK: [Jan, Glauber, Pekka]
+
+
+## ________________ Double sortBy ________________
+
+cat << EOF > "$TEMPDIR/endpoints/get_sorted.ts"
+import { Person } from "../models/types.ts";
+
+export default async function chisel(req: Request) {
+    const sorted = Person.cursor()
+        .sortBy("age")
+        .sortBy("name");
+
+    const results = (await sorted.toArray()).map(p => p.name);
+    return new Response("[" + results.join(", ") + "]");
+}
+EOF
+
+$CHISEL apply
+# CHECK: End point defined: /dev/get_sorted
+
+$CURL -o - $CHISELD_HOST/dev/get_sorted
+# CHECK: [Glauber, Jan, Pekka]
+
+
+
+## ________________ sortBy filter ________________
+
+cat << EOF > "$TEMPDIR/endpoints/get_sorted.ts"
+import { Person } from "../models/types.ts";
+
+export default async function chisel(req: Request) {
+    const sorted = Person.cursor()
+        .sortBy("age")
+        .filter((p) => {
+            return p.age == 89;
+        });
+
+    const results = (await sorted.toArray()).map(p => p.name);
+    return new Response("[" + results.join(", ") + "]");
+}
+EOF
+
+$CHISEL apply
+# CHECK: End point defined: /dev/get_sorted
+
+$CURL -o - $CHISELD_HOST/dev/get_sorted
+# CHECK: [Pekka]
+
+
+## ________________ sortBy take SortBy ________________
+
+cat << EOF > "$TEMPDIR/endpoints/get_sorted.ts"
+import { Person } from "../models/types.ts";
+
+export default async function chisel(req: Request) {
+    const sorted = Person.cursor()
+        .sortBy("age")
+        .take(2)
+        .sortBy("name");
+
+    const results = (await sorted.toArray()).map(p => p.name);
+    return new Response("[" + results.join(", ") + "]");
+}
+EOF
+
+$CHISEL apply
+# CHECK: End point defined: /dev/get_sorted
+
+$CURL -o - $CHISELD_HOST/dev/get_sorted
 # CHECK: [Glauber, Pekka]
