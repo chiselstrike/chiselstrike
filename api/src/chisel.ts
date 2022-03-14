@@ -11,6 +11,7 @@ enum OpType {
     PredicateFilter = "PredicateFilter",
     ExpressionFilter = "ExpressionFilter",
     Sort = "Sort",
+    SortBy = "SortBy",
 }
 
 /**
@@ -30,6 +31,19 @@ abstract class Operator<T> {
     public abstract apply(
         iter: AsyncIterable<T>,
     ): AsyncIterable<T>;
+
+    /** Recursively examines operator chain searching for `opType` operator.
+     * Returns true if found, false otherwise.
+     */
+    public containsType(opType: OpType): boolean {
+        if (this.type == opType) {
+            return true;
+        } else if (this.inner === undefined) {
+            return false;
+        } else {
+            return this.inner.containsType(opType);
+        }
+    }
 }
 
 /**
@@ -210,6 +224,43 @@ class Sort<T> extends Operator<T> {
     }
 }
 
+/**
+ * SortBy operator sorts elements by `key` (property) of element type `T`
+ * in ascending order if `ascending` is set to true, descending otherwise.
+ */
+class SortBy<T> extends Operator<T> {
+    constructor(
+        private key: keyof T,
+        private ascending = true,
+        inner: Operator<T>,
+    ) {
+        super(OpType.SortBy, inner);
+    }
+
+    apply(
+        iter: AsyncIterable<T>,
+    ): AsyncIterable<T> {
+        const key = this.key;
+        const ord = this.ascending ? -1 : 1;
+        return {
+            [Symbol.asyncIterator]: async function* () {
+                const elements = [];
+                for await (const e of iter) {
+                    elements.push(e);
+                }
+                elements.sort(
+                    (lhs: T, rhs: T) => {
+                        return lhs[key] < rhs[key] ? ord : (-1) * ord;
+                    },
+                );
+                for (const e of elements) {
+                    yield e;
+                }
+            },
+        };
+    }
+}
+
 /** ChiselCursor is a lazy iterator that will be used by ChiselStrike to construct an optimized query. */
 export class ChiselCursor<T> {
     constructor(
@@ -358,13 +409,11 @@ export class ChiselCursor<T> {
      * Note: the sort is not guaranteed to be stable.
      */
     sortBy(key: keyof T, ascending = true): ChiselCursor<T> {
-        const cmp = (lhs: T, rhs: T) => {
-            return ascending === (lhs[key] < rhs[key]);
-        };
         return new ChiselCursor(
             this.baseConstructor,
-            new Sort(
-                cmp,
+            new SortBy(
+                key,
+                ascending,
                 this.inner,
             ),
         );
@@ -399,10 +448,12 @@ export class ChiselCursor<T> {
     }
 
     /** Performs recursive descent via Operator.inner examining the whole operator
-     * chain. If PredicateFilter or Sort is encountered, a backend query is generated
-     * and all consecutive operations are applied on the resulting async iterable
-     * in TypeScript. In such a case, the function returns the resulting AsyncIterable.
-     * If no PredicateFilter or Sort is found, undefined is returned.
+     * chain. If PredicateFilter or Sort or second SortBy is encountered, a backend
+     * query is generated and all consecutive operations are applied on the resulting
+     * async iterable in TypeScript. In such a case, the function returns the resulting
+     * AsyncIterable. If Take is encountered, every operation after the take is evaluated
+     * in TypeScript.
+     * If no PredicateFilter or Sort etc. is found, undefined is returned.
      */
     private makeTransformedQueryIter(
         op: Operator<T>,
@@ -420,7 +471,8 @@ export class ChiselCursor<T> {
         } else if (op.type == OpType.Take) {
             return this.makeQueryIter(op);
         } else if (
-            op.type == OpType.PredicateFilter || op.type == OpType.Sort
+            op.type == OpType.PredicateFilter || op.type == OpType.Sort ||
+            (op.type == OpType.SortBy && op.inner.containsType(OpType.SortBy))
         ) {
             iter = this.makeQueryIter(op.inner);
             return op.apply(iter);
@@ -432,7 +484,9 @@ export class ChiselCursor<T> {
     private makeQueryIter(
         op: Operator<T>,
     ): AsyncIterable<T> {
-        const ctor = this.containsSelect(op) ? undefined : this.baseConstructor;
+        const ctor = op.containsType(OpType.ColumnsSelect)
+            ? undefined
+            : this.baseConstructor;
         return {
             [Symbol.asyncIterator]: async function* () {
                 const rid = Deno.core.opSync(
@@ -462,19 +516,6 @@ export class ChiselCursor<T> {
                 }
             },
         };
-    }
-
-    /** Recursively examines operator chain searching for ColumnsSelect operator.
-     * Returns true if found, false otherwise.
-     */
-    private containsSelect(op: Operator<T>): boolean {
-        if (op.type == OpType.ColumnsSelect) {
-            return true;
-        } else if (op.inner === undefined) {
-            return false;
-        } else {
-            return this.containsSelect(op.inner);
-        }
     }
 }
 
