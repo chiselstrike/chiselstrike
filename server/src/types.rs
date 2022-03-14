@@ -514,10 +514,6 @@ pub(crate) struct ObjectType {
     name: String,
     /// Fields of this type.
     fields: Vec<Field>,
-    /// We want to keep the fields in the order the user provided, so above we use a Vec.
-    /// But at times we also want to search fields by name, so keep a separate data structure
-    /// for that
-    fields_by_name: HashMap<String, Field>,
     /// user-visible ID of this object.
     chisel_id: Field,
     /// Name of the backing table for this type.
@@ -550,27 +546,14 @@ impl ObjectType {
             api_version: "__chiselstrike".into(),
             is_unique: true,
         };
-        let mut obj = Self {
+        Ok(Self {
             meta_id: desc.id(),
             name: desc.name(),
             api_version,
             backing_table,
             fields,
-            fields_by_name: Default::default(),
             chisel_id,
-        };
-        obj.populate_fields_by_name();
-        Ok(obj)
-    }
-
-    fn populate_fields_by_name(&mut self) {
-        self.fields_by_name
-            .insert("id".to_string(), self.chisel_id.clone());
-
-        for field in self.fields.iter() {
-            self.fields_by_name
-                .insert(field.name.clone(), field.clone());
-        }
+        })
     }
 
     pub(crate) fn user_fields(&self) -> impl Iterator<Item = &Field> {
