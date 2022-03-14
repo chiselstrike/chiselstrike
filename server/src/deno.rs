@@ -969,12 +969,7 @@ async fn commit_transaction(
 }
 
 pub(crate) async fn run_js(path: String, mut req: Request<hyper::Body>) -> Result<Response<Body>> {
-    let qe = {
-        let runtime = runtime::get();
-        let qe = runtime.query_engine.clone();
-        drop(runtime);
-        qe
-    };
+    let qe = runtime::get().query_engine.clone();
 
     // The rust borrow checker can track fields independently, but
     // only in very simple cases. For example,
