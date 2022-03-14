@@ -101,6 +101,7 @@
         const defaultLibs = [
             "lib.deno.ns.d.ts",
             "lib.dom.asynciterable.d.ts",
+            "lib.dom.iterable.d.ts",
             "lib.dom.d.ts",
             "lib.deno_console.d.ts",
             "lib.deno_broadcast_channel.d.ts",
