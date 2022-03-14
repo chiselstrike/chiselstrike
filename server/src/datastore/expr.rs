@@ -75,6 +75,12 @@ impl From<String> for Literal {
     }
 }
 
+impl From<&str> for Literal {
+    fn from(val: &str) -> Self {
+        Literal::String(val.to_owned())
+    }
+}
+
 impl From<Option<Literal>> for Literal {
     fn from(opt: Option<Literal>) -> Literal {
         match opt {

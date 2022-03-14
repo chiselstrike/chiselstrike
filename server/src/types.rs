@@ -581,10 +581,6 @@ impl ObjectType {
         std::iter::once(&self.chisel_id).chain(self.fields.iter())
     }
 
-    pub(crate) fn field_by_name(&self, name: &str) -> Option<&Field> {
-        self.fields_by_name.get(name)
-    }
-
     pub(crate) fn backing_table(&self) -> &str {
         &self.backing_table
     }
