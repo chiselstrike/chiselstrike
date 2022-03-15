@@ -9,6 +9,7 @@ default = []
 must_not_suspend = []
 
 [dependencies]
+aes-gcm = "0.9.4"
 anyhow = { version = "1.0.45", features = ["backtrace"] }
 api = { path = "../api" }
 async-channel = "1.6.1"
@@ -33,12 +34,18 @@ prost = "0.8.0"
 rand = "0.8.4"
 regex = "1"
 rsa = "0.5.0"
-sea-query = { version = "0.17.1", features = [ "thread-safe" ] }
+sea-query = { version = "0.17.1", features = ["thread-safe"] }
 serde = "1.0.133"
 serde_derive = "1.0.133"
 serde_json = "1.0.68"
+sha2 = "0.9.9"
 socket2 = { version = "0.3.18", features = ["unix", "reuseport"] }
-sqlx = { version = "0.5.7", features = [ "any", "postgres", "sqlite", "runtime-tokio-rustls" ] }
+sqlx = { version = "0.5.7", features = [
+    "any",
+    "postgres",
+    "sqlite",
+    "runtime-tokio-rustls",
+] }
 structopt = "0.3.23"
 tempdir = "0.3.7"
 tempfile = "3.2.0"
@@ -56,7 +63,7 @@ yaml-rust = "0.4"
 # FIXME: We have additional dependencies here to work around
 # https://github.com/rust-lang/cargo/issues/6313
 anyhow = "1.0"
-libc = { version = "0.2.99", features = [ "extra_traits", "align" ] }
+libc = { version = "0.2.99", features = ["extra_traits", "align"] }
 log = { version = "0.4.14", features = ["std"] }
 tonic-build = "0.5.2"
 tracing = { version = "0.1.30", features = ["log"] }
