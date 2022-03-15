@@ -5,16 +5,28 @@ sidebar_position: 0
 ---
 # Welcome to ChiselStrike!
 
-It's a pleasure to have you as part of our beta! Although
-ChiselStrike is in its early stages, we hope you will already find it very
-useful for a variety of your use cases.
+We're so happy you're here! How happy??? This happy!
 
-The goal of this beta is to make sure we're building the right experience
-for you. With this documentation, you will learn how to install ChiselStrike
-and how to build a backend locally on your laptop.
-It even works totally offline (how cool is that!! 🤩). You can integrate it with Gatsby,
-Next.js, or any other framework.
+![](/img/happy.gif)
 
-Over the next few weeks, after the first round of feedback, we'll also allow you to deploy
-it directly on our infrastructure from your git repository (and don't worry about 💰, it's
-on us!).
+And if you're here, you have certainly heard of ChiselStrike, but may still be wondering what
+ChiselStrike is.
+
+In a few short words, ChiselStrike allows you - yes, you - to have your entire persistent layer
+(database, APIs, authentication) created for you from your Typescript definitions. You bring
+your Typescript knowledge and we'll get the rest done. Your very own backend, *chiseled* just
+for you, that evolves with your needs.
+
+* Need a simple CRUD application that just allows you to POST to and GET from an endpoint? Boom, we've got you covered.
+* Want to run some complex business logic in the API layer, federate and connect to other microservices? A bit more Typescript and... done!
+* Access policies and user authentication are your thing? No problem!
+
+All of that is avaialable as a service and created straight from your Github code.
+Interested? The service itself is in private beta. You can join by contacting us at
+https://forms.gle/cwMghfrXz1ZPiWKK6
+
+However, for development purposes, you can install ChiselStrike locally and try it on your laptop.
+It works totally offline, and you can integrate it with Gatsby, Next.js, or your favorite framework.
+Your entire test application, from the UI to the backend, totally offline??? how cool is that!! 🤩
+ 
+And that, my friend, you can do right now! Throughout the next chapters, we'll show you how.
