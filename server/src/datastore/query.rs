@@ -181,8 +181,7 @@ impl QueryBuilder {
         };
 
         let mut builder = Self::new(ty.clone());
-        builder.add_login_filters(&runtime, &ty);
-        builder.entity = builder.load_entity(&runtime, &ty, ty.backing_table());
+        builder.entity = builder.load_entity(&runtime, &ty);
         Ok(builder)
     }
 
@@ -205,10 +204,17 @@ impl QueryBuilder {
         select_field
     }
 
-    /// QueriedEntity for a given type `ty` to be retrieved from the
+    /// Prepares the retrieval of Entity of type `ty` from the database and
+    /// ensures login restrictions are respected.
+    fn load_entity(&mut self, runtime: &runtime::Runtime, ty: &Arc<ObjectType>) -> QueriedEntity {
+        self.add_login_filters_recursive(runtime, ty, Expr::Parameter { position: 0 });
+        self.load_entity_recursive(runtime, ty, ty.backing_table())
+    }
+
+    /// Loads QueriedEntity for a given type `ty` to be retrieved from the
     /// database. For fields that represent a nested Entity a join is
     /// generated and we attempt to retrieve them recursively as well.
-    fn load_entity(
+    fn load_entity_recursive(
         &mut self,
         runtime: &runtime::Runtime,
         ty: &Arc<ObjectType>,
@@ -233,7 +239,7 @@ impl QueryBuilder {
                 joins.insert(
                     field.name.to_owned(),
                     Join {
-                        entity: self.load_entity(runtime, nested_ty, &nested_table),
+                        entity: self.load_entity_recursive(runtime, nested_ty, &nested_table),
                         lkey: field.name.to_owned(),
                         rkey: "id".to_owned(),
                     },
@@ -256,10 +262,8 @@ impl QueryBuilder {
         }
     }
 
-    fn add_login_filters(&mut self, runtime: &runtime::Runtime, ty: &Arc<ObjectType>) {
-        self.add_login_filters_recursive(runtime, ty, Expr::Parameter { position: 0 });
-    }
-
+    /// Adds filters that ensure login constrains are satisfied for a type
+    /// `ty` that is to be retrieved from the database.
     fn add_login_filters_recursive(
         &mut self,
         runtime: &runtime::Runtime,
