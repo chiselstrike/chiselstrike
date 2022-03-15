@@ -1,7 +1,6 @@
 // SPDX-FileCopyrightText: © 2021 ChiselStrike <info@chiselstrike.com>
 
 use crate::datastore::expr::{BinaryExpr, BinaryOp, Expr, Literal, PropertyAccess};
-use crate::deno::current_api_version;
 use crate::deno::make_field_policies;
 
 use crate::runtime;
@@ -185,20 +184,19 @@ impl QueryBuilder {
     }
 
     /// Constructs a builder from a type name `ty_name`.
-    fn new_from_type_name(ty_name: &str) -> Result<Self> {
+    fn new_from_type_name(api_version: &str, path: &str, ty_name: &str) -> Result<Self> {
         let runtime = runtime::get();
         let ts = &runtime.type_system;
-        let api_version = current_api_version();
         let ty = match ts.lookup_builtin_type(ty_name) {
             Ok(Type::Object(ty)) => ty,
             Err(TypeSystemError::NotABuiltinType(_)) => {
-                ts.lookup_custom_type(ty_name, &api_version)?
+                ts.lookup_custom_type(ty_name, api_version)?
             }
             _ => anyhow::bail!("Unexpected type name as select base type: {}", ty_name),
         };
 
         let mut builder = Self::new(ty.clone());
-        builder.entity = builder.load_entity(&runtime, &ty);
+        builder.entity = builder.load_entity(&runtime, path, &ty);
         Ok(builder)
     }
 
@@ -225,9 +223,14 @@ impl QueryBuilder {
 
     /// Prepares the retrieval of Entity of type `ty` from the database and
     /// ensures login restrictions are respected.
-    fn load_entity(&mut self, runtime: &runtime::Runtime, ty: &Arc<ObjectType>) -> QueriedEntity {
-        self.add_login_filters_recursive(runtime, ty, Expr::Parameter { position: 0 });
-        self.load_entity_recursive(runtime, ty, ty.backing_table())
+    fn load_entity(
+        &mut self,
+        runtime: &runtime::Runtime,
+        path: &str,
+        ty: &Arc<ObjectType>,
+    ) -> QueriedEntity {
+        self.add_login_filters_recursive(runtime, path, ty, Expr::Parameter { position: 0 });
+        self.load_entity_recursive(runtime, path, ty, ty.backing_table())
     }
 
     /// Loads QueriedEntity for a given type `ty` to be retrieved from the
@@ -236,10 +239,11 @@ impl QueryBuilder {
     fn load_entity_recursive(
         &mut self,
         runtime: &runtime::Runtime,
+        path: &str,
         ty: &Arc<ObjectType>,
         current_table: &str,
     ) -> QueriedEntity {
-        let policies = make_field_policies(runtime, ty);
+        let policies = make_field_policies(runtime, path, ty);
 
         let mut fields = vec![];
         let mut joins = HashMap::default();
@@ -260,7 +264,7 @@ impl QueryBuilder {
                 joins.insert(
                     field.name.to_owned(),
                     Join {
-                        entity: self.load_entity_recursive(runtime, nested_ty, &nested_table),
+                        entity: self.load_entity_recursive(runtime, path, nested_ty, &nested_table),
                         lkey: field.name.to_owned(),
                         rkey: "id".to_owned(),
                     },
@@ -288,10 +292,11 @@ impl QueryBuilder {
     fn add_login_filters_recursive(
         &mut self,
         runtime: &runtime::Runtime,
+        path: &str,
         ty: &Arc<ObjectType>,
         property_chain: Expr,
     ) {
-        let policies = make_field_policies(runtime, ty);
+        let policies = make_field_policies(runtime, path, ty);
         let user_id: Literal = match &policies.current_userid {
             None => "NULL",
             Some(id) => id.as_str(),
@@ -316,7 +321,12 @@ impl QueryBuilder {
                         )
                     }
                 } else {
-                    self.add_login_filters_recursive(runtime, nested_ty, property_access.into());
+                    self.add_login_filters_recursive(
+                        runtime,
+                        path,
+                        nested_ty,
+                        property_access.into(),
+                    );
                 }
             }
         }
@@ -542,22 +552,26 @@ enum QueryOperator {
     },
 }
 
-fn convert_to_query_builder(op: QueryOperator) -> Result<QueryBuilder> {
+fn convert_to_query_builder(
+    api_version: &str,
+    path: &str,
+    op: QueryOperator,
+) -> Result<QueryBuilder> {
     use QueryOperator::*;
     let builder = match op {
-        BaseEntity { name } => QueryBuilder::new_from_type_name(&name)?,
+        BaseEntity { name } => QueryBuilder::new_from_type_name(api_version, path, &name)?,
         Filter { expression, inner } => {
-            let mut builder = convert_to_query_builder(*inner)?;
+            let mut builder = convert_to_query_builder(api_version, path, *inner)?;
             builder.add_expression_filter(expression);
             builder
         }
         Projection { fields, inner } => {
-            let mut builder = convert_to_query_builder(*inner)?;
+            let mut builder = convert_to_query_builder(api_version, path, *inner)?;
             builder.update_allowed_fields(fields)?;
             builder
         }
         Take { count, inner } => {
-            let mut builder = convert_to_query_builder(*inner)?;
+            let mut builder = convert_to_query_builder(api_version, path, *inner)?;
             builder.update_limit(count);
             builder
         }
@@ -566,7 +580,7 @@ fn convert_to_query_builder(op: QueryOperator) -> Result<QueryBuilder> {
             ascending,
             inner,
         } => {
-            let mut builder = convert_to_query_builder(*inner)?;
+            let mut builder = convert_to_query_builder(api_version, path, *inner)?;
             builder.set_sort(&key, ascending);
             builder
         }
@@ -579,10 +593,14 @@ pub(crate) fn type_to_query(ty: &Arc<ObjectType>) -> Result<Query> {
     builder.build()
 }
 
-pub(crate) fn json_to_query(val: serde_json::Value) -> Result<Query> {
+pub(crate) fn json_to_query(
+    api_version: &str,
+    path: &str,
+    val: serde_json::Value,
+) -> Result<Query> {
     let op_chain: QueryOperator =
         serde_json::from_value(val).context("failed to deserialize QueryOperator from JSON")?;
-    let builder = convert_to_query_builder(op_chain)?;
+    let builder = convert_to_query_builder(api_version, path, op_chain)?;
     builder.build()
 }
 
@@ -657,7 +675,7 @@ pub(crate) struct Mutation {
 
 impl Mutation {
     /// Parses a delete statement from JSON.
-    pub(crate) fn parse_delete(val: &serde_json::Value) -> Result<Self> {
+    pub(crate) fn parse_delete(api_version: &str, val: &serde_json::Value) -> Result<Self> {
         let type_name = val["type_name"]
             .as_str()
             .ok_or_else(|| anyhow!("The `type_name` field is not a JSON string."))?;
@@ -666,10 +684,9 @@ impl Mutation {
             .ok_or_else(|| anyhow!("The `restrictions` passed is not a JSON object."))?;
         let (ty, restrictions) = {
             let runtime = runtime::get();
-            let api_version = current_api_version();
             let ty = match runtime
                 .type_system
-                .lookup_custom_type(type_name, &api_version)
+                .lookup_custom_type(type_name, api_version)
             {
                 Err(_) => anyhow::bail!("Cannot delete from type `{}`", type_name),
                 Ok(ty) => ty,

@@ -362,7 +362,7 @@ where
 async fn op_chisel_store(
     _state: Rc<RefCell<OpState>>,
     content: serde_json::Value,
-    _: (),
+    api_version: String,
 ) -> Result<serde_json::Value> {
     let type_name = content["name"]
         .as_str()
@@ -374,7 +374,6 @@ async fn op_chisel_store(
 
     let (query_engine, ty) = {
         let runtime = runtime::get();
-        let api_version = current_api_version();
 
         // Users can only store custom types.  Builtin types are managed by us.
         let ty = match runtime
@@ -401,9 +400,9 @@ async fn op_chisel_store(
 async fn op_chisel_entity_delete(
     _state: Rc<RefCell<OpState>>,
     content: serde_json::Value,
-    _: (),
+    api_version: String,
 ) -> Result<serde_json::Value> {
-    let mutation = Mutation::parse_delete(&content).context(
+    let mutation = Mutation::parse_delete(&api_version, &content).context(
         "failed to construct delete expression from JSON passed to `op_chisel_entity_delete`",
     )?;
     let query_engine = {
@@ -416,11 +415,11 @@ async fn op_chisel_entity_delete(
 type DbStream = RefCell<QueryResults>;
 
 /// Calculates field policies for the request being processed.
-pub(crate) fn make_field_policies(runtime: &Runtime, ty: &ObjectType) -> FieldPolicies {
+pub(crate) fn make_field_policies(runtime: &Runtime, path: &str, ty: &ObjectType) -> FieldPolicies {
     let mut policies = FieldPolicies::default();
-    let (path, userid) = with_current_context(|p| (p.path.path().to_string(), p.userid.clone()));
+    let userid = with_current_context(|p| p.userid.clone());
     policies.current_userid = userid;
-    runtime.add_field_policies(ty, &mut policies, &path);
+    runtime.add_field_policies(ty, &mut policies, path);
     policies
 }
 
@@ -442,20 +441,12 @@ fn op_chisel_get_secret(
     Ok(runtime.secrets.get_secret(key))
 }
 
-fn op_chisel_current_path(
-    _op_state: &mut OpState,
-    _unused: Option<serde_json::Value>,
-    _: (),
-) -> Result<serde_json::Value> {
-    let path = with_current_context(|p| p.path.path().to_string());
-    Ok(serde_json::json!(path))
-}
-
 fn op_chisel_relational_query_create(
     op_state: &mut OpState,
     relation: serde_json::Value,
-    _: (),
+    path: (String, String),
 ) -> Result<ResourceId> {
+    let (api_version, path) = path;
     // FIXME: It is silly do create a serde_json::Value just to
     // convert it to something else. The difficulty with decoding
     // directly is that we need to implement visit_map to read the
@@ -466,7 +457,7 @@ fn op_chisel_relational_query_create(
     // is no way to access it from here. We would have to replace
     // op_chisel_relational_query_create with a closure that has an
     // Rc<DenoService>.
-    let query = json_to_query(relation)?;
+    let query = json_to_query(&api_version, &path, relation)?;
     let mut runtime = runtime::get();
     let query_engine = &mut runtime.query_engine;
 
@@ -530,7 +521,6 @@ async fn create_deno<P: AsRef<Path>>(base_directory: P, inspect_brk: bool) -> Re
     runtime.register_op("chisel_store", op_req(op_chisel_store));
     runtime.register_op("chisel_entity_delete", op_req(op_chisel_entity_delete));
     runtime.register_op("chisel_get_secret", op_sync(op_chisel_get_secret));
-    runtime.register_op("chisel_current_path", op_sync(op_chisel_current_path));
     runtime.register_op(
         "chisel_relational_query_create",
         op_sync(op_chisel_relational_query_create),
@@ -727,7 +717,6 @@ impl Resource for BodyResource {
 
 #[derive(Default, Clone)]
 struct RequestContext {
-    path: RequestPath,
     /// Uniquely identifies the OAuthUser row for the logged-in user.  None if there was no login.
     userid: Option<String>,
     transaction: Option<TransactionStatic>,
@@ -762,10 +751,6 @@ mod context {
 use context::with_context;
 use context::with_current_context;
 
-pub(crate) fn current_api_version() -> String {
-    with_current_context(|p| p.path.api_version().to_string())
-}
-
 fn current_transaction() -> Result<TransactionStatic> {
     with_current_context(|path| {
         path.transaction
@@ -793,7 +778,7 @@ impl<F: Future> Future for RequestFuture<F> {
     }
 }
 
-fn get_result_aux(path: String, req: Request<hyper::Body>) -> Result<v8::Global<v8::Value>> {
+fn get_result_aux(path: RequestPath, req: Request<hyper::Body>) -> Result<v8::Global<v8::Value>> {
     let mut service = get();
     let runtime = &mut service.worker.js_runtime;
 
@@ -829,20 +814,28 @@ fn get_result_aux(path: String, req: Request<hyper::Body>) -> Result<v8::Global<
         v8::undefined(scope).into()
     };
 
-    let path = v8::String::new(scope, &path).unwrap().into();
+    let api_version = v8::String::new(scope, path.api_version()).unwrap().into();
+    let path = v8::String::new(scope, path.path()).unwrap().into();
     let call_handler: v8::Local<v8::Function> = get_member(chisel, scope, "callHandler").unwrap();
     let result = call_handler
         .call(
             scope,
             global_proxy.into(),
-            &[path, url.into(), method_value, headers.into(), rid],
+            &[
+                path,
+                api_version,
+                url.into(),
+                method_value,
+                headers.into(),
+                rid,
+            ],
         )
         .ok_or(Error::NotAResponse)?;
     Ok(v8::Global::new(scope, result))
 }
 
 async fn get_result(
-    path: String,
+    path: RequestPath,
     req: Request<hyper::Body>,
     context: RequestContext,
 ) -> Result<v8::Global<v8::Value>> {
@@ -886,8 +879,8 @@ pub(crate) async fn run_js(path: String, req: Request<hyper::Body>) -> Result<Re
     }
 
     let transaction = qe.start_transaction_static().await?;
+    let path = RequestPath::try_from(path.as_ref()).unwrap();
     let context = RequestContext {
-        path: RequestPath::try_from(path.as_ref()).unwrap(),
         userid: crate::auth::get_user(&req).await?,
         transaction: Some(transaction.clone()),
     };
@@ -971,7 +964,6 @@ pub(crate) async fn compile_endpoint<P: AsRef<Path>>(
     code: String,
 ) -> Result<()> {
     let context = RequestContext {
-        path: RequestPath::try_from(path.as_ref()).unwrap(),
         userid: None,
         transaction: None,
     };
@@ -999,10 +991,16 @@ pub(crate) async fn compile_endpoint<P: AsRef<Path>>(
         let import_endpoint: v8::Local<v8::Function> = get_member(chisel, scope, "importEndpoint")?;
         let base_directory = format!("{}", base_directory.as_ref().display());
         let base_directory = v8::String::new(scope, &base_directory).unwrap().into();
-        let path = v8::String::new(scope, &path).unwrap().into();
+        let path = RequestPath::try_from(path.as_ref()).unwrap();
+        let api_version = v8::String::new(scope, path.api_version()).unwrap().into();
+        let path = v8::String::new(scope, path.path()).unwrap().into();
         let version = v8::Number::new(scope, entry.version as f64).into();
         let promise = import_endpoint
-            .call(scope, chisel.into(), &[base_directory, path, version])
+            .call(
+                scope,
+                chisel.into(),
+                &[base_directory, path, api_version, version],
+            )
             .unwrap();
         v8::Global::new(scope, promise)
     };
