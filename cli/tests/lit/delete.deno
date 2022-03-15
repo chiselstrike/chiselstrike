@@ -18,6 +18,14 @@ import { User } from "../models/user.ts";
 export default User.crud('/user');
 EOF
 
+cat << EOF > "$TEMPDIR/endpoints/delete.ts"
+import { User } from "../models/user.ts";
+export default async function chisel(req: Request) {
+    await User.delete({ email: "alice@example.com"});
+    return new Response("OK");
+}
+EOF
+
 $CHISEL apply
 # CHECK: Model defined: User
 # CHECK: End point defined: /dev/user
@@ -37,3 +45,9 @@ $CURL -X DELETE "$CHISELD_HOST/dev/user?f=\\{%22email%22:%22bob@bob.me%22\\}"
 
 $CURL $CHISELD_HOST/dev/user
 # CHECK: "username":"alice"
+
+$CURL $CHISELD_HOST/dev/delete
+# CHECK: Error: Mutating the backend is not allowed during GET
+
+$CURL -X POST $CHISELD_HOST/dev/delete
+# CHECK: OK
