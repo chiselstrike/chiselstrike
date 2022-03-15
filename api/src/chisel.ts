@@ -533,6 +533,7 @@ export class ChiselEntity {
 
     /** saves the current object into the backend */
     async save() {
+        ensureNotGet();
         const jsonIds = await Deno.core.opAsync("chisel_store", {
             name: this.constructor.name,
             value: this,
@@ -608,6 +609,7 @@ export class ChiselEntity {
         this: { new (): T },
         restrictions: Partial<T>,
     ): Promise<void> {
+        ensureNotGet();
         await Deno.core.opAsync("chisel_entity_delete", {
             type_name: this.name,
             restrictions: restrictions,
@@ -729,6 +731,13 @@ export function activateEndpoint(path: string) {
     delete nextHandlers[path];
 }
 
+let currentMethod = "";
+function ensureNotGet() {
+    if (currentMethod === "GET") {
+        throw new Error("Mutating the backend is not allowed during GET");
+    }
+}
+
 export function callHandler(
     path: string,
     url: string,
@@ -736,6 +745,7 @@ export function callHandler(
     headers: HeadersInit,
     rid?: number,
 ) {
+    currentMethod = method;
     const init: RequestInit = { method: method, headers: headers };
     if (rid !== undefined) {
         const body = buildReadableStreamForBody(rid);
