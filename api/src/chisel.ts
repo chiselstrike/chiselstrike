@@ -492,6 +492,7 @@ export class ChiselCursor<T> {
                 const rid = Deno.core.opSync(
                     "chisel_relational_query_create",
                     op,
+                    [currentApiVersion, currentPath],
                 );
                 try {
                     while (true) {
@@ -579,7 +580,7 @@ export class ChiselEntity {
         const jsonIds = await Deno.core.opAsync("chisel_store", {
             name: this.constructor.name,
             value: this,
-        });
+        }, currentApiVersion);
         type IdsJson = Map<string, IdsJson>;
         function backfillIds(this_: ChiselEntity, jsonIds: IdsJson) {
             for (const [fieldName, value] of Object.entries(jsonIds)) {
@@ -655,7 +656,7 @@ export class ChiselEntity {
         await Deno.core.opAsync("chisel_entity_delete", {
             type_name: this.name,
             restrictions: restrictions,
-        });
+        }, currentApiVersion);
     }
 
     /**
@@ -782,8 +783,12 @@ const handlers: Record<string, requestHandler> = {};
 export async function importEndpoint(
     baseDirectory: string,
     path: string,
+    apiVersion: string,
     version: number,
 ) {
+    currentPath = path;
+    path = "/" + apiVersion + path;
+
     // Modules are never unloaded, so we need to create an unique
     // path. This will not be a problem once we publish the entire app
     // at once, since then we can create a new isolate for it.
@@ -809,22 +814,28 @@ function ensureNotGet() {
         throw new Error("Mutating the backend is not allowed during GET");
     }
 }
+let currentApiVersion = "";
+let currentPath = "";
 
 export async function callHandler(
     path: string,
+    apiVersion: string,
     url: string,
     method: string,
     headers: HeadersInit,
     rid?: number,
 ) {
     currentMethod = method;
+    currentApiVersion = apiVersion;
+    currentPath = path;
     const init: RequestInit = { method: method, headers: headers };
     if (rid !== undefined) {
         const body = buildReadableStreamForBody(rid);
         init.body = body;
     }
     const req = new Request(url, init);
-    const res = await handlers[path](req);
+    const fullPath = "/" + apiVersion + path;
+    const res = await handlers[fullPath](req);
     const resHeaders: [string, string][] = [];
     for (const h of res.headers) {
         resHeaders.push(h);
@@ -1200,9 +1211,7 @@ export function crud<
         parsePath?: (url: URL) => P;
     },
 ): (req: Request) => Promise<Response> {
-    const endpointPath = Deno.core.opSync("chisel_current_path");
-
-    const pathTemplateRaw = "/:chiselVersion" + endpointPath + "/" +
+    const pathTemplateRaw = "/:chiselVersion" + currentPath + "/" +
         (urlTemplateSuffix.includes(":id")
             ? urlTemplateSuffix
             : `${urlTemplateSuffix}/:id`);
