@@ -8,7 +8,7 @@ use crate::policies::FieldPolicies;
 use crate::rcmut::RcMut;
 use crate::runtime;
 use crate::runtime::Runtime;
-use crate::types::{ObjectType, Type};
+use crate::types::ObjectType;
 use anyhow::{anyhow, Context as AnyhowContext, Result};
 use api::chisel_js;
 use deno_core::error::AnyError;
@@ -430,59 +430,6 @@ struct QueryStreamResource {
 
 impl Resource for QueryStreamResource {}
 
-/// Recursively builds an array representing fields of potentially nested `ty`.
-/// E.g. for types X{x: Float}, and Y{a: Float, b: X} make_fields_json(Y) will
-/// return [
-///     ["a", "Float"],
-///     [
-///         {field_name": "b", "columns": ["x", "Float"]},
-///         "X"
-///     ]
-/// ]
-fn make_fields_json(ty: &Arc<ObjectType>) -> serde_json::Value {
-    let mut columns = vec![];
-    for f in ty.all_fields() {
-        let c = match &f.type_ {
-            Type::Object(nested_ty) => {
-                let nested_json = serde_json::json!({
-                    "field_name": f.name.to_owned(),
-                    "columns": make_fields_json(nested_ty)
-                });
-                serde_json::json!(vec![nested_json, serde_json::json!(f.type_.name())])
-            }
-            _ => serde_json::json!(vec![f.name.to_owned(), f.type_.name().to_string()]),
-        };
-        columns.push(c);
-    }
-    serde_json::json!(columns)
-}
-
-fn op_chisel_introspect(
-    _op_state: &mut OpState,
-    value: serde_json::Value,
-    _: (),
-) -> Result<serde_json::Value> {
-    let runtime = runtime::get();
-    let api_version = current_api_version();
-
-    let type_name = value["name"]
-        .as_str()
-        .ok_or_else(|| anyhow!("expecting to be asked for a name"))?;
-
-    // Could be the OAuthUser, so have to lookup builtins as well
-    let ty = match runtime
-        .type_system
-        .lookup_custom_type(type_name, &api_version)
-    {
-        Ok(ty) => ty,
-        Err(_) => match runtime.type_system.lookup_builtin_type(type_name)? {
-            Type::Object(ty) => ty,
-            _ => anyhow::bail!("Invalid to introspect {}", type_name),
-        },
-    };
-    Ok(make_fields_json(&ty))
-}
-
 fn op_chisel_get_secret(
     _op_state: &mut OpState,
     secret: serde_json::Value,
@@ -582,7 +529,6 @@ async fn create_deno<P: AsRef<Path>>(base_directory: P, inspect_brk: bool) -> Re
         "chisel_relational_query_next",
         op_req(op_chisel_relational_query_next),
     );
-    runtime.register_op("chisel_introspect", op_sync(op_chisel_introspect));
     runtime.register_op("chisel_user", op_req(op_chisel_user));
     runtime.sync_ops_cache();
 
