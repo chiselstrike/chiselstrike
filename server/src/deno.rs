@@ -364,11 +364,6 @@ async fn op_chisel_store(
     content: serde_json::Value,
     _: (),
 ) -> Result<serde_json::Value> {
-    anyhow::ensure!(
-        current_method() != Method::GET,
-        "Mutating the backend is not allowed during GET"
-    );
-
     let type_name = content["name"]
         .as_str()
         .ok_or_else(|| anyhow!("Type name error; the .name key must have a string value"))?;
@@ -408,11 +403,6 @@ async fn op_chisel_entity_delete(
     content: serde_json::Value,
     _: (),
 ) -> Result<serde_json::Value> {
-    anyhow::ensure!(
-        current_method() != Method::GET,
-        "Mutating the backend is not allowed during GET"
-    );
-
     let mutation = Mutation::parse_delete(&content).context(
         "failed to construct delete expression from JSON passed to `op_chisel_entity_delete`",
     )?;
@@ -796,7 +786,6 @@ impl Resource for BodyResource {
 #[derive(Default, Clone)]
 struct RequestContext {
     path: RequestPath,
-    method: Method,
     /// Uniquely identifies the OAuthUser row for the logged-in user.  None if there was no login.
     userid: Option<String>,
     transaction: Option<TransactionStatic>,
@@ -833,10 +822,6 @@ use context::with_current_context;
 
 pub(crate) fn current_api_version() -> String {
     with_current_context(|p| p.path.api_version().to_string())
-}
-
-fn current_method() -> Method {
-    with_current_context(|path| path.method.clone())
 }
 
 fn current_transaction() -> Result<TransactionStatic> {
@@ -960,7 +945,6 @@ pub(crate) async fn run_js(path: String, req: Request<hyper::Body>) -> Result<Re
 
     let transaction = qe.start_transaction_static().await?;
     let context = RequestContext {
-        method: req.method().clone(),
         path: RequestPath::try_from(path.as_ref()).unwrap(),
         userid: crate::auth::get_user(&req).await?,
         transaction: Some(transaction.clone()),
@@ -1053,7 +1037,6 @@ pub(crate) async fn compile_endpoint<P: AsRef<Path>>(
     code: String,
 ) -> Result<()> {
     let context = RequestContext {
-        method: Method::GET,
         path: RequestPath::try_from(path.as_ref()).unwrap(),
         userid: None,
         transaction: None,
