@@ -23,3 +23,26 @@ $CHISEL apply 2>&1 | $RMCOLOR|| true
 # CHECK:  Caused by:
 # CHECK:      Compilation failed:
 # CHECK:      endpoints/store.ts:5:12 - error TS2339: Property 'invalidField' does not exist on type 'Person'.
+
+cat << EOF > "$TEMPDIR/endpoints/store.ts"
+import { Person } from "../models/person.ts";
+
+export default async function chisel(req: Request) {
+    let person = new Person();
+    person.first_name = "foo";
+    await person.save();
+    return new Response("Ok");
+}
+EOF
+
+$CHISEL apply
+
+# CHECK: End point defined: /dev/store
+
+$CURL $CHISELD_HOST/dev/store
+
+# CHECK: Error: Mutating the backend is not allowed during GET
+
+$CURL -X POST $CHISELD_HOST/dev/store
+
+# CHECK: Ok
