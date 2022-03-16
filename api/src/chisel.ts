@@ -550,10 +550,40 @@ export class ChiselEntity {
     }
 
     /**
-     * Convenience method for crud() below.
+     * Generates endpoint code to handle REST methods GET/PUT/POST/DELETE for this entity.
+     *
+     * @example
+     *
+     * Put this in the file 'endpoints/comments.ts':
+     * ```typescript
+     * import { Comment } from "../models/comment";
+     * export default Comment.crud();
+     * ```
+     *
+     * This results in a /comments endpoint that correctly handles all REST methods over Comment. The default  endpoints are:
+     *
+     * * **POST:**
+     *     * `/comments`             Creates a new object. Payload is a JSON with the properties of `Comment` as keys.
+     *
+     * * **GET:**
+     *     * `/comments`              returns an array with all elements (use carefully in datasets expected to be large)
+     *     * `/comments?f={key:val}`  returns all elements that match the filter specified by the json object given as search param.
+     *     * `/comments/:id`          returns the element with the given ID.
+     *
+     * * **DELETE:**
+     *     * `/comments/:id`         deletes the element with the given ID.
+     *     * `/comments?f={key:val}` deletes all elements that match the filter specified by the json object given as search param.
+     *     * `/comments?f={}`        deletes all elements
+     *
+     * * **PUT:**
+     *     * `/comments/:id`         overwrites the element with the given ID. Payload is a JSON with the properties of `Comment` as keys
+     *
+     * If you need more control over which method to generate and their behavior, see the top-level `crud()` function
+     *
+     * @returns A request-handling function suitable as a default export in an endpoint.
      */
-    static crud(p: string) {
-        return crud(this, p);
+    static crud() {
+        return crud(this, "");
     }
 }
 
@@ -914,7 +944,7 @@ const defaultCrudMethods: CRUDMethods<ChiselEntity, GenericChiselEntityClass> =
  * import { Comment } from "../models/comment";
  * export default crud(
  *   Comment,
- *   '/comments/:id',
+ *   ':id',
  *   {
  *     PUT: standardCRUDMethods.notFound, // do not update, instead returns 404
  *     DELETE: standardCRUDMethods.methodNotAllowed, // do not delete, instead returns 405
@@ -952,20 +982,16 @@ export const standardCRUDMethods = {
  * Put this in the file 'endpoints/comments.ts':
  * ```typescript
  * import { Comment } from "../models/comment";
- * export default crud(Comment, "/comments/:id");
+ * export default crud(Comment, ":id");
  * ```
  * This results in a /comments endpoint that correctly handles all REST methods over Comment.
  * @param entity Entity type
- * @param urlTemplate Request URL must match this template (see https://deno.land/x/regexparam for syntax).
+ * @param urlTemplateSuffix A suffix to be added to the Request URL (see https://deno.land/x/regexparam for syntax).
  *   Some CRUD methods rely on parts of the URL to identify the resource to apply to. Eg, GET /comments/1234
  *   returns the comment entity with id=1234, while GET /comments returns all comments. This parameter describes
  *   how to find the relevant parts in the URL. Default CRUD methods (see `defaultCrudMethods`) look for the :id
- *   part in this template to identify specific entity instances. If there is no :id in the template, then '/:id'
- *   is automatically added to its end. Custom methods can use other named parts. NOTE: because of file-based
- *   routing, `urlTemplate` must necessarily begin with the path of the endpoint invoking this function; it's the
- *   only way for the request URL to match it. Eg, if `crud()` is invoked by the file `endpoints/a/b/foo.ts`, the
- *   `urlTemplate` must begin with 'a/b/foo'; in fact, it can be exactly 'a/b/foo', taking advantage of reasonable
- *   defaults to ensure that the created RESTful API works as you would expect.
+ *   part in this template to identify specific entity instances. If there is no :id in the template, then ':id'
+ *   is automatically added to its end. Custom methods can use other named parts.
  * @param config Configure the CRUD behavior:
  *  - `customMethods`: custom request handlers overriding the defaults.
  *     Each present property overrides that method's handler. You can use `standardCRUDMethods` members here to
@@ -986,7 +1012,7 @@ export function crud<
     P extends CRUDBaseParams = CRUDBaseParams,
 >(
     entity: E,
-    urlTemplate: string,
+    urlTemplateSuffix: string,
     config?: {
         customMethods?: Partial<CRUDMethods<T, ChiselEntityClass<T>, P>>;
         createResponses?: Partial<
@@ -996,9 +1022,14 @@ export function crud<
         parsePath?: (url: URL) => P;
     },
 ): (req: Request) => Promise<Response> {
-    const pathTemplate = "/:chiselVersion" +
-        (urlTemplate.startsWith("/") ? "" : "/") +
-        (urlTemplate.includes(":id") ? urlTemplate : `${urlTemplate}/:id`);
+    const endpointPath = Deno.core.opSync("chisel_current_path");
+
+    const pathTemplateRaw = "/:chiselVersion" + endpointPath + "/" +
+        (urlTemplateSuffix.includes(":id")
+            ? urlTemplateSuffix
+            : `${urlTemplateSuffix}/:id`);
+
+    const pathTemplate = pathTemplateRaw.replace(/\/+/g, "/"); // in case we end up with foo///bar somehow.
 
     const defaultCreateResponse = config?.defaultCreateResponse ||
         responseFromJson;

@@ -133,7 +133,7 @@ import { Company } from "../models/company.ts";
 
 export default crud(
   Company,
-  "/companies",
+  "",
   {
     defaultCreateResponse: (body: unknown, status: number) => {
       return new Response(

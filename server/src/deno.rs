@@ -422,6 +422,15 @@ fn op_chisel_get_secret(
     Ok(runtime.secrets.get_secret(key))
 }
 
+fn op_chisel_current_path(
+    _op_state: &mut OpState,
+    _unused: Option<serde_json::Value>,
+    _: (),
+) -> Result<serde_json::Value> {
+    let path = with_current_context(|p| p.path.path().to_string());
+    Ok(serde_json::json!(path))
+}
+
 fn op_chisel_relational_query_create(
     op_state: &mut OpState,
     relation: serde_json::Value,
@@ -501,6 +510,7 @@ async fn create_deno<P: AsRef<Path>>(base_directory: P, inspect_brk: bool) -> Re
     runtime.register_op("chisel_store", op_async(op_chisel_store));
     runtime.register_op("chisel_entity_delete", op_async(op_chisel_entity_delete));
     runtime.register_op("chisel_get_secret", op_sync(op_chisel_get_secret));
+    runtime.register_op("chisel_current_path", op_sync(op_chisel_current_path));
     runtime.register_op(
         "chisel_relational_query_create",
         op_sync(op_chisel_relational_query_create),
