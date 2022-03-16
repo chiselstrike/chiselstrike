@@ -93,28 +93,6 @@ The `curl` command reports:
 [{"content":"First comment"},{"content":"Second comment"},{"content":"Third comment"},{"content":"Fourth comment"}]
 ```
 
-:::info Feedback Requested! We could use your help!
-The next version of our beta will allow you to populate your new version, as well as linking different versions together
-and propagating changes.
-
-* How important for you is to populate from an existing version?
-  * Do you want to populate only a portion of your production data?
-* How important for you is to populate from fake data generators?
-  * Do you have integrations you would like to see supported?
-
-* How would you like to specify links between versions to aid your production experience? Examples include
-  * In a yaml file in your git repository?
-  * With a Typescript file (like calling a function) in your git repository?
-  * In the command-line?
-  * Through a JSON endpoint?
-
-* If two versions contain incompatible models, we will allow you to specify a function with a transformation.
-  * I would prefer to write this file in Typescript.
-  * I would prefer to write this file in yaml, and only support simple property mappings.
-  * I would prefer to write this file in yaml covering the simple cases, but embed a Typescript expression for the complex cases.
-  * 🤢 Please anything but yaml.
-:::
-
 ### Use-cases for API versioning
 
 API versioning is useful for:
