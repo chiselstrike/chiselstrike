@@ -31,6 +31,7 @@ vergen = { version = "6", default-features = false, features = ["git"] }
 
 [dev-dependencies]
 futures = "0.3.17"
+itertools = "0.10.3"
 lit = "1.0.4"
 server = { path = "../server" }
 
