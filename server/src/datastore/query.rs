@@ -238,11 +238,13 @@ impl QueryBuilder {
 
             let query_field = if let Type::Object(nested_ty) = &field.type_ {
                 let nested_table = format!(
-                    "{}_JOIN{}_{}",
-                    current_table,
+                    "JOIN{}_{}_TO_{}",
                     self.join_counter,
+                    current_table,
                     nested_ty.backing_table()
                 );
+                // PostgreSQL has a limit on identifiers to be at most 63 bytes long.
+                let nested_table = max_prefix(nested_table.as_str(), 63).to_owned();
                 self.join_counter += 1;
 
                 joins.insert(
@@ -493,6 +495,20 @@ impl QueryBuilder {
 // FIXME: We should use prepared statements instead
 fn escape_string(s: &str) -> String {
     format!("{}", format_sql_query::QuotedData(s))
+}
+
+/// Returns the longest possible prefix of `s` that is at most `max_len`
+/// bytes long and ends at a character boundary so that we don't break
+/// multi-byte characters.
+fn max_prefix(s: &str, max_len: usize) -> &str {
+    if max_len >= s.len() {
+        return s;
+    }
+    let mut idx = max_len;
+    while !s.is_char_boundary(idx) {
+        idx -= 1;
+    }
+    &s[..idx]
 }
 
 fn convert_to_query_builder(val: &serde_json::Value) -> Result<QueryBuilder> {
