@@ -1,4 +1,3 @@
-use anyhow::Result;
 use serde_derive::{Deserialize, Serialize};
 
 /// An expression.
@@ -139,10 +138,6 @@ pub(crate) struct BinaryExpr {
     pub left: Box<Expr>,
     pub op: BinaryOp,
     pub right: Box<Expr>,
-}
-
-pub(crate) fn from_json(json: serde_json::Value) -> Result<Expr> {
-    Ok(serde_json::from_value(json)?)
 }
 
 #[cfg(test)]

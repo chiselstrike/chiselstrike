@@ -457,7 +457,7 @@ fn op_chisel_relational_query_create(
     // is no way to access it from here. We would have to replace
     // op_chisel_relational_query_create with a closure that has an
     // Rc<DenoService>.
-    let query = json_to_query(&relation)?;
+    let query = json_to_query(relation)?;
     let mut runtime = runtime::get();
     let query_engine = &mut runtime.query_engine;
 

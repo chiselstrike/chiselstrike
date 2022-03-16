@@ -1,6 +1,5 @@
 // SPDX-FileCopyrightText: © 2021 ChiselStrike <info@chiselstrike.com>
 
-use crate::datastore::expr;
 use crate::datastore::expr::{BinaryExpr, BinaryOp, Expr, Literal, PropertyAccess};
 use crate::deno::current_api_version;
 use crate::deno::make_field_policies;
@@ -9,8 +8,9 @@ use crate::runtime;
 use crate::types::{Field, ObjectType, Type, TypeSystemError, OAUTHUSER_TYPE_NAME};
 use crate::JsonObject;
 
-use anyhow::{anyhow, Result};
+use anyhow::{anyhow, Context, Result};
 use enum_as_inner::EnumAsInner;
+use serde_derive::{Deserialize, Serialize};
 use serde_json::value::Value;
 use std::collections::HashMap;
 use std::collections::HashSet;
@@ -316,15 +316,8 @@ impl QueryBuilder {
         self.limit = Some(std::cmp::min(limit, self.limit.unwrap_or(limit)));
     }
 
-    fn update_allowed_fields(&mut self, columns: &[serde_json::Value]) -> Result<()> {
-        let mut allowed_fields = HashSet::<String>::default();
-        for c in columns {
-            let field_name = c
-                .as_str()
-                .ok_or_else(|| anyhow!("internal error: got column unexpected type: `{}`", c))?;
-            allowed_fields.insert(field_name.to_owned());
-        }
-        self.allowed_fields = Some(allowed_fields);
+    fn update_allowed_fields(&mut self, columns: Vec<String>) -> Result<()> {
+        self.allowed_fields = Some(HashSet::from_iter(columns));
         Ok(())
     }
 
@@ -511,43 +504,63 @@ fn max_prefix(s: &str, max_len: usize) -> &str {
     &s[..idx]
 }
 
-fn convert_to_query_builder(val: &serde_json::Value) -> Result<QueryBuilder> {
-    macro_rules! get_key {
-        ($key:expr, $as_type:ident) => {{
-            val[$key].$as_type().ok_or_else(|| {
-                anyhow!(
-                    "internal error: `{}` field is either missing or has invalid type.",
-                    $key
-                )
-            })
-        }};
-    }
-    let op_type = get_key!("type", as_str)?;
-    if op_type == "BaseEntity" {
-        let type_name = get_key!("name", as_str)?;
-        return QueryBuilder::new_from_type_name(type_name);
-    }
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(tag = "type")]
+enum QueryOperator {
+    BaseEntity {
+        name: String,
+    },
+    #[serde(rename = "ExpressionFilter")]
+    Filter {
+        expression: Expr,
+        inner: Box<QueryOperator>,
+    },
+    #[serde(rename = "ColumnsSelect")]
+    Projection {
+        #[serde(rename = "columns")]
+        fields: Vec<String>,
+        inner: Box<QueryOperator>,
+    },
+    Take {
+        count: u64,
+        inner: Box<QueryOperator>,
+    },
+    SortBy {
+        key: String,
+        ascending: bool,
+        inner: Box<QueryOperator>,
+    },
+}
 
-    let mut builder = convert_to_query_builder(&val["inner"])?;
-    match op_type {
-        "ExpressionFilter" => {
-            let expr = expr::from_json(val["expression"].clone())?;
-            builder.add_expression_filter(expr);
+fn convert_to_query_builder(op: QueryOperator) -> Result<QueryBuilder> {
+    use QueryOperator::*;
+    let builder = match op {
+        BaseEntity { name } => QueryBuilder::new_from_type_name(&name)?,
+        Filter { expression, inner } => {
+            let mut builder = convert_to_query_builder(*inner)?;
+            builder.add_expression_filter(expression);
+            builder
         }
-        "ColumnsSelect" => {
-            builder.update_allowed_fields(get_key!("columns", as_array)?)?;
+        Projection { fields, inner } => {
+            let mut builder = convert_to_query_builder(*inner)?;
+            builder.update_allowed_fields(fields)?;
+            builder
         }
-        "Take" => {
-            let count = get_key!("count", as_u64)?;
+        Take { count, inner } => {
+            let mut builder = convert_to_query_builder(*inner)?;
             builder.update_limit(count);
+            builder
         }
-        "SortBy" => {
-            let key = get_key!("key", as_str)?;
-            let ascending = get_key!("ascending", as_bool)?;
-            builder.set_sort(key, ascending);
+        SortBy {
+            key,
+            ascending,
+            inner,
+        } => {
+            let mut builder = convert_to_query_builder(*inner)?;
+            builder.set_sort(&key, ascending);
+            builder
         }
-        _ => anyhow::bail!("unexpected relation type `{}`", op_type),
-    }
+    };
     Ok(builder)
 }
 
@@ -556,8 +569,10 @@ pub(crate) fn type_to_query(ty: &Arc<ObjectType>) -> Result<Query> {
     builder.build()
 }
 
-pub(crate) fn json_to_query(val: &serde_json::Value) -> Result<Query> {
-    let builder = convert_to_query_builder(val)?;
+pub(crate) fn json_to_query(val: serde_json::Value) -> Result<Query> {
+    let op_chain: QueryOperator =
+        serde_json::from_value(val).context("failed to deserialize QueryOperator from JSON")?;
+    let builder = convert_to_query_builder(op_chain)?;
     builder.build()
 }
 
