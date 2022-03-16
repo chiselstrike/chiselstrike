@@ -26,11 +26,6 @@ export class User extends ChiselEntity {
 }
 ```
 
-:::note
-All of your models have to be in the same file. We will lift this restriction
-in the future, so each model can live in its own file.
-:::
-
 The ChiselStrike runtime picks up this entity definition in the `models` directory and automatically does the necessary adjustments to the underlying backing datastore so that the entity can be persisted.
 
 ## Persisting Entities
