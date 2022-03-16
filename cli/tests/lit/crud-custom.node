@@ -67,7 +67,7 @@ function createResponse(body: unknown, status: number) {
 }
 export default crud(
     Person,
-    "/persons/:id", /* :id can be explicitly provided */
+    ":id", /* :id can be explicitly provided */
     {
         customMethods: {
             "DELETE": standardCRUDMethods.methodNotAllowed,

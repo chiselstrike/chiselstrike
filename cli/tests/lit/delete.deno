@@ -15,7 +15,7 @@ EOF
 
 cat << EOF > "$TEMPDIR/endpoints/user.ts"
 import { User } from "../models/user.ts";
-export default User.crud('/user');
+export default User.crud();
 EOF
 
 cat << EOF > "$TEMPDIR/endpoints/delete.ts"
