@@ -11,7 +11,9 @@ mod tests {
     }
 
     fn nightly<T: IntoIterator<Item = &'static str>>(args: T) -> Command {
-        cargo(itertools::chain(["+nightly-2022-03-15"], args))
+        let mut ret = cargo(itertools::chain(["+nightly-2022-03-15"], args));
+        ret.env("CARGO_TARGET_DIR", "./target-nightly");
+        ret
     }
 
     fn cargo_install(version: &'static str, pkg: &'static str, bin: &'static str) {
