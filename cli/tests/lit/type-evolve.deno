@@ -107,3 +107,30 @@ $CHISEL apply
 $CURL $CHISELD_HOST/dev/find
 # CHECK: HTTP/1.1 200 OK
 # CHECK: tst A true tst
+
+cat << EOF > "$TEMPDIR/models/types.ts"
+import { ChiselEntity } from "@chiselstrike/api";
+
+export class Evolving extends ChiselEntity {
+    a: string = "";
+    b: boolean = true;
+    c?: boolean;
+}
+EOF
+$CHISEL apply
+# CHECK: Model defined: Evolving
+
+cat << EOF > "$TEMPDIR/models/types.ts"
+import { ChiselEntity } from "@chiselstrike/api";
+
+export class Evolving extends ChiselEntity {
+    a: string = "";
+    b: boolean = true;
+}
+EOF
+$CHISEL apply
+# CHECK: Model defined: Evolving
+
+$CURL $CHISELD_HOST/dev/find
+# CHECK: HTTP/1.1 200 OK
+# CHECK: tst A true tst
