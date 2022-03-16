@@ -144,7 +144,7 @@ impl TypeSystem {
             match old_fields.map.remove(name) {
                 None => {
                     if field.default.is_none() && !field.is_optional {
-                        return Err(TypeSystemError::UnsafeReplacement(new_type.name.clone(), format!("Trying to add a new field ({}) without a default value. Consider adding a default value to make the types compatible", field.name)));
+                        return Err(TypeSystemError::UnsafeReplacement(new_type.name.clone(), format!("Trying to add a new non-optional field ({}) without a default value. Consider adding a default value or making it optional to make the types compatible", field.name)));
                     }
                     added_fields.push(field.to_owned().clone());
                 }
@@ -214,13 +214,13 @@ impl TypeSystem {
             }
         }
 
-        // only allow the removal of fields that previously had a default value
+        // only allow the removal of fields that previously had a default value or was optional
         for (_, field) in old_fields.map.into_iter() {
-            if field.default.is_none() {
+            if field.default.is_none() && !field.is_optional {
                 return Err(TypeSystemError::UnsafeReplacement(
                     new_type.name.clone(),
                     format!(
-                        "field {} doesn't have a default value, so it is unsafe to remove",
+                        "non-optional field {} doesn't have a default value, so it is unsafe to remove",
                         field.name
                     ),
                 ));
