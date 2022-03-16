@@ -105,7 +105,7 @@ When an endpoint is invoked like this, the backend will know the
 identity of your logged-in user.  (And if your user logged out, this
 call is identical to calling `fetch` directly.)
 
-# Tracking Logins in the Backend
+## Tracking Logins in the Backend
 
 The ChiselStrike backend keeps track of your website's users via a
 builtin type called OAuthUser.  When a user logs in for the first
