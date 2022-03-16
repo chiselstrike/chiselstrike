@@ -1,9 +1,34 @@
 use std::env;
+use std::ops::{Deref, DerefMut};
 use std::path::PathBuf;
-use std::process::Command;
+use std::process;
+
+pub struct Command {
+    inner: process::Command,
+}
+
+impl Drop for Command {
+    fn drop(&mut self) {
+        let status = self.inner.status().unwrap();
+        assert!(status.success());
+    }
+}
+
+impl Deref for Command {
+    type Target = process::Command;
+    fn deref(&self) -> &Self::Target {
+        &self.inner
+    }
+}
+
+impl DerefMut for Command {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.inner
+    }
+}
 
 #[allow(dead_code)]
-pub fn run_in<T: IntoIterator<Item = &'static str>>(cmd: &str, args: T, dir: PathBuf) {
+pub fn run_in<T: IntoIterator<Item = &'static str>>(cmd: &str, args: T, dir: PathBuf) -> Command {
     assert!(
         dir.exists(),
         "{:?} does not exist. Current directory is {:?}",
@@ -11,17 +36,14 @@ pub fn run_in<T: IntoIterator<Item = &'static str>>(cmd: &str, args: T, dir: Pat
         env::current_dir().unwrap()
     );
     assert!(dir.is_dir(), "{:?} is not a directory", dir);
-    let status = Command::new(cmd)
-        .args(args)
-        .current_dir(dir)
-        .status()
-        .unwrap();
-    assert!(status.success());
+    let mut inner = process::Command::new(cmd);
+    inner.args(args).current_dir(dir);
+    Command { inner }
 }
 
 #[allow(dead_code)]
-pub fn run<T: IntoIterator<Item = &'static str>>(cmd: &str, args: T) {
-    run_in(cmd, args, repo_dir());
+pub fn run<T: IntoIterator<Item = &'static str>>(cmd: &str, args: T) -> Command {
+    run_in(cmd, args, repo_dir())
 }
 
 #[allow(dead_code)]

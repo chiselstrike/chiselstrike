@@ -500,6 +500,7 @@ dependencies = [
  "api",
  "compile",
  "futures",
+ "itertools 0.10.3",
  "lit",
  "notify",
  "prost",
