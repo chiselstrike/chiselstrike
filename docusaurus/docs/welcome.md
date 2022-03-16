@@ -5,11 +5,9 @@ sidebar_position: 0
 ---
 # Welcome to ChiselStrike!
 
-We're so happy you're here! How happy??? This happy!
+We're so happy you're here!
 
-![](/img/happy.gif)
-
-And if you're here, you have certainly heard of ChiselStrike, but may still be wondering what
+And since you're here, you have certainly heard of ChiselStrike, but may still be wondering what
 ChiselStrike is.
 
 In a few short words, ChiselStrike allows you - yes, you - to have your entire persistent layer
