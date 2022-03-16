@@ -213,7 +213,7 @@ so we can add data to the database, add the following file:
 
 ```typescript title="my-backend/endpoints/comments.ts"
 import { BlogComment } from "../models/models";
-export default BlogComment.crud('comments'); // Argument must match endpoint path's basename.
+export default BlogComment.crud();
 ```
 
 Upon saving this file, there will be an endpoint in ChiselStrike
@@ -332,7 +332,7 @@ import { crud, standardCRUDMethods, responseFromJson } from "@chiselstrike/api";
 import { BlogComment } from "../models/models";
 export default crud(
     BlogComment,
-    "/comments/:id", /* :id can be explicitly provided */
+    ":id", /* :id can be explicitly provided */
     {
         customMethods: {
             DELETE: standardCRUDMethods.methodNotAllowed,
