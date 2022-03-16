@@ -30,7 +30,17 @@ mod tests {
 
     #[test]
     fn deno_checks() {
-        cargo_install("1.16.3", "deno", "deno");
+        run(
+            "cargo",
+            [
+                "install",
+                "--path",
+                "./third_party/deno/cli",
+                "--bin",
+                "deno",
+                "--locked",
+            ],
+        );
         run("deno", ["lint", "--config", "deno.json"]);
         run("deno", ["fmt", "--config", "deno.json", "--check"]);
     }
