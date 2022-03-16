@@ -5,6 +5,7 @@ mod common;
 #[cfg(test)]
 mod tests {
     use crate::common::run;
+    const USE_NIGHTLY: &str = "+nightly-2022-03-15";
 
     fn cargo_install(version: &'static str, pkg: &'static str, bin: &'static str) {
         run(
@@ -43,7 +44,7 @@ mod tests {
     #[test]
     fn unused_dependencies() {
         cargo_install("0.1.26", "cargo-udeps", "cargo-udeps");
-        run("cargo", ["+nightly", "udeps"]);
+        run("cargo", [USE_NIGHTLY, "udeps"]);
     }
 
     #[test]
@@ -55,7 +56,7 @@ mod tests {
     fn must_not_suspend() {
         run(
             "cargo",
-            ["+nightly", "check", "--features", "must_not_suspend"],
+            [USE_NIGHTLY, "check", "--features", "must_not_suspend"],
         );
     }
 

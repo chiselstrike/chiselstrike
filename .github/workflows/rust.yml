@@ -67,7 +67,7 @@ jobs:
     - name: Install nightly rust toolchain
       uses: actions-rs/toolchain@v1
       with:
-          toolchain: nightly
+          toolchain: nightly-2022-03-15
           components: rustfmt, clippy
 
     - name: set up cache
