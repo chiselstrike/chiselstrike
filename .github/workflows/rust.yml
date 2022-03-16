@@ -10,6 +10,7 @@ env:
   CARGO_TERM_COLOR: always
   REGISTRY: ghcr.io
   IMAGE_NAME: ${{ github.repository }}
+  nightly-version: nightly-2022-03-15
 
 jobs:
   build:
@@ -67,11 +68,13 @@ jobs:
     - name: Install nightly rust toolchain
       uses: actions-rs/toolchain@v1
       with:
-          toolchain: nightly-2022-03-15
+          toolchain: ${{ env.nightly-version }}
           components: rustfmt, clippy
 
     - name: set up cache
       uses: Swatinem/rust-cache@v1
+      with:
+          key: ${{ env.nightly-version }}
 
     - name: set up node cache
       uses: actions/cache@v2
