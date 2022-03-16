@@ -204,245 +204,123 @@ in faster loading of your endpoints. Our cli can bundle type checking by calling
 be achieved by passing the `--type-check` option to `npm run dev`, or to the apply command `npx chisel apply`
 :::
 
-To populate `BlogComment` in the database, add the following file:
+Now we need to expose those entities through an API. The simplest possible API is simply a [RESTful API](https://en.wikipedia.org/wiki/Representational_state_transfer), a standard that describes how an endpoint can handle various HTTP verbs
+to provide basic operations on a collection of entities: create, read,
+update, and delete ([CRUD](https://en.wikipedia.org/wiki/Create,_read,_update_and_delete)).
 
-```typescript title="my-backend/endpoints/populate-comments.ts"
+ChiselStrike makes that as easy as it gets. To generate our RESTful API, including a `POST` method
+so we can add data to the database, add the following file:
+
+```typescript title="my-backend/endpoints/comments.ts"
 import { BlogComment } from "../models/models";
-
-export default async function chisel(_req) {
-    let promises = [];
-    promises.push(BlogComment.build({'content': "First comment", 'by': "Jill"}).save());
-    promises.push(BlogComment.build({'content': "Second comment", 'by': "Jack"}).save());
-    promises.push(BlogComment.build({'content': "Third comment", 'by': "Jim"}).save());
-    promises.push(BlogComment.build({'content': "Fourth comment", 'by': "Jack"}).save());
-
-    await Promise.all(promises);
-    return new Response('success\n');
-}
+export default BlogComment.crud('comments'); // Argument must match endpoint path's basename.
 ```
 
-Upon saving this file, there will be another endpoint in ChiselStrike
+Upon saving this file, there will be an endpoint in ChiselStrike
 for us to call:
 
 ```bash
-curl -X POST localhost:8080/dev/populate-comments
+curl -X POST -d '{"content": "First comment", "by": "Jill"}' localhost:8080/dev/comments
+curl -X POST -d '{"content": "Second comment", "by": "Jack"}' localhost:8080/dev/comments
+curl -X POST -d '{"content": "Third comment", "by": "Jim"}' localhost:8080/dev/comments
+curl -X POST -d '{"content": "Fourth comment", "by": "Jack"}' localhost:8080/dev/comments
+curl -X POST -d '{"content": "Wrong comment", "by": "Author"}' localhost:8080/dev/comments
 ```
 
-and see `curl` output:
+Each of them will return an output, for example:
 
+```json
+{"id":"a4ca3ab3-2e26-4da6-a5de-418c1e6b9b83","content":"First comment","by":"Jill"}
 ```
-success
-```
-
-Note how we can store a comment in the database by simply invoking the `save`
-method of `'BlogComment'`. Every time we do that for an object without an id, a
-new row is added. Every time we invoke `save()` on an object that already has
-an id, the corresponding row is updated.
-
-Because this endpoint mutates the state of the backend, a consequence of
-the call to `save()`, we use a POST request.
-
-The effect of this endpoint is that the database is filled with four
-comments.  Now we just have to read them.  Let's edit the
-`my-backend/endpoints/comments.ts` file as follows:
-
-```typescript title="my-backend/endpoints/comments.ts"
-import { responseFromJson } from "@chiselstrike/api"
-import { BlogComment } from "../models/models"
-
-export default async function chisel(_req) {
-    let comments = [];
-    await BlogComment.cursor().forEach(c => {
-        comments.push(c);
-    });
-    return responseFromJson(comments);
-}
-```
-
 :::tip
-You do not need to specify an id for `BlogComment`. An `id` property is automatically generated for you, and
-you can access it as `c.id` in the examples above. Calling the `save()` on an object that already has an
-`id` will update the field with corresponding object.
+Note how you do not need to specify an `id` for the `BlogComment` entity. An `id` property is automatically generated for you.
 :::
 
-Note that we changed `chisel` to an async function.  This is because
-it uses the `forEach` method (which is an async method) to go over all the stored comments.
-What makes it easy is that ChiselStrike defines the variable `BlogComment`
-(corresponding to the type `BlogComment` from models.ts), which is a collection
-of all the instances of this type that ChiselStrike has in data
-storage.  Now we can call this endpoint to see the comments we stored:
+Now we just have to read them. Because our `crud` function also registers a `GET` handler,
+we can just issue:
 
 ```bash
-curl -s localhost:8080/dev/comments | python -m json.tool
+curl localhost:8080/dev/comments | python -m json.tool
 ```
 
-and see `curl` output:
+to get all the Comments:
 
-```console
+```json
 [
-    {
-        "id": "a4ca3ab3-2e26-4da6-a5de-418c1e6b9b83",
-        "content": "First comment",
-        "by": "Jill"
-    },
-    {
-        "id": "fed312d7-b36b-4f34-bb04-fba327a3f440",
-        "content": "Second comment",
-        "by": "Jack"
-    },
-    {
-        "id": "adc89862-dfaa-43ab-a639-477111afc55e",
-        "content": "Third comment",
-        "by": "Jim"
-    },
-    {
-        "id": "5bfef47e-371b-44e8-a2dd-88260b5c3f2c",
-        "content": "Fourth comment",
-        "by": "Jack"
-    }
+  {
+    "id": "a4ca3ab3-2e26-4da6-a5de-418c1e6b9b83",
+    "content": "First comment",
+    "by": "Jill"
+  },
+  {
+    "id": "fed312d7-b36b-4f34-bb04-fba327a3f440",
+    "content": "Second comment",
+    "by": "Jack"
+  },
+  {
+    "id": "adc89862-dfaa-43ab-a639-477111afc55e",
+    "content": "Third comment",
+    "by": "Jim"
+  },
+  {
+    "id": "5bfef47e-371b-44e8-a2dd-88260b5c3f2c",
+    "content": "Fourth comment",
+    "by": "Jack"
+  },
+  {
+    "id": "d419e629-4304-44d5-b534-9ce446f25e9d",
+    "content": "Wrong comment",
+    "by": "Author"
+  }
 ]
 ```
 
-Neat, they're all there! :)
+or specify an id:
 
-## Accepting different HTTP methods in your endpoint
+```bash
+curl localhost:8080/dev/comments/a4ca3ab3-2e26-4da6-a5de-418c1e6b9b83 | python -m json.tool
+```
 
-
-In ChiselStrike, changes to the backend cannot happen during a `GET` request.
-We have so far seen an example of a POST endpoint, (populate) and an endpoint
-that was effectively a GET through curl's default (comments), but didn't do
-any checking to make sure it was the case. Furthermore, it is customary for
-endpoints to accept both POST and GET requests on the same path and behave
-accordingly, so we shouldn't need two different endpoints.
-
-Now let's change that code to this:
-
-```typescript title="my-backend/endpoints/comments.ts"
-import { responseFromJson } from "@chiselstrike/api"
-import { BlogComment } from "../models/models"
-
-export default async function chisel(req) {
-    if (req.method == 'POST') {
-        const payload = await req.json();
-        const content = payload["content"] || "";
-        const by = payload["by"] || "anonymous";
-        const created = BlogComment.build({'content': content, 'by': by});
-        await created.save();
-        return responseFromJson('inserted ' + created.id);
-    } else if (req.method == 'GET') {
-        let comments = [];
-        await BlogComment.cursor().forEach(c => {
-            comments.push(c);
-        });
-        return responseFromJson(comments);
-    } else {
-        return new Response("Wrong method", { status: 405 });
-    }
+```json
+{
+  "id": "a4ca3ab3-2e26-4da6-a5de-418c1e6b9b83",
+  "content": "First comment",
+  "by": "Jill"
 }
 ```
 
-And then invoke it with:
+The API also allows you to filter by specific properties, by specifying a search parameter with a partial URL-encoded JSON object:
 
 ```bash
-curl -X POST -d '{"content": "Fifth comment", "by": "Jill"}' localhost:8080/dev/comments
+curl -g localhost:8080/dev/comments?f={%22by%22:%22Jack%22} | python -m json.tool
 ```
 
-to see `curl` report:
-
-```console
-"inserted 78604b77-7ff1-4d13-a025-2b3aa9a4d2ef"
-```
-
-We can then run the following `curl` command:
-
-```bash
-curl -s localhost:8080/dev/comments | python -m json.tool
-```
-
-and see the following:
-
-```console
+```json
 [
-    {
-        "id": "5b415bff-2ea1-400f-89e2-f8c67494257e",
-        "content": "First comment",
-        "by": "Jill"
-    },
-    {
-        "id": "8adb7fe6-9bdb-497a-bfe3-06180201e80f",
-        "content": "Second comment",
-        "by": "Jack"
-    },
-    {
-        "id": "f52e5e98-626e-4534-9204-61a879c44c85",
-        "content": "Third comment",
-        "by": "Jim"
-    },
-    {
-        "id": "4d8ab383-529c-4402-841e-06195915a285",
-        "content": "Fourth comment",
-        "by": "Jack"
-    },
-    {
-        "id": "78604b77-7ff1-4d13-a025-2b3aa9a4d2ef",
-        "content": "Fifth comment",
-        "by": "Jill"
-    }
+  {
+    "id": "fed312d7-b36b-4f34-bb04-fba327a3f440",
+    "content": "Second comment",
+    "by": "Jack"
+  },
+  {
+    "id": "5bfef47e-371b-44e8-a2dd-88260b5c3f2c",
+    "content": "Fourth comment",
+    "by": "Jack"
+  }
 ]
 ```
 
-🎉 Ta-da!  POST now inserts a comment, as you would expect.  The site can
-now persist comments by sending POST requests to the `comments`
-endpoint.
+We can also amend an object with `PUT`:
 
-### Easily generating the full RESTful API
-
-The POST and GET methods we handled above are a part of a standard
-called [the RESTful
-API](https://en.wikipedia.org/wiki/Representational_state_transfer).
-This standard describes how an endpoint can handle various HTTP verbs
-to provide basic operations on a collection of entities: create, read,
-update, and delete
-([CRUD](https://en.wikipedia.org/wiki/Create,_read,_update_and_delete)).
-For each entity you define, you could provide a RESTful API by
-creating an endpoint that checks the method, parses the relevant parts
-of the URL, performs the corresponding CRUD action, and handles all
-corner cases.  It would look something like this:
-
-```typescript title="my-backend/endpoints/comments.ts"
-import { BlogComment } from "../models/models"
-
-export default async function chisel(req) {
-    if (req.method == 'POST') {
-        // Create a new BlogComment.
-    } else if (req.method == 'GET') {
-        // Read the BlogComment whose ID is in the URL.
-    } else if (req.method == 'PUT') {
-        // Update the BlogComment whose ID is in the URL.
-    } else if (req.method == 'DELETE') {
-        // Delete the BlogComment whose ID is in the URL.
-    }
-}
+```
+curl -X PUT -d '{"content": "Right Comment", "by": "Right Author"}' localhost:8080/dev/comments/d419e629-4304-44d5-b534-9ce446f25e9d
 ```
 
-This is quite a bit of code, which only handles one entity --
-`BlogComment`.  Other entities would need their own copies of this,
-substantially identical.
+and ultimately `DELETE` it:
 
-ChiselStrike saves you from that repetitive tedium by providing a
-method named `ChiselEntity.crud`.  This method takes the endpoint path
-as a parameter and returns a handler function that implements all REST
-operations, making it trivial to implement a RESTful endpoint.  The
-above example becomes simply:
-
-```typescript title="my-backend/endpoints/comments.ts"
-import { BlogComment } from "../models/models"
-export default BlogComment.crud('comments'); // Argument must match endpoint path.
 ```
-
-This endpoint handles GET, POST, PUT, and DELETE on `BlogComment`,
-instantly allowing clients to perform CRUD operations on the persisted
-collection of blog comments.  (In just two lines of code!)
+curl -X DELETE localhost:8080/dev/comments/d419e629-4304-44d5-b534-9ce446f25e9d
+```
 
 CRUD generation is infinitely customizable; please see its JSDoc for
 an extensive description.  Here is an example that forbids DELETE,
@@ -472,6 +350,108 @@ export default crud(
     },
 );
 ```
+
+## Beyond CRUD
+
+Being able to just get started very quickly and spawn a CRUD API is great, but as your
+project evolves in complexity you may find yourself needing custom logic.
+
+ChiselStrike allows each `endpoint` file to export a default method that takes a [Request](https://developer.mozilla.org/en-US/docs/Web/API/Request)
+object as a parameter, and returns a [Response](https://developer.mozilla.org/en-US/docs/Web/API/Response). You can then use
+whatever logic you want.
+
+:::tip
+Changes to the backend cannot happen during a `GET` request. Make sure that if you are making changes to the backend state,
+they happen under `PUT`, `POST`, or `DELETE`!
+:::
+
+Now let's change our endpoint's code:
+
+```typescript title="my-backend/endpoints/comments.ts"
+import { responseFromJson } from "@chiselstrike/api"
+import { BlogComment } from "../models/models"
+
+export default async function chisel(req) {
+    if (req.method == 'POST') {
+        const payload = await req.json();
+        const content = payload["content"] || "";
+        const by = payload["by"] || "anonymous";
+        const created = BlogComment.build({content, by});
+        await created.save();
+        return responseFromJson('inserted ' + created.id);
+    } else if (req.method == 'GET') {
+        const comments = await BlogComment.cursor().select("content", "by").toArray();
+        return responseFromJson(comments);
+    } else {
+        return new Response("Wrong method", { status: 405 });
+    }
+}
+```
+
+:::tip
+Remember how we didn't have to specify an `id` in the model? We can now access it
+as `created.id` in the example above. If the object doesn't have an `id`, one is created for you upon
+`save`. If it does, `save()` will override the corresponding object in the backend storage
+:::
+
+In this endpoint, we're now getting to know ChiselStrike's API and runtime better. Notice how
+we were able to parse the request under `POST` with our own custom validation, and then use
+the `build` API to construct an object that is then persisted with `save`.
+
+During `GET`, we can acquire a `cursor()`, `select()` which properties we want, and then
+transform it to a standard Javascript `Array`. If we didn't need to do this slicing, we could
+have used the convenience function `findMany()`.
+
+Lastly, notice how we can return a standard `Response`, but also invoke the convenience method
+`responseFromJson` where we know the result is a JSON object.
+
+Let's now invoke it with:
+
+```bash
+curl -X POST -d '{"content": "Fifth comment", "by": "Jill"}' localhost:8080/dev/comments
+```
+
+to see `curl` report:
+
+```console
+"inserted 78604b77-7ff1-4d13-a025-2b3aa9a4d2ef"
+```
+
+We can then run the following `curl` command:
+
+```bash
+curl -s localhost:8080/dev/comments | python -m json.tool
+```
+
+and see the following:
+
+```json
+[
+    {
+        "content": "First comment",
+        "by": "Jill"
+    },
+    {
+        "content": "Second comment",
+        "by": "Jack"
+    },
+    {
+        "content": "Third comment",
+        "by": "Jim"
+    },
+    {
+        "content": "Fourth comment",
+        "by": "Jack"
+    },
+    {
+        "content": "Fifth comment",
+        "by": "Jill"
+    }
+]
+```
+
+🎉 Ta-da! You're a pro now! From generating a simple CRUD RESTful API, to a custom endpoint that behaves
+exactly how you need it to, you've done it all!
 
 ## File-based routing
 
