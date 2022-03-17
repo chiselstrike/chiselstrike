@@ -15,6 +15,7 @@ use crate::JsonObject;
 use anyhow::{anyhow, Context as AnyhowContext, Result};
 use api::chisel_js;
 use deno_core::error::AnyError;
+use deno_core::op;
 use deno_core::v8;
 use deno_core::CancelFuture;
 use deno_core::CancelHandle;
@@ -29,7 +30,6 @@ use deno_core::RcRef;
 use deno_core::Resource;
 use deno_core::ResourceId;
 use deno_core::ZeroCopyBuf;
-use deno_core::{op_async, op_sync};
 use deno_runtime::inspector_server::InspectorServer;
 use deno_runtime::ops::worker_host::CreateWebWorkerCb;
 use deno_runtime::ops::worker_host::PreloadModuleCb;
@@ -276,19 +276,13 @@ impl DenoService {
         );
         let ext = Extension::builder()
             .ops(vec![
-                ("op_format_file_name", op_sync(op_format_file_name)),
-                ("chisel_read_body", op_async(op_chisel_read_body)),
-                ("chisel_store", op_async(op_chisel_store)),
-                ("chisel_entity_delete", op_async(op_chisel_entity_delete)),
-                ("chisel_get_secret", op_sync(op_chisel_get_secret)),
-                (
-                    "chisel_relational_query_create",
-                    op_sync(op_chisel_relational_query_create),
-                ),
-                (
-                    "chisel_relational_query_next",
-                    op_async(op_chisel_relational_query_next),
-                ),
+                op_format_file_name::decl(),
+                op_chisel_read_body::decl(),
+                op_chisel_store::decl(),
+                op_chisel_entity_delete::decl(),
+                op_chisel_get_secret::decl(),
+                op_chisel_relational_query_create::decl(),
+                op_chisel_relational_query_next::decl(),
             ])
             .build();
         let opts = WorkerOptions {
@@ -347,6 +341,7 @@ impl Future for ReadFuture {
     }
 }
 
+#[op]
 async fn op_chisel_read_body(
     state: Rc<RefCell<OpState>>,
     body_rid: ResourceId,
@@ -367,6 +362,7 @@ struct StoreContent {
     value: JsonObject,
 }
 
+#[op]
 async fn op_chisel_store(
     state: Rc<RefCell<OpState>>,
     content: StoreContent,
@@ -406,6 +402,7 @@ struct DeleteContent {
     restrictions: JsonObject,
 }
 
+#[op]
 async fn op_chisel_entity_delete(
     _state: Rc<RefCell<OpState>>,
     content: DeleteContent,
@@ -445,6 +442,7 @@ struct QueryStreamResource {
 
 impl Resource for QueryStreamResource {}
 
+#[op]
 fn op_chisel_get_secret(
     _op_state: &mut OpState,
     key: String,
@@ -454,6 +452,7 @@ fn op_chisel_get_secret(
     Ok(runtime.secrets.get_secret(key))
 }
 
+#[op]
 fn op_chisel_relational_query_create(
     op_state: &mut OpState,
     query: QueryOpChain,
@@ -487,6 +486,7 @@ impl Future for QueryNextFuture {
     }
 }
 
+#[op]
 async fn op_chisel_relational_query_next(
     state: Rc<RefCell<OpState>>,
     query_stream_rid: ResourceId,
@@ -502,6 +502,7 @@ async fn op_chisel_relational_query_next(
 }
 
 // Used by deno to format names in errors
+#[op]
 fn op_format_file_name(_: &mut OpState, file_name: String, _: ()) -> Result<String> {
     Ok(file_name)
 }

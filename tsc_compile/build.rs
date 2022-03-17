@@ -2,7 +2,7 @@
 
 use anyhow::Result;
 use deno_core::anyhow;
-use deno_core::op_sync;
+use deno_core::op;
 use deno_core::Extension;
 use deno_core::JsRuntime;
 use deno_core::OpState;
@@ -10,6 +10,7 @@ use deno_core::RuntimeOptions;
 use std::env;
 use std::path::PathBuf;
 
+#[op]
 fn read(_op_state: &mut OpState, path: String, _: ()) -> Result<String> {
     if path == "bootstrap.ts" {
         return Ok("/// <reference lib=\"deno.core\" />
@@ -65,8 +66,8 @@ fn read(_op_state: &mut OpState, path: String, _: ()) -> Result<String> {
                 "lib.deno.shared_globals.d.ts",
                 "lib.deno.window.d.ts",
                 "lib.dom.asynciterable.d.ts",
-                "lib.dom.iterable.d.ts",
                 "lib.dom.d.ts",
+                "lib.dom.iterable.d.ts",
                 "lib.es2015.collection.d.ts",
                 "lib.es2015.core.d.ts",
                 "lib.es2015.d.ts",
@@ -108,13 +109,15 @@ fn read(_op_state: &mut OpState, path: String, _: ()) -> Result<String> {
                 "lib.es2021.promise.d.ts",
                 "lib.es2021.string.d.ts",
                 "lib.es2021.weakref.d.ts",
+                "lib.es2022.array.d.ts",
+                "lib.es2022.d.ts",
+                "lib.es2022.error.d.ts",
+                "lib.es2022.object.d.ts",
+                "lib.es2022.string.d.ts",
                 "lib.es5.d.ts",
                 "lib.esnext.array.d.ts",
                 "lib.esnext.d.ts",
-                "lib.esnext.error.d.ts",
-                "lib.esnext.intl.d.ts",
-                "lib.esnext.object.d.ts",
-                "lib.esnext.string.d.ts"
+                "lib.esnext.intl.d.ts"
             ),
         };
         if !content.is_empty() {
@@ -123,15 +126,19 @@ fn read(_op_state: &mut OpState, path: String, _: ()) -> Result<String> {
     }
     panic!("Unexpected file at build time: {}", path);
 }
+#[op]
 fn write(_op_state: &mut OpState, _path: String, _content: String) -> Result<()> {
     Ok(())
 }
+#[op]
 fn get_cwd(_op_state: &mut OpState, _: (), _: ()) -> Result<String> {
     Ok("/there/is/no/cwd".to_string())
 }
+#[op]
 fn dir_exists(_op_state: &mut OpState, _path: String, _: ()) -> Result<bool> {
     Ok(false)
 }
+#[op]
 fn diagnostic(_op_state: &mut OpState, msg: String, _: ()) -> Result<()> {
     panic!("unexpected: {}", msg);
 }
@@ -141,11 +148,11 @@ fn main() {
 
     let ext = Extension::builder()
         .ops(vec![
-            ("diagnostic", op_sync(diagnostic)),
-            ("read", op_sync(read)),
-            ("write", op_sync(write)),
-            ("get_cwd", op_sync(get_cwd)),
-            ("dir_exists", op_sync(dir_exists)),
+            diagnostic::decl(),
+            read::decl(),
+            write::decl(),
+            get_cwd::decl(),
+            dir_exists::decl(),
         ])
         .build();
 

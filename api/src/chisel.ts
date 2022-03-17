@@ -432,14 +432,14 @@ export class ChiselCursor<T> {
         return {
             [Symbol.asyncIterator]: async function* () {
                 const rid = Deno.core.opSync(
-                    "chisel_relational_query_create",
+                    "op_chisel_relational_query_create",
                     op,
                     [currentApiVersion, currentPath, currentUserId],
                 );
                 try {
                     while (true) {
                         const properties = await Deno.core.opAsync(
-                            "chisel_relational_query_next",
+                            "op_chisel_relational_query_next",
                             rid,
                         );
 
@@ -519,7 +519,7 @@ export class ChiselEntity {
     /** saves the current object into the backend */
     async save() {
         ensureNotGet();
-        const jsonIds = await Deno.core.opAsync("chisel_store", {
+        const jsonIds = await Deno.core.opAsync("op_chisel_store", {
             name: this.constructor.name,
             value: this,
         }, currentApiVersion);
@@ -595,7 +595,7 @@ export class ChiselEntity {
         restrictions: Partial<T>,
     ): Promise<void> {
         ensureNotGet();
-        await Deno.core.opAsync("chisel_entity_delete", {
+        await Deno.core.opAsync("op_chisel_entity_delete", {
             type_name: this.name,
             restrictions: restrictions,
         }, currentApiVersion);
@@ -646,7 +646,7 @@ export class OAuthUser extends ChiselEntity {
 export function buildReadableStreamForBody(rid: number) {
     return new ReadableStream<string>({
         async pull(controller: ReadableStreamDefaultController) {
-            const chunk = await Deno.core.opAsync("chisel_read_body", rid);
+            const chunk = await Deno.core.opAsync("op_chisel_read_body", rid);
             if (chunk) {
                 controller.enqueue(chunk);
             } else {
@@ -676,7 +676,7 @@ type JSONValue =
     | Array<JSONValue>;
 
 export function getSecret(key: string): JSONValue | undefined {
-    const secret = Deno.core.opSync("chisel_get_secret", key);
+    const secret = Deno.core.opSync("op_chisel_get_secret", key);
     if (secret === undefined || secret === null) {
         return undefined;
     }
