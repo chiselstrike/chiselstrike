@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 
+import Handlebars from "handlebars";
 import Commander from "commander";
 import chalk from "chalk";
 import fs from "fs";
@@ -12,6 +13,7 @@ function isDirEmpty(dirname: string) {
 }
 
 function run(projectDirectory: string) {
+    const projectName = projectDirectory;
     projectDirectory = path.resolve(projectDirectory);
     if (fs.existsSync(projectDirectory)) {
         if (!isDirEmpty(projectDirectory)) {
@@ -41,9 +43,14 @@ function run(projectDirectory: string) {
         "tsconfig.json",
     ];
     for (const f of rootFiles) {
-        fs.copyFileSync(
+        const source = fs.readFileSync(
             path.join(__dirname, "template", f),
+            "utf8",
+        );
+        const template = Handlebars.compile(source);
+        fs.writeFileSync(
             path.join(projectDirectory, f),
+            template({ projectName }),
         );
     }
     fs.appendFileSync(

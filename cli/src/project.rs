@@ -1,6 +1,7 @@
 // SPDX-FileCopyrightText: © 2021 ChiselStrike <info@chiselstrike.com>
 
 use anyhow::{anyhow, Context, Result};
+use handlebars::Handlebars;
 use serde_derive::Deserialize;
 use std::collections::BTreeMap;
 use std::env;
@@ -188,20 +189,24 @@ pub(crate) struct CreateProjectOptions {
 }
 
 /// Writes contents to a file in a directory.
-fn write(contents: &[u8], dir: &Path, file: &str) -> Result<()> {
-    let s = std::str::from_utf8(contents)?.to_string();
-    fs::write(dir.join(file), s).map_err(|e| e.into())
+fn write(contents: &str, dir: &Path, file: &str) -> Result<()> {
+    fs::write(dir.join(file), contents).map_err(|e| e.into())
 }
 
 /// Writes "template/$file" content into $dir/$file.  The file content is read at compile time but written at
 /// runtime.
 macro_rules! write_template {
-    ( $file:expr, $dir:expr ) => {{
-        write(include_bytes!(concat!("template/", $file)), $dir, $file)
+    ( $file:expr, $data:expr, $dir:expr ) => {{
+        let mut handlebars = Handlebars::new();
+        let source = include_str!(concat!("template/", $file));
+        handlebars.register_template_string("t1", source)?;
+        let output = handlebars.render("t1", &$data)?;
+        write(&output, $dir, $file)
     }};
 }
 
 pub(crate) fn create_project(path: &Path, opts: CreateProjectOptions) -> Result<()> {
+    let project_name = path.file_name().unwrap().to_str().unwrap();
     if !opts.force && project_exists(path) {
         anyhow::bail!("You cannot run `chisel init` on an existing ChiselStrike project");
     }
@@ -209,18 +214,22 @@ pub(crate) fn create_project(path: &Path, opts: CreateProjectOptions) -> Result<
     fs::create_dir_all(path.join(ENDPOINTS_DIR))?;
     fs::create_dir_all(path.join(POLICIES_DIR))?;
     fs::create_dir_all(path.join(VSCODE_DIR))?;
-    write_template!("package.json", path)?;
-    write_template!("tsconfig.json", path)?;
-    write_template!("Chisel.toml", path)?;
+
+    let mut data = BTreeMap::new();
+    data.insert("projectName".to_string(), project_name);
+
+    write_template!("package.json", data, path)?;
+    write_template!("tsconfig.json", data, path)?;
+    write_template!("Chisel.toml", data, path)?;
     // creating through chisel instead of npx: default to deno resolution
-    let mut toml = include_bytes!("template/Chisel.toml").to_vec();
-    toml.extend_from_slice("modules = \"deno\"\n".as_bytes());
+    let mut toml = String::from(include_str!("template/Chisel.toml"));
+    toml.push_str("modules = \"deno\"\n");
     write(&toml, path, "Chisel.toml")?;
 
-    write_template!("settings.json", &path.join(VSCODE_DIR))?;
+    write_template!("settings.json", data, &path.join(VSCODE_DIR))?;
 
     if opts.examples {
-        write_template!("hello.ts", &path.join(ENDPOINTS_DIR))?;
+        write_template!("hello.ts", data, &path.join(ENDPOINTS_DIR))?;
     }
     println!("Created ChiselStrike project in {}", path.display());
     Ok(())
