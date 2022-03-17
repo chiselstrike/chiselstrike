@@ -27,5 +27,8 @@
     },
     "engines": {
         "node": ">=12.22.0"
+    },
+    "dependencies": {
+        "handlebars": "^4.7.7"
     }
 }

@@ -9,6 +9,7 @@ anyhow = "1.0"
 api = { path = "../api" }
 compile = { path = "../compile" }
 futures = "0.3.17"
+handlebars = "4.2.2"
 notify = "5.0.0-pre.12"
 prost = "0.8.0"
 regex = "1.5.4"
