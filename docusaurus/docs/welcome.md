@@ -10,7 +10,7 @@ We're so happy you're here!
 And since you're here, you have certainly heard of ChiselStrike, but may still be wondering what
 ChiselStrike is.
 
-In a few short words, ChiselStrike allows you - yes, you - to have your entire persistent layer
+In a few short words, ChiselStrike allows you - yes, you - to have your entire persistence layer
 (database, APIs, authentication) created for you from your Typescript definitions. You bring
 your Typescript knowledge and we'll get the rest done. Your very own backend, *chiseled* just
 for you, that evolves with your needs.
