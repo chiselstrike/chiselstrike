@@ -14,13 +14,8 @@ console = "0.15.0"
 tempfile = "3.2.0"
 tokio = { version = "1.11.0", features = ["rt-multi-thread", "macros"] }
 
-[package.metadata.cargo-udeps.ignore]
-# Used only to update the submodules
-build = ["third_party"]
-
 [build-dependencies]
 deno_core = { path = "../third_party/deno/core" }
-third_party = { path = "../third_party" }
 
 [lib]
 name = "tsc_compile"

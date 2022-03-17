@@ -4494,10 +4494,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "third_party"
-version = "0.9.0-dev.0"
-
-[[package]]
 name = "thiserror"
 version = "1.0.30"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4848,7 +4844,6 @@ dependencies = [
  "deno_core",
  "deno_graph",
  "tempfile",
- "third_party",
  "tokio",
  "utils",
 ]
