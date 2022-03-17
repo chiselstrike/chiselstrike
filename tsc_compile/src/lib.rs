@@ -2,7 +2,7 @@
 
 use anyhow::{anyhow, Context, Result};
 use deno_core::anyhow;
-use deno_core::op_sync;
+use deno_core::op;
 use deno_core::serde;
 use deno_core::url::Url;
 use deno_core::v8;
@@ -117,6 +117,7 @@ where
     func(map, a, b)
 }
 
+#[op]
 fn fetch(s: &mut OpState, path: String, base: String) -> Result<String> {
     with_map(fetch_impl, s, path, base)
 }
@@ -140,6 +141,7 @@ fn read_impl(map: &mut DownloadMap, path: String, _: ()) -> Result<String> {
     Ok((**module.maybe_source.as_ref().unwrap()).clone())
 }
 
+#[op]
 fn read(s: &mut OpState, path: String, _: ()) -> Result<String> {
     with_map(read_impl, s, path, ())
 }
@@ -165,19 +167,23 @@ fn write_impl(map: &mut DownloadMap, mut path: String, content: String) -> Resul
     Ok(())
 }
 
+#[op]
 fn write(s: &mut OpState, path: String, content: String) -> Result<()> {
     with_map(write_impl, s, path, content)
 }
 
+#[op]
 fn get_cwd(_: &mut OpState, _: (), _: ()) -> Result<String> {
     let cwd = std::env::current_dir()?;
     Ok(cwd.into_os_string().into_string().unwrap())
 }
 
+#[op]
 fn dir_exists(_: &mut OpState, path: String, _: ()) -> Result<bool> {
     return Ok(Path::new(&path).is_dir());
 }
 
+#[op]
 fn file_exists(_: &mut OpState, path: String, _: ()) -> Result<bool> {
     return Ok(Path::new(&path).is_file());
 }
@@ -187,6 +193,7 @@ fn diagnostic_impl(map: &mut DownloadMap, msg: String, _: ()) -> Result<()> {
     Ok(())
 }
 
+#[op]
 fn diagnostic(s: &mut OpState, msg: String, _: ()) -> Result<()> {
     with_map(diagnostic_impl, s, msg, ())
 }
@@ -334,13 +341,13 @@ pub async fn compile_ts_code(
 
     let ext = Extension::builder()
         .ops(vec![
-            ("fetch", op_sync(fetch)),
-            ("read", op_sync(read)),
-            ("write", op_sync(write)),
-            ("get_cwd", op_sync(get_cwd)),
-            ("dir_exists", op_sync(dir_exists)),
-            ("file_exists", op_sync(file_exists)),
-            ("diagnostic", op_sync(diagnostic)),
+            fetch::decl(),
+            read::decl(),
+            write::decl(),
+            get_cwd::decl(),
+            dir_exists::decl(),
+            file_exists::decl(),
+            diagnostic::decl(),
         ])
         .build();
 
