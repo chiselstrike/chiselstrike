@@ -112,7 +112,7 @@ export class BlogPost extends ChiselEntity {
 Our logs will show:
 
 ```
-unsafe to replace type: BlogPost. Reason: Trying to add a new field (newField) without a default value. Consider adding a default value to make the types compatible
+unsafe to replace type: BlogPost. Reason: Trying to add a new non-optional field (newField) without a default value. Consider adding a default value or making it optional to make the types compatible
 ```
 
 It is possible, however, to add:
