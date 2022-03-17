@@ -15,6 +15,7 @@ use deno_core::error::AnyError;
 use deno_core::v8;
 use deno_core::CancelFuture;
 use deno_core::CancelHandle;
+use deno_core::Extension;
 use deno_core::JsRuntime;
 use deno_core::ModuleSource;
 use deno_core::ModuleSourceFuture;
@@ -272,9 +273,27 @@ impl DenoService {
             inspector.clone(),
             inner.clone(),
         );
+        let ext = Extension::builder()
+            .ops(vec![
+                ("op_format_file_name", op_sync(op_format_file_name)),
+                ("chisel_read_body", op_req(op_chisel_read_body)),
+                ("chisel_store", op_req(op_chisel_store)),
+                ("chisel_entity_delete", op_req(op_chisel_entity_delete)),
+                ("chisel_get_secret", op_sync(op_chisel_get_secret)),
+                (
+                    "chisel_relational_query_create",
+                    op_sync(op_chisel_relational_query_create),
+                ),
+                (
+                    "chisel_relational_query_next",
+                    op_req(op_chisel_relational_query_next),
+                ),
+                ("chisel_user", op_req(op_chisel_user)),
+            ])
+            .build();
         let opts = WorkerOptions {
             bootstrap,
-            extensions: vec![],
+            extensions: vec![ext],
             unsafely_ignore_certificate_errors: None,
             root_cert_store: None,
             user_agent: "hello_runtime".to_string(),
@@ -513,25 +532,6 @@ fn op_format_file_name(_: &mut OpState, file_name: String, _: ()) -> Result<Stri
 async fn create_deno<P: AsRef<Path>>(base_directory: P, inspect_brk: bool) -> Result<DenoService> {
     let mut d = DenoService::new(base_directory.as_ref().to_owned(), inspect_brk);
     let worker = &mut d.worker;
-    let runtime = &mut worker.js_runtime;
-
-    // FIXME: Turn this into a deno extension
-    runtime.register_op("op_format_file_name", op_sync(op_format_file_name));
-    runtime.register_op("chisel_read_body", op_req(op_chisel_read_body));
-    runtime.register_op("chisel_store", op_req(op_chisel_store));
-    runtime.register_op("chisel_entity_delete", op_req(op_chisel_entity_delete));
-    runtime.register_op("chisel_get_secret", op_sync(op_chisel_get_secret));
-    runtime.register_op(
-        "chisel_relational_query_create",
-        op_sync(op_chisel_relational_query_create),
-    );
-    runtime.register_op(
-        "chisel_relational_query_next",
-        op_req(op_chisel_relational_query_next),
-    );
-    runtime.register_op("chisel_user", op_req(op_chisel_user));
-    runtime.sync_ops_cache();
-
     // FIXME: Include these files in the snapshop
 
     let chisel = chisel_js().to_string();

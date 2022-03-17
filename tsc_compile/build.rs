@@ -3,6 +3,7 @@
 use anyhow::Result;
 use deno_core::anyhow;
 use deno_core::op_sync;
+use deno_core::Extension;
 use deno_core::JsRuntime;
 use deno_core::OpState;
 use deno_core::RuntimeOptions;
@@ -138,17 +139,21 @@ fn main() {
     let out = PathBuf::from(env::var_os("OUT_DIR").unwrap());
     let snapshot_path = out.join("SNAPSHOT.bin");
 
+    let ext = Extension::builder()
+        .ops(vec![
+            ("diagnostic", op_sync(diagnostic)),
+            ("read", op_sync(read)),
+            ("write", op_sync(write)),
+            ("get_cwd", op_sync(get_cwd)),
+            ("dir_exists", op_sync(dir_exists)),
+        ])
+        .build();
+
     let mut runtime = JsRuntime::new(RuntimeOptions {
+        extensions: vec![ext],
         will_snapshot: true,
         ..Default::default()
     });
-
-    runtime.register_op("diagnostic", op_sync(diagnostic));
-    runtime.register_op("read", op_sync(read));
-    runtime.register_op("write", op_sync(write));
-    runtime.register_op("get_cwd", op_sync(get_cwd));
-    runtime.register_op("dir_exists", op_sync(dir_exists));
-    runtime.sync_ops_cache();
 
     for p in ["../third_party/deno/cli/tsc/00_typescript.js", "src/tsc.js"] {
         println!("cargo:rerun-if-changed={}", p);

@@ -6,6 +6,7 @@ use deno_core::op_sync;
 use deno_core::serde;
 use deno_core::url::Url;
 use deno_core::v8;
+use deno_core::Extension;
 use deno_core::JsRuntime;
 use deno_core::OpFn;
 use deno_core::RuntimeOptions;
@@ -317,18 +318,23 @@ pub async fn compile_ts_code(
 
     graph.valid()?;
 
+    let ext = Extension::builder()
+        .ops(vec![
+            ("fetch", op(fetch)),
+            ("read", op(read)),
+            ("write", op(write)),
+            ("get_cwd", op(get_cwd)),
+            ("dir_exists", op(dir_exists)),
+            ("file_exists", op(file_exists)),
+            ("diagnostic", op(diagnostic)),
+        ])
+        .build();
+
     let mut runtime = JsRuntime::new(RuntimeOptions {
+        extensions: vec![ext],
         startup_snapshot: Some(Snapshot::Static(SNAPSHOT)),
         ..Default::default()
     });
-    runtime.register_op("fetch", op(fetch));
-    runtime.register_op("read", op(read));
-    runtime.register_op("write", op(write));
-    runtime.register_op("get_cwd", op(get_cwd));
-    runtime.register_op("dir_exists", op(dir_exists));
-    runtime.register_op("file_exists", op(file_exists));
-    runtime.register_op("diagnostic", op(diagnostic));
-    runtime.sync_ops_cache();
 
     runtime
         .op_state()
