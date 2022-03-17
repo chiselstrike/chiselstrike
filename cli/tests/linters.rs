@@ -43,7 +43,8 @@ mod tests {
             "--bin",
             "deno",
             "--locked",
-        ]);
+        ])
+        .env("CARGO_TARGET_DIR", "./target");
         run("deno", ["lint", "--config", "deno.json"]);
         run("deno", ["fmt", "--config", "deno.json", "--check"]);
     }
