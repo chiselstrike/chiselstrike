@@ -76,31 +76,16 @@ jobs:
       with:
           key: ${{ env.nightly-version }}
 
-    - name: set up node cache
-      uses: actions/cache@v2
-      with:
-            path: ~/.npm
-            key: ${{ runner.os }}-node-${{ hashFiles('**/package-lock.json') }}
+    - name: which deno
+      id: which_deno
+      run: "grep deno ~/.cargo/.crates.toml"
 
-    - name: Build debug mode binaries
-      uses: actions-rs/cargo@v1
-      with:
-          command: build
-          args: --verbose
-
-    - name: Build cli in isolation
-      uses: actions-rs/cargo@v1
-      with:
-          command: build
-          args: --verbose -p cli
-
-    - name: Build server in isolation
-      uses: actions-rs/cargo@v1
-      with:
-          command: build
-          args: --verbose -p server
-
-    - name: run unit tests
+    - name: deno_checks
       uses: actions-rs/cargo@v1
       with:
           command: test
+          args: -p cli --test linters deno_checks
+
+    - name: which deno2
+      id: which_deno2
+      run: "grep deno ~/.cargo/.crates.toml"
