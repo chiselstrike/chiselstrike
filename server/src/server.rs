@@ -314,7 +314,7 @@ pub async fn run_shared_state(
         let mut last_hash = 0;
         let mut last_try_was_failure = false;
         loop {
-            sleep(Duration::from_millis(100)).await;
+            sleep(Duration::from_millis(1000)).await;
             match get_secrets(&secret_location, &private_key).await {
                 Ok(secrets) => {
                     last_try_was_failure = false;
