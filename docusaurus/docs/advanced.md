@@ -91,7 +91,7 @@ But upon trying to execute the same command as before with the same relative URL
 
 Sometimes, we get things wrong and would like our models to evolve. The aim of ChiselStrike is to allow for
 model evolution without any database migration. While fully arbitrary evolution is not here yet, there are
-many cases that we can already handle. You will see that they cover a large of scenarios, especially if you
+many cases that we can already handle. You will see that they cover many scenarios, especially if you
 prepare in advance. They are:
 
 * Fields that have a default value can always be added or removed.
