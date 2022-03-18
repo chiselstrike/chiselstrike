@@ -20,7 +20,15 @@ async fn main() -> Result<()> {
     let mut executors = vec![];
 
     env_logger::Builder::from_env(Env::default().default_filter_or("info"))
-        .format(|buf, record| writeln!(buf, "{} - {}", record.level(), record.args()))
+        .format(|buf, record| {
+            writeln!(
+                buf,
+                "[{}] {} - {}",
+                buf.timestamp(),
+                record.level(),
+                record.args()
+            )
+        })
         .filter_module("sqlx::query", LevelFilter::Warn)
         .init();
 
