@@ -110,6 +110,15 @@ struct SortBy {
     ascending: bool,
 }
 
+struct Column {
+    /// Column name.
+    name: String,
+    /// Name of the table storing this column.
+    table_name: String,
+    /// Entity field corresponding to this column.
+    field: Field,
+}
+
 /// Class used to build `Query` from either JSON query or `ObjectType`.
 /// The json part recursively descends through selected fields and captures all
 /// joins necessary for nested types retrieval.
@@ -119,7 +128,7 @@ struct SortBy {
 struct QueryBuilder {
     /// Vector of SQL column aliases that will be selected from the database and corresponding
     /// scalar fields.
-    columns: Vec<(String, String, Field)>,
+    columns: Vec<Column>,
     /// Entity object representing entity that is being retrieved along with necessary joins
     /// and nested entities
     entity: QueriedEntity,
@@ -169,8 +178,7 @@ impl QueryBuilder {
                 Type::Object(_) => Type::String, // This is actually a foreign key.
                 ty => ty,
             };
-            let field =
-                builder.make_scalar_field(&field, ty.backing_table(), field.name.as_str(), None);
+            let field = builder.make_scalar_field(&field, ty.backing_table(), None);
             builder.entity.fields.push(field)
         }
         builder
@@ -198,7 +206,6 @@ impl QueryBuilder {
         &mut self,
         field: &Field,
         table_name: &str,
-        column_name: &str,
         transform: Option<fn(Value) -> Value>,
     ) -> QueryField {
         let select_field = QueryField::Scalar {
@@ -208,8 +215,11 @@ impl QueryBuilder {
             column_idx: self.columns.len(),
             transform,
         };
-        self.columns
-            .push((table_name.to_owned(), column_name.to_owned(), field.clone()));
+        self.columns.push(Column {
+            name: field.name.to_owned(),
+            table_name: table_name.to_owned(),
+            field: field.clone(),
+        });
         select_field
     }
 
@@ -261,7 +271,7 @@ impl QueryBuilder {
                     transform: field_policy,
                 }
             } else {
-                self.make_scalar_field(field, current_table, &field.name, field_policy)
+                self.make_scalar_field(field, current_table, field_policy)
             };
             fields.push(query_field);
         }
@@ -343,13 +353,13 @@ impl QueryBuilder {
 
     fn make_column_string(&self) -> String {
         let mut column_string = String::new();
-        for (table_name, column_name, field) in &self.columns {
-            let col = match field.default_value() {
+        for c in &self.columns {
+            let col = match c.field.default_value() {
                 Some(dfl) => format!(
                     "coalesce(\"{}\".\"{}\",'{}') AS \"{}_{}\",",
-                    table_name, column_name, dfl, table_name, column_name
+                    c.table_name, c.name, dfl, c.table_name, c.name
                 ),
-                None => format!("\"{}\".\"{}\",", table_name, column_name),
+                None => format!("\"{}\".\"{}\",", c.table_name, c.name),
             };
             column_string += &col;
         }
