@@ -28,7 +28,7 @@ impl DerefMut for Command {
 }
 
 #[allow(dead_code)]
-pub fn run_in<T: IntoIterator<Item = &'static str>>(cmd: &str, args: T, dir: PathBuf) -> Command {
+pub fn run_in<'a, T: IntoIterator<Item = &'a str>>(cmd: &str, args: T, dir: PathBuf) -> Command {
     assert!(
         dir.exists(),
         "{:?} does not exist. Current directory is {:?}",
@@ -42,7 +42,7 @@ pub fn run_in<T: IntoIterator<Item = &'static str>>(cmd: &str, args: T, dir: Pat
 }
 
 #[allow(dead_code)]
-pub fn run<T: IntoIterator<Item = &'static str>>(cmd: &str, args: T) -> Command {
+pub fn run<'a, T: IntoIterator<Item = &'a str>>(cmd: &str, args: T) -> Command {
     run_in(cmd, args, repo_dir())
 }
 

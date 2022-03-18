@@ -6,17 +6,17 @@ mod common;
 mod tests {
     use crate::common::{run, Command};
 
-    fn cargo<T: IntoIterator<Item = &'static str>>(args: T) -> Command {
+    fn cargo<'a, T: IntoIterator<Item = &'a str>>(args: T) -> Command {
         run("cargo", args)
     }
 
-    fn nightly<T: IntoIterator<Item = &'static str>>(args: T) -> Command {
+    fn nightly<'a, T: IntoIterator<Item = &'a str>>(args: T) -> Command {
         let mut ret = cargo(itertools::chain(["+nightly-2022-03-15"], args));
         ret.env("CARGO_TARGET_DIR", "./target/nightly");
         ret
     }
 
-    fn cargo_install(version: &'static str, pkg: &'static str, bin: &'static str) {
+    fn cargo_install(version: &str, pkg: &str, bin: &str) {
         cargo([
             "install",
             "--version",
