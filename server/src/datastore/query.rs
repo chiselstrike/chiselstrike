@@ -169,8 +169,7 @@ impl QueryBuilder {
                 Type::Object(_) => Type::String, // This is actually a foreign key.
                 ty => ty,
             };
-            let field =
-                builder.make_scalar_field(&field, ty.backing_table(), field.name.as_str(), None);
+            let field = builder.make_scalar_field(&field, ty.backing_table(), None);
             builder.entity.fields.push(field)
         }
         builder
@@ -198,7 +197,6 @@ impl QueryBuilder {
         &mut self,
         field: &Field,
         table_name: &str,
-        column_name: &str,
         transform: Option<fn(Value) -> Value>,
     ) -> QueryField {
         let select_field = QueryField::Scalar {
@@ -209,7 +207,7 @@ impl QueryBuilder {
             transform,
         };
         self.columns
-            .push((table_name.to_owned(), column_name.to_owned(), field.clone()));
+            .push((table_name.to_owned(), field.name.to_owned(), field.clone()));
         select_field
     }
 
@@ -261,7 +259,7 @@ impl QueryBuilder {
                     transform: field_policy,
                 }
             } else {
-                self.make_scalar_field(field, current_table, &field.name, field_policy)
+                self.make_scalar_field(field, current_table, field_policy)
             };
             fields.push(query_field);
         }
