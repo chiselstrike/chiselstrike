@@ -582,7 +582,7 @@ export class ChiselEntity {
      *
      * @returns A request-handling function suitable as a default export in an endpoint.
      */
-    static crud() {
+    static crud(_ignored?: string) {
         return crud(this, "");
     }
 }
