@@ -421,7 +421,7 @@ async fn op_chisel_entity_delete(
     _state: Rc<RefCell<OpState>>,
     content: serde_json::Value,
     api_version: String,
-) -> Result<serde_json::Value> {
+) -> Result<()> {
     let mutation = Mutation::parse_delete(&api_version, &content).context(
         "failed to construct delete expression from JSON passed to `op_chisel_entity_delete`",
     )?;
@@ -429,7 +429,7 @@ async fn op_chisel_entity_delete(
         let runtime = runtime::get();
         runtime.query_engine.clone()
     };
-    Ok(serde_json::json!(query_engine.mutate(mutation).await?))
+    query_engine.mutate(mutation).await
 }
 
 type DbStream = RefCell<QueryResults>;
