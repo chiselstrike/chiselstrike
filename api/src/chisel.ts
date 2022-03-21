@@ -434,7 +434,7 @@ export class ChiselCursor<T> {
                 const rid = Deno.core.opSync(
                     "chisel_relational_query_create",
                     op,
-                    [currentApiVersion, currentPath],
+                    [currentApiVersion, currentPath, currentUserId],
                 );
                 try {
                     while (true) {
@@ -710,7 +710,7 @@ export function unique(_target: unknown, _name: string): void {
 
 /** Returns the currently logged-in user or null if no one is logged in. */
 export async function loggedInUser(): Promise<OAuthUser | undefined> {
-    const id = Deno.core.opSync("chisel_user", {});
+    const id = currentUserId;
     if (id === undefined) {
         return undefined;
     }
@@ -758,8 +758,10 @@ function ensureNotGet() {
 }
 let currentApiVersion = "";
 let currentPath = "";
+let currentUserId: string | undefined = undefined;
 
 export async function callHandler(
+    userid: string | undefined,
     path: string,
     apiVersion: string,
     url: string,
@@ -770,6 +772,7 @@ export async function callHandler(
     currentMethod = method;
     currentApiVersion = apiVersion;
     currentPath = path;
+    currentUserId = userid;
     const init: RequestInit = { method: method, headers: headers };
     if (rid !== undefined) {
         const body = buildReadableStreamForBody(rid);

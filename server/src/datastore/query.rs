@@ -231,7 +231,12 @@ impl QueryBuilder {
     }
 
     /// Constructs a builder from a type name `ty_name`.
-    fn new_from_type_name(api_version: &str, path: &str, ty_name: &str) -> Result<Self> {
+    fn new_from_type_name(
+        api_version: &str,
+        userid: &Option<String>,
+        path: &str,
+        ty_name: &str,
+    ) -> Result<Self> {
         let runtime = runtime::get();
         let ts = &runtime.type_system;
         let ty = match ts.lookup_builtin_type(ty_name) {
@@ -243,7 +248,7 @@ impl QueryBuilder {
         };
 
         let mut builder = Self::new(ty.clone());
-        builder.entity = builder.load_entity(&runtime, path, &ty);
+        builder.entity = builder.load_entity(&runtime, userid, path, &ty);
         Ok(builder)
     }
 
@@ -276,11 +281,18 @@ impl QueryBuilder {
     fn load_entity(
         &mut self,
         runtime: &runtime::Runtime,
+        userid: &Option<String>,
         path: &str,
         ty: &Arc<ObjectType>,
     ) -> QueriedEntity {
-        self.add_login_filters_recursive(runtime, path, ty, Expr::Parameter { position: 0 });
-        self.load_entity_recursive(runtime, path, ty, ty.backing_table())
+        self.add_login_filters_recursive(
+            runtime,
+            userid,
+            path,
+            ty,
+            Expr::Parameter { position: 0 },
+        );
+        self.load_entity_recursive(runtime, userid, path, ty, ty.backing_table())
     }
 
     /// Loads QueriedEntity for a given type `ty` to be retrieved from the
@@ -289,11 +301,12 @@ impl QueryBuilder {
     fn load_entity_recursive(
         &mut self,
         runtime: &runtime::Runtime,
+        userid: &Option<String>,
         path: &str,
         ty: &Arc<ObjectType>,
         current_table: &str,
     ) -> QueriedEntity {
-        let policies = make_field_policies(runtime, path, ty);
+        let policies = make_field_policies(runtime, userid, path, ty);
 
         let mut fields = vec![];
         let mut joins = HashMap::default();
@@ -315,7 +328,13 @@ impl QueryBuilder {
                 joins.insert(
                     field.name.to_owned(),
                     Join {
-                        entity: self.load_entity_recursive(runtime, path, nested_ty, &nested_table),
+                        entity: self.load_entity_recursive(
+                            runtime,
+                            userid,
+                            path,
+                            nested_ty,
+                            &nested_table,
+                        ),
                         lkey: field.name.to_owned(),
                         rkey: "id".to_owned(),
                     },
@@ -343,11 +362,12 @@ impl QueryBuilder {
     fn add_login_filters_recursive(
         &mut self,
         runtime: &runtime::Runtime,
+        userid: &Option<String>,
         path: &str,
         ty: &Arc<ObjectType>,
         property_chain: Expr,
     ) {
-        let policies = make_field_policies(runtime, path, ty);
+        let policies = make_field_policies(runtime, userid, path, ty);
         let user_id: Literal = match &policies.current_userid {
             None => "NULL",
             Some(id) => id.as_str(),
@@ -374,6 +394,7 @@ impl QueryBuilder {
                 } else {
                     self.add_login_filters_recursive(
                         runtime,
+                        userid,
                         path,
                         nested_ty,
                         property_access.into(),
@@ -628,24 +649,25 @@ pub(crate) enum QueryOperator {
 
 fn convert_to_query_builder(
     api_version: &str,
+    userid: &Option<String>,
     path: &str,
     op: QueryOperator,
 ) -> Result<QueryBuilder> {
     use QueryOperator::*;
     let builder = match op {
-        BaseEntity { name } => QueryBuilder::new_from_type_name(api_version, path, &name)?,
+        BaseEntity { name } => QueryBuilder::new_from_type_name(api_version, userid, path, &name)?,
         Filter { expression, inner } => {
-            let mut builder = convert_to_query_builder(api_version, path, *inner)?;
+            let mut builder = convert_to_query_builder(api_version, userid, path, *inner)?;
             builder.add_expression_filter(expression);
             builder
         }
         Projection { fields, inner } => {
-            let mut builder = convert_to_query_builder(api_version, path, *inner)?;
+            let mut builder = convert_to_query_builder(api_version, userid, path, *inner)?;
             builder.update_allowed_fields(fields)?;
             builder
         }
         Take { count, inner } => {
-            let mut builder = convert_to_query_builder(api_version, path, *inner)?;
+            let mut builder = convert_to_query_builder(api_version, userid, path, *inner)?;
             builder.update_limit(count);
             builder
         }
@@ -654,7 +676,7 @@ fn convert_to_query_builder(
             ascending,
             inner,
         } => {
-            let mut builder = convert_to_query_builder(api_version, path, *inner)?;
+            let mut builder = convert_to_query_builder(api_version, userid, path, *inner)?;
             builder.set_sort(&key, ascending);
             builder
         }
@@ -669,10 +691,11 @@ pub(crate) fn type_to_query(ty: &Arc<ObjectType>) -> Result<Query> {
 
 pub(crate) fn json_to_query(
     api_version: &str,
+    userid: &Option<String>,
     path: &str,
     op_chain: QueryOperator,
 ) -> Result<Query> {
-    let builder = convert_to_query_builder(api_version, path, op_chain)?;
+    let builder = convert_to_query_builder(api_version, userid, path, op_chain)?;
     builder.build()
 }
 
