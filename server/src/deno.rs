@@ -522,11 +522,8 @@ async fn op_chisel_relational_query_next(
     }
 }
 
-fn op_chisel_user(_: &mut OpState, _: (), _: ()) -> Result<serde_json::Value> {
-    match with_current_context(|path| path.userid.clone()) {
-        None => Ok(serde_json::Value::Null),
-        Some(id) => Ok(serde_json::Value::String(id)),
-    }
+fn op_chisel_user(_: &mut OpState, _: (), _: ()) -> Result<Option<String>> {
+    Ok(with_current_context(|path| path.userid.clone()))
 }
 
 // Used by deno to format names in errors

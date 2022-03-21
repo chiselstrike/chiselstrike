@@ -711,7 +711,7 @@ export function unique(): void {
 /** Returns the currently logged-in user or null if no one is logged in. */
 export async function loggedInUser(): Promise<OAuthUser | undefined> {
     const id = Deno.core.opSync("chisel_user", {});
-    if (id == null) {
+    if (id === undefined) {
         return undefined;
     }
     return await OAuthUser.findOne({ id });
