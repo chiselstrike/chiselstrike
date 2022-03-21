@@ -14,6 +14,7 @@ use futures::StreamExt;
 use itertools::Itertools;
 use pin_project::pin_project;
 use sea_query::{Alias, ColumnDef, Table};
+use serde::Serialize;
 use serde_json::json;
 use sqlx::any::{Any, AnyArguments, AnyPool, AnyRow};
 use sqlx::{Executor, Row, Transaction, ValueRef};
@@ -140,20 +141,11 @@ impl SqlWithArguments {
 ///         }
 ///     }
 /// }
-#[derive(Debug)]
-struct IdTree {
-    id: String,
+#[derive(Debug, Serialize)]
+pub(crate) struct IdTree {
+    pub(crate) id: String,
+    #[serde(flatten)]
     children: HashMap<String, IdTree>,
-}
-
-impl IdTree {
-    fn to_json(&self) -> serde_json::Value {
-        let mut ids_json = json!({"id": self.id});
-        for (field_name, child_tree) in &self.children {
-            ids_json[field_name.to_owned()] = child_tree.to_json();
-        }
-        ids_json
-    }
 }
 
 fn column_is_null(row: &AnyRow, column_idx: usize) -> bool {
@@ -442,10 +434,10 @@ impl QueryEngine {
         ty: &ObjectType,
         ty_value: &JsonObject,
         transaction: Option<&mut Transaction<'_, Any>>,
-    ) -> Result<serde_json::Value> {
+    ) -> Result<IdTree> {
         let (inserts, id_tree) = self.prepare_insertion(ty, ty_value)?;
         self.run_sql_queries(&inserts, transaction).await?;
-        Ok(id_tree.to_json())
+        Ok(id_tree)
     }
 
     pub(crate) async fn add_row_shallow(

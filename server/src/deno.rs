@@ -1,6 +1,7 @@
 // SPDX-FileCopyrightText: © 2021 ChiselStrike <info@chiselstrike.com>
 
 use crate::api::{response_template, Body, RequestPath};
+use crate::datastore::engine::IdTree;
 use crate::datastore::engine::TransactionStatic;
 use crate::datastore::engine::{QueryResults, ResultRow};
 use crate::datastore::query::{json_to_query, Mutation};
@@ -390,7 +391,7 @@ async fn op_chisel_store(
     _state: Rc<RefCell<OpState>>,
     content: StoreContent,
     api_version: String,
-) -> Result<serde_json::Value> {
+) -> Result<IdTree> {
     let type_name = &content.name;
     let value = &content.value;
 
