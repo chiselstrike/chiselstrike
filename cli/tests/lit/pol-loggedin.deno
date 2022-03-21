@@ -132,7 +132,7 @@ export default async function chisel(req: Request) {
     if (req.method == 'POST') {
         const b = Blog.build(await req.json());
         const author = await loggedInUser();
-        if (author == null) return responseFromJson('Must be logged in', 401);
+        if (author === undefined) return responseFromJson('Must be logged in', 401);
         b.post1.author = author;
         await b.save();
         return new Response('saved post successfully');
@@ -146,6 +146,14 @@ EOF
 rm "$TEMPDIR/policies/pol.yaml"
 $CHISEL apply
 # CHECK: End point defined: /dev/blogs
+
+$CURL -d '{"text": "first post by al"}' $CHISELD_HOST/dev/po
+# CHECK:  HTTP/1.1 401 Unauthorized
+# CHECK:  Must be logged in
+
+$CURL -d '{"text": "first post by al"}' $CHISELD_HOST/dev/blogs
+# CHECK:  HTTP/1.1 401 Unauthorized
+# CHECK:  Must be logged in
 
 $CURL -H "ChiselStrikeToken:$token_al" -d '{
   "post1": {"text": "first blog post by al"}
