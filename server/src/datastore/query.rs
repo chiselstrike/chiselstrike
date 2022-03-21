@@ -675,13 +675,11 @@ pub(crate) struct Mutation {
 
 impl Mutation {
     /// Parses a delete statement from JSON.
-    pub(crate) fn parse_delete(api_version: &str, val: &serde_json::Value) -> Result<Self> {
-        let type_name = val["type_name"]
-            .as_str()
-            .ok_or_else(|| anyhow!("The `type_name` field is not a JSON string."))?;
-        let restrictions = val["restrictions"]
-            .as_object()
-            .ok_or_else(|| anyhow!("The `restrictions` passed is not a JSON object."))?;
+    pub(crate) fn parse_delete(
+        api_version: &str,
+        type_name: &str,
+        restrictions: &JsonObject,
+    ) -> Result<Self> {
         let (ty, restrictions) = {
             let runtime = runtime::get();
             let ty = match runtime

@@ -9,6 +9,7 @@ use crate::rcmut::RcMut;
 use crate::runtime;
 use crate::runtime::Runtime;
 use crate::types::ObjectType;
+use crate::JsonObject;
 use anyhow::{anyhow, Context as AnyhowContext, Result};
 use api::chisel_js;
 use deno_core::error::AnyError;
@@ -49,6 +50,7 @@ use once_cell::unsync::OnceCell;
 use pin_project::pin_project;
 use serde::de::DeserializeOwned;
 use serde::Serialize;
+use serde_derive::Deserialize;
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::convert::TryInto;
@@ -378,18 +380,19 @@ where
     })
 }
 
+#[derive(Deserialize)]
+struct StoreContent {
+    name: String,
+    value: JsonObject,
+}
+
 async fn op_chisel_store(
     _state: Rc<RefCell<OpState>>,
-    content: serde_json::Value,
+    content: StoreContent,
     api_version: String,
 ) -> Result<serde_json::Value> {
-    let type_name = content["name"]
-        .as_str()
-        .ok_or_else(|| anyhow!("Type name error; the .name key must have a string value"))?;
-
-    let value = content["value"]
-        .as_object()
-        .ok_or_else(|| anyhow!("Value passed to store is not a Json Object"))?;
+    let type_name = &content.name;
+    let value = &content.value;
 
     let (query_engine, ty) = {
         let runtime = runtime::get();
@@ -409,26 +412,31 @@ async fn op_chisel_store(
 
     let transaction = current_transaction()?;
     let mut transaction = transaction.lock().await;
-    Ok(serde_json::json!(
-        query_engine
-            .add_row(&ty, value, Some(transaction.deref_mut()))
-            .await?
-    ))
+    Ok(query_engine
+        .add_row(&ty, value, Some(transaction.deref_mut()))
+        .await?)
+}
+
+#[derive(Deserialize)]
+struct DeleteContent {
+    type_name: String,
+    restrictions: JsonObject,
 }
 
 async fn op_chisel_entity_delete(
     _state: Rc<RefCell<OpState>>,
-    content: serde_json::Value,
+    content: DeleteContent,
     api_version: String,
-) -> Result<serde_json::Value> {
-    let mutation = Mutation::parse_delete(&api_version, &content).context(
-        "failed to construct delete expression from JSON passed to `op_chisel_entity_delete`",
-    )?;
+) -> Result<()> {
+    let mutation = Mutation::parse_delete(&api_version, &content.type_name, &content.restrictions)
+        .context(
+            "failed to construct delete expression from JSON passed to `op_chisel_entity_delete`",
+        )?;
     let query_engine = {
         let runtime = runtime::get();
         runtime.query_engine.clone()
     };
-    Ok(serde_json::json!(query_engine.mutate(mutation).await?))
+    query_engine.mutate(mutation).await
 }
 
 type DbStream = RefCell<QueryResults>;
@@ -450,12 +458,9 @@ impl Resource for QueryStreamResource {}
 
 fn op_chisel_get_secret(
     _op_state: &mut OpState,
-    secret: serde_json::Value,
+    key: String,
     _: (),
 ) -> Result<Option<serde_json::Value>> {
-    let key = secret
-        .as_str()
-        .ok_or_else(|| anyhow!("secret key is not a string"))?;
     let runtime = runtime::get();
     Ok(runtime.secrets.get_secret(key))
 }
