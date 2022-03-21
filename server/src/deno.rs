@@ -417,14 +417,21 @@ async fn op_chisel_store(
         .await?)
 }
 
+#[derive(Deserialize)]
+struct DeleteContent {
+    type_name: String,
+    restrictions: JsonObject,
+}
+
 async fn op_chisel_entity_delete(
     _state: Rc<RefCell<OpState>>,
-    content: serde_json::Value,
+    content: DeleteContent,
     api_version: String,
 ) -> Result<()> {
-    let mutation = Mutation::parse_delete(&api_version, &content).context(
-        "failed to construct delete expression from JSON passed to `op_chisel_entity_delete`",
-    )?;
+    let mutation = Mutation::parse_delete(&api_version, &content.type_name, &content.restrictions)
+        .context(
+            "failed to construct delete expression from JSON passed to `op_chisel_entity_delete`",
+        )?;
     let query_engine = {
         let runtime = runtime::get();
         runtime.query_engine.clone()
