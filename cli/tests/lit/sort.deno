@@ -35,58 +35,6 @@ export default async function chisel(req: Request) {
 }
 EOF
 
-cat << EOF > "$TEMPDIR/endpoints/get_sorted.ts"
-import { Person } from "../models/types.ts";
-
-export default async function chisel(req: Request) {
-    const url = new URL(req.url);
-
-    const key = url.searchParams.get("key");
-    if (key != "name" && key != "age") {
-        throw new Error(`unexpected entity property '${key}'`);
-    }
-    const order = url.searchParams.get("order") ?? "ascending";
-    const asc = order == "ascending";
-
-    const sorted = Person.cursor().sort((lhs: Person, rhs: Person) => {
-        if (asc) {
-            return lhs[key] < rhs[key];
-        } else {
-            return lhs[key] > rhs[key];
-        }
-    });
-
-    const results = (await sorted.toArray()).map(p => p.name);
-    return new Response("[" + results.join(", ") + "]");
-}
-EOF
-
-
-
-cd "$TEMPDIR"
-$CHISEL apply
-
-# CHECK: Model defined: Person
-# CHECK: End point defined: /dev/get_sorted
-# CHECK: End point defined: /dev/store
-
-$CURL -X POST -o - $CHISELD_HOST/dev/store
-# CHECK: Ok
-
-$CURL -o - "$CHISELD_HOST/dev/get_sorted?key=name&order=ascending"
-# CHECK: [Glauber, Jan, Pekka]
-
-$CURL -o - "$CHISELD_HOST/dev/get_sorted?key=name&order=descending"
-# CHECK: [Pekka, Jan, Glauber]
-
-$CURL -o - "$CHISELD_HOST/dev/get_sorted?key=age&order=ascending"
-# CHECK: [Pekka, Glauber, Jan]
-
-$CURL -o - "$CHISELD_HOST/dev/get_sorted?key=age&order=descending"
-# CHECK: [Jan, Glauber, Pekka]
-
-
-
 cat << EOF > "$TEMPDIR/endpoints/get_sorted_by.ts"
 import { Person } from "../models/types.ts";
 
@@ -105,8 +53,14 @@ export default async function chisel(req: Request) {
 }
 EOF
 
+cd "$TEMPDIR"
 $CHISEL apply
+# CHECK: Model defined: Person
 # CHECK: End point defined: /dev/get_sorted_by
+# CHECK: End point defined: /dev/store
+
+$CURL -X POST -o - $CHISELD_HOST/dev/store
+# CHECK: Ok
 
 $CURL -o - "$CHISELD_HOST/dev/get_sorted_by?key=name&order=ascending"
 # CHECK: [Glauber, Jan, Pekka]

@@ -10,7 +10,6 @@ enum OpType {
     ColumnsSelect = "ColumnsSelect",
     PredicateFilter = "PredicateFilter",
     ExpressionFilter = "ExpressionFilter",
-    Sort = "Sort",
     SortBy = "SortBy",
 }
 
@@ -189,42 +188,6 @@ class ExpressionFilter<T> extends Operator<T> {
 }
 
 /**
- * Sort operator sorts elements using `comparator` which
- * for two elements of the iterable returns true if `lhs`
- * is considered less than `rhs`, false otherwise.
- */
-class Sort<T> extends Operator<T> {
-    constructor(
-        public comparator: (lhs: T, rhs: T) => boolean,
-        inner: Operator<T>,
-    ) {
-        super(OpType.Sort, inner);
-    }
-
-    apply(
-        iter: AsyncIterable<T>,
-    ): AsyncIterable<T> {
-        const cmp = this.comparator;
-        return {
-            [Symbol.asyncIterator]: async function* () {
-                const elements = [];
-                for await (const e of iter) {
-                    elements.push(e);
-                }
-                elements.sort(
-                    (lhs: T, rhs: T) => {
-                        return cmp(lhs, rhs) ? -1 : 1;
-                    },
-                );
-                for (const e of elements) {
-                    yield e;
-                }
-            },
-        };
-    }
-}
-
-/**
  * SortBy operator sorts elements by `key` (property) of element type `T`
  * in ascending order if `ascending` is set to true, descending otherwise.
  */
@@ -382,27 +345,6 @@ export class ChiselCursor<T> {
     /**
      * Sorts cursor elements.
      *
-     * @param comparator determines the sorting order. For two elements of the
-     * iterable returns true if `lhs` is considered less than `rhs`,
-     * false otherwise.
-     *
-     * Note: the sort is not guaranteed to be stable.
-     */
-    sort(
-        comparator: (lhs: T, rhs: T) => boolean,
-    ): ChiselCursor<T> {
-        return new ChiselCursor(
-            this.baseConstructor,
-            new Sort(
-                comparator,
-                this.inner,
-            ),
-        );
-    }
-
-    /**
-     * Sorts cursor elements.
-     *
      * @param key specifies which attribute of `T` is to be used as a sort key.
      * @param ascending if true, the sort will be ascending. Descending otherwise.
      *
@@ -471,7 +413,7 @@ export class ChiselCursor<T> {
         } else if (op.type == OpType.Take) {
             return this.makeQueryIter(op);
         } else if (
-            op.type == OpType.PredicateFilter || op.type == OpType.Sort ||
+            op.type == OpType.PredicateFilter ||
             (op.type == OpType.SortBy && op.inner.containsType(OpType.SortBy))
         ) {
             iter = this.makeQueryIter(op.inner);
