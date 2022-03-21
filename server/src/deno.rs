@@ -290,7 +290,7 @@ impl DenoService {
                     "chisel_relational_query_next",
                     op_req(op_chisel_relational_query_next),
                 ),
-                ("chisel_user", op_req(op_chisel_user)),
+                ("chisel_user", op_sync(op_chisel_user)),
             ])
             .build();
         let opts = WorkerOptions {
@@ -522,7 +522,7 @@ async fn op_chisel_relational_query_next(
     }
 }
 
-async fn op_chisel_user(_: Rc<RefCell<OpState>>, _: (), _: ()) -> Result<serde_json::Value> {
+fn op_chisel_user(_: &mut OpState, _: (), _: ()) -> Result<serde_json::Value> {
     match with_current_context(|path| path.userid.clone()) {
         None => Ok(serde_json::Value::Null),
         Some(id) => Ok(serde_json::Value::String(id)),
