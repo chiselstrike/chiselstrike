@@ -1,5 +1,13 @@
 # ChiselStrike Developer's Guide
 
+## Toolchain
+
+On Linux, you need `lld`:
+
+```bash
+dnf install lld
+```
+
 ## Generating API documentation
 
 The ChiselStrike code has API documentation written in RustDoc. To generate
