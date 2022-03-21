@@ -13,6 +13,7 @@ use serde_derive::{Deserialize, Serialize};
 use serde_json::value::Value;
 use std::collections::HashMap;
 use std::collections::HashSet;
+use std::fmt;
 use std::sync::Arc;
 
 #[derive(Debug, Clone, EnumAsInner)]
@@ -114,12 +115,44 @@ struct SortBy {
 }
 
 struct Column {
-    /// Column name.
+    /// Column name which is coincidentally also the name of the Entity field
+    /// this column corresponds to.
     name: String,
     /// Name of the table storing this column.
     table_name: String,
+    /// Index of a position of this column in SQL SELECT query.
+    index: usize,
     /// Entity field corresponding to this column.
     field: Field,
+}
+
+impl Column {
+    /// Column alias used to uniquely address the column within SQL query.
+    fn alias(&self) -> ColumnAlias {
+        ColumnAlias {
+            field_name: self.name.to_owned(),
+            table_name: self.table_name.to_owned(),
+        }
+    }
+}
+
+/// ColumnAlias is used to uniquely identify a `Column` that is to be retrieved
+/// from the database. It's string representation is used in the SELECT statement
+/// to identify the column which is then utilized by filtering and sorting statements.
+#[derive(PartialEq, Eq, PartialOrd, Ord, Hash)]
+struct ColumnAlias {
+    /// Name of the entity field that corresponds to this retrieved column.
+    field_name: String,
+    /// Name of the table where the field resides. This name can be an alias of the
+    /// original database table name, but it must be the name that is addressable within
+    /// the SQL statement in which the corresponding column is retrieved/used.
+    table_name: String,
+}
+
+impl fmt::Display for ColumnAlias {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}_{}", self.table_name, self.field_name)
+    }
 }
 
 /// Class used to build `Query` from either JSON query or `ObjectType`.
@@ -129,9 +162,9 @@ struct Column {
 /// structure that contains raw SQL query string and additional data necessary for
 /// JSON response reconstruction and filtering.
 struct QueryBuilder {
-    /// Vector of SQL column aliases that will be selected from the database and corresponding
-    /// scalar fields.
-    columns: Vec<Column>,
+    /// Mapping between column alias (uniquely identifying a selected column) and Columns that
+    /// will be retrieved from the database.
+    columns: HashMap<ColumnAlias, Column>,
     /// Entity object representing entity that is being retrieved along with necessary joins
     /// and nested entities
     entity: QueriedEntity,
@@ -151,7 +184,7 @@ struct QueryBuilder {
 impl QueryBuilder {
     fn new(base_type: Arc<ObjectType>) -> Self {
         Self {
-            columns: vec![],
+            columns: HashMap::default(),
             entity: QueriedEntity {
                 ty: base_type.clone(),
                 fields: vec![],
@@ -168,6 +201,16 @@ impl QueryBuilder {
 
     fn base_type(&self) -> &Arc<ObjectType> {
         &self.entity.ty
+    }
+
+    fn get_column(&self, alias: &ColumnAlias) -> Result<&Column> {
+        self.columns.get(alias).ok_or_else(|| {
+            anyhow!(
+                "failed to locate column for table alias `{}` and field name `{}`",
+                alias.table_name,
+                alias.field_name
+            )
+        })
     }
 
     /// Constructs a query builder ready to build an expression querying all fields of a
@@ -210,18 +253,21 @@ impl QueryBuilder {
         table_name: &str,
         transform: Option<fn(Value) -> Value>,
     ) -> QueryField {
+        let column_idx = self.columns.len();
         let select_field = QueryField::Scalar {
             name: field.name.clone(),
             type_: field.type_.clone(),
             is_optional: field.is_optional,
-            column_idx: self.columns.len(),
+            column_idx,
             transform,
         };
-        self.columns.push(Column {
+        let column = Column {
             name: field.name.to_owned(),
             table_name: table_name.to_owned(),
+            index: column_idx,
             field: field.clone(),
-        });
+        };
+        self.columns.insert(column.alias(), column);
         select_field
     }
 
@@ -265,6 +311,7 @@ impl QueryBuilder {
                 let nested_table = max_prefix(nested_table.as_str(), 63).to_owned();
                 self.join_counter += 1;
 
+                self.make_scalar_field(field, current_table, field_policy);
                 joins.insert(
                     field.name.to_owned(),
                     Join {
@@ -367,13 +414,19 @@ impl QueryBuilder {
 
     fn make_column_string(&self) -> String {
         let mut column_string = String::new();
-        for c in &self.columns {
+        let mut columns: Vec<_> = self.columns.iter().map(|(_, c)| c).collect();
+        columns.sort_by_key(|c| c.index);
+
+        for c in columns {
             let col = match c.field.default_value() {
                 Some(dfl) => format!(
-                    "coalesce(\"{}\".\"{}\",'{}') AS \"{}_{}\",",
-                    c.table_name, c.name, dfl, c.table_name, c.name
+                    "coalesce(\"{}\".\"{}\",'{}') AS \"{}\",",
+                    c.table_name,
+                    c.name,
+                    dfl,
+                    c.alias()
                 ),
-                None => format!("\"{}\".\"{}\",", c.table_name, c.name),
+                None => format!("\"{}\".\"{}\" AS \"{}\",", c.table_name, c.name, c.alias()),
             };
             column_string += &col;
         }
@@ -481,20 +534,27 @@ impl QueryBuilder {
         Ok(format!("\"{}\".\"{}\"", entity.table_alias, field))
     }
 
-    fn make_sort_string(&self) -> String {
-        if let Some(sort) = &self.sort {
+    fn make_sort_string(&self) -> Result<String> {
+        let sort_str = if let Some(sort) = &self.sort {
             let order = if sort.ascending { "ASC" } else { "DESC" };
-            format!("ORDER BY \"{}\" {}", sort.field_name, order)
+            let c_alias = ColumnAlias {
+                field_name: sort.field_name.to_owned(),
+                table_name: self.base_type().backing_table().to_owned(),
+            };
+            let c = self.get_column(&c_alias)?;
+
+            format!("ORDER BY \"{}\" {}", c.alias(), order)
         } else {
             "".into()
-        }
+        };
+        Ok(sort_str)
     }
 
     fn make_raw_query(&self) -> Result<String> {
         let column_string = self.make_column_string();
         let join_string = self.make_join_string();
         let filter_string = self.make_filter_string()?;
-        let sort_string = self.make_sort_string();
+        let sort_string = self.make_sort_string()?;
 
         let mut raw_sql = format!(
             "SELECT {} FROM \"{}\" {} {} {}",
