@@ -1,6 +1,6 @@
 [package]
 name = "api"
-version = "0.8.1"
+version = "0.8.2"
 authors = ["ChiselStrike"]
 edition = "2021"
 
