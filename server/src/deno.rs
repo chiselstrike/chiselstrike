@@ -450,12 +450,9 @@ impl Resource for QueryStreamResource {}
 
 fn op_chisel_get_secret(
     _op_state: &mut OpState,
-    secret: serde_json::Value,
+    key: String,
     _: (),
 ) -> Result<Option<serde_json::Value>> {
-    let key = secret
-        .as_str()
-        .ok_or_else(|| anyhow!("secret key is not a string"))?;
     let runtime = runtime::get();
     Ok(runtime.secrets.get_secret(key))
 }
