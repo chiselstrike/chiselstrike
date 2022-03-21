@@ -412,11 +412,9 @@ async fn op_chisel_store(
 
     let transaction = current_transaction()?;
     let mut transaction = transaction.lock().await;
-    Ok(serde_json::json!(
-        query_engine
-            .add_row(&ty, value, Some(transaction.deref_mut()))
-            .await?
-    ))
+    Ok(query_engine
+        .add_row(&ty, value, Some(transaction.deref_mut()))
+        .await?)
 }
 
 async fn op_chisel_entity_delete(
