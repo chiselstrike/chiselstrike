@@ -9,6 +9,7 @@ use crate::rcmut::RcMut;
 use crate::runtime;
 use crate::runtime::Runtime;
 use crate::types::ObjectType;
+use crate::JsonObject;
 use anyhow::{anyhow, Context as AnyhowContext, Result};
 use api::chisel_js;
 use deno_core::error::AnyError;
@@ -49,6 +50,7 @@ use once_cell::unsync::OnceCell;
 use pin_project::pin_project;
 use serde::de::DeserializeOwned;
 use serde::Serialize;
+use serde_derive::Deserialize;
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::convert::TryInto;
@@ -378,18 +380,19 @@ where
     })
 }
 
+#[derive(Deserialize)]
+struct StoreContent {
+    name: String,
+    value: JsonObject,
+}
+
 async fn op_chisel_store(
     _state: Rc<RefCell<OpState>>,
-    content: serde_json::Value,
+    content: StoreContent,
     api_version: String,
 ) -> Result<serde_json::Value> {
-    let type_name = content["name"]
-        .as_str()
-        .ok_or_else(|| anyhow!("Type name error; the .name key must have a string value"))?;
-
-    let value = content["value"]
-        .as_object()
-        .ok_or_else(|| anyhow!("Value passed to store is not a Json Object"))?;
+    let type_name = &content.name;
+    let value = &content.value;
 
     let (query_engine, ty) = {
         let runtime = runtime::get();
