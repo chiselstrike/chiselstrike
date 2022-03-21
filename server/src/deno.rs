@@ -292,7 +292,6 @@ impl DenoService {
                     "chisel_relational_query_next",
                     op_req(op_chisel_relational_query_next),
                 ),
-                ("chisel_user", op_sync(op_chisel_user)),
             ])
             .build();
         let opts = WorkerOptions {
@@ -444,10 +443,16 @@ async fn op_chisel_entity_delete(
 type DbStream = RefCell<QueryResults>;
 
 /// Calculates field policies for the request being processed.
-pub(crate) fn make_field_policies(runtime: &Runtime, path: &str, ty: &ObjectType) -> FieldPolicies {
-    let mut policies = FieldPolicies::default();
-    let userid = with_current_context(|p| p.userid.clone());
-    policies.current_userid = userid;
+pub(crate) fn make_field_policies(
+    runtime: &Runtime,
+    userid: &Option<String>,
+    path: &str,
+    ty: &ObjectType,
+) -> FieldPolicies {
+    let mut policies = FieldPolicies {
+        current_userid: userid.clone(),
+        ..Default::default()
+    };
     runtime.add_field_policies(ty, &mut policies, path);
     policies
 }
@@ -470,10 +475,10 @@ fn op_chisel_get_secret(
 fn op_chisel_relational_query_create(
     op_state: &mut OpState,
     query: QueryOperator,
-    path: (String, String),
+    info: (String, String, Option<String>),
 ) -> Result<ResourceId> {
-    let (api_version, path) = path;
-    let query = json_to_query(&api_version, &path, query)?;
+    let (api_version, path, userid) = info;
+    let query = json_to_query(&api_version, &userid, &path, query)?;
     let mut runtime = runtime::get();
     let query_engine = &mut runtime.query_engine;
 
@@ -512,10 +517,6 @@ async fn op_chisel_relational_query_next(
     } else {
         Ok(None)
     }
-}
-
-fn op_chisel_user(_: &mut OpState, _: (), _: ()) -> Result<Option<String>> {
-    Ok(with_current_context(|path| path.userid.clone()))
 }
 
 // Used by deno to format names in errors
@@ -711,8 +712,6 @@ impl Resource for BodyResource {
 
 #[derive(Default, Clone)]
 struct RequestContext {
-    /// Uniquely identifies the OAuthUser row for the logged-in user.  None if there was no login.
-    userid: Option<String>,
     transaction: Option<TransactionStatic>,
 }
 
@@ -772,7 +771,11 @@ impl<F: Future> Future for RequestFuture<F> {
     }
 }
 
-fn get_result_aux(path: RequestPath, req: Request<hyper::Body>) -> Result<v8::Global<v8::Value>> {
+fn get_result_aux(
+    path: RequestPath,
+    userid: &Option<String>,
+    req: Request<hyper::Body>,
+) -> Result<v8::Global<v8::Value>> {
     let mut service = get();
     let runtime = &mut service.worker.js_runtime;
 
@@ -811,11 +814,16 @@ fn get_result_aux(path: RequestPath, req: Request<hyper::Body>) -> Result<v8::Gl
     let api_version = v8::String::new(scope, path.api_version()).unwrap().into();
     let path = v8::String::new(scope, path.path()).unwrap().into();
     let call_handler: v8::Local<v8::Function> = get_member(chisel, scope, "callHandler").unwrap();
+    let userid = match userid {
+        Some(s) => v8::String::new(scope, s).unwrap().into(),
+        None => v8::undefined(scope).into(),
+    };
     let result = call_handler
         .call(
             scope,
             global_proxy.into(),
             &[
+                userid,
                 path,
                 api_version,
                 url.into(),
@@ -830,13 +838,14 @@ fn get_result_aux(path: RequestPath, req: Request<hyper::Body>) -> Result<v8::Gl
 
 async fn get_result(
     path: RequestPath,
+    userid: &Option<String>,
     req: Request<hyper::Body>,
     context: RequestContext,
 ) -> Result<v8::Global<v8::Value>> {
     // Set the current path to cover JS code that runs before
     // blocking. This in particular covers code that doesn't block at
     // all.
-    let result = with_context(context.clone(), || get_result_aux(path, req))?;
+    let result = with_context(context.clone(), || get_result_aux(path, userid, req))?;
     // We got here without blocking and now have a future representing
     // pending work for the endpoint. resolve_promise() sets the context
     // for safe execution of request_handler; we MUST NOT block (ie,
@@ -875,10 +884,10 @@ pub(crate) async fn run_js(path: String, req: Request<hyper::Body>) -> Result<Re
     let transaction = qe.start_transaction_static().await?;
     let path = RequestPath::try_from(path.as_ref()).unwrap();
     let context = RequestContext {
-        userid: crate::auth::get_user(&req).await?,
         transaction: Some(transaction.clone()),
     };
-    let result = get_result(path, req, context.clone()).await;
+    let userid = crate::auth::get_user(&req).await?;
+    let result = get_result(path, &userid, req, context.clone()).await;
     // FIXME: maybe defer creating the transaction until we need one, to avoid doing it for
     // endpoints that don't do any data access. For now, because we always create it above,
     // it should be safe to unwrap.
@@ -957,10 +966,7 @@ pub(crate) async fn compile_endpoint<P: AsRef<Path>>(
     path: String,
     code: String,
 ) -> Result<()> {
-    let context = RequestContext {
-        userid: None,
-        transaction: None,
-    };
+    let context = RequestContext { transaction: None };
 
     let promise = {
         let mut service = get();
