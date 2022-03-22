@@ -91,6 +91,10 @@ impl QueriedEntity {
     pub(crate) fn get_child_entity<'a>(&'a self, child_name: &str) -> Option<&'a QueriedEntity> {
         self.joins.get(child_name).map(|c| &c.entity)
     }
+
+    fn has_field(&self, field_name: &str) -> bool {
+        self.ty.all_fields().any(|field| field.name == field_name)
+    }
 }
 
 /// Represents JOIN operator joining `entity` to a previous QueriedEntity which holds the
@@ -446,8 +450,20 @@ impl QueryBuilder {
         let properties = get_property_chain(prop_access)?;
         assert!(!properties.is_empty());
 
+        let check_field = |entity: &QueriedEntity, field| {
+            anyhow::ensure!(
+                entity.has_field(field),
+                "expression error: entity '{}' doesn't have field '{}'",
+                entity.ty.name(),
+                field
+            );
+            Ok(())
+        };
+
         let mut field = &properties[0];
         let mut entity = &self.entity;
+        check_field(entity, field)?;
+
         for next_field in &properties[1..] {
             entity = &entity
                 .joins
@@ -460,6 +476,7 @@ impl QueryBuilder {
                 })?
                 .entity;
             field = next_field;
+            check_field(entity, field)?;
         }
         Ok(format!("\"{}\".\"{}\"", entity.table_alias, field))
     }
