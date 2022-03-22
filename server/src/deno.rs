@@ -469,11 +469,11 @@ fn op_chisel_get_secret(
 
 fn op_chisel_relational_query_create(
     op_state: &mut OpState,
-    relation: QueryOperator,
+    query: QueryOperator,
     path: (String, String),
 ) -> Result<ResourceId> {
     let (api_version, path) = path;
-    let query = json_to_query(&api_version, &path, relation)?;
+    let query = json_to_query(&api_version, &path, query)?;
     let mut runtime = runtime::get();
     let query_engine = &mut runtime.query_engine;
 
