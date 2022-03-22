@@ -100,7 +100,7 @@ fn main() {
         config.add_extension("deno");
         config.add_extension("node");
         config.constants.insert("chisel".to_owned(), chisel());
-        config.truncate_output_context_to_number_of_lines = Some(80);
+        config.truncate_output_context_to_number_of_lines = Some(500);
         let mut path = repo.clone();
         path.push("cli/tests/test-wrapper.sh");
         config.shell = path.to_str().unwrap().to_string();
