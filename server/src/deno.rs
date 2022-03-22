@@ -4,6 +4,7 @@ use crate::api::{response_template, Body, RequestPath};
 use crate::datastore::engine::IdTree;
 use crate::datastore::engine::TransactionStatic;
 use crate::datastore::engine::{QueryResults, ResultRow};
+use crate::datastore::query::QueryOperator;
 use crate::datastore::query::{json_to_query, Mutation};
 use crate::policies::FieldPolicies;
 use crate::rcmut::RcMut;
@@ -468,21 +469,11 @@ fn op_chisel_get_secret(
 
 fn op_chisel_relational_query_create(
     op_state: &mut OpState,
-    relation: serde_json::Value,
+    query: QueryOperator,
     path: (String, String),
 ) -> Result<ResourceId> {
     let (api_version, path) = path;
-    // FIXME: It is silly do create a serde_json::Value just to
-    // convert it to something else. The difficulty with decoding
-    // directly is that we need to implement visit_map to read the
-    // kind field to see what we should deserialize. We can only look
-    // once at each K,V pair, so we have to keep the V as
-    // serde_v8::value, which means we need a scope to then
-    // deserialize those. There is a scope is the decoder, but there
-    // is no way to access it from here. We would have to replace
-    // op_chisel_relational_query_create with a closure that has an
-    // Rc<DenoService>.
-    let query = json_to_query(&api_version, &path, relation)?;
+    let query = json_to_query(&api_version, &path, query)?;
     let mut runtime = runtime::get();
     let query_engine = &mut runtime.query_engine;
 
