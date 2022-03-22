@@ -127,6 +127,7 @@ async fn run(state: SharedState, mut cmd: ExecutorChannel) -> Result<()> {
     let policies = meta.load_policies().await?;
     let mut api_service = ApiService::default();
     crate::auth::init(&mut api_service);
+    crate::introspect::init(&mut api_service);
 
     let oauth_user_type = match ts.lookup_builtin_type(OAUTHUSER_TYPE_NAME) {
         Ok(Type::Object(t)) => t,

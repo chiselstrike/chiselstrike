@@ -147,6 +147,14 @@ impl ApiService {
         self.paths.lock().unwrap().remove_prefix(prefix)
     }
 
+    pub(crate) fn routes(&self) -> Vec<String> {
+        let mut result = vec![];
+        for (path, _) in self.paths.lock().unwrap().iter() {
+            result.push(path.display().to_string());
+        }
+        result
+    }
+
     async fn route_impl(&self, req: Request<hyper::Body>) -> Result<Response<Body>> {
         if let Some(route_fn) = self.find_route_fn(req.uri().path()) {
             if req.uri().path().starts_with("/__chiselstrike") {

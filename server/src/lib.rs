@@ -21,6 +21,7 @@ pub(crate) mod auth;
 pub(crate) mod datastore;
 pub(crate) mod deno;
 pub(crate) mod internal;
+pub(crate) mod introspect;
 pub(crate) mod policies;
 pub(crate) mod prefix_map;
 pub(crate) mod rcmut;
