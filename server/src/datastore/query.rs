@@ -409,17 +409,14 @@ impl QueryBuilder {
 
     fn filter_expr_to_string(&self, expr: &Expr) -> Result<String> {
         let expr_str = match &expr {
-            Expr::Literal { value } => {
-                let lit_str = match &value {
-                    Literal::Bool(lit) => (if *lit { "1" } else { "0" }).to_string(),
-                    Literal::U64(lit) => lit.to_string(),
-                    Literal::I64(lit) => lit.to_string(),
-                    Literal::F64(lit) => lit.to_string(),
-                    Literal::String(lit) => lit.to_string(),
-                    Literal::Null => "NULL".to_owned(),
-                };
-                escape_string(lit_str.as_str())
-            }
+            Expr::Literal { value } => match &value {
+                Literal::Bool(lit) => (if *lit { "1" } else { "0" }).to_string(),
+                Literal::U64(lit) => lit.to_string(),
+                Literal::I64(lit) => lit.to_string(),
+                Literal::F64(lit) => lit.to_string(),
+                Literal::String(lit) => escape_string(lit),
+                Literal::Null => "NULL".to_string(),
+            },
             Expr::Binary(binary_exp) => {
                 format!(
                     "({} {} {})",
