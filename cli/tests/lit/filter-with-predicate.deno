@@ -358,3 +358,83 @@ $CHISEL apply
 
 $CURL -o - $CHISELD_HOST/dev/filter_with_expression
 # CHECK: [Jan]
+
+
+## Filter by nonexistent field - check for errors
+
+cat << EOF > "$TEMPDIR/endpoints/filter_with_expression.ts"
+import { Person } from "../models/types.ts";
+
+export default async function chisel(req: Request) {
+    const filtered = Person.cursor()
+        .__filterWithExpression((p) => {
+            return p.age == 89;
+        }, {
+            exprType: "Binary",
+            left: {
+              exprType: "Property",
+              property: "nonexistent",
+              object: {
+                exprType: "Parameter",
+                position: 0
+              }
+            },
+            op: "Eq",
+            right: {
+              exprType: "Literal",
+              value: 89
+            }
+        });
+
+    const results = (await filtered.toArray()).map(p => p.name);
+    return new Response("[" + results.join(", ") + "]");
+}
+EOF
+
+cd "$TEMPDIR"
+$CHISEL apply
+
+$CURL -o - $CHISELD_HOST/dev/filter_with_expression
+# CHECK: expression error: entity 'Person' doesn't have field 'nonexistent'
+
+
+## Filter by nonexistent joined field - check for errors
+
+cat << EOF > "$TEMPDIR/endpoints/filter_with_expression.ts"
+import { Person } from "../models/types.ts";
+
+export default async function chisel(req: Request) {
+    const filtered = Person.cursor()
+        .__filterWithExpression((p) => {
+            return p.biography.title == "The importance of being erinaceous";
+        }, {
+            exprType: "Binary",
+            left: {
+              exprType: "Property",
+              property: "something_else",
+              object: {
+                exprType: "Property",
+                property: "biography",
+                object: {
+                  exprType: "Parameter",
+                  position: 0
+                }
+              }
+            },
+            op: "Eq",
+            right: {
+              exprType: "Literal",
+              value: "The importance of being erinaceous"
+            }
+        });
+
+    const results = (await filtered.toArray()).map(p => p.name);
+    return new Response("[" + results.join(", ") + "]");
+}
+EOF
+
+cd "$TEMPDIR"
+$CHISEL apply
+
+$CURL -o - $CHISELD_HOST/dev/filter_with_expression
+# CHECK: expression error: entity 'Biography' doesn't have field 'something_else'
