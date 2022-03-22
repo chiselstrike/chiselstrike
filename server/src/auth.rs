@@ -6,7 +6,7 @@ use crate::datastore::query::SqlValue;
 use crate::runtime;
 use crate::types::{ObjectType, Type, OAUTHUSER_TYPE_NAME};
 use crate::JsonObject;
-use anyhow::{anyhow, Result};
+use anyhow::Result;
 use futures::{Future, FutureExt};
 use hyper::{header, Request, Response, StatusCode};
 use serde_json::json;
@@ -64,14 +64,10 @@ async fn insert_user_into_db(username: &str) -> Result<String> {
         }
     }
     user.insert("username".into(), json!(username));
-    query_engine
+    Ok(query_engine
         .add_row(&oauth_user_type, &user, None)
         .await?
-        .get("id")
-        .ok_or_else(|| anyhow!("Didn't get user ID from storing a user."))?
-        .as_str()
-        .map(|s| s.to_string())
-        .ok_or_else(|| anyhow!("User ID wasn't a string."))
+        .id)
 }
 
 fn handle_callback(

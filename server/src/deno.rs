@@ -1,6 +1,7 @@
 // SPDX-FileCopyrightText: © 2021 ChiselStrike <info@chiselstrike.com>
 
 use crate::api::{response_template, Body, RequestPath};
+use crate::datastore::engine::IdTree;
 use crate::datastore::engine::TransactionStatic;
 use crate::datastore::engine::{QueryResults, ResultRow};
 use crate::datastore::query::{json_to_query, Mutation};
@@ -390,7 +391,7 @@ async fn op_chisel_store(
     _state: Rc<RefCell<OpState>>,
     content: StoreContent,
     api_version: String,
-) -> Result<serde_json::Value> {
+) -> Result<IdTree> {
     let type_name = &content.name;
     let value = &content.value;
 
@@ -522,11 +523,8 @@ async fn op_chisel_relational_query_next(
     }
 }
 
-fn op_chisel_user(_: &mut OpState, _: (), _: ()) -> Result<serde_json::Value> {
-    match with_current_context(|path| path.userid.clone()) {
-        None => Ok(serde_json::Value::Null),
-        Some(id) => Ok(serde_json::Value::String(id)),
-    }
+fn op_chisel_user(_: &mut OpState, _: (), _: ()) -> Result<Option<String>> {
+    Ok(with_current_context(|path| path.userid.clone()))
 }
 
 // Used by deno to format names in errors
