@@ -7,7 +7,7 @@ use crate::runtime;
 use crate::types::{Field, ObjectType, Type, TypeSystemError, OAUTHUSER_TYPE_NAME};
 use crate::JsonObject;
 
-use anyhow::{anyhow, Context, Result};
+use anyhow::{anyhow, Result};
 use enum_as_inner::EnumAsInner;
 use serde_derive::{Deserialize, Serialize};
 use serde_json::value::Value;
@@ -540,7 +540,7 @@ fn max_prefix(s: &str, max_len: usize) -> &str {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type")]
-enum QueryOperator {
+pub(crate) enum QueryOperator {
     BaseEntity {
         name: String,
     },
@@ -610,10 +610,8 @@ pub(crate) fn type_to_query(ty: &Arc<ObjectType>) -> Result<Query> {
 pub(crate) fn json_to_query(
     api_version: &str,
     path: &str,
-    val: serde_json::Value,
+    op_chain: QueryOperator,
 ) -> Result<Query> {
-    let op_chain: QueryOperator =
-        serde_json::from_value(val).context("failed to deserialize QueryOperator from JSON")?;
     let builder = convert_to_query_builder(api_version, path, op_chain)?;
     builder.build()
 }
