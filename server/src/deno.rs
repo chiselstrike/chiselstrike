@@ -745,11 +745,7 @@ use context::with_context;
 use context::with_current_context;
 
 fn current_transaction() -> Result<TransactionStatic> {
-    with_current_context(|path| {
-        path.transaction
-            .clone()
-            .ok_or_else(|| anyhow!("no active transaction"))
-    })
+    with_current_context(|path| path.transaction.clone().context("no active transaction"))
 }
 
 // This is a wrapper future that sets the context before polling. This

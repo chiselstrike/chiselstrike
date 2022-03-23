@@ -1,5 +1,5 @@
 use crate::chisel::{AddTypeRequest, FieldDefinition};
-use anyhow::{anyhow, bail, ensure, Result};
+use anyhow::{anyhow, bail, ensure, Context, Result};
 use std::collections::BTreeSet;
 use std::path::Path;
 use swc_common::sync::Lrc;
@@ -58,9 +58,7 @@ fn type_to_string(handler: &Handler, x: &TsType) -> Result<String> {
 }
 
 fn get_field_type(handler: &Handler, x: &Option<TsTypeAnn>) -> Result<String> {
-    let t = x
-        .clone()
-        .ok_or_else(|| anyhow!("type ann temporarily mandatory"))?;
+    let t = x.clone().context("type ann temporarily mandatory")?;
 
     type_to_string(handler, &t.type_ann)
 }

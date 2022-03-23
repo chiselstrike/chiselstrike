@@ -106,7 +106,7 @@ async fn remove_field_query(
 ) -> anyhow::Result<()> {
     let field_id = field
         .id
-        .ok_or_else(|| anyhow!("logical error. Trying to delete field without id"))?;
+        .context("logical error. Trying to delete field without id")?;
 
     let query = sqlx::query("DELETE FROM fields WHERE field_id = $1").bind(field_id);
     execute!(transaction, query)?;
@@ -126,7 +126,9 @@ async fn insert_field_query(
     recently_added_type_id: Option<i32>,
     field: &Field,
 ) -> anyhow::Result<()> {
-    let type_id = ty.meta_id.xor(recently_added_type_id).ok_or_else(|| anyhow!("logical error. Seems like a type is at the same type pre-existing and recently added??"))?;
+    let type_id = ty.meta_id.xor(recently_added_type_id).context(
+        "logical error. Seems like a type is at the same type pre-existing and recently added??",
+    )?;
 
     let add_field = match &field.user_provided_default() {
         None => {
@@ -354,7 +356,7 @@ impl MetaService {
     ) -> anyhow::Result<()> {
         let type_id = ty
             .meta_id
-            .ok_or_else(|| anyhow!("logical error. Trying to delete type without id"))?;
+            .context("logical error. Trying to delete type without id")?;
 
         for field in ty.user_fields() {
             remove_field_query(transaction, field).await?;
