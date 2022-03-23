@@ -618,9 +618,7 @@ impl QueryEngine {
             field_names.push(f.name.clone());
             if f.type_ == Type::Id {
                 if let Some(idstr) = val {
-                    let idstr = idstr
-                        .as_str()
-                        .ok_or_else(|| anyhow!("invalid ID: It is not a string"))?;
+                    let idstr = idstr.as_str().context("invalid ID: It is not a string")?;
                     Uuid::parse_str(idstr).map_err(|_| anyhow!("invalid ID '{}'", idstr))?;
                 }
                 anyhow::ensure!(id_bind.is_empty(), "More than one ID??");
