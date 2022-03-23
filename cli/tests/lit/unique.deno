@@ -13,10 +13,10 @@ export class BlogPost extends ChiselEntity {
 }
 EOF
 cat << EOF > "$TEMPDIR/endpoints/post.ts"
-import { BlogPost } from "../models/post";
+import { BlogPost } from "../models/post.ts";
 import { responseFromJson } from "@chiselstrike/api";
 
-export default async function chisel(req) {
+export default async function chisel(req: Request) {
     if (req.method == 'POST') {
         const payload = await req.json();
         const content = payload["content"] ?? "";
