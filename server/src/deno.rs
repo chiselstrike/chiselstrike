@@ -24,7 +24,6 @@ use deno_core::ModuleSource;
 use deno_core::ModuleSourceFuture;
 use deno_core::ModuleSpecifier;
 use deno_core::ModuleType;
-use deno_core::OpFn;
 use deno_core::OpState;
 use deno_core::RcRef;
 use deno_core::Resource;
@@ -49,9 +48,6 @@ use hyper::Method;
 use hyper::{Request, Response, StatusCode};
 use log::debug;
 use once_cell::unsync::OnceCell;
-use pin_project::pin_project;
-use serde::de::DeserializeOwned;
-use serde::Serialize;
 use serde_derive::Deserialize;
 use std::cell::RefCell;
 use std::collections::HashMap;
@@ -280,9 +276,9 @@ impl DenoService {
         let ext = Extension::builder()
             .ops(vec![
                 ("op_format_file_name", op_sync(op_format_file_name)),
-                ("chisel_read_body", op_req(op_chisel_read_body)),
-                ("chisel_store", op_req(op_chisel_store)),
-                ("chisel_entity_delete", op_req(op_chisel_entity_delete)),
+                ("chisel_read_body", op_async(op_chisel_read_body)),
+                ("chisel_store", op_async(op_chisel_store)),
+                ("chisel_entity_delete", op_async(op_chisel_entity_delete)),
                 ("chisel_get_secret", op_sync(op_chisel_get_secret)),
                 (
                     "chisel_relational_query_create",
@@ -290,7 +286,7 @@ impl DenoService {
                 ),
                 (
                     "chisel_relational_query_next",
-                    op_req(op_chisel_relational_query_next),
+                    op_async(op_chisel_relational_query_next),
                 ),
             ])
             .build();
@@ -364,23 +360,6 @@ async fn op_chisel_read_body(
     Ok(fut.await?.transpose()?.map(|x| x.to_vec().into()))
 }
 
-fn op_req<T1, T2, R, F, Fut>(f: F) -> Box<OpFn>
-where
-    T1: DeserializeOwned,
-    T2: DeserializeOwned,
-    R: Serialize + 'static,
-    Fut: Future<Output = anyhow::Result<R>> + 'static,
-    F: Fn(Rc<RefCell<OpState>>, T1, T2) -> Fut + 'static,
-{
-    op_async(move |s, a1, a2| {
-        let inner = f(s, a1, a2);
-        with_current_context(move |c| {
-            let context = c.clone();
-            RequestFuture { context, inner }
-        })
-    })
-}
-
 #[derive(Deserialize)]
 struct StoreContent {
     name: String,
@@ -388,7 +367,7 @@ struct StoreContent {
 }
 
 async fn op_chisel_store(
-    _state: Rc<RefCell<OpState>>,
+    state: Rc<RefCell<OpState>>,
     content: StoreContent,
     api_version: String,
 ) -> Result<IdTree> {
@@ -410,8 +389,10 @@ async fn op_chisel_store(
         let query_engine = runtime.query_engine.clone();
         (query_engine, ty)
     };
-
-    let transaction = current_transaction()?;
+    let transaction = {
+        let state = state.borrow();
+        current_transaction(&state)?
+    };
     let mut transaction = transaction.lock().await;
     Ok(query_engine
         .add_row(&ty, value, Some(transaction.deref_mut()))
@@ -482,7 +463,7 @@ fn op_chisel_relational_query_create(
     let mut runtime = runtime::get();
     let query_engine = &mut runtime.query_engine;
 
-    let transaction = current_transaction()?;
+    let transaction = current_transaction(op_state)?;
     let stream = query_engine.query(transaction, query)?;
     let resource = QueryStreamResource {
         stream: RefCell::new(stream),
@@ -631,17 +612,15 @@ impl Future for ResolveFuture {
 }
 
 fn resolve_promise(
-    context: RequestContext,
     js_promise: v8::Global<v8::Value>,
 ) -> impl Future<Output = Result<v8::Global<v8::Value>>> {
-    let inner = ResolveFuture { js_promise };
-    RequestFuture { context, inner }
+    ResolveFuture { js_promise }
 }
 
 async fn get_read_future(
-    read_tpl: Option<(v8::Global<v8::Function>, RequestContext)>,
+    read_tpl: Option<v8::Global<v8::Function>>,
 ) -> Result<Option<(Box<[u8]>, ())>> {
-    let (read, context) = match read_tpl {
+    let read = match read_tpl {
         Some(x) => x,
         None => {
             return Ok(None);
@@ -659,7 +638,7 @@ async fn get_read_future(
             .ok_or(Error::NotAResponse)?;
         v8::Global::new(scope, res)
     };
-    let read_result = resolve_promise(context, js_promise).await?;
+    let read_result = resolve_promise(js_promise).await?;
     let mut service = get();
     let runtime = &mut service.worker.js_runtime;
     let scope = &mut runtime.handle_scope();
@@ -680,7 +659,6 @@ async fn get_read_future(
 fn get_read_stream(
     runtime: &mut JsRuntime,
     global_response: v8::Global<v8::Value>,
-    context: RequestContext,
 ) -> Result<impl Stream<Item = Result<Box<[u8]>>>> {
     let scope = &mut runtime.handle_scope();
     let response = global_response
@@ -691,7 +669,7 @@ fn get_read_stream(
     let read = match get_member::<v8::Local<v8::Function>>(response, scope, "read") {
         Ok(read) => {
             let read = v8::Global::new(scope, read);
-            Some((read, context))
+            Some(read)
         }
         Err(_) => None,
     };
@@ -710,61 +688,24 @@ impl Resource for BodyResource {
     }
 }
 
-#[derive(Default, Clone)]
-struct RequestContext {
-    transaction: Option<TransactionStatic>,
+fn current_transaction(st: &OpState) -> Result<TransactionStatic> {
+    st.try_borrow::<TransactionStatic>()
+        .cloned()
+        .ok_or_else(|| anyhow!("no active transaction"))
 }
 
-mod context {
-    use crate::deno::RequestContext;
-    use std::cell::RefCell;
-    thread_local! {
-        static CURRENT_CONTEXT : RefCell<Option<RequestContext>> = RefCell::new(None);
-    }
-    pub(super) fn with_current_context<F, R>(f: F) -> R
-    where
-        F: FnOnce(&RequestContext) -> R,
-    {
-        CURRENT_CONTEXT.with(|cx| f(cx.borrow().as_ref().unwrap()))
-    }
-
-    pub(super) fn with_context<F, R>(nc: RequestContext, f: F) -> R
-    where
-        F: FnOnce() -> R,
-    {
-        CURRENT_CONTEXT.with(|cx| {
-            let old = cx.borrow().clone();
-            cx.replace(Some(nc));
-            let ret = f();
-            cx.replace(old);
-            ret
-        })
-    }
-}
-use context::with_context;
-use context::with_current_context;
-
-fn current_transaction() -> Result<TransactionStatic> {
-    with_current_context(|path| path.transaction.clone().context("no active transaction"))
+fn take_current_transaction() -> Option<TransactionStatic> {
+    let mut service = get();
+    let service: &mut DenoService = &mut service;
+    let runtime = &mut service.worker.js_runtime;
+    let state = runtime.op_state();
+    let mut state = state.borrow_mut();
+    // FIXME: Return a Result once all concurrency issues are fixed.
+    state.try_take::<TransactionStatic>()
 }
 
-// This is a wrapper future that sets the context before polling. This
-// is necessary, since future execution can interleave steps from
-// different requests.
-#[pin_project]
-struct RequestFuture<F: Future> {
-    context: RequestContext,
-    #[pin]
-    inner: F,
-}
-
-impl<F: Future> Future for RequestFuture<F> {
-    type Output = F::Output;
-
-    fn poll(self: Pin<&mut Self>, c: &mut Context<'_>) -> Poll<Self::Output> {
-        let this = self.project();
-        with_context(this.context.clone(), || this.inner.poll(c))
-    }
+fn set_current_transaction(st: &mut OpState, transaction: TransactionStatic) {
+    st.put::<TransactionStatic>(transaction);
 }
 
 fn get_result_aux(
@@ -836,40 +777,48 @@ async fn get_result(
     path: RequestPath,
     userid: &Option<String>,
     req: Request<hyper::Body>,
-    context: RequestContext,
 ) -> Result<v8::Global<v8::Value>> {
     // Set the current path to cover JS code that runs before
     // blocking. This in particular covers code that doesn't block at
     // all.
-    let result = with_context(context.clone(), || get_result_aux(path, userid, req))?;
+    let result = get_result_aux(path, userid, req)?;
     // We got here without blocking and now have a future representing
     // pending work for the endpoint. resolve_promise() sets the context
     // for safe execution of request_handler; we MUST NOT block (ie,
     // `await`) between with_context() above and resolve_promise()
     // below. Otherwise, request_handler may begin executing with another,
     // wrong context.
-    resolve_promise(context, result).await
+    resolve_promise(result).await
 }
 
-async fn commit_transaction(
-    transaction: TransactionStatic,
-) -> Result<Option<(Box<[u8]>, TransactionStatic)>, anyhow::Error> {
-    match crate::datastore::QueryEngine::commit_transaction_static(transaction).await {
-        Ok(()) => Ok(None),
-        Err(e) => {
-            warn!("Commit failed: {}", e);
-            Err(e)
+async fn commit_transaction(_: ()) -> Result<Option<(Box<[u8]>, ())>, anyhow::Error> {
+    // FIXME: We should always have a transaction in here
+    if let Some(transaction) = take_current_transaction() {
+        match crate::datastore::QueryEngine::commit_transaction_static(transaction).await {
+            Ok(()) => Ok(None),
+            Err(e) => {
+                warn!("Commit failed: {}", e);
+                Err(e)
+            }
         }
+    } else {
+        Ok(None)
     }
 }
 
 pub(crate) async fn run_js(path: String, req: Request<hyper::Body>) -> Result<Response<Body>> {
     let qe = runtime::get().query_engine.clone();
+    let transaction = qe.start_transaction_static().await?;
+    let path = RequestPath::try_from(path.as_ref()).unwrap();
+    let userid = crate::auth::get_user(&req).await?;
 
     {
         let mut service = get();
         let service: &mut DenoService = &mut service;
         let runtime = &mut service.worker.js_runtime;
+        let state = runtime.op_state();
+        let mut state = state.borrow_mut();
+        set_current_transaction(&mut state, transaction);
         if service.inspector.is_some() {
             runtime
                 .inspector()
@@ -877,16 +826,13 @@ pub(crate) async fn run_js(path: String, req: Request<hyper::Body>) -> Result<Re
         }
     }
 
-    let transaction = qe.start_transaction_static().await?;
-    let path = RequestPath::try_from(path.as_ref()).unwrap();
-    let context = RequestContext {
-        transaction: Some(transaction.clone()),
-    };
-    let userid = crate::auth::get_user(&req).await?;
-    let result = get_result(path, &userid, req, context.clone()).await;
+    let result = get_result(path, &userid, req).await;
     // FIXME: maybe defer creating the transaction until we need one, to avoid doing it for
     // endpoints that don't do any data access. For now, because we always create it above,
     // it should be safe to unwrap.
+
+    let transaction = take_current_transaction();
+
     let result = result?;
 
     let body = {
@@ -915,8 +861,8 @@ pub(crate) async fn run_js(path: String, req: Request<hyper::Body>) -> Result<Re
         let service: &mut DenoService = &mut service;
 
         let runtime = &mut service.worker.js_runtime;
-        let stream = get_read_stream(runtime, result.clone(), context)?;
-        let commit_stream = try_unfold(transaction.clone(), commit_transaction);
+        let stream = get_read_stream(runtime, result.clone())?;
+        let commit_stream = try_unfold((), commit_transaction);
         let stream = stream.chain(commit_stream);
 
         let scope = &mut runtime.handle_scope();
@@ -947,6 +893,16 @@ pub(crate) async fn run_js(path: String, req: Request<hyper::Body>) -> Result<Re
 
         builder.body(Body::Stream(Box::pin(stream)))?
     };
+
+    // FIXME: We should always have a transaction in here
+    if let Some(transaction) = transaction {
+        let mut service = get();
+        let service: &mut DenoService = &mut service;
+        let runtime = &mut service.worker.js_runtime;
+        let state = runtime.op_state();
+        let mut state = state.borrow_mut();
+        set_current_transaction(&mut state, transaction);
+    }
     Ok(body)
 }
 
@@ -962,8 +918,6 @@ pub(crate) async fn compile_endpoint<P: AsRef<Path>>(
     path: String,
     code: String,
 ) -> Result<()> {
-    let context = RequestContext { transaction: None };
-
     let promise = {
         let mut service = get();
         let service: &mut DenoService = &mut service;
@@ -1000,7 +954,7 @@ pub(crate) async fn compile_endpoint<P: AsRef<Path>>(
             .unwrap();
         v8::Global::new(scope, promise)
     };
-    resolve_promise(context, promise).await?;
+    resolve_promise(promise).await?;
     Ok(())
 }
 
