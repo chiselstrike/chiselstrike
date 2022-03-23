@@ -120,8 +120,6 @@ struct Column {
     name: String,
     /// Name of the table storing this column.
     table_name: String,
-    /// Index of a position of this column in SQL SELECT query.
-    index: usize,
     /// Entity field corresponding to this column.
     field: Field,
 }
@@ -139,7 +137,6 @@ impl Column {
 /// ColumnAlias is used to uniquely identify a `Column` that is to be retrieved
 /// from the database. It's string representation is used in the SELECT statement
 /// to identify the column which is then utilized by filtering and sorting statements.
-#[derive(PartialEq, Eq, PartialOrd, Ord, Hash)]
 struct ColumnAlias {
     /// Name of the entity field that corresponds to this retrieved column.
     field_name: String,
@@ -162,9 +159,8 @@ impl fmt::Display for ColumnAlias {
 /// structure that contains raw SQL query string and additional data necessary for
 /// JSON response reconstruction and filtering.
 struct QueryBuilder {
-    /// Mapping between column alias (uniquely identifying a selected column) and Columns that
-    /// will be retrieved from the database.
-    columns: HashMap<ColumnAlias, Column>,
+    /// Columns that will be retrieved from the database in order defined by this vector.
+    columns: Vec<Column>,
     /// Entity object representing entity that is being retrieved along with necessary joins
     /// and nested entities
     entity: QueriedEntity,
@@ -184,7 +180,7 @@ struct QueryBuilder {
 impl QueryBuilder {
     fn new(base_type: Arc<ObjectType>) -> Self {
         Self {
-            columns: HashMap::default(),
+            columns: vec![],
             entity: QueriedEntity {
                 ty: base_type.clone(),
                 fields: vec![],
@@ -201,16 +197,6 @@ impl QueryBuilder {
 
     fn base_type(&self) -> &Arc<ObjectType> {
         &self.entity.ty
-    }
-
-    fn get_column(&self, alias: &ColumnAlias) -> Result<&Column> {
-        self.columns.get(alias).ok_or_else(|| {
-            anyhow!(
-                "failed to locate column for table alias `{}` and field name `{}`",
-                alias.table_name,
-                alias.field_name
-            )
-        })
     }
 
     /// Constructs a query builder ready to build an expression querying all fields of a
@@ -266,13 +252,11 @@ impl QueryBuilder {
             column_idx,
             transform,
         };
-        let column = Column {
+        self.columns.push(Column {
             name: field.name.to_owned(),
             table_name: table_name.to_owned(),
-            index: column_idx,
             field: field.clone(),
-        };
-        self.columns.insert(column.alias(), column);
+        });
         select_field
     }
 
@@ -435,10 +419,7 @@ impl QueryBuilder {
 
     fn make_column_string(&self) -> String {
         let mut column_string = String::new();
-        let mut columns: Vec<_> = self.columns.iter().map(|(_, c)| c).collect();
-        columns.sort_by_key(|c| c.index);
-
-        for c in columns {
+        for c in &self.columns {
             let col = match c.field.default_value() {
                 Some(dfl) => format!(
                     "coalesce(\"{}\".\"{}\",'{}') AS \"{}\",",
@@ -562,9 +543,7 @@ impl QueryBuilder {
                 field_name: sort.field_name.to_owned(),
                 table_name: self.base_type().backing_table().to_owned(),
             };
-            let c = self.get_column(&c_alias)?;
-
-            format!("ORDER BY \"{}\" {}", c.alias(), order)
+            format!("ORDER BY \"{}\" {}", c_alias, order)
         } else {
             "".into()
         };
