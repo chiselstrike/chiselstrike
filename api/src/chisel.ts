@@ -704,7 +704,7 @@ export function labels(..._val: string[]) {
     };
 }
 
-export function unique(): void {
+export function unique(_target: unknown, _name: string): void {
     // chisel-decorator, no content
 }
 
