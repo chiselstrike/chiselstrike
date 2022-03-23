@@ -6,9 +6,9 @@ $CHISEL status
 
 # CHECK: Server status is OK
 
-$CURL -o - $CHISELD_LOCALHOST/status
+$CURL -o - $CHISELD_INTERNAL/status
 # CHECK: ok
-$CURL -o - $CHISELD_LOCALHOST/readiness
+$CURL -o - $CHISELD_INTERNAL/readiness
 # CHECK: ready
-$CURL -o - $CHISELD_LOCALHOST/liveness
+$CURL -o - $CHISELD_INTERNAL/liveness
 # CHECK: alive

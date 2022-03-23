@@ -93,7 +93,7 @@ fn main() {
     env::set_var("CHISEL", chisel());
     env::set_var("RMCOLOR", "sed s/\x1B\\[[0-9;]*[A-Za-z]//g");
     env::set_var("CHISELD_HOST", "localhost:8080");
-    env::set_var("CHISELD_LOCALHOST", "localhost:9090");
+    env::set_var("CHISELD_INTERNAL", "localhost:9090");
     env::set_var("CURL", "curl -S -s -i -w '\\n'");
     env::set_var("CREATE_APP", create_app);
     env::set_var("TEST_DATABASE", opt.database.to_string());
