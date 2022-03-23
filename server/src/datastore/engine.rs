@@ -498,7 +498,7 @@ impl QueryEngine {
 
         for field in ty.all_fields() {
             let field_value = ty_value.get(&field.name);
-            if field_value.is_none() && field.is_optional {
+            if (field_value.is_none() || field_value.unwrap().is_null()) && field.is_optional {
                 continue;
             }
             let incompatible_data = || QueryEngine::incompatible(field, ty);
@@ -611,8 +611,13 @@ impl QueryEngine {
             if val.is_none() && f.is_optional {
                 continue;
             }
-            i += 1;
-            let bind = std::format!("${}", i);
+            let bind = if f.is_optional && val.unwrap().is_null() {
+                // sqlx has trouble binding null values in some cases; insert them verbatim.
+                "NULL".to_string()
+            } else {
+                i += 1;
+                std::format!("${}", i)
+            };
             field_binds.push_str(&bind);
             field_binds.push(',');
 
