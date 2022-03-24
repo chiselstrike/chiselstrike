@@ -45,6 +45,7 @@ use futures::FutureExt;
 use futures::StreamExt;
 use hyper::body::HttpBody;
 use hyper::Method;
+use hyper::Uri;
 use hyper::{Request, Response, StatusCode};
 use log::debug;
 use once_cell::unsync::OnceCell;
@@ -721,8 +722,17 @@ fn get_result_aux(
     let scope = &mut runtime.handle_scope();
     let global_proxy = global_context.open(scope).global(scope);
 
+    // Hyper gives us a URL with just the path, make it a full URL
+    // before passing it to deno.
+    // FIXME: Use the real values for this server.
+    let url = Uri::builder()
+        .scheme("http")
+        .authority("chiselstrike.com")
+        .path_and_query(req.uri().path_and_query().unwrap().clone())
+        .build()
+        .unwrap();
     // FIXME: this request conversion is probably simplistic. Check deno/ext/http/lib.rs
-    let url = v8::String::new(scope, &req.uri().to_string()).unwrap();
+    let url = v8::String::new(scope, &url.to_string()).unwrap();
     let method = req.method();
     let method_value = v8::String::new(scope, method.as_str()).unwrap().into();
 
