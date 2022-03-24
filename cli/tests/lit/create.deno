@@ -1,0 +1,32 @@
+# SPDX-FileCopyrightText: © 2022 ChiselStrike <info@chiselstrike.com>
+
+# RUN: sh -e @file
+
+cd "$TEMPDIR"
+
+cat << EOF > "$TEMPDIR/models/types.ts"
+import { ChiselEntity } from "@chiselstrike/api";
+
+export class Person extends ChiselEntity {
+    name: string = "";
+    isQueen: boolean = false;
+}
+EOF
+
+cat << EOF > "$TEMPDIR/endpoints/new.ts"
+import { Person } from "../models/types.ts";
+import { responseFromJson } from "@chiselstrike/api"
+
+export default async function chisel(req: Request) {
+    const ret = await Person.create({ 'name': 'Elizabeth', 'isQueen': true});
+    return responseFromJson(ret);
+}
+EOF
+
+$CHISEL apply
+# CHECK: Model defined: Person
+# CHECK: End point defined: /dev/new
+
+$CURL -X POST $CHISELD_HOST/dev/new
+# CHECK: HTTP/1.1 200 OK
+# CHECK: "name":"Elizabeth","isQueen":true

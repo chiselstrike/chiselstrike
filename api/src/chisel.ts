@@ -644,6 +644,30 @@ export class ChiselEntity {
     static crud(_ignored?: string) {
         return crud(this, "");
     }
+
+    /**
+     * Creates a new object and persists it, in a single step
+     *
+     * @example
+     * ```typescript
+     * export class User extends ChiselEntity {
+     *   username: string,
+     *   email: string,
+     * }
+     * const user = await User.create({ username: "alice", email: "alice@example.com" });
+     * ```
+     *
+     * Equivalent to calling `const user = User.build(...); await user.save()`
+     */
+    static async create<T extends ChiselEntity>(
+        this: { new (): T },
+        ...properties: Record<string, unknown>[]
+    ): Promise<T> {
+        const result = new this();
+        Object.assign(result, ...properties);
+        await result.save();
+        return result;
+    }
 }
 
 export class OAuthUser extends ChiselEntity {
