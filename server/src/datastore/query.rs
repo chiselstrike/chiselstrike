@@ -330,8 +330,8 @@ impl QueryBuilder {
                 let nested_table = format!(
                     "JOIN{}_{}_TO_{}",
                     self.join_counter,
-                    current_table,
-                    nested_ty.backing_table()
+                    ty.name(),
+                    nested_ty.name()
                 );
                 // PostgreSQL has a limit on identifiers to be at most 63 bytes long.
                 let nested_table = max_prefix(nested_table.as_str(), 63).to_owned();
