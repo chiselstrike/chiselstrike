@@ -6,10 +6,12 @@ sidebar_position: 2
 ## Defining Entities
 
 Entities represent the domain objects of your application.
-For example, in a blogging platform, you will have entities such as `BlogPost`, `BlogComment`, `Author`, and so on.
-The set of entities in your application represents the domain model, which is why in ChiselStrike, entities are defined in your project's `models` directory.
 
-For example, to define an entity `User` that represents a user in your application, you can add the following TypeScript class to your existing models file:
+For example, in a blogging platform, you will have entities such as `BlogPost`, `BlogComment`, `Author`, and so on.
+
+We call the definition of these entities 'models'. 
+
+To define an entity `User`, you can add the following TypeScript class to your existing models file:
 
 ```typescript title="models/models.ts"
 import { ChiselEntity, labels } from "@chiselstrike/api"
@@ -26,13 +28,13 @@ export class User extends ChiselEntity {
 }
 ```
 
-The ChiselStrike runtime picks up this entity definition in the `models` directory and automatically does the necessary adjustments to the underlying backing datastore so that the entity can be persisted.
+The ChiselStrike runtime picks up this entity definition in the `models` directory and automatically makes the necessary adjustments to the underlying backing datastore so that the entity can be persisted.
 
 ## Persisting Entities
 
 The `ChiselEntity` base class that our `User` entity extends provides a `save()` method, which you can use to persist your entity.
 
-We can, for example, write the following endpoint that takes input as JSON, builds a `User` entity, and persists it with the `save()` method as follows:
+Here is an example of an endpoint that takes input as JSON and saves a User to the datastore:
 
 ```typescript title="endpoints/create.ts"
 import { responseFromJson } from "@chiselstrike/api"
@@ -49,21 +51,22 @@ export default async function (req) {
 }
 ```
 
-You can now access the `/dev/create` endpoint:
+We can now create a user through a REST post!:
 
 ```bash
 curl -d '{"username": "alice", "email": "alice@example.com", "city": "Cambridge" }' localhost:8080/dev/create
 ```
 
-to see `curl` report the following:
+and we'll get the following response:
+
 
 ```console
 "Created user alice with id 72325865-1887-4604-a127-025919ca281c"
 ```
 
-Please note that, as discussed in the [Getting Started](intro.md) section, the ChiselStrike runtime assigns an `id` to your entity automatically upon `save()`. If you want to _update_ your entity, you need to either know its `id` from another object or external source or query it to obtain an entity with an `id`.
+As discussed in the [Getting Started](intro.md) section, the ChiselStrike runtime assigns an `id` to your entity automatically upon `save()`. If you want to _update_ your entity, you need to either know its `id`.  The ID can be returned when you create the object, or you can query for it.
 
-For example, you could write the following endpoint that takes the same JSON, but updates the `User` entity based on the provided `username`:
+Still, you are not technically limited to making every endpoint speak follow REST principles by using ids. For example, you could write the following 'update' endpoint that recieves the same JSON, but finds the `User` entity based on the provided `username`:
 
 ```typescript title="endpoints/update.ts"
 import { responseFromJson } from "@chiselstrike/api";
@@ -90,31 +93,13 @@ export default async function (req) {
 }
 ```
 
-You can now update an entity using the `/dev/update` endpoint issuing a read-modify-write pattern:
-
-```bash
-curl -d '{"username": "alice", "email": "alice@mit.edu", "city": "Cambridge" }' localhost:8080/dev/update
-```
-or by explicitly mentioning the id:
-
-
-```bash
-curl -d '{"id": "72325865-1887-4604-a127-025919ca281c", "username": "alice", "email": "alice@mit.edu", "city": "Cambridge" }' localhost:8080/dev/update
-```
-
-which would both produce the following `curl` report:
-
-```console
-"Updated alice id 72325865-1887-4604-a127-025919ca281c"
-```
-
 ## Querying Entities
 
-We have now seen how to define entities and how to persist them, but also saw a glimpse of how to query them with the `User.findOne()` method call when we updated the entity.
+In some of the above examples, we've previewed how to query objects using the `User.findOne()` method call.
 
-The `ChiselEntity` base class provides two convenience methods, `findOne()` and `findMany()`, which you can use to query for entities of that type. Both of the method take an object as an argument, which represents the filtering restrictions.
+There are two search methods `findOne()` and `findMany()` for querying.
 
-For example, to query one entity with a given `username`, you could define the following endpoint:
+For example, to query one entity with a given `username`, we could use the following example code in an endpoint:
 
 ```typescript title="endpoints/find-one.ts"
 import { responseFromJson } from "@chiselstrike/api"
@@ -139,7 +124,9 @@ and see `curl` report:
 "Found alice"
 ```
 
-To find multiple entities, you can use the `findMany()` method. For example, you can write the following endpoint:
+FIXME - show what happens when it fails.
+
+To find multiple entities, use the `findMany()` method:
 
 ```typescript title="endpoints/find-many.ts"
 import { responseFromJson } from "@chiselstrike/api"
@@ -158,7 +145,7 @@ and query it with `/dev/find-many`:
 curl -d '{ "city": "Cambridge" }' localhost:8080/dev/find-many
 ```
 
-and see `curl` report:
+which returns:
 
 ```console
 "Found alice"
@@ -170,19 +157,19 @@ We can create more entities with:
 curl -d '{"username": "bob", "email": "bob@example.com", "city": "Cambridge" }' localhost:8080/dev/create
 ```
 
-and see `curl` report:
+which returns:
 
 ```console
 "Created bob"
 ```
 
-We can then invoke the `/dev/find-many` endpoint:
+We can then invoke the `/dev/find-many` endpoint again:
 
 ```bash
 curl -d '{ "city": "Cambridge" }' localhost:8080/dev/find-many
 ```
 
-To see that `findMany()` returns them if they match the restrictions:
+which returns additional results:
 
 ```console
 "Found alice,bob"
@@ -202,6 +189,8 @@ and see `curl` report:
 "Found alice,bob"
 ```
 
+FIXME: mention pagination 
+
 :::note
 The `findMany()` method is convenient, but also problematic if you have a lot of
 entities stored because loading them can take a lot of time and memory. In future
@@ -210,20 +199,20 @@ releases of ChiselStrike, the runtime will enforce a maximum number of entities
 runtime will also provide optional pagination for the `findMany()` method.
 :::
 
+
+[//]: #FIXME: simplify
+
 ## Cursors
 
-The `findOne` and `findMany()` methods are convenient, but the interface is not
-composable, and can become hard to use for more complex queries. ChiselStrike
-provides a cursor-based API for writing composable queries.
+The `findOne` and `findMany()` methods are convenient, but for more advanced use, ChiselStrike
+provides a cursor API for composable queries.
 
-A cursor can be thought of as an index to an array of entities in the data store.
+By composable, when mean that you can even write functions that build up queries programatically
+with multiple calls chained together.
+
 The `ChiselEntity` base class provides a `cursor()` method to obtain a `ChiselCursor`.
-The `ChiselCursor` class provides variety of composable operations, such as `filter()`, `take()`, `select()`, and so on for writing complex queries.
-The actual query uses _deferred execution_, which allows the ChiselStrike runtime to optimize the query.
 
-:::note
-The ChiselStrike runtime does not perform query optimizations in the current release, but will do that in future releases.
-:::
+The `ChiselCursor` class provides variety of composable operations, such as `filter()`, `take()`, `select()`, and so on for writing complex queries.
 
 For example, the `findOne()` example could be written using the cursor-based API as follows:
 
