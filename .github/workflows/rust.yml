@@ -11,6 +11,7 @@ env:
   REGISTRY: ghcr.io
   IMAGE_NAME: ${{ github.repository }}
   nightly-version: nightly-2022-03-15
+  POSTGRES_PASSWORD: postgres
 
 jobs:
   build:
@@ -19,7 +20,7 @@ jobs:
       postgres:
         image: postgres
         env:
-          POSTGRES_PASSWORD: postgres
+          POSTGRES_PASSWORD: "$POSTGRES_PASSWORD"
         options: >-
           --health-cmd pg_isready
           --health-interval 10s
@@ -121,4 +122,4 @@ jobs:
       uses: actions-rs/cargo@v1
       with:
           command: test
-          args: -p cli --test integration_tests -- --database postgres --database-host localhost --database-user postgres --database-password postgres
+          args: -p cli --test integration_tests -- --database postgres --database-user postgres --database-password "$POSTGRES_PASSWORD"
