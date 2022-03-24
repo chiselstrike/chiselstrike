@@ -15,6 +15,18 @@ env:
 jobs:
   build:
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres
+        env:
+          POSTGRES_PASSWORD: postgres
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
     steps:
     - name: checkout repo
       uses: actions/checkout@v2
@@ -104,3 +116,9 @@ jobs:
       uses: actions-rs/cargo@v1
       with:
           command: test
+
+    - name: Run integration tests against Postgres
+      uses: actions-rs/cargo@v1
+      with:
+          command: test
+          args: -p cli --test integration_tests -- --database postgres --database-host localhost --database-user postgres --database-password postgres
