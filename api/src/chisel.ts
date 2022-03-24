@@ -718,7 +718,9 @@ export async function loggedInUser(): Promise<OAuthUser | undefined> {
 }
 
 // Handlers that have been compiled but are not yet serving requests.
-type requestHandler = (req: Request) => Promise<Response>;
+type requestHandler = (
+    req: Request,
+) => Promise<Response | Promise<Response | unknown> | unknown>;
 const nextHandlers: Record<string, requestHandler> = {};
 const handlers: Record<string, requestHandler> = {};
 
@@ -780,7 +782,15 @@ export async function callHandler(
     }
     const req = new Request(url, init);
     const fullPath = "/" + apiVersion + path;
-    const res = await handlers[fullPath](req);
+
+    const rawRes = await Promise.resolve(await handlers[fullPath](req));
+    let res;
+    if (rawRes instanceof Response) {
+        res = rawRes;
+    } else {
+        res = responseFromJson(rawRes);
+    }
+
     const resHeaders: [string, string][] = [];
     for (const h of res.headers) {
         resHeaders.push(h);

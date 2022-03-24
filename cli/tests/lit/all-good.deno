@@ -1,0 +1,34 @@
+# SPDX-FileCopyrightText: © 2022 ChiselStrike <info@chiselstrike.com>
+
+# RUN: sh -e @file
+
+cat << EOF > "$TEMPDIR/endpoints/response.ts"
+export default async function chisel(req: Request) {
+    return new Response("chisel");
+}
+EOF
+
+cat << EOF > "$TEMPDIR/endpoints/json.ts"
+export default async function chisel(req: Request) {
+    return { "key": "value" }
+}
+EOF
+
+cat << EOF > "$TEMPDIR/endpoints/promise.ts"
+async function foo() {
+    return { "key": "async" }
+}
+export default async function chisel(req: Request) {
+    return foo()
+}
+EOF
+
+cd "$TEMPDIR"
+
+$CHISEL apply
+$CURL $CHISELD_HOST/dev/response
+#CHECK: chisel
+$CURL $CHISELD_HOST/dev/json
+#CHECK: {"key":"value"}
+$CURL $CHISELD_HOST/dev/promise
+#CHECK: {"key":"async"}
