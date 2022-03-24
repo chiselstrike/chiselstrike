@@ -122,4 +122,4 @@ jobs:
       uses: actions-rs/cargo@v1
       with:
           command: test
-          args: -p cli --test integration_tests -- --database postgres --database-host localhost --database-user postgres --database-password "$POSTGRES_PASSWORD"
+          args: -p cli --test integration_tests -- --database postgres --database-user postgres --database-password "$POSTGRES_PASSWORD"
