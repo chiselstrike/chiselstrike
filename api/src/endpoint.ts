@@ -59,8 +59,7 @@ endpointWorker.onmessage = function (event) {
     }
 };
 
-// FIXME: This is export just to silence the linter
-export async function toWorker(msg: unknown) {
+async function toWorker(msg: unknown) {
     const p = new Promise((resolve, reject) => {
         resolvers.push({ resolve, reject, msg });
     });
@@ -80,6 +79,14 @@ export async function toWorker(msg: unknown) {
             endpointWorker.postMessage(resolvers[0].msg);
         }
     }
+}
+
+export async function initWorker(id: number) {
+    await toWorker({ cmd: "initWorker", id });
+}
+
+export async function readWorkerChannel() {
+    await toWorker({ cmd: "readWorkerChannel" });
 }
 
 export async function importEndpoint(

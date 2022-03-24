@@ -13,6 +13,8 @@ macro_rules! send_command {
 
 #[macro_use]
 extern crate log;
+#[macro_use]
+extern crate lazy_static;
 
 pub(crate) mod api;
 pub(crate) mod auth;
@@ -27,6 +29,7 @@ pub(crate) mod runtime;
 pub(crate) mod secrets;
 pub mod server;
 pub(crate) mod types;
+pub(crate) mod vecmap;
 
 pub(crate) mod chisel {
     tonic::include_proto!("chisel");
