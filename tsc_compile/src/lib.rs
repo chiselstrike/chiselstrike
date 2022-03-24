@@ -8,7 +8,7 @@ use deno_core::url::Url;
 use deno_core::v8;
 use deno_core::Extension;
 use deno_core::JsRuntime;
-use deno_core::OpFn;
+use deno_core::OpState;
 use deno_core::RuntimeOptions;
 use deno_core::Snapshot;
 use deno_graph::resolve_import;
@@ -78,7 +78,7 @@ impl DownloadMap {
     }
 }
 
-fn fetch(map: &mut DownloadMap, path: String, mut base: String) -> Result<String> {
+fn fetch_impl(map: &mut DownloadMap, path: String, mut base: String) -> Result<String> {
     if map.extra_libs.contains_key(&path) {
         return Ok(path);
     }
@@ -106,20 +106,22 @@ fn fetch(map: &mut DownloadMap, path: String, mut base: String) -> Result<String
     Ok(path)
 }
 
-fn op<T1, T2, R, F>(func: F) -> Box<OpFn>
+fn with_map<T1, T2, R, F>(func: F, s: &mut OpState, a: T1, b: T2) -> Result<R>
 where
     T1: DeserializeOwned,
     T2: DeserializeOwned,
     R: Serialize + 'static,
-    F: Fn(&mut DownloadMap, T1, T2) -> Result<R> + 'static,
+    F: Fn(&mut DownloadMap, T1, T2) -> Result<R>,
 {
-    op_sync(move |s, a1, a2| {
-        let map = s.borrow_mut::<DownloadMap>();
-        func(map, a1, a2)
-    })
+    let map = s.borrow_mut::<DownloadMap>();
+    func(map, a, b)
 }
 
-fn read(map: &mut DownloadMap, path: String, _: ()) -> Result<String> {
+fn fetch(s: &mut OpState, path: String, base: String) -> Result<String> {
+    with_map(fetch_impl, s, path, base)
+}
+
+fn read_impl(map: &mut DownloadMap, path: String, _: ()) -> Result<String> {
     if let Some(v) = map.extra_libs.get(&path) {
         return Ok(v.to_string());
     }
@@ -138,7 +140,11 @@ fn read(map: &mut DownloadMap, path: String, _: ()) -> Result<String> {
     Ok((**module.maybe_source.as_ref().unwrap()).clone())
 }
 
-fn write(map: &mut DownloadMap, mut path: String, content: String) -> Result<()> {
+fn read(s: &mut OpState, path: String, _: ()) -> Result<String> {
+    with_map(read_impl, s, path, ())
+}
+
+fn write_impl(map: &mut DownloadMap, mut path: String, content: String) -> Result<()> {
     path = path.strip_prefix("chisel:/").unwrap().to_string();
     if let Some(url) = map.path_to_url.get(&path) {
         path = url.to_string();
@@ -159,22 +165,30 @@ fn write(map: &mut DownloadMap, mut path: String, content: String) -> Result<()>
     Ok(())
 }
 
-fn get_cwd(_map: &mut DownloadMap, _: (), _: ()) -> Result<String> {
+fn write(s: &mut OpState, path: String, content: String) -> Result<()> {
+    with_map(write_impl, s, path, content)
+}
+
+fn get_cwd(_: &mut OpState, _: (), _: ()) -> Result<String> {
     let cwd = std::env::current_dir()?;
     Ok(cwd.into_os_string().into_string().unwrap())
 }
 
-fn dir_exists(_map: &mut DownloadMap, path: String, _: ()) -> Result<bool> {
+fn dir_exists(_: &mut OpState, path: String, _: ()) -> Result<bool> {
     return Ok(Path::new(&path).is_dir());
 }
 
-fn file_exists(_map: &mut DownloadMap, path: String, _: ()) -> Result<bool> {
+fn file_exists(_: &mut OpState, path: String, _: ()) -> Result<bool> {
     return Ok(Path::new(&path).is_file());
 }
 
-fn diagnostic(map: &mut DownloadMap, msg: String, _: ()) -> Result<()> {
+fn diagnostic_impl(map: &mut DownloadMap, msg: String, _: ()) -> Result<()> {
     map.diagnostics = msg;
     Ok(())
+}
+
+fn diagnostic(s: &mut OpState, msg: String, _: ()) -> Result<()> {
+    with_map(diagnostic_impl, s, msg, ())
 }
 
 fn try_into_or<'s, T: std::convert::TryFrom<v8::Local<'s, v8::Value>>>(
@@ -320,13 +334,13 @@ pub async fn compile_ts_code(
 
     let ext = Extension::builder()
         .ops(vec![
-            ("fetch", op(fetch)),
-            ("read", op(read)),
-            ("write", op(write)),
-            ("get_cwd", op(get_cwd)),
-            ("dir_exists", op(dir_exists)),
-            ("file_exists", op(file_exists)),
-            ("diagnostic", op(diagnostic)),
+            ("fetch", op_sync(fetch)),
+            ("read", op_sync(read)),
+            ("write", op_sync(write)),
+            ("get_cwd", op_sync(get_cwd)),
+            ("dir_exists", op_sync(dir_exists)),
+            ("file_exists", op_sync(file_exists)),
+            ("diagnostic", op_sync(diagnostic)),
         ])
         .build();
 
