@@ -548,6 +548,20 @@ export class ChiselEntity {
         return chiselIterator<T>(this);
     }
 
+    /**
+     * Return all entities of type T.
+     */
+    static async findAll<T>(
+        this: { new (): T },
+        take?: number,
+    ): Promise<Partial<T>[]> {
+        let it = chiselIterator<T>(this);
+        if (take) {
+            it = it.take(take);
+        }
+        return await it.toArray();
+    }
+
     /** Restricts this iterator to contain just the objects that match the `Partial` object `restrictions`. */
     static async findMany<T>(
         this: { new (): T },
