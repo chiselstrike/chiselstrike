@@ -600,29 +600,29 @@ fn max_prefix(s: &str, max_len: usize) -> &str {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type")]
-pub(crate) enum QueryOperator {
+pub(crate) enum QueryOpChain {
     BaseEntity {
         name: String,
     },
     #[serde(rename = "ExpressionFilter")]
     Filter {
         expression: Expr,
-        inner: Box<QueryOperator>,
+        inner: Box<QueryOpChain>,
     },
     #[serde(rename = "ColumnsSelect")]
     Projection {
         #[serde(rename = "columns")]
         fields: Vec<String>,
-        inner: Box<QueryOperator>,
+        inner: Box<QueryOpChain>,
     },
     Take {
         count: u64,
-        inner: Box<QueryOperator>,
+        inner: Box<QueryOpChain>,
     },
     SortBy {
         key: String,
         ascending: bool,
-        inner: Box<QueryOperator>,
+        inner: Box<QueryOpChain>,
     },
 }
 
@@ -630,9 +630,9 @@ fn convert_to_query_builder(
     api_version: &str,
     userid: &Option<String>,
     path: &str,
-    op: QueryOperator,
+    op: QueryOpChain,
 ) -> Result<QueryBuilder> {
-    use QueryOperator::*;
+    use QueryOpChain::*;
     let builder = match op {
         BaseEntity { name } => QueryBuilder::new_from_type_name(api_version, userid, path, &name)?,
         Filter { expression, inner } => {
@@ -672,7 +672,7 @@ pub(crate) fn json_to_query(
     api_version: &str,
     userid: &Option<String>,
     path: &str,
-    op_chain: QueryOperator,
+    op_chain: QueryOpChain,
 ) -> Result<Query> {
     let builder = convert_to_query_builder(api_version, userid, path, op_chain)?;
     builder.build()

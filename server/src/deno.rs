@@ -4,7 +4,7 @@ use crate::api::{response_template, Body, RequestPath};
 use crate::datastore::engine::IdTree;
 use crate::datastore::engine::TransactionStatic;
 use crate::datastore::engine::{QueryResults, ResultRow};
-use crate::datastore::query::QueryOperator;
+use crate::datastore::query::QueryOpChain;
 use crate::datastore::query::{json_to_query, Mutation};
 use crate::policies::FieldPolicies;
 use crate::rcmut::RcMut;
@@ -474,7 +474,7 @@ fn op_chisel_get_secret(
 
 fn op_chisel_relational_query_create(
     op_state: &mut OpState,
-    query: QueryOperator,
+    query: QueryOpChain,
     info: (String, String, Option<String>),
 ) -> Result<ResourceId> {
     let (api_version, path, userid) = info;
