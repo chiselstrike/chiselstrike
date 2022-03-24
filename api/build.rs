@@ -35,5 +35,6 @@ async fn main() -> Result<()> {
 
     compile("chisel").await?;
     compile("endpoint").await?;
+    compile("worker").await?;
     Ok(())
 }

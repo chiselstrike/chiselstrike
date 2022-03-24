@@ -18,6 +18,7 @@ use crate::JsonObject;
 use anyhow::{anyhow, bail, Context as AnyhowContext, Result};
 use api::chisel_js;
 use api::endpoint_js;
+use api::worker_js;
 use deno_core::error::AnyError;
 use deno_core::op;
 use deno_core::v8;
@@ -358,6 +359,13 @@ impl DenoService {
                 endpoint_path.to_string(),
                 VersionedCode {
                     code: endpoint_js().to_string(),
+                    version: 0,
+                },
+            );
+            code_map.insert(
+                "/worker.js".to_string(),
+                VersionedCode {
+                    code: worker_js().to_string(),
                     version: 0,
                 },
             );
