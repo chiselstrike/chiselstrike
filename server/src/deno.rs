@@ -358,6 +358,13 @@ impl DenoService {
                     version: 0,
                 },
             );
+            code_map.insert(
+                "/worker.js".to_string(),
+                VersionedCode {
+                    code: include_str!("./worker.js").to_string(),
+                    version: 0,
+                },
+            );
         }
 
         worker
