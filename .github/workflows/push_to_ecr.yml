@@ -27,6 +27,10 @@ jobs:
       id: login-ecr
       uses: aws-actions/amazon-ecr-login@v1
 
+    - name: Install lld
+      id: lld
+      run: "sudo apt-get -y install lld"
+
     - name: Install rust toolchain
       uses: actions-rs/toolchain@v1
       with:
