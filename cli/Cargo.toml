@@ -35,6 +35,7 @@ futures = "0.3.17"
 itertools = "0.10.3"
 lit = "1.0.4"
 server = { path = "../server" }
+whoami = "1.2.1"
 
 [[bin]]
 name = "chisel"

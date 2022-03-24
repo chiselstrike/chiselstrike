@@ -49,8 +49,17 @@ struct Opt {
     #[structopt(short, long)]
     test: Option<String>,
     /// Database system to test with. Supported values: `sqlite` (default) and `postgres`.
-    #[structopt(short, long, default_value = "sqlite")]
+    #[structopt(long, default_value = "sqlite")]
     database: Database,
+    /// Database host name. Default: `localhost`.
+    #[structopt(long, default_value = "localhost")]
+    database_host: String,
+    /// Database username.
+    #[structopt(long)]
+    database_user: Option<String>,
+    /// Database password.
+    #[structopt(long)]
+    database_password: Option<String>,
 }
 
 fn chisel() -> String {
@@ -88,6 +97,16 @@ fn main() {
     env::set_var("CURL", "curl -S -s -i -w '\\n'");
     env::set_var("CREATE_APP", create_app);
     env::set_var("TEST_DATABASE", opt.database.to_string());
+    let database_user = opt.database_user.unwrap_or_else(whoami::username);
+    let mut database_url_prefix = "postgres://".to_string();
+    database_url_prefix.push_str(&database_user);
+    if let Some(database_password) = opt.database_password {
+        database_url_prefix.push(':');
+        database_url_prefix.push_str(&database_password);
+    }
+    database_url_prefix.push('@');
+    database_url_prefix.push_str(&opt.database_host);
+    env::set_var("DATABASE_URL_PREFIX", &database_url_prefix);
 
     let search_path = Path::new("tests/lit")
         .join(opt.test.unwrap_or_else(|| "".to_string()))

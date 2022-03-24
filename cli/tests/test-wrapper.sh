@@ -24,9 +24,9 @@ cd $cwd
 if [ "x$TEST_DATABASE" == "xpostgres" ]; then
     DATADB="datadb_$(echo $RANDOM | shasum | head -c 40)"
 
-    psql -c "CREATE DATABASE $DATADB"
+    psql "$DATABASE_URL_PREFIX" -c "CREATE DATABASE $DATADB"
 
-    DATADB_URL="postgresql://localhost/$DATADB"
+    DATADB_URL="$DATABASE_URL_PREFIX/$DATADB"
 else
     METADB_URL="sqlite://$TEMPDIR/chiseld.db?mode=rwc"
     DATADB_URL="sqlite://$TEMPDIR/chiseld-data.db?mode=rwc"
@@ -40,7 +40,7 @@ function cleanup() {
     wait
     rm -rf "$TEMPDIR"
     if [ "x$TEST_DATABASE" == "xpostgres" ]; then
-        psql -c "DROP DATABASE $DATADB"
+        psql "$DATABASE_URL_PREFIX" -c "DROP DATABASE $DATADB"
     fi
 }
 

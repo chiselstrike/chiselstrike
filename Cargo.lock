@@ -547,6 +547,7 @@ dependencies = [
  "tonic-build",
  "tsc_compile",
  "vergen",
+ "whoami",
 ]
 
 [[package]]
