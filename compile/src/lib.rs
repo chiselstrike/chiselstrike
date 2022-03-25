@@ -1,12 +1,8 @@
 // SPDX-FileCopyrightText: © 2021 ChiselStrike <info@chiselstrike.com>
 
-use swc_ecmascript::codegen as swc_ecma_codegen;
-use swc_ecmascript::parser as swc_ecma_parser;
-use swc_ecmascript::transforms::typescript as swc_ecma_transforms_typescript;
-use swc_ecmascript::visit as swc_ecma_visit;
-
 use anyhow::{anyhow, Result};
 use std::sync::Arc;
+pub use swc_common;
 use swc_common::Globals;
 use swc_common::Mark;
 use swc_common::GLOBALS;
@@ -19,6 +15,11 @@ use swc_common::{
 use swc_ecma_codegen::{text_writer::JsWriter, Emitter};
 use swc_ecma_parser::{lexer::Lexer, Parser, StringInput, Syntax};
 use swc_ecma_visit::FoldWith;
+pub use swc_ecmascript;
+use swc_ecmascript::codegen as swc_ecma_codegen;
+use swc_ecmascript::parser as swc_ecma_parser;
+use swc_ecmascript::transforms::typescript as swc_ecma_transforms_typescript;
+use swc_ecmascript::visit as swc_ecma_visit;
 
 pub fn compile_ts_code(code: String) -> Result<String> {
     #[derive(Clone)]

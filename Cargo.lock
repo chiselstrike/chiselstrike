@@ -543,8 +543,6 @@ dependencies = [
  "serde_derive",
  "server",
  "structopt",
- "swc_common",
- "swc_ecmascript",
  "tempfile",
  "tokio",
  "toml",
