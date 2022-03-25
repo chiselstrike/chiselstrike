@@ -24,12 +24,12 @@ const sidebars = {
     {
       type: 'category',
       label: 'Introduction',
-      items: ['welcome', 'first', 'data-access' ]
+      items: ['welcome', 'first', 'endpoints', 'data-access' ]
     },
     {
       type: 'category',
       label: 'In Depth',
-      items: [ 'pol', 'secrets', 'versions', 'routing', 'chisel-cli' ],
+      items: [ 'pol', 'secrets', 'versions', 'login', 'routing', 'chisel-cli' ],
     },
     {
        type: 'category',
