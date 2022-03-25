@@ -5,10 +5,16 @@ extern crate lit;
 use crate::common::bin_dir;
 use crate::common::repo_dir;
 use crate::common::run;
+use crate::lit::event_handler::EventHandler;
+use anyhow::{anyhow, Result};
+use rayon::prelude::*;
+use std::collections::HashMap;
 use std::env;
 use std::fmt::{Display, Formatter};
 use std::path::Path;
 use std::str::FromStr;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Mutex};
 use structopt::StructOpt;
 
 mod common;
@@ -90,13 +96,11 @@ fn main() {
         .to_string();
 
     env::set_var("CHISELD", chiseld);
-    env::set_var("CHISEL", chisel());
     env::set_var("RMCOLOR", "sed s/\x1B\\[[0-9;]*[A-Za-z]//g");
-    env::set_var("CHISELD_HOST", "localhost:8080");
-    env::set_var("CHISELD_INTERNAL", "localhost:9090");
     env::set_var("CURL", "curl -S -s -i -w '\\n'");
     env::set_var("CREATE_APP", create_app);
     env::set_var("TEST_DATABASE", opt.database.to_string());
+
     let database_user = opt.database_user.unwrap_or_else(whoami::username);
     let mut database_url_prefix = "postgres://".to_string();
     database_url_prefix.push_str(&database_user);
@@ -108,21 +112,89 @@ fn main() {
     database_url_prefix.push_str(&opt.database_host);
     env::set_var("DATABASE_URL_PREFIX", &database_url_prefix);
 
-    let search_path = Path::new("tests/lit")
-        .join(opt.test.unwrap_or_else(|| "".to_string()))
-        .to_str()
-        .unwrap()
-        .to_owned();
+    let lit_files = if let Some(test_file) = opt.test {
+        let path = Path::new("tests/lit").join(test_file);
+        vec![std::fs::canonicalize(path).unwrap()]
+    } else {
+        let deno_lits = glob::glob("tests/lit/*.deno").unwrap();
+        let node_lits = glob::glob("tests/lit/*.node").unwrap();
+        deno_lits
+            .chain(node_lits)
+            .map(|path| std::fs::canonicalize(path.unwrap()).unwrap())
+            .collect()
+    };
 
-    lit::run::tests(lit::event_handler::Default::default(), |config| {
-        config.add_search_path(search_path.to_owned());
-        config.add_extension("deno");
-        config.add_extension("node");
-        config.constants.insert("chisel".to_owned(), chisel());
-        config.truncate_output_context_to_number_of_lines = Some(500);
-        let mut path = repo.clone();
-        path.push("cli/tests/test-wrapper.sh");
-        config.shell = path.to_str().unwrap().to_string();
-    })
-    .expect("Lit tests failed");
+    let event_handler = Arc::new(Mutex::new(lit::event_handler::Default::default()));
+    let passed = Arc::new(AtomicBool::new(true));
+
+    lit_files
+        .par_iter()
+        .map(|test_path| -> Result<()> {
+            lit::run::tests(
+                GuardedEventHandler {
+                    event_handler: event_handler.clone(),
+                    passed: passed.clone(),
+                },
+                |config| {
+                    // Add one to avoid conflict with local instances of chisel.
+                    let i = rayon::current_thread_index().unwrap_or(0) + 1;
+                    config.test_paths = vec![test_path.clone()];
+                    config.truncate_output_context_to_number_of_lines = Some(500);
+
+                    let mut path = repo.clone();
+                    path.push("cli/tests/test-wrapper.sh");
+                    config.shell = path.to_str().unwrap().to_string();
+                    config.env_variables = HashMap::from([
+                        (
+                            "CHISEL".into(),
+                            format!("{} --rpc-addr http://127.0.0.1:{}", chisel(), 50051 + i),
+                        ),
+                        ("CHISELD_HOST".into(), format!("127.0.0.1:{}", 8080 + i)),
+                        ("CHISELD_INTERNAL".into(), format!("127.0.0.1:{}", 9090 + i)),
+                        (
+                            "CHISELD_RPC_HOST".into(),
+                            format!("127.0.0.1:{}", 50051 + i),
+                        ),
+                    ])
+                },
+            )
+            .map_err(|_| anyhow!("'{:?}' test failed", test_path))?;
+            Ok(())
+        })
+        .collect::<Vec<_>>();
+
+    let mut handler = event_handler.lock().unwrap();
+    handler.on_test_suite_finished(
+        passed.load(Ordering::SeqCst),
+        &lit::config::Config::default(),
+    );
+}
+
+struct GuardedEventHandler {
+    event_handler: Arc<Mutex<dyn lit::event_handler::EventHandler>>,
+    passed: Arc<AtomicBool>,
+}
+
+impl lit::event_handler::EventHandler for GuardedEventHandler {
+    fn on_test_suite_started(&mut self, _: &lit::event_handler::TestSuiteDetails, _: &lit::Config) {
+    }
+
+    fn on_test_suite_finished(&mut self, passed: bool, _config: &lit::Config) {
+        self.passed.fetch_and(passed, Ordering::SeqCst);
+    }
+
+    fn on_test_finished(
+        &mut self,
+        mut result: lit::event_handler::TestResult,
+        config: &lit::Config,
+    ) {
+        result.path.relative = result.path.absolute.file_name().unwrap().into();
+        let mut handler = self.event_handler.lock().unwrap();
+        handler.on_test_finished(result, config);
+    }
+
+    fn note_warning(&mut self, message: &str) {
+        let mut handler = self.event_handler.lock().unwrap();
+        handler.note_warning(message);
+    }
 }

@@ -32,7 +32,7 @@ else
     DATADB_URL="sqlite://$TEMPDIR/chiseld-data.db?mode=rwc"
 fi
 
-$CHISELD --webui -m "$DATADB_URL" -d "$DATADB_URL" &
+$CHISELD --webui -m "$DATADB_URL" -d "$DATADB_URL" --api-listen-addr "$CHISELD_HOST" --internal-routes-listen-addr "$CHISELD_INTERNAL" --rpc-listen-addr $CHISELD_RPC_HOST &
 PID=$!
 
 function cleanup() {
