@@ -58,13 +58,11 @@ use std::future::Future;
 use std::io::Write;
 use std::net::SocketAddr;
 use std::ops::DerefMut;
-use std::path::{Path, PathBuf};
 use std::pin::Pin;
 use std::rc::Rc;
 use std::sync::Arc;
 use std::task::{Context, Poll};
 use tempfile::Builder;
-use tokio::fs;
 
 // FIXME: This should not be here. The client should download and
 // compile modules, the server should not get code out of the
@@ -108,7 +106,6 @@ enum Error {
 
 struct ModuleLoaderInner {
     code_map: HashMap<String, VersionedCode>,
-    base_directory: PathBuf,
 }
 
 struct ModuleLoader {
@@ -137,9 +134,9 @@ async fn compile(code: &str, lib: Option<&str>) -> Result<String> {
     Ok(compile_ts_code(path, opts).await?.remove(path).unwrap())
 }
 
-async fn load_code(specifier: ModuleSpecifier) -> Result<ModuleSource> {
-    let mut code = if specifier.scheme() == "file" {
-        fs::read_to_string(specifier.to_file_path().unwrap()).await?
+async fn load_code(code_opt: Option<String>, specifier: ModuleSpecifier) -> Result<ModuleSource> {
+    let mut code = if let Some(code) = code_opt {
+        code
     } else {
         utils::get_ok(specifier.clone()).await?.text().await?
     };
@@ -159,14 +156,7 @@ impl deno_core::ModuleLoader for ModuleLoader {
     ) -> Result<ModuleSpecifier, AnyError> {
         debug!("Deno resolving {:?}", specifier);
         if specifier == "@chiselstrike/api" {
-            let handle = self.inner.lock().unwrap();
-            let api_path = handle
-                .base_directory
-                .join("chisel.js")
-                .to_str()
-                .unwrap()
-                .to_string();
-
+            let api_path = "/chisel.js".to_string();
             let spec = ModuleSpecifier::from_file_path(&api_path)
                 .map_err(|_| anyhow!("Can't convert {} to file-based URL", api_path))?;
             Ok(spec)
@@ -181,8 +171,15 @@ impl deno_core::ModuleLoader for ModuleLoader {
         _maybe_referrer: Option<ModuleSpecifier>,
         _is_dyn_import: bool,
     ) -> Pin<Box<ModuleSourceFuture>> {
-        debug!("Deno Loading {:?}", specifier);
-        load_code(specifier.clone()).boxed_local()
+        let handle = self.inner.lock().unwrap();
+        let code = if specifier.scheme() == "file" {
+            let path = specifier.to_file_path().unwrap();
+            let path = path.to_str().unwrap();
+            Some(handle.code_map.get(path).unwrap().code.clone())
+        } else {
+            None
+        };
+        load_code(code, specifier.clone()).boxed_local()
     }
 }
 
@@ -237,12 +234,11 @@ fn create_web_worker(
 }
 
 impl DenoService {
-    pub(crate) fn new(base_directory: PathBuf, inspect_brk: bool) -> Self {
+    pub(crate) fn new(inspect_brk: bool) -> Self {
         let web_worker_preload_module_cb =
             Arc::new(|worker| LocalFutureObj::new(Box::new(future::ready(Ok(worker)))));
         let inner = Arc::new(std::sync::Mutex::new(ModuleLoaderInner {
             code_map: HashMap::new(),
-            base_directory,
         }));
         let module_loader = Rc::new(ModuleLoader {
             inner: inner.clone(),
@@ -507,20 +503,16 @@ fn op_format_file_name(_: &mut OpState, file_name: String, _: ()) -> Result<Stri
     Ok(file_name)
 }
 
-async fn create_deno<P: AsRef<Path>>(base_directory: P, inspect_brk: bool) -> Result<DenoService> {
-    let mut d = DenoService::new(base_directory.as_ref().to_owned(), inspect_brk);
+async fn create_deno(inspect_brk: bool) -> Result<DenoService> {
+    let mut d = DenoService::new(inspect_brk);
     let worker = &mut d.worker;
     // FIXME: Include these files in the snapshop
 
     let chisel = chisel_js().to_string();
-    let chisel_path = base_directory.as_ref().join("chisel.js");
-    fs::write(&chisel_path, &chisel).await?;
-    let chisel_path = chisel_path.to_str().unwrap().to_string();
+    let chisel_path = "/chisel.js".to_string();
 
     let main = include_str!("./main.js").to_string();
-    let main_path = base_directory.as_ref().join("main.js");
-    fs::write(&main_path, &main).await?;
-    let main_path = main_path.to_str().unwrap().to_string();
+    let main_path = "/main.js".to_string();
 
     {
         let mut handle = d.module_loader.lock().unwrap();
@@ -548,10 +540,8 @@ async fn create_deno<P: AsRef<Path>>(base_directory: P, inspect_brk: bool) -> Re
     Ok(d)
 }
 
-pub(crate) async fn init_deno<P: AsRef<Path>>(base_directory: P, inspect_brk: bool) -> Result<()> {
-    let service = Rc::new(RefCell::new(
-        create_deno(base_directory, inspect_brk).await?,
-    ));
+pub(crate) async fn init_deno(inspect_brk: bool) -> Result<()> {
+    let service = Rc::new(RefCell::new(create_deno(inspect_brk).await?));
     DENO.with(|d| {
         d.set(service)
             .map_err(|_| ())
@@ -922,11 +912,7 @@ fn get() -> RcMut<DenoService> {
     })
 }
 
-pub(crate) async fn compile_endpoint<P: AsRef<Path>>(
-    base_directory: P,
-    path: String,
-    code: String,
-) -> Result<()> {
+pub(crate) async fn compile_endpoint(path: String, code: String) -> Result<()> {
     let promise = {
         let mut service = get();
         let service: &mut DenoService = &mut service;
@@ -934,7 +920,7 @@ pub(crate) async fn compile_endpoint<P: AsRef<Path>>(
         let mut handle = service.module_loader.lock().unwrap();
         let code_map = &mut handle.code_map;
         let mut entry = code_map
-            .entry(path.clone())
+            .entry(format!("{}.js", path))
             .and_modify(|v| v.version += 1)
             .or_insert(VersionedCode {
                 code: "".to_string(),
@@ -948,18 +934,12 @@ pub(crate) async fn compile_endpoint<P: AsRef<Path>>(
         let global_proxy = global_context.open(scope).global(scope);
         let chisel: v8::Local<v8::Object> = get_member(global_proxy, scope, "Chisel")?;
         let import_endpoint: v8::Local<v8::Function> = get_member(chisel, scope, "importEndpoint")?;
-        let base_directory = format!("{}", base_directory.as_ref().display());
-        let base_directory = v8::String::new(scope, &base_directory).unwrap().into();
         let path = RequestPath::try_from(path.as_ref()).unwrap();
         let api_version = v8::String::new(scope, path.api_version()).unwrap().into();
         let path = v8::String::new(scope, path.path()).unwrap().into();
         let version = v8::Number::new(scope, entry.version as f64).into();
         let promise = import_endpoint
-            .call(
-                scope,
-                chisel.into(),
-                &[base_directory, path, api_version, version],
-            )
+            .call(scope, chisel.into(), &[path, api_version, version])
             .unwrap();
         v8::Global::new(scope, promise)
     };

@@ -18,13 +18,10 @@ use futures::FutureExt;
 use futures::StreamExt;
 use std::net::SocketAddr;
 use std::panic;
-use std::path::Path;
 use std::rc::Rc;
 use std::sync::Arc;
 use std::time::Duration;
 use structopt::StructOpt;
-use tempdir::TempDir;
-use tokio::fs;
 use tokio::task::JoinHandle;
 use tokio::time::sleep;
 use url::Url;
@@ -78,34 +75,6 @@ pub type Command = Box<dyn CommandTrait>;
 pub type CommandResult = Result<()>;
 
 #[derive(Clone)]
-pub struct ModulesDirectory {
-    dir: Arc<TempDir>,
-}
-
-impl ModulesDirectory {
-    fn new() -> Result<Self> {
-        let dir = Arc::new(TempDir::new("chiselstrike")?);
-        Ok(Self { dir })
-    }
-
-    pub fn path(&self) -> &Path {
-        self.dir.path()
-    }
-
-    pub async fn materialize(&self, path: &str, code: &str) -> Result<()> {
-        // Path.join() doesn't work when path can be absolute, which it usually is here
-        // Also has to force .ts here, otherwise /dev/foo.ts becomes /dev/foo endpoints,
-        // and then later trying /dev/foo/bar clashes and fails
-        let file = format!("{}/{}.js", self.dir.path().display(), path);
-        let base = Path::new(&file).parent().unwrap();
-
-        fs::create_dir_all(base).await?;
-        fs::write(file, &code).await?;
-        Ok(())
-    }
-}
-
-#[derive(Clone)]
 pub struct SharedState {
     signal_rx: async_channel::Receiver<()>,
     /// ChiselRpc waits on all API threads to send here before it starts serving RPC.
@@ -115,7 +84,6 @@ pub struct SharedState {
     executor_threads: usize,
     data_db: DbConnection,
     metadata_db: DbConnection,
-    materialize: ModulesDirectory,
     nr_connections: usize,
 }
 
@@ -138,7 +106,7 @@ impl SharedTasks {
 }
 
 async fn run(state: SharedState, mut cmd: ExecutorChannel) -> Result<()> {
-    init_deno(&state.materialize.path(), state.inspect_brk).await?;
+    init_deno(state.inspect_brk).await?;
 
     let meta =
         Rc::new(MetaService::local_connection(&state.metadata_db, state.nr_connections).await?);
@@ -174,14 +142,8 @@ async fn run(state: SharedState, mut cmd: ExecutorChannel) -> Result<()> {
 
     for (path, code) in routes.iter() {
         let path = path.to_str().unwrap();
-        state.materialize.materialize(path, code).await?;
 
-        compile_endpoint(
-            &state.materialize.path(),
-            path.to_string(),
-            code.to_string(),
-        )
-        .await?;
+        compile_endpoint(path.to_string(), code.to_string()).await?;
         activate_endpoint(path);
 
         let func = Arc::new({
@@ -241,10 +203,6 @@ impl CoordinatorChannel {
 pub async fn run_shared_state(
     opt: Opt,
 ) -> Result<(SharedTasks, SharedState, Vec<ExecutorChannel>)> {
-    let materialize = ModulesDirectory::new()?;
-    let file = format!("{}/chisel.ts", materialize.path().display());
-    fs::write(file, include_bytes!("../../api/src/chisel.ts")).await?;
-
     let meta_conn = DbConnection::connect(&opt.metadata_db_uri, opt.nr_connections).await?;
     let data_db = DbConnection::connect(&opt.data_db_uri, opt.nr_connections).await?;
 
@@ -268,7 +226,7 @@ pub async fn run_shared_state(
         GlobalRpcState::new(meta, query_engine, rpc_commands).await?,
     ));
 
-    let rpc = RpcService::new(state, materialize.clone());
+    let rpc = RpcService::new(state);
 
     let mut sigterm = tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())?;
     let mut sigint = tokio::signal::unix::signal(tokio::signal::unix::SignalKind::interrupt())?;
@@ -388,7 +346,6 @@ pub async fn run_shared_state(
         executor_threads: opt.executor_threads,
         data_db,
         metadata_db: meta_conn,
-        materialize: materialize.clone(),
         nr_connections: opt.nr_connections,
     };
 
