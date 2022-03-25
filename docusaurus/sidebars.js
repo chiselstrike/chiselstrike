@@ -29,7 +29,7 @@ const sidebars = {
     {
       type: 'category',
       label: 'In Depth',
-      items: [ 'pol', 'secrets', 'versions', 'login', 'routing', 'chisel-cli' ],
+      items: [ 'cursors', 'pol', 'secrets', 'versions', 'login', 'routing', 'chisel-cli' ],
     },
     {
        type: 'category',
