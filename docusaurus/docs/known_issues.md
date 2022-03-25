@@ -3,13 +3,14 @@ sidebar_position: 8
 ---
 # Known Issues
 
-We put a lot of effort into getting this beta out the door soon, so we could
+We put a lot of effort into getting this beta out the door, so we could
 hear from you (yes, you!) about what you like and dislike in the product and
 provide you with a great experience moving forward.
 
-However, there are some issues that we plan to address soon but just didn't
-make the cut. If you encounter any of them, just let us know and we'll do our
-best to expedite it, but do know that they are planned functionality going forward.
+Below, we wanted to share some known issues as well as upcoming features
+not currently present in the beta.
+
+<!-- FIXME: need to incorporate a feedback link into the docs -->
 
 * **Module imports:** ChiselStrike is built using Deno, which uses native browser-style URL
 imports. However, it is consumable as a Node project, and you're more likely using VSCode.
