@@ -81,7 +81,7 @@ INFO - ChiselStrike is ready 🚀 - URL: http://localhost:8080
 End point defined: /dev/hello
 ```
 
-For more about `chisel` command usage, please see [the CLI reference](Reference/chisel-cli) or run `chisel --help`.
+For more about `chisel` command usage, please see [the CLI reference](chisel-cli) or run `chisel --help`.
 
 ## Our First Endpoint
 
@@ -126,8 +126,6 @@ and returns the corresponding
 [Response](https://developer.mozilla.org/en-US/docs/Web/API/Response).
 In this above example, we simply returns a string wrapped as a JSON value.  It
 uses a helper function `responseFromJson`.
-
-There's much more to `@chiselstrike/api`, as we'll see shortly! 
 
 ## Our First Model
 
@@ -215,7 +213,7 @@ We always use UUIDs rather than integers.
 
 :::tip
 Right now you are testing only locally, but you'll want to think about restricting access to some endpoints in production.  
-We'll talk about security more in the [Security](security) section.
+We'll talk about security more in the [Policy](pol) section.
 :::
 
 Now that we've inserted some objects, lets read them back! Our `crud` function also registers a `GET` handler, which is already available!
@@ -419,7 +417,7 @@ error checking in the examples.
 With this endpoint example, we're now getting to know ChiselStrike's API and runtime better. Notice how
 we were able to parse the request under `POST` with our own custom validation, and then use
 the `build` API to construct an object that is then persisted with `save`.  We'll explain the use of the 
-data model more in [API](api).
+data model more in [Data Access](data-access).
 
 Finally, notice how we can return a standard `Response` in some cases, but also can also use the convenience method
 `responseFromJson` where we know the result is a JSON object.

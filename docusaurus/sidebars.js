@@ -28,13 +28,18 @@ const sidebars = {
     },
     {
       type: 'category',
-      label: 'Reference',
+      label: 'In Depth',
       items: [ 'pol', 'secrets', 'versions', 'chisel-cli' ],
+    },
+    {
+       type: 'category',
+       label: 'Examples',
+       items: [ 'ex_gatsby', 'ex_nextjs' ] 
     },
     {
       type: 'category',
       label: 'Community',
-      items: [ 'known_issues', ]
+      items: [ 'feedback', 'known_issues', 'discord' ]
     },
   ],
 

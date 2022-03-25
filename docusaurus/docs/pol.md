@@ -1,7 +1,3 @@
----
-sidebar_position: 3
----
-
 # Data Policies
 
 ChiselStrike lets you express data policies through a policy file that
@@ -10,7 +6,7 @@ storage.  Although the policy language is currently limited, it is set
 to rapidly expand in the immediate future.
 
 Examples used in this chapter build on the `my-backend` files from the
-[Introduction](./intro.md).
+[Introduction](./first.md).
 
 ## Data Transformation
 
