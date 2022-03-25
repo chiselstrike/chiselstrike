@@ -14,6 +14,7 @@ use deno_core::Snapshot;
 use deno_graph::resolve_import;
 use deno_graph::source::LoadFuture;
 use deno_graph::source::LoadResponse;
+use deno_graph::source::LoadResult;
 use deno_graph::source::Loader;
 use deno_graph::source::ResolveResponse;
 use deno_graph::source::Resolver;
@@ -246,10 +247,7 @@ struct ModuleLoader {
     extra_libs: HashMap<Url, String>,
 }
 
-fn load_url(
-    extra_libs: &HashMap<Url, String>,
-    specifier: Url,
-) -> impl Future<Output = Result<Option<LoadResponse>>> {
+fn load_url(extra_libs: &HashMap<Url, String>, specifier: Url) -> impl Future<Output = LoadResult> {
     let sync_text = match specifier.scheme() {
         "file" => fs::read_to_string(specifier.to_file_path().unwrap()),
         "chisel" => Ok(extra_libs.get(&specifier).unwrap().clone()),
@@ -270,7 +268,7 @@ fn load_url(
                 res.text().await?
             }
         };
-        let response = LoadResponse {
+        let response = LoadResponse::Module {
             specifier,
             maybe_headers,
             content: Arc::new(text),
