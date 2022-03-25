@@ -1,5 +1,10 @@
 // SPDX-FileCopyrightText: © 2021 ChiselStrike <info@chiselstrike.com>
 
+use swc_ecmascript::codegen as swc_ecma_codegen;
+use swc_ecmascript::parser as swc_ecma_parser;
+use swc_ecmascript::transforms::typescript as swc_ecma_transforms_typescript;
+use swc_ecmascript::visit as swc_ecma_visit;
+
 use anyhow::{anyhow, Result};
 use std::sync::Arc;
 use swc_common::Globals;

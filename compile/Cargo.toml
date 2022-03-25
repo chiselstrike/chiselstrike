@@ -7,10 +7,7 @@ edition = "2021"
 [dependencies]
 anyhow = "1.0"
 swc_common = "0.17.4"
-swc_ecma_codegen = "0.90.0"
-swc_ecma_parser = "0.88.2"
-swc_ecma_transforms_typescript = "0.80.0"
-swc_ecma_visit = "0.51.1"
+swc_ecmascript = { version = "0.111.14", features = ["codegen", "parser", "visit", "transforms", "typescript"] }
 
 [lib]
 name = "compile"

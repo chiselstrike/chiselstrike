@@ -13,6 +13,8 @@ use swc_ecma_ast::{
     TsEntityName, TsKeywordTypeKind, TsType, TsTypeAnn,
 };
 use swc_ecma_parser::{lexer::Lexer, Parser, StringInput, Syntax, TsConfig};
+use swc_ecmascript::ast as swc_ecma_ast;
+use swc_ecmascript::parser as swc_ecma_parser;
 
 fn swc_err<S: Spanned>(handler: &Handler, s: S, msg: &str) -> anyhow::Error {
     handler.span_err(s.span(), msg);
