@@ -29,8 +29,10 @@ vergen = { version = "6", default-features = false, features = ["git"] }
 
 [dev-dependencies]
 futures = "0.3.17"
+glob = "0.3.0"
 itertools = "0.10.3"
-lit = "1.0.4"
+lit = {git = "https://github.com/chiselstrike/lit", rev = "b3137dd"}
+rayon = "1.5.1"
 server = { path = "../server" }
 whoami = "1.2.1"
 

@@ -53,7 +53,6 @@ $CURL --data foobar -o - $CHISELD_HOST/dev/echo
 # CHECK:         "accept": "*/*",
 # CHECK:         "content-length": "6",
 # CHECK:         "content-type": "application/x-www-form-urlencoded",
-# CHECK:         "host": "localhost:8080",
 # CHECK:         "user-agent": "curl/[[.*]]"
 # CHECK:     },
 # CHECK:     "redirect": "follow",
@@ -80,7 +79,6 @@ $CURL -H 'Expect: 100-continue' --data foobar -o - $CHISELD_HOST/dev/echo
 # CHECK:         "content-length": "6",
 # CHECK:         "content-type": "application/x-www-form-urlencoded",
 # CHECK:         "expect": "100-continue",
-# CHECK:         "host": "localhost:8080",
 # CHECK:         "user-agent": "curl/[[.*]]"
 # CHECK:     },
 # CHECK:     "redirect": "follow",
