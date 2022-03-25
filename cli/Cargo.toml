@@ -17,8 +17,7 @@ serde = "1.0.130"
 serde_derive = "1.0.130"
 structopt = "0.3.23"
 swc_common = "0.17.4"
-swc_ecma_ast = "0.65.3"
-swc_ecma_parser = "0.88.2"
+swc_ecmascript = { version = "0.111.14", features = ["parser"] }
 tempfile = "3.2.0"
 tokio = { version = "1.11.0", features = ["rt-multi-thread", "net", "fs"] }
 toml = "0.5.8"
