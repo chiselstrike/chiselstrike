@@ -1,0 +1,283 @@
+# SPDX-FileCopyrightText: © 2021 ChiselStrike <info@chiselstrike.com>
+
+# RUN: sh -e @file
+
+cd "$TEMPDIR"
+
+cat << EOF > "$TEMPDIR/models/types.ts"
+import { ChiselEntity } from "@chiselstrike/api";
+
+export class Person extends ChiselEntity {
+  name: string = "bob";
+  company: string = "ChiselStrike";
+}
+EOF
+
+cat << EOF > "$TEMPDIR/endpoints/store.ts"
+import { Person } from "../models/types.ts";
+
+export default async function chisel(req: Request) {
+    const glauber = new Person();
+    glauber.name = "Glauber";
+    await glauber.save();
+
+    const pekka = new Person();
+    pekka.name = "Pekka";
+    await pekka.save();
+
+    const jan = new Person();
+    jan.name = "Jan";
+    await jan.save();
+    return new Response("Ok");
+}
+EOF
+
+cat << EOF > "$TEMPDIR/endpoints/findall.ts"
+import { Person } from "../models/types.ts";
+
+export default async function chisel(req: Request) {
+    const results = Person.cursor()
+        .sortBy("name");
+    const names = (await results.toArray()).map(p => p.name);
+    return new Response("[" + names.join(", ") + "]");
+}
+EOF
+
+cat << EOF > "$TEMPDIR/endpoints/findtake.ts"
+import { Person } from "../models/types.ts";
+
+export default async function chisel(req: Request) {
+    const results = Person.cursor()
+        .sortBy("name")
+        .take(1);
+    const names = (await results.toArray()).map(p => p.name);
+    return new Response("[" + names.join(", ") + "]");
+}
+EOF
+
+cat << EOF > "$TEMPDIR/endpoints/taketwice.ts"
+import { Person } from "../models/types.ts";
+
+export default async function chisel(req: Request) {
+    const results = Person.cursor()
+        .sortBy("name")
+        .take(4)
+        .take(1);
+    const names = (await results.toArray()).map(p => p.name);
+    return new Response("[" + names.join(", ") + "]");
+}
+EOF
+
+cat << EOF > "$TEMPDIR/endpoints/taketwicereverse.ts"
+import { Person } from "../models/types.ts";
+
+export default async function chisel(req: Request) {
+    const results = Person.cursor()
+        .sortBy("name")
+        .take(1)
+        .take(4);
+    const names = (await results.toArray()).map(p => p.name);
+    return new Response("[" + names.join(", ") + "]");
+}
+EOF
+
+cat << EOF > "$TEMPDIR/endpoints/takecopies.ts"
+import { Person } from "../models/types.ts";
+
+export default async function chisel(req: Request) {
+    const base = Person.cursor().sortBy("name");
+
+    const first = base.take(2);
+    const second = base.take(1);
+
+    let names = (await second.toArray()).map(p => p.name);
+    names.push(...(await first.toArray()).map(p => p.name));
+
+    return new Response("[" + names.join(", ") + "]");
+}
+EOF
+
+
+cat << EOF > "$TEMPDIR/endpoints/findfilter.ts"
+import { Person } from "../models/types.ts";
+
+export default async function chisel(req: Request) {
+    const results = Person.cursor()
+        .sortBy("name")
+        .filter({"company" : "ChiselStrike"})
+        .take(1);
+    const names = (await results.toArray()).map(p => p.name);
+    return new Response("[" + names.join(", ") + "]");
+}
+EOF
+
+$CHISEL apply
+
+# CHECK: Model defined: Person
+# CHECK: End point defined: /dev/findall
+# CHECK: End point defined: /dev/findfilter
+# CHECK: End point defined: /dev/findtake
+# CHECK: End point defined: /dev/store
+# CHECK: End point defined: /dev/takecopies
+# CHECK: End point defined: /dev/taketwice
+# CHECK: End point defined: /dev/taketwicereverse
+
+$CURL -X POST $CHISELD_HOST/dev/store
+# CHECK: Ok
+
+$CURL $CHISELD_HOST/dev/findall
+# CHECK: [Glauber, Jan, Pekka]
+
+$CURL $CHISELD_HOST/dev/findtake
+# CHECK: [Glauber]
+
+$CURL $CHISELD_HOST/dev/findfilter
+# CHECK: [Glauber]
+
+$CURL $CHISELD_HOST/dev/taketwice
+# CHECK: [Glauber]
+
+$CURL $CHISELD_HOST/dev/taketwicereverse
+# CHECK: [Glauber]
+
+$CURL $CHISELD_HOST/dev/takecopies
+# CHECK: [Glauber, Glauber, Jan]
+
+
+cat << EOF > "$TEMPDIR/endpoints/skip1.ts"
+import { Person } from "../models/types.ts";
+
+export default async function chisel(req: Request) {
+    const results = Person.cursor()
+        .sortBy("name")
+        .skip(1);
+    const names = (await results.toArray()).map(p => p.name);
+    return new Response("[" + names.join(", ") + "]");
+}
+EOF
+
+cat << EOF > "$TEMPDIR/endpoints/two_skips.ts"
+import { Person } from "../models/types.ts";
+
+export default async function chisel(req: Request) {
+    const results = Person.cursor()
+        .sortBy("name")
+        .skip(1)
+        .skip(1);
+    const names = (await results.toArray()).map(p => p.name);
+    return new Response("[" + names.join(", ") + "]");
+}
+EOF
+
+cat << EOF > "$TEMPDIR/endpoints/filter_skip.ts"
+import { Person } from "../models/types.ts";
+
+export default async function chisel(req: Request) {
+    const results = Person.cursor()
+        .sortBy("name")
+        .filter({"company" : "ChiselStrike"})
+        .skip(2);
+    const names = (await results.toArray()).map(p => p.name);
+    return new Response("[" + names.join(", ") + "]");
+}
+EOF
+
+cat << EOF > "$TEMPDIR/endpoints/predicate_filter_skip.ts"
+import { Person } from "../models/types.ts";
+
+export default async function chisel(req: Request) {
+    const results = Person.cursor()
+        .sortBy("name")
+        .filter(p => p.name == "Jan" || p.name == "Glauber")
+        .skip(1);
+    const names = (await results.toArray()).map(p => p.name);
+    return new Response("[" + names.join(", ") + "]");
+}
+EOF
+
+cat << EOF > "$TEMPDIR/endpoints/sort_skip_sort.ts"
+import { Person } from "../models/types.ts";
+
+export default async function chisel(req: Request) {
+    const results = Person.cursor()
+        .sortBy("name", false)
+        .skip(1)
+        .sortBy("name", true);
+        const names = (await results.toArray()).map(p => p.name);
+    return new Response("[" + names.join(", ") + "]");
+}
+EOF
+
+cat << EOF > "$TEMPDIR/endpoints/sort_take_skip.ts"
+import { Person } from "../models/types.ts";
+
+export default async function chisel(req: Request) {
+    const results = Person.cursor()
+        .sortBy("name")
+        .take(2)
+        .skip(1);
+        const names = (await results.toArray()).map(p => p.name);
+    return new Response("[" + names.join(", ") + "]");
+}
+EOF
+
+cat << EOF > "$TEMPDIR/endpoints/sort_skip_take.ts"
+import { Person } from "../models/types.ts";
+
+export default async function chisel(req: Request) {
+    const results = Person.cursor()
+        .sortBy("name")
+        .skip(1)
+        .take(1);
+        const names = (await results.toArray()).map(p => p.name);
+    return new Response("[" + names.join(", ") + "]");
+}
+EOF
+
+cat << EOF > "$TEMPDIR/endpoints/sort_skip_take_filter.ts"
+import { Person } from "../models/types.ts";
+
+export default async function chisel(req: Request) {
+    const results = Person.cursor()
+        .sortBy("name")
+        .skip(1)
+        .take(2)
+        .filter({"name": "Pekka"});
+        const names = (await results.toArray()).map(p => p.name);
+    return new Response("[" + names.join(", ") + "]");
+}
+EOF
+
+$CHISEL apply
+
+# CHECK: Model defined: Person
+# CHECK: End point defined: /dev/filter_skip
+# CHECK: End point defined: /dev/predicate_filter_skip
+# CHECK: End point defined: /dev/skip1
+# CHECK: End point defined: /dev/sort_skip_sort
+# CHECK: End point defined: /dev/two_skips
+
+$CURL $CHISELD_HOST/dev/skip1
+# CHECK: [Jan, Pekka]
+
+$CURL $CHISELD_HOST/dev/two_skips
+# CHECK: [Pekka]
+
+$CURL $CHISELD_HOST/dev/filter_skip
+# CHECK: [Pekka]
+
+$CURL $CHISELD_HOST/dev/predicate_filter_skip
+# CHECK: [Jan]
+
+$CURL $CHISELD_HOST/dev/sort_skip_sort
+# CHECK: [Glauber, Jan]
+
+$CURL $CHISELD_HOST/dev/sort_take_skip
+# CHECK: [Jan]
+
+$CURL $CHISELD_HOST/dev/sort_skip_take
+# CHECK: [Jan]
+
+$CURL $CHISELD_HOST/dev/sort_skip_take_filter
+# CHECK: [Pekka]
+

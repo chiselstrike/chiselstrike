@@ -130,6 +130,10 @@ enum QueryOp {
     Take {
         count: u64,
     },
+    /// Skips the first `count` rows.
+    Skip {
+        count: u64,
+    },
     SortBy(SortBy),
 }
 
@@ -566,6 +570,14 @@ impl QueryBuilder {
         }
     }
 
+    fn make_offset_string(&self, offset: Option<u64>) -> String {
+        if let Some(offset) = offset {
+            format!("OFFSET {}", offset)
+        } else {
+            "".into()
+        }
+    }
+
     fn make_core_select(&self) -> String {
         let column_string = self.make_column_string();
         let join_string = self.make_join_string();
@@ -577,13 +589,16 @@ impl QueryBuilder {
         )
     }
 
-    /// Splits the operators' slice at a first occurrence of Take operator into two slices
-    /// first containing everything up to the Take (inclusive) and the second containing the
-    /// remainder. Idiomatically ops = [..., Take] + [...].
+    /// Splits the operators' slice at a first occurrence of Take or Skip (break) operator into two slices
+    /// first containing everything up to the Take|Skip (inclusive) and the second containing the
+    /// remainder. Idiomatically ops = [..., Take|Skip] + [...].
     fn split_on_first_take<'a>(&self, ops: &'a [QueryOp]) -> (&'a [QueryOp], &'a [QueryOp]) {
         for (i, op) in ops.iter().enumerate() {
-            if let QueryOp::Take { .. } = op {
-                return (&ops[..i + 1], &ops[i + 1..]);
+            match op {
+                QueryOp::Take { .. } | QueryOp::Skip { .. } => {
+                    return (&ops[..i + 1], &ops[i + 1..]);
+                }
+                _ => (),
             }
         }
         (ops, &[])
@@ -621,6 +636,13 @@ impl QueryBuilder {
             .map(|op| *op.as_take().unwrap())
     }
 
+    fn find_skip_count(&self, ops: &[QueryOp]) -> Option<u64> {
+        assert!(ops.iter().filter(|op| op.as_skip().is_some()).count() <= 1);
+        ops.iter()
+            .rfind(|op| op.as_skip().is_some())
+            .map(|op| *op.as_skip().unwrap())
+    }
+
     fn make_raw_query(&self) -> Result<String> {
         let mut sql_query = self.make_core_select();
         let mut remaining_ops: &[QueryOp] = &self.operators[..];
@@ -636,10 +658,13 @@ impl QueryBuilder {
 
             let limit = self.find_take_count(ops);
             let limit_string = self.make_limit_string(limit);
+
+            let offset = self.find_skip_count(ops);
+            let offset_string = self.make_offset_string(offset);
             // The "AS subquery" part is necessary to make Postgres happy.
             sql_query = format!(
-                "SELECT * FROM ({}) AS subquery {} {} {}",
-                sql_query, filter_string, sort_string, limit_string
+                "SELECT * FROM ({}) AS subquery {} {} {} {}",
+                sql_query, filter_string, sort_string, offset_string, limit_string
             );
         }
         Ok(sql_query)
@@ -694,6 +719,10 @@ pub(crate) enum QueryOpChain {
         count: u64,
         inner: Box<QueryOpChain>,
     },
+    Skip {
+        count: u64,
+        inner: Box<QueryOpChain>,
+    },
     SortBy {
         #[serde(rename = "key")]
         field_name: String,
@@ -716,6 +745,7 @@ fn convert_ops(op: QueryOpChain) -> Result<(String, Vec<QueryOp>)> {
         Filter { expression, inner } => (QueryOp::Filter { expression }, inner),
         Projection { fields, inner } => (QueryOp::Projection { fields }, inner),
         Take { count, inner } => (QueryOp::Take { count }, inner),
+        Skip { count, inner } => (QueryOp::Skip { count }, inner),
         SortBy {
             field_name,
             ascending,
