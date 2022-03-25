@@ -390,12 +390,10 @@ export class ChiselCursor<T> {
     }
 
     /** Performs recursive descent via Operator.inner examining the whole operator
-     * chain. If PredicateFilter or Sort or second SortBy is encountered, a backend
-     * query is generated and all consecutive operations are applied on the resulting
-     * async iterable in TypeScript. In such a case, the function returns the resulting
-     * AsyncIterable. If Take is encountered, every operation after the take is evaluated
-     * in TypeScript.
-     * If no PredicateFilter or Sort etc. is found, undefined is returned.
+     * chain. If PredicateFilter is encountered, a backend query is generated and
+     * all subsequent operations are applied on the resulting async iterable in
+     * TypeScript. In such a case, the function returns the resulting AsyncIterable.
+     * If no PredicateFilter is found, undefined is returned.
      */
     private makeTransformedQueryIter(
         op: Operator<T>,
@@ -410,12 +408,7 @@ export class ChiselCursor<T> {
         let iter = this.makeTransformedQueryIter(op.inner);
         if (iter !== undefined) {
             return op.apply(iter);
-        } else if (op.type == OpType.Take) {
-            return this.makeQueryIter(op);
-        } else if (
-            op.type == OpType.PredicateFilter ||
-            (op.type == OpType.SortBy && op.inner.containsType(OpType.SortBy))
-        ) {
+        } else if (op.type == OpType.PredicateFilter) {
             iter = this.makeQueryIter(op.inner);
             return op.apply(iter);
         } else {

@@ -108,10 +108,29 @@ struct Join {
     rkey: String,
 }
 
+/// Sorts elements by `field_name` in `ascending` order if true, descending otherwise.
 #[derive(Debug, Clone)]
 struct SortBy {
     field_name: String,
     ascending: bool,
+}
+
+/// Operators used to mutate the result set.
+#[derive(Debug, Clone, EnumAsInner)]
+enum QueryOp {
+    /// Filters elements by `expression`.
+    Filter {
+        expression: Expr,
+    },
+    /// Projects QueryEntity to a projected Entity containing only `fields`.
+    Projection {
+        fields: Vec<String>,
+    },
+    /// Limits the number of output rows by taking the first `count` rows.
+    Take {
+        count: u64,
+    },
+    SortBy(SortBy),
 }
 
 struct Column {
@@ -164,17 +183,13 @@ struct QueryBuilder {
     /// Entity object representing entity that is being retrieved along with necessary joins
     /// and nested entities
     entity: QueriedEntity,
-    /// Expression used to filter the entities that are to be returned.
-    filter_expr: Option<Expr>,
     /// List of fields to be returned to the user.
     allowed_fields: Option<HashSet<String>>,
-    /// If Some, it will be used to sort the queried results.
-    sort: Option<SortBy>,
-    /// Limits how many rows/entries will be returned to the user.
-    limit: Option<u64>,
     /// Counts the total number of joins the builder encountered. It's used to
     /// uniquely identify joined tables.
     join_counter: usize,
+    /// Operators used to mutate the result set.
+    operators: Vec<QueryOp>,
 }
 
 impl QueryBuilder {
@@ -187,11 +202,9 @@ impl QueryBuilder {
                 table_alias: base_type.backing_table().to_owned(),
                 joins: HashMap::default(),
             },
-            filter_expr: None,
             allowed_fields: None,
-            sort: None,
-            limit: None,
             join_counter: 0,
+            operators: vec![],
         }
     }
 
@@ -217,11 +230,12 @@ impl QueryBuilder {
     }
 
     /// Constructs a builder from a type name `ty_name`.
-    fn new_from_type_name(
+    fn from_type_name(
         api_version: &str,
         userid: &Option<String>,
         path: &str,
         ty_name: &str,
+        operators: Vec<QueryOp>,
     ) -> Result<Self> {
         let runtime = runtime::get();
         let ts = &runtime.type_system;
@@ -235,7 +249,22 @@ impl QueryBuilder {
 
         let mut builder = Self::new(ty.clone());
         builder.entity = builder.load_entity(&runtime, userid, path, &ty);
+
+        let operators = builder.process_projections(operators);
+        builder.operators.extend(operators);
         Ok(builder)
+    }
+
+    /// Processes Projection Operators, returns the remaining unused operators.
+    fn process_projections(&mut self, mut ops: Vec<QueryOp>) -> Vec<QueryOp> {
+        // FIXME: Replace this with .drain_filter() when it's moved to stable.
+        for op in &ops {
+            if let QueryOp::Projection { fields } = op {
+                self.allowed_fields = Some(HashSet::from_iter(fields.iter().cloned()));
+            }
+        }
+        ops.retain(|op| !matches!(op, QueryOp::Projection { .. }));
+        ops
     }
 
     fn make_scalar_field(
@@ -301,8 +330,8 @@ impl QueryBuilder {
                 let nested_table = format!(
                     "JOIN{}_{}_TO_{}",
                     self.join_counter,
-                    current_table,
-                    nested_ty.backing_table()
+                    ty.name(),
+                    nested_ty.name()
                 );
                 // PostgreSQL has a limit on identifiers to be at most 63 bytes long.
                 let nested_table = max_prefix(nested_table.as_str(), 63).to_owned();
@@ -366,14 +395,14 @@ impl QueryBuilder {
                 };
                 if nested_ty.name() == OAUTHUSER_TYPE_NAME {
                     if policies.match_login.contains(&field.name) {
-                        self.add_expression_filter(
-                            BinaryExpr {
-                                left: Box::new(property_access.into()),
-                                op: BinaryOp::Eq,
-                                right: Box::new(user_id.clone().into()),
-                            }
-                            .into(),
-                        )
+                        let expr = BinaryExpr {
+                            left: Box::new(property_access.into()),
+                            op: BinaryOp::Eq,
+                            right: Box::new(user_id.clone().into()),
+                        };
+                        self.operators.push(QueryOp::Filter {
+                            expression: expr.into(),
+                        });
                     }
                 } else {
                     self.add_login_filters_recursive(
@@ -386,35 +415,6 @@ impl QueryBuilder {
                 }
             }
         }
-    }
-
-    fn update_limit(&mut self, limit: u64) {
-        self.limit = Some(std::cmp::min(limit, self.limit.unwrap_or(limit)));
-    }
-
-    fn update_allowed_fields(&mut self, columns: Vec<String>) -> Result<()> {
-        self.allowed_fields = Some(HashSet::from_iter(columns));
-        Ok(())
-    }
-
-    fn add_expression_filter(&mut self, expr: Expr) {
-        if let Some(filter_expr) = &self.filter_expr {
-            let new_expr = BinaryExpr {
-                left: Box::new(expr),
-                op: BinaryOp::And,
-                right: Box::new(filter_expr.clone()),
-            };
-            self.filter_expr = Some(new_expr.into());
-        } else {
-            self.filter_expr = Some(expr);
-        }
-    }
-
-    fn set_sort(&mut self, field_name: &str, ascending: bool) {
-        self.sort = Some(SortBy {
-            field_name: field_name.to_owned(),
-            ascending,
-        });
     }
 
     fn make_column_string(&self) -> String {
@@ -456,8 +456,8 @@ impl QueryBuilder {
         gather_joins(&self.entity)
     }
 
-    fn make_filter_string(&self) -> Result<String> {
-        let where_cond = if let Some(expr) = &self.filter_expr {
+    fn make_filter_string(&self, expr: &Option<Expr>) -> Result<String> {
+        let where_cond = if let Some(expr) = expr {
             let condition = self.filter_expr_to_string(expr)?;
             format!("WHERE {}", condition)
         } else {
@@ -533,11 +533,16 @@ impl QueryBuilder {
             field = next_field;
             check_field(entity, field)?;
         }
-        Ok(format!("\"{}\".\"{}\"", entity.table_alias, field))
+        let c_alias = ColumnAlias {
+            field_name: field.to_owned(),
+            table_name: entity.table_alias.to_owned(),
+        };
+
+        Ok(format!("\"{}\"", c_alias))
     }
 
-    fn make_sort_string(&self) -> Result<String> {
-        let sort_str = if let Some(sort) = &self.sort {
+    fn make_sort_string(&self, sort: Option<&SortBy>) -> Result<String> {
+        let sort_str = if let Some(sort) = sort {
             let order = if sort.ascending { "ASC" } else { "DESC" };
             let c_alias = ColumnAlias {
                 field_name: sort.field_name.to_owned(),
@@ -550,24 +555,91 @@ impl QueryBuilder {
         Ok(sort_str)
     }
 
-    fn make_raw_query(&self) -> Result<String> {
+    fn make_limit_string(&self, limit: Option<u64>) -> String {
+        if let Some(limit) = limit {
+            format!("LIMIT {}", limit)
+        } else {
+            "".into()
+        }
+    }
+
+    fn make_core_select(&self) -> String {
         let column_string = self.make_column_string();
         let join_string = self.make_join_string();
-        let filter_string = self.make_filter_string()?;
-        let sort_string = self.make_sort_string()?;
-
-        let mut raw_sql = format!(
-            "SELECT {} FROM \"{}\" {} {} {}",
+        format!(
+            "SELECT {} FROM \"{}\" {}",
             column_string,
             self.base_type().backing_table(),
             join_string,
-            filter_string,
-            sort_string
-        );
-        if let Some(limit) = self.limit {
-            raw_sql += format!(" LIMIT {}", limit).as_str();
+        )
+    }
+
+    /// Splits the operators' slice at a first occurrence of Take operator into two slices
+    /// first containing everything up to the Take (inclusive) and the second containing the
+    /// remainder. Idiomatically ops = [..., Take] + [...].
+    fn split_on_first_take<'a>(&self, ops: &'a [QueryOp]) -> (&'a [QueryOp], &'a [QueryOp]) {
+        for (i, op) in ops.iter().enumerate() {
+            if let QueryOp::Take { .. } = op {
+                return (&ops[..i + 1], &ops[i + 1..]);
+            }
         }
-        Ok(raw_sql)
+        (ops, &[])
+    }
+
+    fn gather_filters(&self, ops: &[QueryOp]) -> Option<Expr> {
+        let mut expr = None;
+        for op in ops {
+            if let QueryOp::Filter { expression } = op {
+                if let Some(filter_expr) = expr {
+                    let new_expr = BinaryExpr {
+                        left: Box::new(filter_expr),
+                        op: BinaryOp::And,
+                        right: Box::new(expression.clone()),
+                    };
+                    expr = Some(new_expr.into());
+                } else {
+                    expr = Some(expression.clone());
+                }
+            }
+        }
+        expr
+    }
+
+    fn find_last_sort_by<'a>(&self, ops: &'a [QueryOp]) -> Option<&'a SortBy> {
+        ops.iter()
+            .rfind(|op| op.as_sort_by().is_some())
+            .map(|op| op.as_sort_by().unwrap())
+    }
+
+    fn find_take_count(&self, ops: &[QueryOp]) -> Option<u64> {
+        assert!(ops.iter().filter(|op| op.as_take().is_some()).count() <= 1);
+        ops.iter()
+            .rfind(|op| op.as_take().is_some())
+            .map(|op| *op.as_take().unwrap())
+    }
+
+    fn make_raw_query(&self) -> Result<String> {
+        let mut sql_query = self.make_core_select();
+        let mut remaining_ops: &[QueryOp] = &self.operators[..];
+        while !remaining_ops.is_empty() {
+            let (ops, remainder) = self.split_on_first_take(remaining_ops);
+            remaining_ops = remainder;
+
+            let filter_expr = self.gather_filters(ops);
+            let filter_string = self.make_filter_string(&filter_expr)?;
+
+            let sort = self.find_last_sort_by(ops);
+            let sort_string = self.make_sort_string(sort)?;
+
+            let limit = self.find_take_count(ops);
+            let limit_string = self.make_limit_string(limit);
+            // The "AS subquery" part is necessary to make Postgres happy.
+            sql_query = format!(
+                "SELECT * FROM ({}) AS subquery {} {} {}",
+                sql_query, filter_string, sort_string, limit_string
+            );
+        }
+        Ok(sql_query)
     }
 
     fn build(&self) -> Result<Query> {
@@ -620,47 +692,42 @@ pub(crate) enum QueryOpChain {
         inner: Box<QueryOpChain>,
     },
     SortBy {
-        key: String,
+        #[serde(rename = "key")]
+        field_name: String,
         ascending: bool,
         inner: Box<QueryOpChain>,
     },
 }
 
-fn convert_to_query_builder(
-    api_version: &str,
-    userid: &Option<String>,
-    path: &str,
-    op: QueryOpChain,
-) -> Result<QueryBuilder> {
+/// Converts operator chain into a tuple `(entity_name, ops)`, where
+/// `entity_name` is the name taken from the BaseEntity which corresponds to
+/// Entity which is to be queried. `ops` are a Vector of Operators that
+/// are to be applied on the resulting entity elements in order that
+/// is defined by the vector.
+fn convert_ops(op: QueryOpChain) -> Result<(String, Vec<QueryOp>)> {
     use QueryOpChain::*;
-    let builder = match op {
-        BaseEntity { name } => QueryBuilder::new_from_type_name(api_version, userid, path, &name)?,
-        Filter { expression, inner } => {
-            let mut builder = convert_to_query_builder(api_version, userid, path, *inner)?;
-            builder.add_expression_filter(expression);
-            builder
+    let (query_op, inner) = match op {
+        BaseEntity { name } => {
+            return Ok((name, vec![]));
         }
-        Projection { fields, inner } => {
-            let mut builder = convert_to_query_builder(api_version, userid, path, *inner)?;
-            builder.update_allowed_fields(fields)?;
-            builder
-        }
-        Take { count, inner } => {
-            let mut builder = convert_to_query_builder(api_version, userid, path, *inner)?;
-            builder.update_limit(count);
-            builder
-        }
+        Filter { expression, inner } => (QueryOp::Filter { expression }, inner),
+        Projection { fields, inner } => (QueryOp::Projection { fields }, inner),
+        Take { count, inner } => (QueryOp::Take { count }, inner),
         SortBy {
-            key,
+            field_name,
             ascending,
             inner,
-        } => {
-            let mut builder = convert_to_query_builder(api_version, userid, path, *inner)?;
-            builder.set_sort(&key, ascending);
-            builder
-        }
+        } => (
+            QueryOp::SortBy(super::query::SortBy {
+                field_name,
+                ascending,
+            }),
+            inner,
+        ),
     };
-    Ok(builder)
+    let (entity_name, mut ops) = convert_ops(*inner)?;
+    ops.push(query_op);
+    Ok((entity_name, ops))
 }
 
 pub(crate) fn type_to_query(ty: &Arc<ObjectType>) -> Result<Query> {
@@ -674,7 +741,8 @@ pub(crate) fn json_to_query(
     path: &str,
     op_chain: QueryOpChain,
 ) -> Result<Query> {
-    let builder = convert_to_query_builder(api_version, userid, path, op_chain)?;
+    let (entity_name, ops) = convert_ops(op_chain)?;
+    let builder = QueryBuilder::from_type_name(api_version, userid, path, &entity_name, ops)?;
     builder.build()
 }
 
