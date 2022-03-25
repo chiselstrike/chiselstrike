@@ -754,7 +754,6 @@ const nextHandlers: Record<string, requestHandler> = {};
 const handlers: Record<string, requestHandler> = {};
 
 export async function importEndpoint(
-    baseDirectory: string,
     path: string,
     apiVersion: string,
     version: number,
@@ -765,7 +764,7 @@ export async function importEndpoint(
     // Modules are never unloaded, so we need to create an unique
     // path. This will not be a problem once we publish the entire app
     // at once, since then we can create a new isolate for it.
-    const url = `file://${baseDirectory}/${path}.js?ver=${version}`;
+    const url = `file:///${path}.js?ver=${version}`;
     const mod = await import(url);
     const handler = mod.default;
     if (typeof handler !== "function") {
