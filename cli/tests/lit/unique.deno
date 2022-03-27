@@ -48,7 +48,8 @@ $CURL -d '{ "relUrl": "post.html", "content": "We at ChiselStrike are so happy t
 
 $CURL http://localhost:8080/dev/post
 # CHECK: HTTP/1.1 200 OK
-# CHECK: "relUrl":"post.html","content":"We at ChiselStrike are so happy to have you with us!"
+# CHECK: "relUrl": "post.html",
+# CHECK: "content": "We at ChiselStrike are so happy to have you with us!"
 
 $CURL -d '{ "relUrl": "post.html", "content": "We at ChiselStrike are so happy to have you with us!" }' -X POST http://localhost:8080/dev/post
 # CHECK: HTTP/1.1 500 Internal Server Error

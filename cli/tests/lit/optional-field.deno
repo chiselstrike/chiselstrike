@@ -45,16 +45,16 @@ $CHISEL apply
 ## Accept payload without optional values:
 $CURL -d '{}' $CHISELD_HOST/dev/save
 # CHECK: HTTP/1.1 200 OK
-# CHECK: {"id":
+# CHECK: "id":
 $CURL -d '{"a":142}' $CHISELD_HOST/dev/save
 # CHECK: HTTP/1.1 200 OK
-# CHECK: "a":142
+# CHECK: "a": 142
 $CURL -d '{"b":{"c":241}}' $CHISELD_HOST/dev/save
 # CHECK: HTTP/1.1 200 OK
-# CHECK: "c":241
+# CHECK: "c": 241
 $CURL -d '{"a":142, "b":{"c":241}}' $CHISELD_HOST/dev/save
 # CHECK: HTTP/1.1 200 OK
-# CHECK: "c":241
+# CHECK: "c": 241
 $CURL $CHISELD_HOST/dev/sum
 # CHECK: HTTP/1.1 200 OK
 # CHECK: the sum is: 766;

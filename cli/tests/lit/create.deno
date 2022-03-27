@@ -29,4 +29,5 @@ $CHISEL apply
 
 $CURL -X POST $CHISELD_HOST/dev/new
 # CHECK: HTTP/1.1 200 OK
-# CHECK: "name":"Elizabeth","isQueen":true
+# CHECK: "name": "Elizabeth"
+# CHECK: "isQueen": true

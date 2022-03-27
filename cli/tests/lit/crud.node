@@ -31,20 +31,20 @@ $CURL -d '{"first_name":"Eve","last_name":"Elgin","age":50,"human":true,"height"
 # CHECK: "Elgin"
 
 $CURL $CHISELD_HOST/dev/persons | tr , \\n | sort # GET all
-# CHECK: "last_name":"Anderson"
-# CHECK: "last_name":"Brown"
-# CHECK: "last_name":"Chong"
-# CHECK: "last_name":"Draper"
-# CHECK: "last_name":"Elgin"
+# CHECK: "last_name": "Anderson"
+# CHECK: "last_name": "Brown"
+# CHECK: "last_name": "Chong"
+# CHECK: "last_name": "Draper"
+# CHECK: "last_name": "Elgin"
 
 $CURL "$CHISELD_HOST/dev/persons?f=\\{%22age%22:40\\}" # Filtered GET
 # CHECK: HTTP/1.1 200 OK
-# CHECK: "last_name":"Brown"
+# CHECK: "last_name": "Brown"
 
-id=`$CURL "$CHISELD_HOST/dev/persons?f=\\{%22age%22:10\\}" | sed -ne 's/.*"id":"\([^"]*\).*/\1/p'`
+id=`$CURL "$CHISELD_HOST/dev/persons?f=\\{%22age%22:10\\}" | sed -ne 's/.*"id":\s*"\([^"]*\).*/\1/p'`
 $CURL $CHISELD_HOST/dev/persons/$id # GET by id
 # CHECK: HTTP/1.1 200 OK
-# CHECK: "first_name":"Dawn"
+# CHECK: "first_name": "Dawn"
 $CURL $CHISELD_HOST/dev/persons/i-will-never-exist-ya-know # GET by invalid id
 # CHECK: HTTP/1.1 404 Not Found
 
@@ -62,9 +62,9 @@ $CURL -X DELETE "$CHISELD_HOST/dev/persons?f=\\{%22age%22:40\\}" # Filtered DELE
 # CHECK: HTTP/1.1 200 OK
 # CHECK: Deleted entities matching {\"age\":40}
 $CURL $CHISELD_HOST/dev/persons | tr , \\n | sort
-# CHECK: "last_name":"Anderson"
-# CHECK: "last_name":"Chong"
-# CHECK: "last_name":"Elgin"
+# CHECK: "last_name": "Anderson"
+# CHECK: "last_name": "Chong"
+# CHECK: "last_name": "Elgin"
 
 $CURL -X DELETE $CHISELD_HOST/dev/persons # Filter missing
 # CHECK: HTTP/1.1 422 Unprocessable Entity
@@ -79,15 +79,15 @@ $CURL $CHISELD_HOST/dev/persons
 
 $CURL -d '{"id":"abcd","first_name":"Alice"}' $CHISELD_HOST/dev/persons
 # CHECK: HTTP/1.1 200 OK
-# CHECK: "first_name":"Alice"
+# CHECK: "first_name": "Alice"
 $CURL -d '{"id":"abcd","first_name":"Alice"}' $CHISELD_HOST/dev/persons # Repeated POST of the same entry.
 # CHECK: HTTP/1.1 200 OK
-# CHECK: "first_name":"Alice"
+# CHECK: "first_name": "Alice"
 echo there are `$CURL $CHISELD_HOST/dev/persons | tr , \\\n | grep -c first_name` entries
 # CHECK: there are 2 entries
 $CURL $CHISELD_HOST/dev/persons | tr , \\n | grep first_name
-# CHECK: "first_name":"Alice"
-# CHECK: "first_name":"Alice"
+# CHECK: "first_name": "Alice"
+# CHECK: "first_name": "Alice"
 
 $CURL -X DELETE "$CHISELD_HOST/dev/persons?f=\\{\\}"
 # CHECK: HTTP/1.1 200 OK
@@ -95,14 +95,14 @@ $CURL -X DELETE "$CHISELD_HOST/dev/persons?f=\\{\\}"
 
 $CURL -X PUT -d '{"age":98422}' $CHISELD_HOST/dev/persons/cef5d492-d7e3-4c45-9a55-5929b9ab8292
 # CHECK: HTTP/1.1 200 OK
-# CHECK: "age":98422
+# CHECK: "age": 98422
 $CURL -X PUT -d '{"age":2938}' $CHISELD_HOST/dev/persons/cef5d492-d7e3-4c45-9a55-5929b9ab8292 # Repeated PUT of the same id.
 # CHECK: HTTP/1.1 200 OK
-# CHECK: "age":2938
+# CHECK: "age": 2938
 echo there is just `$CURL $CHISELD_HOST/dev/persons | tr , \\n | grep -c age\":` entry
 # CHECK: there is just 1 entry
 $CURL $CHISELD_HOST/dev/persons | tr , \\n | grep age\":
-# CHECK: "age":2938
+# CHECK: "age": 2938
 
 $CURL -X PUT -d '{"age":98422}' $CHISELD_HOST/dev/persons/ # PUT without ID.
 # CHECK: 400 Bad Request

@@ -108,7 +108,9 @@ $CURL -H "ChiselStrikeToken:$token_al" -d '{"text": "second post by al"}' $CHISE
 # CHECK: HTTP/1.1 200 OK
 $CURL -H "ChiselStrikeToken:$token_al" $CHISELD_HOST/dev/po
 # CHECK: HTTP/1.1 200 OK
-# CHECK: [{"text":"first post by al"},{"text":"first post by als"},{"text":"second post by al"}]
+# CHECK: "text": "first post by al"
+# CHECK: "text": "first post by als"
+# CHECK: "text": "second post by al"
 
 cat << EOF > "$TEMPDIR/policies/pol.yaml"
 labels:
@@ -118,8 +120,8 @@ EOF
 $CHISEL apply
 $CURL -H "ChiselStrikeToken:$token_al" $CHISELD_HOST/dev/po
 # CHECK: HTTP/1.1 200 OK
-# CHECK: [{"text":"first post by al"},{"text":"second post by al"}]
-
+# CHECK: "text": "first post by al"
+# CHECK: "text": "second post by al"
 
 
 
@@ -176,7 +178,9 @@ $CURL -H "ChiselStrikeToken:$token_al" -d '{
 
 $CURL -H "ChiselStrikeToken:$token_al" $CHISELD_HOST/dev/blogs
 # CHECK: HTTP/1.1 200 OK
-# CHECK: ["first blog post by al","first blog post by als","second blog post by al"]
+# CHECK: "first blog post by al"
+# CHECK: "first blog post by als"
+# CHECK: "second blog post by al"
 
 cat << EOF > "$TEMPDIR/policies/pol.yaml"
 labels:
@@ -189,4 +193,5 @@ $CHISEL apply
 
 $CURL -H "ChiselStrikeToken:$token_al" $CHISELD_HOST/dev/blogs
 # CHECK: HTTP/1.1 200 OK
-# CHECK: ["first blog post by al","second blog post by al"]
+# CHECK: "first blog post by al"
+# CHECK: "second blog post by al"

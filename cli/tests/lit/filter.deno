@@ -115,7 +115,14 @@ $CHISEL apply
 # CHECK: End point defined: /dev/take_filter
 
 $CURL -X POST -o - $CHISELD_HOST/dev/take_filter
-# CHECK: {"simple_take":["x",1],"filter_take":["z",3]}
+# CHECK: "simple_take": [
+# CHECK: "x",
+# CHECK  1
+# CHECK  ],
+# CHECK: "filter_take": [
+# CHECK: "z",
+# CHECK: 3
+# CHECK: ]
 
 
 # Test sql keywords

@@ -720,7 +720,7 @@ export function responseFromJson(body: unknown, status = 200) {
         return status == 101 || status == 204 || status == 205 || status == 304;
     };
 
-    const json = isNullBody(status) ? null : JSON.stringify(body);
+    const json = isNullBody(status) ? null : JSON.stringify(body, null, 2);
     return new Response(json, {
         status: status,
         headers: [
