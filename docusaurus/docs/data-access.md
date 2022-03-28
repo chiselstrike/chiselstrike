@@ -11,7 +11,7 @@ The set of entities in your application represents the domain model, which is wh
 
 For example, to define an entity `User` that represents a user in your application, you can add the following TypeScript class to your existing models file:
 
-```typescript title="models/models.ts"
+```typescript title="my-backend/models/models.ts"
 import { ChiselEntity, labels } from "@chiselstrike/api"
 
 export class BlogComment extends ChiselEntity {
@@ -34,7 +34,7 @@ The `ChiselEntity` base class that our `User` entity extends provides a `save()`
 
 We can, for example, write the following endpoint that takes input as JSON, builds a `User` entity, and persists it with the `save()` method as follows:
 
-```typescript title="endpoints/create.ts"
+```typescript title="my-backend/endpoints/create.ts"
 import { responseFromJson } from "@chiselstrike/api"
 import { User } from "../models/models"
 
@@ -65,7 +65,7 @@ Please note that, as discussed in the [Getting Started](intro.md) section, the C
 
 For example, you could write the following endpoint that takes the same JSON, but updates the `User` entity based on the provided `username`:
 
-```typescript title="endpoints/update.ts"
+```typescript title="my-backend/endpoints/update.ts"
 import { responseFromJson } from "@chiselstrike/api";
 import { User } from "../models/models";
 
@@ -116,7 +116,7 @@ The `ChiselEntity` base class provides two convenience methods, `findOne()` and 
 
 For example, to query one entity with a given `username`, you could define the following endpoint:
 
-```typescript title="endpoints/find-one.ts"
+```typescript title="my-backend/endpoints/find-one.ts"
 import { responseFromJson } from "@chiselstrike/api"
 import { User } from "../models/models"
 
@@ -141,7 +141,7 @@ and see `curl` report:
 
 To find multiple entities, you can use the `findMany()` method. For example, you can write the following endpoint:
 
-```typescript title="endpoints/find-many.ts"
+```typescript title="my-backend/endpoints/find-many.ts"
 import { responseFromJson } from "@chiselstrike/api"
 import { User } from "../models/models"
 
@@ -227,7 +227,7 @@ The ChiselStrike runtime does not perform query optimizations in the current rel
 
 For example, the `findOne()` example could be written using the cursor-based API as follows:
 
-```typescript title="endpoints/find-one-cursor.ts"
+```typescript title="my-backend/endpoints/find-one-cursor.ts"
 import { responseFromJson } from "@chiselstrike/api"
 import { User } from "../models/models"
 

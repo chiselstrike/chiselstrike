@@ -24,7 +24,7 @@ be added.
 
 Here is one example of it in practice:
 
-```typescript title="models/post.ts"
+```typescript title="my-backend/models/post.ts"
 import { ChiselEntity, unique } from "@chiselstrike/api"
 
 export class BlogPost extends ChiselEntity {
@@ -36,7 +36,7 @@ export class BlogPost extends ChiselEntity {
 We can now code an endpoint that will store a post, with a given
 relative URL:
 
-```typescript title="endpoints/post.ts"
+```typescript title="my-backend/endpoints/post.ts"
 import { BlogPost } from "../models/post";
 import { responseFromJson } from "@chiselstrike/api";
 
@@ -99,7 +99,7 @@ prepare in advance. They are:
 
 Going back ot our `BlogPost` model, notice that if we try to add another field, we will be faced with an error messsage:
 
-```typescript title="models/post.ts"
+```typescript title="my-backend/models/post.ts"
 import { ChiselEntity, unique } from "@chiselstrike/api"
 
 export class BlogPost extends ChiselEntity {
@@ -117,7 +117,7 @@ unsafe to replace type: BlogPost. Reason: Trying to add a new non-optional field
 
 It is possible, however, to add:
 
-```typescript title="models/post.ts"
+```typescript title="my-backend/models/post.ts"
 import { ChiselEntity, unique } from "@chiselstrike/api"
 
 export class BlogPost extends ChiselEntity {
@@ -129,7 +129,7 @@ export class BlogPost extends ChiselEntity {
 
 And after that:
 
-```typescript title="models/post.ts"
+```typescript title="my-backend/models/post.ts"
 import { ChiselEntity, unique } from "@chiselstrike/api"
 
 export class BlogPost extends ChiselEntity {
