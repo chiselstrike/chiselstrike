@@ -175,6 +175,12 @@ impl fmt::Display for ColumnAlias {
     }
 }
 
+#[derive(Debug, Clone, EnumAsInner)]
+pub(crate) enum TargetDatabase {
+    Postgres,
+    Sqlite,
+}
+
 /// Class used to build `Query` from either QueryOpChain or `ObjectType`.
 /// The json part recursively descends through selected fields and captures all
 /// joins necessary for nested types retrieval.
@@ -562,19 +568,19 @@ impl QueryBuilder {
         Ok(sort_str)
     }
 
-    fn make_limit_string(&self, limit: Option<u64>) -> String {
-        if let Some(limit) = limit {
-            format!("LIMIT {}", limit)
+    fn make_limit_and_offset_string(
+        &self,
+        target: &TargetDatabase,
+        limit: Option<u64>,
+        offset: Option<u64>,
+    ) -> String {
+        if target.as_sqlite().is_some() && limit.is_none() && offset.is_some() {
+            // Covers Sqlite not supporting standalone OFFSET statement without LIMIT.
+            format!("LIMIT {},-1", offset.unwrap())
         } else {
-            "".into()
-        }
-    }
-
-    fn make_offset_string(&self, offset: Option<u64>) -> String {
-        if let Some(offset) = offset {
-            format!("OFFSET {}", offset)
-        } else {
-            "".into()
+            let limit_str = limit.map_or("".into(), |l| format!("LIMIT {}", l));
+            let offset_str = offset.map_or("".into(), |o| format!("OFFSET {}", o));
+            format!("{} {}", limit_str, offset_str)
         }
     }
 
@@ -643,7 +649,7 @@ impl QueryBuilder {
             .map(|op| *op.as_skip().unwrap())
     }
 
-    fn make_raw_query(&self) -> Result<String> {
+    fn make_raw_query(&self, target: TargetDatabase) -> Result<String> {
         let mut sql_query = self.make_core_select();
         let mut remaining_ops: &[QueryOp] = &self.operators[..];
         while !remaining_ops.is_empty() {
@@ -657,22 +663,21 @@ impl QueryBuilder {
             let sort_string = self.make_sort_string(sort)?;
 
             let limit = self.find_take_count(ops);
-            let limit_string = self.make_limit_string(limit);
-
             let offset = self.find_skip_count(ops);
-            let offset_string = self.make_offset_string(offset);
+            let lo_string = self.make_limit_and_offset_string(&target, limit, offset);
+
             // The "AS subquery" part is necessary to make Postgres happy.
             sql_query = format!(
-                "SELECT * FROM ({}) AS subquery {} {} {} {}",
-                sql_query, filter_string, sort_string, offset_string, limit_string
+                "SELECT * FROM ({}) AS subquery {} {} {}",
+                sql_query, filter_string, sort_string, lo_string
             );
         }
         Ok(sql_query)
     }
 
-    pub(crate) fn build(&self) -> Result<Query> {
+    pub(crate) fn build(&self, target: TargetDatabase) -> Result<Query> {
         Ok(Query {
-            raw_sql: self.make_raw_query()?,
+            raw_sql: self.make_raw_query(target)?,
             entity: self.entity.clone(),
             allowed_fields: self.allowed_fields.clone(),
         })

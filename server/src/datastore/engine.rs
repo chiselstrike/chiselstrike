@@ -1,6 +1,8 @@
 // SPDX-FileCopyrightText: © 2021 ChiselStrike <info@chiselstrike.com>
 
-use crate::datastore::query::{Mutation, QueriedEntity, QueryBuilder, QueryField, SqlValue};
+use crate::datastore::query::{
+    Mutation, QueriedEntity, QueryBuilder, QueryField, SqlValue, TargetDatabase,
+};
 use crate::datastore::{DbConnection, Kind};
 use crate::types::{Field, ObjectDelta, ObjectType, Type, OAUTHUSER_TYPE_NAME};
 use crate::JsonObject;
@@ -189,6 +191,13 @@ impl QueryEngine {
     pub(crate) async fn local_connection(conn: &DbConnection, nr_conn: usize) -> Result<Self> {
         let local = conn.local_connection(nr_conn).await?;
         Ok(Self::new(local.kind, local.pool))
+    }
+
+    fn target_db(&self) -> TargetDatabase {
+        match self.kind {
+            Kind::Postgres => TargetDatabase::Postgres,
+            Kind::Sqlite => TargetDatabase::Sqlite,
+        }
     }
 
     pub(crate) async fn drop_table(
@@ -403,7 +412,7 @@ impl QueryEngine {
         tr: TransactionStatic,
         query_builder: QueryBuilder,
     ) -> anyhow::Result<QueryResults> {
-        let query = query_builder.build()?;
+        let query = query_builder.build(self.target_db())?;
         let allowed_fields = query.allowed_fields;
 
         let stream = new_query_results(query.raw_sql, tr);
