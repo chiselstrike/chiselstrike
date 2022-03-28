@@ -19,9 +19,3 @@ For example, the above endpoint `my-backend/endpoints/comments.ts` will be invok
 `/dev/comments/1234-abcd-5678-efgh`.  The `BlogComment.crud()` will parse the URL and understand that a single
 collection element is being accessed.
 
-
-
-
-
-
-

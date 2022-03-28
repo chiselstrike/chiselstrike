@@ -8,7 +8,7 @@ Models represent the domain objects of your application.
 
 For example, in a blogging platform, you will have entities such as `BlogPost`, `BlogComment`, `Author`, and so on.
 
-To define a `User`, you can add the following TypeScript class to a file in the `models/` directory:
+To define a `BlogComment`, you can add the following TypeScript class to a file in the `models/` directory:
 
 ```typescript title="models/models.ts"
 import { ChiselEntity, labels } from "@chiselstrike/api"
