@@ -15,10 +15,10 @@ This tutorial will show you how to use `chisel`, which allows for easy local
 development and testing.
 
 Imagine you're just starting out building a new application for a dynamic site, but you don't want
-to bother implementing an entire backend server, configuring a SQL database, and all
-of that.
+to bother implementing an entire backend server, configuring a SQL database, and managing the deployment
+for it.
 
-A particular example might involve building a blog that allows readers to make comments. 
+A simple example might involve building a blog that allows readers to make comments. 
 Even if a blog was statically rendered, the comment section would need some kind of endpoint
 to make it work.
 
@@ -127,9 +127,9 @@ Next, let's add the ability to save and load comments. We need to define what ty
 This is where backend models come in -- models use typescript to describe
 what kind of data you want to store.  
 
-Create a file in `my-backend/models/models.ts`:
+Create a file in `my-backend/models/BlogComment.ts`:
 
-```typescript title="my-backend/models/models.ts"
+```typescript title="my-backend/models/BlogComment.ts"
 import { ChiselEntity } from "@chiselstrike/api"
 
 export class BlogComment extends ChiselEntity {
@@ -177,8 +177,8 @@ update, and delete ([CRUD](https://en.wikipedia.org/wiki/Create,_read,_update_an
 ChiselStrike makes REST as easy as it gets. To generate a REST collection for BlogComment, including a `POST` method
 so we can add comments to the database, we can create the following endpoints file:
 
-```typescript title="my-backend/endpoints/comments.ts"
-import { BlogComment } from "../models/models";
+```typescript title="my-backend/endpoints/BlogComment.ts"
+import { BlogComment } from "../models/BlogComment";
 export default BlogComment.crud();
 ```
 

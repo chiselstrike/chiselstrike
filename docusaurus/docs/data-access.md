@@ -15,7 +15,7 @@ import { ChiselEntity, labels } from "@chiselstrike/api"
 
 export class BlogComment extends ChiselEntity {
     content: string = "";
-    @labels("pii") by: string = "";
+    by: string = "";
 }
 
 export class User extends ChiselEntity {

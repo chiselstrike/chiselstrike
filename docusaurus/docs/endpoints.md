@@ -34,10 +34,9 @@ export default crud(
         }
     },
 );
+```
 
 You may also be interested in the [Authentication](auth) chapter.
-
-```
 
 ## Full Custom Endpoints
 
@@ -66,7 +65,7 @@ export default async function chisel(req) {
     if (req.method == 'POST') {
         const payload = await req.json();
         const by = payload["by"] || "anonymous";
-        const created = BlogComment.build({'content': payload['content'], 'by': by });
+        const created = BlogComment.build({'content': payload['content'], by });
         await created.save();
         return responseFromJson(created);
     }
@@ -101,9 +100,9 @@ as `created.id` in the example above. If the object doesn't have an `id`, one is
 :::
 
 :::tip
-Notice that right now using the API to access objects that do not exist returns null values, rather
-than raising exceptions. This will change in the near future, though right now we do our own explicit
-error checking in the examples.
+Notice that right now using `findOne` to access an object that does not exist returns a null value, rather
+than raising an error. This may change in the near future. We do our own explicit
+error checking in this example.
 :::
 
 With this endpoint example, we're now getting to know ChiselStrike's API and runtime better. Notice how
