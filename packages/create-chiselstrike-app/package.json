@@ -10,7 +10,7 @@
     },
     "scripts": {
         "prepare": "npm run build",
-        "build": "rimraf ./dist && ncc build ./index.ts -o ./dist/"
+        "build": "rm -rf ./dist && ncc build ./index.ts -o ./dist/"
     },
     "files": [
         "dist"
@@ -22,7 +22,6 @@
         "@vercel/ncc": "^0.33.1",
         "commander": "^8.3.0",
         "cross-spawn": "^7.0.3",
-        "rimraf": "^3.0.2",
         "typescript": "^4.5.4"
     },
     "engines": {
