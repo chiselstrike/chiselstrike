@@ -1,4 +1,7 @@
+use api::chisel_d_ts;
+use api::chisel_js;
 use std::env;
+use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
@@ -28,6 +31,9 @@ fn main() {
     let create_app = Path::new("./create-chiselstrike-app").to_path_buf();
     let api = Path::new("./chiselstrike-api").to_path_buf();
 
+    fs::write("./chiselstrike-api/lib/chisel.js", chisel_js()).unwrap();
+    fs::write("./chiselstrike-api/lib/chisel.d.ts", chisel_d_ts()).unwrap();
+
     // build create-chiselstrike-app so we can use it in tests
     for v in [
         "create-chiselstrike-app/index.ts",
@@ -44,10 +50,7 @@ fn main() {
     run_in("npm", ["install"], create_app.clone());
     run_in("npm", ["run", "build"], create_app);
 
-    for v in [
-        "chiselstrike-api/tsconfig.json",
-        "chiselstrike-api/package.json",
-    ] {
+    for v in ["chiselstrike-api/package.json"] {
         println!("cargo:rerun-if-changed=./{}", v);
     }
     run_in("npm", ["install"], api.clone());

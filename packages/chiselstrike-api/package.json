@@ -5,13 +5,8 @@
     "types": "lib/chisel.d.ts",
     "author": "Pekka Enberg <penberg@chiselstrike.com>",
     "license": "Proprietary",
-    "prepare": "npm run build",
     "scripts": {
-        "prepare": "npm run build",
-        "build": "rm -rf ./lib && tsc --noResolve --module es2022 && cp -La ../../api/src/lib.deno_core.d.ts lib/"
-    },
-    "dependencies": {
-        "typescript": "^4.5.4"
+        "build": "true"
     },
     "files": [
         "/lib"

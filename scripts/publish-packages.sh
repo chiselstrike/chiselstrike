@@ -6,6 +6,7 @@
 
 cwd=$(pwd)
 
+cargo build -p packages
 cd "$cwd/packages/chiselstrike-api" && npm i && npm publish
 cd "$cwd/packages/chiselstrike-cli" && npm i && npm publish
 cd "$cwd/packages/chiselstrike-frontend" && npm i && npm publish
