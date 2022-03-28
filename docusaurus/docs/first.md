@@ -22,13 +22,6 @@ A particular example might involve building a blog that allows readers to make c
 Even if a blog was statically rendered, the comment section would need some kind of endpoint
 to make it work.
 
-If we had such and endpoint right now, we could interact with it via
-`curl`, like this:
-
-```bash
-curl localhost:8080/dev/comments
-```
-
 # Setup
 
 Let's get started by using ChiselStrike to create a skeleton of a backend project. This
@@ -173,7 +166,7 @@ Model defined: BlogComment
 Now you are able to store `BlogComment` objects!  However, we still need to surface those entities in our web-services API.  
 That comes next!
 
-# Our First Endpoint 
+## Our First Endpoint 
 
 We're big fans of [REST](https://en.wikipedia.org/wiki/Representational_state_transfer), but don't strictly require it in ChiselStrike.
 
@@ -295,7 +288,7 @@ curl -g localhost:8080/dev/comments?f={%22by%22:%22Jack%22} | python -m json.too
 ]
 ```
 
-# PUT and DELETE
+## PUT and DELETE
 
 We can also amend an object with `PUT`:
 
