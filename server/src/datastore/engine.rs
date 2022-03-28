@@ -1,6 +1,6 @@
 // SPDX-FileCopyrightText: © 2021 ChiselStrike <info@chiselstrike.com>
 
-use crate::datastore::query::{Mutation, QueriedEntity, Query, QueryField, SqlValue};
+use crate::datastore::query::{Mutation, QueriedEntity, QueryBuilder, QueryField, SqlValue};
 use crate::datastore::{DbConnection, Kind};
 use crate::types::{Field, ObjectDelta, ObjectType, Type, OAUTHUSER_TYPE_NAME};
 use crate::JsonObject;
@@ -401,8 +401,9 @@ impl QueryEngine {
     pub(crate) fn query(
         &self,
         tr: TransactionStatic,
-        query: Query,
+        query_builder: QueryBuilder,
     ) -> anyhow::Result<QueryResults> {
+        let query = query_builder.build()?;
         let allowed_fields = query.allowed_fields;
 
         let stream = new_query_results(query.raw_sql, tr);

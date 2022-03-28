@@ -1,6 +1,6 @@
 // SPDX-FileCopyrightText: © 2021 ChiselStrike <info@chiselstrike.com>
 
-use crate::datastore::query::type_to_query;
+use crate::datastore::query::QueryBuilder;
 use crate::datastore::QueryEngine;
 use anyhow::Context;
 use derive_new::new;
@@ -327,8 +327,8 @@ impl TypeSystem {
                     })?;
 
                 let tr = engine.clone().start_transaction_static().await?;
-                let query = type_to_query(ty_obj)?;
-                let mut row_streams = engine.query(tr.clone(), query)?;
+                let query_builder = QueryBuilder::from_type(ty_obj);
+                let mut row_streams = engine.query(tr.clone(), query_builder)?;
 
                 while let Some(row) = row_streams.next().await {
                     // FIXME: basic rate limit?
