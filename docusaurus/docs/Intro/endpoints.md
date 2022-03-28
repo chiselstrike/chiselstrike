@@ -1,6 +1,6 @@
 # More About Endpoints
 
-In this section we'll show how to move beyond simple CRUD requests, as shown in [Getting Started](first).
+In this section we'll show how to move beyond simple CRUD requests, as shown in [Getting Started](Intro/first.md).
 
 # Customizing CRUD Further
 
@@ -14,7 +14,7 @@ with either `{"data": VALUE}` or `{"error": "message"}` depending on the result.
 
 ```typescript title="my-backend/endpoints/comments-readonly.ts"
 import { crud, standardCRUDMethods, responseFromJson } from "@chiselstrike/api";
-import { BlogComment } from "../models/models";
+import { BlogComment } from "../models/BlogComment.ts";
 export default crud(
     BlogComment,
     ":id", /* :id can be explicitly provided */
@@ -36,7 +36,7 @@ export default crud(
 );
 ```
 
-You may also be interested in the [Authentication](auth) chapter.
+You may also be interested in the [Authentication](InDepth/auth.md) chapter.
 
 ## Full Custom Endpoints
 
@@ -58,7 +58,7 @@ Now let's edit our endpoint's code to show off a "full customization" example.
 
 ```typescript title="my-backend/endpoints/comments.ts"
 import { responseFromJson } from "@chiselstrike/api"
-import { BlogComment } from "../models/models"
+import { BlogComment } from "../models/BlogComment.ts"
 
 export default async function chisel(req) {
 
@@ -108,7 +108,7 @@ error checking in this example.
 With this endpoint example, we're now getting to know ChiselStrike's API and runtime better. Notice how
 we were able to parse the request under `POST` with our own custom validation, and then use
 the `build` API to construct an object that is then persisted with `save`.  We'll explain the use of the 
-data model more in [Data Access](data-access).
+data model more in [Data Access](Intro/data-access).
 
 Finally, notice how we can return a standard `Response` in some cases, but also can also use the convenience method
 `responseFromJson` where we know the result is a JSON object.

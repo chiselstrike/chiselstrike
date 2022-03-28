@@ -51,10 +51,10 @@ export default async function chisel(req) {
         }
         const created = BlogPost.build({content, relUrl});
         await created.save();
-        return responseFromJson('inserted ' + created.id);
+        return created;
     } else if (req.method == 'GET') {
         const comments = await BlogPost.findMany({});
-        return responseFromJson(comments);
+        return comments;
     } else {
         return new Response("Wrong method", { status: 405 });
     }
@@ -62,15 +62,13 @@ export default async function chisel(req) {
 ```
 
 And as you can see, we can add a post:
+
 ```
 curl -d '{ "relUrl": "post.html", "content": "We at ChiselStrike are so happy to have you with us!" }' -X POST http://localhost:8080/dev/post
 ```
 
-```
-"inserted 9cb079dd-abfe-488c-9def-c9439c2d80f4"
-```
+To read the list of posts:
 
-Read the list of posts:
 ```
 curl http://localhost:8080/dev/post
 ```

@@ -24,22 +24,22 @@ const sidebars = {
     {
       type: 'category',
       label: 'Introduction',
-      items: ['welcome', 'first', 'endpoints', 'data-access' ]
+      items: ['Intro/welcome', 'Intro/first', 'Intro/endpoints', 'Intro/data-access' ]
     },
     {
       type: 'category',
       label: 'In Depth',
-      items: [ 'cursors', 'advanced-data', 'pol', 'secrets', 'versions', 'login', 'routing', 'chisel-cli' ],
+      items: [ 'InDepth/cursors', 'InDepth/advanced-data', 'InDepth/pol', 'InDepth/secrets', 'InDepth/versions', 'InDepth/login', 'InDepth/routing', 'InDepth/chisel-cli' ],
     },
     {
        type: 'category',
        label: 'Examples',
-       items: [ 'ex-gatsby', 'ex-nextjs' ] 
+       items: [ 'Examples/ex-gatsby', 'Examples/ex-nextjs' ] 
     },
     {
       type: 'category',
       label: 'Community',
-      items: [ 'feedback', 'known-issues', 'discord' ]
+      items: [ 'Community/feedback', 'Community/known-issues', 'Community/discord' ]
     },
   ],
 

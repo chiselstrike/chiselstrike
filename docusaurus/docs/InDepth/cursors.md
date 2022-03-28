@@ -1,6 +1,6 @@
 # Cursors
 
-As shown in [Data Access](data-access), the `findOne` and `findMany()` methods are convenient, but for more advanced use, ChiselStrike
+As shown in [Data Access](Intro/data-access.md), the `findOne` and `findMany()` methods are convenient, but for more advanced use, ChiselStrike
 provides a cursor API for building queries.
 
 This composable system also means that you can even write functions that build up queries programatically

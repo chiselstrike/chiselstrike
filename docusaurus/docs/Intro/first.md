@@ -9,7 +9,7 @@ endpoints for your data-driven web applications. Along the sidebar at your left,
 you'll see more advanced topics  you can explore as you are interested in them.
 
 ChiselStrike comes in two parts - the backend generator `chisel` (available in npm) and
-our service platform for hosting ChiselStrike data apps in production.
+our platform that hosts your ChiselStrike data apps in production.
 
 This tutorial will show you how to use `chisel`, which allows for easy local
 development and testing.
@@ -18,14 +18,14 @@ Imagine you're just starting out building a new application for a dynamic site, 
 to bother implementing an entire backend server, configuring a SQL database, and managing the deployment
 for it.
 
-A simple example might involve building a blog that allows readers to make comments. 
-Even if a blog was statically rendered, the comment section would need some kind of endpoint
-to make it work.
+One of the simplest examples might involve building a blog that allows readers to make comments. 
+Even if a blog articles were statically rendered, the comment section would need some kind of 
+dynamic endpoint to make it work.
 
 # Setup
 
 Let's get started by using ChiselStrike to create a skeleton of a backend project. This
-step will also install all our dependendicies.
+step will also install all our dependencies.
 
 ```bash
 npx create-chiselstrike-app my-backend
@@ -47,7 +47,7 @@ found 0 vulnerabilities
 
 You can then start ChiselStrike in local development mode by running ChiselStrike in a new
 terminal tab. As ChiselStrike runs, it will compile your work automatically as you
-make changes, and it is also hosting your endpoints at the same time.
+make changes. It is also hosting your endpoints with a local development server at the same time.
 
 ```bash
 cd my-backend
@@ -74,11 +74,13 @@ INFO - ChiselStrike is ready 🚀 - URL: http://localhost:8080
 End point defined: /dev/hello
 ```
 
-For more about `chisel` command usage, please see [the CLI reference](chisel-cli) or run `chisel --help`.
+...tip:
+For more about `chisel` command usage, please see [the CLI reference](InDepth/chisel-cli.md) or run `chisel --help`.
+...
 
 ## Our First Endpoint
 
-To make our endpoint for "/dev/comments", we add a TypeScript file
+To make our endpoint for "/dev/comments", we create a TypeScript file
 in the `my-backend/endpoints` directory.  Here is one:
 
 ```typescript title="my-backend/endpoints/comments.ts"
@@ -117,14 +119,16 @@ a single parameter.  This function defines the logic for the endpoint.  It takes
 [Request](https://developer.mozilla.org/en-US/docs/Web/API/Request)
 and returns the corresponding
 [Response](https://developer.mozilla.org/en-US/docs/Web/API/Response).
-In this above example, we simply returns a string wrapped as a JSON value.  It
-uses a helper function `responseFromJson`.
+In this above example, we simply returns a string wrapped as a JSON value. Where it is obvious
+that an object is being returned (this will be explained soon), explicit calls to `responseFromJson`
+are not needed.
 
 ## Our First Model
 
-Next, let's add the ability to save and load comments. We need to define what types of data we are going to save and load.
+Next, let's add the ability to save and load comments. 
 
-This is where backend models come in -- models use typescript to describe
+First, we need to define what types of data we are going to save and load.
+This is where backend models come in -- models use Typescript to describe
 what kind of data you want to store.  
 
 Create a file in `my-backend/models/BlogComment.ts`:
@@ -143,17 +147,16 @@ Here we have defined a `BlogComment` which has a string `content` and an author 
 <!-- FIXME: Move this to some advanced tips and tricks section, probably, to not distract from the tutorial? -->
 
 :::tip
-Since we're using TypeScript, you may have some questions about type checking. By default, `chisel` doesn't check your TypeScript types (we assume your IDE did that for you!), which results
-in faster production code. If you want type checking, you can enable it by calling `tsc` directly, which can
-be achieved by passing the `--type-check` option to `npm run dev`, or to the apply command `npx chisel apply`
-:::
-
-<!-- FIXME: move this into the data access chapter talking more about all the model capabilities -->
-
-:::tip
 You are able to specify default values for fields, like you would for a normal typescript
 class. Properties can be added or removed over time if they have default values, so it is always recommended
 you add them.
+:::
+
+:::tip
+Since we're using TypeScript, you may have some questions about type checking. By default, `chisel` doesn't check 
+your TypeScript types (we assume your IDE did that for you!), which results
+in faster production code. If you want type checking, you can enable it by calling `tsc` directly, which can
+be achieved by passing the `--type-check` option to `npm run dev`, or to the apply command `npx chisel apply`
 :::
 
 Once you save this file, you should see new output from the `chisel dev` command that remains running to
@@ -163,14 +166,14 @@ compile your work and serve up your endpoints:
 Model defined: BlogComment
 ```
 
-Now you are able to store `BlogComment` objects!  However, we still need to surface those entities in our web-services API.  
+Now you are able to store `BlogComment` objects!  However, we still need to surface those entities through a web-services API endpoint.
 That comes next!
 
 ## Our First Endpoint 
 
 We're big fans of [REST](https://en.wikipedia.org/wiki/Representational_state_transfer), but don't strictly require it in ChiselStrike.
 
-If you're not familiar, REST is a set of practices that describes how an endpoint can handle various HTTP verbs
+If you're not familiar, REST is a set of practices that describes how a URL endpoint can handle various HTTP verbs
 to provide ways to manipulate a collection of entities: create, read,
 update, and delete ([CRUD](https://en.wikipedia.org/wiki/Create,_read,_update_and_delete)).
 
@@ -193,24 +196,22 @@ curl -X POST -d '{"content": "Fourth comment", "by": "Jack"}' localhost:8080/dev
 curl -X POST -d '{"content": "Wrong comment", "by": "Author"}' localhost:8080/dev/comments
 ```
 
-
 Each POST will return a response to the caller with the object ID, for example:
 
 ```json
 {"id":"a4ca3ab3-2e26-4da6-a5de-418c1e6b9b83","content":"First comment","by":"Jill"}
 ```
 :::tip
-Note how you do not need to specify an `id` for the `BlogComment` entity. An `id` property is automatically generated for you on all objects.
+Note how you do not need to specify an `id` for the `BlogComment` entity in the POST. An `id` property is automatically generated for you on all objects.
 We always use UUIDs rather than integers.
 :::
 
 :::tip
 Right now you are testing only locally, but you'll want to think about restricting access to some endpoints in production.  
-We'll talk about security more in the [Policy](pol) section.
+We'll talk about security more in the [Policy](InDepth/pol.md) section.
 :::
 
 Now that we've inserted some objects, lets read them back! Our `crud` function also registers a `GET` handler, which is already available!
-
 
 ```bash
 curl localhost:8080/dev/comments | python -m json.tool
@@ -247,11 +248,11 @@ curl localhost:8080/dev/comments | python -m json.tool
 ```
 
 ...note:
-Obviously, If you had 10,000 blog responses you wouldn't want to return them all at once.
+Obviously, If we had 10,000 blog responses we wouldn't want to return them all at once.
 Pagination support for collections of large objects will be coming very soon!
 ...
 
-To get a specific comment, we can just specify an id:
+To get a specific comment, we can specify an id in the URL:
 
 ```bash
 curl localhost:8080/dev/comments/a4ca3ab3-2e26-4da6-a5de-418c1e6b9b83 | python -m json.tool
@@ -267,7 +268,7 @@ curl localhost:8080/dev/comments/a4ca3ab3-2e26-4da6-a5de-418c1e6b9b83 | python -
 
 # Built-In Search
 
-The API also allows you to filter by specific properties, by specifying a search parameter with a partial URL-encoded JSON object:
+The API allows you to filter by specific properties, by specifying a search parameter with a partial URL-encoded JSON object:
 
 ```bash
 curl -g localhost:8080/dev/comments?f={%22by%22:%22Jack%22} | python -m json.tool
