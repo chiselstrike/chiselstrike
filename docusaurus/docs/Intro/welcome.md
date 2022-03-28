@@ -17,10 +17,15 @@ With ChiselStrike, we enable you to remove complexity of "full stack" developmen
 (database, APIs, authentication) from simple TypeScript models and doing lots of heavy lifting for you. 
 As a developer, you're off flying quickly, with half the code or less, and can devote most of your time to building compelling presentation layers.
 
+ChiselStrike integrates easily with Gatsby, Next.js, or any of your favorite frameworks.
+
+
 <!-- # FIXME: Some kind of visuals would be nice here to break up the text -->
 
 When hosting your apps on the ChiselStrike platform, we'll handle all scaling, upgrade, and data layer concerns.  There's no need for any "devops", 
 cloud architectures, scaling, monitoring, automation, or security work!
+
+## Examples
 
 Some examples of things we enable:
 
@@ -29,15 +34,21 @@ Some examples of things we enable:
 * Want to connect to other microservices? A bit more Typescript and... done!
 * Need to protect confidential data and ensure consistent security? Our policy language will make this incredibly simple.
 
-When you're ready to move into production, the Chiselstrike hosted service deploys your applications directly from your GitHub repositories.
+## Hosting
+
+When you're ready to move into production, the Chiselstrike hosted service deploys your backends directly from your GitHub repositories.
+
 Interested? The service itself is currently in a private beta. [Request an invite here.](https://forms.gle/cwMghfrXz1ZPiWKK6)
+
+## Local Development & Testing.
 
 For development, you can install ChiselStrike locally, allowing for easy local development and testing. This is a great way
 to try out all of the features, and it works 100% offline!  When  you're done, host the backend on our fully managed service, and
 use your favorite platform to deliver the frontend.
 
-ChiselStrike integrates easily with Gatsby, Next.js, or any of your favorite frameworks.
+
+## Ready?
 
 <!-- FIXME: Hyperlink to next chapter instead, "see also" links throughout -->
 
-Throughout the next chapters, we'll show you how.
+Throughout the next chapters, we'll show you how things work!
