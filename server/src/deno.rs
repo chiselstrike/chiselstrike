@@ -506,36 +506,31 @@ fn op_format_file_name(_: &mut OpState, file_name: String, _: ()) -> Result<Stri
 async fn create_deno(inspect_brk: bool) -> Result<DenoService> {
     let mut d = DenoService::new(inspect_brk);
     let worker = &mut d.worker;
+
     // FIXME: Include these files in the snapshop
-
-    let chisel = chisel_js().to_string();
-    let chisel_path = "/chisel.js".to_string();
-
-    let main = include_str!("./main.js").to_string();
-    let main_path = "/main.js".to_string();
-
+    let main_path = "/main.js";
     {
         let mut handle = d.module_loader.lock().unwrap();
         let code_map = &mut handle.code_map;
         code_map.insert(
-            main_path.clone(),
+            main_path.to_string(),
             VersionedCode {
-                code: main,
+                code: include_str!("./main.js").to_string(),
                 version: 0,
             },
         );
 
         code_map.insert(
-            chisel_path.clone(),
+            "/chisel.js".to_string(),
             VersionedCode {
-                code: chisel,
+                code: chisel_js().to_string(),
                 version: 0,
             },
         );
     }
 
     worker
-        .execute_main_module(&ModuleSpecifier::parse(&format!("file://{}", &main_path)).unwrap())
+        .execute_main_module(&ModuleSpecifier::parse(&format!("file://{}", main_path)).unwrap())
         .await?;
     Ok(d)
 }
