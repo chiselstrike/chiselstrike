@@ -171,13 +171,13 @@ impl fmt::Display for ColumnAlias {
     }
 }
 
-/// Class used to build `Query` from either JSON query or `ObjectType`.
+/// Class used to build `Query` from either QueryOpChain or `ObjectType`.
 /// The json part recursively descends through selected fields and captures all
 /// joins necessary for nested types retrieval.
-/// When we are done with that, `build` is called which creates a `Query`
+/// When we are done with that, `build` can be called which creates a `Query`
 /// structure that contains raw SQL query string and additional data necessary for
 /// JSON response reconstruction and filtering.
-struct QueryBuilder {
+pub(crate) struct QueryBuilder {
     /// Columns that will be retrieved from the database in order defined by this vector.
     columns: Vec<Column>,
     /// Entity object representing entity that is being retrieved along with necessary joins
@@ -215,7 +215,7 @@ impl QueryBuilder {
     /// Constructs a query builder ready to build an expression querying all fields of a
     /// given type `ty`. This is done in a shallow manner. Columns representing foreign
     /// key are returned as string, not as the related Entity.
-    fn from_type(ty: &Arc<ObjectType>) -> Self {
+    pub(crate) fn from_type(ty: &Arc<ObjectType>) -> Self {
         let mut builder = Self::new(ty.clone());
         for field in ty.all_fields() {
             let mut field = field.clone();
@@ -229,22 +229,25 @@ impl QueryBuilder {
         builder
     }
 
-    /// Constructs a builder from a type name `ty_name`.
-    fn from_type_name(
+    /// Constructs a query builder from a query `op_chain` and additional
+    /// helper data like `api_version`, `userid` and `path` (url path used
+    /// for policy evaluation).
+    pub(crate) fn from_op_chain(
         api_version: &str,
         userid: &Option<String>,
         path: &str,
-        ty_name: &str,
-        operators: Vec<QueryOp>,
+        op_chain: QueryOpChain,
     ) -> Result<Self> {
+        let (entity_name, operators) = convert_ops(op_chain)?;
+
         let runtime = runtime::get();
         let ts = &runtime.type_system;
-        let ty = match ts.lookup_builtin_type(ty_name) {
+        let ty = match ts.lookup_builtin_type(&entity_name) {
             Ok(Type::Object(ty)) => ty,
             Err(TypeSystemError::NotABuiltinType(_)) => {
-                ts.lookup_custom_type(ty_name, api_version)?
+                ts.lookup_custom_type(&entity_name, api_version)?
             }
-            _ => anyhow::bail!("Unexpected type name as select base type: {}", ty_name),
+            _ => anyhow::bail!("Unexpected type name as select base type: {}", entity_name),
         };
 
         let mut builder = Self::new(ty.clone());
@@ -642,7 +645,7 @@ impl QueryBuilder {
         Ok(sql_query)
     }
 
-    fn build(&self) -> Result<Query> {
+    pub(crate) fn build(&self) -> Result<Query> {
         Ok(Query {
             raw_sql: self.make_raw_query()?,
             entity: self.entity.clone(),
@@ -728,22 +731,6 @@ fn convert_ops(op: QueryOpChain) -> Result<(String, Vec<QueryOp>)> {
     let (entity_name, mut ops) = convert_ops(*inner)?;
     ops.push(query_op);
     Ok((entity_name, ops))
-}
-
-pub(crate) fn type_to_query(ty: &Arc<ObjectType>) -> Result<Query> {
-    let builder = QueryBuilder::from_type(ty);
-    builder.build()
-}
-
-pub(crate) fn json_to_query(
-    api_version: &str,
-    userid: &Option<String>,
-    path: &str,
-    op_chain: QueryOpChain,
-) -> Result<Query> {
-    let (entity_name, ops) = convert_ops(op_chain)?;
-    let builder = QueryBuilder::from_type_name(api_version, userid, path, &entity_name, ops)?;
-    builder.build()
 }
 
 #[derive(Debug, Clone)]
