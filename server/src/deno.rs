@@ -234,7 +234,7 @@ fn create_web_worker(
 }
 
 impl DenoService {
-    pub(crate) fn new(inspect_brk: bool) -> Self {
+    pub(crate) async fn new(inspect_brk: bool) -> Self {
         let web_worker_preload_module_cb =
             Arc::new(|worker| LocalFutureObj::new(Box::new(future::ready(Ok(worker)))));
         let inner = Arc::new(std::sync::Mutex::new(ModuleLoaderInner {
@@ -313,8 +313,35 @@ impl DenoService {
             ..Permissions::default()
         };
 
-        let worker =
+        let mut worker =
             MainWorker::bootstrap_from_options(Url::parse(path).unwrap(), permissions, opts);
+
+        let main_path = "/main.js";
+        {
+            let mut handle = inner.lock().unwrap();
+            let code_map = &mut handle.code_map;
+            code_map.insert(
+                main_path.to_string(),
+                VersionedCode {
+                    code: include_str!("./main.js").to_string(),
+                    version: 0,
+                },
+            );
+
+            code_map.insert(
+                "/chisel.js".to_string(),
+                VersionedCode {
+                    code: chisel_js().to_string(),
+                    version: 0,
+                },
+            );
+        }
+
+        worker
+            .execute_main_module(&ModuleSpecifier::parse(&format!("file://{}", main_path)).unwrap())
+            .await
+            .unwrap();
+
         Self {
             worker,
             inspector,
@@ -503,40 +530,8 @@ fn op_format_file_name(_: &mut OpState, file_name: String, _: ()) -> Result<Stri
     Ok(file_name)
 }
 
-async fn create_deno(inspect_brk: bool) -> Result<DenoService> {
-    let mut d = DenoService::new(inspect_brk);
-    let worker = &mut d.worker;
-
-    // FIXME: Include these files in the snapshop
-    let main_path = "/main.js";
-    {
-        let mut handle = d.module_loader.lock().unwrap();
-        let code_map = &mut handle.code_map;
-        code_map.insert(
-            main_path.to_string(),
-            VersionedCode {
-                code: include_str!("./main.js").to_string(),
-                version: 0,
-            },
-        );
-
-        code_map.insert(
-            "/chisel.js".to_string(),
-            VersionedCode {
-                code: chisel_js().to_string(),
-                version: 0,
-            },
-        );
-    }
-
-    worker
-        .execute_main_module(&ModuleSpecifier::parse(&format!("file://{}", main_path)).unwrap())
-        .await?;
-    Ok(d)
-}
-
 pub(crate) async fn init_deno(inspect_brk: bool) -> Result<()> {
-    let service = Rc::new(RefCell::new(create_deno(inspect_brk).await?));
+    let service = Rc::new(RefCell::new(DenoService::new(inspect_brk).await));
     DENO.with(|d| {
         d.set(service)
             .map_err(|_| ())
