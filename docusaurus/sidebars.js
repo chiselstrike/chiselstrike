@@ -34,12 +34,12 @@ const sidebars = {
     {
        type: 'category',
        label: 'Examples',
-       items: [ 'ex_gatsby', 'ex_nextjs' ] 
+       items: [ 'ex-gatsby', 'ex-nextjs' ] 
     },
     {
       type: 'category',
       label: 'Community',
-      items: [ 'feedback', 'known_issues', 'discord' ]
+      items: [ 'feedback', 'known-issues', 'discord' ]
     },
   ],
 
