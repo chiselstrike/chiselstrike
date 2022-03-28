@@ -182,12 +182,12 @@ pub(crate) enum TargetDatabase {
 }
 
 /// Class used to build `Query` from either QueryOpChain or `ObjectType`.
-/// The json part recursively descends through selected fields and captures all
+/// For the op chain, it recursively descends through selected fields and captures all
 /// joins necessary for nested types retrieval.
-/// When we are done with that, `build` can be called which creates a `Query`
+/// When we are done with that, `build_query` can be called which creates a `Query`
 /// structure that contains raw SQL query string and additional data necessary for
 /// JSON response reconstruction and filtering.
-pub(crate) struct QueryBuilder {
+pub(crate) struct QueryPlan {
     /// Columns that will be retrieved from the database in order defined by this vector.
     columns: Vec<Column>,
     /// Entity object representing entity that is being retrieved along with necessary joins
@@ -202,7 +202,7 @@ pub(crate) struct QueryBuilder {
     operators: Vec<QueryOp>,
 }
 
-impl QueryBuilder {
+impl QueryPlan {
     fn new(base_type: Arc<ObjectType>) -> Self {
         Self {
             columns: vec![],
@@ -675,7 +675,7 @@ impl QueryBuilder {
         Ok(sql_query)
     }
 
-    pub(crate) fn build(&self, target: TargetDatabase) -> Result<Query> {
+    pub(crate) fn build_query(&self, target: TargetDatabase) -> Result<Query> {
         Ok(Query {
             raw_sql: self.make_raw_query(target)?,
             entity: self.entity.clone(),
