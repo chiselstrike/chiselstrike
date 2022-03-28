@@ -22,8 +22,6 @@ the fields of your models.
 For instance, suppose we have a BlogComment object defined and add the "labels"
 decorator as shown below:
 
-`models/models.ts` to have BlogComment look like this:
-
 ```typescript title="my-backend/models/models.ts"
 import { ChiselEntity, labels } from "@chiselstrike/api"
 
