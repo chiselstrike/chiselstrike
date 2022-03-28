@@ -1,15 +1,16 @@
 ---
 sidebar_position: 8
 ---
-# Known Issues
+# Upcoming Items
 
-We put a lot of effort into getting this beta out the door soon, so we could
+We put a lot of effort into getting this beta out the door, so we could
 hear from you (yes, you!) about what you like and dislike in the product and
 provide you with a great experience moving forward.
 
-However, there are some issues that we plan to address soon but just didn't
-make the cut. If you encounter any of them, just let us know and we'll do our
-best to expedite it, but do know that they are planned functionality going forward.
+Below, we wanted to share some known issues as well as upcoming features
+and fixes not currently present in the beta.
+
+<!-- FIXME: need to incorporate a feedback link into the docs -->
 
 * **Module imports:** ChiselStrike is built using Deno, which uses native browser-style URL
 imports. However, it is consumable as a Node project, and you're more likely using VSCode.
@@ -21,6 +22,15 @@ want to use external modules, browser-style should work.
 
 * **Joins:** We currently don't support explicit Joins. Implicitly the joins are partially supported
 by nested Types (`class Y {z: int}; class X {y: Y}`). Support for explicit joins is coming soon.
+
+* **Syntactic Sugar:** We've shown some relatively low level examples with the Data API, and some very compelling class based
+versions are in the works!
+
+* **Implicit Error Handling:** Soon the data APIs will throw Javascript exceptions allowing for writing code with less explicit error
+checking.
+
+* **Additional Security Features:** The policy system has some evolutions in the works that will allow many additional controls, including
+easy per verb policy changes.
 
 * **Changing types:** It is possible to evolve a model by adding and removing fields that have
 default values without writing any migration file (how awesome is that???), but you can't
