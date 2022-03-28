@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: © 2021 ChiselStrike <info@chiselstrike.com>
 
 use crate::datastore::query::{
-    Mutation, QueriedEntity, QueryBuilder, QueryField, SqlValue, TargetDatabase,
+    Mutation, QueriedEntity, QueryField, QueryPlan, SqlValue, TargetDatabase,
 };
 use crate::datastore::{DbConnection, Kind};
 use crate::types::{Field, ObjectDelta, ObjectType, Type, OAUTHUSER_TYPE_NAME};
@@ -410,9 +410,9 @@ impl QueryEngine {
     pub(crate) fn query(
         &self,
         tr: TransactionStatic,
-        query_builder: QueryBuilder,
+        query_plan: QueryPlan,
     ) -> anyhow::Result<QueryResults> {
-        let query = query_builder.build(self.target_db())?;
+        let query = query_plan.build_query(self.target_db())?;
         let allowed_fields = query.allowed_fields;
 
         let stream = new_query_results(query.raw_sql, tr);

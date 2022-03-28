@@ -5,7 +5,7 @@ use crate::datastore::engine::IdTree;
 use crate::datastore::engine::TransactionStatic;
 use crate::datastore::engine::{QueryResults, ResultRow};
 use crate::datastore::query::QueryOpChain;
-use crate::datastore::query::{Mutation, QueryBuilder};
+use crate::datastore::query::{Mutation, QueryPlan};
 use crate::policies::FieldPolicies;
 use crate::rcmut::RcMut;
 use crate::runtime;
@@ -519,12 +519,12 @@ fn op_chisel_relational_query_create(
     info: (String, String, Option<String>),
 ) -> Result<ResourceId> {
     let (api_version, path, userid) = info;
-    let query_builder = QueryBuilder::from_op_chain(&api_version, &userid, &path, op_chain)?;
+    let query_plan = QueryPlan::from_op_chain(&api_version, &userid, &path, op_chain)?;
     let mut runtime = runtime::get();
     let query_engine = &mut runtime.query_engine;
 
     let transaction = current_transaction(op_state)?;
-    let stream = query_engine.query(transaction, query_builder)?;
+    let stream = query_engine.query(transaction, query_plan)?;
     let resource = QueryStreamResource {
         stream: RefCell::new(stream),
     };
