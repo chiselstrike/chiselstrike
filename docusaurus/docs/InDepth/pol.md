@@ -1,7 +1,3 @@
----
-sidebar_position: 3
----
-
 # Data Policies
 
 ChiselStrike lets you express data policies through a policy file that
@@ -10,7 +6,7 @@ storage.  Although the policy language is currently limited, it is set
 to rapidly expand in the immediate future.
 
 Examples used in this chapter build on the `my-backend` files from the
-[Introduction](./intro.md).
+[Introduction](Intro/first.md).
 
 ## Data Transformation
 
@@ -21,8 +17,10 @@ transformed like this whenever it is accessed".
 
 Let's first examine more precisely how you define which data we're
 talking about.  This is done using _labels_: TypeScript decorators on
-the fields of your models.  To illustrate, please edit the file
-`models/models.ts` like this:
+the fields of your models.  
+
+For instance, suppose we have a BlogComment object defined and add the "labels"
+decorator as shown below:
 
 ```typescript title="my-backend/models/models.ts"
 import { ChiselEntity, labels } from "@chiselstrike/api"

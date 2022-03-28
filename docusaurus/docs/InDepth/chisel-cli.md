@@ -1,4 +1,4 @@
-# ChiselStrike Command-Line Reference
+# Command-Line
 
 This is the command-line reference for the ChiselStrike `chisel` [command-line interface](#cli) and the `chiseld` [server](#server).
 
