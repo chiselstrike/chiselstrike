@@ -4,5 +4,8 @@ version = "0.9.0-dev.0"
 authors = ["ChiselStrike"]
 edition = "2021"
 
+[build-dependencies]
+api = { path = "../api" }
+
 [lib]
 name = "packages"
