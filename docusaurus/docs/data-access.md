@@ -67,7 +67,7 @@ As discussed in the [Getting Started](/first.md) section, the ChiselStrike runti
 <!-- FIXME: need a Section "Updating Objects" -->
 <!-- FIXME: need a Section "Deleting Objects" -->
 
-Still, you are not technically limited to making every endpoint speak follow REST principles by using ids. For example, you could write the following 'update' endpoint that recieves the same JSON, but finds the `User` entity based on the provided `username`:
+Still, you are not technically limited to making every endpoint speak follow REST principles by using ids. For example, you could write the following 'update' endpoint that receives the same JSON, but finds the `User` entity based on the provided `username`:
 
 ```typescript title="endpoints/update.ts"
 import { responseFromJson } from "@chiselstrike/api";
