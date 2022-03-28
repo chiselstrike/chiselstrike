@@ -212,13 +212,13 @@ runtime will also provide optional pagination for the `findMany()` method.
 
 ## Cursors
 
-The `findOne` and `findMany()` methods are convenient, but the interface is not
-composable, and can become hard to use for more complex queries. ChiselStrike
+The `findOne()` and `findMany()` methods are convenient, but the interface is not
+composable and can become hard to use for more complex queries. ChiselStrike
 provides a cursor-based API for writing composable queries.
 
 A cursor can be thought of as an index to an array of entities in the data store.
 The `ChiselEntity` base class provides a `cursor()` method to obtain a `ChiselCursor`.
-The `ChiselCursor` class provides variety of composable operations, such as `filter()`, `take()`, `select()`, and so on for writing complex queries.
+The `ChiselCursor` class provides a variety of composable operations, such as `filter()`, `take()`, `select()`, and so on, for writing complex queries.
 The actual query uses _deferred execution_, which allows the ChiselStrike runtime to optimize the query.
 
 :::note
@@ -263,12 +263,12 @@ The methods provided by `ChiselCursor` are outlined in the following table.
 
 :::note
 The `ChiselCursor` interface is still work-in-progress. For example, methods such as `skip()`,  `map()`, and `reduce()` are planned for future releases.
-Also, the current implementation of `filter()` takes either a _restriction object_ or a function predicate. Filtering using restriction object is already quite efficient and done directly in the database. Predicate filtering can be slower as it's evaluated in TypeScript, but future releases of Chisel runtime will translate most TypeScript predicates to efficient database expressions.
+Also, the current implementation of `filter()` takes either a _restriction object_ or a function predicate. Filtering using a restriction object is already quite efficient and done directly in the database. Predicate filtering can be slower, as it's evaluated in TypeScript, but future releases of Chisel runtime will translate most TypeScript predicates to efficient database expressions.
 :::
 
 ### `filter`
 
-ChiselCursor supports two overloads of the `filter` method. The first accepts a predicate identifying elements to be kept or ignored. As an example, let's find all Gmail users:
+ChiselCursor supports two overloads of the `filter()` method. The first accepts a predicate identifying elements to be kept or ignored. As an example, let's find all Gmail users:
 
 ```typescript
   const gmailUsers = await User.cursor()
@@ -287,9 +287,9 @@ The second overload takes a restriction-object parameter. It allows you to filte
 We currently support implicit transactional evaluation. The transaction is created before ChiselStrike
 starts evaluating your endpoint and is automatically committed after your endpoint ends and we generate
 the HTTP response. In case your endpoint returns a stream, any database-related operation done within
-stream generation code will happen outside of the transaction and can result in a crash.
+stream-generation code will happen outside of the transaction and can result in a crash.
 
-If your code crashes or explicitly throws exception that is not caught, ChiselStrike rollbacks the
+If your code crashes or explicitly throws an exception that is not caught, ChiselStrike rolls back the
 transaction automatically.
 
 Explicit user-controlled transactions are coming soon.
