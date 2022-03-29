@@ -25,6 +25,6 @@ EOF
 
 cd "$TEMPDIR"
 $CHISEL apply
-$CURL -X POST http://localhost:8080/dev/camel
+$CURL -X POST $CHISELD_HOST/dev/camel
 # CHECK: HTTP/1.1 200 OK
 # CHECK: ok
