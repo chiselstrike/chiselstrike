@@ -14,6 +14,7 @@ use crate::types::ObjectType;
 use crate::JsonObject;
 use anyhow::{anyhow, Context as AnyhowContext, Result};
 use api::chisel_js;
+use api::endpoint_js;
 use deno_core::error::AnyError;
 use deno_core::op;
 use deno_core::v8;
@@ -139,15 +140,16 @@ async fn compile(code: &str, lib: Option<&str>) -> Result<String> {
 }
 
 async fn load_code(code_opt: Option<String>, specifier: ModuleSpecifier) -> Result<ModuleSource> {
-    let mut code = if let Some(code) = code_opt {
+    let code = if let Some(code) = code_opt {
         code
     } else {
-        utils::get_ok(specifier.clone()).await?.text().await?
+        let mut code = utils::get_ok(specifier.clone()).await?.text().await?;
+        let last = specifier.path_segments().unwrap().rev().next().unwrap();
+        if last.ends_with(".ts") {
+            code = compile(&code, None).await?;
+        }
+        code
     };
-    let last = specifier.path_segments().unwrap().rev().next().unwrap();
-    if last.ends_with(".ts") {
-        code = compile(&code, None).await?;
-    }
     wrap(&specifier, code)
 }
 
@@ -321,6 +323,7 @@ impl DenoService {
             MainWorker::bootstrap_from_options(Url::parse(path).unwrap(), permissions, opts);
 
         let main_path = "/main.js";
+        let endpoint_path = "/endpoint.ts";
         {
             let mut handle = inner.lock().unwrap();
             let code_map = &mut handle.code_map;
@@ -339,6 +342,13 @@ impl DenoService {
                     version: 0,
                 },
             );
+            code_map.insert(
+                endpoint_path.to_string(),
+                VersionedCode {
+                    code: endpoint_js().to_string(),
+                    version: 0,
+                },
+            );
         }
 
         worker
@@ -348,18 +358,20 @@ impl DenoService {
 
         let (import_endpoint, activate_endpoint, call_handler) = {
             let runtime = &mut worker.js_runtime;
-            let global_context = runtime.global_context();
+            let promise = runtime
+                .execute_script(main_path, &format!("import(\"file://{}\")", endpoint_path))
+                .unwrap();
+            let module = runtime.resolve_value(promise).await.unwrap();
             let scope = &mut runtime.handle_scope();
-            let global_proxy = global_context.open(scope).global(scope);
-            let chisel: v8::Local<v8::Object> = get_member(global_proxy, scope, "Chisel").unwrap();
+            let module = v8::Local::new(scope, module).try_into().unwrap();
             let import_endpoint: v8::Local<v8::Function> =
-                get_member(chisel, scope, "importEndpoint").unwrap();
+                get_member(module, scope, "importEndpoint").unwrap();
             let import_endpoint = v8::Global::new(scope, import_endpoint);
             let activate_endpoint: v8::Local<v8::Function> =
-                get_member(chisel, scope, "activateEndpoint").unwrap();
+                get_member(module, scope, "activateEndpoint").unwrap();
             let activate_endpoint = v8::Global::new(scope, activate_endpoint);
             let call_handler: v8::Local<v8::Function> =
-                get_member(chisel, scope, "callHandler").unwrap();
+                get_member(module, scope, "callHandler").unwrap();
             let call_handler = v8::Global::new(scope, call_handler);
             (import_endpoint, activate_endpoint, call_handler)
         };
