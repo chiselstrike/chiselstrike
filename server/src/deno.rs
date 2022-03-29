@@ -96,6 +96,10 @@ struct DenoService {
     inspector: Option<Arc<InspectorServer>>,
 
     module_loader: Arc<std::sync::Mutex<ModuleLoaderInner>>,
+
+    import_endpoint: v8::Global<v8::Function>,
+    activate_endpoint: v8::Global<v8::Function>,
+    call_handler: v8::Global<v8::Function>,
 }
 
 #[derive(thiserror::Error, Debug)]
@@ -234,7 +238,7 @@ fn create_web_worker(
 }
 
 impl DenoService {
-    pub(crate) fn new(inspect_brk: bool) -> Self {
+    pub(crate) async fn new(inspect_brk: bool) -> Self {
         let web_worker_preload_module_cb =
             Arc::new(|worker| LocalFutureObj::new(Box::new(future::ready(Ok(worker)))));
         let inner = Arc::new(std::sync::Mutex::new(ModuleLoaderInner {
@@ -313,12 +317,60 @@ impl DenoService {
             ..Permissions::default()
         };
 
-        let worker =
+        let mut worker =
             MainWorker::bootstrap_from_options(Url::parse(path).unwrap(), permissions, opts);
+
+        let main_path = "/main.js";
+        {
+            let mut handle = inner.lock().unwrap();
+            let code_map = &mut handle.code_map;
+            code_map.insert(
+                main_path.to_string(),
+                VersionedCode {
+                    code: include_str!("./main.js").to_string(),
+                    version: 0,
+                },
+            );
+
+            code_map.insert(
+                "/chisel.js".to_string(),
+                VersionedCode {
+                    code: chisel_js().to_string(),
+                    version: 0,
+                },
+            );
+        }
+
+        worker
+            .execute_main_module(&ModuleSpecifier::parse(&format!("file://{}", main_path)).unwrap())
+            .await
+            .unwrap();
+
+        let (import_endpoint, activate_endpoint, call_handler) = {
+            let runtime = &mut worker.js_runtime;
+            let global_context = runtime.global_context();
+            let scope = &mut runtime.handle_scope();
+            let global_proxy = global_context.open(scope).global(scope);
+            let chisel: v8::Local<v8::Object> = get_member(global_proxy, scope, "Chisel").unwrap();
+            let import_endpoint: v8::Local<v8::Function> =
+                get_member(chisel, scope, "importEndpoint").unwrap();
+            let import_endpoint = v8::Global::new(scope, import_endpoint);
+            let activate_endpoint: v8::Local<v8::Function> =
+                get_member(chisel, scope, "activateEndpoint").unwrap();
+            let activate_endpoint = v8::Global::new(scope, activate_endpoint);
+            let call_handler: v8::Local<v8::Function> =
+                get_member(chisel, scope, "callHandler").unwrap();
+            let call_handler = v8::Global::new(scope, call_handler);
+            (import_endpoint, activate_endpoint, call_handler)
+        };
+
         Self {
             worker,
             inspector,
             module_loader: inner,
+            import_endpoint,
+            activate_endpoint,
+            call_handler,
         }
     }
 }
@@ -503,45 +555,8 @@ fn op_format_file_name(_: &mut OpState, file_name: String, _: ()) -> Result<Stri
     Ok(file_name)
 }
 
-async fn create_deno(inspect_brk: bool) -> Result<DenoService> {
-    let mut d = DenoService::new(inspect_brk);
-    let worker = &mut d.worker;
-    // FIXME: Include these files in the snapshop
-
-    let chisel = chisel_js().to_string();
-    let chisel_path = "/chisel.js".to_string();
-
-    let main = include_str!("./main.js").to_string();
-    let main_path = "/main.js".to_string();
-
-    {
-        let mut handle = d.module_loader.lock().unwrap();
-        let code_map = &mut handle.code_map;
-        code_map.insert(
-            main_path.clone(),
-            VersionedCode {
-                code: main,
-                version: 0,
-            },
-        );
-
-        code_map.insert(
-            chisel_path.clone(),
-            VersionedCode {
-                code: chisel,
-                version: 0,
-            },
-        );
-    }
-
-    worker
-        .execute_main_module(&ModuleSpecifier::parse(&format!("file://{}", &main_path)).unwrap())
-        .await?;
-    Ok(d)
-}
-
 pub(crate) async fn init_deno(inspect_brk: bool) -> Result<()> {
-    let service = Rc::new(RefCell::new(create_deno(inspect_brk).await?));
+    let service = Rc::new(RefCell::new(DenoService::new(inspect_brk).await));
     DENO.with(|d| {
         d.set(service)
             .map_err(|_| ())
@@ -704,12 +719,11 @@ fn get_result_aux(
     req: Request<hyper::Body>,
 ) -> Result<v8::Global<v8::Value>> {
     let mut service = get();
+    let service: &mut DenoService = &mut service;
     let runtime = &mut service.worker.js_runtime;
 
     let op_state = runtime.op_state();
-    let global_context = runtime.global_context();
     let scope = &mut runtime.handle_scope();
-    let global_proxy = global_context.open(scope).global(scope);
 
     // Hyper gives us a URL with just the path, make it a full URL
     // before passing it to deno.
@@ -734,7 +748,6 @@ fn get_result_aux(
             .ok_or(Error::NotAResponse)?;
     }
 
-    let chisel: v8::Local<v8::Object> = get_member(global_proxy, scope, "Chisel")?;
     let rid = if method != Method::GET && method != Method::HEAD {
         let body = req.into_body();
         let resource = BodyResource {
@@ -749,15 +762,16 @@ fn get_result_aux(
 
     let api_version = v8::String::new(scope, path.api_version()).unwrap().into();
     let path = v8::String::new(scope, path.path()).unwrap().into();
-    let call_handler: v8::Local<v8::Function> = get_member(chisel, scope, "callHandler").unwrap();
+    let call_handler = service.call_handler.open(scope);
     let userid = match userid {
         Some(s) => v8::String::new(scope, s).unwrap().into(),
         None => v8::undefined(scope).into(),
     };
+    let undefined = v8::undefined(scope).into();
     let result = call_handler
         .call(
             scope,
-            global_proxy.into(),
+            undefined,
             &[
                 userid,
                 path,
@@ -929,17 +943,15 @@ pub(crate) async fn compile_endpoint(path: String, code: String) -> Result<()> {
         entry.code = code;
 
         let runtime = &mut service.worker.js_runtime;
-        let global_context = runtime.global_context();
         let scope = &mut runtime.handle_scope();
-        let global_proxy = global_context.open(scope).global(scope);
-        let chisel: v8::Local<v8::Object> = get_member(global_proxy, scope, "Chisel")?;
-        let import_endpoint: v8::Local<v8::Function> = get_member(chisel, scope, "importEndpoint")?;
+        let import_endpoint = service.import_endpoint.open(scope);
         let path = RequestPath::try_from(path.as_ref()).unwrap();
         let api_version = v8::String::new(scope, path.api_version()).unwrap().into();
         let path = v8::String::new(scope, path.path()).unwrap().into();
         let version = v8::Number::new(scope, entry.version as f64).into();
+        let undefined = v8::undefined(scope).into();
         let promise = import_endpoint
-            .call(scope, chisel.into(), &[path, api_version, version])
+            .call(scope, undefined, &[path, api_version, version])
             .unwrap();
         v8::Global::new(scope, promise)
     };
@@ -949,13 +961,11 @@ pub(crate) async fn compile_endpoint(path: String, code: String) -> Result<()> {
 
 pub(crate) fn activate_endpoint(path: &str) {
     let mut service = get();
+    let service: &mut DenoService = &mut service;
     let runtime = &mut service.worker.js_runtime;
-    let global_context = runtime.global_context();
     let scope = &mut runtime.handle_scope();
-    let global_proxy = global_context.open(scope).global(scope);
-    let chisel: v8::Local<v8::Object> = get_member(global_proxy, scope, "Chisel").unwrap();
-    let activate_endpoint: v8::Local<v8::Function> =
-        get_member(chisel, scope, "activateEndpoint").unwrap();
+    let activate_endpoint = service.activate_endpoint.open(scope);
+    let undefined = v8::undefined(scope).into();
     let path = v8::String::new(scope, path).unwrap().into();
-    activate_endpoint.call(scope, chisel.into(), &[path]);
+    activate_endpoint.call(scope, undefined, &[path]);
 }
