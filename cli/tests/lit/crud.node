@@ -41,7 +41,7 @@ $CURL "$CHISELD_HOST/dev/persons?f=\\{%22age%22:40\\}" # Filtered GET
 # CHECK: HTTP/1.1 200 OK
 # CHECK: "last_name": "Brown"
 
-id=`$CURL "$CHISELD_HOST/dev/persons?f=\\{%22age%22:10\\}" | sed -ne 's/.*"id":\s*"\([^"]*\).*/\1/p'`
+id=`$CURL "$CHISELD_HOST/dev/persons?f=\\{%22age%22:10\\}" | sed -ne 's/.*"id":[[:space:]]*"\([^"]*\).*/\1/p'`
 $CURL $CHISELD_HOST/dev/persons/$id # GET by id
 # CHECK: HTTP/1.1 200 OK
 # CHECK: "first_name": "Dawn"
