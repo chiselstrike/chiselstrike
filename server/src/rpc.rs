@@ -387,25 +387,29 @@ impl RpcService {
         }
 
         let cmd = send_command!({
-            let mut runtime = runtime::get();
-            let type_system = &mut runtime.type_system;
+            {
+                let mut runtime = runtime::get();
+                let type_system = &mut runtime.type_system;
 
-            type_system.update(&types_global);
+                type_system.update(&types_global);
 
-            runtime
-                .policies
-                .versions
-                .insert(api_version.to_owned(), policy.clone());
+                runtime
+                    .policies
+                    .versions
+                    .insert(api_version.to_owned(), policy.clone());
 
-            runtime.api.remove_routes(&prefix);
+                runtime.api.remove_routes(&prefix);
 
+                for (path, _) in &endpoints {
+                    let func = Arc::new({
+                        let path = path.clone();
+                        move |req| deno::run_js(path.clone(), req).boxed_local()
+                    });
+                    runtime.api.add_route(path.into(), func);
+                }
+            }
             for (path, _) in endpoints {
-                let func = Arc::new({
-                    let path = path.clone();
-                    move |req| deno::run_js(path.clone(), req).boxed_local()
-                });
-                deno::activate_endpoint(&path);
-                runtime.api.add_route(path.into(), func);
+                deno::activate_endpoint(&path).await?;
             }
             Ok(())
         });
