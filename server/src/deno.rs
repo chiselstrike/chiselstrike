@@ -162,7 +162,7 @@ impl deno_core::ModuleLoader for ModuleLoader {
     ) -> Result<ModuleSpecifier, AnyError> {
         debug!("Deno resolving {:?}", specifier);
         if specifier == "@chiselstrike/api" {
-            let api_path = "/chisel.js".to_string();
+            let api_path = "/chisel.ts".to_string();
             let spec = ModuleSpecifier::from_file_path(&api_path)
                 .map_err(|_| anyhow!("Can't convert {} to file-based URL", api_path))?;
             Ok(spec)
@@ -342,7 +342,7 @@ impl DenoService {
             );
 
             code_map.insert(
-                "/chisel.js".to_string(),
+                "/chisel.ts".to_string(),
                 VersionedCode {
                     code: chisel_js().to_string(),
                     version: 0,
