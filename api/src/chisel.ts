@@ -7,6 +7,7 @@
 enum OpType {
     BaseEntity = "BaseEntity",
     Take = "Take",
+    Skip = "Skip",
     ColumnsSelect = "ColumnsSelect",
     PredicateFilter = "PredicateFilter",
     ExpressionFilter = "ExpressionFilter",
@@ -88,6 +89,34 @@ class Take<T> extends Operator<T> {
                     yield e;
                     if (++i >= count) {
                         break;
+                    }
+                }
+            },
+        };
+    }
+}
+
+/**
+ * Skip operator skips first `count` elements from a collection.
+ */
+class Skip<T> extends Operator<T> {
+    constructor(
+        public readonly count: number,
+        inner: Operator<T>,
+    ) {
+        super(OpType.Skip, inner);
+    }
+
+    apply(
+        iter: AsyncIterable<T>,
+    ): AsyncIterable<T> {
+        const count = this.count;
+        return {
+            [Symbol.asyncIterator]: async function* () {
+                let i = 0;
+                for await (const e of iter) {
+                    if (++i > count) {
+                        yield e;
                     }
                 }
             },
@@ -245,6 +274,14 @@ export class ChiselCursor<T> {
         return new ChiselCursor(
             this.baseConstructor,
             new Take(count, this.inner),
+        );
+    }
+
+    /** Skips the first `count` elements of this cursor. */
+    skip(count: number): ChiselCursor<T> {
+        return new ChiselCursor(
+            this.baseConstructor,
+            new Skip(count, this.inner),
         );
     }
 

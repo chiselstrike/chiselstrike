@@ -130,6 +130,10 @@ enum QueryOp {
     Take {
         count: u64,
     },
+    /// Skips the first `count` rows.
+    Skip {
+        count: u64,
+    },
     SortBy(SortBy),
 }
 
@@ -169,6 +173,12 @@ impl fmt::Display for ColumnAlias {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}_{}", self.table_name, self.field_name)
     }
+}
+
+#[derive(Debug, Clone, EnumAsInner)]
+pub(crate) enum TargetDatabase {
+    Postgres,
+    Sqlite,
 }
 
 /// Class used to build `Query` from either QueryOpChain or `ObjectType`.
@@ -558,11 +568,19 @@ impl QueryBuilder {
         Ok(sort_str)
     }
 
-    fn make_limit_string(&self, limit: Option<u64>) -> String {
-        if let Some(limit) = limit {
-            format!("LIMIT {}", limit)
+    fn make_limit_and_offset_string(
+        &self,
+        target: &TargetDatabase,
+        limit: Option<u64>,
+        offset: Option<u64>,
+    ) -> String {
+        if target.as_sqlite().is_some() && limit.is_none() && offset.is_some() {
+            // Covers Sqlite not supporting standalone OFFSET statement without LIMIT.
+            format!("LIMIT {},-1", offset.unwrap())
         } else {
-            "".into()
+            let limit_str = limit.map_or("".into(), |l| format!("LIMIT {}", l));
+            let offset_str = offset.map_or("".into(), |o| format!("OFFSET {}", o));
+            format!("{} {}", limit_str, offset_str)
         }
     }
 
@@ -577,13 +595,16 @@ impl QueryBuilder {
         )
     }
 
-    /// Splits the operators' slice at a first occurrence of Take operator into two slices
-    /// first containing everything up to the Take (inclusive) and the second containing the
-    /// remainder. Idiomatically ops = [..., Take] + [...].
+    /// Splits the operators' slice at a first occurrence of Take or Skip (break) operator into two slices
+    /// first containing everything up to the Take|Skip (inclusive) and the second containing the
+    /// remainder. Idiomatically ops = [..., Take|Skip] + [...].
     fn split_on_first_take<'a>(&self, ops: &'a [QueryOp]) -> (&'a [QueryOp], &'a [QueryOp]) {
         for (i, op) in ops.iter().enumerate() {
-            if let QueryOp::Take { .. } = op {
-                return (&ops[..i + 1], &ops[i + 1..]);
+            match op {
+                QueryOp::Take { .. } | QueryOp::Skip { .. } => {
+                    return (&ops[..i + 1], &ops[i + 1..]);
+                }
+                _ => (),
             }
         }
         (ops, &[])
@@ -621,7 +642,14 @@ impl QueryBuilder {
             .map(|op| *op.as_take().unwrap())
     }
 
-    fn make_raw_query(&self) -> Result<String> {
+    fn find_skip_count(&self, ops: &[QueryOp]) -> Option<u64> {
+        assert!(ops.iter().filter(|op| op.as_skip().is_some()).count() <= 1);
+        ops.iter()
+            .rfind(|op| op.as_skip().is_some())
+            .map(|op| *op.as_skip().unwrap())
+    }
+
+    fn make_raw_query(&self, target: TargetDatabase) -> Result<String> {
         let mut sql_query = self.make_core_select();
         let mut remaining_ops: &[QueryOp] = &self.operators[..];
         while !remaining_ops.is_empty() {
@@ -635,19 +663,21 @@ impl QueryBuilder {
             let sort_string = self.make_sort_string(sort)?;
 
             let limit = self.find_take_count(ops);
-            let limit_string = self.make_limit_string(limit);
+            let offset = self.find_skip_count(ops);
+            let lo_string = self.make_limit_and_offset_string(&target, limit, offset);
+
             // The "AS subquery" part is necessary to make Postgres happy.
             sql_query = format!(
                 "SELECT * FROM ({}) AS subquery {} {} {}",
-                sql_query, filter_string, sort_string, limit_string
+                sql_query, filter_string, sort_string, lo_string
             );
         }
         Ok(sql_query)
     }
 
-    pub(crate) fn build(&self) -> Result<Query> {
+    pub(crate) fn build(&self, target: TargetDatabase) -> Result<Query> {
         Ok(Query {
-            raw_sql: self.make_raw_query()?,
+            raw_sql: self.make_raw_query(target)?,
             entity: self.entity.clone(),
             allowed_fields: self.allowed_fields.clone(),
         })
@@ -694,6 +724,10 @@ pub(crate) enum QueryOpChain {
         count: u64,
         inner: Box<QueryOpChain>,
     },
+    Skip {
+        count: u64,
+        inner: Box<QueryOpChain>,
+    },
     SortBy {
         #[serde(rename = "key")]
         field_name: String,
@@ -716,6 +750,7 @@ fn convert_ops(op: QueryOpChain) -> Result<(String, Vec<QueryOp>)> {
         Filter { expression, inner } => (QueryOp::Filter { expression }, inner),
         Projection { fields, inner } => (QueryOp::Projection { fields }, inner),
         Take { count, inner } => (QueryOp::Take { count }, inner),
+        Skip { count, inner } => (QueryOp::Skip { count }, inner),
         SortBy {
             field_name,
             ascending,
