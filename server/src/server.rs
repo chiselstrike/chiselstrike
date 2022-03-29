@@ -144,7 +144,7 @@ async fn run(state: SharedState, mut cmd: ExecutorChannel) -> Result<()> {
         let path = path.to_str().unwrap();
 
         compile_endpoint(path.to_string(), code.to_string()).await?;
-        activate_endpoint(path);
+        activate_endpoint(path).await?;
 
         let func = Arc::new({
             let path = path.to_string();

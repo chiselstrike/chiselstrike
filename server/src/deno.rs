@@ -977,13 +977,18 @@ pub(crate) async fn compile_endpoint(path: String, code: String) -> Result<()> {
     Ok(())
 }
 
-pub(crate) fn activate_endpoint(path: &str) {
-    let mut service = get();
-    let service: &mut DenoService = &mut service;
-    let runtime = &mut service.worker.js_runtime;
-    let scope = &mut runtime.handle_scope();
-    let activate_endpoint = service.activate_endpoint.open(scope);
-    let undefined = v8::undefined(scope).into();
-    let path = v8::String::new(scope, path).unwrap().into();
-    activate_endpoint.call(scope, undefined, &[path]);
+pub(crate) async fn activate_endpoint(path: &str) -> Result<()> {
+    let promise = {
+        let mut service = get();
+        let service: &mut DenoService = &mut service;
+        let runtime = &mut service.worker.js_runtime;
+        let scope = &mut runtime.handle_scope();
+        let activate_endpoint = service.activate_endpoint.open(scope);
+        let undefined = v8::undefined(scope).into();
+        let path = v8::String::new(scope, path).unwrap().into();
+        let promise = activate_endpoint.call(scope, undefined, &[path]).unwrap();
+        v8::Global::new(scope, promise)
+    };
+    resolve_promise(promise).await?;
+    Ok(())
 }
