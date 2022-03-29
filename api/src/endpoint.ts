@@ -9,10 +9,7 @@ type requestHandler = (req: Request) => Promise<Response>;
 const nextHandlers: Record<string, requestHandler> = {};
 const handlers: Record<string, requestHandler> = {};
 
-export let currentPath = "";
-export let currentMethod = "";
-export let currentApiVersion = "";
-export let currentUserId: string | undefined = undefined;
+import { requestContext } from "./chisel.ts";
 
 function buildReadableStreamForBody(rid: number) {
     return new ReadableStream<string>({
@@ -36,7 +33,7 @@ export async function importEndpoint(
     apiVersion: string,
     version: number,
 ) {
-    currentPath = path;
+    requestContext.path = path;
     path = "/" + apiVersion + path;
 
     // Modules are never unloaded, so we need to create an unique
@@ -67,10 +64,10 @@ export async function callHandler(
     headers: HeadersInit,
     rid?: number,
 ) {
-    currentMethod = method;
-    currentApiVersion = apiVersion;
-    currentPath = path;
-    currentUserId = userid;
+    requestContext.method = method;
+    requestContext.apiVersion = apiVersion;
+    requestContext.path = path;
+    requestContext.userId = userid;
     const init: RequestInit = { method: method, headers: headers };
     if (rid !== undefined) {
         const body = buildReadableStreamForBody(rid);

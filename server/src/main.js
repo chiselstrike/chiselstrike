@@ -1,2 +1,2 @@
-import * as Chisel from "./chisel.js";
+import * as Chisel from "./chisel.ts";
 globalThis.Chisel = Chisel;
