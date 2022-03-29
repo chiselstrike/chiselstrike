@@ -43,15 +43,15 @@ $CHISEL describe
 
 # CHECK: @unique relUrl: string;
 
-$CURL -d '{ "relUrl": "post.html", "content": "We at ChiselStrike are so happy to have you with us!" }' -X POST http://localhost:8080/dev/post
+$CURL -d '{ "relUrl": "post.html", "content": "We at ChiselStrike are so happy to have you with us!" }' -X POST $CHISELD_HOST/dev/post
 # CHECK: HTTP/1.1 200 OK
 
-$CURL http://localhost:8080/dev/post
+$CURL $CHISELD_HOST/dev/post
 # CHECK: HTTP/1.1 200 OK
 # CHECK: "relUrl": "post.html",
 # CHECK: "content": "We at ChiselStrike are so happy to have you with us!"
 
-$CURL -d '{ "relUrl": "post.html", "content": "We at ChiselStrike are so happy to have you with us!" }' -X POST http://localhost:8080/dev/post
+$CURL -d '{ "relUrl": "post.html", "content": "We at ChiselStrike are so happy to have you with us!" }' -X POST $CHISELD_HOST/dev/post
 # CHECK: HTTP/1.1 500 Internal Server Error
 # CHECK: [[(UNIQUE constraint failed|unique constraint)]]
 
