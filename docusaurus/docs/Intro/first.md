@@ -31,6 +31,8 @@ step will also install all our dependencies.
 npx create-chiselstrike-app my-backend
 ```
 
+Note: You need Node 14.18.0 or later installed to successfully run the command.
+
 Output will look something like this:
 
 ```console
