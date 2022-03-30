@@ -16,18 +16,6 @@ env:
 jobs:
   build:
     runs-on: ubuntu-latest
-    services:
-      postgres:
-        image: postgres
-        env:
-          POSTGRES_PASSWORD: "$POSTGRES_PASSWORD"
-        options: >-
-          --health-cmd pg_isready
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-        ports:
-          - 5432:5432
     steps:
     - name: checkout repo
       uses: actions/checkout@v2
@@ -117,6 +105,44 @@ jobs:
       uses: actions-rs/cargo@v1
       with:
           command: test
+
+  postgres-test:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres
+        env:
+          POSTGRES_PASSWORD: "$POSTGRES_PASSWORD"
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v2
+      with:
+        submodules: true
+
+    - name: Install lld
+      id: lld
+      run: "sudo apt-get -y install lld"
+
+    - name: Install Rust toolchain
+      uses: actions-rs/toolchain@v1
+      with:
+          components: rustfmt, clippy
+
+    - name: Configure Rust cache
+      uses: Swatinem/rust-cache@v1
+
+    - name: Configure Node cache
+      uses: actions/cache@v2
+      with:
+            path: ~/.npm
+            key: ${{ runner.os }}-node-${{ hashFiles('**/package-lock.json') }}
 
     - name: Run integration tests against Postgres
       uses: actions-rs/cargo@v1
