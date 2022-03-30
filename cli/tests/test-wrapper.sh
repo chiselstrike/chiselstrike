@@ -15,7 +15,7 @@ EXTENSION=`basename "$2" | cut -d'.' -f2`
 
 cd $TEMPDIR
 if [ "x$EXTENSION" == "xnode" ]; then
-    npx $CREATE_APP ./
+    node $CREATE_APP/dist/index.js ./
 else
     $CHISEL init --no-examples
 fi
