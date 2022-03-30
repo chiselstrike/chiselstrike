@@ -49,6 +49,7 @@ jobs:
         cargo build --release --bin=chiseld --bin=chisel
 
     - name: push image ECR chiseld
+      id: pushchiseld
       env:
         ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
         ECR_REPOSITORY: chiseld
@@ -58,6 +59,8 @@ jobs:
         docker build -f Dockerfile.chiseld -t $ECR_REGISTRY/$ECR_REPOSITORY:$TAG -t $ECR_REGISTRY/$ECR_REPOSITORY:latest .
         docker push $ECR_REGISTRY/$ECR_REPOSITORY:$TAG
         docker push $ECR_REGISTRY/$ECR_REPOSITORY:latest
+        echo "::set-output name=build-tag::$TAG"
+
 
     - name: push image ECR toolset
       env:
@@ -69,4 +72,9 @@ jobs:
         docker build -f Dockerfile.toolset -t $ECR_REGISTRY/$ECR_REPOSITORY:$TAG -t $ECR_REGISTRY/$ECR_REPOSITORY:latest .
         docker push $ECR_REGISTRY/$ECR_REPOSITORY:$TAG
         docker push $ECR_REGISTRY/$ECR_REPOSITORY:latest
+
+    - name: print the build tag
+      id: tagresult
+      run: |
+        echo "built images with tag: ${{ steps.pushchiseld.outputs.build-tag }}"
 
