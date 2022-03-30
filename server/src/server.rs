@@ -4,11 +4,12 @@ use crate::api::ApiService;
 use crate::datastore::{DbConnection, MetaService, QueryEngine};
 use crate::deno;
 use crate::deno::init_deno;
+use crate::deno::update_secrets;
 use crate::deno::{activate_endpoint, compile_endpoint};
 use crate::rpc::{GlobalRpcState, RpcService};
 use crate::runtime;
 use crate::runtime::Runtime;
-use crate::secrets::{get_private_key, get_secrets, SecretManager};
+use crate::secrets::{get_private_key, get_secrets};
 use crate::types::{Type, OAUTHUSER_TYPE_NAME};
 use crate::JsonObject;
 use anyhow::Result;
@@ -130,14 +131,7 @@ async fn run(state: SharedState, mut cmd: ExecutorChannel) -> Result<()> {
     QueryEngine::commit_transaction(transaction).await?;
     let api_service = Rc::new(api_service);
 
-    let rt = Runtime::new(
-        api_service.clone(),
-        query_engine,
-        meta,
-        ts,
-        policies,
-        SecretManager::default(),
-    );
+    let rt = Runtime::new(api_service.clone(), query_engine, meta, ts, policies);
     runtime::set(rt);
 
     for (path, code) in routes.iter() {
@@ -292,9 +286,7 @@ pub async fn run_shared_state(
                     for cmd in &secret_commands {
                         let v = val.clone();
                         let payload = send_command!({
-                            let mut runtime = runtime::get();
-                            let sec = &mut runtime.secrets;
-                            sec.update_secrets(v);
+                            update_secrets(v);
                             Ok(())
                         });
                         cmd.send(payload).await.unwrap();

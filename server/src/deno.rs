@@ -510,12 +510,16 @@ impl Resource for QueryStreamResource {}
 
 #[op]
 fn op_chisel_get_secret(
-    _op_state: &mut OpState,
+    op_state: &mut OpState,
     key: String,
     _: (),
 ) -> Result<Option<serde_json::Value>> {
-    let runtime = runtime::get();
-    Ok(runtime.secrets.get_secret(key))
+    let ret = if let Some(secrets) = current_secrets(op_state) {
+        secrets.get(&key).cloned()
+    } else {
+        None
+    };
+    Ok(ret)
 }
 
 #[op]
@@ -729,6 +733,21 @@ fn take_current_transaction() -> Option<TransactionStatic> {
 
 fn set_current_transaction(st: &mut OpState, transaction: TransactionStatic) {
     st.put::<TransactionStatic>(transaction);
+}
+
+fn current_secrets(st: &OpState) -> Option<&JsonObject> {
+    st.try_borrow::<JsonObject>()
+}
+
+fn set_current_secrets(st: &mut OpState, secrets: JsonObject) {
+    st.put::<JsonObject>(secrets);
+}
+
+pub(crate) fn update_secrets(secrets: JsonObject) {
+    let mut service = get();
+    let runtime = &mut service.worker.js_runtime;
+    let op_state = runtime.op_state();
+    set_current_secrets(&mut op_state.borrow_mut(), secrets);
 }
 
 fn get_result_aux(
