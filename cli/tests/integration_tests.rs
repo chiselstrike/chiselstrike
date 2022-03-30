@@ -168,6 +168,7 @@ fn main() {
         passed.load(Ordering::SeqCst),
         &lit::config::Config::default(),
     );
+    std::process::exit(if passed.load(Ordering::SeqCst) { 0 } else { 1 });
 }
 
 struct GuardedEventHandler {
