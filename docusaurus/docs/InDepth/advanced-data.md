@@ -33,7 +33,7 @@ We can now code an endpoint that will store a post, but posts must
 have unique URLs:
 
 ```typescript title="endpoints/post.ts"
-import { BlogPost } from "my-backend/models/BlogPost";
+import { BlogPost } from "../models/BlogPost";
 import { responseFromJson } from "@chiselstrike/api";
 
 export default async function chisel(req) {
