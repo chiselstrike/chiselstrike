@@ -189,6 +189,20 @@ impl deno_core::ModuleLoader for ModuleLoader {
     }
 }
 
+fn build_extensions() -> Vec<Extension> {
+    vec![Extension::builder()
+        .ops(vec![
+            op_format_file_name::decl(),
+            op_chisel_read_body::decl(),
+            op_chisel_store::decl(),
+            op_chisel_entity_delete::decl(),
+            op_chisel_get_secret::decl(),
+            op_chisel_relational_query_create::decl(),
+            op_chisel_relational_query_next::decl(),
+        ])
+        .build()]
+}
+
 fn create_web_worker(
     bootstrap: BootstrapOptions,
     preload_module_cb: Arc<PreloadModuleCb>,
@@ -207,10 +221,12 @@ fn create_web_worker(
             inner: module_loader_inner.clone(),
         });
 
+        let extensions = build_extensions();
+
         // FIXME: Send a patch refactoring WebWorkerOptions and WorkerOptions
         let options = WebWorkerOptions {
             bootstrap: bootstrap.clone(),
-            extensions: vec![],
+            extensions,
             unsafely_ignore_certificate_errors: None,
             root_cert_store: None,
             user_agent: "hello_runtime".to_string(),
@@ -270,26 +286,16 @@ impl DenoService {
             ts_version: "x".to_string(),
             unstable: false,
         };
+        let extensions = build_extensions();
         let create_web_worker_cb = create_web_worker(
             bootstrap.clone(),
             web_worker_preload_module_cb.clone(),
             inspector.clone(),
             inner.clone(),
         );
-        let ext = Extension::builder()
-            .ops(vec![
-                op_format_file_name::decl(),
-                op_chisel_read_body::decl(),
-                op_chisel_store::decl(),
-                op_chisel_entity_delete::decl(),
-                op_chisel_get_secret::decl(),
-                op_chisel_relational_query_create::decl(),
-                op_chisel_relational_query_next::decl(),
-            ])
-            .build();
         let opts = WorkerOptions {
             bootstrap,
-            extensions: vec![ext],
+            extensions,
             unsafely_ignore_certificate_errors: None,
             root_cert_store: None,
             user_agent: "hello_runtime".to_string(),
