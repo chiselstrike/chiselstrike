@@ -506,13 +506,13 @@ impl ChiselRpc for RpcService {
                     });
                 }
             }
-            // FIXME don't unrwap
-            let policies = state.policies.versions.get(api_version).unwrap();
             let mut label_policy_defs = vec![];
-            for label in policies.labels.keys() {
-                label_policy_defs.push(chisel::LabelPolicyDefinition {
-                    label: label.clone(),
-                });
+            if let Some(policies) = state.policies.versions.get(api_version) {
+                for label in policies.labels.keys() {
+                    label_policy_defs.push(chisel::LabelPolicyDefinition {
+                        label: label.clone(),
+                    });
+                }
             }
             version_defs.push(chisel::VersionDefinition {
                 version: api_version.to_string(),
