@@ -1,6 +1,5 @@
 // SPDX-FileCopyrightText: © 2022 ChiselStrike <info@chiselstrike.com>
 
-use crate::JsonObject;
 use aes_gcm::aead::{Aead, NewAead};
 use aes_gcm::{Aes256Gcm, Nonce};
 use anyhow::Context;
@@ -42,21 +41,6 @@ mod serde_base64 {
     pub fn deserialize<'de, D: Deserializer<'de>>(d: D) -> Result<Vec<u8>, D::Error> {
         let base64 = String::deserialize(d)?;
         base64::decode(base64.as_bytes()).map_err(serde::de::Error::custom)
-    }
-}
-
-#[derive(Debug, Default)]
-pub(crate) struct SecretManager {
-    secrets: JsonObject,
-}
-
-impl SecretManager {
-    pub(crate) fn update_secrets(&mut self, new_secrets: JsonObject) {
-        self.secrets = new_secrets;
-    }
-
-    pub(crate) fn get_secret<S: AsRef<str>>(&self, key: S) -> Option<serde_json::Value> {
-        self.secrets.get(key.as_ref()).cloned()
     }
 }
 
