@@ -556,6 +556,13 @@ impl QueryPlan {
 
     fn make_sort_string(&self, sort: Option<&SortBy>) -> Result<String> {
         let sort_str = if let Some(sort) = sort {
+            if !self.base_type().has_field(&sort.field_name) {
+                anyhow::bail!(
+                    "entity '{}' has no field named '{}'",
+                    self.base_type().name(),
+                    sort.field_name
+                );
+            }
             let order = if sort.ascending { "ASC" } else { "DESC" };
             let c_alias = ColumnAlias {
                 field_name: sort.field_name.to_owned(),
