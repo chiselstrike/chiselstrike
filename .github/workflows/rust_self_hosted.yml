@@ -43,7 +43,7 @@ jobs:
       uses: docker/metadata-action@98669ae865ea3cffbcbaa878cf57c20bbf1c6c38
       with:
         images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
-      working-directory: "/runner"
+        working-directory: "/runner"
 
     - name: Find desired image
       id: findimg
@@ -63,7 +63,7 @@ jobs:
         push: true
         tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.findimg.outputs.img_name }}
         labels: ${{ steps.meta.outputs.labels }}
-      working-directory: "/runner"
+        working-directory: "/runner"
 
     - name: Install lld
       id: lld
@@ -72,55 +72,55 @@ jobs:
     - name: Install rust toolchain
       uses: actions-rs/toolchain@v1
       with:
-          components: rustfmt, clippy
-      working-directory: "/runner"
+        components: rustfmt, clippy
+        working-directory: "/runner"
 
     - name: Install nightly rust toolchain
       uses: actions-rs/toolchain@v1
       with:
-          toolchain: ${{ env.nightly-version }}
-          components: rustfmt, clippy
-      working-directory: "/runner"
+        toolchain: ${{ env.nightly-version }}
+        components: rustfmt, clippy
+        working-directory: "/runner"
 
     - name: set up cache
       uses: Swatinem/rust-cache@v1
       with:
-          key: ${{ env.nightly-version }}
-      working-directory: "/runner"
+        key: ${{ env.nightly-version }}
+        working-directory: "/runner"
 
     - name: set up node cache
       uses: actions/cache@v2
       with:
-            path: ~/.npm
-            key: ${{ runner.os }}-node-${{ hashFiles('**/package-lock.json') }}
-      working-directory: "/runner"
+        path: ~/.npm
+        key: ${{ runner.os }}-node-${{ hashFiles('**/package-lock.json') }}
+        working-directory: "/runner"
 
     - name: Build debug mode binaries
       uses: actions-rs/cargo@v1
       with:
-          command: build
-          args: --verbose
-      working-directory: "/runner"
+        command: build
+        args: --verbose
+        working-directory: "/runner"
 
     - name: Build cli in isolation
       uses: actions-rs/cargo@v1
       with:
-          command: build
-          args: --verbose -p cli
-      working-directory: "/runner"
+        command: build
+        args: --verbose -p cli
+        working-directory: "/runner"
 
     - name: Build server in isolation
       uses: actions-rs/cargo@v1
       with:
-          command: build
-          args: --verbose -p server
-      working-directory: "/runner"
+        command: build
+        args: --verbose -p server
+        working-directory: "/runner"
 
     - name: run unit tests
       uses: actions-rs/cargo@v1
       with:
-          command: test
-      working-directory: "/runner"
+        command: test
+        working-directory: "/runner"
 
   postgres-test:
     defaults:
@@ -144,7 +144,7 @@ jobs:
       uses: actions/checkout@v2
       with:
         submodules: true
-      working-directory: "/runner"
+        working-directory: "/runner"
 
     - name: Install lld
       id: lld
@@ -153,8 +153,8 @@ jobs:
     - name: Install Rust toolchain
       uses: actions-rs/toolchain@v1
       with:
-          components: rustfmt, clippy
-      working-directory: "/runner"
+        components: rustfmt, clippy
+        working-directory: "/runner"
 
     - name: Configure Rust cache
       uses: Swatinem/rust-cache@v1
@@ -163,13 +163,13 @@ jobs:
     - name: Configure Node cache
       uses: actions/cache@v2
       with:
-            path: ~/.npm
-            key: ${{ runner.os }}-node-${{ hashFiles('**/package-lock.json') }}
-      working-directory: "/runner"
+        path: ~/.npm
+        key: ${{ runner.os }}-node-${{ hashFiles('**/package-lock.json') }}
+        working-directory: "/runner"
 
     - name: Run integration tests against Postgres
       uses: actions-rs/cargo@v1
       with:
-          command: test
-          args: -p cli --test integration_tests -- --database postgres --database-user postgres --database-password "$POSTGRES_PASSWORD"
-      working-directory: "/runner"
+        command: test
+        args: -p cli --test integration_tests -- --database postgres --database-user postgres --database-password "$POSTGRES_PASSWORD"
+        working-directory: "/runner"
