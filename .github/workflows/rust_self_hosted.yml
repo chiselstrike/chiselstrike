@@ -1,4 +1,4 @@
-name: Rust
+name: Rust-self-hosted
 
 on:
   push:
