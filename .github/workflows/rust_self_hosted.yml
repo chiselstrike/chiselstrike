@@ -19,7 +19,7 @@ jobs:
     defaults:
       run:
         working-directory: "/runner"
-    runs-on: self-hosted, linux, X64
+    runs-on: self-hosted, linux
     steps:
     - name: prep the workspace
       run: cd /runner && rm -rf ./*
@@ -126,7 +126,7 @@ jobs:
     defaults:
       run:
         working-directory: "/runner"
-    runs-on: self-hosted, linux, X64
+    runs-on: self-hosted, linux
     services:
       postgres:
         image: postgres
