@@ -9,7 +9,7 @@ type requestHandler = (req: Request) => Promise<Response>;
 const nextHandlers: Record<string, requestHandler> = {};
 const handlers: Record<string, requestHandler> = {};
 
-import { requestContext } from "./chisel.ts";
+import { ChiselRequest, loggedInUser, requestContext } from "./chisel.ts";
 
 function buildReadableStreamForBody(rid: number) {
     return new ReadableStream<string>({
@@ -73,8 +73,23 @@ export async function callHandler(
         const body = buildReadableStreamForBody(rid);
         init.body = body;
     }
-    const req = new Request(url, init);
+
     const fullPath = "/" + apiVersion + path;
+    const pathParams = new URL(url).pathname.replace(
+        /\/+/g,
+        "/",
+    ).replace(/\/$/, "").substring(fullPath.length + 1);
+
+    const user = await loggedInUser();
+
+    const req = new ChiselRequest(
+        url,
+        init,
+        apiVersion,
+        path,
+        pathParams,
+        user,
+    );
     const res = await handlers[fullPath](req);
     const resHeaders: [string, string][] = [];
     for (const h of res.headers) {

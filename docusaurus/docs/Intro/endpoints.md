@@ -44,8 +44,8 @@ Being able to just get started very quickly and spawn a CRUD API is great, but a
 project evolves in complexity you may find yourself needing custom business logic and endpoints
 that don't fit neatly into REST workflows.
 
-ChiselStrike allows each `endpoint` file to export a default method that takes a [Request](https://developer.mozilla.org/en-US/docs/Web/API/Request)
-object as a parameter, and returns a [Response](https://developer.mozilla.org/en-US/docs/Web/API/Response). You can then add whatever logic you want.
+ChiselStrike allows each `endpoint` file to export a default method that takes a `ChiselRequest`, a subclass of [Request](https://developer.mozilla.org/en-US/docs/Web/API/Request) with a few convenience fields added, as a parameter,
+and returns a [Response](https://developer.mozilla.org/en-US/docs/Web/API/Response). You can then add whatever logic you want.
 
 This is a lower level mechanism and is pretty raw -- we are working on syntax features that will make this much more powerful.
 
@@ -60,43 +60,34 @@ Now let's edit our endpoint's code to show off a "full customization" example.
 import { responseFromJson } from "@chiselstrike/api"
 import { BlogComment } from "../models/BlogComment.ts"
 
-export default async function chisel(req) {
-
+export default async function chisel(req: ChiselRequest) {
     if (req.method == 'POST') {
         const payload = await req.json();
         const by = payload["by"] || "anonymous";
-        const created = BlogComment.build({'content': payload['content'], by });
-        await created.save();
+        const content = payload["content"];
+        const created = await BlogComment.create({ content, by });
         return responseFromJson(created);
-    }
-
-    else if (req.method == 'GET') {
-        const tokens = req.url.split('/')
-        // better syntax around this coming soon!
-        if (tokens.length != 6) {
+    } else if (req.method == 'GET') {
+        // if we have a parameter, treat it as an id, otherwise get all
+        const id = req.pathComponents()[0]
+        if (id) {
+           const comment = await BlogComment.findOne({id})
+           const status = comment ? 200 : 404;
+           return responseFromJson(comment, status)
+        } else {
            const comments = await BlogComment.cursor().toArray();
            return responseFromJson(comments);
-        } else {
-           const id = tokens.reverse()[0]
-           const comment = await BlogComment.findOne({id})
-           if (comment) {
-              return responseFromJson(comment)
-           }
-           return new Response("Not found", { status: 404 })
         }
-    }
-
-    else {
-        return new Response("Wrong method", { status: 405 });
+    } else {
+        return new Response("Wrong method", { status: 405});
     }
 }
-
 ```
 
 :::tip
 Remember how we didn't have to specify an `id` in the model? We can now access it
 as `created.id` in the example above. If the object doesn't have an `id`, one is created for you after
-`save`. 
+`create` or `save`.
 :::
 
 :::tip
