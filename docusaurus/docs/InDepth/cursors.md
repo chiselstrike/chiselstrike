@@ -39,13 +39,13 @@ The methods provided by `ChiselCursor` are:
 | Method                | Description |
 | --------------------- | ----------- |
 | `filter(predicate)`   | Restrict this cursor to contain only entities matching the given function `predicate`. |
-| `filter(restriction)` | Restrict this cursor to contain only entities matching the given `restrictions`. |
+| `filter(restrictions)`| Restrict this cursor to contain only entities matching the given `restrictions`. |
 | `forEach(function)`   | Execute `function` for every entity in this cursor. |
 | `select(...fields)`   | Return another cursor with a projection of each entity by `fields`.      |
 | `take(count)`         | Take `count` entities from this cursor. |
 | `toArray()`           | Convert this cursor to an array.  |
 
-<!-- FIXME : without examples it's unclear what a restriction object or a function predicate is, this needs a simpler explanation with examples. -->
+<!-- FIXME : without examples it's unclear what a restrictions object or a function predicate is, this needs a simpler explanation with examples. -->
 
 :::note
 The `ChiselCursor` interface is still evolving. For example, methods such as `skip()`,  `map()`, and `reduce()` are planned for future releases.
@@ -60,7 +60,7 @@ ChiselCursor supports two versions of the `filter` method. The first accepts a p
       .filter((user: User) => user.email.endsWith("@gmail.com"));
 ```
 
-The second overload takes a restriction-object parameter. It allows you to filter by *equality* based on an object whose keys correspond to attributes of an Entity matching on respective values. For example, let's find Alice by email:
+The second overload takes a restrictions-object parameter. It allows you to filter by *equality* based on an object whose keys correspond to attributes of an Entity matching on respective values. For example, let's find Alice by email:
 
 ```typescript
   const users = await User.cursor().filter({"email": "alice@mit.edu"});
