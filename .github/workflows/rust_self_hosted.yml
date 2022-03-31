@@ -19,7 +19,7 @@ jobs:
     runs-on: self-hosted
     steps:
     - name: prep the workspace
-      run: cd /home/ubuntu/runner/_work && rm -rf ./*
+      run: cd /home/ubuntu/runner/_work && sudo rm -rf ./*
 
     - name: checkout repo
       uses: actions/checkout@v2
