@@ -1,6 +1,3 @@
----
-sidebar_position: 3
----
 # API Versioning
 
 Now that we have defined our endpoints, models, and policies, it is time to spice things up.

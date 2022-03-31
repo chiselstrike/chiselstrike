@@ -1,6 +1,3 @@
----
-sidebar_position: 5
----
 # OAuth and Login
 
 ChiselStrike supports the process of having your own users.  Your

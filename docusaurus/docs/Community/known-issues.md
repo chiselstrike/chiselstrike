@@ -1,6 +1,3 @@
----
-sidebar_position: 8
----
 # Upcoming Items
 
 We put a lot of effort into getting this beta out the door, so we could
