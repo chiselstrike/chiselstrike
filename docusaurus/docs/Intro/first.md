@@ -1,7 +1,3 @@
----
-# Settings the slug to / defines the home
-sidebar_position: 1
----
 # Getting Started
 
 In this introductory ChiselStrike tutorial, we'll show how to build some simple
