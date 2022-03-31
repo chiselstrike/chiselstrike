@@ -143,3 +143,24 @@ $CHISEL apply
 
 $CURL -o - $CHISELD_HOST/dev/get_sorted
 # CHECK: [Glauber, Pekka]
+
+
+## ________________ sortBy invalid key ________________
+
+cat << EOF > "$TEMPDIR/endpoints/get_sorted.ts"
+import { Person } from "../models/types.ts";
+
+export default async function chisel(req: Request) {
+    const sorted = Person.cursor()
+        .sortBy("invalid_field" as keyof Person)
+
+    const results = (await sorted.toArray()).map(p => p.name);
+    return new Response("[" + results.join(", ") + "]");
+}
+EOF
+
+$CHISEL apply
+# CHECK: End point defined: /dev/get_sorted
+
+$CURL -o - $CHISELD_HOST/dev/get_sorted
+# CHECK: Error: entity 'Person' has no field named 'invalid_field'
