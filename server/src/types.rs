@@ -287,11 +287,6 @@ impl TypeSystem {
         }
     }
 
-    pub(crate) fn update(&mut self, other: &TypeSystem) {
-        self.versions.clear();
-        self.versions = other.versions.clone();
-    }
-
     pub(crate) async fn populate_types<T: AsRef<str>, F: AsRef<str>>(
         &self,
         engine: Arc<QueryEngine>,

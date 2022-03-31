@@ -11,6 +11,9 @@ use crate::rcmut::RcMut;
 use crate::runtime;
 use crate::runtime::Runtime;
 use crate::types::ObjectType;
+use crate::types::Type;
+use crate::types::TypeSystem;
+use crate::types::TypeSystemError;
 use crate::JsonObject;
 use anyhow::{anyhow, Context as AnyhowContext, Result};
 use api::chisel_js;
@@ -441,10 +444,8 @@ async fn op_chisel_store(
         let runtime = runtime::get();
 
         // Users can only store custom types.  Builtin types are managed by us.
-        let ty = match runtime
-            .type_system
-            .lookup_custom_type(type_name, &api_version)
-        {
+        let mut state = state.borrow_mut();
+        let ty = match current_type_system(&mut state).lookup_custom_type(type_name, &api_version) {
             Err(_) => anyhow::bail!("Cannot save into type {}.", type_name),
             Ok(ty) => ty,
         };
@@ -470,14 +471,22 @@ struct DeleteContent {
 
 #[op]
 async fn op_chisel_entity_delete(
-    _state: Rc<RefCell<OpState>>,
+    state: Rc<RefCell<OpState>>,
     content: DeleteContent,
     api_version: String,
 ) -> Result<()> {
-    let mutation = Mutation::parse_delete(&api_version, &content.type_name, &content.restrictions)
+    let mutation = {
+        let mut state = state.borrow_mut();
+        Mutation::parse_delete(
+            current_type_system(&mut state),
+            &api_version,
+            &content.type_name,
+            &content.restrictions,
+        )
         .context(
             "failed to construct delete expression from JSON passed to `op_chisel_entity_delete`",
-        )?;
+        )?
+    };
     let query_engine = {
         let runtime = runtime::get();
         runtime.query_engine.clone()
@@ -529,7 +538,13 @@ fn op_chisel_relational_query_create(
     info: (String, String, Option<String>),
 ) -> Result<ResourceId> {
     let (api_version, path, userid) = info;
-    let query_plan = QueryPlan::from_op_chain(&api_version, &userid, &path, op_chain)?;
+    let query_plan = QueryPlan::from_op_chain(
+        current_type_system(op_state),
+        &api_version,
+        &userid,
+        &path,
+        op_chain,
+    )?;
     let mut runtime = runtime::get();
     let query_engine = &mut runtime.query_engine;
 
@@ -749,6 +764,30 @@ fn current_secrets(st: &OpState) -> Option<&JsonObject> {
 
 fn set_current_secrets(st: &mut OpState, secrets: JsonObject) {
     st.put::<JsonObject>(secrets);
+}
+
+fn current_type_system(st: &mut OpState) -> &mut TypeSystem {
+    st.try_borrow_mut::<TypeSystem>().unwrap()
+}
+
+pub(crate) fn lookup_builtin_type(type_name: &str) -> Result<Type, TypeSystemError> {
+    with_op_state(|state| {
+        let type_system = current_type_system(state);
+        type_system.lookup_builtin_type(type_name)
+    })
+}
+
+pub(crate) fn remove_type_version(version: &str) {
+    with_op_state(|state| {
+        let type_system = current_type_system(state);
+        type_system.versions.remove(version);
+    });
+}
+
+pub(crate) fn set_type_system(type_system: TypeSystem) {
+    with_op_state(move |state| {
+        state.put::<TypeSystem>(type_system);
+    });
 }
 
 pub(crate) fn update_secrets(secrets: JsonObject) {
