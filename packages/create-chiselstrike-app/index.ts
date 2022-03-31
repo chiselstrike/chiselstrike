@@ -12,7 +12,7 @@ function isDirEmpty(dirname: string) {
     return fs.readdirSync(dirname).length === 0;
 }
 
-function run(projectDirectory: string) {
+function run(projectDirectory: string, chiselVersion: string) {
     const projectName = projectDirectory;
     projectDirectory = path.resolve(projectDirectory);
     if (fs.existsSync(projectDirectory)) {
@@ -50,7 +50,7 @@ function run(projectDirectory: string) {
         const template = Handlebars.compile(source);
         fs.writeFileSync(
             path.join(projectDirectory, f),
-            template({ projectName }),
+            template({ projectName, chiselVersion }),
         );
     }
     fs.appendFileSync(
@@ -80,7 +80,12 @@ function run(projectDirectory: string) {
 const _program = new Commander.Command(packageJson.name)
     .version(packageJson.version)
     .arguments("<project-directory>")
-    .action((projectDirectory) => {
-        run(projectDirectory);
+    .option(
+        "-c, --chisel-version <version>",
+        "ChiselStrike version to use.",
+        packageJson.version,
+    )
+    .action((projectDirectory, options) => {
+        run(projectDirectory, options.chiselVersion);
     })
     .parse(process.argv);
