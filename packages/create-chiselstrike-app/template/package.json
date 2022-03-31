@@ -9,11 +9,11 @@
     "author": "",
     "license": "ISC",
     "dependencies": {
-        "@chiselstrike/api": "latest",
+        "@chiselstrike/api": "{{chiselVersion}}",
         "esbuild": "^0.14.14",
         "typescript": "^4.5.4"
     },
     "devDependencies": {
-        "@chiselstrike/cli": "latest"
+        "@chiselstrike/cli": "{{chiselVersion}}"
     }
 }
