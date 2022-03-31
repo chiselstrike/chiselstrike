@@ -6,7 +6,7 @@ provides a cursor API for building queries.
 This composable system also means that you can even write functions that build up queries programmatically
 and pass them around as arguments.
 
-The `ChiselEntity` base class provides a `cursor()` method to obtain a `ChiselCursor`.  The `ChiselCursor` class provides variety of composable operations, such as `filter()`, `take()`, `select()`, 
+The `ChiselEntity` base class provides a `cursor()` method to obtain a `ChiselCursor`.  The `ChiselCursor` class provides a variety of composable operations, such as `filter()`, `take()`, `select()`, 
 for building queries.
 
 For example, the `findOne()` example could be written using the cursor-based API as:
@@ -71,9 +71,9 @@ The second overload takes a restrictions-object parameter. It allows you to filt
 ChiselStrke currently implements implicit transactional evaluation. A transaction is created before ChiselStrike
 starts evaluating your endpoint and is automatically committed after your endpoint ends and we generate
 the HTTP response. In case your endpoint returns a stream, any database-related operation done within
-stream generation code will happen outside of the transaction and can result in a crash.
+stream-generation code will happen outside of the transaction and can result in a crash.
 
-If your code crashes or explicitly throws exception that is not caught, ChiselStrike rollbacks the
+If your code crashes or explicitly throws an exception that is not caught, ChiselStrike rolls back the
 transaction automatically.
 
 Explicit user-controlled transactions are coming soon!
