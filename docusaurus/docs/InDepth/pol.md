@@ -63,7 +63,7 @@ And now notice how the output of the `comments` endpoint changes.
 If you invoke the `/dev/comments` endpoint with:
 
 ```bash
-curl -s localhost:8080/dev/comments | python -m json.tool
+curl -s localhost:8080/dev/comments
 ```
 
 The `curl` command reports:
@@ -119,7 +119,7 @@ exempt from the policy.
 If you now query the `/dev/comments` endpoint:
 
 ```bash
-curl -s localhost:8080/dev/comments | python -m json.tool
+curl -s localhost:8080/dev/comments
 ```
 
 The `curl` command reports:

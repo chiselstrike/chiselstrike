@@ -129,7 +129,7 @@ Now lets fetch the entire list of comments:
 
 
 ```bash
-curl -s localhost:8080/dev/comments | python -m json.tool
+curl -s localhost:8080/dev/comments
 ```
 
 and we should see something like the following:
