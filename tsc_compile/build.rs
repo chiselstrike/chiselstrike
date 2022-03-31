@@ -14,6 +14,7 @@ use std::path::PathBuf;
 fn read(_op_state: &mut OpState, path: String, _: ()) -> Result<String> {
     if path == "bootstrap.ts" {
         return Ok("/// <reference lib=\"deno.core\" />
+                   /// <reference lib=\"deno.unstable\" />
                   export {};"
             .to_string());
     }
@@ -64,6 +65,7 @@ fn read(_op_state: &mut OpState, path: String, _: ()) -> Result<String> {
             _ => inc!(
                 "lib.deno.ns.d.ts",
                 "lib.deno.shared_globals.d.ts",
+                "lib.deno.unstable.d.ts",
                 "lib.deno.window.d.ts",
                 "lib.dom.asynciterable.d.ts",
                 "lib.dom.d.ts",

@@ -10,7 +10,7 @@ For example, in a blogging platform, you will have entities such as `BlogPost`, 
 
 To define a `BlogComment`, you can add the following TypeScript class to a file in the `models/` directory:
 
-```typescript title="models/models.ts"
+```typescript title="my-backend/models/models.ts"
 import { ChiselEntity, labels } from "@chiselstrike/api"
 
 export class BlogComment extends ChiselEntity {
@@ -21,7 +21,7 @@ export class BlogComment extends ChiselEntity {
 
 and another example:
 
-```typescript  title="models/User.ts"
+```typescript  title="my-backend/models/User.ts"
 
 export class User extends ChiselEntity {
     username: string;
@@ -38,7 +38,7 @@ The `ChiselEntity` base class that our `User` entity extends provides a `save()`
 Here is an example endpoint demo:
 
 <!-- FIXME : update the example below to return JSON -->
-```typescript title="endpoints/create.ts"
+```typescript title="my-backend/endpoints/create.ts"
 import { responseFromJson } from "@chiselstrike/api"
 import { User } from "../models/User"
 
@@ -74,7 +74,7 @@ As discussed in the [Getting Started](Intro/first.md) section, the ChiselStrike 
 
 Still, you are not technically limited to making every endpoint follow REST principles by using ids. For example, you could write the following 'update' endpoint that recieves the same JSON, but finds the `User` entity based on the provided `username`:
 
-```typescript title="endpoints/update.ts"
+```typescript title="my-backend/endpoints/update.ts"
 import { responseFromJson } from "@chiselstrike/api";
 import { User } from "../models/User";
 
@@ -107,7 +107,7 @@ There are two search methods `findOne()` and `findMany()` for querying.
 
 For example, to query one entity with a given `username`, we could use the following example code in an endpoint:
 
-```typescript title="endpoints/find-one.ts"
+```typescript title="my-backend/endpoints/find-one.ts"
 import { responseFromJson } from "@chiselstrike/api"
 import { User } from "../models/User"
 
@@ -134,7 +134,7 @@ and see `curl` report:
 
 To find multiple entities, use the `findMany()` method:
 
-```typescript title="endpoints/find-many.ts"
+```typescript title="my-backend/endpoints/find-many.ts"
 import { responseFromJson } from "@chiselstrike/api"
 import { User } from "../models/User"
 
@@ -205,7 +205,7 @@ The documentation robots are at work. Examples coming soon!
 
 ## Deleting Objects
 
-```typescript title="endpoints/find-one.ts"
+```typescript title="my-backend/endpoints/find-one.ts"
 object.delete()
 ```
 Examples coming soon!

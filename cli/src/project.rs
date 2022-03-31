@@ -217,6 +217,7 @@ pub(crate) fn create_project(path: &Path, opts: CreateProjectOptions) -> Result<
 
     let mut data = BTreeMap::new();
     data.insert("projectName".to_string(), project_name);
+    data.insert("chiselVersion".to_string(), "latest");
 
     write_template!("package.json", data, path)?;
     write_template!("tsconfig.json", data, path)?;

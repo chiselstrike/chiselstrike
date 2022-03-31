@@ -174,6 +174,7 @@
         "deno.webgpu": "deno_webgpu",
         "deno.websocket": "deno_websocket",
         "deno.webstorage": "deno_webstorage",
+        "deno.unstable": "deno.unstable",
     };
 
     for (const k in libs) {

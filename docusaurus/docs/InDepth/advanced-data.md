@@ -4,7 +4,7 @@ So far, we have shown how to write simple models in ChiselStrike. Our goal is to
 feel as native as possible for TypeScript users, and we aim to build as much as possible of
 the backend from just your TypeScript definitions.
 
-Still, there are some things that have cannot be easily derived
+Still, there are some things that cannot be easily derived
 from just the code. For those, we rely on annotations to allow you to tell our system how to behave.
 
 We have already seen one example: The `labels` decorator is used to tell ChiselStrike about the
@@ -32,7 +32,7 @@ export class BlogPost extends ChiselEntity {
 We can now code an endpoint that will store a post, but posts must
 have unique URLs:
 
-```typescript title="endpoints/post.ts"
+```typescript title="my-backend/endpoints/post.ts"
 import { BlogPost } from "../models/BlogPost";
 import { responseFromJson } from "@chiselstrike/api";
 

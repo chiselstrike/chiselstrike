@@ -564,6 +564,10 @@ impl ObjectType {
         std::iter::once(&self.chisel_id).chain(self.fields.iter())
     }
 
+    pub(crate) fn has_field(&self, field_name: &str) -> bool {
+        self.all_fields().any(|f| f.name == field_name)
+    }
+
     pub(crate) fn backing_table(&self) -> &str {
         &self.backing_table
     }

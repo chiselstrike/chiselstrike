@@ -464,7 +464,11 @@ export class ChiselCursor<T> {
                 const rid = Deno.core.opSync(
                     "op_chisel_relational_query_create",
                     op,
-                    [currentApiVersion, currentPath, currentUserId],
+                    [
+                        requestContext.apiVersion,
+                        requestContext.path,
+                        requestContext.userId,
+                    ],
                 );
                 try {
                     while (true) {
@@ -552,7 +556,7 @@ export class ChiselEntity {
         const jsonIds = await Deno.core.opAsync("op_chisel_store", {
             name: this.constructor.name,
             value: this,
-        }, currentApiVersion);
+        }, requestContext.apiVersion);
         type IdsJson = Map<string, IdsJson>;
         function backfillIds(this_: ChiselEntity, jsonIds: IdsJson) {
             for (const [fieldName, value] of Object.entries(jsonIds)) {
@@ -642,7 +646,7 @@ export class ChiselEntity {
         await Deno.core.opAsync("op_chisel_entity_delete", {
             type_name: this.name,
             restrictions: restrictions,
-        }, currentApiVersion);
+        }, requestContext.apiVersion);
     }
 
     /**
@@ -761,7 +765,7 @@ export function unique(_target: unknown, _name: string): void {
 
 /** Returns the currently logged-in user or null if no one is logged in. */
 export async function loggedInUser(): Promise<OAuthUser | undefined> {
-    const id = currentUserId;
+    const id = requestContext.userId;
     if (id === undefined) {
         return undefined;
     }
@@ -769,16 +773,21 @@ export async function loggedInUser(): Promise<OAuthUser | undefined> {
 }
 
 function ensureNotGet() {
-    if (currentMethod === "GET") {
+    if (requestContext.method === "GET") {
         throw new Error("Mutating the backend is not allowed during GET");
     }
 }
-import {
-    currentApiVersion,
-    currentMethod,
-    currentPath,
-    currentUserId,
-} from "./endpoint.ts";
+
+export const requestContext: {
+    path: string;
+    method: string;
+    apiVersion: string;
+    userId?: string;
+} = {
+    path: "",
+    method: "",
+    apiVersion: "",
+};
 
 // TODO: BEGIN: this should be in another file: crud.ts
 
@@ -1137,7 +1146,7 @@ export function crud<
         parsePath?: (url: URL) => P;
     },
 ): (req: Request) => Promise<Response> {
-    const pathTemplateRaw = "/:chiselVersion" + currentPath + "/" +
+    const pathTemplateRaw = "/:chiselVersion" + requestContext.path + "/" +
         (urlTemplateSuffix.includes(":id")
             ? urlTemplateSuffix
             : `${urlTemplateSuffix}/:id`);
