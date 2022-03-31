@@ -4,7 +4,7 @@ use crate::api::ApiService;
 use crate::datastore::{MetaService, QueryEngine};
 use crate::policies::{FieldPolicies, Kind, Policies};
 use crate::rcmut::RcMut;
-use crate::types::{ObjectType, TypeSystem};
+use crate::types::ObjectType;
 use derive_new::new;
 use once_cell::sync::OnceCell;
 use std::cell::RefCell;
@@ -16,7 +16,6 @@ pub(crate) struct Runtime {
     pub(crate) api: Rc<ApiService>,
     pub(crate) query_engine: Arc<QueryEngine>,
     pub(crate) meta: Rc<MetaService>,
-    pub(crate) type_system: TypeSystem,
     pub(crate) policies: Policies,
 }
 

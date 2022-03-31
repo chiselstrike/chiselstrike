@@ -2,6 +2,7 @@
 
 use crate::datastore::expr::{BinaryExpr, BinaryOp, Expr, Literal, PropertyAccess};
 use crate::deno::make_field_policies;
+use crate::types::TypeSystem;
 
 use crate::runtime;
 use crate::types::{Field, ObjectType, Type, TypeSystemError, OAUTHUSER_TYPE_NAME};
@@ -243,6 +244,7 @@ impl QueryPlan {
     /// helper data like `api_version`, `userid` and `path` (url path used
     /// for policy evaluation).
     pub(crate) fn from_op_chain(
+        ts: &TypeSystem,
         api_version: &str,
         userid: &Option<String>,
         path: &str,
@@ -251,7 +253,6 @@ impl QueryPlan {
         let (entity_name, operators) = convert_ops(op_chain)?;
 
         let runtime = runtime::get();
-        let ts = &runtime.type_system;
         let ty = match ts.lookup_builtin_type(&entity_name) {
             Ok(Type::Object(ty)) => ty,
             Err(TypeSystemError::NotABuiltinType(_)) => {
@@ -847,16 +848,13 @@ pub(crate) struct Mutation {
 impl Mutation {
     /// Parses a delete statement from JSON.
     pub(crate) fn parse_delete(
+        type_system: &TypeSystem,
         api_version: &str,
         type_name: &str,
         restrictions: &JsonObject,
     ) -> Result<Self> {
         let (ty, restrictions) = {
-            let runtime = runtime::get();
-            let ty = match runtime
-                .type_system
-                .lookup_custom_type(type_name, api_version)
-            {
+            let ty = match type_system.lookup_custom_type(type_name, api_version) {
                 Err(_) => anyhow::bail!("Cannot delete from type `{}`", type_name),
                 Ok(ty) => ty,
             };

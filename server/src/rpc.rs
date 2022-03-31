@@ -4,6 +4,8 @@ use crate::api::RequestPath;
 use crate::chisel;
 use crate::datastore::{MetaService, QueryEngine};
 use crate::deno;
+use crate::deno::remove_type_version;
+use crate::deno::set_type_system;
 use crate::policies::{Policies, VersionPolicy};
 use crate::prefix_map::PrefixMap;
 use crate::runtime;
@@ -145,9 +147,8 @@ impl RpcService {
 
         let cmd = send_command!({
             let mut runtime = runtime::get();
-            let type_system = &mut runtime.type_system;
 
-            type_system.versions.remove(&version);
+            remove_type_version(&version);
 
             runtime.policies.versions.remove(&version);
 
@@ -389,9 +390,7 @@ impl RpcService {
         let cmd = send_command!({
             {
                 let mut runtime = runtime::get();
-                let type_system = &mut runtime.type_system;
-
-                type_system.update(&types_global);
+                set_type_system(types_global.clone());
 
                 runtime
                     .policies

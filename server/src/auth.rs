@@ -3,6 +3,7 @@
 use crate::api::{response_template, ApiService, Body};
 use crate::datastore::engine::SqlWithArguments;
 use crate::datastore::query::SqlValue;
+use crate::deno::lookup_builtin_type;
 use crate::runtime;
 use crate::types::{ObjectType, Type, OAUTHUSER_TYPE_NAME};
 use crate::JsonObject;
@@ -34,10 +35,7 @@ fn bad_request(msg: String) -> Response<Body> {
 }
 
 pub(crate) fn get_oauth_user_type() -> Result<Arc<ObjectType>> {
-    match runtime::get()
-        .type_system
-        .lookup_builtin_type(OAUTHUSER_TYPE_NAME)
-    {
+    match lookup_builtin_type(OAUTHUSER_TYPE_NAME) {
         Ok(Type::Object(t)) => Ok(t),
         _ => anyhow::bail!("Internal error: type {} not found", OAUTHUSER_TYPE_NAME),
     }
@@ -142,7 +140,8 @@ pub(crate) async fn get_username(req: &Request<hyper::Body>) -> Option<String> {
 
     let qeng = { crate::runtime::get().query_engine.clone() };
 
-    match (userid, crate::auth::get_oauth_user_type()) {
+    let user_type = crate::auth::get_oauth_user_type();
+    match (userid, user_type) {
         (None, _) => None,
         (Some(_), Err(e)) => {
             warn!("{:?}", e);
