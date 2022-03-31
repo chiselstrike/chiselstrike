@@ -32,7 +32,7 @@ export class BlogPost extends ChiselEntity {
 We can now code an endpoint that will store a post, but posts must
 have unique URLs:
 
-```typescript title="endpoints/post.ts"
+```typescript title="my-backend/endpoints/post.ts"
 import { BlogPost } from "../models/BlogPost";
 import { responseFromJson } from "@chiselstrike/api";
 

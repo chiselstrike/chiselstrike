@@ -11,7 +11,7 @@ for building queries.
 
 For example, the `findOne()` example could be written using the cursor-based API as:
 
-```typescript title="endpoints/find-one-cursor.ts"
+```typescript title="my-backend/endpoints/find-one-cursor.ts"
 import { responseFromJson } from "@chiselstrike/api"
 import { User } from "../models/models"
 
