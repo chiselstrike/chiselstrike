@@ -18,9 +18,6 @@ jobs:
   build:
     runs-on: self-hosted
     steps:
-    - name: prep the workspace
-      run: cd /home/ubuntu/runner/_work && sudo rm -rf ./*
-
     - name: checkout repo
       uses: actions/checkout@v2
       with:
@@ -103,6 +100,13 @@ jobs:
       with:
         command: test
 
+    - name: Clean working directory
+      shell: bash
+      run: |
+         cd $RUNNER_WORKSPACE
+         cd ..
+         rm -r *
+
   postgres-test:
     runs-on: self-hosted
     services:
@@ -146,3 +150,11 @@ jobs:
       with:
         command: test
         args: -p cli --test integration_tests -- --database postgres --database-user postgres --database-password "$POSTGRES_PASSWORD"
+
+    - name: Clean working directory
+      shell: bash
+      run: |
+         cd $RUNNER_WORKSPACE
+         cd ..
+         rm -r *
+
