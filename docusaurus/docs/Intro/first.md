@@ -212,7 +212,7 @@ We'll talk about security more in the [Policy](InDepth/pol.md) section.
 Now that we've inserted some objects, lets read them back! Our `crud` function also registers a `GET` handler, which is already available!
 
 ```bash
-curl localhost:8080/dev/comments | python -m json.tool
+curl localhost:8080/dev/comments
 ```
 
 ```json
@@ -253,7 +253,7 @@ Pagination support for collections of large objects will be coming very soon!
 To get a specific comment, we can specify an id in the URL:
 
 ```bash
-curl localhost:8080/dev/comments/a4ca3ab3-2e26-4da6-a5de-418c1e6b9b83 | python -m json.tool
+curl localhost:8080/dev/comments/a4ca3ab3-2e26-4da6-a5de-418c1e6b9b83
 ```
 
 ```json
@@ -269,7 +269,7 @@ curl localhost:8080/dev/comments/a4ca3ab3-2e26-4da6-a5de-418c1e6b9b83 | python -
 The API allows you to filter by specific properties, by specifying a search parameter with a partial URL-encoded JSON object:
 
 ```bash
-curl -g localhost:8080/dev/comments?f={%22by%22:%22Jack%22} | python -m json.tool
+curl -g localhost:8080/dev/comments?f={%22by%22:%22Jack%22}
 ```
 
 ```json
