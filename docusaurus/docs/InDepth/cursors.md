@@ -3,7 +3,7 @@
 As shown in [Data Access](Intro/data-access.md), the `findOne` and `findMany()` methods are convenient, but for more advanced use, ChiselStrike
 provides a cursor API for building queries.
 
-This composable system also means that you can even write functions that build up queries programatically
+This composable system also means that you can even write functions that build up queries programmatically
 and pass them around as arguments.
 
 The `ChiselEntity` base class provides a `cursor()` method to obtain a `ChiselCursor`.  The `ChiselCursor` class provides variety of composable operations, such as `filter()`, `take()`, `select()`, 
