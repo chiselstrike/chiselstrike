@@ -18,6 +18,9 @@ jobs:
   build:
     runs-on: self-hosted
     steps:
+    - name: cleanup
+      uses: AutoModality/action-clean@v1
+
     - name: checkout repo
       uses: actions/checkout@v2
       with:
@@ -100,13 +103,6 @@ jobs:
       with:
         command: test
 
-    - name: Clean working directory
-      shell: bash
-      run: |
-         cd $RUNNER_WORKSPACE
-         cd ..
-         rm -r *
-
   postgres-test:
     runs-on: self-hosted
     services:
@@ -122,6 +118,9 @@ jobs:
         ports:
           - 5432:5432
     steps:
+    - name: cleanup
+      uses: AutoModality/action-clean@v1
+
     - name: Checkout repository
       uses: actions/checkout@v2
       with:
@@ -150,11 +149,4 @@ jobs:
       with:
         command: test
         args: -p cli --test integration_tests -- --database postgres --database-user postgres --database-password "$POSTGRES_PASSWORD"
-
-    - name: Clean working directory
-      shell: bash
-      run: |
-         cd $RUNNER_WORKSPACE
-         cd ..
-         rm -r *
 
