@@ -287,6 +287,48 @@ curl -g localhost:8080/dev/comments?f={%22by%22:%22Jack%22}
 ]
 ```
 
+Similarly, you can order the results by specifying the `sort` parameter:
+```bash
+curl -g localhost:8080/dev/comments?sort=-by
+```
+
+```json
+[
+    {
+    "id": "d419e629-4304-44d5-b534-9ce446f25e9d",
+    "content": "Wrong comment",
+    "by": "Author"
+  },
+  {
+    "id": "fed312d7-b36b-4f34-bb04-fba327a3f440",
+    "content": "Second comment",
+    "by": "Jack"
+  },
+  {
+    "id": "5bfef47e-371b-44e8-a2dd-88260b5c3f2c",
+    "content": "Fourth comment",
+    "by": "Jack"
+  },
+  {
+    "id": "a4ca3ab3-2e26-4da6-a5de-418c1e6b9b83",
+    "content": "First comment",
+    "by": "Jill"
+  },
+  {
+    "id": "adc89862-dfaa-43ab-a639-477111afc55e",
+    "content": "Third comment",
+    "by": "Jim"
+  },
+]
+```
+
+Note the minus `-` sign in front of the field name `by`. It signifies a descending sort ordering.
+For ascending order, you use a `+` prefix or omit it completely which will default to ascending.
+
+...tip:
+When using the ascending ordering with prefix `+`, your HTTP library may do URL encoding automatically, but if it doesn't, `+` needs to be encoded as `%2B`.
+...
+
 ## PUT and DELETE
 
 We can also amend an object with `PUT`:

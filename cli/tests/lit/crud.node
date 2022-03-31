@@ -37,6 +37,27 @@ $CURL $CHISELD_HOST/dev/persons | tr , \\n | sort # GET all
 # CHECK: "last_name": "Draper"
 # CHECK: "last_name": "Elgin"
 
+$CURL "$CHISELD_HOST/dev/persons?sort=first_name"
+# CHECK: "last_name": "Anderson"
+# CHECK: "last_name": "Brown"
+# CHECK: "last_name": "Chong"
+# CHECK: "last_name": "Draper"
+# CHECK: "last_name": "Elgin"
+
+$CURL "$CHISELD_HOST/dev/persons?sort=%2Blast_name"
+# CHECK: "last_name": "Anderson"
+# CHECK: "last_name": "Brown"
+# CHECK: "last_name": "Chong"
+# CHECK: "last_name": "Draper"
+# CHECK: "last_name": "Elgin"
+
+$CURL "$CHISELD_HOST/dev/persons?sort=-age"
+# CHECK: "last_name": "Elgin"
+# CHECK: "last_name": "Brown"
+# CHECK: "last_name": "Anderson"
+# CHECK: "last_name": "Chong"
+# CHECK: "last_name": "Draper"
+
 $CURL "$CHISELD_HOST/dev/persons?f=\\{%22age%22:40\\}" # Filtered GET
 # CHECK: HTTP/1.1 200 OK
 # CHECK: "last_name": "Brown"

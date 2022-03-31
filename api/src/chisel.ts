@@ -852,6 +852,7 @@ type ChiselEntityClass<T extends ChiselEntity> = {
     findMany: (_: Partial<T>) => Promise<Partial<T>[]>;
     build: (...properties: Record<string, unknown>[]) => T;
     delete: (restrictions: Partial<T>) => Promise<void>;
+    cursor: () => ChiselCursor<T>;
 };
 
 type GenericChiselEntityClass = ChiselEntityClass<ChiselEntity>;
@@ -979,6 +980,39 @@ export type CRUDCreateResponses<
     [K in keyof CRUDMethods<T, E, P>]: CRUDCreateResponse;
 };
 
+/**
+ * Parses Query Operators out of `params` query string and applies them on a
+ * given `entity` creating a `ChiselCursor` which is then returned.
+ */
+function applyQueryOperators(
+    entity: GenericChiselEntityClass,
+    params: URLSearchParams,
+): ChiselCursor<ChiselEntity> {
+    let it = entity.cursor();
+    for (const [op_name, value] of Array.from(params)) {
+        if (op_name == "f") { // filter
+            const o = JSON.parse(value);
+            if (o && typeof o === "object") {
+                it = it.filter(o);
+            } else {
+                throw new Error(
+                    `provided search parameter 'f=${value}' is not a JSON object.`,
+                );
+            }
+        } else if (op_name == "sort") {
+            let entity_field = value;
+            let ord = "+";
+            if (value[0] == "+" || value[0] == "-") {
+                ord = value[0];
+                entity_field = value.substring(1);
+            }
+            it = it.sortBy(entity_field as keyof ChiselEntity, ord == "+");
+        }
+        // TODO: More operators like take, offset etc.
+    }
+    return it;
+}
+
 const defaultCrudMethods: CRUDMethods<ChiselEntity, GenericChiselEntityClass> =
     {
         // Returns a specific entity matching params.id (if present) or all entities matching the filter in the `f` URL parameter.
@@ -990,16 +1024,16 @@ const defaultCrudMethods: CRUDMethods<ChiselEntity, GenericChiselEntityClass> =
             createResponse: CRUDCreateResponse,
         ) => {
             const { id } = params;
-            if (!id) {
+            if (id) {
+                const u = await entity.findOne({ id });
+                return createResponse(u ?? "Not found", u ? 200 : 404);
+            } else {
+                const cursor = applyQueryOperators(entity, url.searchParams);
                 return createResponse(
-                    await entity.findMany(
-                        getEntityFiltersFromURL(entity, url) || {},
-                    ),
+                    await cursor.toArray(),
                     200,
                 );
             }
-            const u = await entity.findOne({ id });
-            return createResponse(u ?? "Not found", u ? 200 : 404);
         },
         // Creates and returns a new entity from the `req` payload. Ignores the payload's id property and assigns a fresh one.
         POST: async (
