@@ -66,16 +66,8 @@ jobs:
       with:
           components: rustfmt, clippy
 
-    - name: Install nightly rust toolchain
-      uses: actions-rs/toolchain@v1
-      with:
-          toolchain: ${{ env.nightly-version }}
-          components: rustfmt, clippy
-
-    - name: set up cache
+    - name: Configure Rust cache
       uses: Swatinem/rust-cache@v1
-      with:
-          key: ${{ env.nightly-version }}
 
     - name: set up node cache
       uses: actions/cache@v2
@@ -106,10 +98,86 @@ jobs:
           command: build
           args: --verbose -p server
 
-    - name: run unit tests
+    - name: Run unit tests
       uses: actions-rs/cargo@v1
       with:
           command: test
+          args: --lib
+
+  linters:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Install nightly rust toolchain
+      uses: actions-rs/toolchain@v1
+      with:
+          toolchain: ${{ env.nightly-version }}
+          components: rustfmt, clippy
+
+    - name: set up cache
+      uses: Swatinem/rust-cache@v1
+      with:
+          key: ${{ env.nightly-version }}
+
+    - name: Checkout repository
+      uses: actions/checkout@v2
+      with:
+        submodules: true
+
+    - name: Install lld
+      id: lld
+      run: "sudo apt-get -y install lld"
+
+    - name: Install Rust toolchain
+      uses: actions-rs/toolchain@v1
+      with:
+          components: rustfmt, clippy
+
+    - name: Configure Rust cache
+      uses: Swatinem/rust-cache@v1
+
+    - name: Configure Node cache
+      uses: actions/cache@v2
+      with:
+            path: ~/.npm
+            key: ${{ runner.os }}-node-${{ hashFiles('**/package-lock.json') }}
+
+    - name: Run linters
+      uses: actions-rs/cargo@v1
+      with:
+          command: test
+          args: -p cli --test linters
+
+  sqlite-test:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v2
+      with:
+        submodules: true
+
+    - name: Install lld
+      id: lld
+      run: "sudo apt-get -y install lld"
+
+    - name: Install Rust toolchain
+      uses: actions-rs/toolchain@v1
+      with:
+          components: rustfmt, clippy
+
+    - name: Configure Rust cache
+      uses: Swatinem/rust-cache@v1
+
+    - name: Configure Node cache
+      uses: actions/cache@v2
+      with:
+            path: ~/.npm
+            key: ${{ runner.os }}-node-${{ hashFiles('**/package-lock.json') }}
+
+    - name: Run integration tests against SQLite
+      uses: actions-rs/cargo@v1
+      with:
+          command: test
+          args: -p cli --test integration_tests -- --database sqlite
 
   postgres-test:
     runs-on: ubuntu-latest
