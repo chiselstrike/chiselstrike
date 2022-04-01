@@ -2,34 +2,27 @@
 
 # RUN: sh -e @file
 
-cat << EOF > "$TEMPDIR/endpoints/echo.js"
+cat << EOF > "$TEMPDIR/endpoints/echo.ts"
 // This function produces a response whose body is a json of the request
 export default async function chisel(req: Request) {
-    // The replacer function is not async, so read the body first.
-    let body_text = await req.text();
-
     // Stringfy needs some help to see some of the fields
-    function replacer(key, value) {
-        const ret = {};
-        if (key == "") {
-            for (const k in value) {
-                ret[k] = value[k];
+    const ret: Record<string, unknown> = {};
+    for (const k in req) {
+        let v;
+        if (k == "body") {
+            v = await req.text();
+        } else if (k == "headers") {
+            const copy: Record<string, string> = {};
+            for (const header of req.headers) {
+                copy[header[0]] = header[1];
             }
-            return ret;
+            v = copy;
+        } else {
+            v = req[k as keyof Request];
         }
-        if (key == "headers") {
-            for (const header of value) {
-                ret[header[0]] = header[1];
-            }
-            return ret;
-        }
-        if (key == "body") {
-            return body_text;
-        }
-        return value;
+        ret[k] = v;
     }
-
-    const body = JSON.stringify(req, replacer, 4);
+    const body = JSON.stringify(ret, null, 4);
     return new Response(body);
 }
 EOF
