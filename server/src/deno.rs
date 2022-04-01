@@ -715,6 +715,17 @@ impl Resource for BodyResource {
     }
 }
 
+fn with_op_state<T, F>(func: F) -> T
+where
+    F: FnOnce(&mut OpState) -> T,
+{
+    let mut service = get();
+    let runtime = &mut service.worker.js_runtime;
+    let op_state = runtime.op_state();
+    let mut borrow = op_state.borrow_mut();
+    func(&mut borrow)
+}
+
 fn current_transaction(st: &OpState) -> Result<TransactionStatic> {
     st.try_borrow::<TransactionStatic>()
         .cloned()
@@ -722,13 +733,10 @@ fn current_transaction(st: &OpState) -> Result<TransactionStatic> {
 }
 
 fn take_current_transaction() -> Option<TransactionStatic> {
-    let mut service = get();
-    let service: &mut DenoService = &mut service;
-    let runtime = &mut service.worker.js_runtime;
-    let state = runtime.op_state();
-    let mut state = state.borrow_mut();
-    // FIXME: Return a Result once all concurrency issues are fixed.
-    state.try_take::<TransactionStatic>()
+    with_op_state(|state| {
+        // FIXME: Return a Result once all concurrency issues are fixed.
+        state.try_take::<TransactionStatic>()
+    })
 }
 
 fn set_current_transaction(st: &mut OpState, transaction: TransactionStatic) {
@@ -744,10 +752,9 @@ fn set_current_secrets(st: &mut OpState, secrets: JsonObject) {
 }
 
 pub(crate) fn update_secrets(secrets: JsonObject) {
-    let mut service = get();
-    let runtime = &mut service.worker.js_runtime;
-    let op_state = runtime.op_state();
-    set_current_secrets(&mut op_state.borrow_mut(), secrets);
+    with_op_state(|state| {
+        set_current_secrets(state, secrets);
+    })
 }
 
 fn get_result_aux(
@@ -862,14 +869,13 @@ pub(crate) async fn run_js(path: String, req: Request<hyper::Body>) -> Result<Re
     let path = RequestPath::try_from(path.as_ref()).unwrap();
     let userid = crate::auth::get_user(&req).await?;
 
+    with_op_state(|state| {
+        set_current_transaction(state, transaction);
+    });
     {
         let mut service = get();
-        let service: &mut DenoService = &mut service;
-        let runtime = &mut service.worker.js_runtime;
-        let state = runtime.op_state();
-        let mut state = state.borrow_mut();
-        set_current_transaction(&mut state, transaction);
         if service.inspector.is_some() {
+            let runtime = &mut service.worker.js_runtime;
             runtime
                 .inspector()
                 .wait_for_session_and_break_on_next_statement();
@@ -946,12 +952,9 @@ pub(crate) async fn run_js(path: String, req: Request<hyper::Body>) -> Result<Re
 
     // FIXME: We should always have a transaction in here
     if let Some(transaction) = transaction {
-        let mut service = get();
-        let service: &mut DenoService = &mut service;
-        let runtime = &mut service.worker.js_runtime;
-        let state = runtime.op_state();
-        let mut state = state.borrow_mut();
-        set_current_transaction(&mut state, transaction);
+        with_op_state(|state| {
+            set_current_transaction(state, transaction);
+        });
     }
     Ok(body)
 }
