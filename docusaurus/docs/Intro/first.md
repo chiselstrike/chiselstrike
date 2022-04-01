@@ -294,20 +294,10 @@ curl -g localhost:8080/dev/comments?sort=-by
 
 ```json
 [
-    {
-    "id": "d419e629-4304-44d5-b534-9ce446f25e9d",
-    "content": "Wrong comment",
-    "by": "Author"
-  },
   {
-    "id": "fed312d7-b36b-4f34-bb04-fba327a3f440",
-    "content": "Second comment",
-    "by": "Jack"
-  },
-  {
-    "id": "5bfef47e-371b-44e8-a2dd-88260b5c3f2c",
-    "content": "Fourth comment",
-    "by": "Jack"
+    "id": "adc89862-dfaa-43ab-a639-477111afc55e",
+    "content": "Third comment",
+    "by": "Jim"
   },
   {
     "id": "a4ca3ab3-2e26-4da6-a5de-418c1e6b9b83",
@@ -315,10 +305,20 @@ curl -g localhost:8080/dev/comments?sort=-by
     "by": "Jill"
   },
   {
-    "id": "adc89862-dfaa-43ab-a639-477111afc55e",
-    "content": "Third comment",
-    "by": "Jim"
+    "id": "5bfef47e-371b-44e8-a2dd-88260b5c3f2c",
+    "content": "Fourth comment",
+    "by": "Jack"
   },
+  {
+    "id": "fed312d7-b36b-4f34-bb04-fba327a3f440",
+    "content": "Second comment",
+    "by": "Jack"
+  },
+  {
+    "id": "d419e629-4304-44d5-b534-9ce446f25e9d",
+    "content": "Wrong comment",
+    "by": "Author"
+  }
 ]
 ```
 
