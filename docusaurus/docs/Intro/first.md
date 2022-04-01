@@ -329,6 +329,35 @@ For ascending order, you use a `+` prefix or omit it completely which will defau
 When using the ascending ordering with prefix `+`, your HTTP library may do URL encoding automatically, but if it doesn't, `+` needs to be encoded as `%2B`.
 ...
 
+To limit the result set to only the first `n` elements, you can use the `take` parameter:
+```bash
+curl -g localhost:8080/dev/comments?sort=by&take=3
+```
+
+```json
+[
+    {
+    "id": "d419e629-4304-44d5-b534-9ce446f25e9d",
+    "content": "Wrong comment",
+    "by": "Author"
+  },
+  {
+    "id": "fed312d7-b36b-4f34-bb04-fba327a3f440",
+    "content": "Second comment",
+    "by": "Jack"
+  },
+    {
+    "id": "5bfef47e-371b-44e8-a2dd-88260b5c3f2c",
+    "content": "Fourth comment",
+    "by": "Jack"
+  },
+]
+```
+
+...note:
+The order in which you specify CRUD operators *does matter*. The operators are applied in the order specified by the query string. For example `?sort=by&take=2&sort=content` can yield different results than `?sort=by&sort=content&take=2` which would be equivalent to `?sort=content&take=2`.
+...
+
 ## PUT and DELETE
 
 We can also amend an object with `PUT`:
