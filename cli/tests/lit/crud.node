@@ -79,10 +79,27 @@ $CURL "$CHISELD_HOST/dev/persons?sort=-first_name&take=3" | count_results
 # CHECK: "last_name": "Draper"
 # CHECK: "last_name": "Chong"
 
+$CURL "$CHISELD_HOST/dev/persons?sort=first_name&skip=3" | count_results
+# CHECK: Number of names: 2
+# CHECK: HTTP/1.1 200 OK
+# CHECK: "last_name": "Draper"
+# CHECK: "last_name": "Elgin"
+
+$CURL "$CHISELD_HOST/dev/persons?sort=-first_name&skip=3" | count_results
+# CHECK: Number of names: 2
+# CHECK: HTTP/1.1 200 OK
+# CHECK: "last_name": "Brown"
+# CHECK: "last_name": "Anderson"
+
 ## Ordering of operators matters:
 $CURL "$CHISELD_HOST/dev/persons?sort=first_name&take=3&sort=-first_name&take=1" | count_results
 # CHECK: Number of names: 1
 # CHECK: "last_name": "Chong"
+
+$CURL "$CHISELD_HOST/dev/persons?sort=first_name&take=3&skip=2" | count_results
+# CHECK: Number of names: 1
+# CHECK: "last_name": "Chong"
+
 
 $CURL "$CHISELD_HOST/dev/persons?f=\\{%22age%22:40\\}" # Filtered GET
 # CHECK: HTTP/1.1 200 OK

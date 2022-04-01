@@ -354,6 +354,21 @@ curl -g localhost:8080/dev/comments?sort=by&take=3
 ]
 ```
 
+To skip the first `n` elements, you can use `skip` operator:
+```bash
+curl -g localhost:8080/dev/comments?sort=by&skip=4
+```
+
+```json
+[
+  {
+    "id": "adc89862-dfaa-43ab-a639-477111afc55e",
+    "content": "Third comment",
+    "by": "Jim"
+  },
+]
+```
+
 ...note:
 The order in which you specify CRUD operators *does matter*. The operators are applied in the order specified by the query string. For example `?sort=by&take=2&sort=content` can yield different results than `?sort=by&sort=content&take=2` which would be equivalent to `?sort=content&take=2`.
 ...
