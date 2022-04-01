@@ -1009,8 +1009,9 @@ function applyQueryOperators(
             it = it.sortBy(entity_field as keyof ChiselEntity, ord == "+");
         } else if (op_name == "take") {
             it = it.take(Number(value));
+        } else if (op_name == "skip") {
+            it = it.skip(Number(value));
         }
-        // TODO: More operators like offset etc.
     }
     return it;
 }
