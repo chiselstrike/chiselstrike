@@ -602,11 +602,11 @@ export class ChiselEntity {
         restrictions: Partial<T>,
         take?: number,
     ): Promise<Partial<T>[]> {
-        let it = chiselIterator<T>(this);
+        let it = chiselIterator<T>(this).filter(restrictions);
         if (take) {
             it = it.take(take);
         }
-        return await it.filter(restrictions).toArray();
+        return await it.toArray();
     }
 
     /** Returns a single object that matches the `Partial` object `restrictions` passed as its parameter.
