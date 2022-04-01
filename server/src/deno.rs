@@ -6,9 +6,9 @@ use crate::datastore::engine::TransactionStatic;
 use crate::datastore::engine::{QueryResults, ResultRow};
 use crate::datastore::query::QueryOpChain;
 use crate::datastore::query::{Mutation, QueryPlan};
+use crate::datastore::QueryEngine;
 use crate::policies::FieldPolicies;
 use crate::rcmut::RcMut;
-use crate::runtime;
 use crate::runtime::Runtime;
 use crate::types::ObjectType;
 use crate::types::Type;
@@ -441,8 +441,6 @@ async fn op_chisel_store(
     let value = &content.value;
 
     let (query_engine, ty) = {
-        let runtime = runtime::get();
-
         // Users can only store custom types.  Builtin types are managed by us.
         let mut state = state.borrow_mut();
         let ty = match current_type_system(&mut state).lookup_custom_type(type_name, &api_version) {
@@ -450,7 +448,7 @@ async fn op_chisel_store(
             Ok(ty) => ty,
         };
 
-        let query_engine = runtime.query_engine.clone();
+        let query_engine = query_engine(&mut state).clone();
         (query_engine, ty)
     };
     let transaction = {
@@ -488,8 +486,8 @@ async fn op_chisel_entity_delete(
         )?
     };
     let query_engine = {
-        let runtime = runtime::get();
-        runtime.query_engine.clone()
+        let mut state = state.borrow_mut();
+        query_engine(&mut state).clone()
     };
     query_engine.mutate(mutation).await
 }
@@ -545,10 +543,8 @@ fn op_chisel_relational_query_create(
         &path,
         op_chain,
     )?;
-    let mut runtime = runtime::get();
-    let query_engine = &mut runtime.query_engine;
-
     let transaction = current_transaction(op_state)?;
+    let query_engine = query_engine(op_state);
     let stream = query_engine.query(transaction, query_plan)?;
     let resource = QueryStreamResource {
         stream: RefCell::new(stream),
@@ -770,6 +766,20 @@ fn current_type_system(st: &mut OpState) -> &mut TypeSystem {
     st.try_borrow_mut::<TypeSystem>().unwrap()
 }
 
+fn query_engine(st: &mut OpState) -> &mut Arc<QueryEngine> {
+    st.try_borrow_mut::<Arc<QueryEngine>>().unwrap()
+}
+
+pub(crate) fn set_query_engine(query_engine: Arc<QueryEngine>) {
+    with_op_state(move |state| {
+        state.put::<Arc<QueryEngine>>(query_engine);
+    });
+}
+
+pub(crate) fn query_engine_arc() -> Arc<QueryEngine> {
+    with_op_state(|state| query_engine(state).clone())
+}
+
 pub(crate) fn lookup_builtin_type(type_name: &str) -> Result<Type, TypeSystemError> {
     with_op_state(|state| {
         let type_system = current_type_system(state);
@@ -903,7 +913,7 @@ async fn commit_transaction(_: ()) -> Result<Option<(Box<[u8]>, ())>, anyhow::Er
 }
 
 pub(crate) async fn run_js(path: String, req: Request<hyper::Body>) -> Result<Response<Body>> {
-    let qe = runtime::get().query_engine.clone();
+    let qe = query_engine_arc();
     let transaction = qe.start_transaction_static().await?;
     let path = RequestPath::try_from(path.as_ref()).unwrap();
     let userid = crate::auth::get_user(&req).await?;

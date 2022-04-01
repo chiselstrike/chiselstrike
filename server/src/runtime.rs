@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: © 2021 ChiselStrike <info@chiselstrike.com>
 
 use crate::api::ApiService;
-use crate::datastore::{MetaService, QueryEngine};
+use crate::datastore::MetaService;
 use crate::policies::{FieldPolicies, Kind, Policies};
 use crate::rcmut::RcMut;
 use crate::types::ObjectType;
@@ -9,12 +9,10 @@ use derive_new::new;
 use once_cell::sync::OnceCell;
 use std::cell::RefCell;
 use std::rc::Rc;
-use std::sync::Arc;
 
 #[derive(new)]
 pub(crate) struct Runtime {
     pub(crate) api: Rc<ApiService>,
-    pub(crate) query_engine: Arc<QueryEngine>,
     pub(crate) meta: Rc<MetaService>,
     pub(crate) policies: Policies,
 }

@@ -4,6 +4,7 @@ use crate::api::{response_template, ApiService, Body};
 use crate::datastore::engine::SqlWithArguments;
 use crate::datastore::query::SqlValue;
 use crate::deno::lookup_builtin_type;
+use crate::deno::query_engine_arc;
 use crate::runtime;
 use crate::types::{ObjectType, Type, OAUTHUSER_TYPE_NAME};
 use crate::JsonObject;
@@ -45,7 +46,7 @@ pub(crate) fn get_oauth_user_type() -> Result<Arc<ObjectType>> {
 async fn insert_user_into_db(username: &str) -> Result<String> {
     let oauth_user_type = get_oauth_user_type()?;
     let mut user = JsonObject::new();
-    let query_engine = { runtime::get().query_engine.clone() };
+    let query_engine = query_engine_arc();
     match query_engine
         .fetch_one(SqlWithArguments {
             sql: format!(
@@ -138,7 +139,7 @@ pub(crate) async fn get_username(req: &Request<hyper::Body>) -> Option<String> {
         }
     };
 
-    let qeng = { crate::runtime::get().query_engine.clone() };
+    let qeng = query_engine_arc();
 
     let user_type = crate::auth::get_oauth_user_type();
     match (userid, user_type) {
