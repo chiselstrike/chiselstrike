@@ -1007,8 +1007,10 @@ function applyQueryOperators(
                 entity_field = value.substring(1);
             }
             it = it.sortBy(entity_field as keyof ChiselEntity, ord == "+");
+        } else if (op_name == "take") {
+            it = it.take(Number(value));
         }
-        // TODO: More operators like take, offset etc.
+        // TODO: More operators like offset etc.
     }
     return it;
 }

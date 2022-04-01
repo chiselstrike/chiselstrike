@@ -58,6 +58,32 @@ $CURL "$CHISELD_HOST/dev/persons?sort=-age"
 # CHECK: "last_name": "Chong"
 # CHECK: "last_name": "Draper"
 
+count_results () {
+    results=$(cat)
+    printf "$results" \
+        | grep -o "last_name" \
+        | wc -l \
+        | xargs printf 'Number of names: %d\n';
+    printf "$results";
+}
+
+$CURL "$CHISELD_HOST/dev/persons?sort=first_name&take=3" | count_results
+# CHECK: Number of names: 3
+# CHECK: "last_name": "Anderson"
+# CHECK: "last_name": "Brown"
+# CHECK: "last_name": "Chong"
+
+$CURL "$CHISELD_HOST/dev/persons?sort=-first_name&take=3" | count_results
+# CHECK: Number of names: 3
+# CHECK: "last_name": "Elgin"
+# CHECK: "last_name": "Draper"
+# CHECK: "last_name": "Chong"
+
+## Ordering of operators matters:
+$CURL "$CHISELD_HOST/dev/persons?sort=first_name&take=3&sort=-first_name&take=1" | count_results
+# CHECK: Number of names: 1
+# CHECK: "last_name": "Chong"
+
 $CURL "$CHISELD_HOST/dev/persons?f=\\{%22age%22:40\\}" # Filtered GET
 # CHECK: HTTP/1.1 200 OK
 # CHECK: "last_name": "Brown"
