@@ -160,14 +160,17 @@ impl ApiService {
                 return response_template().body("ok".to_string().into()); // Makes CORS preflights pass.
             }
 
-            let pol = { crate::runtime::get().policies.clone() };
             let username = get_username(&req).await;
             let rp = match RequestPath::try_from(req.uri().path()) {
                 Ok(rp) => rp,
                 Err(_) => return ApiService::not_found(),
             };
             let is_allowed = {
-                match pol.versions.get(rp.api_version()) {
+                match crate::runtime::get()
+                    .policies
+                    .versions
+                    .get(rp.api_version())
+                {
                     None => {
                         return Self::internal_error(anyhow::anyhow!(
                             "found a route, but no version object for {}",
