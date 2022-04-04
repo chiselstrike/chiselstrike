@@ -5,13 +5,12 @@ use deno_core::anyhow;
 use deno_core::op;
 use deno_core::Extension;
 use deno_core::JsRuntime;
-use deno_core::OpState;
 use deno_core::RuntimeOptions;
 use std::env;
 use std::path::PathBuf;
 
 #[op]
-fn read(_op_state: &mut OpState, path: String, _: ()) -> Result<String> {
+fn read(path: String) -> Result<String> {
     if path == "bootstrap.ts" {
         return Ok("/// <reference lib=\"deno.core\" />
                    /// <reference lib=\"deno.unstable\" />
@@ -129,19 +128,19 @@ fn read(_op_state: &mut OpState, path: String, _: ()) -> Result<String> {
     panic!("Unexpected file at build time: {}", path);
 }
 #[op]
-fn write(_op_state: &mut OpState, _path: String, _content: String) -> Result<()> {
+fn write(_path: String, _content: String) -> Result<()> {
     Ok(())
 }
 #[op]
-fn get_cwd(_op_state: &mut OpState, _: (), _: ()) -> Result<String> {
+fn get_cwd() -> Result<String> {
     Ok("/there/is/no/cwd".to_string())
 }
 #[op]
-fn dir_exists(_op_state: &mut OpState, _path: String, _: ()) -> Result<bool> {
+fn dir_exists(_path: String) -> Result<bool> {
     Ok(false)
 }
 #[op]
-fn diagnostic(_op_state: &mut OpState, msg: String, _: ()) -> Result<()> {
+fn diagnostic(msg: String) -> Result<()> {
     panic!("unexpected: {}", msg);
 }
 fn main() {

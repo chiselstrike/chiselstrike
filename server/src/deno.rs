@@ -414,7 +414,6 @@ impl Future for ReadFuture {
 async fn op_chisel_read_body(
     state: Rc<RefCell<OpState>>,
     body_rid: ResourceId,
-    _: (),
 ) -> Result<Option<ZeroCopyBuf>> {
     let resource: Rc<BodyResource> = state.borrow().resource_table.get(body_rid)?;
     let cancel = RcRef::map(&resource, |r| &r.cancel);
@@ -516,11 +515,7 @@ struct QueryStreamResource {
 impl Resource for QueryStreamResource {}
 
 #[op]
-fn op_chisel_get_secret(
-    op_state: &mut OpState,
-    key: String,
-    _: (),
-) -> Result<Option<serde_json::Value>> {
+fn op_chisel_get_secret(op_state: &mut OpState, key: String) -> Result<Option<serde_json::Value>> {
     let ret = if let Some(secrets) = current_secrets(op_state) {
         secrets.get(&key).cloned()
     } else {
@@ -571,7 +566,6 @@ impl Future for QueryNextFuture {
 async fn op_chisel_relational_query_next(
     state: Rc<RefCell<OpState>>,
     query_stream_rid: ResourceId,
-    _: (),
 ) -> Result<Option<ResultRow>> {
     let resource: Rc<QueryStreamResource> = state.borrow().resource_table.get(query_stream_rid)?;
     let fut = QueryNextFuture { resource };
@@ -584,7 +578,7 @@ async fn op_chisel_relational_query_next(
 
 // Used by deno to format names in errors
 #[op]
-fn op_format_file_name(_: &mut OpState, file_name: String, _: ()) -> Result<String> {
+fn op_format_file_name(file_name: String) -> Result<String> {
     Ok(file_name)
 }
 
