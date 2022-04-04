@@ -732,7 +732,7 @@ where
 }
 
 fn current_transaction(st: &OpState) -> Result<TransactionStatic> {
-    st.try_borrow::<TransactionStatic>()
+    st.try_borrow()
         .cloned()
         .ok_or_else(|| anyhow!("no active transaction"))
 }
@@ -740,33 +740,33 @@ fn current_transaction(st: &OpState) -> Result<TransactionStatic> {
 fn take_current_transaction() -> Option<TransactionStatic> {
     with_op_state(|state| {
         // FIXME: Return a Result once all concurrency issues are fixed.
-        state.try_take::<TransactionStatic>()
+        state.try_take()
     })
 }
 
 fn set_current_transaction(st: &mut OpState, transaction: TransactionStatic) {
-    st.put::<TransactionStatic>(transaction);
+    st.put(transaction);
 }
 
 fn current_secrets(st: &OpState) -> Option<&JsonObject> {
-    st.try_borrow::<JsonObject>()
+    st.try_borrow()
 }
 
 fn set_current_secrets(st: &mut OpState, secrets: JsonObject) {
-    st.put::<JsonObject>(secrets);
+    st.put(secrets);
 }
 
 fn current_type_system(st: &mut OpState) -> &mut TypeSystem {
-    st.try_borrow_mut::<TypeSystem>().unwrap()
+    st.borrow_mut()
 }
 
 fn query_engine(st: &mut OpState) -> &mut Arc<QueryEngine> {
-    st.try_borrow_mut::<Arc<QueryEngine>>().unwrap()
+    st.borrow_mut()
 }
 
 pub(crate) fn set_query_engine(query_engine: Arc<QueryEngine>) {
     with_op_state(move |state| {
-        state.put::<Arc<QueryEngine>>(query_engine);
+        state.put(query_engine);
     });
 }
 
@@ -790,7 +790,7 @@ pub(crate) fn remove_type_version(version: &str) {
 
 pub(crate) fn set_type_system(type_system: TypeSystem) {
     with_op_state(move |state| {
-        state.put::<TypeSystem>(type_system);
+        state.put(type_system);
     });
 }
 
