@@ -3,7 +3,6 @@
 use crate::datastore::expr::{BinaryExpr, BinaryOp, Expr, Literal, PropertyAccess};
 use crate::deno::make_field_policies;
 use crate::policies::Policies;
-use crate::runtime;
 use crate::types::TypeSystem;
 use crate::types::{Field, ObjectType, Type, TypeSystemError, OAUTHUSER_TYPE_NAME};
 use crate::JsonObject;
@@ -240,10 +239,11 @@ impl QueryPlan {
         builder
     }
 
-    /// Constructs a query builder from a query `op_chain` and additional
-    /// helper data like `api_version`, `userid` and `path` (url path used
-    /// for policy evaluation).
+    /// Constructs a query builder from a query `op_chain` and
+    /// additional helper data like `policies`, `api_version`,
+    /// `userid` and `path` (url path used for policy evaluation).
     pub(crate) fn from_op_chain(
+        policies: &Policies,
         ts: &TypeSystem,
         api_version: &str,
         userid: &Option<String>,
@@ -252,7 +252,6 @@ impl QueryPlan {
     ) -> Result<Self> {
         let (entity_name, operators) = convert_ops(op_chain)?;
 
-        let runtime = runtime::get();
         let ty = match ts.lookup_builtin_type(&entity_name) {
             Ok(Type::Object(ty)) => ty,
             Err(TypeSystemError::NotABuiltinType(_)) => {
@@ -262,7 +261,7 @@ impl QueryPlan {
         };
 
         let mut builder = Self::new(ty.clone());
-        builder.entity = builder.load_entity(&runtime.policies, userid, path, &ty);
+        builder.entity = builder.load_entity(policies, userid, path, &ty);
 
         let operators = builder.process_projections(operators);
         builder.operators.extend(operators);

@@ -2,7 +2,6 @@
 
 use crate::api::ApiService;
 use crate::datastore::MetaService;
-use crate::policies::Policies;
 use crate::rcmut::RcMut;
 use derive_new::new;
 use once_cell::sync::OnceCell;
@@ -13,7 +12,6 @@ use std::rc::Rc;
 pub(crate) struct Runtime {
     pub(crate) api: Rc<ApiService>,
     pub(crate) meta: Rc<MetaService>,
-    pub(crate) policies: Policies,
 }
 
 thread_local!(static RUNTIME: OnceCell<Rc<RefCell<Runtime>>> = OnceCell::new());
