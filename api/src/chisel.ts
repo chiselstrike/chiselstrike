@@ -988,10 +988,10 @@ function applyQueryOperators(
     entity: GenericChiselEntityClass,
     params: URLSearchParams,
 ): ChiselCursor<ChiselEntity> {
-    let limit_count, offset_count;
+    let limitCount, offsetCount;
     let it = entity.cursor();
-    for (const [op_name, value] of Array.from(params)) {
-        if (op_name == "f") { // filter
+    for (const [opName, value] of Array.from(params)) {
+        if (opName == "f") { // filter
             const o = JSON.parse(value);
             if (o && typeof o === "object") {
                 it = it.filter(o);
@@ -1000,25 +1000,25 @@ function applyQueryOperators(
                     `provided search parameter 'f=${value}' is not a JSON object.`,
                 );
             }
-        } else if (op_name == "sort") {
-            let entity_field = value;
+        } else if (opName == "sort") {
+            let entityField = value;
             let ord = "+";
             if (value[0] == "+" || value[0] == "-") {
                 ord = value[0];
-                entity_field = value.substring(1);
+                entityField = value.substring(1);
             }
-            it = it.sortBy(entity_field as keyof ChiselEntity, ord == "+");
-        } else if (op_name == "limit") {
-            limit_count = Number(value);
-        } else if (op_name == "offset") {
-            offset_count = Number(value);
+            it = it.sortBy(entityField as keyof ChiselEntity, ord == "+");
+        } else if (opName == "limit") {
+            limitCount = Number(value);
+        } else if (opName == "offset") {
+            offsetCount = Number(value);
         }
     }
-    if (offset_count !== undefined) {
-        it = it.skip(offset_count);
+    if (offsetCount !== undefined) {
+        it = it.skip(offsetCount);
     }
-    if (limit_count !== undefined) {
-        it = it.take(limit_count);
+    if (limitCount !== undefined) {
+        it = it.take(limitCount);
     }
     return it;
 }
