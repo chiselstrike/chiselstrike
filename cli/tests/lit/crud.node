@@ -67,38 +67,41 @@ count_results () {
     printf "$results";
 }
 
-$CURL "$CHISELD_HOST/dev/persons?sort=first_name&take=3" | count_results
+$CURL "$CHISELD_HOST/dev/persons?sort=first_name&limit=3" | count_results
 # CHECK: Number of names: 3
 # CHECK: "last_name": "Anderson"
 # CHECK: "last_name": "Brown"
 # CHECK: "last_name": "Chong"
 
-$CURL "$CHISELD_HOST/dev/persons?sort=-first_name&take=3" | count_results
+$CURL "$CHISELD_HOST/dev/persons?sort=-first_name&limit=3" | count_results
 # CHECK: Number of names: 3
 # CHECK: "last_name": "Elgin"
 # CHECK: "last_name": "Draper"
 # CHECK: "last_name": "Chong"
 
-$CURL "$CHISELD_HOST/dev/persons?sort=first_name&skip=3" | count_results
+$CURL "$CHISELD_HOST/dev/persons?sort=first_name&offset=3" | count_results
 # CHECK: Number of names: 2
 # CHECK: HTTP/1.1 200 OK
 # CHECK: "last_name": "Draper"
 # CHECK: "last_name": "Elgin"
 
-$CURL "$CHISELD_HOST/dev/persons?sort=-first_name&skip=3" | count_results
+$CURL "$CHISELD_HOST/dev/persons?sort=-first_name&offset=3" | count_results
 # CHECK: Number of names: 2
 # CHECK: HTTP/1.1 200 OK
 # CHECK: "last_name": "Brown"
 # CHECK: "last_name": "Anderson"
 
-## Ordering of operators matters:
-$CURL "$CHISELD_HOST/dev/persons?sort=first_name&take=3&sort=-first_name&take=1" | count_results
-# CHECK: Number of names: 1
+## Ordering of operators doesn't matter, first sort gets ignored:
+$CURL "$CHISELD_HOST/dev/persons?sort=first_name&limit=3&sort=-first_name&offset=1" | count_results
+# CHECK: Number of names: 3
+# CHECK: "last_name": "Draper"
 # CHECK: "last_name": "Chong"
+# CHECK: "last_name": "Brown"
 
-$CURL "$CHISELD_HOST/dev/persons?sort=first_name&take=3&skip=2" | count_results
-# CHECK: Number of names: 1
+$CURL "$CHISELD_HOST/dev/persons?sort=first_name&limit=2&offset=2" | count_results
+# CHECK: Number of names: 2
 # CHECK: "last_name": "Chong"
+# CHECK: "last_name": "Draper"
 
 
 $CURL "$CHISELD_HOST/dev/persons?f=\\{%22age%22:40\\}" # Filtered GET

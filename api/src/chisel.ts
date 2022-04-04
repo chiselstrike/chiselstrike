@@ -988,6 +988,7 @@ function applyQueryOperators(
     entity: GenericChiselEntityClass,
     params: URLSearchParams,
 ): ChiselCursor<ChiselEntity> {
+    let limit_count, offset_count;
     let it = entity.cursor();
     for (const [op_name, value] of Array.from(params)) {
         if (op_name == "f") { // filter
@@ -1007,11 +1008,17 @@ function applyQueryOperators(
                 entity_field = value.substring(1);
             }
             it = it.sortBy(entity_field as keyof ChiselEntity, ord == "+");
-        } else if (op_name == "take") {
-            it = it.take(Number(value));
-        } else if (op_name == "skip") {
-            it = it.skip(Number(value));
+        } else if (op_name == "limit") {
+            limit_count = Number(value);
+        } else if (op_name == "offset") {
+            offset_count = Number(value);
         }
+    }
+    if (offset_count !== undefined) {
+        it = it.skip(offset_count);
+    }
+    if (limit_count !== undefined) {
+        it = it.take(limit_count);
     }
     return it;
 }

@@ -329,9 +329,9 @@ For ascending order, you use a `+` prefix or omit it completely which will defau
 When using the ascending ordering with prefix `+`, your HTTP library may do URL encoding automatically, but if it doesn't, `+` needs to be encoded as `%2B`.
 ...
 
-To limit the result set to only the first `n` elements, you can use the `take` parameter:
+To limit the result set to only the first `n` elements, you can use the the `limit` parameter:
 ```bash
-curl -g localhost:8080/dev/comments?sort=by&take=3
+curl -g localhost:8080/dev/comments?sort=by&limit=3
 ```
 
 ```json
@@ -354,9 +354,9 @@ curl -g localhost:8080/dev/comments?sort=by&take=3
 ]
 ```
 
-To skip the first `n` elements, you can use `skip` operator:
+To skip the first `n` elements, you can use the `offset` parameter:
 ```bash
-curl -g localhost:8080/dev/comments?sort=by&skip=4
+curl -g localhost:8080/dev/comments?sort=by&offset=4
 ```
 
 ```json
@@ -370,7 +370,11 @@ curl -g localhost:8080/dev/comments?sort=by&skip=4
 ```
 
 ...note:
-The order in which you specify CRUD operators *does matter*. The operators are applied in the order specified by the query string. For example `?sort=by&take=2&sort=content` can yield different results than `?sort=by&sort=content&take=2` which would be equivalent to `?sort=content&take=2`.
+If both `limit` and `offset` are used, they are applied in traditional order - we first skip all elements up to the `offset` and then we return `limit` number of remaining elements.
+...
+
+...note:
+The order in which you specify CRUD parameters *does not* matter. For example `?sort=by&limit=2&sort=content` will yield the same results as `?sort=content&limit=2`.
 ...
 
 ## PUT and DELETE
