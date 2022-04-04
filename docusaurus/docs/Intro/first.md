@@ -14,8 +14,8 @@ Imagine you're just starting out building a new application for a dynamic site, 
 to bother implementing an entire backend server, configuring a SQL database, and managing the deployment
 for it.
 
-One of the simplest examples might involve building a blog that allows readers to make comments. 
-Even if a blog articles were statically rendered, the comment section would need some kind of 
+One of the simplest examples might involve building a blog that allows readers to make comments.
+Even if a blog articles were statically rendered, the comment section would need some kind of
 dynamic endpoint to make it work.
 
 # Setup
@@ -123,11 +123,11 @@ are not needed.
 
 ## Our First Model
 
-Next, let's add the ability to save and load comments. 
+Next, let's add the ability to save and load comments.
 
 First, we need to define what types of data we are going to save and load.
 This is where backend models come in -- models use Typescript to describe
-what kind of data you want to store.  
+what kind of data you want to store.
 
 Create a file in `my-backend/models/BlogComment.ts`:
 
@@ -151,7 +151,7 @@ you add them.
 :::
 
 :::tip
-Since we're using TypeScript, you may have some questions about type checking. By default, `chisel` doesn't check 
+Since we're using TypeScript, you may have some questions about type checking. By default, `chisel` doesn't check
 your TypeScript types (we assume your IDE did that for you!), which results
 in faster production code. If you want type checking, you can enable it by calling `tsc` directly, which can
 be achieved by passing the `--type-check` option to `npm run dev`, or to the apply command `npx chisel apply`
@@ -167,7 +167,7 @@ Model defined: BlogComment
 Now you are able to store `BlogComment` objects!  However, we still need to surface those entities through a web-services API endpoint.
 That comes next!
 
-## Our First Endpoint 
+## Our First Endpoint
 
 We're big fans of [REST](https://en.wikipedia.org/wiki/Representational_state_transfer), but don't strictly require it in ChiselStrike.
 
@@ -205,7 +205,7 @@ We always use UUIDs rather than integers.
 :::
 
 :::tip
-Right now you are testing only locally, but you'll want to think about restricting access to some endpoints in production.  
+Right now you are testing only locally, but you'll want to think about restricting access to some endpoints in production.
 We'll talk about security more in the [Policy](InDepth/pol.md) section.
 :::
 
@@ -269,7 +269,7 @@ curl localhost:8080/dev/comments/a4ca3ab3-2e26-4da6-a5de-418c1e6b9b83
 The API allows you to filter by specific properties, by specifying a search parameter with a partial URL-encoded JSON object:
 
 ```bash
-curl -g localhost:8080/dev/comments?f={%22by%22:%22Jack%22}
+curl -g localhost:8080/dev/comments?filter={%22by%22:%22Jack%22}
 ```
 
 ```json

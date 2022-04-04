@@ -666,14 +666,14 @@ export class ChiselEntity {
      *     * `/comments`             Creates a new object. Payload is a JSON with the properties of `Comment` as keys.
      *
      * * **GET:**
-     *     * `/comments`              returns an array with all elements (use carefully in datasets expected to be large)
-     *     * `/comments?f={key:val}`  returns all elements that match the filter specified by the json object given as search param.
-     *     * `/comments/:id`          returns the element with the given ID.
+     *     * `/comments`                  returns an array with all elements (use carefully in datasets expected to be large)
+     *     * `/comments?filter={key:val}` returns all elements that match the filter specified by the json object given as search param.
+     *     * `/comments/:id`              returns the element with the given ID.
      *
      * * **DELETE:**
-     *     * `/comments/:id`         deletes the element with the given ID.
-     *     * `/comments?f={key:val}` deletes all elements that match the filter specified by the json object given as search param.
-     *     * `/comments?f={}`        deletes all elements
+     *     * `/comments/:id`              deletes the element with the given ID.
+     *     * `/comments?filter={key:val}` deletes all elements that match the filter specified by the json object given as search param.
+     *     * `/comments?filter={}`        deletes all elements
      *
      * * **PUT:**
      *     * `/comments/:id`         overwrites the element with the given ID. Payload is a JSON with the properties of `Comment` as keys
@@ -860,7 +860,7 @@ type GenericChiselEntityClass = ChiselEntityClass<ChiselEntity>;
 /**
  * Get the filters to be used with a ChiselEntity from a URL.
  *
- * This will get the URL search parameter "f" and assume it's a JSON object.
+ * This will get the URL search parameter "filter" and assume it's a JSON object.
  * @param _entity the entity class that will be filtered
  * @param url the url that provides the search parameters
  * @returns the filter object, if found and successfully parsed; undefined if not found; throws if parsing failed
@@ -872,15 +872,17 @@ export function getEntityFiltersFromURL<
     // TODO: it's more common to have filters as regular query parameters, URI-encoded,
     // then entity may be used to get such field names
     // TODO: validate if unknown filters where given?
-    const f = url.searchParams.get("f");
-    if (!f) {
+    const filter = url.searchParams.get("filter");
+    if (!filter) {
         return undefined;
     }
-    const o = JSON.parse(decodeURI(f));
+    const o = JSON.parse(decodeURI(filter));
     if (o && typeof o === "object") {
         return o;
     }
-    throw new Error(`provided search parameter 'f=${f}' is not a JSON object.`);
+    throw new Error(
+        `provided search parameter 'filter=${filter}' is not a JSON object.`,
+    );
 }
 
 /**
@@ -991,13 +993,13 @@ function applyQueryOperators(
     let limitCount, offsetCount;
     let it = entity.cursor();
     for (const [opName, value] of Array.from(params)) {
-        if (opName == "f") { // filter
+        if (opName == "filter") { // filter
             const o = JSON.parse(value);
             if (o && typeof o === "object") {
                 it = it.filter(o);
             } else {
                 throw new Error(
-                    `provided search parameter 'f=${value}' is not a JSON object.`,
+                    `provided search parameter 'filter=${value}' is not a JSON object.`,
                 );
             }
         } else if (opName == "sort") {
@@ -1025,7 +1027,7 @@ function applyQueryOperators(
 
 const defaultCrudMethods: CRUDMethods<ChiselEntity, GenericChiselEntityClass> =
     {
-        // Returns a specific entity matching params.id (if present) or all entities matching the filter in the `f` URL parameter.
+        // Returns a specific entity matching params.id (if present) or all entities matching the filter in the `filter` URL parameter.
         GET: async (
             entity: GenericChiselEntityClass,
             _req: Request,
@@ -1078,7 +1080,7 @@ const defaultCrudMethods: CRUDMethods<ChiselEntity, GenericChiselEntityClass> =
             await u.save();
             return createResponse(u, 200);
         },
-        // Deletes the entity matching params.id (if present) or all entities matching the filter in the `f` URL parameter. One of the two must be present.
+        // Deletes the entity matching params.id (if present) or all entities matching the filter in the `filter` URL parameter. One of the two must be present.
         DELETE: async (
             entity: GenericChiselEntityClass,
             _req: Request,
