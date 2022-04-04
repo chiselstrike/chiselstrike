@@ -42,7 +42,7 @@ pub(crate) async fn cmd_dev(server_url: String, type_check: bool) -> Result<()> 
     while let Some(res) = rx.next().await {
         match res {
             Ok(Event {
-                kind: EventKind::Modify(ModifyKind::Data(_)),
+                kind: EventKind::Modify(ModifyKind::Data(_) | ModifyKind::Name(_)),
                 paths,
                 ..
             }) => {
