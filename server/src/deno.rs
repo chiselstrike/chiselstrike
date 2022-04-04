@@ -812,7 +812,7 @@ pub(crate) fn remove_type_version(version: &str) {
     });
 }
 
-pub(crate) fn set_type_system(type_system: TypeSystem) {
+pub(crate) async fn set_type_system(type_system: TypeSystem) {
     with_op_state(move |state| {
         state.put(type_system);
     });

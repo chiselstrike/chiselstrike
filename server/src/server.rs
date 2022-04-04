@@ -136,7 +136,7 @@ async fn run(state: SharedState, mut cmd: ExecutorChannel) -> Result<()> {
 
     let rt = Runtime::new(api_service.clone(), meta);
     runtime::set(rt);
-    set_type_system(ts);
+    set_type_system(ts).await;
     set_query_engine(query_engine);
     set_policies(policies);
 
