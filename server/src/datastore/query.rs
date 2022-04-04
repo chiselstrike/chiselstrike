@@ -2,9 +2,9 @@
 
 use crate::datastore::expr::{BinaryExpr, BinaryOp, Expr, Literal, PropertyAccess};
 use crate::deno::make_field_policies;
-use crate::types::TypeSystem;
-
+use crate::policies::Policies;
 use crate::runtime;
+use crate::types::TypeSystem;
 use crate::types::{Field, ObjectType, Type, TypeSystemError, OAUTHUSER_TYPE_NAME};
 use crate::JsonObject;
 
@@ -262,7 +262,7 @@ impl QueryPlan {
         };
 
         let mut builder = Self::new(ty.clone());
-        builder.entity = builder.load_entity(&runtime, userid, path, &ty);
+        builder.entity = builder.load_entity(&runtime.policies, userid, path, &ty);
 
         let operators = builder.process_projections(operators);
         builder.operators.extend(operators);
@@ -307,19 +307,19 @@ impl QueryPlan {
     /// ensures login restrictions are respected.
     fn load_entity(
         &mut self,
-        runtime: &runtime::Runtime,
+        policies: &Policies,
         userid: &Option<String>,
         path: &str,
         ty: &Arc<ObjectType>,
     ) -> QueriedEntity {
         self.add_login_filters_recursive(
-            runtime,
+            policies,
             userid,
             path,
             ty,
             Expr::Parameter { position: 0 },
         );
-        self.load_entity_recursive(runtime, userid, path, ty, ty.backing_table())
+        self.load_entity_recursive(policies, userid, path, ty, ty.backing_table())
     }
 
     /// Loads QueriedEntity for a given type `ty` to be retrieved from the
@@ -327,18 +327,18 @@ impl QueryPlan {
     /// generated and we attempt to retrieve them recursively as well.
     fn load_entity_recursive(
         &mut self,
-        runtime: &runtime::Runtime,
+        policies: &Policies,
         userid: &Option<String>,
         path: &str,
         ty: &Arc<ObjectType>,
         current_table: &str,
     ) -> QueriedEntity {
-        let policies = make_field_policies(runtime, userid, path, ty);
+        let field_policies = make_field_policies(policies, userid, path, ty);
 
         let mut fields = vec![];
         let mut joins = HashMap::default();
         for field in ty.all_fields() {
-            let field_policy = policies.transforms.get(&field.name).cloned();
+            let field_policy = field_policies.transforms.get(&field.name).cloned();
 
             let query_field = if let Type::Object(nested_ty) = &field.type_ {
                 let nested_table = format!(
@@ -356,7 +356,7 @@ impl QueryPlan {
                     field.name.to_owned(),
                     Join {
                         entity: self.load_entity_recursive(
-                            runtime,
+                            policies,
                             userid,
                             path,
                             nested_ty,
@@ -388,14 +388,14 @@ impl QueryPlan {
     /// `ty` that is to be retrieved from the database.
     fn add_login_filters_recursive(
         &mut self,
-        runtime: &runtime::Runtime,
+        policies: &Policies,
         userid: &Option<String>,
         path: &str,
         ty: &Arc<ObjectType>,
         property_chain: Expr,
     ) {
-        let policies = make_field_policies(runtime, userid, path, ty);
-        let user_id: Literal = match &policies.current_userid {
+        let field_policies = make_field_policies(policies, userid, path, ty);
+        let user_id: Literal = match &field_policies.current_userid {
             None => "NULL",
             Some(id) => id.as_str(),
         }
@@ -408,7 +408,7 @@ impl QueryPlan {
                     object: property_chain.clone().into(),
                 };
                 if nested_ty.name() == OAUTHUSER_TYPE_NAME {
-                    if policies.match_login.contains(&field.name) {
+                    if field_policies.match_login.contains(&field.name) {
                         let expr = BinaryExpr {
                             left: Box::new(property_access.into()),
                             op: BinaryOp::Eq,
@@ -420,7 +420,7 @@ impl QueryPlan {
                     }
                 } else {
                     self.add_login_filters_recursive(
-                        runtime,
+                        policies,
                         userid,
                         path,
                         nested_ty,

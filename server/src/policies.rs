@@ -1,6 +1,7 @@
 // SPDX-FileCopyrightText: © 2021 ChiselStrike <info@chiselstrike.com>
 
 use crate::prefix_map::PrefixMap;
+use crate::types::ObjectType;
 use anyhow::Result;
 use serde_json::{json, Value};
 use std::collections::{HashMap, HashSet};
@@ -86,6 +87,33 @@ impl Policies {
         let v = VersionPolicy::from_yaml(yaml)?;
         self.versions.insert(version.to_string(), v);
         Ok(())
+    }
+
+    /// Adds the current policies on ty's fields.
+    pub(crate) fn add_field_policies(
+        &self,
+        ty: &ObjectType,
+        policies: &mut FieldPolicies,
+        current_path: &str,
+    ) {
+        if let Some(version) = self.versions.get(&ty.api_version) {
+            for fld in ty.user_fields() {
+                for lbl in &fld.labels {
+                    if let Some(p) = version.labels.get(lbl) {
+                        if !p.except_uri.is_match(current_path) {
+                            match p.kind {
+                                Kind::Transform(f) => {
+                                    policies.transforms.insert(fld.name.clone(), f);
+                                }
+                                Kind::MatchLogin => {
+                                    policies.match_login.insert(fld.name.clone());
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
     }
 }
 
