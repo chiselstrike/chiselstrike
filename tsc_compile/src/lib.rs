@@ -143,7 +143,7 @@ fn read_impl(map: &mut DownloadMap, path: String, _: ()) -> Result<String> {
 }
 
 #[op]
-fn read(s: &mut OpState, path: String, _: ()) -> Result<String> {
+fn read(s: &mut OpState, path: String) -> Result<String> {
     with_map(read_impl, s, path, ())
 }
 
@@ -174,18 +174,18 @@ fn write(s: &mut OpState, path: String, content: String) -> Result<()> {
 }
 
 #[op]
-fn get_cwd(_: &mut OpState, _: (), _: ()) -> Result<String> {
+fn get_cwd() -> Result<String> {
     let cwd = std::env::current_dir()?;
     Ok(cwd.into_os_string().into_string().unwrap())
 }
 
 #[op]
-fn dir_exists(_: &mut OpState, path: String, _: ()) -> Result<bool> {
+fn dir_exists(path: String) -> Result<bool> {
     return Ok(Path::new(&path).is_dir());
 }
 
 #[op]
-fn file_exists(_: &mut OpState, path: String, _: ()) -> Result<bool> {
+fn file_exists(path: String) -> Result<bool> {
     return Ok(Path::new(&path).is_file());
 }
 
@@ -195,7 +195,7 @@ fn diagnostic_impl(map: &mut DownloadMap, msg: String, _: ()) -> Result<()> {
 }
 
 #[op]
-fn diagnostic(s: &mut OpState, msg: String, _: ()) -> Result<()> {
+fn diagnostic(s: &mut OpState, msg: String) -> Result<()> {
     with_map(diagnostic_impl, s, msg, ())
 }
 
