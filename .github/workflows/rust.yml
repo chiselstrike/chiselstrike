@@ -83,6 +83,11 @@ jobs:
             path: ~/.npm
             key: ${{ runner.os }}-node-${{ hashFiles('**/package-lock.json') }}
 
+    - name: Cargo config
+      run: |
+          mkdir -p ~/.cargo
+          cp scripts/cargo-config.toml ~/.cargo/config.toml
+
     - name: Build debug mode binaries
       uses: actions-rs/cargo@v1
       with:
@@ -143,6 +148,11 @@ jobs:
       with:
             path: ~/.npm
             key: ${{ runner.os }}-node-${{ hashFiles('**/package-lock.json') }}
+
+    - name: Cargo config
+      run: |
+          mkdir -p ~/.cargo
+          cp scripts/cargo-config.toml ~/.cargo/config.toml
 
     - name: Run integration tests against Postgres
       uses: actions-rs/cargo@v1
