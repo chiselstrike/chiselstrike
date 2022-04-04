@@ -8,7 +8,9 @@ use anyhow::Result;
 use futures::channel::mpsc::channel;
 use futures::{SinkExt, StreamExt};
 use notify::{event::ModifyKind, Event, EventKind, RecommendedWatcher, RecursiveMode, Watcher};
+use std::collections::HashSet;
 use std::path::Path;
+use std::path::PathBuf;
 use std::time::Duration;
 
 pub(crate) async fn cmd_dev(server_url: String, type_check: bool) -> Result<()> {
@@ -16,7 +18,7 @@ pub(crate) async fn cmd_dev(server_url: String, type_check: bool) -> Result<()> 
     let manifest = read_manifest()?;
     let mut server = start_server()?;
     wait(server_url.clone()).await?;
-    apply_from_dev(server_url.clone(), type_check).await;
+    apply_from_dev(server_url.clone(), type_check, HashSet::default()).await;
     let (mut tx, mut rx) = channel(1);
     let mut apply_watcher = RecommendedWatcher::new(move |res: Result<Event, notify::Error>| {
         futures::executor::block_on(async {
@@ -41,9 +43,11 @@ pub(crate) async fn cmd_dev(server_url: String, type_check: bool) -> Result<()> 
         match res {
             Ok(Event {
                 kind: EventKind::Modify(ModifyKind::Data(_)),
+                paths,
                 ..
             }) => {
-                apply_from_dev(server_url.clone(), type_check).await;
+                let paths = HashSet::from_iter(paths.into_iter());
+                apply_from_dev(server_url.clone(), type_check, paths).await;
             }
             Ok(_) => { /* ignore */ }
             Err(e) => println!("watch error: {:?}", e),
@@ -54,12 +58,13 @@ pub(crate) async fn cmd_dev(server_url: String, type_check: bool) -> Result<()> 
     Ok(())
 }
 
-async fn apply_from_dev(server_url: String, type_check: TypeChecking) {
+async fn apply_from_dev(server_url: String, type_check: TypeChecking, paths: HashSet<PathBuf>) {
     if let Err(e) = apply(
         server_url,
         DEFAULT_API_VERSION,
         AllowTypeDeletion::No,
         type_check,
+        paths,
     )
     .await
     {
