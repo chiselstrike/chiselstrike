@@ -788,7 +788,7 @@ fn query_engine(st: &mut OpState) -> &mut Arc<QueryEngine> {
     st.borrow_mut()
 }
 
-pub(crate) fn set_query_engine(query_engine: Arc<QueryEngine>) {
+pub(crate) async fn set_query_engine(query_engine: Arc<QueryEngine>) {
     with_op_state(move |state| {
         state.put(query_engine);
     });
