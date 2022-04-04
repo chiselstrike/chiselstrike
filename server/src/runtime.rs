@@ -2,9 +2,8 @@
 
 use crate::api::ApiService;
 use crate::datastore::MetaService;
-use crate::policies::{FieldPolicies, Kind, Policies};
+use crate::policies::Policies;
 use crate::rcmut::RcMut;
-use crate::types::ObjectType;
 use derive_new::new;
 use once_cell::sync::OnceCell;
 use std::cell::RefCell;
@@ -15,35 +14,6 @@ pub(crate) struct Runtime {
     pub(crate) api: Rc<ApiService>,
     pub(crate) meta: Rc<MetaService>,
     pub(crate) policies: Policies,
-}
-
-impl Runtime {
-    /// Adds the current policies on ty's fields to policies.
-    pub(crate) fn add_field_policies(
-        &self,
-        ty: &ObjectType,
-        policies: &mut FieldPolicies,
-        current_path: &str,
-    ) {
-        if let Some(version) = self.policies.versions.get(&ty.api_version) {
-            for fld in ty.user_fields() {
-                for lbl in &fld.labels {
-                    if let Some(p) = version.labels.get(lbl) {
-                        if !p.except_uri.is_match(current_path) {
-                            match p.kind {
-                                Kind::Transform(f) => {
-                                    policies.transforms.insert(fld.name.clone(), f);
-                                }
-                                Kind::MatchLogin => {
-                                    policies.match_login.insert(fld.name.clone());
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
 }
 
 thread_local!(static RUNTIME: OnceCell<Rc<RefCell<Runtime>>> = OnceCell::new());

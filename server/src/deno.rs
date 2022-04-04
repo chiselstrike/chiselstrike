@@ -8,8 +8,8 @@ use crate::datastore::query::QueryOpChain;
 use crate::datastore::query::{Mutation, QueryPlan};
 use crate::datastore::QueryEngine;
 use crate::policies::FieldPolicies;
+use crate::policies::Policies;
 use crate::rcmut::RcMut;
-use crate::runtime::Runtime;
 use crate::types::ObjectType;
 use crate::types::Type;
 use crate::types::TypeSystem;
@@ -495,17 +495,17 @@ type DbStream = RefCell<QueryResults>;
 
 /// Calculates field policies for the request being processed.
 pub(crate) fn make_field_policies(
-    runtime: &Runtime,
+    policies: &Policies,
     userid: &Option<String>,
     path: &str,
     ty: &ObjectType,
 ) -> FieldPolicies {
-    let mut policies = FieldPolicies {
+    let mut field_policies = FieldPolicies {
         current_userid: userid.clone(),
         ..Default::default()
     };
-    runtime.add_field_policies(ty, &mut policies, path);
-    policies
+    policies.add_field_policies(ty, &mut field_policies, path);
+    field_policies
 }
 
 struct QueryStreamResource {
