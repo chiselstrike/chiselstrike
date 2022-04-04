@@ -7,7 +7,7 @@ use crate::DEFAULT_API_VERSION;
 use anyhow::Result;
 use futures::channel::mpsc::channel;
 use futures::{SinkExt, StreamExt};
-use notify::{Event, RecommendedWatcher, RecursiveMode, Watcher};
+use notify::{event::ModifyKind, Event, EventKind, RecommendedWatcher, RecursiveMode, Watcher};
 use std::path::Path;
 use std::time::Duration;
 
@@ -39,8 +39,8 @@ pub(crate) async fn cmd_dev(server_url: String, type_check: bool) -> Result<()> 
     }
     while let Some(res) = rx.next().await {
         match res {
-            Ok(notify::event::Event {
-                kind: notify::event::EventKind::Modify(notify::event::ModifyKind::Data(_)),
+            Ok(Event {
+                kind: EventKind::Modify(ModifyKind::Data(_)),
                 ..
             }) => {
                 apply_from_dev(server_url.clone(), type_check).await;
