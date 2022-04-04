@@ -1,6 +1,7 @@
 // SPDX-FileCopyrightText: © 2021 ChiselStrike <info@chiselstrike.com>
 
 use crate::auth::get_username;
+use crate::deno::with_policies;
 use crate::prefix_map::PrefixMap;
 use anyhow::{Error, Result};
 use futures::future::LocalBoxFuture;
@@ -166,20 +167,20 @@ impl ApiService {
                 Err(_) => return ApiService::not_found(),
             };
             let is_allowed = {
-                match crate::runtime::get()
-                    .policies
-                    .versions
-                    .get(rp.api_version())
-                {
+                let maybe_is_allowed = with_policies(|policies| {
+                    policies.versions.get(rp.api_version()).map(|x| {
+                        x.user_authorization
+                            .is_allowed(username, rp.path().as_ref())
+                    })
+                });
+                match maybe_is_allowed {
                     None => {
                         return Self::internal_error(anyhow::anyhow!(
                             "found a route, but no version object for {}",
                             req.uri().path()
                         ))
                     }
-                    Some(x) => x
-                        .user_authorization
-                        .is_allowed(username, rp.path().as_ref()),
+                    Some(x) => x,
                 }
             };
 

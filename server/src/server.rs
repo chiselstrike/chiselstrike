@@ -4,6 +4,7 @@ use crate::api::ApiService;
 use crate::datastore::{DbConnection, MetaService, QueryEngine};
 use crate::deno;
 use crate::deno::init_deno;
+use crate::deno::set_policies;
 use crate::deno::set_query_engine;
 use crate::deno::set_type_system;
 use crate::deno::update_secrets;
@@ -133,10 +134,11 @@ async fn run(state: SharedState, mut cmd: ExecutorChannel) -> Result<()> {
     QueryEngine::commit_transaction(transaction).await?;
     let api_service = Rc::new(api_service);
 
-    let rt = Runtime::new(api_service.clone(), meta, policies);
+    let rt = Runtime::new(api_service.clone(), meta);
     runtime::set(rt);
     set_type_system(ts);
     set_query_engine(query_engine);
+    set_policies(policies);
 
     for (path, code) in routes.iter() {
         let path = path.to_str().unwrap();

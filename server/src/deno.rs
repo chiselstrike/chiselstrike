@@ -442,7 +442,7 @@ async fn op_chisel_store(
     let (query_engine, ty) = {
         // Users can only store custom types.  Builtin types are managed by us.
         let mut state = state.borrow_mut();
-        let ty = match current_type_system(&mut state).lookup_custom_type(type_name, &api_version) {
+        let ty = match current_type_system(&state).lookup_custom_type(type_name, &api_version) {
             Err(_) => anyhow::bail!("Cannot save into type {}.", type_name),
             Ok(ty) => ty,
         };
@@ -473,9 +473,9 @@ async fn op_chisel_entity_delete(
     api_version: String,
 ) -> Result<()> {
     let mutation = {
-        let mut state = state.borrow_mut();
+        let state = state.borrow_mut();
         Mutation::parse_delete(
-            current_type_system(&mut state),
+            current_type_system(&state),
             &api_version,
             &content.type_name,
             &content.restrictions,
@@ -532,6 +532,7 @@ fn op_chisel_relational_query_create(
 ) -> Result<ResourceId> {
     let (api_version, path, userid) = info;
     let query_plan = QueryPlan::from_op_chain(
+        current_policies(op_state),
         current_type_system(op_state),
         &api_version,
         &userid,
@@ -731,6 +732,23 @@ where
     func(&mut borrow)
 }
 
+fn current_policies(st: &OpState) -> &Policies {
+    st.borrow()
+}
+
+pub(crate) fn with_policies<T, F>(func: F) -> T
+where
+    F: FnOnce(&mut Policies) -> T,
+{
+    with_op_state(|st| func(st.borrow_mut()))
+}
+
+pub(crate) fn set_policies(policies: Policies) {
+    with_op_state(|st| {
+        st.put(policies);
+    });
+}
+
 fn current_transaction(st: &OpState) -> Result<TransactionStatic> {
     st.try_borrow()
         .cloned()
@@ -758,7 +776,11 @@ fn set_current_secrets(st: &mut OpState, secrets: JsonObject) {
     st.put(secrets);
 }
 
-fn current_type_system(st: &mut OpState) -> &mut TypeSystem {
+fn current_type_system(st: &OpState) -> &TypeSystem {
+    st.borrow()
+}
+
+fn current_type_system_mut(st: &mut OpState) -> &mut TypeSystem {
     st.borrow_mut()
 }
 
@@ -785,7 +807,7 @@ pub(crate) fn lookup_builtin_type(type_name: &str) -> Result<Type, TypeSystemErr
 
 pub(crate) fn remove_type_version(version: &str) {
     with_op_state(|state| {
-        let type_system = current_type_system(state);
+        let type_system = current_type_system_mut(state);
         type_system.versions.remove(version);
     });
 }
