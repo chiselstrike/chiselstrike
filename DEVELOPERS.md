@@ -2,10 +2,19 @@
 
 ## Toolchain
 
-On Linux, you need `lld`:
+On Linux, you can speed up build by first installing `lld`:
 
 ```bash
 dnf install lld
+```
+
+and then configuring it in `~/.cargo/config.toml`, for example:
+
+```toml
+[target.x86_64-unknown-linux-gnu]
+rustflags = [
+  "-C", "link-arg=-fuse-ld=lld",
+]
 ```
 
 ## Generating API documentation
