@@ -821,10 +821,6 @@ pub(crate) fn get_secret<S: AsRef<str>>(name: S) -> Option<serde_json::Value> {
     with_op_state(|state| current_secrets(state).and_then(|sec| sec.get(name.as_ref()).cloned()))
 }
 
-fn set_current_secrets(st: &mut OpState, secrets: JsonObject) {
-    st.put(secrets);
-}
-
 fn current_type_system(st: &OpState) -> &TypeSystem {
     st.borrow()
 }
@@ -867,9 +863,9 @@ pub(crate) async fn set_type_system(type_system: TypeSystem) {
     });
 }
 
-pub(crate) fn update_secrets(secrets: JsonObject) {
+pub(crate) async fn update_secrets(secrets: JsonObject) {
     with_op_state(|state| {
-        set_current_secrets(state, secrets);
+        state.put(secrets);
     })
 }
 
