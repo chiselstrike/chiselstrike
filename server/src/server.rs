@@ -138,7 +138,7 @@ async fn run(state: SharedState, mut cmd: ExecutorChannel) -> Result<()> {
     runtime::set(rt);
     set_type_system(ts).await;
     set_query_engine(query_engine).await;
-    set_policies(policies);
+    set_policies(policies).await;
 
     for (path, code) in routes.iter() {
         let path = path.to_str().unwrap();

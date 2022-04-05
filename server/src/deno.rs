@@ -743,7 +743,7 @@ where
     with_op_state(|st| func(st.borrow_mut()))
 }
 
-pub(crate) fn set_policies(policies: Policies) {
+pub(crate) async fn set_policies(policies: Policies) {
     with_op_state(|st| {
         st.put(policies);
     });
