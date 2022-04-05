@@ -15,7 +15,7 @@ use crate::types::Type;
 use crate::types::TypeSystem;
 use crate::types::TypeSystemError;
 use crate::JsonObject;
-use anyhow::{anyhow, Context as AnyhowContext, Result};
+use anyhow::{anyhow, bail, Context as AnyhowContext, Result};
 use api::chisel_js;
 use api::endpoint_js;
 use deno_core::error::AnyError;
@@ -736,11 +736,22 @@ fn current_policies(st: &OpState) -> &Policies {
     st.borrow()
 }
 
-pub(crate) fn with_policies<T, F>(func: F) -> T
-where
-    F: FnOnce(&Policies) -> T,
-{
-    with_op_state(|st| func(st.borrow_mut()))
+pub(crate) async fn is_allowed_by_policy(
+    api_version: &str,
+    username: Option<String>,
+    path: &std::path::Path,
+) -> Result<bool> {
+    with_op_state(|st| {
+        let policies = current_policies(st);
+        match policies.versions.get(api_version) {
+            None => bail!(
+                "found a route, but no version object for {}/{}",
+                api_version,
+                path.display()
+            ),
+            Some(x) => Ok(x.user_authorization.is_allowed(username, path)),
+        }
+    })
 }
 
 async fn mutate_policies_impl(func: Box<dyn FnOnce(&mut Policies) + Send>) {
