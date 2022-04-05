@@ -392,8 +392,8 @@ impl RpcService {
 
         let cmd = send_command!({
             {
+                set_type_system(types_global.clone()).await;
                 let runtime = runtime::get();
-                set_type_system(types_global.clone());
 
                 with_policies(|policies| {
                     policies

@@ -743,7 +743,7 @@ where
     with_op_state(|st| func(st.borrow_mut()))
 }
 
-pub(crate) fn set_policies(policies: Policies) {
+pub(crate) async fn set_policies(policies: Policies) {
     with_op_state(|st| {
         st.put(policies);
     });
@@ -755,14 +755,14 @@ fn current_transaction(st: &OpState) -> Result<TransactionStatic> {
         .ok_or_else(|| anyhow!("no active transaction"))
 }
 
-fn take_current_transaction() -> Option<TransactionStatic> {
+async fn take_current_transaction() -> Option<TransactionStatic> {
     with_op_state(|state| {
         // FIXME: Return a Result once all concurrency issues are fixed.
         state.try_take()
     })
 }
 
-fn set_current_transaction(transaction: TransactionStatic) {
+async fn set_current_transaction(transaction: TransactionStatic) {
     with_op_state(|st| {
         st.put(transaction);
     });
@@ -788,7 +788,7 @@ fn query_engine(st: &mut OpState) -> &mut Arc<QueryEngine> {
     st.borrow_mut()
 }
 
-pub(crate) fn set_query_engine(query_engine: Arc<QueryEngine>) {
+pub(crate) async fn set_query_engine(query_engine: Arc<QueryEngine>) {
     with_op_state(move |state| {
         state.put(query_engine);
     });
@@ -812,7 +812,7 @@ pub(crate) fn remove_type_version(version: &str) {
     });
 }
 
-pub(crate) fn set_type_system(type_system: TypeSystem) {
+pub(crate) async fn set_type_system(type_system: TypeSystem) {
     with_op_state(move |state| {
         state.put(type_system);
     });
@@ -917,7 +917,7 @@ async fn get_result(
 
 async fn commit_transaction(_: ()) -> Result<Option<(Box<[u8]>, ())>, anyhow::Error> {
     // FIXME: We should always have a transaction in here
-    if let Some(transaction) = take_current_transaction() {
+    if let Some(transaction) = take_current_transaction().await {
         match crate::datastore::QueryEngine::commit_transaction_static(transaction).await {
             Ok(()) => Ok(None),
             Err(e) => {
@@ -936,7 +936,7 @@ pub(crate) async fn run_js(path: String, req: Request<hyper::Body>) -> Result<Re
     let path = RequestPath::try_from(path.as_ref()).unwrap();
     let userid = crate::auth::get_user(&req).await?;
 
-    set_current_transaction(transaction);
+    set_current_transaction(transaction).await;
     {
         let mut service = get();
         if service.inspector.is_some() {
@@ -952,7 +952,7 @@ pub(crate) async fn run_js(path: String, req: Request<hyper::Body>) -> Result<Re
     // endpoints that don't do any data access. For now, because we always create it above,
     // it should be safe to unwrap.
 
-    let transaction = take_current_transaction();
+    let transaction = take_current_transaction().await;
 
     let result = result?;
 
@@ -1017,7 +1017,7 @@ pub(crate) async fn run_js(path: String, req: Request<hyper::Body>) -> Result<Re
 
     // FIXME: We should always have a transaction in here
     if let Some(transaction) = transaction {
-        set_current_transaction(transaction);
+        set_current_transaction(transaction).await;
     }
     Ok(body)
 }
