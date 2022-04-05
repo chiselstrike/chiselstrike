@@ -738,9 +738,20 @@ fn current_policies(st: &OpState) -> &Policies {
 
 pub(crate) fn with_policies<T, F>(func: F) -> T
 where
-    F: FnOnce(&mut Policies) -> T,
+    F: FnOnce(&Policies) -> T,
 {
     with_op_state(|st| func(st.borrow_mut()))
+}
+
+async fn mutate_policies_impl(func: Box<dyn FnOnce(&mut Policies) + Send>) {
+    with_op_state(|st| func(st.borrow_mut()));
+}
+
+pub(crate) async fn mutate_policies<F>(func: F)
+where
+    F: FnOnce(&mut Policies) + Send + 'static,
+{
+    mutate_policies_impl(Box::new(func)).await;
 }
 
 pub(crate) async fn set_policies(policies: Policies) {
