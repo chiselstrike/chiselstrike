@@ -67,45 +67,48 @@ count_results () {
     printf "$results";
 }
 
-$CURL "$CHISELD_HOST/dev/persons?sort=first_name&take=3" | count_results
+$CURL "$CHISELD_HOST/dev/persons?sort=first_name&limit=3" | count_results
 # CHECK: Number of names: 3
 # CHECK: "last_name": "Anderson"
 # CHECK: "last_name": "Brown"
 # CHECK: "last_name": "Chong"
 
-$CURL "$CHISELD_HOST/dev/persons?sort=-first_name&take=3" | count_results
+$CURL "$CHISELD_HOST/dev/persons?sort=-first_name&limit=3" | count_results
 # CHECK: Number of names: 3
 # CHECK: "last_name": "Elgin"
 # CHECK: "last_name": "Draper"
 # CHECK: "last_name": "Chong"
 
-$CURL "$CHISELD_HOST/dev/persons?sort=first_name&skip=3" | count_results
+$CURL "$CHISELD_HOST/dev/persons?sort=first_name&offset=3" | count_results
 # CHECK: Number of names: 2
 # CHECK: HTTP/1.1 200 OK
 # CHECK: "last_name": "Draper"
 # CHECK: "last_name": "Elgin"
 
-$CURL "$CHISELD_HOST/dev/persons?sort=-first_name&skip=3" | count_results
+$CURL "$CHISELD_HOST/dev/persons?sort=-first_name&offset=3" | count_results
 # CHECK: Number of names: 2
 # CHECK: HTTP/1.1 200 OK
 # CHECK: "last_name": "Brown"
 # CHECK: "last_name": "Anderson"
 
-## Ordering of operators matters:
-$CURL "$CHISELD_HOST/dev/persons?sort=first_name&take=3&sort=-first_name&take=1" | count_results
-# CHECK: Number of names: 1
+## Ordering of operators doesn't matter, first sort gets ignored:
+$CURL "$CHISELD_HOST/dev/persons?sort=first_name&limit=3&sort=-first_name&offset=1" | count_results
+# CHECK: Number of names: 3
+# CHECK: "last_name": "Draper"
 # CHECK: "last_name": "Chong"
+# CHECK: "last_name": "Brown"
 
-$CURL "$CHISELD_HOST/dev/persons?sort=first_name&take=3&skip=2" | count_results
-# CHECK: Number of names: 1
+$CURL "$CHISELD_HOST/dev/persons?sort=first_name&limit=2&offset=2" | count_results
+# CHECK: Number of names: 2
 # CHECK: "last_name": "Chong"
+# CHECK: "last_name": "Draper"
 
 
-$CURL "$CHISELD_HOST/dev/persons?f=\\{%22age%22:40\\}" # Filtered GET
+$CURL "$CHISELD_HOST/dev/persons?filter=\\{%22age%22:40\\}" # Filtered GET
 # CHECK: HTTP/1.1 200 OK
 # CHECK: "last_name": "Brown"
 
-id=`$CURL "$CHISELD_HOST/dev/persons?f=\\{%22age%22:10\\}" | sed -ne 's/.*"id":[[:space:]]*"\([^"]*\).*/\1/p'`
+id=`$CURL "$CHISELD_HOST/dev/persons?filter=\\{%22age%22:10\\}" | sed -ne 's/.*"id":[[:space:]]*"\([^"]*\).*/\1/p'`
 $CURL $CHISELD_HOST/dev/persons/$id # GET by id
 # CHECK: HTTP/1.1 200 OK
 # CHECK: "first_name": "Dawn"
@@ -118,11 +121,11 @@ $CURL -X DELETE $CHISELD_HOST/dev/persons/$id # DELETE by id
 $CURL $CHISELD_HOST/dev/persons/$id
 # CHECK: HTTP/1.1 404 Not Found
 # CHECK: Not found
-$CURL "$CHISELD_HOST/dev/persons?f=\\{%22age%22:10\\}"
+$CURL "$CHISELD_HOST/dev/persons?filter=\\{%22age%22:10\\}"
 # CHECK: HTTP/1.1 200 OK
 # CHECK: []
 
-$CURL -X DELETE "$CHISELD_HOST/dev/persons?f=\\{%22age%22:40\\}" # Filtered DELETE
+$CURL -X DELETE "$CHISELD_HOST/dev/persons?filter=\\{%22age%22:40\\}" # Filtered DELETE
 # CHECK: HTTP/1.1 200 OK
 # CHECK: Deleted entities matching {\"age\":40}
 $CURL $CHISELD_HOST/dev/persons | tr , \\n | sort
@@ -134,7 +137,7 @@ $CURL -X DELETE $CHISELD_HOST/dev/persons # Filter missing
 # CHECK: HTTP/1.1 422 Unprocessable Entity
 # CHECK: Neither ID nor filter found
 
-$CURL -X DELETE "$CHISELD_HOST/dev/persons?f=\\{\\}" # DELETE all
+$CURL -X DELETE "$CHISELD_HOST/dev/persons?filter=\\{\\}" # DELETE all
 # CHECK: HTTP/1.1 200 OK
 # CHECK: Deleted entities matching {}
 $CURL $CHISELD_HOST/dev/persons
@@ -153,7 +156,7 @@ $CURL $CHISELD_HOST/dev/persons | tr , \\n | grep first_name
 # CHECK: "first_name": "Alice"
 # CHECK: "first_name": "Alice"
 
-$CURL -X DELETE "$CHISELD_HOST/dev/persons?f=\\{\\}"
+$CURL -X DELETE "$CHISELD_HOST/dev/persons?filter=\\{\\}"
 # CHECK: HTTP/1.1 200 OK
 # CHECK: Deleted entities matching {}
 

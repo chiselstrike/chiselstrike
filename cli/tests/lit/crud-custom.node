@@ -132,14 +132,14 @@ $CURL $CHISELD_HOST/dev/persons # GET all
 # CHECK: last_name: "Elgin"
 # CHECK: status: 200
 
-$CURL "$CHISELD_HOST/dev/persons?f=\\{%22age%22:40\\}" # Filtered GET
+$CURL "$CHISELD_HOST/dev/persons?filter=\\{%22age%22:40\\}" # Filtered GET
 # CHECK: HTTP/1.1 200 OK
 # CHECK: content-type: text/yaml
 # CHECK: data:
 # CHECK: last_name: "Brown"
 # CHECK: status: 200
 
-id=`$CURL "$CHISELD_HOST/dev/persons?f=\\{%22age%22:10\\}" | sed -ne 's/.*id::[[:space:]]*"\([^"]*\).*/\1/p'`
+id=`$CURL "$CHISELD_HOST/dev/persons?filter=\\{%22age%22:10\\}" | sed -ne 's/.*id::[[:space:]]*"\([^"]*\).*/\1/p'`
 $CURL $CHISELD_HOST/dev/persons/$id # GET by id
 # CHECK: HTTP/1.1 200 OK
 # CHECK: content-type: text/yaml
@@ -164,7 +164,7 @@ $CURL $CHISELD_HOST/dev/persons/$id
 # CHECK: first_name: "Dawn"
 # CHECK: status: 200
 
-$CURL -X DELETE "$CHISELD_HOST/dev/persons?f=\\{%22age%22:40\\}" # Filtered DELETE
+$CURL -X DELETE "$CHISELD_HOST/dev/persons?filter=\\{%22age%22:40\\}" # Filtered DELETE
 # CHECK: HTTP/1.1 405 Method Not Allowed
 # CHECK: content-type: text/yaml
 # CHECK: error: "Method Not Allowed"

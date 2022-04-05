@@ -14,8 +14,8 @@ Imagine you're just starting out building a new application for a dynamic site, 
 to bother implementing an entire backend server, configuring a SQL database, and managing the deployment
 for it.
 
-One of the simplest examples might involve building a blog that allows readers to make comments. 
-Even if a blog articles were statically rendered, the comment section would need some kind of 
+One of the simplest examples might involve building a blog that allows readers to make comments.
+Even if a blog articles were statically rendered, the comment section would need some kind of
 dynamic endpoint to make it work.
 
 # Setup
@@ -123,11 +123,11 @@ are not needed.
 
 ## Our First Model
 
-Next, let's add the ability to save and load comments. 
+Next, let's add the ability to save and load comments.
 
 First, we need to define what types of data we are going to save and load.
 This is where backend models come in -- models use Typescript to describe
-what kind of data you want to store.  
+what kind of data you want to store.
 
 Create a file in `my-backend/models/BlogComment.ts`:
 
@@ -151,7 +151,7 @@ you add them.
 :::
 
 :::tip
-Since we're using TypeScript, you may have some questions about type checking. By default, `chisel` doesn't check 
+Since we're using TypeScript, you may have some questions about type checking. By default, `chisel` doesn't check
 your TypeScript types (we assume your IDE did that for you!), which results
 in faster production code. If you want type checking, you can enable it by calling `tsc` directly, which can
 be achieved by passing the `--type-check` option to `npm run dev`, or to the apply command `npx chisel apply`
@@ -167,7 +167,7 @@ Model defined: BlogComment
 Now you are able to store `BlogComment` objects!  However, we still need to surface those entities through a web-services API endpoint.
 That comes next!
 
-## Our First Endpoint 
+## Our First Endpoint
 
 We're big fans of [REST](https://en.wikipedia.org/wiki/Representational_state_transfer), but don't strictly require it in ChiselStrike.
 
@@ -205,7 +205,7 @@ We always use UUIDs rather than integers.
 :::
 
 :::tip
-Right now you are testing only locally, but you'll want to think about restricting access to some endpoints in production.  
+Right now you are testing only locally, but you'll want to think about restricting access to some endpoints in production.
 We'll talk about security more in the [Policy](InDepth/pol.md) section.
 :::
 
@@ -269,7 +269,7 @@ curl localhost:8080/dev/comments/a4ca3ab3-2e26-4da6-a5de-418c1e6b9b83
 The API allows you to filter by specific properties, by specifying a search parameter with a partial URL-encoded JSON object:
 
 ```bash
-curl -g localhost:8080/dev/comments?f={%22by%22:%22Jack%22}
+curl -g localhost:8080/dev/comments?filter={%22by%22:%22Jack%22}
 ```
 
 ```json
@@ -329,9 +329,9 @@ For ascending order, you use a `+` prefix or omit it completely which will defau
 When using the ascending ordering with prefix `+`, your HTTP library may do URL encoding automatically, but if it doesn't, `+` needs to be encoded as `%2B`.
 ...
 
-To limit the result set to only the first `n` elements, you can use the `take` parameter:
+To limit the result set to only the first `n` elements, you can use the the `limit` parameter:
 ```bash
-curl -g localhost:8080/dev/comments?sort=by&take=3
+curl -g localhost:8080/dev/comments?sort=by&limit=3
 ```
 
 ```json
@@ -354,9 +354,9 @@ curl -g localhost:8080/dev/comments?sort=by&take=3
 ]
 ```
 
-To skip the first `n` elements, you can use `skip` operator:
+To skip the first `n` elements, you can use the `offset` parameter:
 ```bash
-curl -g localhost:8080/dev/comments?sort=by&skip=4
+curl -g localhost:8080/dev/comments?sort=by&offset=4
 ```
 
 ```json
@@ -370,7 +370,11 @@ curl -g localhost:8080/dev/comments?sort=by&skip=4
 ```
 
 ...note:
-The order in which you specify CRUD operators *does matter*. The operators are applied in the order specified by the query string. For example `?sort=by&take=2&sort=content` can yield different results than `?sort=by&sort=content&take=2` which would be equivalent to `?sort=content&take=2`.
+If both `limit` and `offset` are used, they are applied in traditional order - we first skip all elements up to the `offset` and then we return `limit` number of remaining elements.
+...
+
+...note:
+The order in which you specify CRUD parameters *does not* matter. For example `?sort=by&limit=2&sort=content` will yield the same results as `?sort=content&limit=2`.
 ...
 
 ## PUT and DELETE
