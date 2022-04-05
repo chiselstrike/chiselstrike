@@ -762,7 +762,7 @@ fn take_current_transaction() -> Option<TransactionStatic> {
     })
 }
 
-fn set_current_transaction(transaction: TransactionStatic) {
+async fn set_current_transaction(transaction: TransactionStatic) {
     with_op_state(|st| {
         st.put(transaction);
     });
@@ -936,7 +936,7 @@ pub(crate) async fn run_js(path: String, req: Request<hyper::Body>) -> Result<Re
     let path = RequestPath::try_from(path.as_ref()).unwrap();
     let userid = crate::auth::get_user(&req).await?;
 
-    set_current_transaction(transaction);
+    set_current_transaction(transaction).await;
     {
         let mut service = get();
         if service.inspector.is_some() {
@@ -1017,7 +1017,7 @@ pub(crate) async fn run_js(path: String, req: Request<hyper::Body>) -> Result<Re
 
     // FIXME: We should always have a transaction in here
     if let Some(transaction) = transaction {
-        set_current_transaction(transaction);
+        set_current_transaction(transaction).await;
     }
     Ok(body)
 }
