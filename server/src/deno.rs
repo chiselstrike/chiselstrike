@@ -755,7 +755,7 @@ fn current_transaction(st: &OpState) -> Result<TransactionStatic> {
         .ok_or_else(|| anyhow!("no active transaction"))
 }
 
-fn take_current_transaction() -> Option<TransactionStatic> {
+async fn take_current_transaction() -> Option<TransactionStatic> {
     with_op_state(|state| {
         // FIXME: Return a Result once all concurrency issues are fixed.
         state.try_take()
@@ -917,7 +917,7 @@ async fn get_result(
 
 async fn commit_transaction(_: ()) -> Result<Option<(Box<[u8]>, ())>, anyhow::Error> {
     // FIXME: We should always have a transaction in here
-    if let Some(transaction) = take_current_transaction() {
+    if let Some(transaction) = take_current_transaction().await {
         match crate::datastore::QueryEngine::commit_transaction_static(transaction).await {
             Ok(()) => Ok(None),
             Err(e) => {
@@ -952,7 +952,7 @@ pub(crate) async fn run_js(path: String, req: Request<hyper::Body>) -> Result<Re
     // endpoints that don't do any data access. For now, because we always create it above,
     // it should be safe to unwrap.
 
-    let transaction = take_current_transaction();
+    let transaction = take_current_transaction().await;
 
     let result = result?;
 
