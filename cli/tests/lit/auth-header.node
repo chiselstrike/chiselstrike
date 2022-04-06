@@ -10,7 +10,7 @@ $CURL $CHISELD_HOST/dev/hello
 # CHECK: hello world
 
 echo '{ "CHISEL_API_AUTH_SECRET" : "1234" }' > ${TEMPDIR}/.env
-sleep 2.5;
+$CHISEL restart
 $CURL $CHISELD_HOST/dev/hello
 # CHECK: HTTP/1.1 403 Forbidden
 

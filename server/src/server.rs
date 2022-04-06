@@ -111,6 +111,14 @@ impl SharedTasks {
 async fn run(state: SharedState, mut cmd: ExecutorChannel) -> Result<()> {
     init_deno(state.inspect_brk).await?;
 
+    // Ensure we read the secrets before spawning an ApiService; secrets may dictate API authorization.
+    if let Ok(secrets) = get_secrets().await {
+        match serde_json::from_str(&secrets) {
+            Err(e) => warn!("Could not read secrets: {:?}", e),
+            Ok(json) => update_secrets(json),
+        }
+    }
+
     let meta =
         Rc::new(MetaService::local_connection(&state.metadata_db, state.nr_connections).await?);
     let ts = meta.load_type_system().await?;
