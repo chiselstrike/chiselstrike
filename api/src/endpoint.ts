@@ -99,7 +99,11 @@ export async function callHandler(
     const read = reader
         ? async function () {
             const v = await reader.read();
-            return v.done ? undefined : v.value;
+            if (v.done) {
+                await Deno.core.opAsync("op_chisel_commit_transaction");
+                return undefined;
+            }
+            return v.value;
         }
         : undefined;
     return {
