@@ -1,0 +1,153 @@
+name: Rust-self-hosted
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+env:
+  CARGO_TERM_COLOR: always
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+  nightly-version: nightly-2022-03-15
+  POSTGRES_PASSWORD: postgres
+
+
+jobs:
+  build:
+    runs-on: self-hosted
+    steps:
+    - name: cleanup
+      uses: AutoModality/action-clean@v1
+
+    - name: checkout repo
+      uses: actions/checkout@v2
+      with:
+        submodules: true
+
+    - name: Log in to the Container registry
+      uses: docker/login-action@f054a8b539a109f9f41c372932f1ae047eff08c9
+      with:
+        registry: ${{ env.REGISTRY }}
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Extract metadata (tags, labels) for Docker
+      id: meta
+      uses: docker/metadata-action@98669ae865ea3cffbcbaa878cf57c20bbf1c6c38
+      with:
+        images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+
+    - name: Find desired image
+      id: findimg
+      run: echo "::set-output name=img_name::$(md5sum Dockerfile.test.baseimg | awk '{print $1}')"
+
+    - name: Verify existence of docker base image
+      run: docker manifest inspect ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.findimg.outputs.img_name }}
+      id: testimg
+      continue-on-error: true
+
+    - name: Build and push test Docker base image if needed
+      uses: docker/build-push-action@ad44023a93711e3deb337508980b4b5e9bcdc5dc
+      if: steps.testimg.outcome == 'failure'
+      with:
+        context: .
+        file: Dockerfile.test.baseimg
+        push: true
+        tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.findimg.outputs.img_name }}
+        labels: ${{ steps.meta.outputs.labels }}
+
+    - name: Install rust toolchain
+      uses: actions-rs/toolchain@v1
+      with:
+        components: rustfmt, clippy
+
+    - name: Install nightly rust toolchain
+      uses: actions-rs/toolchain@v1
+      with:
+        toolchain: ${{ env.nightly-version }}
+        components: rustfmt, clippy
+
+    - name: set up cache
+      uses: Swatinem/rust-cache@v1
+      with:
+        key: ${{ env.nightly-version }}
+
+    - name: set up node cache
+      uses: actions/cache@v2
+      with:
+        path: ~/.npm
+        key: ${{ runner.os }}-node-${{ hashFiles('**/package-lock.json') }}
+
+    - name: Build debug mode binaries
+      uses: actions-rs/cargo@v1
+      with:
+        command: build
+        args: --verbose
+          
+    - name: Build cli in isolation
+      uses: actions-rs/cargo@v1
+      with:
+        command: build
+        args: --verbose -p cli
+
+    - name: Build server in isolation
+      uses: actions-rs/cargo@v1
+      with:
+        command: build
+        args: --verbose -p server
+
+    - name: run unit tests
+      uses: actions-rs/cargo@v1
+      with:
+        command: test
+
+  postgres-test:
+    runs-on: self-hosted
+    services:
+      postgres:
+        image: postgres
+        env:
+          POSTGRES_PASSWORD: "$POSTGRES_PASSWORD"
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+    steps:
+    - name: cleanup
+      uses: AutoModality/action-clean@v1
+
+    - name: Checkout repository
+      uses: actions/checkout@v2
+      with:
+        submodules: true
+
+    - name: Install lld
+      id: lld
+      run: "sudo apt-get -y install lld"
+
+    - name: Install Rust toolchain
+      uses: actions-rs/toolchain@v1
+      with:
+        components: rustfmt, clippy
+
+    - name: Configure Rust cache
+      uses: Swatinem/rust-cache@v1
+
+    - name: Configure Node cache
+      uses: actions/cache@v2
+      with:
+        path: ~/.npm
+        key: ${{ runner.os }}-node-${{ hashFiles('**/package-lock.json') }}
+
+    - name: Run integration tests against Postgres
+      uses: actions-rs/cargo@v1
+      with:
+        command: test
+        args: -p cli --test integration_tests -- --database postgres --database-user postgres --database-password "$POSTGRES_PASSWORD"
+
+
