@@ -156,6 +156,16 @@ impl ApiService {
                 };
             }
 
+            let auth_header = req.headers().get("ChiselAuth");
+            let expected_secret = crate::deno::get_secret("CHISEL_API_AUTH_SECRET");
+            match (expected_secret, auth_header) {
+                (Some(_), None) => return Self::forbidden("ChiselAuth"),
+                (Some(serde_json::Value::String(s)), Some(h)) if s != *h => {
+                    return Self::forbidden("Fundamental auth")
+                }
+                _ => (),
+            }
+
             // TODO: Make this optional, for users who want to reject some OPTIONS requests.
             if req.method() == "OPTIONS" {
                 return response_template().body("ok".to_string().into()); // Makes CORS preflights pass.
@@ -185,9 +195,7 @@ impl ApiService {
             };
 
             if !is_allowed {
-                return Response::builder()
-                    .status(StatusCode::FORBIDDEN)
-                    .body("Unauthorized user\n".to_string().into());
+                return Self::forbidden("Unauthorized user\n");
             }
             return match route_fn(req).await {
                 Ok(val) => Ok(val),
@@ -207,6 +215,12 @@ impl ApiService {
         Response::builder()
             .status(StatusCode::INTERNAL_SERVER_ERROR)
             .body(format!("{:?}\n", err).into())
+    }
+
+    fn forbidden(err: &str) -> hyper::http::Result<Response<Body>> {
+        Response::builder()
+            .status(StatusCode::FORBIDDEN)
+            .body(err.to_string().into())
     }
 }
 

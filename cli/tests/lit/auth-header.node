@@ -1,0 +1,25 @@
+# SPDX-FileCopyrightText: © 2022 ChiselStrike <info@chiselstrike.com>
+
+# RUN: sh -e @file
+
+cd "$TEMPDIR"
+$CHISEL apply
+
+$CURL $CHISELD_HOST/dev/hello
+# CHECK: HTTP/1.1 200 OK
+# CHECK: hello world
+
+echo '{ "CHISEL_API_AUTH_SECRET" : "1234" }' > ${TEMPDIR}/.env
+sleep 2.5;
+$CURL $CHISELD_HOST/dev/hello
+# CHECK: HTTP/1.1 403 Forbidden
+
+$CURL -H "ChiselAuth:1234" $CHISELD_HOST/dev/hello
+# CHECK: HTTP/1.1 200 OK
+# CHECK: hello world
+
+$CURL -H "ChiselAuth:12345" $CHISELD_HOST/dev/hello
+# CHECK: HTTP/1.1 403 Forbidden
+
+$CURL -H "ChiselAuth:" $CHISELD_HOST/dev/hello
+# CHECK: HTTP/1.1 403 Forbidden
