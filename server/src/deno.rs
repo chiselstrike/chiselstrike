@@ -768,7 +768,7 @@ async fn set_current_transaction(transaction: TransactionStatic) {
     });
 }
 
-fn current_secrets(st: &mut OpState) -> Option<&JsonObject> {
+fn current_secrets(st: &OpState) -> Option<&JsonObject> {
     st.try_borrow()
 }
 
