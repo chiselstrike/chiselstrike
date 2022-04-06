@@ -46,7 +46,6 @@ use futures::future;
 use futures::stream::{try_unfold, Stream};
 use futures::task::LocalFutureObj;
 use futures::FutureExt;
-use futures::StreamExt;
 use hyper::body::HttpBody;
 use hyper::Method;
 use hyper::Uri;
@@ -202,6 +201,7 @@ fn build_extensions() -> Vec<Extension> {
             op_chisel_get_secret::decl(),
             op_chisel_relational_query_create::decl(),
             op_chisel_relational_query_next::decl(),
+            op_chisel_commit_transaction::decl(),
         ])
         .build()]
 }
@@ -926,19 +926,18 @@ async fn get_result(
     resolve_promise(result).await
 }
 
-async fn commit_transaction(_: ()) -> Result<Option<(Box<[u8]>, ())>, anyhow::Error> {
-    // FIXME: We should always have a transaction in here
-    if let Some(transaction) = take_current_transaction().await {
-        match crate::datastore::QueryEngine::commit_transaction_static(transaction).await {
-            Ok(()) => Ok(None),
-            Err(e) => {
-                warn!("Commit failed: {}", e);
-                Err(e)
-            }
+#[op]
+async fn op_chisel_commit_transaction(state: Rc<RefCell<OpState>>) -> Result<()> {
+    let transaction = {
+        let mut state = state.borrow_mut();
+        // FIXME: We should always have a transaction in here
+        match state.try_take::<TransactionStatic>() {
+            Some(v) => v,
+            None => return Ok(()),
         }
-    } else {
-        Ok(None)
-    }
+    };
+    crate::datastore::QueryEngine::commit_transaction_static(transaction).await?;
+    Ok(())
 }
 
 async fn run_js_impl(path: String, req: Request<hyper::Body>) -> Result<Response<Body>> {
@@ -983,8 +982,6 @@ async fn run_js_impl(path: String, req: Request<hyper::Body>) -> Result<Response
 
         let runtime = &mut service.worker.js_runtime;
         let stream = get_read_stream(runtime, result.clone())?;
-        let commit_stream = try_unfold((), commit_transaction);
-        let stream = stream.chain(commit_stream);
 
         let scope = &mut runtime.handle_scope();
         let response = result
