@@ -941,13 +941,9 @@ async fn commit_transaction(_: ()) -> Result<Option<(Box<[u8]>, ())>, anyhow::Er
     }
 }
 
-pub(crate) async fn run_js(path: String, req: Request<hyper::Body>) -> Result<Response<Body>> {
-    let qe = query_engine_arc();
-    let transaction = qe.start_transaction_static().await?;
+async fn run_js_impl(path: String, req: Request<hyper::Body>) -> Result<Response<Body>> {
     let path = RequestPath::try_from(path.as_ref()).unwrap();
     let userid = crate::auth::get_user(&req).await?;
-
-    set_current_transaction(transaction).await;
     {
         let mut service = get();
         if service.inspector.is_some() {
@@ -958,14 +954,7 @@ pub(crate) async fn run_js(path: String, req: Request<hyper::Body>) -> Result<Re
         }
     }
 
-    let result = get_result(path, &userid, req).await;
-    // FIXME: maybe defer creating the transaction until we need one, to avoid doing it for
-    // endpoints that don't do any data access. For now, because we always create it above,
-    // it should be safe to unwrap.
-
-    let transaction = take_current_transaction().await;
-
-    let result = result?;
+    let result = get_result(path, &userid, req).await?;
 
     let body = {
         // The rust borrow checker can track fields independently, but
@@ -1026,11 +1015,22 @@ pub(crate) async fn run_js(path: String, req: Request<hyper::Body>) -> Result<Re
         builder.body(Body::Stream(Box::pin(stream)))?
     };
 
-    // FIXME: We should always have a transaction in here
-    if let Some(transaction) = transaction {
-        set_current_transaction(transaction).await;
-    }
     Ok(body)
+}
+
+pub(crate) async fn run_js(path: String, req: Request<hyper::Body>) -> Result<Response<Body>> {
+    // FIXME: maybe defer creating the transaction until we need one, to avoid doing it for
+    // endpoints that don't do any data access. For now, because we always create it above,
+    // it should be safe to unwrap.
+    let qe = query_engine_arc();
+    let transaction = qe.start_transaction_static().await?;
+    set_current_transaction(transaction).await;
+    let res = run_js_impl(path, req).await;
+    if res.is_err() {
+        // Drop the transaction, causing it to rollback.
+        take_current_transaction().await;
+    }
+    res
 }
 
 fn get() -> RcMut<DenoService> {
