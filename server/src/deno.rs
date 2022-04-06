@@ -87,6 +87,8 @@ struct VersionedCode {
 
 enum WorkerMsg {}
 
+enum WorkerResp {}
+
 /// A v8 isolate doesn't want to be moved between or used from
 /// multiple threads. A JsRuntime owns an isolate, so we need to use a
 /// thread local storage.
@@ -113,6 +115,7 @@ struct DenoService {
     _read_worker_channel: v8::Global<v8::Function>,
 
     _to_worker: Sender<WorkerMsg>,
+    _from_worker: Receiver<WorkerResp>,
     worker_channel_id: u32,
 }
 
@@ -274,14 +277,20 @@ fn create_web_worker(
     })
 }
 
-type GlobalChannels = VecMap<Receiver<WorkerMsg>>;
+#[derive(Debug)]
+struct Channel {
+    receiver: Receiver<WorkerMsg>,
+    _sender: Sender<WorkerResp>,
+}
+
+type GlobalChannels = VecMap<Channel>;
 
 lazy_static! {
     static ref GLOBAL_WORKER_CHANNELS: Mutex<GlobalChannels> = Mutex::new(GlobalChannels::new());
 }
 
 thread_local! {
-     static WORKER_CHANNEL: OnceCell<Receiver<WorkerMsg>> = OnceCell::new();
+     static WORKER_CHANNEL: OnceCell<Channel> = OnceCell::new();
 }
 
 impl DenoService {
@@ -432,8 +441,12 @@ impl DenoService {
         };
 
         let (to_worker_sender, to_worker_receiver) = async_channel::bounded(1);
+        let (from_worker_sender, from_worker_receiver) = async_channel::bounded(1);
         let mut map = GLOBAL_WORKER_CHANNELS.lock().unwrap();
-        let worker_channel_id = map.push(to_worker_receiver) as u32;
+        let worker_channel_id = map.push(Channel {
+            receiver: to_worker_receiver,
+            _sender: from_worker_sender,
+        }) as u32;
 
         (
             Self {
@@ -444,6 +457,7 @@ impl DenoService {
                 activate_endpoint,
                 call_handler,
                 _to_worker: to_worker_sender,
+                _from_worker: from_worker_receiver,
                 worker_channel_id,
                 _read_worker_channel: read_worker_channel,
             },
@@ -674,7 +688,7 @@ fn op_chisel_init_worker(id: u32) {
 
 #[op]
 async fn op_chisel_read_worker_channel(_state: Rc<RefCell<OpState>>) -> Result<()> {
-    let receiver = WORKER_CHANNEL.with(|d| d.get().unwrap().clone());
+    let receiver = WORKER_CHANNEL.with(|d| d.get().unwrap().receiver.clone());
     let _msg = receiver.recv().await.unwrap();
     Ok(())
 }
