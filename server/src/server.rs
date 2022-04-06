@@ -12,7 +12,7 @@ use crate::deno::{activate_endpoint, compile_endpoint};
 use crate::rpc::{GlobalRpcState, RpcService};
 use crate::runtime;
 use crate::runtime::Runtime;
-use crate::secrets::{get_private_key, get_secrets};
+use crate::secrets::get_secrets;
 use crate::types::{Type, OAUTHUSER_TYPE_NAME};
 use crate::JsonObject;
 use anyhow::Result;
@@ -28,7 +28,6 @@ use std::time::Duration;
 use structopt::StructOpt;
 use tokio::task::JoinHandle;
 use tokio::time::sleep;
-use url::Url;
 
 #[derive(StructOpt, Debug, Clone)]
 #[structopt(name = "chiseld", version = env!("VERGEN_GIT_SEMVER_LIGHTWEIGHT"))]
@@ -250,15 +249,8 @@ pub async fn run_shared_state(
     });
 
     let secret_commands = commands2.clone();
-    let secret_location = match std::env::var("CHISEL_SECRET_LOCATION") {
-        Ok(s) => Url::parse(&s)?,
-        Err(_) => {
-            let cwd = std::env::current_dir()?;
-            Url::from_file_path(&cwd.join(".env")).unwrap()
-        }
-    };
 
-    let private_key = get_private_key().await?;
+    // Spawn periodic hot-reload of secrets.  This doesn't load secrets immediately, though.
     let secret_reader = tokio::task::spawn(async move {
         use std::collections::hash_map::DefaultHasher;
         use std::hash::{Hash, Hasher};
@@ -273,7 +265,7 @@ pub async fn run_shared_state(
         let mut last_try_was_failure = false;
         loop {
             sleep(Duration::from_millis(1000)).await;
-            match get_secrets(&secret_location, &private_key).await {
+            match get_secrets().await {
                 Ok(secrets) => {
                     last_try_was_failure = false;
                     let hash = calculate_hash(&secrets);
