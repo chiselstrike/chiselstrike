@@ -52,6 +52,7 @@
 //! object instead and returns a `QueryResults` object, which represents a
 //! stream of query results with *policies applied*.
 
+pub(crate) mod crud;
 mod dbconn;
 pub(crate) mod engine;
 pub(crate) mod expr;

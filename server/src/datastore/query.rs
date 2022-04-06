@@ -1,5 +1,6 @@
 // SPDX-FileCopyrightText: © 2021 ChiselStrike <info@chiselstrike.com>
 
+use crate::datastore::crud;
 use crate::datastore::expr::{BinaryExpr, BinaryOp, Expr, Literal, PropertyAccess};
 use crate::deno::make_field_policies;
 use crate::policies::Policies;
@@ -110,14 +111,14 @@ struct Join {
 
 /// Sorts elements by `field_name` in `ascending` order if true, descending otherwise.
 #[derive(Debug, Clone)]
-struct SortBy {
-    field_name: String,
-    ascending: bool,
+pub(crate) struct SortBy {
+    pub field_name: String,
+    pub ascending: bool,
 }
 
 /// Operators used to mutate the result set.
 #[derive(Debug, Clone, EnumAsInner)]
-enum QueryOp {
+pub(crate) enum QueryOp {
     /// Filters elements by `expression`.
     Filter {
         expression: Expr,
@@ -239,7 +240,48 @@ impl QueryPlan {
         builder
     }
 
-    /// Constructs a query builder from a query `op_chain` and
+    fn from_entity_name(
+        policies: &Policies,
+        ts: &TypeSystem,
+        api_version: &str,
+        userid: &Option<String>,
+        path: &str,
+        entity_name: &str,
+    ) -> Result<Self> {
+        let ty = match ts.lookup_builtin_type(entity_name) {
+            Ok(Type::Object(ty)) => ty,
+            Err(TypeSystemError::NotABuiltinType(_)) => {
+                ts.lookup_custom_type(entity_name, api_version)?
+            }
+            _ => anyhow::bail!("Unexpected type name as select base type: {}", entity_name),
+        };
+
+        let mut builder = Self::new(ty.clone());
+        builder.entity = builder.load_entity(policies, userid, path, &ty);
+        Ok(builder)
+    }
+
+    /// Constructs query plan from CRUD URL query parameters. It parses the query
+    /// string contain within given `url` and loads provided querying parameters
+    /// into the query plan.
+    pub(crate) fn from_crud_url(
+        policies: &Policies,
+        ts: &TypeSystem,
+        api_version: &str,
+        userid: &Option<String>,
+        path: &str,
+        entity_name: &str,
+        url: &str,
+    ) -> Result<Self> {
+        let mut builder =
+            Self::from_entity_name(policies, ts, api_version, userid, path, entity_name)?;
+        let operators = crud::query_str_to_ops(builder.base_type(), url)?;
+        builder.extend_operators(operators);
+
+        Ok(builder)
+    }
+
+    /// Constructs a query plan from a query `op_chain` and
     /// additional helper data like `policies`, `api_version`,
     /// `userid` and `path` (url path used for policy evaluation).
     pub(crate) fn from_op_chain(
@@ -251,21 +293,16 @@ impl QueryPlan {
         op_chain: QueryOpChain,
     ) -> Result<Self> {
         let (entity_name, operators) = convert_ops(op_chain)?;
+        let mut builder =
+            Self::from_entity_name(policies, ts, api_version, userid, path, &entity_name)?;
 
-        let ty = match ts.lookup_builtin_type(&entity_name) {
-            Ok(Type::Object(ty)) => ty,
-            Err(TypeSystemError::NotABuiltinType(_)) => {
-                ts.lookup_custom_type(&entity_name, api_version)?
-            }
-            _ => anyhow::bail!("Unexpected type name as select base type: {}", entity_name),
-        };
-
-        let mut builder = Self::new(ty.clone());
-        builder.entity = builder.load_entity(policies, userid, path, &ty);
-
-        let operators = builder.process_projections(operators);
-        builder.operators.extend(operators);
+        builder.extend_operators(operators);
         Ok(builder)
+    }
+
+    fn extend_operators(&mut self, ops: Vec<QueryOp>) {
+        let ops = self.process_projections(ops);
+        self.operators.extend(ops);
     }
 
     /// Processes Projection Operators, returns the remaining unused operators.

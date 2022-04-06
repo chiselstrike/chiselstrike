@@ -104,7 +104,8 @@ $CURL "$CHISELD_HOST/dev/persons?sort=first_name&limit=2&offset=2" | count_resul
 # CHECK: "last_name": "Draper"
 
 
-$CURL "$CHISELD_HOST/dev/persons?filter=\\{%22age%22:40\\}" # Filtered GET
+$CURL "$CHISELD_HOST/dev/persons?filter=\\{%22age%22:40\\}" | count_results # Filtered GET
+# CHECK: Number of names: 1
 # CHECK: HTTP/1.1 200 OK
 # CHECK: "last_name": "Brown"
 

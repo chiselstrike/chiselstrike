@@ -473,7 +473,7 @@ export class ChiselCursor<T> {
                 try {
                     while (true) {
                         const properties = await Deno.core.opAsync(
-                            "op_chisel_relational_query_next",
+                            "op_chisel_query_next",
                             rid,
                         );
 
@@ -1017,46 +1017,47 @@ export type CRUDCreateResponses<
 };
 
 /**
- * Parses Query Operators out of `params` query string and applies them on a
- * given `entity` creating a `ChiselCursor` which is then returned.
+ * Fetches crud data based on curd `url`.
  */
-function applyQueryOperators(
-    entity: GenericChiselEntityClass,
-    params: URLSearchParams,
-): ChiselCursor<ChiselEntity> {
-    let limitCount, offsetCount;
-    let it = entity.cursor();
-    for (const [opName, value] of Array.from(params)) {
-        if (opName == "filter") { // filter
-            const o = JSON.parse(value);
-            if (o && typeof o === "object") {
-                it = it.filter(o);
-            } else {
-                throw new Error(
-                    `provided search parameter 'filter=${value}' is not a JSON object.`,
-                );
+async function fetchCrudData<T extends ChiselEntity>(
+    type: { new (): T },
+    url: string,
+): Promise<T[]> {
+    const iter = {
+        [Symbol.asyncIterator]: async function* () {
+            const rid = Deno.core.opSync(
+                "op_chisel_crud_query_create",
+                [type.name, url],
+                [
+                    requestContext.apiVersion,
+                    requestContext.path,
+                    requestContext.userId,
+                ],
+            );
+            try {
+                while (true) {
+                    const properties = await Deno.core.opAsync(
+                        "op_chisel_query_next",
+                        rid,
+                    );
+                    if (properties == undefined) {
+                        break;
+                    }
+                    const result = new type();
+                    Object.assign(result, properties);
+                    yield result;
+                }
+            } finally {
+                Deno.core.opSync("op_close", rid);
             }
-        } else if (opName == "sort") {
-            let entityField = value;
-            let ord = "+";
-            if (value[0] == "+" || value[0] == "-") {
-                ord = value[0];
-                entityField = value.substring(1);
-            }
-            it = it.sortBy(entityField as keyof ChiselEntity, ord == "+");
-        } else if (opName == "limit") {
-            limitCount = Number(value);
-        } else if (opName == "offset") {
-            offsetCount = Number(value);
-        }
+        },
+    };
+
+    const arr = [];
+    for await (const t of iter) {
+        arr.push(t);
     }
-    if (offsetCount !== undefined) {
-        it = it.skip(offsetCount);
-    }
-    if (limitCount !== undefined) {
-        it = it.take(limitCount);
-    }
-    return it;
+    return arr;
 }
 
 const defaultCrudMethods: CRUDMethods<ChiselEntity, GenericChiselEntityClass> =
@@ -1074,9 +1075,8 @@ const defaultCrudMethods: CRUDMethods<ChiselEntity, GenericChiselEntityClass> =
                 const u = await entity.findOne({ id });
                 return createResponse(u ?? "Not found", u ? 200 : 404);
             } else {
-                const cursor = applyQueryOperators(entity, url.searchParams);
                 return createResponse(
-                    await cursor.toArray(),
+                    await fetchCrudData(entity, url.href),
                     200,
                 );
             }

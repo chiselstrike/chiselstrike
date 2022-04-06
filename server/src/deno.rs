@@ -199,8 +199,9 @@ fn build_extensions() -> Vec<Extension> {
             op_chisel_store::decl(),
             op_chisel_entity_delete::decl(),
             op_chisel_get_secret::decl(),
+            op_chisel_crud_query_create::decl(),
             op_chisel_relational_query_create::decl(),
-            op_chisel_relational_query_next::decl(),
+            op_chisel_query_next::decl(),
             op_chisel_commit_transaction::decl(),
         ])
         .build()]
@@ -525,6 +526,26 @@ fn op_chisel_get_secret(op_state: &mut OpState, key: String) -> Result<Option<se
 }
 
 #[op]
+fn op_chisel_crud_query_create(
+    op_state: &mut OpState,
+    params: (String, String),
+    info: (String, String, Option<String>),
+) -> Result<ResourceId> {
+    let (entity_name, url) = params;
+    let (api_version, path, userid) = info;
+    let query_plan = QueryPlan::from_crud_url(
+        current_policies(op_state),
+        current_type_system(op_state),
+        &api_version,
+        &userid,
+        &path,
+        &entity_name,
+        &url,
+    )?;
+    create_query(op_state, query_plan)
+}
+
+#[op]
 fn op_chisel_relational_query_create(
     op_state: &mut OpState,
     op_chain: QueryOpChain,
@@ -539,6 +560,10 @@ fn op_chisel_relational_query_create(
         &path,
         op_chain,
     )?;
+    create_query(op_state, query_plan)
+}
+
+fn create_query(op_state: &mut OpState, query_plan: QueryPlan) -> Result<ResourceId> {
     let transaction = current_transaction(op_state)?;
     let query_engine = query_engine(op_state);
     let stream = query_engine.query(transaction, query_plan)?;
@@ -564,7 +589,7 @@ impl Future for QueryNextFuture {
 }
 
 #[op]
-async fn op_chisel_relational_query_next(
+async fn op_chisel_query_next(
     state: Rc<RefCell<OpState>>,
     query_stream_rid: ResourceId,
 ) -> Result<Option<ResultRow>> {
