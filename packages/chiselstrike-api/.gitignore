@@ -1,3 +1,4 @@
 node_modules
 /lib/chisel.d.ts
 /lib/chisel.js
+yarn.lock
