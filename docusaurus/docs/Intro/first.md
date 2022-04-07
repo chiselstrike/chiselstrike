@@ -27,7 +27,15 @@ step will also install all our dependencies.
 npx create-chiselstrike-app my-backend
 ```
 
-Note: You need Node 14.18.0 or later installed to successfully run the command.
+:::tip Node Version?
+You need Node 14.18.0 or later installed to successfully run the command.
+:::
+
+:::info Are you on Windows??
+At the moment, ChiselStrike is supported on Windows through WSL.
+Aside from that, on WSL2 you should create your project in an ext4 filesystem (like the `$HOME` folder) to support hot reloading
+of endpoints. See details [here](https://stackoverflow.com/a/70275534)
+:::
 
 Output will look something like this:
 
