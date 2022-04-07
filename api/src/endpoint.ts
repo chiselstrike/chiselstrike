@@ -90,11 +90,20 @@ export async function activateEndpoint(path: string) {
     });
 }
 
-export async function callHandler(path: string, apiVersion: string) {
+export function endOfRequest(id: number) {
+    endpointWorker.postMessage({ cmd: "endOfRequest", id });
+}
+
+export async function callHandler(
+    path: string,
+    apiVersion: string,
+    id: number,
+) {
     const res = await toWorker({
         cmd: "callHandler",
         path,
         apiVersion,
+        id,
     }) as { body?: number; status: number; headers: number };
 
     // The read function is called repeatedly until it return

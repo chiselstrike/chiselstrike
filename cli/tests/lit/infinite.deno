@@ -1,0 +1,44 @@
+# SPDX-FileCopyrightText: © 2022 ChiselStrike <info@chiselstrike.com>
+
+# RUN: sh -e @file
+
+cat << EOF > "$TEMPDIR/endpoints/hello.js"
+export default async function chisel(req: Request) {
+    return new Response("HELLO\n");
+}
+EOF
+
+cat << EOF > "$TEMPDIR/endpoints/inf.js"
+export default async function chisel(req: Request) {
+    let stream = new ReadableStream({
+        async pull(controller) {
+            let msg = "foo";
+            const textEncoder = new TextEncoder();
+            const utf8 = new Uint8Array(msg.length);
+            textEncoder.encodeInto(msg, utf8);
+            controller.enqueue(utf8);
+        }
+    })
+
+    return new Response(stream);
+}
+EOF
+
+cd "$TEMPDIR"
+
+$CHISEL apply
+
+$CURL  $CHISELD_HOST/dev/inf&
+pid=$!
+
+# Sleep a bit to try to give the server time to start processing the
+# above request. If the sleep is too short, this test will pass, but
+# not test anything.
+sleep 1
+
+kill $pid
+
+$CURL $CHISELD_HOST/dev/hello
+
+# CHECK: HTTP/1.1 200 OK
+# CHECK: HELLO
