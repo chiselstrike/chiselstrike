@@ -27,8 +27,7 @@ done
 
 version=$(git describe --tags 2> /dev/null || git rev-parse --short HEAD)
 rustup target add "$target"
-# FIXME: Use default job-level parallelism when the "bad archive" problem discussed in https://github.com/chiselstrike/chiselstrike/issues/777 is resolved.
-cargo build --release --target "$target" -j1
+cargo build --release --target "$target"
 mkdir -p "builds/$program-$target"
 for file in ${files[@]}
 do
