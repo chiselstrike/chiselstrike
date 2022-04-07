@@ -203,6 +203,7 @@ fn build_extensions() -> Vec<Extension> {
             op_chisel_relational_query_create::decl(),
             op_chisel_query_next::decl(),
             op_chisel_commit_transaction::decl(),
+            op_chisel_rollback_transaction::decl(),
         ])
         .build()]
 }
@@ -802,11 +803,9 @@ fn current_transaction(st: &OpState) -> Result<TransactionStatic> {
         .ok_or_else(|| anyhow!("no active transaction"))
 }
 
-async fn take_current_transaction() -> Option<TransactionStatic> {
-    with_op_state(|state| {
-        // FIXME: Return a Result once all concurrency issues are fixed.
-        state.try_take()
-    })
+fn take_current_transaction(state: &mut OpState) -> Option<TransactionStatic> {
+    // FIXME: We should always have a transaction in here
+    state.try_take::<TransactionStatic>()
 }
 
 async fn set_current_transaction(transaction: TransactionStatic) {
@@ -970,8 +969,7 @@ async fn get_result(
 async fn op_chisel_commit_transaction(state: Rc<RefCell<OpState>>) -> Result<()> {
     let transaction = {
         let mut state = state.borrow_mut();
-        // FIXME: We should always have a transaction in here
-        match state.try_take::<TransactionStatic>() {
+        match take_current_transaction(&mut state) {
             Some(v) => v,
             None => return Ok(()),
         }
@@ -980,7 +978,21 @@ async fn op_chisel_commit_transaction(state: Rc<RefCell<OpState>>) -> Result<()>
     Ok(())
 }
 
-async fn run_js_impl(path: String, req: Request<hyper::Body>) -> Result<Response<Body>> {
+#[op]
+fn op_chisel_rollback_transaction(state: &mut OpState) -> Result<()> {
+    // Drop the transaction, causing it to rollback.
+    take_current_transaction(state);
+    Ok(())
+}
+
+pub(crate) async fn run_js(path: String, req: Request<hyper::Body>) -> Result<Response<Body>> {
+    // FIXME: maybe defer creating the transaction until we need one, to avoid doing it for
+    // endpoints that don't do any data access. For now, because we always create it above,
+    // it should be safe to unwrap.
+    let qe = query_engine_arc();
+    let transaction = qe.start_transaction_static().await?;
+    set_current_transaction(transaction).await;
+
     let path = RequestPath::try_from(path.as_ref()).unwrap();
     let userid = crate::auth::get_user(&req).await?;
     {
@@ -1053,21 +1065,6 @@ async fn run_js_impl(path: String, req: Request<hyper::Body>) -> Result<Response
     };
 
     Ok(body)
-}
-
-pub(crate) async fn run_js(path: String, req: Request<hyper::Body>) -> Result<Response<Body>> {
-    // FIXME: maybe defer creating the transaction until we need one, to avoid doing it for
-    // endpoints that don't do any data access. For now, because we always create it above,
-    // it should be safe to unwrap.
-    let qe = query_engine_arc();
-    let transaction = qe.start_transaction_static().await?;
-    set_current_transaction(transaction).await;
-    let res = run_js_impl(path, req).await;
-    if res.is_err() {
-        // Drop the transaction, causing it to rollback.
-        take_current_transaction().await;
-    }
-    res
 }
 
 fn get() -> RcMut<DenoService> {

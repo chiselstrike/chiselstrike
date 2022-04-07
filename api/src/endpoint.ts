@@ -55,7 +55,38 @@ export function activateEndpoint(path: string) {
     delete nextHandlers[path];
 }
 
-export async function callHandler(
+async function rollback_on_failure<T>(func: () => Promise<T>): Promise<T> {
+    try {
+        return await func();
+    } catch (e) {
+        Deno.core.opSync("op_chisel_rollback_transaction");
+        throw e;
+    }
+}
+
+export function callHandler(
+    userid: string | undefined,
+    path: string,
+    apiVersion: string,
+    url: string,
+    method: string,
+    headers: HeadersInit,
+    rid?: number,
+) {
+    return rollback_on_failure(() => {
+        return callHandlerImpl(
+            userid,
+            path,
+            apiVersion,
+            url,
+            method,
+            headers,
+            rid,
+        );
+    });
+}
+
+async function callHandlerImpl(
     userid: string | undefined,
     path: string,
     apiVersion: string,
@@ -97,13 +128,15 @@ export async function callHandler(
     }
     const reader = res.body?.getReader();
     const read = reader
-        ? async function () {
-            const v = await reader.read();
-            if (v.done) {
-                await Deno.core.opAsync("op_chisel_commit_transaction");
-                return undefined;
-            }
-            return v.value;
+        ? function () {
+            return rollback_on_failure(async () => {
+                const v = await reader.read();
+                if (v.done) {
+                    await Deno.core.opAsync("op_chisel_commit_transaction");
+                    return undefined;
+                }
+                return v.value;
+            });
         }
         : undefined;
     return {
