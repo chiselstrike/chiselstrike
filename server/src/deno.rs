@@ -59,8 +59,10 @@ use hyper::Uri;
 use hyper::{Request, Response, StatusCode};
 use log::debug;
 use once_cell::unsync::OnceCell;
+use pin_project::pin_project;
 use serde_derive::Deserialize;
 use serde_derive::Serialize;
+use std::cell::Cell;
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::convert::TryInto;
@@ -126,6 +128,7 @@ struct DenoService {
     activate_endpoint: v8::Global<v8::Function>,
     call_handler: v8::Global<v8::Function>,
     read_worker_channel: v8::Global<v8::Function>,
+    end_of_request: v8::Global<v8::Function>,
 
     to_worker: Sender<WorkerMsg>,
     worker_channel_id: u32,
@@ -419,7 +422,14 @@ impl DenoService {
             .await
             .unwrap();
 
-        let (import_endpoint, activate_endpoint, call_handler, init_worker, read_worker_channel) = {
+        let (
+            import_endpoint,
+            activate_endpoint,
+            call_handler,
+            init_worker,
+            read_worker_channel,
+            end_of_request,
+        ) = {
             let runtime = &mut worker.js_runtime;
             let promise = runtime
                 .execute_script(main_path, &format!("import(\"file://{}\")", endpoint_path))
@@ -442,6 +452,9 @@ impl DenoService {
             let read_worker_channel: v8::Local<v8::Function> =
                 get_member(module, scope, "readWorkerChannel").unwrap();
             let read_worker_channel = v8::Global::new(scope, read_worker_channel);
+            let end_of_request: v8::Local<v8::Function> =
+                get_member(module, scope, "endOfRequest").unwrap();
+            let end_of_request = v8::Global::new(scope, end_of_request);
 
             (
                 import_endpoint,
@@ -449,6 +462,7 @@ impl DenoService {
                 call_handler,
                 init_worker,
                 read_worker_channel,
+                end_of_request,
             )
         };
 
@@ -467,6 +481,7 @@ impl DenoService {
                 to_worker: to_worker_sender,
                 worker_channel_id,
                 read_worker_channel,
+                end_of_request,
             },
             init_worker,
         )
@@ -1120,6 +1135,41 @@ struct ResponseParts {
     headers: Vec<(String, String)>,
 }
 
+struct RequestHandler {
+    id: u32,
+}
+
+impl Drop for RequestHandler {
+    fn drop(&mut self) {
+        let mut service = get();
+        let service: &mut DenoService = &mut service;
+        let runtime = &mut service.worker.js_runtime;
+        let scope = &mut runtime.handle_scope();
+        let end_of_request = service.end_of_request.open(scope);
+        let undefined = v8::undefined(scope).into();
+        let id = v8::Number::new(scope, self.id as f64).into();
+        end_of_request.call(scope, undefined, &[id]).unwrap();
+    }
+}
+
+#[pin_project]
+struct EndReqStream<S> {
+    #[pin]
+    inner: S,
+    req: RequestHandler,
+}
+
+impl<S> Stream for EndReqStream<S>
+where
+    S: Stream,
+{
+    type Item = S::Item;
+
+    fn poll_next(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Option<Self::Item>> {
+        self.project().inner.poll_next(cx)
+    }
+}
+
 // FIXME: It would probably be cleaner to move more of this to
 // javascript.
 async fn special_response(
@@ -1215,6 +1265,17 @@ async fn op_chisel_auth_user(
 }
 
 pub(crate) async fn run_js(path: String, req: Request<hyper::Body>) -> Result<Response<Body>> {
+    thread_local! {
+        static NEXT_REQUEST_ID: Cell<u32> = Cell::new(0);
+    }
+
+    let id = NEXT_REQUEST_ID.with(|x| {
+        let v = x.get();
+        x.set(v + 1);
+        v
+    });
+    let request_handler = RequestHandler { id };
+
     {
         let mut service = get();
         if service.inspector.is_some() {
@@ -1239,8 +1300,9 @@ pub(crate) async fn run_js(path: String, req: Request<hyper::Body>) -> Result<Re
         let undefined = v8::undefined(scope).into();
         let api_version = v8::String::new(scope, path.api_version()).unwrap().into();
         let path = v8::String::new(scope, path.path()).unwrap().into();
+        let id = v8::Number::new(scope, id as f64).into();
         let result = call_handler
-            .call(scope, undefined, &[path, api_version])
+            .call(scope, undefined, &[path, api_version, id])
             .unwrap();
         v8::Global::new(scope, result)
     };
@@ -1273,6 +1335,10 @@ pub(crate) async fn run_js(path: String, req: Request<hyper::Body>) -> Result<Re
 
         let runtime = &mut service.worker.js_runtime;
         let stream = get_read_stream(runtime, result.clone())?;
+        let stream = EndReqStream {
+            inner: stream,
+            req: request_handler,
+        };
 
         let scope = &mut runtime.handle_scope();
         let response = result

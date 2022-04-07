@@ -141,10 +141,13 @@ function closeResources() {
     }
 }
 
+let currentRequestId: number | undefined;
 async function callHandlerImpl(
     path: string,
     apiVersion: string,
+    id: number,
 ) {
+    currentRequestId = id;
     requestContext.apiVersion = apiVersion;
     requestContext.path = path;
 
@@ -194,9 +197,13 @@ async function callHandlerImpl(
     let body = undefined;
     if (reader) {
         const arrays = [];
-        for (;;) {
+        for (let i = 0;; i += 1) {
             const v = await reader.read();
-            if (v.done) {
+            // FIXME: Is this the correct way to yield in async JS?
+            if (i % 16 == 0) {
+                await new Promise((resolve) => setTimeout(resolve, 0));
+            }
+            if (v.done || currentRequestId === undefined) {
                 break;
             }
             arrays.push(v.value);
@@ -213,15 +220,23 @@ async function callHandlerImpl(
 function callHandler(
     path: string,
     apiVersion: string,
+    id: number,
 ) {
     handleMsg(() => {
         return rollback_on_failure(() => {
             return callHandlerImpl(
                 path,
                 apiVersion,
+                id,
             );
         });
     });
+}
+
+function endOfRequest(id: number) {
+    if (id == currentRequestId) {
+        currentRequestId = undefined;
+    }
 }
 
 onmessage = function (e) {
@@ -243,7 +258,11 @@ onmessage = function (e) {
             callHandler(
                 d.path,
                 d.apiVersion,
+                d.id,
             );
+            break;
+        case "endOfRequest":
+            endOfRequest(d.id);
             break;
         default:
             throw new Error("unknown command");
