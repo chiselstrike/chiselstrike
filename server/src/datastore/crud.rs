@@ -150,3 +150,147 @@ fn convert_json_to_filter_expr(base_type: &Arc<ObjectType>, value: &str) -> Resu
     }
     Ok(filter_expr)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::types::{Field, FieldDescriptor, ObjectDescriptor};
+
+    use itertools::Itertools;
+
+    pub(crate) struct FakeField {
+        name: &'static str,
+        ty_: Type,
+    }
+
+    impl FieldDescriptor for FakeField {
+        fn name(&self) -> String {
+            self.name.to_string()
+        }
+        fn id(&self) -> Option<i32> {
+            None
+        }
+        fn ty(&self) -> Type {
+            self.ty_.clone()
+        }
+        fn api_version(&self) -> String {
+            "whatever".to_string()
+        }
+    }
+
+    pub(crate) struct FakeObject {
+        name: &'static str,
+    }
+
+    impl ObjectDescriptor for FakeObject {
+        fn name(&self) -> String {
+            self.name.to_string()
+        }
+        fn id(&self) -> Option<i32> {
+            None
+        }
+        fn backing_table(&self) -> String {
+            "whatever".to_string()
+        }
+        fn api_version(&self) -> String {
+            "whatever".to_string()
+        }
+    }
+
+    fn make_field(name: &'static str, type_: Type) -> Field {
+        let d = FakeField { name, ty_: type_ };
+        Field::new(d, vec![], None, false, false)
+    }
+
+    fn make_obj(name: &'static str, fields: Vec<Field>) -> Arc<ObjectType> {
+        let d = FakeObject { name };
+        Arc::new(ObjectType::new(d, fields).unwrap())
+    }
+
+    fn url(query_string: &str) -> String {
+        format!("http://xxx?{}", query_string)
+    }
+
+    #[test]
+    fn test_query_str_to_ops() {
+        let base_type = make_obj(
+            "Person",
+            vec![
+                make_field("name", Type::String),
+                make_field("age", Type::Float),
+            ],
+        );
+        {
+            let ops = query_str_to_ops(&base_type, &url("limit=2")).unwrap();
+            assert!(ops.len() == 1);
+            let op = ops.first().unwrap();
+            assert!(matches!(op, QueryOp::Take { count: 2 }));
+        }
+        {
+            let ops = query_str_to_ops(&base_type, &url("offset=3")).unwrap();
+            assert!(ops.len() == 1);
+            let op = ops.first().unwrap();
+            assert!(matches!(op, QueryOp::Skip { count: 3 }));
+        }
+        {
+            let ops1 = query_str_to_ops(&base_type, &url("sort=age")).unwrap();
+            assert_eq!(
+                ops1,
+                vec![QueryOp::SortBy(SortBy {
+                    field_name: "age".into(),
+                    ascending: true
+                })]
+            );
+            let ops2 = query_str_to_ops(&base_type, &url("sort=%2Bage")).unwrap();
+            assert_eq!(ops1, ops2);
+            let ops3 = query_str_to_ops(&base_type, &url("sort=-age")).unwrap();
+            assert_eq!(
+                ops3,
+                vec![QueryOp::SortBy(SortBy {
+                    field_name: "age".into(),
+                    ascending: false
+                })]
+            );
+        }
+        {
+            let raw_ops = vec!["limit=3", "offset=7", "sort=age"];
+            for perm in raw_ops.iter().permutations(raw_ops.len()) {
+                let query_string = perm.iter().join("&");
+                let ops1 = query_str_to_ops(&base_type, &url(&query_string)).unwrap();
+                assert_eq!(
+                    ops1,
+                    vec![
+                        QueryOp::SortBy(SortBy {
+                            field_name: "age".into(),
+                            ascending: true
+                        }),
+                        QueryOp::Skip { count: 7 },
+                        QueryOp::Take { count: 3 },
+                    ]
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn test_query_str_to_ops_errors() {
+        let base_type = make_obj(
+            "Person",
+            vec![
+                make_field("name", Type::String),
+                make_field("age", Type::Float),
+            ],
+        );
+        assert!(query_str_to_ops(&base_type, &url("limit=two")).is_err());
+        assert!(query_str_to_ops(&base_type, &url("limit=true")).is_err());
+
+        assert!(query_str_to_ops(&base_type, &url("offset=two")).is_err());
+        assert!(query_str_to_ops(&base_type, &url("offset=true")).is_err());
+
+        assert!(query_str_to_ops(&base_type, &url("sort=age1")).is_err());
+        assert!(query_str_to_ops(&base_type, &url("sort=%2Bnotname")).is_err());
+        assert!(query_str_to_ops(&base_type, &url("sort=-notname")).is_err());
+        assert!(query_str_to_ops(&base_type, &url("sort=--age")).is_err());
+        assert!(query_str_to_ops(&base_type, &url("sort=age aa")).is_err());
+    }
+}

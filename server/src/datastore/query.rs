@@ -110,6 +110,7 @@ struct Join {
 }
 
 /// Sorts elements by `field_name` in `ascending` order if true, descending otherwise.
+#[cfg_attr(test, derive(PartialEq))]
 #[derive(Debug, Clone)]
 pub(crate) struct SortBy {
     pub field_name: String,
@@ -117,6 +118,7 @@ pub(crate) struct SortBy {
 }
 
 /// Operators used to mutate the result set.
+#[cfg_attr(test, derive(PartialEq))]
 #[derive(Debug, Clone, EnumAsInner)]
 pub(crate) enum QueryOp {
     /// Filters elements by `expression`.

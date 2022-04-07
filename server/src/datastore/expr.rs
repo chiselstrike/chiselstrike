@@ -1,6 +1,7 @@
 use serde_derive::{Deserialize, Serialize};
 
 /// An expression.
+#[cfg_attr(test, derive(PartialEq))]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "exprType")]
 pub(crate) enum Expr {
@@ -33,6 +34,7 @@ impl From<PropertyAccess> for Expr {
 }
 
 /// Various literals.
+#[cfg_attr(test, derive(PartialEq))]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(untagged)]
 pub(crate) enum Literal {
@@ -90,6 +92,7 @@ impl From<Option<Literal>> for Literal {
 }
 
 /// Expression of a property access on an Entity
+#[cfg_attr(test, derive(PartialEq))]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub(crate) struct PropertyAccess {
     /// Name of a property that will be accessed.
@@ -101,6 +104,7 @@ pub(crate) struct PropertyAccess {
 }
 
 /// A binary operator.
+#[cfg_attr(test, derive(PartialEq))]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub(crate) enum BinaryOp {
     Eq,
@@ -133,6 +137,7 @@ impl BinaryOp {
 }
 
 /// A binary expression.
+#[cfg_attr(test, derive(PartialEq))]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub(crate) struct BinaryExpr {
     pub left: Box<Expr>,
