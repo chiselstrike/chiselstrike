@@ -839,7 +839,7 @@ pub(crate) async fn set_query_engine(query_engine: Arc<QueryEngine>) {
     });
 }
 
-pub(crate) fn query_engine_arc() -> Arc<QueryEngine> {
+pub(crate) async fn query_engine_arc() -> Arc<QueryEngine> {
     with_op_state(|state| query_engine(state).clone())
 }
 

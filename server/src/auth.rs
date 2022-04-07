@@ -46,7 +46,7 @@ pub(crate) async fn get_oauth_user_type() -> Result<Arc<ObjectType>> {
 async fn insert_user_into_db(username: &str) -> Result<String> {
     let oauth_user_type = get_oauth_user_type().await?;
     let mut user = JsonObject::new();
-    let query_engine = query_engine_arc();
+    let query_engine = query_engine_arc().await;
     match query_engine
         .fetch_one(SqlWithArguments {
             sql: format!(
@@ -139,7 +139,7 @@ pub(crate) async fn get_username(req: &Request<hyper::Body>) -> Option<String> {
         }
     };
 
-    let qeng = query_engine_arc();
+    let qeng = query_engine_arc().await;
 
     let user_type = crate::auth::get_oauth_user_type().await;
     match (userid, user_type) {
