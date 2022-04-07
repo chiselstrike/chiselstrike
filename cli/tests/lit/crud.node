@@ -104,12 +104,45 @@ $CURL "$CHISELD_HOST/dev/persons?sort=first_name&limit=2&offset=2" | count_resul
 # CHECK: "last_name": "Draper"
 
 
-$CURL "$CHISELD_HOST/dev/persons?filter=\\{%22age%22:40\\}" | count_results # Filtered GET
+## Test filtering
+
+$CURL "$CHISELD_HOST/dev/persons?.last_name=Brown" | count_results
 # CHECK: Number of names: 1
 # CHECK: HTTP/1.1 200 OK
 # CHECK: "last_name": "Brown"
 
-id=`$CURL "$CHISELD_HOST/dev/persons?filter=\\{%22age%22:10\\}" | sed -ne 's/.*"id":[[:space:]]*"\([^"]*\).*/\1/p'`
+$CURL "$CHISELD_HOST/dev/persons?.age=50" | count_results
+# CHECK: Number of names: 1
+# CHECK: HTTP/1.1 200 OK
+# CHECK: "last_name": "Elgin"
+
+$CURL "$CHISELD_HOST/dev/persons?.human=true" | count_results
+# CHECK: Number of names: 5
+
+$CURL "$CHISELD_HOST/dev/persons?.human=false" | count_results
+# CHECK: HTTP/1.1 200 OK
+# CHECK: Number of names: 0
+
+$CURL "$CHISELD_HOST/dev/persons?.human=true&.height=7" | count_results
+# CHECK: Number of names: 1
+# CHECK: HTTP/1.1 200 OK
+# CHECK: "last_name": "Draper"
+
+$CURL "$CHISELD_HOST/dev/persons?sort=last_name&.age~lte=30&.height~gte=8" | count_results
+# CHECK: Number of names: 2
+# CHECK: HTTP/1.1 200 OK
+# CHECK: "last_name": "Anderson"
+# CHECK: "last_name": "Chong"
+
+## Filters all whose last name ends with `n`.
+$CURL "$CHISELD_HOST/dev/persons?sort=last_name&.last_name~like=%25n" | count_results
+# CHECK: Number of names: 3
+# CHECK: HTTP/1.1 200 OK
+# CHECK: "last_name": "Anderson"
+# CHECK: "last_name": "Brown"
+# CHECK: "last_name": "Elgin"
+
+id=`$CURL "$CHISELD_HOST/dev/persons?.age=10" | sed -ne 's/.*"id":[[:space:]]*"\([^"]*\).*/\1/p'`
 $CURL $CHISELD_HOST/dev/persons/$id # GET by id
 # CHECK: HTTP/1.1 200 OK
 # CHECK: "first_name": "Dawn"
@@ -122,9 +155,11 @@ $CURL -X DELETE $CHISELD_HOST/dev/persons/$id # DELETE by id
 $CURL $CHISELD_HOST/dev/persons/$id
 # CHECK: HTTP/1.1 404 Not Found
 # CHECK: Not found
-$CURL "$CHISELD_HOST/dev/persons?filter=\\{%22age%22:10\\}"
+$CURL "$CHISELD_HOST/dev/persons?.age=10"
 # CHECK: HTTP/1.1 200 OK
 # CHECK: []
+
+## Test deletion with filter
 
 $CURL -X DELETE "$CHISELD_HOST/dev/persons?filter=\\{%22age%22:40\\}" # Filtered DELETE
 # CHECK: HTTP/1.1 200 OK
