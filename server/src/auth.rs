@@ -35,7 +35,7 @@ fn bad_request(msg: String) -> Response<Body> {
         .unwrap()
 }
 
-pub(crate) fn get_oauth_user_type() -> Result<Arc<ObjectType>> {
+pub(crate) async fn get_oauth_user_type() -> Result<Arc<ObjectType>> {
     match lookup_builtin_type(OAUTHUSER_TYPE_NAME) {
         Ok(Type::Object(t)) => Ok(t),
         _ => anyhow::bail!("Internal error: type {} not found", OAUTHUSER_TYPE_NAME),
@@ -44,7 +44,7 @@ pub(crate) fn get_oauth_user_type() -> Result<Arc<ObjectType>> {
 
 /// Upserts username into OAuthUser type, returning its ID.
 async fn insert_user_into_db(username: &str) -> Result<String> {
-    let oauth_user_type = get_oauth_user_type()?;
+    let oauth_user_type = get_oauth_user_type().await?;
     let mut user = JsonObject::new();
     let query_engine = query_engine_arc();
     match query_engine
@@ -141,7 +141,7 @@ pub(crate) async fn get_username(req: &Request<hyper::Body>) -> Option<String> {
 
     let qeng = query_engine_arc();
 
-    let user_type = crate::auth::get_oauth_user_type();
+    let user_type = crate::auth::get_oauth_user_type().await;
     match (userid, user_type) {
         (None, _) => None,
         (Some(_), Err(e)) => {
