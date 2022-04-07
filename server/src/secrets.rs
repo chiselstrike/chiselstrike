@@ -107,14 +107,19 @@ pub(crate) async fn get_private_key() -> Result<Option<RsaPrivateKey>> {
     get_pkcs8_private_key(&pem).with_context(|| format!("Could not read private key at {}", url))
 }
 
-pub(crate) async fn get_secrets(
-    secret_location: &Url,
-    private_key: &Option<RsaPrivateKey>,
-) -> Result<String> {
-    let data = read_url(secret_location).await?;
+pub(crate) async fn get_secrets() -> Result<String> {
+    let secret_location = match std::env::var("CHISEL_SECRET_LOCATION") {
+        Ok(s) => Url::parse(&s)?,
+        Err(_) => {
+            let cwd = std::env::current_dir()?;
+            Url::from_file_path(&cwd.join(".env")).unwrap()
+        }
+    };
+    let private_key = get_private_key().await?;
+    let data = read_url(&secret_location).await?;
     match private_key {
         None => Ok(data),
-        Some(private_key) => decrypt(private_key, &data),
+        Some(private_key) => decrypt(&private_key, &data),
     }
 }
 

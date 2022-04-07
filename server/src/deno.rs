@@ -794,6 +794,10 @@ fn current_secrets(st: &OpState) -> Option<&JsonObject> {
     st.try_borrow()
 }
 
+pub(crate) fn get_secret<S: AsRef<str>>(name: S) -> Option<serde_json::Value> {
+    with_op_state(|state| current_secrets(state).and_then(|sec| sec.get(name.as_ref()).cloned()))
+}
+
 fn set_current_secrets(st: &mut OpState, secrets: JsonObject) {
     st.put(secrets);
 }
