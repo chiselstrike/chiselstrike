@@ -20,6 +20,8 @@ cat << EOF > "$TEMPDIR/endpoints/stream.js"
 import { Data } from "../models/types.ts";
 
 export default async function chisel(req: Request) {
+    const options = await req.json();
+    let only_one = options.only_one;
     const promises = [];
     for (let i = 0; i < 10; i += 1) {
         promises.push(Data.build({ 'num': i}).save());
@@ -28,11 +30,14 @@ export default async function chisel(req: Request) {
 
     let cursor = Data.cursor();
     let asyncIter = cursor[Symbol.asyncIterator]();
+    let read_one = false;
     let stream = new ReadableStream({
         async pull(controller) {
             let item = await asyncIter.next();
             let string;
-            if (item.done) {
+            const done = item.done || (only_one && read_one);
+            read_one = true;
+            if (done) {
                 string = '\n';
             } else {
                 string = String(item.value.num);
@@ -41,7 +46,7 @@ export default async function chisel(req: Request) {
             const utf8 = new Uint8Array(string.length);
             textEncoder.encodeInto(string, utf8);
             controller.enqueue(utf8);
-            if (item.done) {
+            if (done) {
                 controller.close();
             }
         }
@@ -55,6 +60,10 @@ cd "$TEMPDIR"
 
 $CHISEL apply
 
-$CURL --data '' $CHISELD_HOST/dev/stream
+$CURL --data '{"only_one":false}' $CHISELD_HOST/dev/stream
 
 # CHECK: 0123456789
+
+$CURL --data '{"only_one":true}' $CHISELD_HOST/dev/stream
+
+# CHECK: 0
