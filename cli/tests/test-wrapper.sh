@@ -22,7 +22,7 @@ fi
 cd $cwd
 
 if [ "x$TEST_DATABASE" == "xpostgres" ]; then
-    DATADB="datadb_$(echo $RANDOM | shasum | head -c 40)"
+    DATADB="datadb_$(uuidgen | shasum | head -c 40)"
 
     psql "$DATABASE_URL_PREFIX" -c "CREATE DATABASE $DATADB"
 
