@@ -182,6 +182,14 @@ async function callHandlerImpl(
         body = concat(arrays);
     }
     const status = res.status;
+
+    const resources = Deno.core.resources();
+    for (const k in resources) {
+        if (parseInt(k) > 2) {
+            Deno.core.opSync("op_close", k);
+        }
+    }
+
     await Deno.core.opAsync("op_chisel_commit_transaction");
     return { body, status, headers: resHeaders };
 }
