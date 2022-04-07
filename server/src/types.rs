@@ -563,6 +563,10 @@ impl ObjectType {
         self.all_fields().any(|f| f.name == field_name)
     }
 
+    pub(crate) fn get_field(&self, field_name: &str) -> Option<&Field> {
+        self.all_fields().find(|f| f.name == field_name)
+    }
+
     pub(crate) fn backing_table(&self) -> &str {
         &self.backing_table
     }
