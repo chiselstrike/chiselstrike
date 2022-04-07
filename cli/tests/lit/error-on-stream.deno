@@ -1,0 +1,23 @@
+# SPDX-FileCopyrightText: © 2022 ChiselStrike <info@chiselstrike.com>
+
+# RUN: sh -e @file
+
+cat << EOF > "$TEMPDIR/endpoints/stream.js"
+export default async function chisel(req: Request) {
+    let stream = new ReadableStream({
+        pull(controller) {
+          throw new Error("failed stream");
+        }
+    })
+
+    return new Response(stream);
+}
+EOF
+
+cd "$TEMPDIR"
+
+$CHISEL apply
+
+$CURL $CHISELD_HOST/dev/stream 2>&1 || true
+
+# CHECK: Empty reply from server
