@@ -36,7 +36,7 @@ fn bad_request(msg: String) -> Response<Body> {
 }
 
 pub(crate) async fn get_oauth_user_type() -> Result<Arc<ObjectType>> {
-    match lookup_builtin_type(OAUTHUSER_TYPE_NAME) {
+    match lookup_builtin_type(OAUTHUSER_TYPE_NAME).await {
         Ok(Type::Object(t)) => Ok(t),
         _ => anyhow::bail!("Internal error: type {} not found", OAUTHUSER_TYPE_NAME),
     }

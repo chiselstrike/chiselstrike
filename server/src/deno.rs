@@ -843,7 +843,7 @@ pub(crate) fn query_engine_arc() -> Arc<QueryEngine> {
     with_op_state(|state| query_engine(state).clone())
 }
 
-pub(crate) fn lookup_builtin_type(type_name: &str) -> Result<Type, TypeSystemError> {
+pub(crate) async fn lookup_builtin_type(type_name: &str) -> Result<Type, TypeSystemError> {
     with_op_state(|state| {
         let type_system = current_type_system(state);
         type_system.lookup_builtin_type(type_name)
