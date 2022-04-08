@@ -147,7 +147,7 @@ impl RpcService {
         let version = api_version.clone();
 
         let cmd = send_command!({
-            remove_type_version(&version);
+            remove_type_version(&version).await;
 
             mutate_policies(move |policies| {
                 policies.versions.remove(&version);

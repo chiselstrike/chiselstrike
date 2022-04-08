@@ -817,12 +817,8 @@ fn current_secrets(st: &OpState) -> Option<&JsonObject> {
     st.try_borrow()
 }
 
-pub(crate) fn get_secret<S: AsRef<str>>(name: S) -> Option<serde_json::Value> {
-    with_op_state(|state| current_secrets(state).and_then(|sec| sec.get(name.as_ref()).cloned()))
-}
-
-fn set_current_secrets(st: &mut OpState, secrets: JsonObject) {
-    st.put(secrets);
+pub(crate) async fn get_secret(name: &str) -> Option<serde_json::Value> {
+    with_op_state(|state| current_secrets(state).and_then(|sec| sec.get(name).cloned()))
 }
 
 fn current_type_system(st: &OpState) -> &TypeSystem {
@@ -843,18 +839,18 @@ pub(crate) async fn set_query_engine(query_engine: Arc<QueryEngine>) {
     });
 }
 
-pub(crate) fn query_engine_arc() -> Arc<QueryEngine> {
+pub(crate) async fn query_engine_arc() -> Arc<QueryEngine> {
     with_op_state(|state| query_engine(state).clone())
 }
 
-pub(crate) fn lookup_builtin_type(type_name: &str) -> Result<Type, TypeSystemError> {
+pub(crate) async fn lookup_builtin_type(type_name: &str) -> Result<Type, TypeSystemError> {
     with_op_state(|state| {
         let type_system = current_type_system(state);
         type_system.lookup_builtin_type(type_name)
     })
 }
 
-pub(crate) fn remove_type_version(version: &str) {
+pub(crate) async fn remove_type_version(version: &str) {
     with_op_state(|state| {
         let type_system = current_type_system_mut(state);
         type_system.versions.remove(version);
@@ -867,9 +863,9 @@ pub(crate) async fn set_type_system(type_system: TypeSystem) {
     });
 }
 
-pub(crate) fn update_secrets(secrets: JsonObject) {
+pub(crate) async fn update_secrets(secrets: JsonObject) {
     with_op_state(|state| {
-        set_current_secrets(state, secrets);
+        state.put(secrets);
     })
 }
 

@@ -115,7 +115,7 @@ async fn run(state: SharedState, mut cmd: ExecutorChannel) -> Result<()> {
     if let Ok(secrets) = get_secrets().await {
         match serde_json::from_str(&secrets) {
             Err(e) => warn!("Could not read secrets: {:?}", e),
-            Ok(json) => update_secrets(json),
+            Ok(json) => update_secrets(json).await,
         }
     }
 
@@ -292,7 +292,7 @@ pub async fn run_shared_state(
                     for cmd in &secret_commands {
                         let v = val.clone();
                         let payload = send_command!({
-                            update_secrets(v);
+                            update_secrets(v).await;
                             Ok(())
                         });
                         cmd.send(payload).await.unwrap();

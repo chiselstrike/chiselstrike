@@ -157,7 +157,7 @@ impl ApiService {
             }
 
             let auth_header = req.headers().get("ChiselAuth");
-            let expected_secret = crate::deno::get_secret("CHISEL_API_AUTH_SECRET");
+            let expected_secret = crate::deno::get_secret("CHISEL_API_AUTH_SECRET").await;
             match (expected_secret, auth_header) {
                 (Some(_), None) => return Self::forbidden("ChiselAuth"),
                 (Some(serde_json::Value::String(s)), Some(h)) if s != *h => {
