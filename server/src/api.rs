@@ -147,13 +147,10 @@ impl ApiService {
         self.paths.lock().unwrap().remove_prefix(prefix)
     }
 
-    async fn route(&self, req: Request<hyper::Body>) -> hyper::http::Result<Response<Body>> {
+    async fn route_impl(&self, req: Request<hyper::Body>) -> Result<Response<Body>> {
         if let Some(route_fn) = self.find_route_fn(req.uri().path()) {
             if req.uri().path().starts_with("/__chiselstrike") {
-                return match route_fn(req).await {
-                    Ok(val) => Ok(val),
-                    Err(err) => Self::internal_error(err),
-                };
+                return route_fn(req).await;
             }
 
             let auth_header = req.headers().get("ChiselAuth");
@@ -168,7 +165,7 @@ impl ApiService {
 
             // TODO: Make this optional, for users who want to reject some OPTIONS requests.
             if req.method() == "OPTIONS" {
-                return response_template().body("ok".to_string().into()); // Makes CORS preflights pass.
+                return Ok(response_template().body("ok".to_string().into())?); // Makes CORS preflights pass.
             }
 
             let username = get_username(&req).await;
@@ -176,30 +173,28 @@ impl ApiService {
                 Ok(rp) => rp,
                 Err(_) => return ApiService::not_found(),
             };
-            let is_allowed = {
-                let maybe_is_allowed =
-                    is_allowed_by_policy(rp.api_version(), username, rp.path().as_ref()).await;
-                match maybe_is_allowed {
-                    Err(e) => return Self::internal_error(e),
-                    Ok(x) => x,
-                }
-            };
+            let is_allowed =
+                is_allowed_by_policy(rp.api_version(), username, rp.path().as_ref()).await?;
 
             if !is_allowed {
                 return Self::forbidden("Unauthorized user\n");
             }
-            return match route_fn(req).await {
-                Ok(val) => Ok(val),
-                Err(err) => Self::internal_error(err),
-            };
+            return route_fn(req).await;
         }
         ApiService::not_found()
     }
 
-    fn not_found() -> hyper::http::Result<Response<Body>> {
-        Response::builder()
+    async fn route(&self, req: Request<hyper::Body>) -> hyper::http::Result<Response<Body>> {
+        match self.route_impl(req).await {
+            Ok(val) => Ok(val),
+            Err(err) => Self::internal_error(err),
+        }
+    }
+
+    fn not_found() -> Result<Response<Body>> {
+        Ok(Response::builder()
             .status(StatusCode::NOT_FOUND)
-            .body(Body::default())
+            .body(Body::default())?)
     }
 
     fn internal_error(err: anyhow::Error) -> hyper::http::Result<Response<Body>> {
@@ -208,10 +203,10 @@ impl ApiService {
             .body(format!("{:?}\n", err).into())
     }
 
-    fn forbidden(err: &str) -> hyper::http::Result<Response<Body>> {
-        Response::builder()
+    fn forbidden(err: &str) -> Result<Response<Body>> {
+        Ok(Response::builder()
             .status(StatusCode::FORBIDDEN)
-            .body(err.to_string().into())
+            .body(err.to_string().into())?)
     }
 }
 
