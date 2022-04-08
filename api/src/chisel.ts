@@ -1017,7 +1017,7 @@ export type CRUDCreateResponses<
 };
 
 /**
- * Fetches crud data based on curd `url`.
+ * Fetches crud data based on crud `url`.
  */
 async function fetchCrudData<T extends ChiselEntity>(
     type: { new (): T },
