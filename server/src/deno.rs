@@ -850,7 +850,7 @@ pub(crate) async fn lookup_builtin_type(type_name: &str) -> Result<Type, TypeSys
     })
 }
 
-pub(crate) fn remove_type_version(version: &str) {
+pub(crate) async fn remove_type_version(version: &str) {
     with_op_state(|state| {
         let type_system = current_type_system_mut(state);
         type_system.versions.remove(version);
