@@ -274,10 +274,10 @@ curl localhost:8080/dev/comments/a4ca3ab3-2e26-4da6-a5de-418c1e6b9b83
 
 # Built-In Search
 
-The API allows you to filter by specific properties, by specifying a search parameter with a partial URL-encoded JSON object:
+The API allows you to filter by object properties. For example:
 
 ```bash
-curl -g localhost:8080/dev/comments?filter={%22by%22:%22Jack%22}
+curl -g localhost:8080/dev/comments?.by=Jack
 ```
 
 ```json
@@ -293,6 +293,26 @@ curl -g localhost:8080/dev/comments?filter={%22by%22:%22Jack%22}
     "by": "Jack"
   }
 ]
+```
+
+will return all comments where field `by` is equal to `Jack`. Our api supports other comparison operators as well. For example
+`curl -g localhost:8080/dev/comments?.by~like=Ji%25` will in our example return all comments by Jim and Jill (`%25` is encoded wildcard `%`). We support the following comparators:
+
+| symbol      | Description |
+| ----------- | ----------- |
+|             | If no comparator is specified, the filter will check for equality |
+| ~ne         | Not equal |
+| ~lt         | Lower than |
+| ~lte        | Lower than or equal |
+| ~gt         | Greater than |
+| ~gte        | Greater than or equal |
+| ~like       | Like operator - supports the same syntax as SQL Like operator |
+| ~unlike    | Equivalent to SQL's NOT LIKE |
+
+Relationships are supported as well. Imagine that Comments's field `by` would be of type `Person` which would have a field `age`. In such a scenario, to get all comments that were written byt authors under 40 and are named John, we would do:
+
+```bash
+curl -g localhost:8080/dev/comments?.by.age~lt=40&.by.name=John
 ```
 
 Similarly, you can order the results by specifying the `sort` parameter:

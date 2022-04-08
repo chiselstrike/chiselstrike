@@ -156,7 +156,7 @@ fn convert_operator(op_str: Option<&str>) -> Result<BinaryOp> {
         "gt" => BinaryOp::Gt,
         "gte" => BinaryOp::GtEq,
         "like" => BinaryOp::Like,
-        "notLike" => BinaryOp::NotLike,
+        "unlike" => BinaryOp::NotLike,
         op => anyhow::bail!("found unsupported operator '{}'", op),
     };
     Ok(op)
@@ -291,7 +291,7 @@ mod tests {
             );
 
             let ops =
-                query_str_to_ops(&base_type, &url(".age~lte=10&.name~notLike=foo%25")).unwrap();
+                query_str_to_ops(&base_type, &url(".age~lte=10&.name~unlike=foo%25")).unwrap();
             assert_eq!(
                 ops,
                 vec![
@@ -303,6 +303,27 @@ mod tests {
                     }
                 ]
             );
+        }
+        {
+            let raw_ops = vec!["limit=3", "offset=7", "sort=age"];
+            for perm in raw_ops.iter().permutations(raw_ops.len()) {
+                let query_string = perm.iter().join("&");
+                let ops = query_str_to_ops(&base_type, &url(&query_string)).unwrap();
+
+                assert_eq!(
+                    ops,
+                    vec![
+                        QueryOp::SortBy(SortBy {
+                            field_name: "age".into(),
+                            ascending: true
+                        }),
+                        QueryOp::Skip { count: 7 },
+                        QueryOp::Take { count: 3 },
+                    ],
+                    "unexpected ops for query string '{}'",
+                    query_string
+                );
+            }
         }
         {
             let raw_ops = vec!["limit=3", "offset=7", "sort=age", ".age~gte=10"];
@@ -360,15 +381,15 @@ mod tests {
                 .unwrap()
                 .clone()
         };
+        let ops = [
+            (BinaryOp::Eq, ""),
+            (BinaryOp::NotEq, "~ne"),
+            (BinaryOp::Lt, "~lt"),
+            (BinaryOp::LtEq, "~lte"),
+            (BinaryOp::Gt, "~gt"),
+            (BinaryOp::GtEq, "~gte"),
+        ];
         {
-            let ops = [
-                (BinaryOp::Eq, ""),
-                (BinaryOp::NotEq, "~ne"),
-                (BinaryOp::Lt, "~lt"),
-                (BinaryOp::LtEq, "~lte"),
-                (BinaryOp::Gt, "~gt"),
-                (BinaryOp::GtEq, "~gte"),
-            ];
             for (op, op_str) in &ops {
                 let key = &format!("employee_count{}", op_str);
                 assert_eq!(
@@ -390,14 +411,6 @@ mod tests {
             }
         }
         {
-            let ops = [
-                (BinaryOp::Eq, ""),
-                (BinaryOp::NotEq, "~ne"),
-                (BinaryOp::Lt, "~lt"),
-                (BinaryOp::LtEq, "~lte"),
-                (BinaryOp::Gt, "~gt"),
-                (BinaryOp::GtEq, "~gte"),
-            ];
             for (op, op_str) in ops {
                 let key = &format!("name{}", op_str);
                 assert_eq!(
@@ -444,5 +457,6 @@ mod tests {
         assert!(query_str_to_ops(&base_type, &url(".age~ltt=4")).is_err());
         assert!(query_str_to_ops(&base_type, &url(".age~neq~lt=4")).is_err());
         assert!(query_str_to_ops(&base_type, &url(".age.nothing=4")).is_err());
+        assert!(query_str_to_ops(&base_type, &url(".=123")).is_err());
     }
 }
