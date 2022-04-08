@@ -458,9 +458,9 @@ async fn op_chisel_store(
         current_transaction(&state)?
     };
     let mut transaction = transaction.lock().await;
-    Ok(query_engine
+    query_engine
         .add_row(&ty, value, Some(transaction.deref_mut()))
-        .await?)
+        .await
 }
 
 #[derive(Deserialize)]
