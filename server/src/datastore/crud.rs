@@ -1,7 +1,6 @@
 use crate::datastore::expr::{BinaryExpr, BinaryOp, Expr, Literal, PropertyAccess};
 use crate::datastore::query::{QueryOp, SortBy};
 use crate::types::{ObjectType, Type};
-use crate::JsonObject;
 
 use anyhow::{Context, Result};
 use url::Url;
@@ -77,15 +76,6 @@ fn parse_query_parameter(
             })?;
             QueryOp::Skip { count }
         }
-        "filter" => {
-            let expr = convert_json_to_filter_expr(base_type, value)
-                .context("failed to convert json filter to filter expression")?;
-            if let Some(expression) = expr {
-                QueryOp::Filter { expression }
-            } else {
-                return Ok(None);
-            }
-        }
         _ => {
             if let Some(param_key) = param_key.strip_prefix('.') {
                 parse_filter(base_type, param_key, value).context("failed to parse filter")?
@@ -95,62 +85,6 @@ fn parse_query_parameter(
         }
     };
     Ok(Some(op))
-}
-
-fn convert_json_to_filter_expr(base_type: &Arc<ObjectType>, value: &str) -> Result<Option<Expr>> {
-    let filter =
-        serde_json::from_str::<JsonObject>(value).context("failed to parse JSON filter")?;
-    let mut filter_expr = None;
-    for (field_name, v) in filter.iter() {
-        if let Some(field) = base_type.get_field(field_name) {
-            let err_msg = |ty| {
-                format!(
-                    "failed to convert filter value '{:?}' to {} for field '{}'",
-                    v, ty, field_name
-                )
-            };
-            let literal: Literal = match &field.type_ {
-                Type::String | Type::Id => v.as_str().with_context(|| err_msg("string/id"))?.into(),
-                Type::Float => v.as_f64().with_context(|| err_msg("float"))?.into(),
-                Type::Boolean => v.as_bool().with_context(|| err_msg("bool"))?.into(),
-                _ => anyhow::bail!(
-                    "trying to filter on entity-type field '{}' which is not supported",
-                    field_name
-                ),
-            };
-            let f: Expr = BinaryExpr {
-                left: Box::new(
-                    PropertyAccess {
-                        property: field_name.to_owned(),
-                        object: Box::new(Expr::Parameter { position: 0 }),
-                    }
-                    .into(),
-                ),
-                op: BinaryOp::Eq,
-                right: Box::new(literal.into()),
-            }
-            .into();
-            if let Some(expr) = filter_expr {
-                filter_expr = Some(
-                    BinaryExpr {
-                        left: Box::new(expr),
-                        op: BinaryOp::And,
-                        right: Box::new(f),
-                    }
-                    .into(),
-                );
-            } else {
-                filter_expr = Some(f);
-            }
-        } else {
-            anyhow::bail!(
-                "entity '{}' doesn't have field named '{}'",
-                base_type.name(),
-                field_name
-            );
-        }
-    }
-    Ok(filter_expr)
 }
 
 fn parse_filter(base_type: &Arc<ObjectType>, param_key: &str, value: &str) -> Result<QueryOp> {
