@@ -108,6 +108,24 @@ impl SharedTasks {
     }
 }
 
+async fn add_endpoint<S: AsRef<str>>(
+    path: S,
+    code: String,
+    api_service: &ApiService,
+) -> Result<()> {
+    let path = path.as_ref();
+
+    compile_endpoint(path.to_string(), code).await?;
+    activate_endpoint(path).await?;
+
+    let func = Arc::new({
+        let path = path.to_string();
+        move |req| deno::run_js(path.clone(), req).boxed_local()
+    });
+    api_service.add_route(path.into(), func);
+    Ok(())
+}
+
 async fn run(state: SharedState, mut cmd: ExecutorChannel) -> Result<()> {
     init_deno(state.inspect_brk).await?;
 
@@ -149,16 +167,7 @@ async fn run(state: SharedState, mut cmd: ExecutorChannel) -> Result<()> {
     set_policies(policies).await;
 
     for (path, code) in routes.iter() {
-        let path = path.to_str().unwrap();
-
-        compile_endpoint(path.to_string(), code.to_string()).await?;
-        activate_endpoint(path).await?;
-
-        let func = Arc::new({
-            let path = path.to_string();
-            move |req| deno::run_js(path.clone(), req).boxed_local()
-        });
-        api_service.add_route(path.into(), func);
+        add_endpoint(path.to_str().unwrap(), code.to_string(), &api_service).await?;
     }
 
     let command_task = tokio::task::spawn_local(async move {
