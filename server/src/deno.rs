@@ -204,6 +204,7 @@ fn build_extensions() -> Vec<Extension> {
             op_chisel_query_next::decl(),
             op_chisel_commit_transaction::decl(),
             op_chisel_rollback_transaction::decl(),
+            op_chisel_create_transaction::decl(),
         ])
         .build()]
 }
@@ -808,10 +809,8 @@ fn take_current_transaction(state: &mut OpState) -> Option<TransactionStatic> {
     state.try_take::<TransactionStatic>()
 }
 
-async fn set_current_transaction(transaction: TransactionStatic) {
-    with_op_state(|st| {
-        st.put(transaction);
-    });
+fn set_current_transaction(st: &mut OpState, transaction: TransactionStatic) {
+    st.put(transaction);
 }
 
 fn current_secrets(st: &OpState) -> Option<&JsonObject> {
@@ -985,14 +984,18 @@ fn op_chisel_rollback_transaction(state: &mut OpState) -> Result<()> {
     Ok(())
 }
 
-pub(crate) async fn run_js(path: String, req: Request<hyper::Body>) -> Result<Response<Body>> {
-    // FIXME: maybe defer creating the transaction until we need one, to avoid doing it for
-    // endpoints that don't do any data access. For now, because we always create it above,
-    // it should be safe to unwrap.
-    let qe = query_engine_arc();
+#[op]
+async fn op_chisel_create_transaction(state: Rc<RefCell<OpState>>) -> Result<()> {
+    let qe = {
+        let mut state = state.borrow_mut();
+        query_engine(&mut state).clone()
+    };
     let transaction = qe.start_transaction_static().await?;
-    set_current_transaction(transaction).await;
+    set_current_transaction(&mut state.borrow_mut(), transaction);
+    Ok(())
+}
 
+pub(crate) async fn run_js(path: String, req: Request<hyper::Body>) -> Result<Response<Body>> {
     let path = RequestPath::try_from(path.as_ref()).unwrap();
     let userid = crate::auth::get_user(&req).await?;
     {
