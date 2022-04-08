@@ -99,6 +99,12 @@ async function callHandlerImpl(
     requestContext.apiVersion = apiVersion;
     requestContext.path = path;
     requestContext.userId = userid;
+
+    // FIXME: maybe defer creating the transaction until we need one, to avoid doing it for
+    // endpoints that don't do any data access. For now, because we always create it above,
+    // it should be safe to unwrap.
+    await Deno.core.opAsync("op_chisel_create_transaction");
+
     const init: RequestInit = { method: method, headers: headers };
     if (rid !== undefined) {
         const body = buildReadableStreamForBody(rid);
