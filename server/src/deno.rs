@@ -817,8 +817,8 @@ fn current_secrets(st: &OpState) -> Option<&JsonObject> {
     st.try_borrow()
 }
 
-pub(crate) fn get_secret<S: AsRef<str>>(name: S) -> Option<serde_json::Value> {
-    with_op_state(|state| current_secrets(state).and_then(|sec| sec.get(name.as_ref()).cloned()))
+pub(crate) async fn get_secret(name: &str) -> Option<serde_json::Value> {
+    with_op_state(|state| current_secrets(state).and_then(|sec| sec.get(name).cloned()))
 }
 
 fn current_type_system(st: &OpState) -> &TypeSystem {
