@@ -22,13 +22,11 @@ pub(crate) fn query_str_to_ops(base_type: &Arc<ObjectType>, url: &str) -> Result
                 param_key, value
             )
         })?;
-
-        if let Some(QueryOp::Skip { .. }) = op {
-            offset = op;
-        } else if let Some(QueryOp::Take { .. }) = op {
-            limit = op;
-        } else if let Some(op) = op {
-            ops.push(op);
+        match op {
+            Some(QueryOp::Skip { .. }) => offset = op,
+            Some(QueryOp::Take { .. }) => limit = op,
+            Some(op) => ops.push(op),
+            _ => {}
         }
     }
     if let Some(offset) = offset {
@@ -160,7 +158,7 @@ mod tests {
 
     pub(crate) struct FakeField {
         name: &'static str,
-        ty_: Type,
+        ty: Type,
     }
 
     impl FieldDescriptor for FakeField {
@@ -171,7 +169,7 @@ mod tests {
             None
         }
         fn ty(&self) -> Type {
-            self.ty_.clone()
+            self.ty.clone()
         }
         fn api_version(&self) -> String {
             "whatever".to_string()
@@ -198,7 +196,7 @@ mod tests {
     }
 
     fn make_field(name: &'static str, type_: Type) -> Field {
-        let d = FakeField { name, ty_: type_ };
+        let d = FakeField { name, ty: type_ };
         Field::new(d, vec![], None, false, false)
     }
 
@@ -266,7 +264,9 @@ mod tests {
                         }),
                         QueryOp::Skip { count: 7 },
                         QueryOp::Take { count: 3 },
-                    ]
+                    ],
+                    "unexpected ops for query string '{}'",
+                    query_string
                 );
             }
         }
