@@ -35,7 +35,7 @@ fn bad_request(msg: String) -> Response<Body> {
         .unwrap()
 }
 
-pub(crate) async fn get_oauth_user_type() -> Result<Arc<ObjectType>> {
+async fn get_oauth_user_type() -> Result<Arc<ObjectType>> {
     match lookup_builtin_type(OAUTHUSER_TYPE_NAME).await {
         Ok(Type::Object(t)) => Ok(t),
         _ => anyhow::bail!("Internal error: type {} not found", OAUTHUSER_TYPE_NAME),
@@ -141,7 +141,7 @@ pub(crate) async fn get_username(req: &Request<hyper::Body>) -> Option<String> {
 
     let qeng = query_engine_arc().await;
 
-    let user_type = crate::auth::get_oauth_user_type().await;
+    let user_type = get_oauth_user_type().await;
     match (userid, user_type) {
         (None, _) => None,
         (Some(_), Err(e)) => {
