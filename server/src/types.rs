@@ -31,10 +31,10 @@ pub(crate) struct VersionTypes {
     pub(crate) custom_types: HashMap<String, Arc<ObjectType>>,
 }
 
-#[derive(Debug, Default, Clone, new)]
+#[derive(Debug, Clone)]
 pub(crate) struct TypeSystem {
-    #[new(default)]
     pub(crate) versions: HashMap<String, VersionTypes>,
+    pub(crate) builtin_types: HashMap<String, Type>,
 }
 
 impl VersionTypes {
@@ -61,30 +61,6 @@ impl VersionTypes {
 
 pub(crate) const OAUTHUSER_TYPE_NAME: &str = "OAuthUser";
 
-thread_local! {
-    static OAUTHUSER_TYPE: Arc<ObjectType> = {
-        let fields = vec![
-            Field {
-                id: None,
-                name: "username".into(),
-                type_: Type::String,
-                labels: vec![],
-                default: None,
-                effective_default: None,
-                is_optional: false,
-                api_version: "__chiselstrike".into(),
-                is_unique: false,
-        }];
-
-        let desc = InternalObject {
-            name: OAUTHUSER_TYPE_NAME,
-            backing_table: "oauth_user",
-        };
-
-        Arc::new(ObjectType::new(desc, fields).unwrap())
-    }
-}
-
 fn optional_string_field(name: &str) -> Field {
     Field {
         id: None,
@@ -101,25 +77,52 @@ fn optional_string_field(name: &str) -> Field {
 
 pub(crate) const NXAUTH_USER_TYPE_NAME: &str = "NextAuthUser";
 
-thread_local! {
-    static NXAUTH_USER_TYPE: Arc<ObjectType> = {
-        let fields = vec![
-            optional_string_field("emailVerified"),
-            optional_string_field("name"),
-            optional_string_field("email"),
-            optional_string_field("image"),
-        ];
-
-        let desc = InternalObject {
-            name: NXAUTH_USER_TYPE_NAME,
-            backing_table: "nextauth_user",
-        };
-
-        Arc::new(ObjectType::new(desc, fields).unwrap())
-    }
-}
-
 impl TypeSystem {
+    pub(crate) fn new() -> Self {
+        let mut ts = Self {
+            versions: Default::default(),
+            builtin_types: Default::default(),
+        };
+        ts.builtin_types.insert("string".into(), Type::String);
+        ts.builtin_types.insert("number".into(), Type::Float);
+        ts.builtin_types.insert("boolean".into(), Type::Boolean);
+        ts.builtin_types.insert(OAUTHUSER_TYPE_NAME.into(), {
+            let fields = vec![Field {
+                id: None,
+                name: "username".into(),
+                type_: Type::String,
+                labels: vec![],
+                default: None,
+                effective_default: None,
+                is_optional: false,
+                api_version: "__chiselstrike".into(),
+                is_unique: false,
+            }];
+            let desc = InternalObject {
+                name: OAUTHUSER_TYPE_NAME,
+                backing_table: "oauth_user",
+            };
+            Type::Object(Arc::new(ObjectType::new(desc, fields).unwrap()))
+        });
+        ts.builtin_types.insert(NXAUTH_USER_TYPE_NAME.into(), {
+            let fields = vec![
+                optional_string_field("emailVerified"),
+                optional_string_field("name"),
+                optional_string_field("email"),
+                optional_string_field("image"),
+            ];
+
+            let desc = InternalObject {
+                name: NXAUTH_USER_TYPE_NAME,
+                backing_table: "nextauth_user",
+            };
+
+            Type::Object(Arc::new(ObjectType::new(desc, fields).unwrap()))
+        });
+
+        ts
+    }
+
     /// Returns a mutable reference to all types from a specific version.
     ///
     /// If there are no types for this version, the version is created.
@@ -290,14 +293,10 @@ impl TypeSystem {
 
     /// Looks up a builtin type with name `type_name`.
     pub(crate) fn lookup_builtin_type(&self, type_name: &str) -> Result<Type, TypeSystemError> {
-        match type_name {
-            "string" => Ok(Type::String),
-            "number" => Ok(Type::Float),
-            "boolean" => Ok(Type::Boolean),
-            OAUTHUSER_TYPE_NAME => OAUTHUSER_TYPE.with(|t| Ok(Type::Object(t.clone()))),
-            NXAUTH_USER_TYPE_NAME => NXAUTH_USER_TYPE.with(|t| Ok(Type::Object(t.clone()))),
-            _ => Err(TypeSystemError::NotABuiltinType(type_name.to_string())),
-        }
+        self.builtin_types
+            .get(type_name)
+            .cloned()
+            .ok_or_else(|| TypeSystemError::NotABuiltinType(type_name.to_string()))
     }
 
     /// Tries to look up a type. It tries to match built-ins first, custom types second.

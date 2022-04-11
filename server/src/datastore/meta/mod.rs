@@ -292,7 +292,7 @@ impl MetaService {
         let query = sqlx::query("SELECT types.type_id AS type_id, types.backing_table AS backing_table, type_names.name AS type_name FROM types INNER JOIN type_names ON types.type_id = type_names.type_id");
         let rows = fetch_all!(&self.pool, query)?;
 
-        let mut ts = TypeSystem::default();
+        let mut ts = TypeSystem::new();
         for row in rows {
             let type_id: i32 = row.get("type_id");
             let backing_table: &str = row.get("backing_table");
