@@ -107,7 +107,7 @@ async fn lookup_user(req: Request<hyper::Body>) -> Result<Response<Body>> {
     }
 }
 
-pub(crate) fn init(api: &mut ApiService) {
+pub(crate) async fn init(api: &mut ApiService) -> Result<()> {
     api.add_route(
         "/__chiselstrike/auth/callback".into(),
         Arc::new(handle_callback),
@@ -116,6 +116,16 @@ pub(crate) fn init(api: &mut ApiService) {
         USERPATH.into(),
         Arc::new(move |req| { lookup_user(req) }.boxed_local()),
     );
+    crate::server::add_endpoint(
+        "/__chiselstrike/auth/users",
+        r#"
+import { ChiselEntity } from "@chiselstrike/api"
+class NextAuthUser extends ChiselEntity {}
+export default NextAuthUser.crud()"#
+            .into(),
+        api,
+    )
+    .await
 }
 
 /// Returns the user ID corresponding to the token in req.  If token is absent, returns None.

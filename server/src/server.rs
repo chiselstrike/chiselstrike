@@ -13,7 +13,7 @@ use crate::rpc::{GlobalRpcState, RpcService};
 use crate::runtime;
 use crate::runtime::Runtime;
 use crate::secrets::get_secrets;
-use crate::types::{Type, OAUTHUSER_TYPE_NAME};
+use crate::types::{Type, NXAUTH_USER_TYPE_NAME, OAUTHUSER_TYPE_NAME};
 use crate::JsonObject;
 use anyhow::Result;
 use async_lock::Mutex;
@@ -108,7 +108,7 @@ impl SharedTasks {
     }
 }
 
-async fn add_endpoint<S: AsRef<str>>(
+pub(crate) async fn add_endpoint<S: AsRef<str>>(
     path: S,
     code: String,
     api_service: &ApiService,
@@ -144,18 +144,25 @@ async fn run(state: SharedState, mut cmd: ExecutorChannel) -> Result<()> {
     let routes = meta.load_endpoints().await?;
     let policies = meta.load_policies().await?;
     let mut api_service = ApiService::default();
-    crate::auth::init(&mut api_service);
+    crate::auth::init(&mut api_service).await?;
     crate::introspect::init(&mut api_service);
 
     let oauth_user_type = match ts.lookup_builtin_type(OAUTHUSER_TYPE_NAME) {
         Ok(Type::Object(t)) => t,
         _ => anyhow::bail!("Internal error: type {} not found", OAUTHUSER_TYPE_NAME),
     };
+    let nxauth_user_type = match ts.lookup_builtin_type(NXAUTH_USER_TYPE_NAME) {
+        Ok(Type::Object(t)) => t,
+        _ => anyhow::bail!("Internal error: type {} not found", NXAUTH_USER_TYPE_NAME),
+    };
     let query_engine =
         Arc::new(QueryEngine::local_connection(&state.data_db, state.nr_connections).await?);
     let mut transaction = query_engine.start_transaction().await?;
     query_engine
         .create_table(&mut transaction, &oauth_user_type)
+        .await?;
+    query_engine
+        .create_table(&mut transaction, &nxauth_user_type)
         .await?;
     QueryEngine::commit_transaction(transaction).await?;
     let api_service = Rc::new(api_service);

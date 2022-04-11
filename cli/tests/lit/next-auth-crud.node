@@ -1,0 +1,10 @@
+# SPDX-FileCopyrightText: © 2022 ChiselStrike <info@chiselstrike.com>
+
+# RUN: sh -e @file
+
+cd "$TEMPDIR"
+$CHISEL apply
+
+$CURL -d '{"name":"Foo", "email":"foo@t.co"}' $CHISELD_HOST/__chiselstrike/auth/users
+# CHECK: HTTP/1.1 200 OK
+# CHECK: "email": "foo@t.co"

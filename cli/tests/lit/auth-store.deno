@@ -19,22 +19,10 @@ export default async function chisel(req: Request) {
 }
 EOF
 
-cat << EOF > "$TEMPDIR/endpoints/trysave.ts"
-export default async function chisel(req: Request) {
-    let u = new Chisel.OAuthUser();
-    u.username = 'a';
-    await u.save();
-    return new Response('success!');
-}
-EOF
-
 cd "$TEMPDIR"
 $CHISEL apply
 $CURL $CHISELD_HOST/dev/users
 # CHECK: alice bob charlie .
-$CURL -XPOST $CHISELD_HOST/dev/trysave
-# CHECK: Cannot save into type OAuthUser
-
 
 ## Reproduces #708:
 $CURL $CHISELD_HOST/__chiselstrike/auth/callback?user=bob

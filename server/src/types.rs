@@ -85,6 +85,40 @@ thread_local! {
     }
 }
 
+fn optional_string_field(name: &str) -> Field {
+    Field {
+        id: None,
+        name: name.into(),
+        type_: Type::String,
+        labels: vec![],
+        default: None,
+        effective_default: None,
+        is_optional: true,
+        api_version: "__chiselstrike".into(),
+        is_unique: false,
+    }
+}
+
+pub(crate) const NXAUTH_USER_TYPE_NAME: &str = "NextAuthUser";
+
+thread_local! {
+    static NXAUTH_USER_TYPE: Arc<ObjectType> = {
+        let fields = vec![
+            optional_string_field("emailVerified"),
+            optional_string_field("name"),
+            optional_string_field("email"),
+            optional_string_field("image"),
+        ];
+
+        let desc = InternalObject {
+            name: NXAUTH_USER_TYPE_NAME,
+            backing_table: "nextauth_user",
+        };
+
+        Arc::new(ObjectType::new(desc, fields).unwrap())
+    }
+}
+
 impl TypeSystem {
     /// Returns a mutable reference to all types from a specific version.
     ///
@@ -261,6 +295,7 @@ impl TypeSystem {
             "number" => Ok(Type::Float),
             "boolean" => Ok(Type::Boolean),
             OAUTHUSER_TYPE_NAME => OAUTHUSER_TYPE.with(|t| Ok(Type::Object(t.clone()))),
+            NXAUTH_USER_TYPE_NAME => NXAUTH_USER_TYPE.with(|t| Ok(Type::Object(t.clone()))),
             _ => Err(TypeSystemError::NotABuiltinType(type_name.to_string())),
         }
     }
