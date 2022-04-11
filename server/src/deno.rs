@@ -691,10 +691,10 @@ async fn get_read_future(
         let mut service = get();
         let runtime = &mut service.worker.js_runtime;
         let scope = &mut runtime.handle_scope();
-        let und = v8::undefined(scope).into();
+        let undefined = v8::undefined(scope).into();
         let res = read
             .open(scope)
-            .call(scope, und, &[])
+            .call(scope, undefined, &[])
             .ok_or(Error::NotAResponse)?;
         v8::Global::new(scope, res)
     };
