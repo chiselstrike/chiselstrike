@@ -21,19 +21,24 @@ $CHISEL apply
 # CHECK: Model defined: Person
 # CHECK: End point defined: /dev/store
 
-for i in $(seq 1 100); do
+NUM=100
+for i in $(seq 1 $NUM); do
   $CURL --data '{
       "first_name":"Glauber",
       "last_name":"Costa",
       "age": 666,
       "human": true,
       "height": 10.01
-  }' -o - $CHISELD_HOST/dev/store &
+  }' -o - $CHISELD_HOST/dev/store > log.$i 2>&1 &
 done
 
 # CHECK: ok
 
 wait
+
+for i in $(seq 1 $NUM); do
+    cat log.$i
+done
 
 $CURL -o - $CHISELD_HOST/dev/query
 
