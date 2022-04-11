@@ -4,6 +4,7 @@ import Handlebars from "handlebars";
 import Commander from "commander";
 import chalk from "chalk";
 import fs from "fs";
+import os from "os";
 import packageJson from "./package.json";
 import path from "path";
 import spawn from "cross-spawn";
@@ -75,6 +76,23 @@ function run(projectDirectory: string, chiselVersion: string) {
     spawn("npm", ["install"], {
         stdio: "inherit",
     });
+}
+
+if (os.type() == "Windows_NT") {
+    console.log(chalk.red("Error: Failed to create a ChiselStrike project."));
+    console.log("");
+    console.log(
+        "ChiselStrike is currently supported on Windows through Windows Subsystem for Linux (WSL).",
+    );
+    console.log("");
+    console.log(
+        "Please create your project in an ext4 filesystem (like the $HOME folder) to support hot reloading of endpoints.",
+    );
+    console.log("");
+    console.log(
+        "For more information, see the documentation at: https://docs.chiselstrike.com",
+    );
+    process.exit(1);
 }
 
 const _program = new Commander.Command(packageJson.name)
