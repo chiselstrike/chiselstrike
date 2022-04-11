@@ -14,10 +14,14 @@ use crate::types::ObjectType;
 use crate::types::Type;
 use crate::types::TypeSystem;
 use crate::types::TypeSystemError;
+use crate::vecmap::VecMap;
 use crate::JsonObject;
 use anyhow::{anyhow, bail, Context as AnyhowContext, Result};
 use api::chisel_js;
 use api::endpoint_js;
+use api::worker_js;
+use async_channel::Receiver;
+use async_channel::Sender;
 use deno_core::error::AnyError;
 use deno_core::op;
 use deno_core::v8;
@@ -64,6 +68,7 @@ use std::ops::DerefMut;
 use std::pin::Pin;
 use std::rc::Rc;
 use std::sync::Arc;
+use std::sync::Mutex;
 use std::task::{Context, Poll};
 use tempfile::Builder;
 
@@ -79,6 +84,10 @@ struct VersionedCode {
     code: String,
     version: u64,
 }
+
+enum WorkerMsg {}
+
+enum WorkerResp {}
 
 /// A v8 isolate doesn't want to be moved between or used from
 /// multiple threads. A JsRuntime owns an isolate, so we need to use a
@@ -103,6 +112,11 @@ struct DenoService {
     import_endpoint: v8::Global<v8::Function>,
     activate_endpoint: v8::Global<v8::Function>,
     call_handler: v8::Global<v8::Function>,
+    _read_worker_channel: v8::Global<v8::Function>,
+
+    _to_worker: Sender<WorkerMsg>,
+    _from_worker: Receiver<WorkerResp>,
+    worker_channel_id: u32,
 }
 
 #[derive(thiserror::Error, Debug)]
@@ -205,6 +219,8 @@ fn build_extensions() -> Vec<Extension> {
             op_chisel_commit_transaction::decl(),
             op_chisel_rollback_transaction::decl(),
             op_chisel_create_transaction::decl(),
+            op_chisel_init_worker::decl(),
+            op_chisel_read_worker_channel::decl(),
         ])
         .build()]
 }
@@ -261,8 +277,24 @@ fn create_web_worker(
     })
 }
 
+#[derive(Debug)]
+struct Channel {
+    receiver: Receiver<WorkerMsg>,
+    _sender: Sender<WorkerResp>,
+}
+
+type GlobalChannels = VecMap<Channel>;
+
+lazy_static! {
+    static ref GLOBAL_WORKER_CHANNELS: Mutex<GlobalChannels> = Mutex::new(GlobalChannels::new());
+}
+
+thread_local! {
+     static WORKER_CHANNEL: OnceCell<Channel> = OnceCell::new();
+}
+
 impl DenoService {
-    pub(crate) async fn new(inspect_brk: bool) -> Self {
+    pub(crate) async fn new(inspect_brk: bool) -> (Self, v8::Global<v8::Function>) {
         let web_worker_preload_module_cb =
             Arc::new(|worker| LocalFutureObj::new(Box::new(future::ready(Ok(worker)))));
         let inner = Arc::new(std::sync::Mutex::new(ModuleLoaderInner {
@@ -361,6 +393,13 @@ impl DenoService {
                     version: 0,
                 },
             );
+            code_map.insert(
+                "/worker.js".to_string(),
+                VersionedCode {
+                    code: worker_js().to_string(),
+                    version: 0,
+                },
+            );
         }
 
         worker
@@ -368,7 +407,7 @@ impl DenoService {
             .await
             .unwrap();
 
-        let (import_endpoint, activate_endpoint, call_handler) = {
+        let (import_endpoint, activate_endpoint, call_handler, init_worker, read_worker_channel) = {
             let runtime = &mut worker.js_runtime;
             let promise = runtime
                 .execute_script(main_path, &format!("import(\"file://{}\")", endpoint_path))
@@ -385,17 +424,45 @@ impl DenoService {
             let call_handler: v8::Local<v8::Function> =
                 get_member(module, scope, "callHandler").unwrap();
             let call_handler = v8::Global::new(scope, call_handler);
-            (import_endpoint, activate_endpoint, call_handler)
+            let init_worker: v8::Local<v8::Function> =
+                get_member(module, scope, "initWorker").unwrap();
+            let init_worker = v8::Global::new(scope, init_worker);
+            let read_worker_channel: v8::Local<v8::Function> =
+                get_member(module, scope, "readWorkerChannel").unwrap();
+            let read_worker_channel = v8::Global::new(scope, read_worker_channel);
+
+            (
+                import_endpoint,
+                activate_endpoint,
+                call_handler,
+                init_worker,
+                read_worker_channel,
+            )
         };
 
-        Self {
-            worker,
-            inspector,
-            module_loader: inner,
-            import_endpoint,
-            activate_endpoint,
-            call_handler,
-        }
+        let (to_worker_sender, to_worker_receiver) = async_channel::bounded(1);
+        let (from_worker_sender, from_worker_receiver) = async_channel::bounded(1);
+        let mut map = GLOBAL_WORKER_CHANNELS.lock().unwrap();
+        let worker_channel_id = map.push(Channel {
+            receiver: to_worker_receiver,
+            _sender: from_worker_sender,
+        }) as u32;
+
+        (
+            Self {
+                worker,
+                inspector,
+                module_loader: inner,
+                import_endpoint,
+                activate_endpoint,
+                call_handler,
+                _to_worker: to_worker_sender,
+                _from_worker: from_worker_receiver,
+                worker_channel_id,
+                _read_worker_channel: read_worker_channel,
+            },
+            init_worker,
+        )
     }
 }
 
@@ -610,13 +677,40 @@ fn op_format_file_name(file_name: String) -> Result<String> {
     Ok(file_name)
 }
 
+#[op]
+fn op_chisel_init_worker(id: u32) {
+    let mut map = GLOBAL_WORKER_CHANNELS.lock().unwrap();
+    let channel = map.remove(id as usize).unwrap();
+    WORKER_CHANNEL.with(|d| {
+        d.set(channel).unwrap();
+    });
+}
+
+#[op]
+async fn op_chisel_read_worker_channel(_state: Rc<RefCell<OpState>>) -> Result<()> {
+    let receiver = WORKER_CHANNEL.with(|d| d.get().unwrap().receiver.clone());
+    let _msg = receiver.recv().await.unwrap();
+    Ok(())
+}
+
 pub(crate) async fn init_deno(inspect_brk: bool) -> Result<()> {
-    let service = Rc::new(RefCell::new(DenoService::new(inspect_brk).await));
+    let (service, init_worker) = DenoService::new(inspect_brk).await;
     DENO.with(|d| {
-        d.set(service)
+        d.set(Rc::new(RefCell::new(service)))
             .map_err(|_| ())
             .expect("Deno is already initialized.");
     });
+
+    let mut service = get();
+    let service: &mut DenoService = &mut service;
+    let runtime = &mut service.worker.js_runtime;
+    let scope = &mut runtime.handle_scope();
+    let undefined = v8::undefined(scope).into();
+    let id = v8::Number::new(scope, service.worker_channel_id as f64).into();
+    init_worker
+        .open(scope)
+        .call(scope, undefined, &[id])
+        .unwrap();
     Ok(())
 }
 
@@ -855,6 +949,25 @@ pub(crate) async fn remove_type_version(version: &str) {
         let type_system = current_type_system_mut(state);
         type_system.versions.remove(version);
     });
+}
+
+async fn _to_worker(msg: WorkerMsg) {
+    let promise = {
+        let sender = get()._to_worker.clone();
+        sender.send(msg).await.unwrap();
+        let mut service = get();
+        let service: &mut DenoService = &mut service;
+        let runtime = &mut service.worker.js_runtime;
+        let scope = &mut runtime.handle_scope();
+        let undefined = v8::undefined(scope).into();
+        let promise = service
+            ._read_worker_channel
+            .open(scope)
+            .call(scope, undefined, &[])
+            .unwrap();
+        v8::Global::new(scope, promise)
+    };
+    resolve_promise(promise).await.unwrap();
 }
 
 pub(crate) async fn set_type_system(type_system: TypeSystem) {

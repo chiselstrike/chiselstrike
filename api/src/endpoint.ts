@@ -3,6 +3,7 @@
 /// <reference types="./lib.deno_core.d.ts" />
 /// <reference lib="dom" />
 /// <reference lib="dom.iterable" />
+/// <reference lib="deno.unstable" />
 
 // Handlers that have been compiled but are not yet serving requests.
 type requestHandler = (req: Request) => Promise<Response>;
@@ -26,6 +27,66 @@ function buildReadableStreamForBody(rid: number) {
             Deno.core.opSync("op_close", rid);
         },
     });
+}
+
+const endpointWorker = new Worker("file:///worker.js", {
+    type: "module",
+    name: "endpointWorker",
+    deno: {
+        namespace: true,
+    },
+});
+type Resolver = {
+    resolve: (value: unknown) => void;
+    reject: (err: Error) => void;
+    msg: unknown;
+};
+const resolvers: Resolver[] = [];
+endpointWorker.onmessageerror = function (e) {
+    throw e;
+};
+endpointWorker.onerror = function (e) {
+    throw e;
+};
+endpointWorker.onmessage = function (event) {
+    const resolver = resolvers.shift()!;
+    const d = event.data;
+    const e = d.err;
+    if (e) {
+        resolver.reject(e);
+    } else {
+        resolver.resolve(d.value);
+    }
+};
+
+async function toWorker(msg: unknown) {
+    const p = new Promise((resolve, reject) => {
+        resolvers.push({ resolve, reject, msg });
+    });
+    // Each worker should handle a single request at a time, so we
+    // only post a message if the worker is not currently
+    // busy. Otherwise we leave it scheduled and know it will be
+    // posted once the preceding messages are answered.
+    if (resolvers.length == 1) {
+        endpointWorker.postMessage(resolvers[0].msg);
+    }
+    try {
+        return await p;
+    } finally {
+        // If a message was scheduled while the worker was busy, post
+        // it now.
+        if (resolvers.length != 0) {
+            endpointWorker.postMessage(resolvers[0].msg);
+        }
+    }
+}
+
+export async function initWorker(id: number) {
+    await toWorker({ cmd: "initWorker", id });
+}
+
+export async function readWorkerChannel() {
+    await toWorker({ cmd: "readWorkerChannel" });
 }
 
 export async function importEndpoint(
