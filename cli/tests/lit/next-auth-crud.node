@@ -20,3 +20,13 @@ $CURL -d '{"token":"tok1", "identifier":"id1", "expires":"2026-12-31"}' $CHISELD
 # CHECK: "token": "tok1"
 # CHECK: "identifier": "id1"
 # CHECK: "expires": "2026-12-31"
+
+$CURL -d '{"providerAccountId":"acct1", "userId":"usr1", "provider":"gh", "type":"oauth", "expires_at":42, "session_state":"good"}' \
+      $CHISELD_HOST/__chiselstrike/auth/accounts
+# CHECK: HTTP/1.1 200 OK
+# CHECK: "providerAccountId": "acct1"
+# CHECK: "userId": "usr1"
+# CHECK: "provider": "gh"
+# CHECK: "type": "oauth"
+# CHECK: "expires_at": 42
+# CHECK: "session_state": "good"

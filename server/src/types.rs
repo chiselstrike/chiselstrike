@@ -81,6 +81,20 @@ fn optional_string_field(name: &str) -> Field {
     f
 }
 
+fn optional_number_field(name: &str) -> Field {
+    Field {
+        id: None,
+        name: name.into(),
+        type_: Type::Float,
+        labels: vec![],
+        default: None,
+        effective_default: None,
+        is_optional: true,
+        api_version: "__chiselstrike".into(),
+        is_unique: false,
+    }
+}
+
 impl TypeSystem {
     pub(crate) fn new() -> Self {
         let mut ts = Self {
@@ -132,6 +146,25 @@ impl TypeSystem {
                 string_field("token"),
             ],
             "nextauth_token",
+        );
+        ts.add_builtin_object_type(
+            "NextAuthAccount",
+            vec![
+                string_field("providerAccountId"),
+                string_field("userId"),
+                string_field("provider"),
+                string_field("type"),
+                optional_string_field("access_token"),
+                optional_string_field("token_type"),
+                optional_string_field("id_token"),
+                optional_string_field("refresh_token"),
+                optional_string_field("scope"),
+                optional_string_field("session_state"),
+                optional_string_field("oauth_token_secret"),
+                optional_string_field("oauth_token"),
+                optional_number_field("expires_at"),
+            ],
+            "nextauth_account",
         );
 
         ts

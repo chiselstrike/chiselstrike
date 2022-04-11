@@ -136,7 +136,8 @@ pub(crate) async fn init(api: &mut ApiService) -> Result<()> {
     );
     add_crud_endpoint_for_type("NextAuthUser", "users", api).await?;
     add_crud_endpoint_for_type("NextAuthSession", "sessions", api).await?;
-    add_crud_endpoint_for_type("NextAuthToken", "tokens", api).await
+    add_crud_endpoint_for_type("NextAuthToken", "tokens", api).await?;
+    add_crud_endpoint_for_type("NextAuthAccount", "accounts", api).await
 }
 
 /// Returns the user ID corresponding to the token in req.  If token is absent, returns None.
