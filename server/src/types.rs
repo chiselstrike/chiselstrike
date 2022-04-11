@@ -90,8 +90,9 @@ impl TypeSystem {
         ts.builtin_types.insert("string".into(), Type::String);
         ts.builtin_types.insert("number".into(), Type::Float);
         ts.builtin_types.insert("boolean".into(), Type::Boolean);
-        ts.builtin_types.insert(OAUTHUSER_TYPE_NAME.into(), {
-            let fields = vec![Field {
+        ts.add_builtin_object_type(
+            OAUTHUSER_TYPE_NAME,
+            vec![Field {
                 id: None,
                 name: "username".into(),
                 type_: Type::String,
@@ -101,56 +102,37 @@ impl TypeSystem {
                 is_optional: false,
                 api_version: "__chiselstrike".into(),
                 is_unique: false,
-            }];
-            let desc = InternalObject {
-                name: OAUTHUSER_TYPE_NAME,
-                backing_table: "oauth_user",
-            };
-            Type::Object(Arc::new(ObjectType::new(desc, fields).unwrap()))
-        });
-        ts.builtin_types.insert("NextAuthUser".into(), {
-            let fields = vec![
+            }],
+            "oauth_user",
+        );
+        ts.add_builtin_object_type(
+            "NextAuthUser",
+            vec![
                 optional_string_field("emailVerified"),
                 optional_string_field("name"),
                 optional_string_field("email"),
                 optional_string_field("image"),
-            ];
-
-            let desc = InternalObject {
-                name: "NextAuthUser",
-                backing_table: "nextauth_user",
-            };
-
-            Type::Object(Arc::new(ObjectType::new(desc, fields).unwrap()))
-        });
-        ts.builtin_types.insert("NextAuthSession".into(), {
-            let fields = vec![
+            ],
+            "nextauth_user",
+        );
+        ts.add_builtin_object_type(
+            "NextAuthSession",
+            vec![
                 string_field("sessionToken"),
                 string_field("userId"),
                 string_field("expires"),
-            ];
-
-            let desc = InternalObject {
-                name: "NextAuthSession",
-                backing_table: "nextauth_session",
-            };
-
-            Type::Object(Arc::new(ObjectType::new(desc, fields).unwrap()))
-        });
-        ts.builtin_types.insert("NextAuthToken".into(), {
-            let fields = vec![
+            ],
+            "nextauth_session",
+        );
+        ts.add_builtin_object_type(
+            "NextAuthToken",
+            vec![
                 string_field("identifier"),
                 string_field("expires"),
                 string_field("token"),
-            ];
-
-            let desc = InternalObject {
-                name: "NextAuthToken",
-                backing_table: "nextauth_token",
-            };
-
-            Type::Object(Arc::new(ObjectType::new(desc, fields).unwrap()))
-        });
+            ],
+            "nextauth_token",
+        );
 
         ts
     }
@@ -416,6 +398,21 @@ impl TypeSystem {
             }
         }
         Ok(())
+    }
+
+    fn add_builtin_object_type(
+        &mut self,
+        type_name: &'static str,
+        fields: Vec<Field>,
+        backing_table_name: &'static str,
+    ) {
+        self.builtin_types.insert(type_name.into(), {
+            let desc = InternalObject {
+                name: type_name,
+                backing_table: backing_table_name,
+            };
+            Type::Object(Arc::new(ObjectType::new(desc, fields).unwrap()))
+        });
     }
 }
 
