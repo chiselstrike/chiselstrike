@@ -81,8 +81,6 @@ fn optional_string_field(name: &str) -> Field {
     f
 }
 
-pub(crate) const NXAUTH_USER_TYPE_NAME: &str = "NextAuthUser";
-
 impl TypeSystem {
     pub(crate) fn new() -> Self {
         let mut ts = Self {
@@ -110,7 +108,7 @@ impl TypeSystem {
             };
             Type::Object(Arc::new(ObjectType::new(desc, fields).unwrap()))
         });
-        ts.builtin_types.insert(NXAUTH_USER_TYPE_NAME.into(), {
+        ts.builtin_types.insert("NextAuthUser".into(), {
             let fields = vec![
                 optional_string_field("emailVerified"),
                 optional_string_field("name"),
@@ -119,7 +117,7 @@ impl TypeSystem {
             ];
 
             let desc = InternalObject {
-                name: NXAUTH_USER_TYPE_NAME,
+                name: "NextAuthUser",
                 backing_table: "nextauth_user",
             };
 
