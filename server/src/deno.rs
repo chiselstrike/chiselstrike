@@ -1144,6 +1144,7 @@ async fn get_result(
 
 #[op]
 async fn op_chisel_commit_transaction(state: Rc<RefCell<OpState>>) -> Result<()> {
+    info!("COMMIT");
     let transaction = {
         let mut state = state.borrow_mut();
         take_current_transaction(&mut state)
@@ -1154,6 +1155,7 @@ async fn op_chisel_commit_transaction(state: Rc<RefCell<OpState>>) -> Result<()>
 
 #[op]
 fn op_chisel_rollback_transaction(state: &mut OpState) -> Result<()> {
+    info!("ROLLBACK");
     // Drop the transaction, causing it to rollback.
     take_current_transaction(state);
     Ok(())
