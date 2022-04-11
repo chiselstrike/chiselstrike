@@ -34,7 +34,7 @@ pub(crate) struct VersionTypes {
 #[derive(Debug, Clone)]
 pub(crate) struct TypeSystem {
     pub(crate) versions: HashMap<String, VersionTypes>,
-    pub(crate) builtin_types: HashMap<String, Type>,
+    builtin_types: HashMap<String, Type>,
 }
 
 impl VersionTypes {
@@ -121,6 +121,20 @@ impl TypeSystem {
         });
 
         ts
+    }
+
+    pub(crate) async fn create_builtin_backing_tables(
+        &self,
+        query_engine: &QueryEngine,
+    ) -> anyhow::Result<()> {
+        let mut transaction = query_engine.start_transaction().await?;
+        for ty in self.builtin_types.values() {
+            if let Type::Object(ty) = ty {
+                query_engine.create_table(&mut transaction, ty).await?;
+            }
+        }
+        QueryEngine::commit_transaction(transaction).await?;
+        Ok(())
     }
 
     /// Returns a mutable reference to all types from a specific version.

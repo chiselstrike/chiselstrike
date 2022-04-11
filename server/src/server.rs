@@ -13,7 +13,6 @@ use crate::rpc::{GlobalRpcState, RpcService};
 use crate::runtime;
 use crate::runtime::Runtime;
 use crate::secrets::get_secrets;
-use crate::types::{Type, NXAUTH_USER_TYPE_NAME, OAUTHUSER_TYPE_NAME};
 use crate::JsonObject;
 use anyhow::Result;
 use async_lock::Mutex;
@@ -147,24 +146,10 @@ async fn run(state: SharedState, mut cmd: ExecutorChannel) -> Result<()> {
     crate::auth::init(&mut api_service).await?;
     crate::introspect::init(&mut api_service);
 
-    let oauth_user_type = match ts.lookup_builtin_type(OAUTHUSER_TYPE_NAME) {
-        Ok(Type::Object(t)) => t,
-        _ => anyhow::bail!("Internal error: type {} not found", OAUTHUSER_TYPE_NAME),
-    };
-    let nxauth_user_type = match ts.lookup_builtin_type(NXAUTH_USER_TYPE_NAME) {
-        Ok(Type::Object(t)) => t,
-        _ => anyhow::bail!("Internal error: type {} not found", NXAUTH_USER_TYPE_NAME),
-    };
     let query_engine =
         Arc::new(QueryEngine::local_connection(&state.data_db, state.nr_connections).await?);
-    let mut transaction = query_engine.start_transaction().await?;
-    query_engine
-        .create_table(&mut transaction, &oauth_user_type)
+    ts.create_builtin_backing_tables(query_engine.as_ref())
         .await?;
-    query_engine
-        .create_table(&mut transaction, &nxauth_user_type)
-        .await?;
-    QueryEngine::commit_transaction(transaction).await?;
     let api_service = Rc::new(api_service);
 
     let rt = Runtime::new(api_service.clone(), meta);
