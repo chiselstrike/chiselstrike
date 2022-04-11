@@ -14,3 +14,9 @@ $CURL -d '{"sessionToken":"tok1", "userId":"id1", "expires":"2025-12-31"}' $CHIS
 # CHECK: "sessionToken": "tok1"
 # CHECK: "userId": "id1"
 # CHECK: "expires": "2025-12-31"
+
+$CURL -d '{"token":"tok1", "identifier":"id1", "expires":"2026-12-31"}' $CHISELD_HOST/__chiselstrike/auth/tokens
+# CHECK: HTTP/1.1 200 OK
+# CHECK: "token": "tok1"
+# CHECK: "identifier": "id1"
+# CHECK: "expires": "2026-12-31"

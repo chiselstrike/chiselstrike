@@ -137,6 +137,20 @@ impl TypeSystem {
 
             Type::Object(Arc::new(ObjectType::new(desc, fields).unwrap()))
         });
+        ts.builtin_types.insert("NextAuthToken".into(), {
+            let fields = vec![
+                string_field("identifier"),
+                string_field("expires"),
+                string_field("token"),
+            ];
+
+            let desc = InternalObject {
+                name: "NextAuthToken",
+                backing_table: "nextauth_token",
+            };
+
+            Type::Object(Arc::new(ObjectType::new(desc, fields).unwrap()))
+        });
 
         ts
     }
