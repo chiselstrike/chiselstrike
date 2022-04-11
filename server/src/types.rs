@@ -61,7 +61,7 @@ impl VersionTypes {
 
 pub(crate) const OAUTHUSER_TYPE_NAME: &str = "OAuthUser";
 
-fn optional_string_field(name: &str) -> Field {
+fn string_field(name: &str) -> Field {
     Field {
         id: None,
         name: name.into(),
@@ -69,10 +69,16 @@ fn optional_string_field(name: &str) -> Field {
         labels: vec![],
         default: None,
         effective_default: None,
-        is_optional: true,
+        is_optional: false,
         api_version: "__chiselstrike".into(),
         is_unique: false,
     }
+}
+
+fn optional_string_field(name: &str) -> Field {
+    let mut f = string_field(name);
+    f.is_optional = true;
+    f
 }
 
 pub(crate) const NXAUTH_USER_TYPE_NAME: &str = "NextAuthUser";
@@ -115,6 +121,20 @@ impl TypeSystem {
             let desc = InternalObject {
                 name: NXAUTH_USER_TYPE_NAME,
                 backing_table: "nextauth_user",
+            };
+
+            Type::Object(Arc::new(ObjectType::new(desc, fields).unwrap()))
+        });
+        ts.builtin_types.insert("NextAuthSession".into(), {
+            let fields = vec![
+                string_field("sessionToken"),
+                string_field("userId"),
+                string_field("expires"),
+            ];
+
+            let desc = InternalObject {
+                name: "NextAuthSession",
+                backing_table: "nextauth_session",
             };
 
             Type::Object(Arc::new(ObjectType::new(desc, fields).unwrap()))

@@ -8,3 +8,9 @@ $CHISEL apply
 $CURL -d '{"name":"Foo", "email":"foo@t.co"}' $CHISELD_HOST/__chiselstrike/auth/users
 # CHECK: HTTP/1.1 200 OK
 # CHECK: "email": "foo@t.co"
+
+$CURL -d '{"sessionToken":"tok1", "userId":"id1", "expires":"2025-12-31"}' $CHISELD_HOST/__chiselstrike/auth/sessions
+# CHECK: HTTP/1.1 200 OK
+# CHECK: "sessionToken": "tok1"
+# CHECK: "userId": "id1"
+# CHECK: "expires": "2025-12-31"
