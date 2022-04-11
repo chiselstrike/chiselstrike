@@ -701,7 +701,7 @@ export class ChiselEntity {
      *
      * * **GET:**
      *     * `/comments`                  returns an array with all elements (use carefully in datasets expected to be large)
-     *     * `/comments?filter={key:val}` returns all elements that match the filter specified by the json object given as search param.
+     *     * `/comments?<filters>`        returns all elements that match filters. For more details, please refer to our documentation.
      *     * `/comments/:id`              returns the element with the given ID.
      *
      * * **DELETE:**
