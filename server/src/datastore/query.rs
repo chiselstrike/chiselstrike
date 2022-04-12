@@ -892,9 +892,9 @@ impl Mutation {
         restrictions: &JsonObject,
     ) -> Result<Self> {
         let (ty, restrictions) = {
-            let ty = match type_system.lookup_custom_type(type_name, api_version) {
-                Err(_) => anyhow::bail!("Cannot delete from type `{}`", type_name),
-                Ok(ty) => ty,
+            let ty = match type_system.lookup_type(type_name, api_version) {
+                Ok(Type::Object(ty)) => ty,
+                _ => anyhow::bail!("Cannot delete from type `{}`", type_name),
             };
             let restrictions = convert_restrictions(restrictions)?;
             (ty, restrictions)
