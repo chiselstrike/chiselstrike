@@ -95,8 +95,8 @@ fn optional_number_field(name: &str) -> Field {
     }
 }
 
-impl TypeSystem {
-    pub(crate) fn new() -> Self {
+impl Default for TypeSystem {
+    fn default() -> Self {
         let mut ts = Self {
             versions: Default::default(),
             builtin_types: Default::default(),
@@ -169,7 +169,9 @@ impl TypeSystem {
 
         ts
     }
+}
 
+impl TypeSystem {
     pub(crate) async fn create_builtin_backing_tables(
         &self,
         query_engine: &QueryEngine,
