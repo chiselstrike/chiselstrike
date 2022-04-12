@@ -526,11 +526,10 @@ async fn op_chisel_store(
     let value = &content.value;
 
     let (query_engine, ty) = {
-        // Users can only store custom types.  Builtin types are managed by us.
         let mut state = state.borrow_mut();
-        let ty = match current_type_system(&state).lookup_custom_type(type_name, &api_version) {
-            Err(_) => anyhow::bail!("Cannot save into type {}.", type_name),
-            Ok(ty) => ty,
+        let ty = match current_type_system(&state).lookup_type(type_name, &api_version) {
+            Ok(Type::Object(ty)) => ty,
+            _ => anyhow::bail!("Cannot save into type {}.", type_name),
         };
 
         let query_engine = query_engine(&mut state).clone();

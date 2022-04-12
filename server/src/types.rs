@@ -31,10 +31,10 @@ pub(crate) struct VersionTypes {
     pub(crate) custom_types: HashMap<String, Arc<ObjectType>>,
 }
 
-#[derive(Debug, Default, Clone, new)]
+#[derive(Debug, Clone)]
 pub(crate) struct TypeSystem {
-    #[new(default)]
     pub(crate) versions: HashMap<String, VersionTypes>,
+    builtin_types: HashMap<String, Type>,
 }
 
 impl VersionTypes {
@@ -61,10 +61,52 @@ impl VersionTypes {
 
 pub(crate) const OAUTHUSER_TYPE_NAME: &str = "OAuthUser";
 
-thread_local! {
-    static OAUTHUSER_TYPE: Arc<ObjectType> = {
-        let fields = vec![
-            Field {
+fn string_field(name: &str) -> Field {
+    Field {
+        id: None,
+        name: name.into(),
+        type_: Type::String,
+        labels: vec![],
+        default: None,
+        effective_default: None,
+        is_optional: false,
+        api_version: "__chiselstrike".into(),
+        is_unique: false,
+    }
+}
+
+fn optional_string_field(name: &str) -> Field {
+    let mut f = string_field(name);
+    f.is_optional = true;
+    f
+}
+
+fn optional_number_field(name: &str) -> Field {
+    Field {
+        id: None,
+        name: name.into(),
+        type_: Type::Float,
+        labels: vec![],
+        default: None,
+        effective_default: None,
+        is_optional: true,
+        api_version: "__chiselstrike".into(),
+        is_unique: false,
+    }
+}
+
+impl Default for TypeSystem {
+    fn default() -> Self {
+        let mut ts = Self {
+            versions: Default::default(),
+            builtin_types: Default::default(),
+        };
+        ts.builtin_types.insert("string".into(), Type::String);
+        ts.builtin_types.insert("number".into(), Type::Float);
+        ts.builtin_types.insert("boolean".into(), Type::Boolean);
+        ts.add_builtin_object_type(
+            OAUTHUSER_TYPE_NAME,
+            vec![Field {
                 id: None,
                 name: "username".into(),
                 type_: Type::String,
@@ -74,18 +116,76 @@ thread_local! {
                 is_optional: false,
                 api_version: "__chiselstrike".into(),
                 is_unique: false,
-        }];
+            }],
+            "oauth_user",
+        );
+        ts.add_builtin_object_type(
+            "NextAuthUser",
+            vec![
+                optional_string_field("emailVerified"),
+                optional_string_field("name"),
+                optional_string_field("email"),
+                optional_string_field("image"),
+            ],
+            "nextauth_user",
+        );
+        ts.add_builtin_object_type(
+            "NextAuthSession",
+            vec![
+                string_field("sessionToken"),
+                string_field("userId"),
+                string_field("expires"),
+            ],
+            "nextauth_session",
+        );
+        ts.add_builtin_object_type(
+            "NextAuthToken",
+            vec![
+                string_field("identifier"),
+                string_field("expires"),
+                string_field("token"),
+            ],
+            "nextauth_token",
+        );
+        ts.add_builtin_object_type(
+            "NextAuthAccount",
+            vec![
+                string_field("providerAccountId"),
+                string_field("userId"),
+                string_field("provider"),
+                string_field("type"),
+                optional_string_field("access_token"),
+                optional_string_field("token_type"),
+                optional_string_field("id_token"),
+                optional_string_field("refresh_token"),
+                optional_string_field("scope"),
+                optional_string_field("session_state"),
+                optional_string_field("oauth_token_secret"),
+                optional_string_field("oauth_token"),
+                optional_number_field("expires_at"),
+            ],
+            "nextauth_account",
+        );
 
-        let desc = InternalObject {
-            name: OAUTHUSER_TYPE_NAME,
-            backing_table: "oauth_user",
-        };
-
-        Arc::new(ObjectType::new(desc, fields).unwrap())
+        ts
     }
 }
 
 impl TypeSystem {
+    pub(crate) async fn create_builtin_backing_tables(
+        &self,
+        query_engine: &QueryEngine,
+    ) -> anyhow::Result<()> {
+        let mut transaction = query_engine.start_transaction().await?;
+        for ty in self.builtin_types.values() {
+            if let Type::Object(ty) = ty {
+                query_engine.create_table(&mut transaction, ty).await?;
+            }
+        }
+        QueryEngine::commit_transaction(transaction).await?;
+        Ok(())
+    }
+
     /// Returns a mutable reference to all types from a specific version.
     ///
     /// If there are no types for this version, the version is created.
@@ -256,13 +356,10 @@ impl TypeSystem {
 
     /// Looks up a builtin type with name `type_name`.
     pub(crate) fn lookup_builtin_type(&self, type_name: &str) -> Result<Type, TypeSystemError> {
-        match type_name {
-            "string" => Ok(Type::String),
-            "number" => Ok(Type::Float),
-            "boolean" => Ok(Type::Boolean),
-            OAUTHUSER_TYPE_NAME => OAUTHUSER_TYPE.with(|t| Ok(Type::Object(t.clone()))),
-            _ => Err(TypeSystemError::NotABuiltinType(type_name.to_string())),
-        }
+        self.builtin_types
+            .get(type_name)
+            .cloned()
+            .ok_or_else(|| TypeSystemError::NotABuiltinType(type_name.to_string()))
     }
 
     /// Tries to look up a type. It tries to match built-ins first, custom types second.
@@ -336,6 +433,21 @@ impl TypeSystem {
             }
         }
         Ok(())
+    }
+
+    fn add_builtin_object_type(
+        &mut self,
+        type_name: &'static str,
+        fields: Vec<Field>,
+        backing_table_name: &'static str,
+    ) {
+        self.builtin_types.insert(type_name.into(), {
+            let desc = InternalObject {
+                name: type_name,
+                backing_table: backing_table_name,
+            };
+            Type::Object(Arc::new(ObjectType::new(desc, fields).unwrap()))
+        });
     }
 }
 

@@ -13,7 +13,6 @@ use crate::rpc::{GlobalRpcState, RpcService};
 use crate::runtime;
 use crate::runtime::Runtime;
 use crate::secrets::get_secrets;
-use crate::types::{Type, OAUTHUSER_TYPE_NAME};
 use crate::JsonObject;
 use anyhow::Result;
 use async_lock::Mutex;
@@ -108,6 +107,24 @@ impl SharedTasks {
     }
 }
 
+pub(crate) async fn add_endpoint<S: AsRef<str>>(
+    path: S,
+    code: String,
+    api_service: &ApiService,
+) -> Result<()> {
+    let path = path.as_ref();
+
+    compile_endpoint(path.to_string(), code).await?;
+    activate_endpoint(path).await?;
+
+    let func = Arc::new({
+        let path = path.to_string();
+        move |req| deno::run_js(path.clone(), req).boxed_local()
+    });
+    api_service.add_route(path.into(), func);
+    Ok(())
+}
+
 async fn run(state: SharedState, mut cmd: ExecutorChannel) -> Result<()> {
     init_deno(state.inspect_brk).await?;
 
@@ -126,20 +143,13 @@ async fn run(state: SharedState, mut cmd: ExecutorChannel) -> Result<()> {
     let routes = meta.load_endpoints().await?;
     let policies = meta.load_policies().await?;
     let mut api_service = ApiService::default();
-    crate::auth::init(&mut api_service);
+    crate::auth::init(&mut api_service).await?;
     crate::introspect::init(&mut api_service);
 
-    let oauth_user_type = match ts.lookup_builtin_type(OAUTHUSER_TYPE_NAME) {
-        Ok(Type::Object(t)) => t,
-        _ => anyhow::bail!("Internal error: type {} not found", OAUTHUSER_TYPE_NAME),
-    };
     let query_engine =
         Arc::new(QueryEngine::local_connection(&state.data_db, state.nr_connections).await?);
-    let mut transaction = query_engine.start_transaction().await?;
-    query_engine
-        .create_table(&mut transaction, &oauth_user_type)
+    ts.create_builtin_backing_tables(query_engine.as_ref())
         .await?;
-    QueryEngine::commit_transaction(transaction).await?;
     let api_service = Rc::new(api_service);
 
     let rt = Runtime::new(api_service.clone(), meta);
@@ -149,16 +159,7 @@ async fn run(state: SharedState, mut cmd: ExecutorChannel) -> Result<()> {
     set_policies(policies).await;
 
     for (path, code) in routes.iter() {
-        let path = path.to_str().unwrap();
-
-        compile_endpoint(path.to_string(), code.to_string()).await?;
-        activate_endpoint(path).await?;
-
-        let func = Arc::new({
-            let path = path.to_string();
-            move |req| deno::run_js(path.clone(), req).boxed_local()
-        });
-        api_service.add_route(path.into(), func);
+        add_endpoint(path.to_str().unwrap(), code.to_string(), &api_service).await?;
     }
 
     let command_task = tokio::task::spawn_local(async move {
