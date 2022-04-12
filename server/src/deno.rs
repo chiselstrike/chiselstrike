@@ -849,16 +849,7 @@ fn resolve_promise(
     ResolveFuture { js_promise }
 }
 
-async fn get_read_future(
-    read_tpl: Option<v8::Global<v8::Function>>,
-) -> Result<Option<(Box<[u8]>, ())>> {
-    let read = match read_tpl {
-        Some(x) => x,
-        None => {
-            return Ok(None);
-        }
-    };
-
+async fn get_read_future(read: v8::Global<v8::Function>) -> Result<Option<(Box<[u8]>, ())>> {
     let js_promise = {
         let mut service = get();
         let runtime = &mut service.worker.js_runtime;
@@ -898,14 +889,8 @@ fn get_read_stream(
         .to_object(scope)
         .ok_or(Error::NotAResponse)?;
 
-    let read = match get_member::<v8::Local<v8::Function>>(response, scope, "read") {
-        Ok(read) => {
-            let read = v8::Global::new(scope, read);
-            Some(read)
-        }
-        Err(_) => None,
-    };
-
+    let read = get_member::<v8::Local<v8::Function>>(response, scope, "read")?;
+    let read = v8::Global::new(scope, read);
     Ok(try_unfold((), move |_| get_read_future(read.clone())))
 }
 
