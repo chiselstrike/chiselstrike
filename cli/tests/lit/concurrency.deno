@@ -5,6 +5,15 @@
 cp examples/person.ts "$TEMPDIR/models"
 cp examples/store.js "$TEMPDIR/endpoints"
 
+cat << EOF > "$TEMPDIR/endpoints/query.ts"
+import { Person } from "../models/person.ts";
+
+export default async function (req: Request) {
+    const people = await Person.findMany({});
+    return new Response("Found " + people.length + " people.");
+}
+EOF
+
 cd "$TEMPDIR"
 
 $CHISEL apply
@@ -12,7 +21,7 @@ $CHISEL apply
 # CHECK: Model defined: Person
 # CHECK: End point defined: /dev/store
 
-for i in $(seq 1 1000); do
+for i in $(seq 1 100); do
   $CURL --data '{
       "first_name":"Glauber",
       "last_name":"Costa",
@@ -25,3 +34,7 @@ done
 # CHECK: ok
 
 wait
+
+$CURL -o - $CHISELD_HOST/dev/query
+
+# CHECK: Found 100 people.

@@ -2,32 +2,7 @@
 
 /// <reference types="./lib.deno_core.d.ts" />
 /// <reference lib="dom" />
-/// <reference lib="dom.iterable" />
 /// <reference lib="deno.unstable" />
-
-// Handlers that have been compiled but are not yet serving requests.
-type requestHandler = (req: Request) => Promise<Response>;
-const nextHandlers: Record<string, requestHandler> = {};
-const handlers: Record<string, requestHandler> = {};
-
-import { ChiselRequest, loggedInUser, requestContext } from "./chisel.ts";
-
-function buildReadableStreamForBody(rid: number) {
-    return new ReadableStream<string>({
-        async pull(controller: ReadableStreamDefaultController) {
-            const chunk = await Deno.core.opAsync("op_chisel_read_body", rid);
-            if (chunk) {
-                controller.enqueue(chunk);
-            } else {
-                controller.close();
-                Deno.core.opSync("op_close", rid);
-            }
-        },
-        cancel() {
-            Deno.core.opSync("op_close", rid);
-        },
-    });
-}
 
 const endpointWorker = new Worker("file:///worker.js", {
     type: "module",
@@ -49,7 +24,7 @@ endpointWorker.onerror = function (e) {
     throw e;
 };
 endpointWorker.onmessage = function (event) {
-    const resolver = resolvers.shift()!;
+    const resolver = resolvers[0];
     const d = event.data;
     const e = d.err;
     if (e) {
@@ -73,6 +48,7 @@ async function toWorker(msg: unknown) {
     try {
         return await p;
     } finally {
+        resolvers.shift();
         // If a message was scheduled while the worker was busy, post
         // it now.
         if (resolvers.length != 0) {
@@ -94,60 +70,22 @@ export async function importEndpoint(
     apiVersion: string,
     version: number,
 ) {
-    requestContext.path = path;
-    path = "/" + apiVersion + path;
-
-    // Modules are never unloaded, so we need to create an unique
-    // path. This will not be a problem once we publish the entire app
-    // at once, since then we can create a new isolate for it.
-    const url = `file:///${path}.js?ver=${version}`;
-    const mod = await import(url);
-    const handler = mod.default;
-    if (typeof handler !== "function") {
-        throw new Error(
-            "expected type `v8::data::Function`, got `v8::data::Value`",
-        );
-    }
-    nextHandlers[path] = handler;
-}
-
-export function activateEndpoint(path: string) {
-    handlers[path] = nextHandlers[path];
-    delete nextHandlers[path];
-}
-
-async function rollback_on_failure<T>(func: () => Promise<T>): Promise<T> {
-    try {
-        return await func();
-    } catch (e) {
-        Deno.core.opSync("op_chisel_rollback_transaction");
-        throw e;
-    }
-}
-
-export function callHandler(
-    userid: string | undefined,
-    path: string,
-    apiVersion: string,
-    url: string,
-    method: string,
-    headers: HeadersInit,
-    rid?: number,
-) {
-    return rollback_on_failure(() => {
-        return callHandlerImpl(
-            userid,
-            path,
-            apiVersion,
-            url,
-            method,
-            headers,
-            rid,
-        );
+    await toWorker({
+        cmd: "importEndpoint",
+        path,
+        apiVersion,
+        version,
     });
 }
 
-async function callHandlerImpl(
+export async function activateEndpoint(path: string) {
+    await toWorker({
+        cmd: "activateEndpoint",
+        path,
+    });
+}
+
+export async function callHandler(
     userid: string | undefined,
     path: string,
     apiVersion: string,
@@ -156,59 +94,43 @@ async function callHandlerImpl(
     headers: HeadersInit,
     rid?: number,
 ) {
-    requestContext.method = method;
-    requestContext.apiVersion = apiVersion;
-    requestContext.path = path;
-    requestContext.userId = userid;
-
-    // FIXME: maybe defer creating the transaction until we need one, to avoid doing it for
-    // endpoints that don't do any data access. For now, because we always create it above,
-    // it should be safe to unwrap.
-    await Deno.core.opAsync("op_chisel_create_transaction");
-
-    const init: RequestInit = { method: method, headers: headers };
-    if (rid !== undefined) {
-        const body = buildReadableStreamForBody(rid);
-        init.body = body;
-    }
-
-    const fullPath = "/" + apiVersion + path;
-    const pathParams = new URL(url).pathname.replace(
-        /\/+/g,
-        "/",
-    ).replace(/\/$/, "").substring(fullPath.length + 1);
-
-    const user = await loggedInUser();
-
-    const req = new ChiselRequest(
-        url,
-        init,
-        apiVersion,
-        path,
-        pathParams,
-        user,
-    );
-    const res = await handlers[fullPath](req);
-    const resHeaders: [string, string][] = [];
-    for (const h of res.headers) {
-        resHeaders.push(h);
-    }
-    const reader = res.body?.getReader();
-    const read = reader
-        ? function () {
-            return rollback_on_failure(async () => {
-                const v = await reader.read();
-                if (v.done) {
-                    await Deno.core.opAsync("op_chisel_commit_transaction");
-                    return undefined;
-                }
-                return v.value;
-            });
+    let chunks = undefined;
+    if (rid) {
+        chunks = [];
+        for (;;) {
+            const chunk = await Deno.core.opAsync("op_chisel_read_body", rid);
+            if (chunk !== null) {
+                chunks.push(chunk);
+            } else {
+                Deno.core.opSync("op_close", rid);
+                break;
+            }
         }
-        : undefined;
+    }
+
+    const res = await toWorker({
+        cmd: "callHandler",
+        userid,
+        path,
+        apiVersion,
+        url,
+        method,
+        headers,
+        chunks,
+    }) as { body?: number; status: number; headers: number };
+
+    // The read function is called repeatedly until it return
+    // undefined. In the current implementation it returns the full
+    // body on the first call and undefined on the second.
+    let body = res.body;
+    const read = function () {
+        const ret = body;
+        body = undefined;
+        return ret;
+    };
     return {
         "status": res.status,
-        "headers": resHeaders,
+        "headers": res.headers,
         "read": read,
     };
 }

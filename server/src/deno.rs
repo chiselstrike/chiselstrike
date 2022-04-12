@@ -16,7 +16,7 @@ use crate::types::TypeSystem;
 use crate::types::TypeSystemError;
 use crate::vecmap::VecMap;
 use crate::JsonObject;
-use anyhow::{anyhow, bail, Context as AnyhowContext, Result};
+use anyhow::{anyhow, Context as AnyhowContext, Result};
 use api::chisel_js;
 use api::endpoint_js;
 use api::worker_js;
@@ -85,9 +85,25 @@ struct VersionedCode {
     version: u64,
 }
 
-enum WorkerMsg {}
+enum WorkerMsg {
+    SetTypeSystem(TypeSystem),
+    LookupBuiltinType(String),
+    RemoveTypeVersion(String),
+    SetQueryEngine(Arc<QueryEngine>),
+    GetQueryEngine,
+    SetPolicies(Policies),
+    MutatePolicies(Box<dyn FnOnce(&mut Policies) + Send>),
+    SetCurrentSecrets(JsonObject),
+    GetSecret(String),
+    IsAllowedByPolicy(String, Option<String>, std::path::PathBuf),
+}
 
-enum WorkerResp {}
+enum WorkerResp {
+    IsAllowedByPolicy(Result<bool>),
+    GetQueryEngine(Arc<QueryEngine>),
+    LookupBuiltinType(Result<Type, TypeSystemError>),
+    GetSecret(Option<serde_json::Value>),
+}
 
 /// A v8 isolate doesn't want to be moved between or used from
 /// multiple threads. A JsRuntime owns an isolate, so we need to use a
@@ -112,10 +128,10 @@ struct DenoService {
     import_endpoint: v8::Global<v8::Function>,
     activate_endpoint: v8::Global<v8::Function>,
     call_handler: v8::Global<v8::Function>,
-    _read_worker_channel: v8::Global<v8::Function>,
+    read_worker_channel: v8::Global<v8::Function>,
 
-    _to_worker: Sender<WorkerMsg>,
-    _from_worker: Receiver<WorkerResp>,
+    to_worker: Sender<WorkerMsg>,
+    from_worker: Receiver<WorkerResp>,
     worker_channel_id: u32,
 }
 
@@ -280,7 +296,7 @@ fn create_web_worker(
 #[derive(Debug)]
 struct Channel {
     receiver: Receiver<WorkerMsg>,
-    _sender: Sender<WorkerResp>,
+    sender: Sender<WorkerResp>,
 }
 
 type GlobalChannels = VecMap<Channel>;
@@ -445,7 +461,7 @@ impl DenoService {
         let mut map = GLOBAL_WORKER_CHANNELS.lock().unwrap();
         let worker_channel_id = map.push(Channel {
             receiver: to_worker_receiver,
-            _sender: from_worker_sender,
+            sender: from_worker_sender,
         }) as u32;
 
         (
@@ -456,10 +472,10 @@ impl DenoService {
                 import_endpoint,
                 activate_endpoint,
                 call_handler,
-                _to_worker: to_worker_sender,
-                _from_worker: from_worker_receiver,
+                to_worker: to_worker_sender,
+                from_worker: from_worker_receiver,
                 worker_channel_id,
-                _read_worker_channel: read_worker_channel,
+                read_worker_channel,
             },
             init_worker,
         )
@@ -522,7 +538,7 @@ async fn op_chisel_store(
     };
     let transaction = {
         let state = state.borrow();
-        current_transaction(&state)?
+        current_transaction(&state)
     };
     let mut transaction = transaction.lock().await;
     query_engine
@@ -633,7 +649,7 @@ fn op_chisel_relational_query_create(
 }
 
 fn create_query(op_state: &mut OpState, query_plan: QueryPlan) -> Result<ResourceId> {
-    let transaction = current_transaction(op_state)?;
+    let transaction = current_transaction(op_state);
     let query_engine = query_engine(op_state);
     let stream = query_engine.query(transaction, query_plan)?;
     let resource = QueryStreamResource {
@@ -687,9 +703,71 @@ fn op_chisel_init_worker(id: u32) {
 }
 
 #[op]
-async fn op_chisel_read_worker_channel(_state: Rc<RefCell<OpState>>) -> Result<()> {
+async fn op_chisel_read_worker_channel(state: Rc<RefCell<OpState>>) -> Result<()> {
     let receiver = WORKER_CHANNEL.with(|d| d.get().unwrap().receiver.clone());
-    let _msg = receiver.recv().await.unwrap();
+    let msg = receiver.recv().await.unwrap();
+
+    let reply = {
+        let mut state = state.borrow_mut();
+        let state = &mut state;
+        match msg {
+            WorkerMsg::GetSecret(name) => {
+                let secret = current_secrets(state).and_then(|sec| sec.get(&name).cloned());
+                Some(WorkerResp::GetSecret(secret))
+            }
+            WorkerMsg::SetTypeSystem(type_system) => {
+                state.put(type_system);
+                None
+            }
+            WorkerMsg::RemoveTypeVersion(version) => {
+                let type_system = state.borrow_mut::<TypeSystem>();
+                type_system.versions.remove(&version);
+                None
+            }
+            WorkerMsg::LookupBuiltinType(type_name) => {
+                let type_system = current_type_system(state);
+                let res = type_system.lookup_builtin_type(&type_name);
+                Some(WorkerResp::LookupBuiltinType(res))
+            }
+            WorkerMsg::SetQueryEngine(query_engine) => {
+                state.put(query_engine);
+                None
+            }
+            WorkerMsg::GetQueryEngine => {
+                let engine = query_engine(state).clone();
+                Some(WorkerResp::GetQueryEngine(engine))
+            }
+            WorkerMsg::SetPolicies(policies) => {
+                state.put(policies);
+                None
+            }
+            WorkerMsg::MutatePolicies(func) => {
+                func(state.borrow_mut());
+                None
+            }
+            WorkerMsg::SetCurrentSecrets(secretes) => {
+                state.put(secretes);
+                None
+            }
+            WorkerMsg::IsAllowedByPolicy(api_version, username, path) => {
+                let policies = current_policies(state);
+                let allowed = match policies.versions.get(&api_version) {
+                    None => Err(anyhow!(
+                        "found a route, but no version object for {}/{}",
+                        api_version,
+                        path.display()
+                    )),
+                    Some(x) => Ok(x.user_authorization.is_allowed(username, &path)),
+                };
+                Some(WorkerResp::IsAllowedByPolicy(allowed))
+            }
+        }
+    };
+
+    if let Some(reply) = reply {
+        let sender = WORKER_CHANNEL.with(|d| d.get().unwrap().sender.clone());
+        sender.send(reply).await.unwrap();
+    }
     Ok(())
 }
 
@@ -842,17 +920,6 @@ impl Resource for BodyResource {
     }
 }
 
-fn with_op_state<T, F>(func: F) -> T
-where
-    F: FnOnce(&mut OpState) -> T,
-{
-    let mut service = get();
-    let runtime = &mut service.worker.js_runtime;
-    let op_state = runtime.op_state();
-    let mut borrow = op_state.borrow_mut();
-    func(&mut borrow)
-}
-
 fn current_policies(st: &OpState) -> &Policies {
     st.borrow()
 }
@@ -862,21 +929,20 @@ pub(crate) async fn is_allowed_by_policy(
     username: Option<String>,
     path: &std::path::Path,
 ) -> Result<bool> {
-    with_op_state(|st| {
-        let policies = current_policies(st);
-        match policies.versions.get(api_version) {
-            None => bail!(
-                "found a route, but no version object for {}/{}",
-                api_version,
-                path.display()
-            ),
-            Some(x) => Ok(x.user_authorization.is_allowed(username, path)),
-        }
-    })
+    let reply = to_worker_and_back(WorkerMsg::IsAllowedByPolicy(
+        api_version.to_string(),
+        username.clone(),
+        path.to_path_buf(),
+    ))
+    .await;
+    match reply {
+        WorkerResp::IsAllowedByPolicy(allowed) => allowed,
+        _ => unreachable!("Bad reply"),
+    }
 }
 
 async fn mutate_policies_impl(func: Box<dyn FnOnce(&mut Policies) + Send>) {
-    with_op_state(|st| func(st.borrow_mut()));
+    to_worker(WorkerMsg::MutatePolicies(func)).await;
 }
 
 pub(crate) async fn mutate_policies<F>(func: F)
@@ -887,23 +953,19 @@ where
 }
 
 pub(crate) async fn set_policies(policies: Policies) {
-    with_op_state(|st| {
-        st.put(policies);
-    });
+    to_worker(WorkerMsg::SetPolicies(policies)).await;
 }
 
-fn current_transaction(st: &OpState) -> Result<TransactionStatic> {
-    st.try_borrow()
-        .cloned()
-        .ok_or_else(|| anyhow!("no active transaction"))
+fn take_current_transaction(state: &mut OpState) -> TransactionStatic {
+    state.take()
 }
 
-fn take_current_transaction(state: &mut OpState) -> Option<TransactionStatic> {
-    // FIXME: We should always have a transaction in here
-    state.try_take::<TransactionStatic>()
+fn current_transaction(st: &OpState) -> TransactionStatic {
+    st.borrow::<TransactionStatic>().clone()
 }
 
 fn set_current_transaction(st: &mut OpState, transaction: TransactionStatic) {
+    assert!(!st.has::<TransactionStatic>());
     st.put(transaction);
 }
 
@@ -912,15 +974,15 @@ fn current_secrets(st: &OpState) -> Option<&JsonObject> {
 }
 
 pub(crate) async fn get_secret(name: &str) -> Option<serde_json::Value> {
-    with_op_state(|state| current_secrets(state).and_then(|sec| sec.get(name).cloned()))
+    let reply = to_worker_and_back(WorkerMsg::GetSecret(name.to_string())).await;
+    match reply {
+        WorkerResp::GetSecret(secrete) => secrete,
+        _ => unreachable!("Bad reply"),
+    }
 }
 
 fn current_type_system(st: &OpState) -> &TypeSystem {
     st.borrow()
-}
-
-fn current_type_system_mut(st: &mut OpState) -> &mut TypeSystem {
-    st.borrow_mut()
 }
 
 fn query_engine(st: &mut OpState) -> &mut Arc<QueryEngine> {
@@ -928,32 +990,37 @@ fn query_engine(st: &mut OpState) -> &mut Arc<QueryEngine> {
 }
 
 pub(crate) async fn set_query_engine(query_engine: Arc<QueryEngine>) {
-    with_op_state(move |state| {
-        state.put(query_engine);
-    });
+    to_worker(WorkerMsg::SetQueryEngine(query_engine)).await;
 }
 
 pub(crate) async fn query_engine_arc() -> Arc<QueryEngine> {
-    with_op_state(|state| query_engine(state).clone())
+    let reply = to_worker_and_back(WorkerMsg::GetQueryEngine).await;
+    match reply {
+        WorkerResp::GetQueryEngine(engine) => engine,
+        _ => unreachable!("Bad reply"),
+    }
 }
 
 pub(crate) async fn lookup_builtin_type(type_name: &str) -> Result<Type, TypeSystemError> {
-    with_op_state(|state| {
-        let type_system = current_type_system(state);
-        type_system.lookup_builtin_type(type_name)
-    })
+    let reply = to_worker_and_back(WorkerMsg::LookupBuiltinType(type_name.to_string())).await;
+    match reply {
+        WorkerResp::LookupBuiltinType(res) => res,
+        _ => unreachable!("Bad reply"),
+    }
 }
 
 pub(crate) async fn remove_type_version(version: &str) {
-    with_op_state(|state| {
-        let type_system = current_type_system_mut(state);
-        type_system.versions.remove(version);
-    });
+    to_worker(WorkerMsg::RemoveTypeVersion(version.to_string())).await;
 }
 
-async fn _to_worker(msg: WorkerMsg) {
+thread_local! {
+    static CHANNEL_LOCK: Arc<async_lock::Mutex<()>> = Arc::new(async_lock::Mutex::new(()));
+}
+
+async fn to_worker(msg: WorkerMsg) {
+    let _handle = CHANNEL_LOCK.with(|d| d.lock_arc()).await;
     let promise = {
-        let sender = get()._to_worker.clone();
+        let sender = get().to_worker.clone();
         sender.send(msg).await.unwrap();
         let mut service = get();
         let service: &mut DenoService = &mut service;
@@ -961,7 +1028,7 @@ async fn _to_worker(msg: WorkerMsg) {
         let scope = &mut runtime.handle_scope();
         let undefined = v8::undefined(scope).into();
         let promise = service
-            ._read_worker_channel
+            .read_worker_channel
             .open(scope)
             .call(scope, undefined, &[])
             .unwrap();
@@ -970,16 +1037,18 @@ async fn _to_worker(msg: WorkerMsg) {
     resolve_promise(promise).await.unwrap();
 }
 
+async fn to_worker_and_back(msg: WorkerMsg) -> WorkerResp {
+    to_worker(msg).await;
+    let from_worker = get().from_worker.clone();
+    from_worker.recv().await.unwrap()
+}
+
 pub(crate) async fn set_type_system(type_system: TypeSystem) {
-    with_op_state(move |state| {
-        state.put(type_system);
-    });
+    to_worker(WorkerMsg::SetTypeSystem(type_system)).await;
 }
 
 pub(crate) async fn update_secrets(secrets: JsonObject) {
-    with_op_state(|state| {
-        state.put(secrets);
-    })
+    to_worker(WorkerMsg::SetCurrentSecrets(secrets.clone())).await;
 }
 
 fn get_result_aux(
@@ -1077,10 +1146,7 @@ async fn get_result(
 async fn op_chisel_commit_transaction(state: Rc<RefCell<OpState>>) -> Result<()> {
     let transaction = {
         let mut state = state.borrow_mut();
-        match take_current_transaction(&mut state) {
-            Some(v) => v,
-            None => return Ok(()),
-        }
+        take_current_transaction(&mut state)
     };
     crate::datastore::QueryEngine::commit_transaction_static(transaction).await?;
     Ok(())
