@@ -997,12 +997,7 @@ pub(crate) async fn remove_type_version(version: &str) {
     to_worker(WorkerMsg::RemoveTypeVersion(version.to_string())).await;
 }
 
-thread_local! {
-    static CHANNEL_LOCK: Arc<async_lock::Mutex<()>> = Arc::new(async_lock::Mutex::new(()));
-}
-
 async fn to_worker(msg: WorkerMsg) {
-    let _handle = CHANNEL_LOCK.with(|d| d.lock_arc()).await;
     let promise = {
         let sender = get().to_worker.clone();
         sender.send(msg).await.unwrap();
