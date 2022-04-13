@@ -46,8 +46,15 @@ pub(crate) async fn cmd_dev(server_url: String, type_check: bool) -> Result<()> 
                 paths,
                 ..
             }) => {
+                let paths: HashSet<PathBuf> = HashSet::from_iter(
+                    paths
+                        .into_iter()
+                        .filter(|path| !crate::project::ignore_path(path.to_str().unwrap())),
+                );
                 let paths = HashSet::from_iter(paths.into_iter());
-                apply_from_dev(server_url.clone(), type_check, paths).await;
+                if !paths.is_empty() {
+                    apply_from_dev(server_url.clone(), type_check, paths).await;
+                }
             }
             Ok(_) => { /* ignore */ }
             Err(e) => println!("watch error: {:?}", e),

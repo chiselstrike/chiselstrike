@@ -118,7 +118,7 @@ fn dir_to_paths(dir: &Path, paths: &mut Vec<PathBuf>) -> anyhow::Result<()> {
     Ok(())
 }
 
-fn ignore_path(path: &str) -> bool {
+pub fn ignore_path(path: &str) -> bool {
     if path.starts_with('.') {
         return true;
     }
