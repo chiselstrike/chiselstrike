@@ -37,6 +37,30 @@ pub(crate) fn query_str_to_ops(base_type: &Arc<ObjectType>, url: &str) -> Result
     Ok(ops)
 }
 
+pub(crate) fn url_to_filter(base_type: &Arc<ObjectType>, url: &str) -> Result<Option<Expr>> {
+    let mut filter = None;
+    let q = Url::parse(url).with_context(|| format!("failed to parse query string '{}'", url))?;
+    for (param_key, value) in q.query_pairs().into_owned() {
+        let param_key = param_key.to_string();
+        if let Some(param_key) = param_key.strip_prefix('.') {
+            let expression =
+                parse_filter(base_type, param_key, &value).context("failed to parse filter")?;
+
+            filter = filter
+                .map_or(expression.clone(), |e| {
+                    BinaryExpr {
+                        left: Box::new(expression),
+                        op: BinaryOp::And,
+                        right: Box::new(e),
+                    }
+                    .into()
+                })
+                .into();
+        }
+    }
+    Ok(filter)
+}
+
 fn parse_query_parameter(
     base_type: &Arc<ObjectType>,
     param_key: &str,

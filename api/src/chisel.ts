@@ -647,7 +647,7 @@ export class ChiselEntity {
         ensureNotGet();
         await Deno.core.opAsync("op_chisel_entity_delete", {
             typeName: this.name,
-            restrictions: restrictions,
+            filterExpr: restrictionsToFilterExpr(restrictions),
         }, requestContext);
     }
 
@@ -674,8 +674,8 @@ export class ChiselEntity {
      *
      * * **DELETE:**
      *     * `/comments/:id`              deletes the element with the given ID.
-     *     * `/comments?filter={key:val}` deletes all elements that match the filter specified by the json object given as search param.
-     *     * `/comments?filter={}`        deletes all elements
+     *     * `/comments?<filters>`        deletes all elements that match filters. For more details, please refer to our documentation.
+     *     * `/comments?all=true`         deletes all elements
      *
      * * **PUT:**
      *     * `/comments/:id`         overwrites the element with the given ID. Payload is a JSON with the properties of `Comment` as keys
@@ -895,34 +895,6 @@ type ChiselEntityClass<T extends ChiselEntity> = {
 type GenericChiselEntityClass = ChiselEntityClass<ChiselEntity>;
 
 /**
- * Get the filters to be used with a ChiselEntity from a URL.
- *
- * This will get the URL search parameter "filter" and assume it's a JSON object.
- * @param _entity the entity class that will be filtered
- * @param url the url that provides the search parameters
- * @returns the filter object, if found and successfully parsed; undefined if not found; throws if parsing failed
- */
-export function getEntityFiltersFromURL<
-    T extends ChiselEntity,
-    E extends ChiselEntityClass<T>,
->(_entity: E, url: URL): Partial<T> | undefined {
-    // TODO: it's more common to have filters as regular query parameters, URI-encoded,
-    // then entity may be used to get such field names
-    // TODO: validate if unknown filters where given?
-    const filter = url.searchParams.get("filter");
-    if (!filter) {
-        return undefined;
-    }
-    const o = JSON.parse(decodeURI(filter));
-    if (o && typeof o === "object") {
-        return o;
-    }
-    throw new Error(
-        `provided search parameter 'filter=${filter}' is not a JSON object.`,
-    );
-}
-
-/**
  * Creates a path parser from a template using regexparam.
  *
  * @param pathTemplate the path template such as `/static`, `/param/:id/:otherParam`...
@@ -1022,7 +994,7 @@ export type CRUDCreateResponses<
 /**
  * Fetches crud data based on crud `url`.
  */
-async function fetchCrudData<T extends ChiselEntity>(
+async function fetchEntitiesCrud<T extends ChiselEntity>(
     type: { new (): T },
     url: string,
 ): Promise<T[]> {
@@ -1062,6 +1034,20 @@ async function fetchCrudData<T extends ChiselEntity>(
     return arr;
 }
 
+async function deleteEntitiesCrud<T extends ChiselEntity>(
+    type: { new (): T },
+    url: string,
+): Promise<void> {
+    await Deno.core.opAsync(
+        "op_chisel_crud_delete",
+        {
+            typeName: type.name,
+            url,
+        },
+        requestContext,
+    );
+}
+
 const defaultCrudMethods: CRUDMethods<ChiselEntity, GenericChiselEntityClass> =
     {
         // Returns a specific entity matching params.id (if present) or all entities matching the filter in the `filter` URL parameter.
@@ -1078,7 +1064,7 @@ const defaultCrudMethods: CRUDMethods<ChiselEntity, GenericChiselEntityClass> =
                 return createResponse(u ?? "Not found", u ? 200 : 404);
             } else {
                 return createResponse(
-                    await fetchCrudData(entity, url.href),
+                    await fetchEntitiesCrud(entity, url.href),
                     200,
                 );
             }
@@ -1128,16 +1114,13 @@ const defaultCrudMethods: CRUDMethods<ChiselEntity, GenericChiselEntityClass> =
             if (id) {
                 await entity.delete({ id });
                 return createResponse(`Deleted ID ${id}`, 200);
-            }
-            const restrictions = getEntityFiltersFromURL(entity, url);
-            if (restrictions) {
-                await entity.delete(restrictions);
+            } else {
+                await deleteEntitiesCrud(entity, url.href);
                 return createResponse(
-                    `Deleted entities matching ${JSON.stringify(restrictions)}`,
+                    `Deleted entities matching ${url.search}`,
                     200,
                 );
             }
-            return createResponse("Neither ID nor filter found", 422);
         },
     } as const;
 

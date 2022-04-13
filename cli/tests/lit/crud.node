@@ -161,21 +161,17 @@ $CURL "$CHISELD_HOST/dev/persons?.age=10"
 
 ## Test deletion with filter
 
-$CURL -X DELETE "$CHISELD_HOST/dev/persons?filter=\\{%22age%22:40\\}" # Filtered DELETE
+$CURL -X DELETE "$CHISELD_HOST/dev/persons?.age=40" # Filtered DELETE
 # CHECK: HTTP/1.1 200 OK
-# CHECK: Deleted entities matching {\"age\":40}
+# CHECK: Deleted entities matching ?.age=40
 $CURL $CHISELD_HOST/dev/persons | tr , \\n | sort
 # CHECK: "last_name": "Anderson"
 # CHECK: "last_name": "Chong"
 # CHECK: "last_name": "Elgin"
 
-$CURL -X DELETE $CHISELD_HOST/dev/persons # Filter missing
-# CHECK: HTTP/1.1 422 Unprocessable Entity
-# CHECK: Neither ID nor filter found
-
-$CURL -X DELETE "$CHISELD_HOST/dev/persons?filter=\\{\\}" # DELETE all
+$CURL -X DELETE "$CHISELD_HOST/dev/persons?all=true" # DELETE all
 # CHECK: HTTP/1.1 200 OK
-# CHECK: Deleted entities matching {}
+# CHECK: Deleted entities matching ?all=true
 $CURL $CHISELD_HOST/dev/persons
 # CHECK: HTTP/1.1 200 OK
 # CHECK: []
@@ -192,9 +188,9 @@ $CURL $CHISELD_HOST/dev/persons | tr , \\n | grep first_name
 # CHECK: "first_name": "Alice"
 # CHECK: "first_name": "Alice"
 
-$CURL -X DELETE "$CHISELD_HOST/dev/persons?filter=\\{\\}"
+$CURL -X DELETE "$CHISELD_HOST/dev/persons?all=true"
 # CHECK: HTTP/1.1 200 OK
-# CHECK: Deleted entities matching {}
+# CHECK: Deleted entities matching ?all=true
 
 $CURL -X PUT -d '{"age":98422}' $CHISELD_HOST/dev/persons/cef5d492-d7e3-4c45-9a55-5929b9ab8292
 # CHECK: HTTP/1.1 200 OK

@@ -8,6 +8,7 @@ use crate::datastore::engine::extract_transaction;
 use crate::datastore::engine::IdTree;
 use crate::datastore::engine::TransactionStatic;
 use crate::datastore::engine::{QueryResults, ResultRow};
+use crate::datastore::expr::Expr;
 use crate::datastore::query::{Mutation, QueryOpChain, QueryPlan, RequestContext};
 use crate::datastore::MetaService;
 use crate::datastore::QueryEngine;
@@ -222,6 +223,7 @@ fn build_extensions() -> Vec<Extension> {
             op_chisel_read_body::decl(),
             op_chisel_store::decl(),
             op_chisel_entity_delete::decl(),
+            op_chisel_crud_delete::decl(),
             op_chisel_get_secret::decl(),
             op_chisel_crud_query_create::decl(),
             op_chisel_relational_query_create::decl(),
@@ -552,7 +554,8 @@ async fn op_chisel_store(
 struct DeleteParams {
     #[serde(rename = "typeName")]
     type_name: String,
-    restrictions: JsonObject,
+    #[serde(rename = "filterExpr")]
+    filter_expr: Option<Expr>,
 }
 
 #[op]
@@ -563,17 +566,59 @@ async fn op_chisel_entity_delete(
 ) -> Result<()> {
     let mutation = {
         let state = state.borrow_mut();
-        Mutation::parse_delete(
-            current_type_system(&state),
-            &context.api_version,
+        Mutation::delete_with_expr(
+            &RequestContext {
+                policies: current_policies(&state),
+                ts: current_type_system(&state),
+                api_version: context.api_version,
+                user_id: context.user_id,
+                path: context.path,
+            },
             &params.type_name,
-            &params.restrictions,
+            &params.filter_expr,
         )
         .context(
             "failed to construct delete expression from JSON passed to `op_chisel_entity_delete`",
         )?
     };
     let query_engine = query_engine_arc(&state.borrow());
+    query_engine.mutate(mutation).await
+}
+
+#[derive(Deserialize)]
+struct CrudDeleteParams {
+    #[serde(rename = "typeName")]
+    type_name: String,
+    url: String,
+}
+
+#[op]
+async fn op_chisel_crud_delete(
+    state: Rc<RefCell<OpState>>,
+    params: CrudDeleteParams,
+    context: ChiselRequestContext,
+) -> Result<()> {
+    let mutation = {
+        let state = state.borrow_mut();
+        Mutation::delete_from_crud_url(
+            &RequestContext {
+                policies: current_policies(&state),
+                ts: current_type_system(&state),
+                api_version: context.api_version,
+                user_id: context.user_id,
+                path: context.path,
+            },
+            &params.type_name,
+            &params.url,
+        )
+        .context(
+            "failed to construct delete expression from JSON passed to `op_chisel_crud_delete`",
+        )?
+    };
+    let query_engine = {
+        let state = state.borrow();
+        query_engine_arc(&state).clone()
+    };
     query_engine.mutate(mutation).await
 }
 

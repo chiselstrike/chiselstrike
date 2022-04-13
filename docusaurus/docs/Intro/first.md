@@ -421,6 +421,12 @@ and ultimately `DELETE` it:
 curl -X DELETE localhost:8080/dev/comments/d419e629-4304-44d5-b534-9ce446f25e9d
 ```
 
+Alternatively, you can delete by specifying the same filters as for GET method. So for example, to delete all Comments written by Jack, we can write:
+
+```
+curl -X DELETE localhost:8080/dev/comments/?.by=Jack
+```
+
 🎉 Ta-da! You're a pro now!  There's a basic simple CRUD RESTful API, right out of the box.
 In the next sections we'll show how to customize this endpoint further.
 

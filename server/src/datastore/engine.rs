@@ -119,8 +119,6 @@ impl SqlWithArguments {
         for arg in &self.args {
             match arg {
                 SqlValue::Bool(arg) => sqlx_query = sqlx_query.bind(*arg as i64),
-                SqlValue::U64(arg) => sqlx_query = sqlx_query.bind(*arg as i64),
-                SqlValue::I64(arg) => sqlx_query = sqlx_query.bind(arg),
                 SqlValue::F64(arg) => sqlx_query = sqlx_query.bind(arg),
                 SqlValue::String(arg) => sqlx_query = sqlx_query.bind(arg),
             };
@@ -414,7 +412,7 @@ impl QueryEngine {
         tr: TransactionStatic,
         query_plan: QueryPlan,
     ) -> anyhow::Result<QueryResults> {
-        let query = query_plan.build_query(self.target_db())?;
+        let query = query_plan.build_query(&self.target_db())?;
         let allowed_fields = query.allowed_fields;
 
         let stream = new_query_results(query.raw_sql, tr);
@@ -426,7 +424,8 @@ impl QueryEngine {
     /// Execute the given `mutation`.
     pub(crate) async fn mutate(&self, mutation: Mutation) -> Result<()> {
         let mut transaction = self.start_transaction().await?;
-        let query = sqlx::query(&mutation.raw_sql);
+        let raw_sql = mutation.build_sql(self.target_db())?;
+        let query = sqlx::query(&raw_sql);
         transaction.execute(query).await?;
         QueryEngine::commit_transaction(transaction).await?;
         Ok(())
