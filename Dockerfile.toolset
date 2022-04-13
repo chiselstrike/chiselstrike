@@ -4,7 +4,7 @@ COPY target/release/chisel /usr/local/bin/chisel
 ARG DEBIAN_FRONTEND=noninteractive
 
 RUN apt-get update && \
-    apt-get install -y curl && \
+    apt-get install -y curl sqlite3 && \
     N=$(curl -XGET https://nodejs.org/dist/latest/|grep linux-x64.tar.gz|awk -F'>' '{ print $2 }'|awk -F'<' '{ print $1 }') && \
     curl -fsSLOk --compressed https://nodejs.org/dist/latest-v17.x/$N && \
     tar -zxvf $N -C /usr/local --strip-components=1 --no-same-owner && \
