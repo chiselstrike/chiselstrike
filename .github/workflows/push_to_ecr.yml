@@ -4,6 +4,8 @@ on:
   push:
     branches:
       - release*
+    tags:
+￼      - '*'
 
 jobs:
   release:
