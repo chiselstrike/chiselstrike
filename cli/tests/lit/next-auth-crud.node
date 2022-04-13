@@ -8,9 +8,9 @@ $CHISEL apply
 $CURL -d '{"name":"Foo", "email":"foo@t.co"}' $CHISELD_HOST/__chiselstrike/auth/users
 # CHECK: HTTP/1.1 200 OK
 # CHECK: "email": "foo@t.co"
-$CURL -X DELETE "$CHISELD_HOST/__chiselstrike/auth/users?filter=\\{%22name%22:%22Foo%22\\}"
+$CURL -X DELETE "$CHISELD_HOST/__chiselstrike/auth/users?.name=Foo"
 # CHECK: HTTP/1.1 200 OK
-# CHECK: Deleted entities matching {\"name\":\"Foo\"}
+# CHECK: Deleted entities matching ?.name=Foo
 $CURL $CHISELD_HOST/__chiselstrike/auth/users
 # CHECK: HTTP/1.1 200 OK
 # CHECK: []

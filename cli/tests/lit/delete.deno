@@ -40,8 +40,8 @@ $CURL $CHISELD_HOST/dev/user | tr , \\n | sort
 # CHECK: "username": "alice"
 # CHECK: "username": "bob"
 
-$CURL -X DELETE "$CHISELD_HOST/dev/user?filter=\\{%22email%22:%22bob@bob.me%22\\}"
-# CHECK: Deleted entities matching {\"email\":\"bob@bob.me\"}
+$CURL -X DELETE "$CHISELD_HOST/dev/user?.email=bob@bob.me"
+# CHECK: Deleted entities matching ?.email=bob@bob.me
 
 $CURL $CHISELD_HOST/dev/user
 # CHECK: "username": "alice"
