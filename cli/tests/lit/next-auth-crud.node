@@ -36,3 +36,18 @@ $CURL -d '{"providerAccountId":"acct1", "userId":"usr1", "provider":"gh", "type"
 # CHECK: "type": "oauth"
 # CHECK: "expires_at": 42
 # CHECK: "session_state": "good"
+
+## CHISEL_API_AUTH_SECRET protection should cover these endpoints, too
+echo '{ "CHISEL_API_AUTH_SECRET" : "aa" }' > ${TEMPDIR}/.env
+$CHISEL restart
+$CURL $CHISELD_HOST/__chiselstrike/auth/users
+# CHECK: HTTP/1.1 403 Forbidden
+$CURL $CHISELD_HOST/__chiselstrike/auth/sessions
+# CHECK: HTTP/1.1 403 Forbidden
+$CURL $CHISELD_HOST/__chiselstrike/auth/tokens
+# CHECK: HTTP/1.1 403 Forbidden
+$CURL $CHISELD_HOST/__chiselstrike/auth/accounts
+# CHECK: HTTP/1.1 403 Forbidden
+$CURL -H "ChiselAuth:aa" $CHISELD_HOST/__chiselstrike/auth/users
+# CHECK: HTTP/1.1 200 OK
+# CHECK: []

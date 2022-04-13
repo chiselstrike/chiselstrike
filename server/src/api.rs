@@ -157,10 +157,6 @@ impl ApiService {
 
     async fn route_impl(&self, req: Request<hyper::Body>) -> Result<Response<Body>> {
         if let Some(route_fn) = self.find_route_fn(req.uri().path()) {
-            if req.uri().path().starts_with("/__chiselstrike") {
-                return route_fn(req).await;
-            }
-
             let auth_header = req.headers().get("ChiselAuth");
             let expected_secret = crate::deno::get_secret("CHISEL_API_AUTH_SECRET").await;
             match (expected_secret, auth_header) {
@@ -174,6 +170,10 @@ impl ApiService {
             // TODO: Make this optional, for users who want to reject some OPTIONS requests.
             if req.method() == "OPTIONS" {
                 return Ok(response_template().body("ok".to_string().into())?); // Makes CORS preflights pass.
+            }
+
+            if req.uri().path().starts_with("/__chiselstrike") {
+                return route_fn(req).await;
             }
 
             let username = get_username(&req).await;
