@@ -1,7 +1,5 @@
 // SPDX-FileCopyrightText: © 2021 ChiselStrike <info@chiselstrike.com>
 
-use crate::auth::get_username;
-use crate::deno::is_allowed_by_policy;
 use crate::prefix_map::PrefixMap;
 use anyhow::{Error, Result};
 use futures::future::LocalBoxFuture;
@@ -157,36 +155,6 @@ impl ApiService {
 
     async fn route_impl(&self, req: Request<hyper::Body>) -> Result<Response<Body>> {
         if let Some(route_fn) = self.find_route_fn(req.uri().path()) {
-            if req.uri().path().starts_with("/__chiselstrike") {
-                return route_fn(req).await;
-            }
-
-            let auth_header = req.headers().get("ChiselAuth");
-            let expected_secret = crate::deno::get_secret("CHISEL_API_AUTH_SECRET").await;
-            match (expected_secret, auth_header) {
-                (Some(_), None) => return Self::forbidden("ChiselAuth"),
-                (Some(serde_json::Value::String(s)), Some(h)) if s != *h => {
-                    return Self::forbidden("Fundamental auth")
-                }
-                _ => (),
-            }
-
-            // TODO: Make this optional, for users who want to reject some OPTIONS requests.
-            if req.method() == "OPTIONS" {
-                return Ok(response_template().body("ok".to_string().into())?); // Makes CORS preflights pass.
-            }
-
-            let username = get_username(&req).await;
-            let rp = match RequestPath::try_from(req.uri().path()) {
-                Ok(rp) => rp,
-                Err(_) => return ApiService::not_found(),
-            };
-            let is_allowed =
-                is_allowed_by_policy(rp.api_version(), username, rp.path().as_ref()).await?;
-
-            if !is_allowed {
-                return Self::forbidden("Unauthorized user\n");
-            }
             return route_fn(req).await;
         }
         ApiService::not_found()
@@ -199,7 +167,7 @@ impl ApiService {
         }
     }
 
-    fn not_found() -> Result<Response<Body>> {
+    pub(crate) fn not_found() -> Result<Response<Body>> {
         Ok(Response::builder()
             .status(StatusCode::NOT_FOUND)
             .body(Body::default())?)
@@ -211,7 +179,7 @@ impl ApiService {
             .body(format!("{:?}\n", err).into())
     }
 
-    fn forbidden(err: &str) -> Result<Response<Body>> {
+    pub(crate) fn forbidden(err: &str) -> Result<Response<Body>> {
         Ok(Response::builder()
             .status(StatusCode::FORBIDDEN)
             .body(err.to_string().into())?)
