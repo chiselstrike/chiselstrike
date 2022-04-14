@@ -10,6 +10,7 @@
 
 use crate::api::{response_template, ApiService, Body};
 use crate::runtime;
+use anyhow::anyhow;
 use anyhow::Result;
 use futures::FutureExt;
 use hyper::{Request, Response};
@@ -19,22 +20,41 @@ use std::sync::Arc;
 
 const INTROSPECT_PATH: &str = "/__chiselstrike/introspect";
 
-async fn introspect(_req: Request<hyper::Body>) -> Result<Response<Body>> {
+async fn introspect(req: Request<hyper::Body>) -> Result<Response<Body>> {
     let api = runtime::get().api.clone();
+
+    let req_path = req
+        .uri()
+        .path()
+        .strip_prefix(INTROSPECT_PATH)
+        .ok_or_else(|| {
+            anyhow!(
+                "Invalid URI for route! This is an internal problem. Request: {:?}",
+                req
+            )
+        })?;
+
+    let mut api_version = req_path.trim_end_matches('/');
+    if api_version.is_empty() {
+        api_version = "/__chiselstrike"
+    }
+
     let mut paths = BTreeMap::new();
     let routes = api.routes();
     for route in routes {
-        paths.insert(
-            route,
-            Operations {
-                get: None,
-                post: None,
-                put: None,
-                patch: None,
-                delete: None,
-                parameters: None,
-            },
-        );
+        if route.starts_with(api_version) {
+            paths.insert(
+                route,
+                Operations {
+                    get: None,
+                    post: None,
+                    put: None,
+                    patch: None,
+                    delete: None,
+                    parameters: None,
+                },
+            );
+        }
     }
     let spec = Spec {
         swagger: "2.0".to_string(),
