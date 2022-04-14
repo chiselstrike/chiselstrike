@@ -15,12 +15,32 @@ EOF
 $CHISEL apply --version __chiselstrike 2>&1 || echo
 # CHECK: Error
 
+$CHISEL apply --version string.dots 2>&1 || echo
+# CHECK: Error
+
+$CHISEL apply --version string/slash 2>&1 || echo
+# CHECK: Error
+
+$CHISEL apply --version string-💵 2>&1 || echo
+# CHECK: Error
+
+$CHISEL apply --version string-# 2>&1 || echo
+# CHECK: Error
+
 $CHISEL apply --version v0
 # CHECK: Model defined: Person
 # CHECK: Model defined: Position
 # CHECK: End point defined: /v0/csv
 # CHECK: End point defined: /v0/find
 # CHECK: End point defined: /v0/foo
+
+$CHISEL apply --version v0-_
+# CHECK: Model defined: Person
+# CHECK: Model defined: Position
+# CHECK: End point defined: /v0-_/csv
+# CHECK: End point defined: /v0-_/find
+# CHECK: End point defined: /v0-_/foo
+
 
 cat << EOF > "endpoints/foo.js"
 export default async function my_req_func(req) {

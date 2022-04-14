@@ -156,6 +156,10 @@ async fn insert_field_query(
 
     let field_id: i32 = row.get("field_id");
     let full_name = field.persisted_name(ty);
+
+    let split = full_name.split('.').count();
+    anyhow::ensure!(split == 3, "Expected version and type information as part of the field name. Got {}. Should have caught sooner! Aborting", full_name);
+
     let add_field_name = add_field_name.bind(full_name).bind(field_id);
     execute!(transaction, add_field_name)?;
 
