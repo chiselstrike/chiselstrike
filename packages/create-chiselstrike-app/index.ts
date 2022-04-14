@@ -71,6 +71,10 @@ function run(projectDirectory: string, chiselVersion: string) {
         path.join(__dirname, "template", "hello.ts"),
         path.join(projectDirectory, "endpoints", "hello.ts"),
     );
+    fs.copyFileSync(
+        path.join(__dirname, "template", "gitignore"),
+        path.join(projectDirectory, "", ".gitignore"),
+    );
     console.log("Installing packages. This might take a couple of minutes.");
     process.chdir(projectDirectory);
     spawn("npm", ["install"], {
