@@ -34,15 +34,17 @@ async fn introspect(req: Request<hyper::Body>) -> Result<Response<Body>> {
             )
         })?;
 
-    let mut api_version = req_path.trim_end_matches('/');
+    let mut api_version = req_path.trim_matches('/');
     if api_version.is_empty() {
-        api_version = "/__chiselstrike"
+        api_version = "__chiselstrike"
     }
 
     let mut paths = BTreeMap::new();
     let routes = api.routes();
+    let prefix = format!("/{}", api_version);
+
     for route in routes {
-        if route.starts_with(api_version) {
+        if route.starts_with(&prefix) {
             paths.insert(
                 route,
                 Operations {
@@ -56,11 +58,19 @@ async fn introspect(req: Request<hyper::Body>) -> Result<Response<Body>> {
             );
         }
     }
+
+    let info = match api.get_api_info(api_version) {
+        Some(x) => x,
+        None => {
+            return ApiService::not_found();
+        }
+    };
+
     let spec = Spec {
         swagger: "2.0".to_string(),
         info: Info {
-            title: "ChiselStrike API".to_string(),
-            version: "0.0.0".to_string(),
+            title: info.name,
+            version: info.tag,
             terms_of_service: None,
         },
         paths,

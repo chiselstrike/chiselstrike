@@ -10,6 +10,7 @@ use hyper::header::HeaderValue;
 use hyper::service::{make_service_fn, service_fn};
 use hyper::{HeaderMap, Request, Response, Server, StatusCode};
 use socket2::{Domain, Protocol, Socket, Type};
+use std::collections::HashMap;
 use std::convert::Infallible;
 use std::convert::TryFrom;
 use std::io::Cursor;
@@ -110,17 +111,53 @@ impl TryFrom<&str> for RequestPath {
     }
 }
 
+#[derive(Default, Debug, Clone)]
+pub(crate) struct ApiInfo {
+    pub(crate) name: String,
+    pub(crate) tag: String,
+}
+
+impl ApiInfo {
+    pub(crate) fn new<N, T>(name: N, tag: T) -> Self
+    where
+        N: ToString,
+        T: ToString,
+    {
+        Self {
+            name: name.to_string(),
+            tag: tag.to_string(),
+        }
+    }
+
+    pub(crate) fn chiselstrike() -> Self {
+        let tag = env!("VERGEN_GIT_SEMVER_LIGHTWEIGHT").to_string();
+        Self {
+            name: "ChiselStrike API".into(),
+            tag,
+        }
+    }
+}
+pub(crate) type ApiInfoMap = HashMap<PathBuf, ApiInfo>;
+
 /// API service for Chisel server.
-#[derive(Default)]
 pub(crate) struct ApiService {
     // Although we are on a TPC environment, this sync mutex should be fine. It will
     // never contend because the ApiService is thread-local. The alternative is a RefCell
     // with runtime checking, which is likely cheaper, but still this is safer and we don't
     // have to manually implement Send (which is unsafe).
     paths: Mutex<PrefixMap<RouteFn>>,
+    info: Mutex<ApiInfoMap>,
 }
 
 impl ApiService {
+    pub(crate) fn new(mut info: ApiInfoMap) -> Self {
+        info.insert("__chiselstrike".into(), ApiInfo::chiselstrike());
+        Self {
+            paths: Default::default(),
+            info: Mutex::new(info),
+        }
+    }
+
     /// Finds the right RouteFn for this request.
     fn find_route_fn<S: AsRef<Path>>(&self, request: S) -> Option<RouteFn> {
         match self.paths.lock().unwrap().longest_prefix(request.as_ref()) {
@@ -143,6 +180,17 @@ impl ApiService {
     /// Remove all routes that have this prefix.
     pub(crate) fn remove_routes(&self, prefix: &Path) {
         self.paths.lock().unwrap().remove_prefix(prefix)
+    }
+
+    pub(crate) fn update_api_info<P: AsRef<Path>>(&self, api_version: P, info: ApiInfo) {
+        self.info
+            .lock()
+            .unwrap()
+            .insert(api_version.as_ref().into(), info);
+    }
+
+    pub(crate) fn get_api_info<P: AsRef<Path>>(&self, api_version: P) -> Option<ApiInfo> {
+        self.info.lock().unwrap().get(api_version.as_ref()).cloned()
     }
 
     pub(crate) fn routes(&self) -> Vec<String> {

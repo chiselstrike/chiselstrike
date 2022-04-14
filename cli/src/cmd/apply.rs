@@ -14,6 +14,8 @@ use tokio::task::{spawn_blocking, JoinHandle};
 use tsc_compile::compile_ts_code;
 use tsc_compile::CompileOptions;
 
+static DEFAULT_APP_NAME: &str = "ChiselStrike Application";
+
 pub(crate) enum AllowTypeDeletion {
     No,
     Yes,
@@ -215,6 +217,36 @@ pub(crate) async fn apply<S: ToString>(
         });
     }
 
+    let package = match read_to_string("./package.json") {
+        Ok(x) => {
+            let val: serde_json::Result<serde_json::Value> = serde_json::from_str(&x);
+            match val {
+                Ok(val) => val,
+                Err(_) => serde_json::json!("{}"),
+            }
+        }
+        Err(_) => serde_json::json!("{}"),
+    };
+
+    let git_version = get_git_version();
+
+    let app_name = package["name"]
+        .as_str()
+        .unwrap_or(DEFAULT_APP_NAME)
+        .to_owned();
+    let mut version_tag = package["version"].as_str().unwrap_or("").to_owned();
+
+    version_tag = match git_version {
+        Some(v) => {
+            if version_tag.is_empty() {
+                v
+            } else {
+                format!("{}-{}", version_tag, v)
+            }
+        }
+        None => version_tag,
+    };
+
     let mut client = ChiselRpcClient::connect(server_url).await?;
     let msg = execute!(
         client
@@ -224,6 +256,8 @@ pub(crate) async fn apply<S: ToString>(
                 policies: policy_req,
                 allow_type_deletion: allow_type_deletion.into(),
                 version,
+                version_tag,
+                app_name,
             }))
             .await
     );
@@ -251,6 +285,15 @@ fn to_tempfile(data: &str, suffix: &str) -> Result<NamedTempFile> {
     Ok(f)
 }
 
+fn output_to_string(out: &std::process::Output) -> Option<String> {
+    Some(
+        std::str::from_utf8(&out.stdout)
+            .expect("command output not utf-8")
+            .trim()
+            .to_owned(),
+    )
+}
+
 fn npx(command: &str, args: &[&str]) -> JoinHandle<Result<std::process::Output>> {
     let mut cmd = std::process::Command::new("npx");
     cmd.arg(command).args(args);
@@ -259,4 +302,23 @@ fn npx(command: &str, args: &[&str]) -> JoinHandle<Result<std::process::Output>>
         cmd.output()
             .with_context(|| "trying to execute `npx esbuild`. Is npx on your PATH?".to_string())
     })
+}
+
+fn get_git_version() -> Option<String> {
+    let mut cmd = std::process::Command::new("git");
+    cmd.args(["describe", "--exact-match", "--tags"]);
+
+    let tag = cmd.output().ok()?;
+    if tag.status.success() {
+        return output_to_string(&tag);
+    }
+
+    let mut cmd = std::process::Command::new("git");
+    cmd.args(["rev-parse", "--short", "HEAD"]);
+
+    let sha = cmd.output().ok()?;
+    if sha.status.success() {
+        return output_to_string(&sha);
+    }
+    None
 }

@@ -142,7 +142,9 @@ async fn run(state: SharedState, mut cmd: ExecutorChannel) -> Result<()> {
 
     let routes = meta.load_endpoints().await?;
     let policies = meta.load_policies().await?;
-    let mut api_service = ApiService::default();
+    let api_info = meta.load_api_info().await?;
+
+    let mut api_service = ApiService::new(api_info);
     crate::auth::init(&mut api_service).await?;
     crate::introspect::init(&mut api_service);
 
