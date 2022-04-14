@@ -222,6 +222,7 @@ pub(crate) fn create_project(path: &Path, opts: CreateProjectOptions) -> Result<
     write_template!("package.json", "package.json", data, path)?;
     write_template!("tsconfig.json", "tsconfig.json", data, path)?;
     write_template!("Chisel.toml", "Chisel.toml", data, path)?;
+    write_template!("gitignore", ".gitignore", data, path)?;
     // creating through chisel instead of npx: default to deno resolution
     let mut toml = String::from(include_str!("template/Chisel.toml"));
     toml.push_str("modules = \"deno\"\n");
