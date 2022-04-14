@@ -28,6 +28,19 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use tonic::{transport::Server, Request, Response, Status};
 
+fn validate_api_version(version: &str) -> Result<()> {
+    anyhow::ensure!(
+        version.is_ascii(),
+        "api version cannot have non-ascii characters"
+    );
+    let v = regex::Regex::new(r"^[-_[[:alnum:]]]+$").unwrap();
+    anyhow::ensure!(
+        v.is_match(version),
+        "api version can only be alphanumeric, _ or -"
+    );
+    Ok(())
+}
+
 // First, guarantees that a single RPC command is executing throught the lock that goes over a
 // static instance of this.
 //
@@ -194,6 +207,8 @@ impl RpcService {
     ) -> Result<Response<ChiselApplyResponse>> {
         let apply_request = request.into_inner();
         let api_version = apply_request.version;
+        validate_api_version(&api_version)?;
+
         let mut state = self.state.lock().await;
 
         let mut endpoint_routes = vec![];
