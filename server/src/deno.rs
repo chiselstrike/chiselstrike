@@ -1,6 +1,8 @@
 // SPDX-FileCopyrightText: © 2021 ChiselStrike <info@chiselstrike.com>
 
+use crate::api::ApiService;
 use crate::api::{response_template, Body, RequestPath};
+use crate::auth::get_username_from_id;
 use crate::datastore::engine::IdTree;
 use crate::datastore::engine::TransactionStatic;
 use crate::datastore::engine::{QueryResults, ResultRow};
@@ -957,7 +959,7 @@ fn current_secrets(st: &OpState) -> Option<&JsonObject> {
     st.try_borrow()
 }
 
-pub(crate) async fn get_secret(name: &str) -> Option<serde_json::Value> {
+async fn get_secret(name: &str) -> Option<serde_json::Value> {
     let reply = to_worker_and_back(WorkerMsg::GetSecret(name.to_string())).await;
     match reply {
         WorkerResp::GetSecret(secrete) => secrete,
@@ -1152,6 +1154,36 @@ async fn op_chisel_create_transaction(state: Rc<RefCell<OpState>>) -> Result<()>
 pub(crate) async fn run_js(path: String, req: Request<hyper::Body>) -> Result<Response<Body>> {
     let path = RequestPath::try_from(path.as_ref()).unwrap();
     let userid = crate::auth::get_user(&req).await?;
+    let req_path = req.uri().path();
+    if !req_path.starts_with("/__chiselstrike") {
+        let auth_header = req.headers().get("ChiselAuth");
+        let expected_secret = get_secret("CHISEL_API_AUTH_SECRET").await;
+        match (expected_secret, auth_header) {
+            (Some(_), None) => return ApiService::forbidden("ChiselAuth"),
+            (Some(serde_json::Value::String(s)), Some(h)) if s != *h => {
+                return ApiService::forbidden("Fundamental auth")
+            }
+            _ => (),
+        }
+
+        // TODO: Make this optional, for users who want to reject some OPTIONS requests.
+        if req.method() == "OPTIONS" {
+            return Ok(response_template().body("ok".to_string().into())?); // Makes CORS preflights pass.
+        }
+
+        let username = get_username_from_id(userid.clone()).await;
+
+        let rp = match RequestPath::try_from(req_path) {
+            Ok(rp) => rp,
+            Err(_) => return ApiService::not_found(),
+        };
+        let is_allowed =
+            is_allowed_by_policy(rp.api_version(), username, rp.path().as_ref()).await?;
+        if !is_allowed {
+            return ApiService::forbidden("Unauthorized user\n");
+        }
+    }
+
     {
         let mut service = get();
         if service.inspector.is_some() {

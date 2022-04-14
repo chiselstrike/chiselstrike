@@ -152,7 +152,7 @@ pub(crate) async fn get_user(req: &Request<hyper::Body>) -> Result<Option<String
 }
 
 /// Extracts the username of the logged-in user, or None if there was no login.
-pub(crate) async fn get_username(req: &Request<hyper::Body>) -> Option<String> {
+async fn get_username(req: &Request<hyper::Body>) -> Option<String> {
     let userid = match get_user(req).await {
         Ok(id) => id,
         Err(e) => {
@@ -160,7 +160,10 @@ pub(crate) async fn get_username(req: &Request<hyper::Body>) -> Option<String> {
             return None;
         }
     };
+    get_username_from_id(userid).await
+}
 
+pub(crate) async fn get_username_from_id(userid: Option<String>) -> Option<String> {
     let qeng = query_engine_arc().await;
 
     let user_type = get_oauth_user_type().await;
