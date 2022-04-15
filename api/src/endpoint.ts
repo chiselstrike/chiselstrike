@@ -85,38 +85,11 @@ export async function activateEndpoint(path: string) {
     });
 }
 
-export async function callHandler(
-    userid: string | undefined,
-    path: string,
-    apiVersion: string,
-    url: string,
-    method: string,
-    headers: HeadersInit,
-    rid?: number,
-) {
-    let chunks = undefined;
-    if (rid) {
-        chunks = [];
-        for (;;) {
-            const chunk = await Deno.core.opAsync("op_chisel_read_body", rid);
-            if (chunk !== null) {
-                chunks.push(chunk);
-            } else {
-                Deno.core.opSync("op_close", rid);
-                break;
-            }
-        }
-    }
-
+export async function callHandler(path: string, apiVersion: string) {
     const res = await toWorker({
         cmd: "callHandler",
-        userid,
         path,
         apiVersion,
-        url,
-        method,
-        headers,
-        chunks,
     }) as { body?: number; status: number; headers: number };
 
     // The read function is called repeatedly until it return
