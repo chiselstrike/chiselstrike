@@ -193,15 +193,15 @@ fn write(contents: &str, dir: &Path, file: &str) -> Result<()> {
     fs::write(dir.join(file), contents).map_err(|e| e.into())
 }
 
-/// Writes "template/$file" content into $dir/$file.  The file content is read at compile time but written at
+/// Writes "template/$from" content into $dir/$to.  The file content is read at compile time but written at
 /// runtime.
 macro_rules! write_template {
-    ( $file:expr, $data:expr, $dir:expr ) => {{
+    ( $from:expr, $to:expr, $data:expr, $dir:expr ) => {{
         let mut handlebars = Handlebars::new();
-        let source = include_str!(concat!("template/", $file));
+        let source = include_str!(concat!("template/", $from));
         handlebars.register_template_string("t1", source)?;
         let output = handlebars.render("t1", &$data)?;
-        write(&output, $dir, $file)
+        write(&output, $dir, $to)
     }};
 }
 
@@ -219,18 +219,24 @@ pub(crate) fn create_project(path: &Path, opts: CreateProjectOptions) -> Result<
     data.insert("projectName".to_string(), project_name);
     data.insert("chiselVersion".to_string(), "latest");
 
-    write_template!("package.json", data, path)?;
-    write_template!("tsconfig.json", data, path)?;
-    write_template!("Chisel.toml", data, path)?;
+    write_template!("package.json", "package.json", data, path)?;
+    write_template!("tsconfig.json", "tsconfig.json", data, path)?;
+    write_template!("Chisel.toml", "Chisel.toml", data, path)?;
+    write_template!("gitignore", ".gitignore", data, path)?;
     // creating through chisel instead of npx: default to deno resolution
     let mut toml = String::from(include_str!("template/Chisel.toml"));
     toml.push_str("modules = \"deno\"\n");
     write(&toml, path, "Chisel.toml")?;
 
-    write_template!("settings.json", data, &path.join(VSCODE_DIR))?;
+    write_template!(
+        "settings.json",
+        "settings.json",
+        data,
+        &path.join(VSCODE_DIR)
+    )?;
 
     if opts.examples {
-        write_template!("hello.ts", data, &path.join(ENDPOINTS_DIR))?;
+        write_template!("hello.ts", "hello.ts", data, &path.join(ENDPOINTS_DIR))?;
     }
     println!("Created ChiselStrike project in {}", path.display());
     Ok(())
