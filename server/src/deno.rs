@@ -3,11 +3,13 @@
 use crate::api::ApiService;
 use crate::api::{response_template, Body, RequestPath};
 use crate::auth::get_username_from_id;
+use crate::auth::handle_callback;
 use crate::datastore::engine::IdTree;
 use crate::datastore::engine::TransactionStatic;
 use crate::datastore::engine::{QueryResults, ResultRow};
 use crate::datastore::query::QueryOpChain;
 use crate::datastore::query::{Mutation, QueryPlan};
+use crate::datastore::MetaService;
 use crate::datastore::QueryEngine;
 use crate::policies::FieldPolicies;
 use crate::policies::Policies;
@@ -59,11 +61,13 @@ use hyper::{Request, Response, StatusCode};
 use log::debug;
 use once_cell::unsync::OnceCell;
 use serde_derive::Deserialize;
+use serde_derive::Serialize;
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::convert::TryInto;
 use std::fmt::Debug;
 use std::future::Future;
+use std::io::Read;
 use std::io::Write;
 use std::net::SocketAddr;
 use std::ops::DerefMut;
@@ -88,23 +92,14 @@ struct VersionedCode {
 }
 
 enum WorkerMsg {
+    SetMeta(MetaService),
+    HandleRequest(Request<hyper::Body>),
     SetTypeSystem(TypeSystem),
-    LookupBuiltinType(String),
     RemoveTypeVersion(String),
     SetQueryEngine(Arc<QueryEngine>),
-    GetQueryEngine,
     SetPolicies(Policies),
     MutatePolicies(Box<dyn FnOnce(&mut Policies) + Send>),
     SetCurrentSecrets(JsonObject),
-    GetSecret(String),
-    IsAllowedByPolicy(String, Option<String>, std::path::PathBuf),
-}
-
-enum WorkerResp {
-    IsAllowedByPolicy(Result<bool>),
-    GetQueryEngine(Arc<QueryEngine>),
-    LookupBuiltinType(Result<Type, TypeSystemError>),
-    GetSecret(Option<serde_json::Value>),
 }
 
 /// A v8 isolate doesn't want to be moved between or used from
@@ -133,7 +128,6 @@ struct DenoService {
     read_worker_channel: v8::Global<v8::Function>,
 
     to_worker: Sender<WorkerMsg>,
-    from_worker: Receiver<WorkerResp>,
     worker_channel_id: u32,
 }
 
@@ -239,6 +233,9 @@ fn build_extensions() -> Vec<Extension> {
             op_chisel_create_transaction::decl(),
             op_chisel_init_worker::decl(),
             op_chisel_read_worker_channel::decl(),
+            op_chisel_auth_callback::decl(),
+            op_chisel_auth_user::decl(),
+            op_chisel_start_request::decl(),
         ])
         .build()]
 }
@@ -295,12 +292,7 @@ fn create_web_worker(
     })
 }
 
-#[derive(Debug)]
-struct Channel {
-    receiver: Receiver<WorkerMsg>,
-    sender: Sender<WorkerResp>,
-}
-
+type Channel = Receiver<WorkerMsg>;
 type GlobalChannels = VecMap<Channel>;
 
 lazy_static! {
@@ -459,12 +451,8 @@ impl DenoService {
         };
 
         let (to_worker_sender, to_worker_receiver) = async_channel::bounded(1);
-        let (from_worker_sender, from_worker_receiver) = async_channel::bounded(1);
         let mut map = GLOBAL_WORKER_CHANNELS.lock().unwrap();
-        let worker_channel_id = map.push(Channel {
-            receiver: to_worker_receiver,
-            sender: from_worker_sender,
-        }) as u32;
+        let worker_channel_id = map.push(to_worker_receiver) as u32;
 
         (
             Self {
@@ -475,7 +463,6 @@ impl DenoService {
                 activate_endpoint,
                 call_handler,
                 to_worker: to_worker_sender,
-                from_worker: from_worker_receiver,
                 worker_channel_id,
                 read_worker_channel,
             },
@@ -528,13 +515,13 @@ async fn op_chisel_store(
     let value = &content.value;
 
     let (query_engine, ty) = {
-        let mut state = state.borrow_mut();
+        let state = state.borrow();
         let ty = match current_type_system(&state).lookup_type(type_name, &api_version) {
             Ok(Type::Object(ty)) => ty,
             _ => anyhow::bail!("Cannot save into type {}.", type_name),
         };
 
-        let query_engine = query_engine(&mut state).clone();
+        let query_engine = query_engine_arc(&state);
         (query_engine, ty)
     };
     let transaction = {
@@ -571,10 +558,7 @@ async fn op_chisel_entity_delete(
             "failed to construct delete expression from JSON passed to `op_chisel_entity_delete`",
         )?
     };
-    let query_engine = {
-        let mut state = state.borrow_mut();
-        query_engine(&mut state).clone()
-    };
+    let query_engine = query_engine_arc(&state.borrow());
     query_engine.mutate(mutation).await
 }
 
@@ -651,7 +635,7 @@ fn op_chisel_relational_query_create(
 
 fn create_query(op_state: &mut OpState, query_plan: QueryPlan) -> Result<ResourceId> {
     let transaction = current_transaction(op_state);
-    let query_engine = query_engine(op_state);
+    let query_engine = query_engine_arc(op_state);
     let stream = query_engine.query(transaction, query_plan)?;
     let resource = QueryStreamResource {
         stream: RefCell::new(stream),
@@ -705,70 +689,24 @@ fn op_chisel_init_worker(id: u32) {
 
 #[op]
 async fn op_chisel_read_worker_channel(state: Rc<RefCell<OpState>>) -> Result<()> {
-    let receiver = WORKER_CHANNEL.with(|d| d.get().unwrap().receiver.clone());
+    let receiver = WORKER_CHANNEL.with(|d| d.get().unwrap().clone());
     let msg = receiver.recv().await.unwrap();
 
-    let reply = {
-        let mut state = state.borrow_mut();
-        let state = &mut state;
-        match msg {
-            WorkerMsg::GetSecret(name) => {
-                let secret = current_secrets(state).and_then(|sec| sec.get(&name).cloned());
-                Some(WorkerResp::GetSecret(secret))
-            }
-            WorkerMsg::SetTypeSystem(type_system) => {
-                state.put(type_system);
-                None
-            }
-            WorkerMsg::RemoveTypeVersion(version) => {
-                let type_system = state.borrow_mut::<TypeSystem>();
-                type_system.versions.remove(&version);
-                None
-            }
-            WorkerMsg::LookupBuiltinType(type_name) => {
-                let type_system = current_type_system(state);
-                let res = type_system.lookup_builtin_type(&type_name);
-                Some(WorkerResp::LookupBuiltinType(res))
-            }
-            WorkerMsg::SetQueryEngine(query_engine) => {
-                state.put(query_engine);
-                None
-            }
-            WorkerMsg::GetQueryEngine => {
-                let engine = query_engine(state).clone();
-                Some(WorkerResp::GetQueryEngine(engine))
-            }
-            WorkerMsg::SetPolicies(policies) => {
-                state.put(policies);
-                None
-            }
-            WorkerMsg::MutatePolicies(func) => {
-                func(state.borrow_mut());
-                None
-            }
-            WorkerMsg::SetCurrentSecrets(secretes) => {
-                state.put(secretes);
-                None
-            }
-            WorkerMsg::IsAllowedByPolicy(api_version, username, path) => {
-                let policies = current_policies(state);
-                let allowed = match policies.versions.get(&api_version) {
-                    None => Err(anyhow!(
-                        "found a route, but no version object for {}/{}",
-                        api_version,
-                        path.display()
-                    )),
-                    Some(x) => Ok(x.user_authorization.is_allowed(username, &path)),
-                };
-                Some(WorkerResp::IsAllowedByPolicy(allowed))
-            }
+    let mut state = state.borrow_mut();
+    let state = &mut state;
+    match msg {
+        WorkerMsg::SetMeta(meta) => state.put::<Rc<MetaService>>(Rc::new(meta)),
+        WorkerMsg::HandleRequest(_req) => unreachable!("Wrong message"),
+        WorkerMsg::SetTypeSystem(type_system) => state.put(type_system),
+        WorkerMsg::RemoveTypeVersion(version) => {
+            state.borrow_mut::<TypeSystem>().versions.remove(&version);
         }
-    };
-
-    if let Some(reply) = reply {
-        let sender = WORKER_CHANNEL.with(|d| d.get().unwrap().sender.clone());
-        sender.send(reply).await.unwrap();
+        WorkerMsg::SetQueryEngine(query_engine) => state.put(query_engine),
+        WorkerMsg::SetPolicies(policies) => state.put(policies),
+        WorkerMsg::MutatePolicies(func) => func(state.borrow_mut()),
+        WorkerMsg::SetCurrentSecrets(secretes) => state.put(secretes),
     }
+
     Ok(())
 }
 
@@ -910,20 +848,20 @@ fn current_policies(st: &OpState) -> &Policies {
     st.borrow()
 }
 
-pub(crate) async fn is_allowed_by_policy(
+fn is_allowed_by_policy(
+    state: &OpState,
     api_version: &str,
     username: Option<String>,
     path: &std::path::Path,
 ) -> Result<bool> {
-    let reply = to_worker_and_back(WorkerMsg::IsAllowedByPolicy(
-        api_version.to_string(),
-        username.clone(),
-        path.to_path_buf(),
-    ))
-    .await;
-    match reply {
-        WorkerResp::IsAllowedByPolicy(allowed) => allowed,
-        _ => unreachable!("Bad reply"),
+    let policies = current_policies(state);
+    match policies.versions.get(api_version) {
+        None => Err(anyhow!(
+            "found a route, but no version object for {}/{}",
+            api_version,
+            path.display()
+        )),
+        Some(x) => Ok(x.user_authorization.is_allowed(username, path)),
     }
 }
 
@@ -959,40 +897,32 @@ fn current_secrets(st: &OpState) -> Option<&JsonObject> {
     st.try_borrow()
 }
 
-async fn get_secret(name: &str) -> Option<serde_json::Value> {
-    let reply = to_worker_and_back(WorkerMsg::GetSecret(name.to_string())).await;
-    match reply {
-        WorkerResp::GetSecret(secrete) => secrete,
-        _ => unreachable!("Bad reply"),
-    }
-}
-
 fn current_type_system(st: &OpState) -> &TypeSystem {
     st.borrow()
 }
 
-fn query_engine(st: &mut OpState) -> &mut Arc<QueryEngine> {
-    st.borrow_mut()
+pub(crate) async fn set_meta(meta: MetaService) {
+    to_worker(WorkerMsg::SetMeta(meta)).await;
+}
+
+pub(crate) fn get_meta(st: &OpState) -> Rc<MetaService> {
+    st.borrow::<Rc<MetaService>>().clone()
+}
+
+pub(crate) fn query_engine_arc(st: &OpState) -> Arc<QueryEngine> {
+    st.borrow::<Arc<QueryEngine>>().clone()
 }
 
 pub(crate) async fn set_query_engine(query_engine: Arc<QueryEngine>) {
     to_worker(WorkerMsg::SetQueryEngine(query_engine)).await;
 }
 
-pub(crate) async fn query_engine_arc() -> Arc<QueryEngine> {
-    let reply = to_worker_and_back(WorkerMsg::GetQueryEngine).await;
-    match reply {
-        WorkerResp::GetQueryEngine(engine) => engine,
-        _ => unreachable!("Bad reply"),
-    }
-}
-
-pub(crate) async fn lookup_builtin_type(type_name: &str) -> Result<Type, TypeSystemError> {
-    let reply = to_worker_and_back(WorkerMsg::LookupBuiltinType(type_name.to_string())).await;
-    match reply {
-        WorkerResp::LookupBuiltinType(res) => res,
-        _ => unreachable!("Bad reply"),
-    }
+pub(crate) fn lookup_builtin_type(
+    state: &OpState,
+    type_name: &str,
+) -> Result<Type, TypeSystemError> {
+    let type_system = current_type_system(state);
+    type_system.lookup_builtin_type(type_name)
 }
 
 pub(crate) async fn remove_type_version(version: &str) {
@@ -1018,109 +948,12 @@ async fn to_worker(msg: WorkerMsg) {
     resolve_promise(promise).await.unwrap();
 }
 
-async fn to_worker_and_back(msg: WorkerMsg) -> WorkerResp {
-    to_worker(msg).await;
-    let from_worker = get().from_worker.clone();
-    from_worker.recv().await.unwrap()
-}
-
 pub(crate) async fn set_type_system(type_system: TypeSystem) {
     to_worker(WorkerMsg::SetTypeSystem(type_system)).await;
 }
 
 pub(crate) async fn update_secrets(secrets: JsonObject) {
     to_worker(WorkerMsg::SetCurrentSecrets(secrets.clone())).await;
-}
-
-fn get_result_aux(
-    path: RequestPath,
-    userid: &Option<String>,
-    req: Request<hyper::Body>,
-) -> Result<v8::Global<v8::Value>> {
-    let mut service = get();
-    let service: &mut DenoService = &mut service;
-    let runtime = &mut service.worker.js_runtime;
-
-    let op_state = runtime.op_state();
-    let scope = &mut runtime.handle_scope();
-
-    // Hyper gives us a URL with just the path, make it a full URL
-    // before passing it to deno.
-    // FIXME: Use the real values for this server.
-    let url = Uri::builder()
-        .scheme("http")
-        .authority("chiselstrike.com")
-        .path_and_query(req.uri().path_and_query().unwrap().clone())
-        .build()
-        .unwrap();
-    // FIXME: this request conversion is probably simplistic. Check deno/ext/http/lib.rs
-    let url = v8::String::new(scope, &url.to_string()).unwrap();
-    let method = req.method();
-    let method_value = v8::String::new(scope, method.as_str()).unwrap().into();
-
-    let headers = v8::Object::new(scope);
-    for (k, v) in req.headers().iter() {
-        let k = v8::String::new(scope, k.as_str()).ok_or(Error::NotAResponse)?;
-        let v = v8::String::new(scope, v.to_str()?).ok_or(Error::NotAResponse)?;
-        headers
-            .set(scope, k.into(), v.into())
-            .ok_or(Error::NotAResponse)?;
-    }
-
-    let rid = if method != Method::GET && method != Method::HEAD {
-        let body = req.into_body();
-        let resource = BodyResource {
-            body: RefCell::new(body),
-            cancel: Default::default(),
-        };
-        let rid = op_state.borrow_mut().resource_table.add(resource);
-        v8::Integer::new_from_unsigned(scope, rid).into()
-    } else {
-        v8::undefined(scope).into()
-    };
-
-    let api_version = v8::String::new(scope, path.api_version()).unwrap().into();
-    let path = v8::String::new(scope, path.path()).unwrap().into();
-    let call_handler = service.call_handler.open(scope);
-    let userid = match userid {
-        Some(s) => v8::String::new(scope, s).unwrap().into(),
-        None => v8::undefined(scope).into(),
-    };
-    let undefined = v8::undefined(scope).into();
-    let result = call_handler
-        .call(
-            scope,
-            undefined,
-            &[
-                userid,
-                path,
-                api_version,
-                url.into(),
-                method_value,
-                headers.into(),
-                rid,
-            ],
-        )
-        .ok_or(Error::NotAResponse)?;
-    Ok(v8::Global::new(scope, result))
-}
-
-async fn get_result(
-    path: RequestPath,
-    userid: &Option<String>,
-    req: Request<hyper::Body>,
-) -> Result<v8::Global<v8::Value>> {
-    // Set the current path to cover JS code that runs before
-    // blocking. This in particular covers code that doesn't block at
-    // all.
-    let result = get_result_aux(path, userid, req)?;
-    // We got here without blocking and now have a future representing
-    // pending work for the endpoint. resolve_promise() sets the context
-    // for safe execution of request_handler; we MUST NOT block (ie,
-    // `await`) between with_context() above and resolve_promise()
-    // below. Otherwise, request_handler may begin executing with another,
-    // wrong context.
-    resolve_promise(result).await
 }
 
 #[op]
@@ -1142,48 +975,114 @@ fn op_chisel_rollback_transaction(state: &mut OpState) -> Result<()> {
 
 #[op]
 async fn op_chisel_create_transaction(state: Rc<RefCell<OpState>>) -> Result<()> {
-    let qe = {
-        let mut state = state.borrow_mut();
-        query_engine(&mut state).clone()
-    };
+    let qe = query_engine_arc(&state.borrow());
     let transaction = qe.start_transaction_static().await?;
     set_current_transaction(&mut state.borrow_mut(), transaction);
     Ok(())
 }
 
-pub(crate) async fn run_js(path: String, req: Request<hyper::Body>) -> Result<Response<Body>> {
-    let path = RequestPath::try_from(path.as_ref()).unwrap();
-    let userid = crate::auth::get_user(&req).await?;
+#[derive(Serialize)]
+struct ResponseParts {
+    status: u16,
+    body: String,
+    headers: Vec<(String, String)>,
+}
+
+// FIXME: It would probably be cleaner to move more of this to
+// javascript.
+async fn special_response(
+    state: Rc<RefCell<OpState>>,
+    req: &Request<hyper::Body>,
+    userid: &Option<String>,
+) -> Result<Option<Response<Body>>> {
     let req_path = req.uri().path();
     if !req_path.starts_with("/__chiselstrike") {
         let auth_header = req.headers().get("ChiselAuth");
-        let expected_secret = get_secret("CHISEL_API_AUTH_SECRET").await;
+        let expected_secret = current_secrets(&state.borrow())
+            .and_then(|sec| sec.get("CHISEL_API_AUTH_SECRET").cloned());
+
         match (expected_secret, auth_header) {
-            (Some(_), None) => return ApiService::forbidden("ChiselAuth"),
+            (Some(_), None) => return Ok(Some(ApiService::forbidden("ChiselAuth")?)),
             (Some(serde_json::Value::String(s)), Some(h)) if s != *h => {
-                return ApiService::forbidden("Fundamental auth")
+                return Ok(Some(ApiService::forbidden("Fundamental auth")?))
             }
             _ => (),
         }
 
         // TODO: Make this optional, for users who want to reject some OPTIONS requests.
         if req.method() == "OPTIONS" {
-            return Ok(response_template().body("ok".to_string().into())?); // Makes CORS preflights pass.
+            // Makes CORS preflights pass.
+            return Ok(Some(response_template().body("ok".to_string().into())?));
         }
 
-        let username = get_username_from_id(userid.clone()).await;
+        let username = get_username_from_id(state.clone(), userid.clone()).await;
 
         let rp = match RequestPath::try_from(req_path) {
             Ok(rp) => rp,
-            Err(_) => return ApiService::not_found(),
+            Err(_) => return Ok(Some(ApiService::not_found()?)),
         };
-        let is_allowed =
-            is_allowed_by_policy(rp.api_version(), username, rp.path().as_ref()).await?;
+        let is_allowed = is_allowed_by_policy(
+            &state.borrow(),
+            rp.api_version(),
+            username,
+            rp.path().as_ref(),
+        )?;
         if !is_allowed {
-            return ApiService::forbidden("Unauthorized user\n");
+            return Ok(Some(ApiService::forbidden("Unauthorized user\n")?));
         }
     }
+    Ok(None)
+}
 
+async fn convert_response(mut res: Response<Body>) -> Result<ResponseParts> {
+    let status = res.status().as_u16();
+    let res_body = res.body_mut();
+
+    let mut body = String::new();
+    while let Some(data) = res_body.data().await {
+        let mut data = data?;
+        data.read_to_string(&mut body)?;
+    }
+
+    let res_headers = res.headers();
+    let mut headers = Vec::new();
+    for (k, v) in res_headers {
+        headers.push((k.to_string(), v.to_str()?.to_string()));
+    }
+    Ok(ResponseParts {
+        status,
+        body,
+        headers,
+    })
+}
+
+// FIXME: It would probably be cleaner to move more of this to
+// javascript.
+#[op]
+async fn op_chisel_auth_callback(
+    state: Rc<RefCell<OpState>>,
+    url: String,
+) -> Result<ResponseParts> {
+    let res = handle_callback(state, url.parse()?).await?;
+    convert_response(res).await
+}
+
+// FIXME: It would probably be cleaner to move more of this to
+// javascript.
+#[op]
+async fn op_chisel_auth_user(
+    state: Rc<RefCell<OpState>>,
+    userid: Option<String>,
+) -> Result<ResponseParts> {
+    let username = get_username_from_id(state.clone(), userid).await;
+    let res = match username {
+        None => anyhow::bail!("Error finding logged-in user; perhaps no one is logged in?"),
+        Some(username) => response_template().body(username.into()).unwrap(),
+    };
+    convert_response(res).await
+}
+
+pub(crate) async fn run_js(path: String, req: Request<hyper::Body>) -> Result<Response<Body>> {
     {
         let mut service = get();
         if service.inspector.is_some() {
@@ -1194,7 +1093,26 @@ pub(crate) async fn run_js(path: String, req: Request<hyper::Body>) -> Result<Re
         }
     }
 
-    let result = get_result(path, &userid, req).await?;
+    let sender = get().to_worker.clone();
+    sender.send(WorkerMsg::HandleRequest(req)).await.unwrap();
+
+    let result = {
+        let mut service = get();
+        let service: &mut DenoService = &mut service;
+        let runtime = &mut service.worker.js_runtime;
+        let scope = &mut runtime.handle_scope();
+
+        let path = RequestPath::try_from(path.as_ref()).unwrap();
+        let call_handler = service.call_handler.open(scope);
+        let undefined = v8::undefined(scope).into();
+        let api_version = v8::String::new(scope, path.api_version()).unwrap().into();
+        let path = v8::String::new(scope, path.path()).unwrap().into();
+        let result = call_handler
+            .call(scope, undefined, &[path, api_version])
+            .unwrap();
+        v8::Global::new(scope, result)
+    };
+    let result = resolve_promise(result).await?;
 
     let body = {
         // The rust borrow checker can track fields independently, but
@@ -1254,6 +1172,88 @@ pub(crate) async fn run_js(path: String, req: Request<hyper::Body>) -> Result<Re
     };
 
     Ok(body)
+}
+
+#[derive(Serialize)]
+struct StartRequest {
+    body_rid: Option<u32>,
+    headers: HashMap<String, String>,
+    method: String,
+    url: String,
+    userid: Option<String>,
+}
+
+async fn handle_request(
+    state: Rc<RefCell<OpState>>,
+    userid: Option<String>,
+    req: Request<hyper::Body>,
+) -> Result<StartRequest> {
+    // FIXME: this request conversion is probably simplistic. Check deno/ext/http/lib.rs
+
+    // Hyper gives us a URL with just the path, make it a full URL
+    // before passing it to deno.
+    // FIXME: Use the real values for this server.
+    let url = Uri::builder()
+        .scheme("http")
+        .authority("chiselstrike.com")
+        .path_and_query(req.uri().path_and_query().unwrap().clone())
+        .build()
+        .unwrap();
+    let url = url.to_string();
+    let method = req.method();
+
+    let mut headers: HashMap<String, String> = HashMap::new();
+    for (k, v) in req.headers().iter() {
+        let k = k.as_str();
+        let v = v.to_str()?;
+        headers.insert(k.to_string(), v.to_string());
+    }
+
+    let has_body = method != Method::GET && method != Method::HEAD;
+    let method = method.as_str().to_string();
+    let body_rid = if has_body {
+        let body = req.into_body();
+        let resource = BodyResource {
+            body: RefCell::new(body),
+            cancel: Default::default(),
+        };
+        let rid = state.borrow_mut().resource_table.add(resource);
+        Some(rid)
+    } else {
+        None
+    };
+
+    Ok(StartRequest {
+        body_rid,
+        headers,
+        method,
+        url,
+        userid,
+    })
+}
+
+#[derive(Serialize)]
+enum StartRequestRes {
+    Js(StartRequest),
+    Special(ResponseParts),
+}
+
+#[op]
+async fn op_chisel_start_request(state: Rc<RefCell<OpState>>) -> Result<StartRequestRes> {
+    let receiver = WORKER_CHANNEL.with(|d| d.get().unwrap().clone());
+    let req = match receiver.recv().await {
+        Ok(WorkerMsg::HandleRequest(req)) => req,
+        _ => unreachable!("Wrong message"),
+    };
+    let userid = crate::auth::get_user(state.clone(), &req).await?;
+    if let Some(resp) = special_response(state.clone(), &req, &userid).await? {
+        let resp = convert_response(resp).await?;
+        return Ok(StartRequestRes::Special(resp));
+    }
+
+    Ok(StartRequestRes::Js(
+        handle_request(state, userid, req).await?,
+    ))
 }
 
 fn get() -> RcMut<DenoService> {

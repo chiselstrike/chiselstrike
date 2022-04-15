@@ -106,17 +106,18 @@ function concat(arrays: Uint8Array[]): Uint8Array {
 }
 
 async function callHandlerImpl(
-    userid: string | undefined,
     path: string,
     apiVersion: string,
-    url: string,
-    method: string,
-    headers: HeadersInit,
-    chunks: Uint8Array[],
 ) {
-    requestContext.method = method;
     requestContext.apiVersion = apiVersion;
     requestContext.path = path;
+
+    const start = await Deno.core.opAsync("op_chisel_start_request");
+    if (start.Special) {
+        return start.Special;
+    }
+    const { userid, url, method, headers, body_rid } = start.Js;
+    requestContext.method = method;
     requestContext.userId = userid;
 
     // FIXME: maybe defer creating the transaction until we need one, to avoid doing it for
@@ -124,11 +125,27 @@ async function callHandlerImpl(
     // it should be safe to unwrap.
     await Deno.core.opAsync("op_chisel_create_transaction");
 
+    const chunks = [];
+    if (body_rid) {
+        for (;;) {
+            const chunk = await Deno.core.opAsync(
+                "op_chisel_read_body",
+                body_rid,
+            );
+            if (chunk !== null) {
+                chunks.push(chunk);
+            } else {
+                Deno.core.opSync("op_close", body_rid);
+                break;
+            }
+        }
+    }
+
     const init: { method: string; headers: HeadersInit; body?: Uint8Array } = {
         method,
         headers,
     };
-    if (chunks !== undefined) {
+    if (chunks.length !== 0) {
         init.body = concat(chunks);
     }
     const fullPath = "/" + apiVersion + path;
@@ -170,24 +187,14 @@ async function callHandlerImpl(
 }
 
 function callHandler(
-    userid: string | undefined,
     path: string,
     apiVersion: string,
-    url: string,
-    method: string,
-    headers: HeadersInit,
-    chunks: Uint8Array[],
 ) {
     handleMsg(() => {
         return rollback_on_failure(() => {
             return callHandlerImpl(
-                userid,
                 path,
                 apiVersion,
-                url,
-                method,
-                headers,
-                chunks,
             );
         });
     });
@@ -210,13 +217,8 @@ onmessage = function (e) {
             break;
         case "callHandler":
             callHandler(
-                d.userid,
                 d.path,
                 d.apiVersion,
-                d.url,
-                d.method,
-                d.headers,
-                d.chunks,
             );
             break;
         default:

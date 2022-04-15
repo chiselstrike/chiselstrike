@@ -4,6 +4,7 @@ use crate::api::ApiService;
 use crate::datastore::{DbConnection, MetaService, QueryEngine};
 use crate::deno;
 use crate::deno::init_deno;
+use crate::deno::set_meta;
 use crate::deno::set_policies;
 use crate::deno::set_query_engine;
 use crate::deno::set_type_system;
@@ -136,8 +137,7 @@ async fn run(state: SharedState, mut cmd: ExecutorChannel) -> Result<()> {
         }
     }
 
-    let meta =
-        Rc::new(MetaService::local_connection(&state.metadata_db, state.nr_connections).await?);
+    let meta = MetaService::local_connection(&state.metadata_db, state.nr_connections).await?;
     let ts = meta.load_type_system().await?;
 
     let routes = meta.load_endpoints().await?;
@@ -152,11 +152,12 @@ async fn run(state: SharedState, mut cmd: ExecutorChannel) -> Result<()> {
         .await?;
     let api_service = Rc::new(api_service);
 
-    let rt = Runtime::new(api_service.clone(), meta);
+    let rt = Runtime::new(api_service.clone());
     runtime::set(rt);
     set_type_system(ts).await;
     set_query_engine(query_engine).await;
     set_policies(policies).await;
+    set_meta(meta).await;
 
     for (path, code) in routes.iter() {
         add_endpoint(path.to_str().unwrap(), code.to_string(), &api_service).await?;
