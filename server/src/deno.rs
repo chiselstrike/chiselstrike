@@ -1377,7 +1377,17 @@ async fn op_chisel_start_request(state: Rc<RefCell<OpState>>) -> Result<StartReq
         Ok(WorkerMsg::HandleRequest(req)) => req,
         _ => unreachable!("Wrong message"),
     };
-    let userid = crate::auth::get_user(state.clone(), &req).await?;
+    let userid = match req.headers().get("ChiselUID").map(|v| v.to_str()) {
+        Some(Ok(str)) => Some(str.to_string()),
+        Some(Err(e)) => {
+            warn!(
+                "Weird bytes in ChiselUID value on request {:?}, error {:?}",
+                req, e
+            );
+            None
+        }
+        None => None,
+    };
     if let Some(resp) = special_response(state.clone(), &req, &userid).await? {
         let resp = convert_response(resp).await?;
         return Ok(StartRequestRes::Special(resp));

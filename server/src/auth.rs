@@ -6,12 +6,12 @@ use crate::datastore::query::SqlValue;
 use crate::deno::get_meta;
 use crate::deno::lookup_builtin_type;
 use crate::deno::query_engine_arc;
-use crate::types::{ObjectType, Type, OAUTHUSER_TYPE_NAME};
+use crate::types::{ObjectType, Type};
 use crate::JsonObject;
 use anyhow::Result;
 use deno_core::OpState;
 use http::Uri;
-use hyper::{header, Request, Response, StatusCode};
+use hyper::{header, Response, StatusCode};
 use serde_json::json;
 use sqlx::Row;
 use std::cell::RefCell;
@@ -36,9 +36,9 @@ fn bad_request(msg: String) -> Response<Body> {
 }
 
 fn get_oauth_user_type(state: &OpState) -> Result<Arc<ObjectType>> {
-    match lookup_builtin_type(state, OAUTHUSER_TYPE_NAME) {
+    match lookup_builtin_type(state, "NextAuthUser") {
         Ok(Type::Object(t)) => Ok(t),
-        _ => anyhow::bail!("Internal error: type {} not found", OAUTHUSER_TYPE_NAME),
+        _ => anyhow::bail!("Internal error: type NextAuthUser not found"),
     }
 }
 
@@ -141,20 +141,6 @@ pub(crate) async fn init(api: &mut ApiService) -> Result<()> {
     add_crud_endpoint_for_type("NextAuthAccount", "accounts", api).await
 }
 
-/// Returns the user ID corresponding to the token in req.  If token is absent, returns None.
-pub(crate) async fn get_user(
-    state: Rc<RefCell<OpState>>,
-    req: &Request<hyper::Body>,
-) -> Result<Option<String>> {
-    match req.headers().get("ChiselStrikeToken") {
-        Some(token) => {
-            let meta = get_meta(&state.borrow());
-            Ok(meta.get_user_id(token.to_str()?).await.ok())
-        }
-        None => Ok(None),
-    }
-}
-
 /// Extracts the username of the logged-in user, or None if there was no login.
 pub(crate) async fn get_username_from_id(
     state: Rc<RefCell<OpState>>,
@@ -176,7 +162,7 @@ pub(crate) async fn get_username_from_id(
             match qeng
                 .fetch_one(SqlWithArguments {
                     sql: format!(
-                        "SELECT username FROM \"{}\" WHERE id=$1",
+                        "SELECT email FROM \"{}\" WHERE id=$1", // For now, let's pretend email is username.
                         user_type.backing_table()
                     ),
                     args: vec![SqlValue::String(id)],
@@ -187,7 +173,7 @@ pub(crate) async fn get_username_from_id(
                     warn!("Username query error: {:?}", e);
                     None
                 }
-                Ok(row) => row.get("username"),
+                Ok(row) => row.get("email"),
             }
         }
     }

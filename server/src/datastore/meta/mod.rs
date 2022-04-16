@@ -9,7 +9,7 @@ use crate::prefix_map::PrefixMap;
 use crate::types::{
     ExistingField, ExistingObject, Field, FieldDelta, ObjectDelta, ObjectType, TypeSystem,
 };
-use anyhow::{anyhow, Context};
+use anyhow::Context;
 use sqlx::any::{Any, AnyPool};
 use sqlx::{Execute, Executor, Row, Transaction};
 use std::sync::Arc;
@@ -594,17 +594,6 @@ impl MetaService {
 
         transaction.commit().await?;
         Ok(token)
-    }
-
-    pub(crate) async fn get_user_id(&self, token: &str) -> anyhow::Result<String> {
-        let query = sqlx::query("SELECT user_id FROM sessions WHERE token=$1::uuid").bind(token);
-
-        let mut rows = fetch_all(&self.pool, query).await?;
-        let row = rows
-            .pop()
-            .ok_or_else(|| anyhow!("token {} not found", token))?;
-        let id: &str = row.get("user_id");
-        Ok(id.into())
     }
 }
 

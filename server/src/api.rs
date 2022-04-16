@@ -318,8 +318,5 @@ pub(crate) fn response_template() -> http::response::Builder {
             "Access-Control-Allow-Methods",
             "POST, PUT, GET, OPTIONS, DELETE",
         )
-        .header(
-            "Access-Control-Allow-Headers",
-            "Content-Type,ChiselStrikeToken",
-        )
+        .header("Access-Control-Allow-Headers", "Content-Type,ChiselUID")
 }
