@@ -1,0 +1,43 @@
+# SPDX-FileCopyrightText: © 2022 ChiselStrike <info@chiselstrike.com>
+
+# RUN: sh -e @file
+
+cat << EOF > "$TEMPDIR/models/types.ts"
+import { ChiselEntity } from "@chiselstrike/api";
+
+export class Data extends ChiselEntity {
+    num: number = 0;
+}
+EOF
+
+cat << EOF > "$TEMPDIR/endpoints/stream.js"
+import { Data } from "../models/types.ts";
+
+export default async function chisel(req: Request) {
+    const promises = [];
+    for (let i = 0; i < 10; i += 1) {
+        promises.push(Data.build({ 'num': i}).save());
+    }
+    await Promise.all(promises);
+
+    let cursor = Data.cursor();
+    let asyncIter = cursor[Symbol.asyncIterator]();
+    let stream = new ReadableStream({
+        async pull(controller) {
+            let item = await asyncIter.next();
+            throw new Error("Error in stream");
+        }
+    })
+
+    return new Response(stream);
+}
+EOF
+
+cd "$TEMPDIR"
+
+$CHISEL apply
+
+$CURL --data '' $CHISELD_HOST/dev/stream
+
+# CHECK: HTTP/1.1 500 Internal Server Error
+# CHECK: Error: Error in stream

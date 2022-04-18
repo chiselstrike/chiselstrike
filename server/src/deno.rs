@@ -4,6 +4,7 @@ use crate::api::ApiService;
 use crate::api::{response_template, Body, RequestPath};
 use crate::auth::get_username_from_id;
 use crate::auth::handle_callback;
+use crate::datastore::engine::extract_transaction;
 use crate::datastore::engine::IdTree;
 use crate::datastore::engine::TransactionStatic;
 use crate::datastore::engine::{QueryResults, ResultRow};
@@ -968,8 +969,11 @@ async fn op_chisel_commit_transaction(state: Rc<RefCell<OpState>>) -> Result<()>
 
 #[op]
 fn op_chisel_rollback_transaction(state: &mut OpState) -> Result<()> {
+    let transaction = take_current_transaction(state);
+    // Check that this is the last reference to the transaction.
+    let transaction = extract_transaction(transaction)?;
     // Drop the transaction, causing it to rollback.
-    take_current_transaction(state);
+    drop(transaction);
     Ok(())
 }
 
