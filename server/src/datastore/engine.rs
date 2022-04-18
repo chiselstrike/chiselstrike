@@ -34,12 +34,9 @@ pub(crate) type QueryResults = BoxStream<'static, Result<ResultRow>>;
 
 pub(crate) type TransactionStatic = Arc<Mutex<Transaction<'static, Any>>>;
 
-pub(crate) fn extract_transaction(
-    transaction: TransactionStatic,
-) -> Result<Transaction<'static, Any>> {
-    let transaction = Arc::try_unwrap(transaction)
-        .map_err(|_| anyhow!("Transaction still has references held!"))?;
-    Ok(transaction.into_inner())
+pub(crate) fn extract_transaction(transaction: TransactionStatic) -> Transaction<'static, Any> {
+    let transaction = Arc::try_unwrap(transaction).expect("Transaction still has references held!");
+    transaction.into_inner()
 }
 
 /// `RawQueryResults` represents the raw query results from the backing stor
@@ -237,7 +234,7 @@ impl QueryEngine {
     }
 
     pub(crate) async fn commit_transaction_static(transaction: TransactionStatic) -> Result<()> {
-        let transaction = extract_transaction(transaction)?;
+        let transaction = extract_transaction(transaction);
         transaction.commit().await?;
         Ok(())
     }
