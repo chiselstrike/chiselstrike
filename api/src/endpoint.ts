@@ -1,6 +1,6 @@
 // SPDX-FileCopyrightText: © 2021 ChiselStrike <info@chiselstrike.com>
 
-/// <reference types="./lib.deno_core.d.ts" />
+/// <reference lib="deno.core" />
 /// <reference lib="dom" />
 /// <reference lib="deno.unstable" />
 
