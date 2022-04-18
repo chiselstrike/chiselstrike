@@ -957,7 +957,7 @@ async fn op_chisel_commit_transaction(state: Rc<RefCell<OpState>>) -> Result<()>
 fn op_chisel_rollback_transaction(state: &mut OpState) -> Result<()> {
     let transaction = take_current_transaction(state);
     // Check that this is the last reference to the transaction.
-    let transaction = extract_transaction(transaction)?;
+    let transaction = extract_transaction(transaction);
     // Drop the transaction, causing it to rollback.
     drop(transaction);
     Ok(())
