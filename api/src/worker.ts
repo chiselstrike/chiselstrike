@@ -86,6 +86,7 @@ async function rollback_on_failure<T>(func: () => Promise<T>): Promise<T> {
     try {
         return await func();
     } catch (e) {
+        closeResources();
         Deno.core.opSync("op_chisel_rollback_transaction");
         throw e;
     }
@@ -120,6 +121,15 @@ function buildReadableStreamForBody(rid: number) {
             Deno.core.opSync("op_close", rid);
         },
     });
+}
+
+function closeResources() {
+    const resources = Deno.core.resources();
+    for (const k in resources) {
+        if (parseInt(k) > 2) {
+            Deno.core.opSync("op_close", k);
+        }
+    }
 }
 
 async function callHandlerImpl(
@@ -186,13 +196,7 @@ async function callHandlerImpl(
     }
     const status = res.status;
 
-    const resources = Deno.core.resources();
-    for (const k in resources) {
-        if (parseInt(k) > 2) {
-            Deno.core.opSync("op_close", k);
-        }
-    }
-
+    closeResources();
     await Deno.core.opAsync("op_chisel_commit_transaction");
     return { body, status, headers: resHeaders };
 }
