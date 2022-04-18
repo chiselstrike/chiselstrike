@@ -105,6 +105,23 @@ function concat(arrays: Uint8Array[]): Uint8Array {
     return ret;
 }
 
+function buildReadableStreamForBody(rid: number) {
+    return new ReadableStream<string>({
+        async pull(controller: ReadableStreamDefaultController) {
+            const chunk = await Deno.core.opAsync("op_chisel_read_body", rid);
+            if (chunk) {
+                controller.enqueue(chunk);
+            } else {
+                controller.close();
+                Deno.core.opSync("op_close", rid);
+            }
+        },
+        cancel() {
+            Deno.core.opSync("op_close", rid);
+        },
+    });
+}
+
 async function callHandlerImpl(
     path: string,
     apiVersion: string,
@@ -125,28 +142,14 @@ async function callHandlerImpl(
     // it should be safe to unwrap.
     await Deno.core.opAsync("op_chisel_create_transaction");
 
-    const chunks = [];
-    if (body_rid) {
-        for (;;) {
-            const chunk = await Deno.core.opAsync(
-                "op_chisel_read_body",
-                body_rid,
-            );
-            if (chunk !== null) {
-                chunks.push(chunk);
-            } else {
-                Deno.core.opSync("op_close", body_rid);
-                break;
-            }
-        }
-    }
-
-    const init: { method: string; headers: HeadersInit; body?: Uint8Array } = {
+    const init: RequestInit = {
         method,
         headers,
     };
-    if (chunks.length !== 0) {
-        init.body = concat(chunks);
+
+    if (body_rid != undefined) {
+        const body = buildReadableStreamForBody(body_rid);
+        init.body = body;
     }
     const fullPath = "/" + apiVersion + path;
     const pathParams = new URL(url).pathname.replace(
