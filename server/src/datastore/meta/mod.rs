@@ -13,7 +13,6 @@ use anyhow::Context;
 use sqlx::any::{Any, AnyPool};
 use sqlx::{Execute, Executor, Row, Transaction};
 use std::sync::Arc;
-use uuid::Uuid;
 
 /// Meta service.
 ///
@@ -580,20 +579,6 @@ impl MetaService {
             insert_field_query(transaction, ty, Some(id), field).await?;
         }
         Ok(())
-    }
-
-    pub(crate) async fn new_session_token(&self, userid: &str) -> anyhow::Result<String> {
-        let token = Uuid::new_v4().to_string();
-        // TODO: Expire tokens.
-        let insert = sqlx::query("INSERT INTO sessions(token, user_id) VALUES($1::uuid, $2)")
-            .bind(&token)
-            .bind(userid);
-        let mut transaction = self.pool.begin().await?;
-
-        execute(&mut transaction, insert).await?;
-
-        transaction.commit().await?;
-        Ok(token)
     }
 }
 

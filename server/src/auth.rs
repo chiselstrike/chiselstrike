@@ -1,103 +1,23 @@
 // SPDX-FileCopyrightText: © 2021 ChiselStrike <info@chiselstrike.com>
 
-use crate::api::{ApiService, Body};
+use crate::api::ApiService;
 use crate::datastore::engine::SqlWithArguments;
 use crate::datastore::query::SqlValue;
-use crate::deno::get_meta;
 use crate::deno::lookup_builtin_type;
 use crate::deno::query_engine_arc;
 use crate::types::{ObjectType, Type};
-use crate::JsonObject;
 use anyhow::Result;
 use deno_core::OpState;
-use http::Uri;
-use hyper::{header, Response, StatusCode};
-use serde_json::json;
 use sqlx::Row;
 use std::cell::RefCell;
 use std::rc::Rc;
 use std::sync::Arc;
-
-fn redirect(link: &str) -> Response<Body> {
-    let bd: Body = format!("Redirecting to <a href='{}'>{}</a>\n", link, link).into();
-    Response::builder()
-        .status(StatusCode::TEMPORARY_REDIRECT)
-        .header(header::LOCATION, link)
-        .body(bd)
-        .unwrap()
-}
-
-fn bad_request(msg: String) -> Response<Body> {
-    let bd: Body = (msg + "\n").into();
-    Response::builder()
-        .status(StatusCode::BAD_REQUEST)
-        .body(bd)
-        .unwrap()
-}
 
 fn get_nextauth_user_type(state: &OpState) -> Result<Arc<ObjectType>> {
     match lookup_builtin_type(state, "NextAuthUser") {
         Ok(Type::Object(t)) => Ok(t),
         _ => anyhow::bail!("Internal error: type NextAuthUser not found"),
     }
-}
-
-/// Upserts username into OAuthUser type, returning its ID.
-async fn insert_user_into_db(state: Rc<RefCell<OpState>>, username: &str) -> Result<String> {
-    let (user_type, query_engine) = {
-        let state = state.borrow();
-        let user_type = get_nextauth_user_type(&state)?;
-        let query_engine = query_engine_arc(&state);
-        (user_type, query_engine)
-    };
-    let mut user = JsonObject::new();
-    match query_engine
-        .fetch_one(SqlWithArguments {
-            sql: format!(
-                "SELECT id FROM \"{}\" WHERE username=$1",
-                user_type.backing_table()
-            ),
-            args: vec![username.into()],
-        })
-        .await
-    {
-        Err(_) => { /* Presume the ID just isn't in the database because this is a new user. */ }
-        Ok(row) => {
-            user.insert("id".into(), serde_json::Value::String(row.get("id")));
-        }
-    }
-    user.insert("username".into(), json!(username));
-    Ok(query_engine.add_row(&user_type, &user, None).await?.id)
-}
-
-pub(crate) async fn handle_callback(
-    state: Rc<RefCell<OpState>>,
-    url: Uri,
-) -> Result<Response<Body>> {
-    // TODO: Grab state out of the request, validate it, and grab the referrer URL out of it.
-    let params = url.query();
-    if params.is_none() {
-        return Ok(bad_request("Callback error: parameter missing".into()));
-    }
-    let username = params.unwrap().strip_prefix("user=");
-    if username.is_none() {
-        return Ok(bad_request(
-            "Callback error: parameter value missing".into(),
-        ));
-    }
-    let username = username.unwrap();
-    if username.is_empty() {
-        return Ok(bad_request("Callback error: parameter value empty".into()));
-    }
-    let username = urldecode::decode(username.into());
-    let meta = get_meta(&state.borrow());
-    let userid = insert_user_into_db(state, &username).await?;
-
-    Ok(redirect(&format!(
-        // TODO: redirect to the URL from state.
-        "http://localhost:3000/profile?chiselstrike_token={}",
-        meta.new_session_token(&userid).await?
-    )))
 }
 
 async fn add_crud_endpoint_for_type(
@@ -119,19 +39,6 @@ export default {type_name}.crud()"#
 }
 
 pub(crate) async fn init(api: &mut ApiService) -> Result<()> {
-    crate::server::add_endpoint(
-        "/__chiselstrike/auth/callback",
-        include_str!("auth_callback.js").to_string(),
-        api,
-    )
-    .await?;
-    crate::server::add_endpoint(
-        "/__chiselstrike/auth/user/",
-        include_str!("auth_user.js").to_string(),
-        api,
-    )
-    .await?;
-
     add_crud_endpoint_for_type("NextAuthUser", "users", api).await?;
     add_crud_endpoint_for_type("NextAuthSession", "sessions", api).await?;
     add_crud_endpoint_for_type("NextAuthToken", "tokens", api).await?;

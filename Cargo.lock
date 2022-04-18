@@ -3900,7 +3900,6 @@ dependencies = [
  "tracing",
  "tsc_compile",
  "url",
- "urldecode",
  "utils",
  "uuid",
  "vergen",
@@ -5220,12 +5219,6 @@ dependencies = [
  "percent-encoding",
  "serde",
 ]
-
-[[package]]
-name = "urldecode"
-version = "0.1.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "070c2eb79ba268848a73885f94a83b86d9e6441c5d5b10727d5f8989db2c8edc"
 
 [[package]]
 name = "urlpattern"

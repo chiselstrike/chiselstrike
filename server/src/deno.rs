@@ -3,7 +3,6 @@
 use crate::api::ApiService;
 use crate::api::{response_template, Body, RequestPath};
 use crate::auth::get_username_from_id;
-use crate::auth::handle_callback;
 use crate::datastore::engine::extract_transaction;
 use crate::datastore::engine::IdTree;
 use crate::datastore::engine::TransactionStatic;
@@ -234,8 +233,6 @@ fn build_extensions() -> Vec<Extension> {
             op_chisel_create_transaction::decl(),
             op_chisel_init_worker::decl(),
             op_chisel_read_worker_channel::decl(),
-            op_chisel_auth_callback::decl(),
-            op_chisel_auth_user::decl(),
             op_chisel_start_request::decl(),
             op_chisel_internal_error::decl(),
         ])
@@ -1029,10 +1026,6 @@ pub(crate) async fn set_meta(meta: MetaService) {
     to_worker(WorkerMsg::SetMeta(meta)).await;
 }
 
-pub(crate) fn get_meta(st: &OpState) -> Rc<MetaService> {
-    st.borrow::<Rc<MetaService>>().clone()
-}
-
 pub(crate) fn query_engine_arc(st: &OpState) -> Arc<QueryEngine> {
     st.borrow::<Arc<QueryEngine>>().clone()
 }
@@ -1186,32 +1179,6 @@ async fn convert_response(mut res: Response<Body>) -> Result<ResponseParts> {
         body: body.into(),
         headers,
     })
-}
-
-// FIXME: It would probably be cleaner to move more of this to
-// javascript.
-#[op]
-async fn op_chisel_auth_callback(
-    state: Rc<RefCell<OpState>>,
-    url: String,
-) -> Result<ResponseParts> {
-    let res = handle_callback(state, url.parse()?).await?;
-    convert_response(res).await
-}
-
-// FIXME: It would probably be cleaner to move more of this to
-// javascript.
-#[op]
-async fn op_chisel_auth_user(
-    state: Rc<RefCell<OpState>>,
-    userid: Option<String>,
-) -> Result<ResponseParts> {
-    let username = get_username_from_id(state.clone(), userid).await;
-    let res = match username {
-        None => anyhow::bail!("Error finding logged-in user; perhaps no one is logged in?"),
-        Some(username) => Response::builder().body(username.into()).unwrap(),
-    };
-    convert_response(res).await
 }
 
 pub(crate) async fn run_js(path: String, req: Request<hyper::Body>) -> Result<Response<Body>> {
