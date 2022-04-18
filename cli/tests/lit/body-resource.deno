@@ -1,7 +1,6 @@
 # SPDX-FileCopyrightText: © 2021 ChiselStrike <info@chiselstrike.com>
 
-# FIXME, Disabled for now since we are eagerly reading the bodies.
-# RUNx: sh -e @file
+# RUN: sh -e @file
 
 cat << EOF > "$TEMPDIR/endpoints/test1.js"
 export default async function chisel(req: Request) {
@@ -24,12 +23,12 @@ EOF
 cat << EOF > "$TEMPDIR/endpoints/test2.js"
 export default async function chisel(req: Request) {
     let res = Deno.core.resources();
-    if (res[4] !== "chisel_server::deno::BodyResource") {
+    if (res[5] !== "chisel_server::deno::BodyResource") {
         throw "Missing resource";
     }
     await req.body.cancel();
     res = Deno.core.resources();
-    if (res[4] !== undefined) {
+    if (res[5] !== undefined) {
        throw "Body resource was not released";
     }
     return new Response("test2 is ok");
