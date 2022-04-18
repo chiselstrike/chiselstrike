@@ -35,7 +35,7 @@ fn bad_request(msg: String) -> Response<Body> {
         .unwrap()
 }
 
-fn get_oauth_user_type(state: &OpState) -> Result<Arc<ObjectType>> {
+fn get_nextauth_user_type(state: &OpState) -> Result<Arc<ObjectType>> {
     match lookup_builtin_type(state, "NextAuthUser") {
         Ok(Type::Object(t)) => Ok(t),
         _ => anyhow::bail!("Internal error: type NextAuthUser not found"),
@@ -44,18 +44,18 @@ fn get_oauth_user_type(state: &OpState) -> Result<Arc<ObjectType>> {
 
 /// Upserts username into OAuthUser type, returning its ID.
 async fn insert_user_into_db(state: Rc<RefCell<OpState>>, username: &str) -> Result<String> {
-    let (oauth_user_type, query_engine) = {
+    let (user_type, query_engine) = {
         let state = state.borrow();
-        let oauth_user_type = get_oauth_user_type(&state)?;
+        let user_type = get_nextauth_user_type(&state)?;
         let query_engine = query_engine_arc(&state);
-        (oauth_user_type, query_engine)
+        (user_type, query_engine)
     };
     let mut user = JsonObject::new();
     match query_engine
         .fetch_one(SqlWithArguments {
             sql: format!(
                 "SELECT id FROM \"{}\" WHERE username=$1",
-                oauth_user_type.backing_table()
+                user_type.backing_table()
             ),
             args: vec![username.into()],
         })
@@ -67,10 +67,7 @@ async fn insert_user_into_db(state: Rc<RefCell<OpState>>, username: &str) -> Res
         }
     }
     user.insert("username".into(), json!(username));
-    Ok(query_engine
-        .add_row(&oauth_user_type, &user, None)
-        .await?
-        .id)
+    Ok(query_engine.add_row(&user_type, &user, None).await?.id)
 }
 
 pub(crate) async fn handle_callback(
@@ -149,7 +146,7 @@ pub(crate) async fn get_username_from_id(
     let (qeng, user_type) = {
         let state = state.borrow();
         let qeng = query_engine_arc(&state);
-        let user_type = get_oauth_user_type(&state);
+        let user_type = get_nextauth_user_type(&state);
         (qeng, user_type)
     };
     match (userid, user_type) {
