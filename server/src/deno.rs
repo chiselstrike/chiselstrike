@@ -1023,7 +1023,7 @@ async fn special_response(
         // TODO: Make this optional, for users who want to reject some OPTIONS requests.
         if req.method() == "OPTIONS" {
             // Makes CORS preflights pass.
-            return Ok(Some(response_template().body("ok".to_string().into())?));
+            return Ok(Some(Response::builder().body("ok".to_string().into())?));
         }
 
         let username = get_username_from_id(state.clone(), userid.clone()).await;
@@ -1088,7 +1088,7 @@ async fn op_chisel_auth_user(
     let username = get_username_from_id(state.clone(), userid).await;
     let res = match username {
         None => anyhow::bail!("Error finding logged-in user; perhaps no one is logged in?"),
-        Some(username) => response_template().body(username.into()).unwrap(),
+        Some(username) => Response::builder().body(username.into()).unwrap(),
     };
     convert_response(res).await
 }
