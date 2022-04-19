@@ -31,4 +31,5 @@ $CURL -XOPTIONS $CHISELD_HOST/dev/foo
 # CHECK: access-control-allow-origin: *
 # CHECK: access-control-allow-methods: POST, PUT, GET, OPTIONS
 # CHECK: access-control-allow-headers: Content-Type,ChiselStrikeToken
+# CHECK: date:
 # CHECK: ok

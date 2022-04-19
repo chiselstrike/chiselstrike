@@ -813,10 +813,10 @@ async fn get_read_future(read: v8::Global<v8::Function>) -> Result<Option<(Box<[
     let runtime = &mut service.worker.js_runtime;
     let scope = &mut runtime.handle_scope();
     let read_result = v8::Local::new(scope, read_result);
-    let value: v8::Local<v8::ArrayBufferView> = match read_result.try_into() {
-        Ok(v) => v,
-        Err(_) => return Ok(None),
-    };
+    if read_result.is_undefined() {
+        return Ok(None);
+    }
+    let value: v8::Local<v8::ArrayBufferView> = read_result.try_into()?;
     let size = value.byte_length();
     // FIXME: We might want to use an uninitialized buffer.
     let mut buffer = vec![0; size];
@@ -995,7 +995,7 @@ async fn op_chisel_create_transaction(state: Rc<RefCell<OpState>>) -> Result<()>
 #[derive(Serialize)]
 struct ResponseParts {
     status: u16,
-    body: String,
+    body: ZeroCopyBuf,
     headers: Vec<(String, String)>,
 }
 
@@ -1049,10 +1049,10 @@ async fn convert_response(mut res: Response<Body>) -> Result<ResponseParts> {
     let status = res.status().as_u16();
     let res_body = res.body_mut();
 
-    let mut body = String::new();
+    let mut body = vec![];
     while let Some(data) = res_body.data().await {
         let mut data = data?;
-        data.read_to_string(&mut body)?;
+        data.read_to_end(&mut body)?;
     }
 
     let res_headers = res.headers();
@@ -1062,7 +1062,7 @@ async fn convert_response(mut res: Response<Body>) -> Result<ResponseParts> {
     }
     Ok(ResponseParts {
         status,
-        body,
+        body: body.into(),
         headers,
     })
 }
