@@ -38,7 +38,7 @@ pub(crate) fn extract_transaction(
     transaction: TransactionStatic,
 ) -> Result<Transaction<'static, Any>> {
     let transaction = Arc::try_unwrap(transaction)
-        .map_err(|_| anyhow!("Transaction still have references held!"))?;
+        .map_err(|_| anyhow!("Transaction still has references held!"))?;
     Ok(transaction.into_inner())
 }
 
