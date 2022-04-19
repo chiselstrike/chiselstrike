@@ -89,13 +89,18 @@ impl Policies {
         Ok(())
     }
 
-    /// Adds the current policies on ty's fields.
-    pub(crate) fn add_field_policies(
+    /// For field of type `ty` creates field policies.
+    pub(crate) fn make_field_policies(
         &self,
-        ty: &ObjectType,
-        policies: &mut FieldPolicies,
+        user_id: &Option<String>,
         current_path: &str,
-    ) {
+        ty: &ObjectType,
+    ) -> FieldPolicies {
+        let mut field_policies = FieldPolicies {
+            current_userid: user_id.clone(),
+            ..Default::default()
+        };
+
         if let Some(version) = self.versions.get(&ty.api_version) {
             for fld in ty.user_fields() {
                 for lbl in &fld.labels {
@@ -103,10 +108,10 @@ impl Policies {
                         if !p.except_uri.is_match(current_path) {
                             match p.kind {
                                 Kind::Transform(f) => {
-                                    policies.transforms.insert(fld.name.clone(), f);
+                                    field_policies.transforms.insert(fld.name.clone(), f);
                                 }
                                 Kind::MatchLogin => {
-                                    policies.match_login.insert(fld.name.clone());
+                                    field_policies.match_login.insert(fld.name.clone());
                                 }
                             }
                         }
@@ -114,6 +119,7 @@ impl Policies {
                 }
             }
         }
+        field_policies
     }
 }
 

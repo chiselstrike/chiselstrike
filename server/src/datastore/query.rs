@@ -2,8 +2,7 @@
 
 use crate::datastore::crud;
 use crate::datastore::expr::{BinaryExpr, BinaryOp, Expr, Literal, PropertyAccess};
-use crate::deno::make_field_policies;
-use crate::policies::Policies;
+use crate::policies::{FieldPolicies, Policies};
 use crate::types::TypeSystem;
 use crate::types::{Field, ObjectType, Type, TypeSystemError, OAUTHUSER_TYPE_NAME};
 use crate::JsonObject;
@@ -29,6 +28,29 @@ pub(crate) enum SqlValue {
 impl From<&str> for SqlValue {
     fn from(f: &str) -> Self {
         Self::String(f.to_string())
+    }
+}
+
+/// RequestContext bears a mix of contextual variables used by QueryPlan
+/// and Mutations.
+pub(crate) struct RequestContext<'a> {
+    /// Policies to be applied on the query.
+    pub policies: &'a Policies,
+    /// Type system to be used of version `api_version`
+    pub ts: &'a TypeSystem,
+    /// Schema version to be used.
+    pub api_version: String,
+    /// Id of user making the request.
+    pub user_id: Option<String>,
+    /// Current URL path from which this request originated.
+    pub path: String,
+}
+
+impl RequestContext<'_> {
+    /// Calculates field policies for the request being processed.
+    fn make_field_policies(&self, ty: &ObjectType) -> FieldPolicies {
+        self.policies
+            .make_field_policies(&self.user_id, &self.path, ty)
     }
 }
 
@@ -242,24 +264,17 @@ impl QueryPlan {
         builder
     }
 
-    fn from_entity_name(
-        policies: &Policies,
-        ts: &TypeSystem,
-        api_version: &str,
-        userid: &Option<String>,
-        path: &str,
-        entity_name: &str,
-    ) -> Result<Self> {
-        let ty = match ts.lookup_builtin_type(entity_name) {
+    fn from_entity_name(c: &RequestContext, entity_name: &str) -> Result<Self> {
+        let ty = match c.ts.lookup_builtin_type(entity_name) {
             Ok(Type::Object(ty)) => ty,
             Err(TypeSystemError::NotABuiltinType(_)) => {
-                ts.lookup_custom_type(entity_name, api_version)?
+                c.ts.lookup_custom_type(entity_name, &c.api_version)?
             }
             _ => anyhow::bail!("Unexpected type name as select base type: {}", entity_name),
         };
 
         let mut builder = Self::new(ty.clone());
-        builder.entity = builder.load_entity(policies, userid, path, &ty);
+        builder.entity = builder.load_entity(c, &ty);
         Ok(builder)
     }
 
@@ -267,16 +282,11 @@ impl QueryPlan {
     /// string contain within given `url` and loads provided querying parameters
     /// into the query plan.
     pub(crate) fn from_crud_url(
-        policies: &Policies,
-        ts: &TypeSystem,
-        api_version: &str,
-        userid: &Option<String>,
-        path: &str,
+        context: &RequestContext,
         entity_name: &str,
         url: &str,
     ) -> Result<Self> {
-        let mut builder =
-            Self::from_entity_name(policies, ts, api_version, userid, path, entity_name)?;
+        let mut builder = Self::from_entity_name(context, entity_name)?;
         let operators = crud::query_str_to_ops(builder.base_type(), url)?;
         builder.extend_operators(operators);
 
@@ -286,17 +296,9 @@ impl QueryPlan {
     /// Constructs a query plan from a query `op_chain` and
     /// additional helper data like `policies`, `api_version`,
     /// `userid` and `path` (url path used for policy evaluation).
-    pub(crate) fn from_op_chain(
-        policies: &Policies,
-        ts: &TypeSystem,
-        api_version: &str,
-        userid: &Option<String>,
-        path: &str,
-        op_chain: QueryOpChain,
-    ) -> Result<Self> {
+    pub(crate) fn from_op_chain(context: &RequestContext, op_chain: QueryOpChain) -> Result<Self> {
         let (entity_name, operators) = convert_ops(op_chain)?;
-        let mut builder =
-            Self::from_entity_name(policies, ts, api_version, userid, path, &entity_name)?;
+        let mut builder = Self::from_entity_name(context, &entity_name)?;
 
         builder.extend_operators(operators);
         Ok(builder)
@@ -343,21 +345,9 @@ impl QueryPlan {
 
     /// Prepares the retrieval of Entity of type `ty` from the database and
     /// ensures login restrictions are respected.
-    fn load_entity(
-        &mut self,
-        policies: &Policies,
-        userid: &Option<String>,
-        path: &str,
-        ty: &Arc<ObjectType>,
-    ) -> QueriedEntity {
-        self.add_login_filters_recursive(
-            policies,
-            userid,
-            path,
-            ty,
-            Expr::Parameter { position: 0 },
-        );
-        self.load_entity_recursive(policies, userid, path, ty, ty.backing_table())
+    fn load_entity(&mut self, context: &RequestContext, ty: &Arc<ObjectType>) -> QueriedEntity {
+        self.add_login_filters_recursive(context, ty, Expr::Parameter { position: 0 });
+        self.load_entity_recursive(context, ty, ty.backing_table())
     }
 
     /// Loads QueriedEntity for a given type `ty` to be retrieved from the
@@ -365,13 +355,11 @@ impl QueryPlan {
     /// generated and we attempt to retrieve them recursively as well.
     fn load_entity_recursive(
         &mut self,
-        policies: &Policies,
-        userid: &Option<String>,
-        path: &str,
+        context: &RequestContext,
         ty: &Arc<ObjectType>,
         current_table: &str,
     ) -> QueriedEntity {
-        let field_policies = make_field_policies(policies, userid, path, ty);
+        let field_policies = context.make_field_policies(ty);
 
         let mut fields = vec![];
         let mut joins = HashMap::default();
@@ -393,13 +381,7 @@ impl QueryPlan {
                 joins.insert(
                     field.name.to_owned(),
                     Join {
-                        entity: self.load_entity_recursive(
-                            policies,
-                            userid,
-                            path,
-                            nested_ty,
-                            &nested_table,
-                        ),
+                        entity: self.load_entity_recursive(context, nested_ty, &nested_table),
                         lkey: field.name.to_owned(),
                         rkey: "id".to_owned(),
                     },
@@ -426,13 +408,11 @@ impl QueryPlan {
     /// `ty` that is to be retrieved from the database.
     fn add_login_filters_recursive(
         &mut self,
-        policies: &Policies,
-        userid: &Option<String>,
-        path: &str,
+        context: &RequestContext,
         ty: &Arc<ObjectType>,
         property_chain: Expr,
     ) {
-        let field_policies = make_field_policies(policies, userid, path, ty);
+        let field_policies = context.make_field_policies(ty);
         let user_id: Literal = match &field_policies.current_userid {
             None => "NULL",
             Some(id) => id.as_str(),
@@ -457,13 +437,7 @@ impl QueryPlan {
                         });
                     }
                 } else {
-                    self.add_login_filters_recursive(
-                        policies,
-                        userid,
-                        path,
-                        nested_ty,
-                        property_access.into(),
-                    );
+                    self.add_login_filters_recursive(context, nested_ty, property_access.into());
                 }
             }
         }

@@ -8,14 +8,11 @@ use crate::datastore::engine::extract_transaction;
 use crate::datastore::engine::IdTree;
 use crate::datastore::engine::TransactionStatic;
 use crate::datastore::engine::{QueryResults, ResultRow};
-use crate::datastore::query::QueryOpChain;
-use crate::datastore::query::{Mutation, QueryPlan};
+use crate::datastore::query::{Mutation, QueryOpChain, QueryPlan, RequestContext};
 use crate::datastore::MetaService;
 use crate::datastore::QueryEngine;
-use crate::policies::FieldPolicies;
 use crate::policies::Policies;
 use crate::rcmut::RcMut;
-use crate::types::ObjectType;
 use crate::types::Type;
 use crate::types::TypeSystem;
 use crate::types::TypeSystemError;
@@ -565,21 +562,6 @@ async fn op_chisel_entity_delete(
 
 type DbStream = RefCell<QueryResults>;
 
-/// Calculates field policies for the request being processed.
-pub(crate) fn make_field_policies(
-    policies: &Policies,
-    userid: &Option<String>,
-    path: &str,
-    ty: &ObjectType,
-) -> FieldPolicies {
-    let mut field_policies = FieldPolicies {
-        current_userid: userid.clone(),
-        ..Default::default()
-    };
-    policies.add_field_policies(ty, &mut field_policies, path);
-    field_policies
-}
-
 struct QueryStreamResource {
     stream: DbStream,
 }
@@ -603,13 +585,15 @@ fn op_chisel_crud_query_create(
     info: (String, String, Option<String>),
 ) -> Result<ResourceId> {
     let (entity_name, url) = params;
-    let (api_version, path, userid) = info;
+    let (api_version, path, user_id) = info;
     let query_plan = QueryPlan::from_crud_url(
-        current_policies(op_state),
-        current_type_system(op_state),
-        &api_version,
-        &userid,
-        &path,
+        &RequestContext {
+            policies: current_policies(op_state),
+            ts: current_type_system(op_state),
+            api_version,
+            user_id,
+            path,
+        },
         &entity_name,
         &url,
     )?;
@@ -622,13 +606,15 @@ fn op_chisel_relational_query_create(
     op_chain: QueryOpChain,
     info: (String, String, Option<String>),
 ) -> Result<ResourceId> {
-    let (api_version, path, userid) = info;
+    let (api_version, path, user_id) = info;
     let query_plan = QueryPlan::from_op_chain(
-        current_policies(op_state),
-        current_type_system(op_state),
-        &api_version,
-        &userid,
-        &path,
+        &RequestContext {
+            policies: current_policies(op_state),
+            ts: current_type_system(op_state),
+            api_version,
+            user_id,
+            path,
+        },
         op_chain,
     )?;
     create_query(op_state, query_plan)
