@@ -28,7 +28,7 @@ export class Bar extends ChiselEntity { a: string = "default"; }
 EOF
 set +e
 $CHISEL apply 2>&1
-# CHECK: Trying to remove types from type file. This will delete the underlying data associated with this type. To proceed, apply again with --allow-type-deletion
+# CHECK: Error
 
 cat << EOF > "$TEMPDIR/models/types.ts"
 export class Zed extends ChiselEntity { a: string; a: string; }
