@@ -29,6 +29,10 @@ const requestContext = Chisel.requestContext;
 const ChiselRequest = Chisel.ChiselRequest;
 const loggedInUser = Chisel.loggedInUser;
 
+function sendBodyPart(value: Uint8Array) {
+    postMessage({ msg: "body", value });
+}
+
 async function handleMsg(func: () => unknown) {
     let err = undefined;
     let value = undefined;
@@ -37,7 +41,7 @@ async function handleMsg(func: () => unknown) {
     } catch (e) {
         err = e;
     }
-    postMessage({ value, err });
+    postMessage({ msg: "reply", value, err });
 }
 
 function initWorker(id: number) {
@@ -101,20 +105,6 @@ async function rollback_on_failure<T>(func: () => Promise<T>): Promise<T> {
     }
 }
 
-function concat(arrays: Uint8Array[]): Uint8Array {
-    let length = 0;
-    for (const a of arrays) {
-        length += a.length;
-    }
-    const ret = new Uint8Array(length);
-    let i = 0;
-    for (const a of arrays) {
-        ret.set(a, i);
-        i += a.length;
-    }
-    return ret;
-}
-
 function buildReadableStreamForBody(rid: number) {
     return new ReadableStream<string>({
         async pull(controller: ReadableStreamDefaultController) {
@@ -153,6 +143,7 @@ async function callHandlerImpl(
 
     const start = await Deno.core.opAsync("op_chisel_start_request");
     if (start.Special) {
+        sendBodyPart(start.Special.body);
         return start.Special;
     }
     const { userid, url, method, headers, body_rid } = start.Js;
@@ -194,9 +185,7 @@ async function callHandlerImpl(
         resHeaders.push(h);
     }
     const reader = res.body?.getReader();
-    let body = undefined;
     if (reader) {
-        const arrays = [];
         for (let i = 0;; i += 1) {
             const v = await reader.read();
             // FIXME: Is this the correct way to yield in async JS?
@@ -206,15 +195,14 @@ async function callHandlerImpl(
             if (v.done || currentRequestId === undefined) {
                 break;
             }
-            arrays.push(v.value);
+            sendBodyPart(v.value);
         }
-        body = concat(arrays);
     }
     const status = res.status;
 
     closeResources();
     await Deno.core.opAsync("op_chisel_commit_transaction");
-    return { body, status, headers: resHeaders };
+    return { status, headers: resHeaders };
 }
 
 function callHandler(
