@@ -23,14 +23,20 @@ endpointWorker.onmessageerror = function (e) {
 endpointWorker.onerror = function (e) {
     throw e;
 };
+
+const bodyParts: Uint8Array[] = [];
 endpointWorker.onmessage = function (event) {
-    const resolver = resolvers[0];
     const d = event.data;
-    const e = d.err;
-    if (e) {
-        resolver.reject(e);
+    if (d.msg == "body") {
+        bodyParts.push(d.value);
     } else {
-        resolver.resolve(d.value);
+        const resolver = resolvers[0];
+        const e = d.err;
+        if (e) {
+            resolver.reject(e);
+        } else {
+            resolver.resolve(d.value);
+        }
     }
 };
 
@@ -104,16 +110,12 @@ export async function callHandler(
         path,
         apiVersion,
         id,
-    }) as { body?: number; status: number; headers: number };
+    }) as { status: number; headers: number };
 
     // The read function is called repeatedly until it return
-    // undefined. In the current implementation it returns the full
-    // body on the first call and undefined on the second.
-    let body = res.body;
+    // undefined.
     const read = function () {
-        const ret = body;
-        body = undefined;
-        return ret;
+        return bodyParts.shift();
     };
     return {
         "status": res.status,
