@@ -76,6 +76,8 @@ message ChiselApplyRequest {
    repeated PolicyUpdateRequest policies = 3;
    bool allow_type_deletion = 4;
    string version = 5;
+   string version_tag = 6;
+   string app_name = 7;
 }
 
 message ChiselApplyResponse {

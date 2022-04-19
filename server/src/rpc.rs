@@ -1,6 +1,6 @@
 // SPDX-FileCopyrightText: © 2021 ChiselStrike <info@chiselstrike.com>
 
-use crate::api::RequestPath;
+use crate::api::{ApiInfo, RequestPath};
 use crate::chisel;
 use crate::datastore::{MetaService, QueryEngine};
 use crate::deno;
@@ -209,7 +209,11 @@ impl RpcService {
         let api_version = apply_request.version;
         validate_api_version(&api_version)?;
 
+        let api_version_tag = apply_request.version_tag;
+        let app_name = apply_request.app_name;
+
         let mut state = self.state.lock().await;
+        let api_info = ApiInfo::new(app_name, api_version_tag);
 
         let mut endpoint_routes = vec![];
         for endpoint in apply_request.endpoints {
@@ -342,6 +346,9 @@ impl RpcService {
         meta.persist_policy_version(&mut transaction, &api_version, policy_str)
             .await?;
 
+        meta.persist_api_info(&mut transaction, &api_version, &api_info)
+            .await?;
+
         for ty in to_insert.iter() {
             // FIXME: Consistency between metadata and backing store updates.
             meta.insert_type(&mut transaction, ty).await?;
@@ -408,8 +415,9 @@ impl RpcService {
         let cmd = send_command!({
             {
                 set_type_system(types_global.clone()).await;
+                let pol_version = api_version.clone();
                 mutate_policies(move |policies| {
-                    policies.versions.insert(api_version, policy);
+                    policies.versions.insert(pol_version, policy);
                 })
                 .await;
 
@@ -423,6 +431,7 @@ impl RpcService {
                     });
                     runtime.api.add_route(path.into(), func);
                 }
+                runtime.api.update_api_info(&api_version, api_info);
             }
             for (path, _) in endpoints {
                 deno::activate_endpoint(&path).await?;

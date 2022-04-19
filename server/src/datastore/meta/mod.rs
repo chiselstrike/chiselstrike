@@ -2,6 +2,7 @@ pub(crate) mod schema;
 
 // SPDX-FileCopyrightText: © 2021 ChiselStrike <info@chiselstrike.com>
 
+use crate::api::{ApiInfo, ApiInfoMap};
 use crate::datastore::{DbConnection, Kind};
 use crate::policies::Policies;
 use crate::prefix_map::PrefixMap;
@@ -256,6 +257,35 @@ impl MetaService {
         }
 
         Self::commit_transaction(transaction).await?;
+        Ok(())
+    }
+
+    /// Load information about the current API versions present in this system
+    pub(crate) async fn load_api_info(&self) -> anyhow::Result<ApiInfoMap> {
+        let query = sqlx::query("SELECT api_version, app_name, version_tag FROM api_info");
+        let rows = fetch_all!(&self.pool, query)?;
+
+        let mut info = ApiInfoMap::default();
+        for row in rows {
+            let api_version: &str = row.get("api_version");
+            let app_name: &str = row.get("app_name");
+            let tag: &str = row.get("version_tag");
+
+            debug!("Loading api version info for {}", api_version);
+            info.insert(api_version.into(), ApiInfo::new(app_name, tag));
+        }
+        Ok(info)
+    }
+
+    pub(crate) async fn persist_api_info(
+        &self,
+        transaction: &mut Transaction<'_, Any>,
+        api_version: &str,
+        info: &ApiInfo,
+    ) -> anyhow::Result<()> {
+        let add_api = sqlx::query("INSERT INTO api_info (api_version, app_name, version_tag) VALUES ($1, $2, $3) ON CONFLICT(api_version) DO UPDATE SET app_name = $2, version_tag = $3 WHERE api_info.api_version = $1")
+            .bind(api_version.to_owned()).bind(info.name.clone()).bind(info.tag.clone());
+        execute!(transaction, add_api)?;
         Ok(())
     }
 

@@ -14,6 +14,14 @@ enum ChiselVersion {
 }
 
 #[derive(Iden)]
+enum ApiInfo {
+    Table,
+    ApiVersion,
+    AppName,
+    VersionTag,
+}
+
+#[derive(Iden)]
 enum Types {
     Table,
     TypeId,
@@ -102,6 +110,14 @@ pub(crate) fn tables() -> Vec<TableCreateStatement> {
         .if_not_exists()
         .col(ColumnDef::new(ChiselVersion::VersionId).text().unique_key())
         .col(ColumnDef::new(ChiselVersion::Version).text())
+        .to_owned();
+
+    let api_info = Table::create()
+        .table(ApiInfo::Table)
+        .if_not_exists()
+        .col(ColumnDef::new(ApiInfo::ApiVersion).text().unique_key())
+        .col(ColumnDef::new(ApiInfo::AppName).text())
+        .col(ColumnDef::new(ApiInfo::VersionTag).text())
         .to_owned();
 
     let types = Table::create()
@@ -196,6 +212,7 @@ pub(crate) fn tables() -> Vec<TableCreateStatement> {
 
     vec![
         version,
+        api_info,
         types,
         type_names,
         fields,
