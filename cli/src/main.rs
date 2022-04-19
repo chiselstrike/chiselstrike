@@ -9,7 +9,6 @@ use chisel::chisel_rpc_client::ChiselRpcClient;
 use chisel::{
     ChiselDeleteRequest, DescribeRequest, PopulateRequest, RestartRequest, StatusRequest,
 };
-use std::collections::HashSet;
 use std::env;
 use std::fs;
 use std::io::ErrorKind;
@@ -253,7 +252,6 @@ async fn main() -> Result<()> {
                 version,
                 allow_type_deletion.into(),
                 type_check.into(),
-                HashSet::default(),
             )
             .await?;
         }

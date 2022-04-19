@@ -18,7 +18,7 @@ pub(crate) async fn cmd_dev(server_url: String, type_check: bool) -> Result<()> 
     let manifest = read_manifest()?;
     let mut server = start_server()?;
     wait(server_url.clone()).await?;
-    apply_from_dev(server_url.clone(), type_check, HashSet::default()).await;
+    apply_from_dev(server_url.clone(), type_check).await;
     let (mut tx, mut rx) = channel(1);
     let mut apply_watcher = RecommendedWatcher::new(move |res: Result<Event, notify::Error>| {
         futures::executor::block_on(async {
@@ -51,9 +51,9 @@ pub(crate) async fn cmd_dev(server_url: String, type_check: bool) -> Result<()> 
                         .into_iter()
                         .filter(|path| !crate::project::ignore_path(path.to_str().unwrap())),
                 );
-                let paths = HashSet::from_iter(paths.into_iter());
+                let paths: HashSet<PathBuf> = HashSet::from_iter(paths.into_iter());
                 if !paths.is_empty() {
-                    apply_from_dev(server_url.clone(), type_check, paths).await;
+                    apply_from_dev(server_url.clone(), type_check).await;
                 }
             }
             Ok(_) => { /* ignore */ }
@@ -65,13 +65,12 @@ pub(crate) async fn cmd_dev(server_url: String, type_check: bool) -> Result<()> 
     Ok(())
 }
 
-async fn apply_from_dev(server_url: String, type_check: TypeChecking, paths: HashSet<PathBuf>) {
+async fn apply_from_dev(server_url: String, type_check: TypeChecking) {
     if let Err(e) = apply(
         server_url,
         DEFAULT_API_VERSION,
         AllowTypeDeletion::No,
         type_check,
-        paths,
     )
     .await
     {

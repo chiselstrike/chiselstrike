@@ -5,11 +5,9 @@ use crate::chisel::{ChiselApplyRequest, EndPointCreationRequest, PolicyUpdateReq
 use crate::project::{read_manifest, read_to_string, Module};
 use anyhow::{anyhow, Context, Result};
 use compile::compile_ts_code as swc_compile;
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::env;
-use std::fs;
 use std::io::Write;
-use std::path::PathBuf;
 use tempfile::Builder;
 use tempfile::NamedTempFile;
 use tokio::task::{spawn_blocking, JoinHandle};
@@ -68,31 +66,14 @@ pub(crate) async fn apply<S: ToString>(
     version: S,
     allow_type_deletion: AllowTypeDeletion,
     type_check: TypeChecking,
-    include_paths: HashSet<PathBuf>,
 ) -> Result<()> {
     let version = version.to_string();
 
     let manifest = read_manifest().with_context(|| "Reading manifest file".to_string())?;
-    let mut models = manifest.models()?;
-    let mut endpoints = manifest.endpoints()?;
-    let mut policies = manifest.policies()?;
+    let models = manifest.models()?;
+    let endpoints = manifest.endpoints()?;
+    let policies = manifest.policies()?;
 
-    if !include_paths.is_empty() {
-        models = models
-            .into_iter()
-            .filter(|path| include_paths.contains(&fs::canonicalize(path).unwrap()))
-            .collect();
-        endpoints = endpoints
-            .into_iter()
-            .filter(|endpoint| {
-                include_paths.contains(&fs::canonicalize(&endpoint.file_path).unwrap())
-            })
-            .collect();
-        policies = policies
-            .into_iter()
-            .filter(|path| include_paths.contains(&fs::canonicalize(path).unwrap()))
-            .collect();
-    }
     let types_req = crate::ts::parse_types(&models)?;
     let mut endpoints_req = vec![];
     let mut policy_req = vec![];
