@@ -1,0 +1,26 @@
+# SPDX-FileCopyrightText: © 2022 ChiselStrike <info@chiselstrike.com>
+
+# RUN: sh -e @file
+
+cat << EOF > "$TEMPDIR/endpoints/foo.ts"
+export default async function chisel(req: Request) {
+    return new Response("foo");
+}
+EOF
+
+cd "$TEMPDIR"
+$CHISEL apply
+# CHECK: End point defined: /dev/foo
+
+num=$($CURL $CHISELD_HOST/dev/foo | grep ChiselStrikeToken | wc -l)
+echo Found $num copies
+# CHECK: Found 1 copies
+
+num=$($CURL -XOPTIONS $CHISELD_HOST/dev/foo | grep ChiselStrikeToken | wc -l)
+echo Found $num copies
+# CHECK: Found 1 copies
+
+token=`$CURL -s $CHISELD_HOST/__chiselstrike/auth/callback?user=thoroughly-unique-username|sed -ne "s/.*chiselstrike_token=//" -e "s/<.*//p"`
+num=$($CURL -H "ChiselStrikeToken:$token" $CHISELD_HOST/__chiselstrike/auth/user | grep ChiselStrikeToken | wc -l)
+echo Found $num copies
+# CHECK: Found 1 copies
