@@ -464,11 +464,7 @@ export class ChiselCursor<T> {
                 const rid = Deno.core.opSync(
                     "op_chisel_relational_query_create",
                     op,
-                    [
-                        requestContext.apiVersion,
-                        requestContext.path,
-                        requestContext.userId,
-                    ],
+                    requestContext,
                 );
                 try {
                     while (true) {
@@ -590,7 +586,7 @@ export class ChiselEntity {
         const jsonIds = await Deno.core.opAsync("op_chisel_store", {
             name: this.constructor.name,
             value: this,
-        }, requestContext.apiVersion);
+        }, requestContext);
         type IdsJson = Map<string, IdsJson>;
         function backfillIds(this_: ChiselEntity, jsonIds: IdsJson) {
             for (const [fieldName, value] of Object.entries(jsonIds)) {
@@ -678,9 +674,9 @@ export class ChiselEntity {
     ): Promise<void> {
         ensureNotGet();
         await Deno.core.opAsync("op_chisel_entity_delete", {
-            type_name: this.name,
+            typeName: this.name,
             restrictions: restrictions,
-        }, requestContext.apiVersion);
+        }, requestContext);
     }
 
     /**
@@ -1027,12 +1023,11 @@ async function fetchCrudData<T extends ChiselEntity>(
         [Symbol.asyncIterator]: async function* () {
             const rid = Deno.core.opSync(
                 "op_chisel_crud_query_create",
-                [type.name, url],
-                [
-                    requestContext.apiVersion,
-                    requestContext.path,
-                    requestContext.userId,
-                ],
+                {
+                    typeName: type.name,
+                    url,
+                },
+                requestContext,
             );
             try {
                 while (true) {

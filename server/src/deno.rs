@@ -497,6 +497,22 @@ async fn op_chisel_read_body(
     Ok(fut.await?.transpose()?.map(|x| x.to_vec().into()))
 }
 
+/// RequestContext corresponds to `requestContext` structure used in chisel.ts.
+#[derive(Deserialize)]
+struct ChiselRequestContext {
+    /// Current URL path.
+    path: String,
+    /// Current HTTP method.
+    #[serde(rename = "method")]
+    _method: String,
+    /// Schema version to be used with the request.
+    #[serde(rename = "apiVersion")]
+    api_version: String,
+    /// Current user ID.
+    #[serde(rename = "userId")]
+    user_id: Option<String>,
+}
+
 #[derive(Deserialize)]
 struct StoreContent {
     name: String,
@@ -507,14 +523,14 @@ struct StoreContent {
 async fn op_chisel_store(
     state: Rc<RefCell<OpState>>,
     content: StoreContent,
-    api_version: String,
+    c: ChiselRequestContext,
 ) -> Result<IdTree> {
     let type_name = &content.name;
     let value = &content.value;
 
     let (query_engine, ty) = {
         let state = state.borrow();
-        let ty = match current_type_system(&state).lookup_type(type_name, &api_version) {
+        let ty = match current_type_system(&state).lookup_type(type_name, &c.api_version) {
             Ok(Type::Object(ty)) => ty,
             _ => anyhow::bail!("Cannot save into type {}.", type_name),
         };
@@ -533,7 +549,8 @@ async fn op_chisel_store(
 }
 
 #[derive(Deserialize)]
-struct DeleteContent {
+struct DeleteParams {
+    #[serde(rename = "typeName")]
     type_name: String,
     restrictions: JsonObject,
 }
@@ -541,16 +558,16 @@ struct DeleteContent {
 #[op]
 async fn op_chisel_entity_delete(
     state: Rc<RefCell<OpState>>,
-    content: DeleteContent,
-    api_version: String,
+    params: DeleteParams,
+    context: ChiselRequestContext,
 ) -> Result<()> {
     let mutation = {
         let state = state.borrow_mut();
         Mutation::parse_delete(
             current_type_system(&state),
-            &api_version,
-            &content.type_name,
-            &content.restrictions,
+            &context.api_version,
+            &params.type_name,
+            &params.restrictions,
         )
         .context(
             "failed to construct delete expression from JSON passed to `op_chisel_entity_delete`",
@@ -578,24 +595,29 @@ fn op_chisel_get_secret(op_state: &mut OpState, key: String) -> Result<Option<se
     Ok(ret)
 }
 
+#[derive(Deserialize)]
+struct CrudQueryParams {
+    #[serde(rename = "typeName")]
+    type_name: String,
+    url: String,
+}
+
 #[op]
 fn op_chisel_crud_query_create(
     op_state: &mut OpState,
-    params: (String, String),
-    info: (String, String, Option<String>),
+    params: CrudQueryParams,
+    context: ChiselRequestContext,
 ) -> Result<ResourceId> {
-    let (entity_name, url) = params;
-    let (api_version, path, user_id) = info;
     let query_plan = QueryPlan::from_crud_url(
         &RequestContext {
             policies: current_policies(op_state),
             ts: current_type_system(op_state),
-            api_version,
-            user_id,
-            path,
+            api_version: context.api_version,
+            user_id: context.user_id,
+            path: context.path,
         },
-        &entity_name,
-        &url,
+        &params.type_name,
+        &params.url,
     )?;
     create_query(op_state, query_plan)
 }
@@ -604,16 +626,15 @@ fn op_chisel_crud_query_create(
 fn op_chisel_relational_query_create(
     op_state: &mut OpState,
     op_chain: QueryOpChain,
-    info: (String, String, Option<String>),
+    context: ChiselRequestContext,
 ) -> Result<ResourceId> {
-    let (api_version, path, user_id) = info;
     let query_plan = QueryPlan::from_op_chain(
         &RequestContext {
             policies: current_policies(op_state),
             ts: current_type_system(op_state),
-            api_version,
-            user_id,
-            path,
+            api_version: context.api_version,
+            user_id: context.user_id,
+            path: context.path,
         },
         op_chain,
     )?;
