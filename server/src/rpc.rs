@@ -282,7 +282,16 @@ impl RpcService {
         let policy = VersionPolicy::from_yaml(policy_str)?;
 
         if !to_remove.is_empty() && !apply_request.allow_type_deletion {
-            anyhow::bail!("Trying to remove types from type file. This will delete the underlying data associated with this type. To proceed, apply again with --allow-type-deletion");
+            anyhow::bail!(
+                r"Trying to remove types from type file. This will delete the underlying data associated with this type.
+To proceed, try:
+
+   'npx chisel apply --allow-type-deletion' (if installed from npm)
+
+or
+
+   'chisel apply --allow-type-deletion' (otherwise)"
+            );
         }
 
         let mut decorators = BTreeSet::default();
