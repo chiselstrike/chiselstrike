@@ -309,35 +309,7 @@ export class ChiselCursor<T> {
             );
         } else {
             const restrictions = arg1;
-            let expr = undefined;
-            for (const key in restrictions) {
-                if (restrictions[key] === undefined) {
-                    continue;
-                }
-                const cmpExpr = {
-                    exprType: "Binary",
-                    left: {
-                        exprType: "Property",
-                        object: { exprType: "Parameter", position: 0 },
-                        property: key,
-                    },
-                    op: "Eq",
-                    right: {
-                        exprType: "Literal",
-                        value: restrictions[key],
-                    },
-                };
-                if (expr === undefined) {
-                    expr = cmpExpr;
-                } else {
-                    expr = {
-                        exprType: "Binary",
-                        left: cmpExpr,
-                        op: "And",
-                        right: expr,
-                    };
-                }
-            }
+            const expr = restrictionsToFilterExpr(restrictions);
             if (expr === undefined) {
                 // If it's an empty restriction, no need to create an empty filter.
                 return this;
@@ -739,6 +711,41 @@ export class ChiselEntity {
         await result.save();
         return result;
     }
+}
+
+function restrictionsToFilterExpr<T extends ChiselEntity>(
+    restrictions: Partial<T>,
+): Record<string, unknown> | undefined {
+    let expr = undefined;
+    for (const key in restrictions) {
+        if (restrictions[key] === undefined) {
+            continue;
+        }
+        const cmpExpr = {
+            exprType: "Binary",
+            left: {
+                exprType: "Property",
+                object: { exprType: "Parameter", position: 0 },
+                property: key,
+            },
+            op: "Eq",
+            right: {
+                exprType: "Literal",
+                value: restrictions[key],
+            },
+        };
+        if (expr === undefined) {
+            expr = cmpExpr;
+        } else {
+            expr = {
+                exprType: "Binary",
+                left: cmpExpr,
+                op: "And",
+                right: expr,
+            };
+        }
+    }
+    return expr;
 }
 
 export class OAuthUser extends ChiselEntity {
