@@ -78,7 +78,9 @@ fn parse_query_parameter(
         }
         _ => {
             if let Some(param_key) = param_key.strip_prefix('.') {
-                parse_filter(base_type, param_key, value).context("failed to parse filter")?
+                let expression =
+                    parse_filter(base_type, param_key, value).context("failed to parse filter")?;
+                QueryOp::Filter { expression }
             } else {
                 return Ok(None);
             }
@@ -87,7 +89,7 @@ fn parse_query_parameter(
     Ok(Some(op))
 }
 
-fn parse_filter(base_type: &Arc<ObjectType>, param_key: &str, value: &str) -> Result<QueryOp> {
+fn parse_filter(base_type: &Arc<ObjectType>, param_key: &str, value: &str) -> Result<Expr> {
     let tokens: Vec<_> = param_key.split('~').collect();
     anyhow::ensure!(
         tokens.len() <= 2,
@@ -135,14 +137,12 @@ fn parse_filter(base_type: &Arc<ObjectType>, param_key: &str, value: &str) -> Re
         Type::Boolean => Literal::Bool(value.parse::<bool>().with_context(|| err_msg("bool"))?),
     };
 
-    let op = QueryOp::Filter {
-        expression: Expr::Binary(BinaryExpr {
-            left: Box::new(property_chain),
-            op: convert_operator(operator)?,
-            right: Box::new(literal.into()),
-        }),
-    };
-    Ok(op)
+    let expr = Expr::Binary(BinaryExpr {
+        left: Box::new(property_chain),
+        op: convert_operator(operator)?,
+        right: Box::new(literal.into()),
+    });
+    Ok(expr)
 }
 
 fn convert_operator(op_str: Option<&str>) -> Result<BinaryOp> {
@@ -374,13 +374,7 @@ mod tests {
                 make_field("ceo", Type::Object(person_type)),
             ],
         );
-        let filter_expr = |key: &str, value: &str| {
-            parse_filter(&base_type, key, value)
-                .unwrap()
-                .as_filter()
-                .unwrap()
-                .clone()
-        };
+        let filter_expr = |key: &str, value: &str| parse_filter(&base_type, key, value).unwrap();
         let ops = [
             (BinaryOp::Eq, ""),
             (BinaryOp::NotEq, "~ne"),
