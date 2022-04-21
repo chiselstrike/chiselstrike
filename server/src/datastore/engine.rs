@@ -486,7 +486,7 @@ impl QueryEngine {
 
     fn incompatible(field: &Field, ty: &ObjectType) -> anyhow::Error {
         anyhow!(
-            "provided data for field `{}` are incompatibble with given type `{}`",
+            "provided data for field `{}` are incompatible with given type `{}`",
             field.name,
             ty.name()
         )
