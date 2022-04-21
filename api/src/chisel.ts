@@ -505,6 +505,20 @@ export function chiselIterator<T>(
     return new ChiselCursor<T>(type, b);
 }
 
+/**
+ * Options for a `findMany` call. For example, for pagination purposes.
+ */
+export interface FindManyOpts {
+    /**
+     * The offset where to start scanning for entities.
+     */
+    skip?: number;
+    /**
+     * The limit of how many entities to return.
+     */
+    take?: number;
+}
+
 /** ChiselEntity is a class that ChiselStrike user-defined entities are expected to extend.
  *
  * It provides properties that are inherent to a ChiselStrike entity, like an id, and static
@@ -602,11 +616,14 @@ export class ChiselEntity {
     static async findMany<T>(
         this: { new (): T },
         restrictions: Partial<T>,
-        take?: number,
+        opts?: FindManyOpts,
     ): Promise<Partial<T>[]> {
         let it = chiselIterator<T>(this).filter(restrictions);
-        if (take) {
-            it = it.take(take);
+        if (opts && opts.skip) {
+            it = it.skip(opts.skip);
+        }
+        if (opts && opts.take) {
+            it = it.take(opts.take);
         }
         return await it.toArray();
     }
