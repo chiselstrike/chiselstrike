@@ -804,19 +804,16 @@ impl Mutation {
     /// Constructs delete from filter expression.
     pub(crate) fn delete_from_expr(
         c: &RequestContext,
-        entity_name: &str,
+        type_name: &str,
         filter_expr: &Option<Expr>,
     ) -> Result<Self> {
-        let base_entity = match c.ts.lookup_type(entity_name, &c.api_version) {
+        let base_entity = match c.ts.lookup_type(type_name, &c.api_version) {
             Ok(Type::Object(ty)) => ty,
-            Ok(ty) => anyhow::bail!("Cannot delete scalar type {} ({})", entity_name, ty.name()),
-            Err(_) => anyhow::bail!(
-                "Cannot delete from entity `{}`, entity not found",
-                entity_name
-            ),
+            Ok(ty) => anyhow::bail!("Cannot delete scalar type {type_name} ({})", ty.name()),
+            Err(_) => anyhow::bail!("Cannot delete from type `{type_name}`, type not found"),
         };
 
-        let mut query_plan = QueryPlan::from_entity_name(c, entity_name)?;
+        let mut query_plan = QueryPlan::from_entity_name(c, type_name)?;
         if let Some(expr) = filter_expr {
             query_plan.extend_operators(vec![QueryOp::Filter {
                 expression: expr.clone(),
@@ -835,18 +832,14 @@ impl Mutation {
     ) -> Result<Self> {
         let base_entity = match c.ts.lookup_type(type_name, &c.api_version) {
             Ok(Type::Object(ty)) => ty,
-            Ok(ty) => anyhow::bail!(
-                "Cannot delete builtin-in type {} ({})",
-                type_name,
-                ty.name()
-            ),
-            Err(_) => anyhow::bail!("Cannot delete from type `{}`, type not found", type_name),
+            Ok(ty) => anyhow::bail!("Cannot delete scalar type {type_name} ({})", ty.name()),
+            Err(_) => anyhow::bail!("Cannot delete from type `{type_name}`, type not found"),
         };
         let filter_expr = crud::url_to_filter(&base_entity, url)
             .context("failed to convert crud URL to filter expression")?;
         if filter_expr.is_none() {
-            let q = Url::parse(url)
-                .with_context(|| format!("failed to parse query string '{}'", url))?;
+            let q =
+                Url::parse(url).with_context(|| format!("failed to parse query string '{url}'"))?;
             let delete_all = q
                 .query_pairs()
                 .any(|(key, value)| key == "all" && value == "true");
@@ -865,8 +858,6 @@ impl Mutation {
                 WHERE {row_id} IN (
                     SELECT {row_id} FROM ({select_sql}) as subquery
                 )"#,
-            select_sql = select_sql,
-            row_id = row_id,
             base_table = &self.base_entity.backing_table(),
         );
         Ok(raw_sql)
