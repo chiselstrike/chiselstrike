@@ -802,18 +802,14 @@ pub(crate) struct Mutation {
 
 impl Mutation {
     /// Constructs delete from filter expression.
-    pub(crate) fn delete_with_expr(
+    pub(crate) fn delete_from_expr(
         c: &RequestContext,
         entity_name: &str,
         filter_expr: &Option<Expr>,
     ) -> Result<Self> {
         let base_entity = match c.ts.lookup_type(entity_name, &c.api_version) {
             Ok(Type::Object(ty)) => ty,
-            Ok(ty) => anyhow::bail!(
-                "Cannot delete builtin-in type {} ({})",
-                entity_name,
-                ty.name()
-            ),
+            Ok(ty) => anyhow::bail!("Cannot delete scalar type {} ({})", entity_name, ty.name()),
             Err(_) => anyhow::bail!(
                 "Cannot delete from entity `{}`, entity not found",
                 entity_name
@@ -858,7 +854,7 @@ impl Mutation {
                 anyhow::bail!("crud delete requires a filter to be set or `all=true` parameter.")
             }
         }
-        Self::delete_with_expr(c, type_name, &filter_expr)
+        Self::delete_from_expr(c, type_name, &filter_expr)
     }
 
     pub(crate) fn build_sql(&self, target: TargetDatabase) -> Result<String> {
@@ -1001,7 +997,7 @@ mod tests {
     #[tokio::test]
     async fn test_delete_with_expr() {
         let delete_with_expr = |entity_name: &str, expr: Expr| {
-            Mutation::delete_with_expr(
+            Mutation::delete_from_expr(
                 &RequestContext {
                     policies: &Policies::default(),
                     ts: &make_type_system(&*ENTITIES),

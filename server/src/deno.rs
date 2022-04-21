@@ -566,7 +566,7 @@ async fn op_chisel_entity_delete(
 ) -> Result<()> {
     let mutation = {
         let state = state.borrow_mut();
-        Mutation::delete_with_expr(
+        Mutation::delete_from_expr(
             &RequestContext {
                 policies: current_policies(&state),
                 ts: current_type_system(&state),
