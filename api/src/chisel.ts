@@ -457,7 +457,7 @@ export class ChiselCursor<T> {
                         }
                     }
                 } finally {
-                    Deno.core.opSync("op_close", rid);
+                    Deno.core.tryClose(rid);
                 }
             },
         };

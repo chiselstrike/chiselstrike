@@ -72,6 +72,7 @@ use std::net::SocketAddr;
 use std::ops::DerefMut;
 use std::pin::Pin;
 use std::rc::Rc;
+use std::rc::Weak;
 use std::sync::Arc;
 use std::sync::Mutex;
 use std::task::{Context, Poll};
@@ -699,15 +700,20 @@ fn create_query(op_state: &mut OpState, query_plan: QueryPlan) -> Result<Resourc
 
 // A future that resolves when this stream next element is available.
 struct QueryNextFuture {
-    resource: Rc<QueryStreamResource>,
+    resource: Weak<QueryStreamResource>,
 }
 
 impl Future for QueryNextFuture {
     type Output = Option<Result<ResultRow>>;
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        let mut stream = self.resource.stream.borrow_mut();
-        let stream: &mut QueryResults = &mut stream;
-        Pin::new(stream).poll_next(cx)
+        match self.resource.upgrade() {
+            Some(rc) => {
+                let mut stream = rc.stream.borrow_mut();
+                let stream: &mut QueryResults = &mut stream;
+                Pin::new(stream).poll_next(cx)
+            }
+            None => Poll::Ready(Some(Err(anyhow!("Closed resource")))),
+        }
     }
 }
 
@@ -716,7 +722,10 @@ async fn op_chisel_query_next(
     state: Rc<RefCell<OpState>>,
     query_stream_rid: ResourceId,
 ) -> Result<Option<ResultRow>> {
-    let resource: Rc<QueryStreamResource> = state.borrow().resource_table.get(query_stream_rid)?;
+    let resource = {
+        let rc = state.borrow().resource_table.get(query_stream_rid)?;
+        Rc::downgrade(&rc)
+    };
     let fut = QueryNextFuture { resource };
     if let Some(row) = fut.await {
         Ok(Some(row?))
