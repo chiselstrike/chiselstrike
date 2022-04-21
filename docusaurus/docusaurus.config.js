@@ -72,6 +72,10 @@ const config = {
             title: 'Community',
             items: [
               {
+                label: 'Discord',
+                href: 'https://discord.gg/GHNN9CNAZe',
+              },
+              {
                 label: 'Linkedin',
                 href: 'https://www.linkedin.com/company/chiselstrike/',
               },
