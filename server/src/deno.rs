@@ -627,9 +627,14 @@ type DbStream = RefCell<QueryResults>;
 
 struct QueryStreamResource {
     stream: DbStream,
+    cancel: CancelHandle,
 }
 
-impl Resource for QueryStreamResource {}
+impl Resource for QueryStreamResource {
+    fn close(self: Rc<Self>) {
+        self.cancel.cancel();
+    }
+}
 
 #[op]
 fn op_chisel_get_secret(op_state: &mut OpState, key: String) -> Result<Option<serde_json::Value>> {
@@ -693,6 +698,7 @@ fn create_query(op_state: &mut OpState, query_plan: QueryPlan) -> Result<Resourc
     let stream = query_engine.query(transaction, query_plan)?;
     let resource = QueryStreamResource {
         stream: RefCell::new(stream),
+        cancel: Default::default(),
     };
     let rid = op_state.resource_table.add(resource);
     Ok(rid)
@@ -722,12 +728,14 @@ async fn op_chisel_query_next(
     state: Rc<RefCell<OpState>>,
     query_stream_rid: ResourceId,
 ) -> Result<Option<ResultRow>> {
-    let resource = {
-        let rc = state.borrow().resource_table.get(query_stream_rid)?;
-        Rc::downgrade(&rc)
+    let (resource, cancel) = {
+        let rc: Rc<QueryStreamResource> = state.borrow().resource_table.get(query_stream_rid)?;
+        let cancel = RcRef::map(&rc, |r| &r.cancel);
+        (Rc::downgrade(&rc), cancel)
     };
     let fut = QueryNextFuture { resource };
-    if let Some(row) = fut.await {
+    let fut = fut.or_cancel(cancel);
+    if let Some(row) = fut.await? {
         Ok(Some(row?))
     } else {
         Ok(None)
