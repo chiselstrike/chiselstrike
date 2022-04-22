@@ -2,33 +2,39 @@
 
 # RUN: sh -e @file
 
-cat << EOF > "$TEMPDIR/endpoints/test1.js"
+cat << EOF > "$TEMPDIR/endpoints/test1.ts"
 export default async function chisel(req: Request) {
-    let res = Deno.core.resources();
-    if (res[3] !== "chisel_server::deno::BodyResource") {
+    const getResources = () => {
+        return Object.values(Deno.core.resources()).filter(x => x == "chisel_server::deno::BodyResource");
+    };
+    let res = getResources();
+    if (res.length !== 1) {
         throw "Missing resource";
     }
     let body = await req.text();
     if (body != "foobar") {
        throw "Wrong body";
     }
-    res = Deno.core.resources();
-    if (res[3] !== undefined) {
+    res = getResources();
+    if (res.length !== 0) {
        throw "Body resource was not released";
     }
     return new Response("test1 is ok");
 }
 EOF
 
-cat << EOF > "$TEMPDIR/endpoints/test2.js"
+cat << EOF > "$TEMPDIR/endpoints/test2.ts"
 export default async function chisel(req: Request) {
-    let res = Deno.core.resources();
-    if (res[5] !== "chisel_server::deno::BodyResource") {
+    const getResources = () => {
+        return Object.values(Deno.core.resources()).filter(x => x == "chisel_server::deno::BodyResource");
+    };
+    let res = getResources();
+    if (res.length !== 1) {
         throw "Missing resource";
     }
-    await req.body.cancel();
-    res = Deno.core.resources();
-    if (res[5] !== undefined) {
+    await req.body!.cancel();
+    res = getResources();
+    if (res.length !== 0) {
        throw "Body resource was not released";
     }
     return new Response("test2 is ok");
