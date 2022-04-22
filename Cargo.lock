@@ -540,6 +540,7 @@ dependencies = [
  "handlebars",
  "itertools 0.10.3",
  "lit",
+ "nix 0.22.3",
  "notify",
  "prost",
  "rayon",
