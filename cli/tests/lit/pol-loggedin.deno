@@ -66,3 +66,46 @@ EOF
 $CHISEL apply 2>&1 || echo # (swallow the apply abort)
 # CHECK: Error: Repeated path in user authorization: "/find"
 rm "$TEMPDIR/policies/pol.yaml"
+
+cat << EOF > "$TEMPDIR/models/post.ts"
+import { ChiselEntity, NextAuthUser } from '@chiselstrike/api'
+export class Post extends ChiselEntity {
+    text: string = "Lorem Ipsum";
+    author: NextAuthUser;
+}
+EOF
+
+cat << EOF > "$TEMPDIR/endpoints/po.ts"
+import { Post } from '../models/post.ts';
+import { loggedInUser, responseFromJson } from '@chiselstrike/api';
+export default async function (req: Request) {
+    if (req.method == 'POST') {
+        let p = Post.build(await req.json());
+        let author = await loggedInUser();
+        if (author === undefined) return responseFromJson('Must be logged in', 401);
+        p.author = author;
+        await p.save();
+        return new Response('saved post successfully');
+    } else if (req.method == 'GET') {
+        let r: Array<Pick<Post, "text">> = [];
+        await Post.cursor().select('text').forEach(p => r.push(p));
+        return responseFromJson(r);
+    }
+}
+EOF
+
+$CHISEL apply
+# CHECK: Model defined: Post
+# CHECK: End point defined: /dev/po
+
+$CURL -H ChiselUID\:$id_al -d '{"text": "first post by al"}' $CHISELD_HOST/dev/po
+# CHECK: HTTP/1.1 200 OK
+$CURL -H ChiselUID\:$id_als -d '{"text": "first post by als"}' $CHISELD_HOST/dev/po
+# CHECK: HTTP/1.1 200 OK
+$CURL -H ChiselUID\:$id_al -d '{"text": "second post by al"}' $CHISELD_HOST/dev/po
+# CHECK: HTTP/1.1 200 OK
+$CURL -H ChiselUID\:$id_al $CHISELD_HOST/dev/po
+# CHECK: HTTP/1.1 200 OK
+# CHECK: "text": "first post by al"
+# CHECK: "text": "first post by als"
+# CHECK: "text": "second post by al"
