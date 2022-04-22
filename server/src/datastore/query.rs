@@ -8,7 +8,7 @@ use crate::types::{Field, ObjectType, Type, TypeSystemError, OAUTHUSER_TYPE_NAME
 
 use anyhow::{anyhow, Context, Result};
 use enum_as_inner::EnumAsInner;
-use serde_derive::{Deserialize, Serialize};
+use serde_derive::Deserialize;
 use serde_json::value::Value;
 use std::collections::HashMap;
 use std::collections::HashSet;
@@ -129,10 +129,11 @@ struct Join {
     rkey: String,
 }
 
-/// Sorts elements by `field_name` in `ascending` order if true, descending otherwise.
+/// SortKey specifies a `field_name` and ordering in which sorting should be done.
 #[cfg_attr(test, derive(PartialEq))]
-#[derive(Debug, Clone)]
-pub(crate) struct SortBy {
+#[derive(Debug, Deserialize, Clone)]
+pub(crate) struct SortKey {
+    #[serde(rename = "fieldName")]
     pub field_name: String,
     pub ascending: bool,
 }
@@ -142,22 +143,15 @@ pub(crate) struct SortBy {
 #[derive(Debug, Clone, EnumAsInner)]
 pub(crate) enum QueryOp {
     /// Filters elements by `expression`.
-    Filter {
-        expression: Expr,
-    },
+    Filter { expression: Expr },
     /// Projects QueryEntity to a projected Entity containing only `fields`.
-    Projection {
-        fields: Vec<String>,
-    },
+    Projection { fields: Vec<String> },
     /// Limits the number of output rows by taking the first `count` rows.
-    Take {
-        count: u64,
-    },
+    Take { count: u64 },
     /// Skips the first `count` rows.
-    Skip {
-        count: u64,
-    },
-    SortBy(SortBy),
+    Skip { count: u64 },
+    /// Lexicographically sorts elements using `SortKey`s.
+    SortBy { keys: Vec<SortKey> },
 }
 
 struct Column {
@@ -572,21 +566,25 @@ impl QueryPlan {
         Ok(format!("\"{}\"", c_alias))
     }
 
-    fn make_sort_string(&self, sort: Option<&SortBy>) -> Result<String> {
+    fn make_sort_string(&self, sort: Option<&Vec<SortKey>>) -> Result<String> {
         let sort_str = if let Some(sort) = sort {
-            if !self.base_type().has_field(&sort.field_name) {
-                anyhow::bail!(
-                    "entity '{}' has no field named '{}'",
-                    self.base_type().name(),
-                    sort.field_name
-                );
+            let mut order_tokens = vec![];
+            for sort_key in sort {
+                if !self.base_type().has_field(&sort_key.field_name) {
+                    anyhow::bail!(
+                        "entity '{}' has no field named '{}'",
+                        self.base_type().name(),
+                        sort_key.field_name
+                    );
+                }
+                let order = if sort_key.ascending { "ASC" } else { "DESC" };
+                let c_alias = ColumnAlias {
+                    field_name: sort_key.field_name.to_owned(),
+                    table_name: self.base_type().backing_table().to_owned(),
+                };
+                order_tokens.push(format!("\"{c_alias}\" {order}"));
             }
-            let order = if sort.ascending { "ASC" } else { "DESC" };
-            let c_alias = ColumnAlias {
-                field_name: sort.field_name.to_owned(),
-                table_name: self.base_type().backing_table().to_owned(),
-            };
-            format!("ORDER BY \"{}\" {}", c_alias, order)
+            format!("ORDER BY {}", order_tokens.join(", "))
         } else {
             "".into()
         };
@@ -654,7 +652,7 @@ impl QueryPlan {
         expr
     }
 
-    fn find_last_sort_by<'a>(&self, ops: &'a [QueryOp]) -> Option<&'a SortBy> {
+    fn find_last_sort_by<'a>(&self, ops: &'a [QueryOp]) -> Option<&'a Vec<SortKey>> {
         ops.iter()
             .rfind(|op| op.as_sort_by().is_some())
             .map(|op| op.as_sort_by().unwrap())
@@ -728,7 +726,7 @@ fn max_prefix(s: &str, max_len: usize) -> &str {
     &s[..idx]
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Deserialize)]
 #[serde(tag = "type")]
 pub(crate) enum QueryOpChain {
     BaseEntity {
@@ -754,9 +752,7 @@ pub(crate) enum QueryOpChain {
         inner: Box<QueryOpChain>,
     },
     SortBy {
-        #[serde(rename = "key")]
-        field_name: String,
-        ascending: bool,
+        keys: Vec<SortKey>,
         inner: Box<QueryOpChain>,
     },
 }
@@ -776,17 +772,7 @@ fn convert_ops(op: QueryOpChain) -> Result<(String, Vec<QueryOp>)> {
         Projection { fields, inner } => (QueryOp::Projection { fields }, inner),
         Take { count, inner } => (QueryOp::Take { count }, inner),
         Skip { count, inner } => (QueryOp::Skip { count }, inner),
-        SortBy {
-            field_name,
-            ascending,
-            inner,
-        } => (
-            QueryOp::SortBy(super::query::SortBy {
-                field_name,
-                ascending,
-            }),
-            inner,
-        ),
+        SortBy { keys, inner } => (QueryOp::SortBy { keys }, inner),
     };
     let (entity_name, mut ops) = convert_ops(*inner)?;
     ops.push(query_op);
@@ -955,8 +941,12 @@ mod tests {
     }
 
     async fn fetch_rows(qe: &QueryEngine, entity: &Arc<ObjectType>) -> Vec<JsonObject> {
-        let qe = Arc::new(qe.clone());
         let query_plan = QueryPlan::from_type(entity);
+        fetch_rows_with_plan(qe, query_plan).await
+    }
+
+    async fn fetch_rows_with_plan(qe: &QueryEngine, query_plan: QueryPlan) -> Vec<JsonObject> {
+        let qe = Arc::new(qe.clone());
         let tr = qe.clone().start_transaction_static().await.unwrap();
         let row_streams = qe.query(tr, query_plan).unwrap();
 
@@ -983,6 +973,73 @@ mod tests {
         );
         static ref ENTITIES: [&'static Arc<ObjectType>; 2] = [&*PERSON_TY, &*COMPANY_TY];
         static ref TS: TypeSystem = make_type_system(&*ENTITIES);
+    }
+
+    #[tokio::test]
+    async fn test_query_plan() {
+        let fetch_names = |qe: QueryEngine, op_chain: QueryOpChain| async move {
+            let query_plan = QueryPlan::from_op_chain(
+                &RequestContext {
+                    policies: &Policies::default(),
+                    ts: &make_type_system(&*ENTITIES),
+                    api_version: VERSION.to_owned(),
+                    user_id: None,
+                    path: "".to_string(),
+                },
+                op_chain,
+            )
+            .unwrap();
+            let rows = fetch_rows_with_plan(&qe, query_plan).await;
+            let names: Vec<_> = rows
+                .iter()
+                .map(|r| r["name"].as_str().unwrap().to_owned())
+                .collect();
+            names
+        };
+
+        let ppl = [
+            json!({"name": "John", "age": json!(20f32)}),
+            json!({"name": "Alan", "age": json!(30f32)}),
+            json!({"name": "Max", "age": json!(40f32)}),
+            json!({"name": "Kek", "age": json!(40f32)}),
+        ];
+        {
+            let (qe, _db_file) = setup_clear_db(&*ENTITIES).await;
+            for person in ppl {
+                add_row(&qe, &PERSON_TY, &person).await;
+            }
+            let make_sort_op = |keys: &[(&str, bool)]| {
+                let keys = keys
+                    .iter()
+                    .map(|(name, asc)| SortKey {
+                        field_name: name.to_string(),
+                        ascending: *asc,
+                    })
+                    .collect();
+                QueryOpChain::SortBy {
+                    keys,
+                    inner: QueryOpChain::BaseEntity {
+                        name: "Person".to_owned(),
+                    }
+                    .into(),
+                }
+            };
+            let ops = make_sort_op(&[("name", true)]);
+            let names = fetch_names(qe.clone(), ops.clone()).await;
+            assert_eq!(names, vec!["Alan", "John", "Kek", "Max"]);
+
+            let ops = make_sort_op(&[("name", false)]);
+            let names = fetch_names(qe.clone(), ops.clone()).await;
+            assert_eq!(names, vec!["Max", "Kek", "John", "Alan"]);
+
+            let ops = make_sort_op(&[("age", true), ("name", false)]);
+            let names = fetch_names(qe.clone(), ops.clone()).await;
+            assert_eq!(names, vec!["John", "Alan", "Max", "Kek"]);
+
+            let ops = make_sort_op(&[("age", true), ("name", true)]);
+            let names = fetch_names(qe.clone(), ops.clone()).await;
+            assert_eq!(names, vec!["John", "Alan", "Kek", "Max"]);
+        }
     }
 
     #[tokio::test]

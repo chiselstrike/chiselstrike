@@ -217,13 +217,22 @@ class ExpressionFilter<T> extends Operator<T> {
 }
 
 /**
- * SortBy operator sorts elements by `key` (property) of element type `T`
- * in ascending order if `ascending` is set to true, descending otherwise.
+ * SortKey specifies that sorting over a `fieldname` is to be done in
+ * `ascending` (if true) or descending manner.
+ */
+class SortKey<T> {
+    constructor(
+        public fieldName: keyof T,
+        public ascending = true,
+    ) {}
+}
+
+/**
+ * SortBy operator sorts elements by sorting `keys`in lexicographicall manner.
  */
 class SortBy<T> extends Operator<T> {
     constructor(
-        private key: keyof T,
-        private ascending = true,
+        private keys: SortKey<T>[],
         inner: Operator<T>,
     ) {
         super(OpType.SortBy, inner);
@@ -232,8 +241,7 @@ class SortBy<T> extends Operator<T> {
     apply(
         iter: AsyncIterable<T>,
     ): AsyncIterable<T> {
-        const key = this.key;
-        const ord = this.ascending ? -1 : 1;
+        const keys = this.keys;
         return {
             [Symbol.asyncIterator]: async function* () {
                 const elements = [];
@@ -242,7 +250,19 @@ class SortBy<T> extends Operator<T> {
                 }
                 elements.sort(
                     (lhs: T, rhs: T) => {
-                        return lhs[key] < rhs[key] ? ord : (-1) * ord;
+                        for (const key of keys) {
+                            let [l, r] = [
+                                lhs[key.fieldName],
+                                rhs[key.fieldName],
+                            ];
+                            if (key.ascending) {
+                                [l, r] = [r, l];
+                            }
+                            if (l != r) {
+                                return l < r ? 1 : -1;
+                            }
+                        }
+                        return 0;
                     },
                 );
                 for (const e of elements) {
@@ -363,8 +383,7 @@ export class ChiselCursor<T> {
         return new ChiselCursor(
             this.baseConstructor,
             new SortBy(
-                key,
-                ascending,
+                [new SortKey<T>(key, ascending)],
                 this.inner,
             ),
         );
