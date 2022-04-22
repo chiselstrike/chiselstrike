@@ -554,6 +554,7 @@ dependencies = [
  "handlebars",
  "itertools 0.10.3",
  "lit 1.0.4 (git+https://github.com/chiselstrike/lit?rev=607b0b9)",
+ "nix 0.22.3",
  "notify",
  "prost",
  "rayon",
