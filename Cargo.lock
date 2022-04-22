@@ -133,7 +133,7 @@ dependencies = [
 
 [[package]]
 name = "api"
-version = "0.9.0-dev.0"
+version = "0.10.0-dev.0"
 dependencies = [
  "anyhow",
  "tokio",
@@ -530,7 +530,7 @@ dependencies = [
 
 [[package]]
 name = "cli"
-version = "0.9.0-dev.0"
+version = "0.10.0-dev.0"
 dependencies = [
  "anyhow",
  "api",
@@ -571,7 +571,7 @@ dependencies = [
 
 [[package]]
 name = "compile"
-version = "0.9.0-dev.0"
+version = "0.10.0-dev.0"
 dependencies = [
  "anyhow",
  "swc_common",
@@ -857,7 +857,7 @@ dependencies = [
 
 [[package]]
 name = "dbgarc"
-version = "0.9.0-dev.0"
+version = "0.10.0-dev.0"
 dependencies = [
  "backtrace",
 ]
@@ -2867,7 +2867,7 @@ dependencies = [
 
 [[package]]
 name = "packages"
-version = "0.9.0-dev.0"
+version = "0.10.0-dev.0"
 dependencies = [
  "api",
 ]
@@ -3852,7 +3852,7 @@ dependencies = [
 
 [[package]]
 name = "server"
-version = "0.9.0-dev.0"
+version = "0.10.0-dev.0"
 dependencies = [
  "aes-gcm",
  "anyhow",
@@ -5042,7 +5042,7 @@ checksum = "59547bce71d9c38b83d9c0e92b6066c4253371f15005def0c30d9657f50c7642"
 
 [[package]]
 name = "tsc_compile"
-version = "0.9.0-dev.0"
+version = "0.10.0-dev.0"
 dependencies = [
  "console",
  "deno_core",
@@ -5248,7 +5248,7 @@ checksum = "09cc8ee72d2a9becf2f2febe0205bbed8fc6615b7cb429ad062dc7b7ddd036a9"
 
 [[package]]
 name = "utils"
-version = "0.9.0-dev.0"
+version = "0.10.0-dev.0"
 dependencies = [
  "anyhow",
  "reqwest",
