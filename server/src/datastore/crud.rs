@@ -1,5 +1,5 @@
 use crate::datastore::expr::{BinaryExpr, BinaryOp, Expr, Literal, PropertyAccess};
-use crate::datastore::query::{QueryOp, SortBy};
+use crate::datastore::query::{QueryOp, SortKey};
 use crate::types::{ObjectType, Type};
 
 use anyhow::{Context, Result};
@@ -83,10 +83,12 @@ fn parse_query_parameter(
                 field_name,
                 base_type.name(),
             );
-            QueryOp::SortBy(SortBy {
-                field_name: field_name.to_owned(),
-                ascending,
-            })
+            QueryOp::SortBy {
+                keys: vec![SortKey {
+                    field_name: field_name.to_owned(),
+                    ascending,
+                }],
+            }
         }
         "limit" => {
             let count = value
@@ -289,20 +291,24 @@ mod tests {
             let ops1 = query_str_to_ops(&base_type, &url("sort=age")).unwrap();
             assert_eq!(
                 ops1,
-                vec![QueryOp::SortBy(SortBy {
-                    field_name: "age".into(),
-                    ascending: true
-                })]
+                vec![QueryOp::SortBy {
+                    keys: vec![SortKey {
+                        field_name: "age".into(),
+                        ascending: true
+                    }]
+                }]
             );
             let ops2 = query_str_to_ops(&base_type, &url("sort=%2Bage")).unwrap();
             assert_eq!(ops1, ops2);
             let ops3 = query_str_to_ops(&base_type, &url("sort=-age")).unwrap();
             assert_eq!(
                 ops3,
-                vec![QueryOp::SortBy(SortBy {
-                    field_name: "age".into(),
-                    ascending: false
-                })]
+                vec![QueryOp::SortBy {
+                    keys: vec![SortKey {
+                        field_name: "age".into(),
+                        ascending: false
+                    }]
+                }]
             );
         }
         {
@@ -337,10 +343,12 @@ mod tests {
                 assert_eq!(
                     ops,
                     vec![
-                        QueryOp::SortBy(SortBy {
-                            field_name: "age".into(),
-                            ascending: true
-                        }),
+                        QueryOp::SortBy {
+                            keys: vec![SortKey {
+                                field_name: "age".into(),
+                                ascending: true
+                            }]
+                        },
                         QueryOp::Skip { count: 7 },
                         QueryOp::Take { count: 3 },
                     ],
