@@ -4,7 +4,7 @@ use crate::datastore::crud;
 use crate::datastore::expr::{BinaryExpr, BinaryOp, Expr, Literal, PropertyAccess};
 use crate::policies::{FieldPolicies, Policies};
 use crate::types::TypeSystem;
-use crate::types::{Field, ObjectType, Type, TypeSystemError, OAUTHUSER_TYPE_NAME};
+use crate::types::{Field, ObjectType, Type, TypeSystemError};
 
 use anyhow::{anyhow, Context, Result};
 use enum_as_inner::EnumAsInner;
@@ -417,7 +417,7 @@ impl QueryPlan {
                     property: field.name.to_owned(),
                     object: property_chain.clone().into(),
                 };
-                if nested_ty.name() == OAUTHUSER_TYPE_NAME {
+                if nested_ty.name() == "NextAuthUser" {
                     if field_policies.match_login.contains(&field.name) {
                         let expr = BinaryExpr {
                             left: Box::new(property_access.into()),

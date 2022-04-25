@@ -67,11 +67,12 @@ $CHISEL apply 2>&1 || echo # (swallow the apply abort)
 # CHECK: Error: Repeated path in user authorization: "/find"
 rm "$TEMPDIR/policies/pol.yaml"
 
+rm "$TEMPDIR/models/person.ts" #1201
 cat << EOF > "$TEMPDIR/models/post.ts"
-import { ChiselEntity, NextAuthUser } from '@chiselstrike/api'
+import { ChiselEntity, NextAuthUser, labels } from '@chiselstrike/api'
 export class Post extends ChiselEntity {
     text: string = "Lorem Ipsum";
-    author: NextAuthUser;
+    @labels("protect") author: NextAuthUser;
 }
 EOF
 
@@ -94,7 +95,7 @@ export default async function (req: Request) {
 }
 EOF
 
-$CHISEL apply
+$CHISEL apply --allow-type-deletion
 # CHECK: Model defined: Post
 # CHECK: End point defined: /dev/po
 
@@ -108,4 +109,18 @@ $CURL -H ChiselUID\:$id_al $CHISELD_HOST/dev/po
 # CHECK: HTTP/1.1 200 OK
 # CHECK: "text": "first post by al"
 # CHECK: "text": "first post by als"
+# CHECK: "text": "second post by al"
+
+cat << EOF > "$TEMPDIR/policies/pol.yaml"
+labels:
+  - name: protect
+    transform: match_login
+EOF
+$CHISEL apply
+echo -n result count:
+$CURL -H ChiselUID\:$id_al $CHISELD_HOST/dev/po | grep text | wc -l
+# CHECK: result count:2
+$CURL -H ChiselUID\:$id_al $CHISELD_HOST/dev/po
+# CHECK: HTTP/1.1 200 OK
+# CHECK: "text": "first post by al"
 # CHECK: "text": "second post by al"
