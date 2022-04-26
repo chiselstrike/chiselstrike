@@ -74,6 +74,9 @@ export class Post extends ChiselEntity {
     text: string = "Lorem Ipsum";
     @labels("protect") author: NextAuthUser;
 }
+export class Blog extends ChiselEntity {
+  post1?: Post;
+}
 EOF
 
 cat << EOF > "$TEMPDIR/endpoints/po.ts"
@@ -124,3 +127,73 @@ $CURL -H ChiselUID\:$id_al $CHISELD_HOST/dev/po
 # CHECK: HTTP/1.1 200 OK
 # CHECK: "text": "first post by al"
 # CHECK: "text": "second post by al"
+
+cat << EOF > "$TEMPDIR/endpoints/blogs.js"
+import { Post } from '../models/post.ts';
+import { loggedInUser, responseFromJson } from '@chiselstrike/api';
+export default async function chisel(req: Request) {
+    if (req.method == 'POST') {
+        const b = Blog.build(await req.json());
+        const author = await loggedInUser();
+        if (author === undefined) return responseFromJson('Must be logged in', 401);
+        b.post1.author = author;
+        await b.save();
+        return new Response('saved post successfully');
+    } else if (req.method == 'GET') {
+        const r = (await Blog.cursor().toArray()).map(b => b.post1.text);
+        return responseFromJson(r);
+    }
+}
+EOF
+
+rm "$TEMPDIR/policies/pol.yaml"
+$CHISEL apply
+# CHECK: End point defined: /dev/blogs
+
+$CURL -d '{"text": "first post by al"}' $CHISELD_HOST/dev/po
+# CHECK:  HTTP/1.1 401 Unauthorized
+# CHECK:  Must be logged in
+
+$CURL -d '{"text": "first post by al"}' $CHISELD_HOST/dev/blogs
+# CHECK:  HTTP/1.1 401 Unauthorized
+# CHECK:  Must be logged in
+
+$CURL -H ChiselUID\:$id_al -d '{
+  "post1": {"text": "first blog post by al"}
+}' $CHISELD_HOST/dev/blogs
+# CHECK: HTTP/1.1 200 OK
+# CHECK: saved post successfully
+
+$CURL -H ChiselUID\:$id_als -d '{
+  "post1": {"text": "first blog post by als"}
+}' $CHISELD_HOST/dev/blogs
+# CHECK: HTTP/1.1 200 OK
+# CHECK: saved post successfully
+
+$CURL -H ChiselUID\:$id_al -d '{
+  "post1": {"text": "second blog post by al"}
+}' $CHISELD_HOST/dev/blogs
+# CHECK: HTTP/1.1 200 OK
+# CHECK: saved post successfully
+
+$CURL -H ChiselUID\:$id_al $CHISELD_HOST/dev/blogs
+# CHECK: HTTP/1.1 200 OK
+# CHECK: "first blog post by al"
+# CHECK: "first blog post by als"
+# CHECK: "second blog post by al"
+
+cat << EOF > "$TEMPDIR/policies/pol.yaml"
+labels:
+  - name: protect
+    transform: match_login
+EOF
+$CHISEL apply
+# CHECK:Policy defined for label protect
+
+echo -n result count:
+$CURL -H ChiselUID\:$id_al $CHISELD_HOST/dev/blogs | grep 'blog post by' | wc -l
+# CHECK: result count:2
+$CURL -H ChiselUID\:$id_al $CHISELD_HOST/dev/blogs
+# CHECK: HTTP/1.1 200 OK
+# CHECK: "first blog post by al"
+# CHECK: "second blog post by al"
