@@ -237,6 +237,7 @@ fn build_extensions() -> Vec<Extension> {
             op_chisel_auth_callback::decl(),
             op_chisel_auth_user::decl(),
             op_chisel_start_request::decl(),
+            op_chisel_internal_error::decl(),
         ])
         .build()]
 }
@@ -1076,6 +1077,11 @@ pub(crate) async fn set_type_system(type_system: TypeSystem) {
 
 pub(crate) async fn update_secrets(secrets: JsonObject) {
     to_worker(WorkerMsg::SetCurrentSecrets(secrets.clone())).await;
+}
+
+#[op]
+fn op_chisel_internal_error() {
+    panic!("Internal error, please report this as a bug to ChiselStrike");
 }
 
 #[op]
