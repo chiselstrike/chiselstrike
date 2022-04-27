@@ -8,7 +8,7 @@ use crate::types::{Field, ObjectType, Type, TypeSystemError, OAUTHUSER_TYPE_NAME
 
 use anyhow::{anyhow, Context, Result};
 use enum_as_inner::EnumAsInner;
-use serde_derive::{Deserialize, Serialize};
+use serde_derive::Deserialize;
 use serde_json::value::Value;
 use std::collections::HashMap;
 use std::collections::HashSet;
@@ -728,7 +728,7 @@ fn max_prefix(s: &str, max_len: usize) -> &str {
     &s[..idx]
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Deserialize)]
 #[serde(tag = "type")]
 pub(crate) enum QueryOpChain {
     BaseEntity {
