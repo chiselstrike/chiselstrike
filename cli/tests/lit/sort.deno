@@ -164,3 +164,32 @@ $CHISEL apply
 
 $CURL -o - $CHISELD_HOST/dev/get_sorted
 # CHECK: Error: entity 'Person' has no field named 'invalid_field'
+
+
+## ________________ enforce sorting in Typescript ________________
+
+cat << EOF > "$TEMPDIR/endpoints/get_sorted.ts"
+import { Person } from "../models/types.ts";
+
+export default async function chisel(req: Request) {
+    const url = new URL(req.url);
+    const order = url.searchParams.get("order") ?? "ascending";
+    const sorted = Person.cursor()
+        .filter((p) => {
+            return true;
+        })
+        .sortBy("name", order == "ascending")
+
+    const results = (await sorted.toArray()).map(p => p.name);
+    return new Response("[" + results.join(", ") + "]");
+}
+EOF
+
+$CHISEL apply
+# CHECK: End point defined: /dev/get_sorted
+
+$CURL -o - $CHISELD_HOST/dev/get_sorted
+# CHECK: [Glauber, Jan, Pekka]
+
+$CURL -o - $CHISELD_HOST/dev/get_sorted?order=descending
+# CHECK: [Pekka, Jan, Glauber]
