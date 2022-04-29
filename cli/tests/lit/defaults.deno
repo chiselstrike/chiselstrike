@@ -74,9 +74,54 @@ export default async function chisel(req: Request) {
 }
 EOF
 
+cat << EOF > "$TEMPDIR/endpoints/crud_foo.ts"
+import { Foo } from "../models/types.ts";
+export default Foo.crud();
+EOF
+
 cd "$TEMPDIR"
 $CHISEL apply
 
 $CURL -o - $CHISELD_HOST/dev/readold
+$CURL -o - $CHISELD_HOST/dev/crud_foo
 # CHECK: HTTP/1.1 200 OK
 # CHECK: dfl1 0 false 2 value oldval 2 2.2
+
+
+count_results () {
+    results=$(cat)
+    printf "$results" \
+        | grep -o "\"a\":" \
+        | wc -l \
+        | xargs printf 'Number of results: %d\n';
+    printf "$results";
+}
+
+$CURL "$CHISELD_HOST/dev/crud_foo?.a=xxx" | count_results
+# CHECK: Number of results: 0
+
+$CURL "$CHISELD_HOST/dev/crud_foo?.a=dfl1" | count_results
+# CHECK: Number of results: 1
+# CHECK: "a": "dfl1"
+
+$CURL "$CHISELD_HOST/dev/crud_foo?.b=0.1" | count_results
+# CHECK: Number of results: 0
+
+$CURL "$CHISELD_HOST/dev/crud_foo?.b=0.0" | count_results
+# CHECK: Number of results: 1
+# CHECK: "a": "dfl1"
+
+$CURL "$CHISELD_HOST/dev/crud_foo?.c=true" | count_results
+# CHECK: Number of results: 0
+
+$CURL "$CHISELD_HOST/dev/crud_foo?.c=false" | count_results
+# CHECK: Number of results: 1
+# CHECK: "a": "dfl1"
+
+$CURL "$CHISELD_HOST/dev/crud_foo?.d=1" | count_results
+# CHECK: Number of results: 0
+
+$CURL "$CHISELD_HOST/dev/crud_foo?.d=2" | count_results
+# CHECK: Number of results: 1
+# CHECK: "a": "dfl1"
+
