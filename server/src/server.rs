@@ -146,13 +146,18 @@ async fn run(state: SharedState, mut cmd: ExecutorChannel) -> Result<()> {
 
     let mut api_service = ApiService::new(api_info);
     crate::auth::init(&mut api_service).await?;
-    crate::introspect::init(&mut api_service);
+    crate::introspect::init(&api_service);
 
     let query_engine =
         Arc::new(QueryEngine::local_connection(&state.data_db, state.nr_connections).await?);
     ts.create_builtin_backing_tables(query_engine.as_ref())
         .await?;
     let api_service = Rc::new(api_service);
+    let versions: Vec<&String> = ts.versions.keys().collect();
+
+    for v in versions {
+        crate::introspect::add_introspection(&api_service, v);
+    }
 
     let rt = Runtime::new(api_service.clone());
     runtime::set(rt);

@@ -1,0 +1,84 @@
+# SPDX-FileCopyrightText: © 2022 ChiselStrike <info@chiselstrike.com>
+
+# RUN: sh -e @file
+
+cat << EOF > "$TEMPDIR/endpoints/simple.ts"
+export default function chisel(_req: Request) : Promise<Response> {
+    return new Response("");
+}
+EOF
+
+export GIT_AUTHOR_NAME="ChiselStrike test"
+export GIT_AUTHOR_EMAIL="chiselstrike@test.com"
+export GIT_COMMITTER_NAME="ChiselStrike test"
+export GIT_COMMITTER_EMAIL="chiselstrike@test.com"
+
+cd "$TEMPDIR"
+mv package.json pkg.json
+
+$CHISEL apply
+# CHECK: End point defined: /dev/simple
+
+$CURL $CHISELD_HOST/__chiselstrike/
+# CHECK: HTTP/1.1 200 OK
+# CHECK: "title": "ChiselStrike Internal API",
+# CHECK: "/__chiselstrike/auth/accounts"
+# CHECK: "/__chiselstrike/auth/callback"
+# CHECK: "/__chiselstrike/auth/sessions"
+# CHECK: "/__chiselstrike/auth/tokens"
+# CHECK: "/__chiselstrike/auth/user/"
+# CHECK: "/__chiselstrike/auth/users"
+
+$CURL $CHISELD_HOST/
+# CHECK: HTTP/1.1 200 OK
+# CHECK: "title": "ChiselStrike all routes",
+# CHECK: "/__chiselstrike/auth/accounts"
+# CHECK: "/__chiselstrike/auth/callback"
+# CHECK: "/__chiselstrike/auth/sessions"
+# CHECK: "/__chiselstrike/auth/tokens"
+# CHECK: "/__chiselstrike/auth/user/"
+# CHECK: "/__chiselstrike/auth/users"
+# CHECK: "/dev/simple"
+
+$CURL $CHISELD_HOST/dev
+# CHECK: HTTP/1.1 200 OK
+# CHECK: "title": "ChiselStrike Application",
+# CHECK: "version": ""
+
+
+jq '.name = "glauber" | .version = "1.0.1"' pkg.json > package.json
+$CHISEL apply
+$CURL $CHISELD_HOST/dev
+# CHECK: HTTP/1.1 200 OK
+# CHECK: "title": "glauber",
+# CHECK: "version": "1.0.1"
+
+## change the version to 1.0.0 and see if it gets reflected
+jq '.name = "glauber" | .version = "1.0.0"' pkg.json > package.json
+$CHISEL apply
+$CURL $CHISELD_HOST/dev
+# CHECK: HTTP/1.1 200 OK
+# CHECK: "title": "glauber",
+# CHECK: "version": "1.0.0"
+
+git init ./ --initial-branch main
+git add endpoints/simple.ts
+git commit -m "test"
+$CHISEL apply
+$CURL $CHISELD_HOST/dev
+# CHECK: HTTP/1.1 200 OK
+# CHECK: "title": "glauber",
+
+# jq doesn't like the standard output including headers because it is not json
+TITLE=$(curl -s $CHISELD_HOST/dev | jq '.info.version')
+EXPECTED="\"1.0.0-$(git rev-parse --short HEAD)\""
+
+if [ "$TITLE" = "$EXPECTED" ]; then echo "match"; fi
+# CHECK: match
+
+git tag "foo"
+$CHISEL apply
+$CURL $CHISELD_HOST/dev
+# CHECK: HTTP/1.1 200 OK
+# CHECK: "title": "glauber",
+# CHECK: "version": "1.0.0-foo"
