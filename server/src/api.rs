@@ -129,10 +129,18 @@ impl ApiInfo {
         }
     }
 
+    pub(crate) fn all_routes() -> Self {
+        let tag = env!("VERGEN_GIT_SEMVER_LIGHTWEIGHT").to_string();
+        Self {
+            name: "ChiselStrike all routes".into(),
+            tag,
+        }
+    }
+
     pub(crate) fn chiselstrike() -> Self {
         let tag = env!("VERGEN_GIT_SEMVER_LIGHTWEIGHT").to_string();
         Self {
-            name: "ChiselStrike API".into(),
+            name: "ChiselStrike Internal API".into(),
             tag,
         }
     }
@@ -152,6 +160,7 @@ pub(crate) struct ApiService {
 impl ApiService {
     pub(crate) fn new(mut info: ApiInfoMap) -> Self {
         info.insert("__chiselstrike".into(), ApiInfo::chiselstrike());
+        info.insert("".into(), ApiInfo::all_routes());
         Self {
             paths: Default::default(),
             info: Mutex::new(info),
@@ -183,6 +192,7 @@ impl ApiService {
     }
 
     pub(crate) fn update_api_info<P: AsRef<Path>>(&self, api_version: P, info: ApiInfo) {
+        crate::introspect::add_introspection(self, &api_version);
         self.info
             .lock()
             .unwrap()
