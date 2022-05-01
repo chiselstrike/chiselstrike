@@ -2,6 +2,7 @@
 
 use crate::datastore::query::QueryPlan;
 use crate::datastore::QueryEngine;
+use crate::types::AuthOrNot::IsAuth;
 use anyhow::Context;
 use derive_new::new;
 use futures::StreamExt;
@@ -118,6 +119,7 @@ impl Default for TypeSystem {
                 is_unique: false,
             }],
             "oauth_user",
+            IsAuth,
         );
         ts.add_builtin_object_type(
             "NextAuthUser",
@@ -128,6 +130,7 @@ impl Default for TypeSystem {
                 optional_string_field("image"),
             ],
             "nextauth_user",
+            IsAuth,
         );
         ts.add_builtin_object_type(
             "NextAuthSession",
@@ -137,6 +140,7 @@ impl Default for TypeSystem {
                 string_field("expires"),
             ],
             "nextauth_session",
+            IsAuth,
         );
         ts.add_builtin_object_type(
             "NextAuthToken",
@@ -146,6 +150,7 @@ impl Default for TypeSystem {
                 string_field("token"),
             ],
             "nextauth_token",
+            IsAuth,
         );
         ts.add_builtin_object_type(
             "NextAuthAccount",
@@ -165,6 +170,7 @@ impl Default for TypeSystem {
                 optional_number_field("expires_at"),
             ],
             "nextauth_account",
+            IsAuth,
         );
 
         ts
@@ -440,13 +446,14 @@ impl TypeSystem {
         type_name: &'static str,
         fields: Vec<Field>,
         backing_table_name: &'static str,
+        is_auth: AuthOrNot,
     ) {
         self.builtin_types.insert(type_name.into(), {
             let desc = InternalObject {
                 name: type_name,
                 backing_table: backing_table_name,
             };
-            Type::Object(Arc::new(ObjectType::new(desc, fields).unwrap()))
+            Type::Object(Arc::new(ObjectType::new(desc, fields, is_auth).unwrap()))
         });
     }
 }
@@ -613,6 +620,13 @@ impl<'a> ObjectDescriptor for NewObject<'a> {
     }
 }
 
+/// Whether a type is used in authentication.
+#[derive(Debug)]
+pub(crate) enum AuthOrNot {
+    IsAuth,
+    IsNotAuth,
+}
+
 #[derive(Debug)]
 pub(crate) struct ObjectType {
     /// id of this object in the meta-database. Will be None for objects that are not persisted yet
@@ -625,12 +639,17 @@ pub(crate) struct ObjectType {
     chisel_id: Field,
     /// Name of the backing table for this type.
     backing_table: String,
+    is_auth: AuthOrNot,
 
     pub(crate) api_version: String,
 }
 
 impl ObjectType {
-    pub(crate) fn new<D: ObjectDescriptor>(desc: D, fields: Vec<Field>) -> anyhow::Result<Self> {
+    pub(crate) fn new<D: ObjectDescriptor>(
+        desc: D,
+        fields: Vec<Field>,
+        is_auth: AuthOrNot,
+    ) -> anyhow::Result<Self> {
         let backing_table = desc.backing_table();
         let api_version = desc.api_version();
 
@@ -660,6 +679,7 @@ impl ObjectType {
             backing_table,
             fields,
             chisel_id,
+            is_auth,
         })
     }
 
@@ -695,6 +715,13 @@ impl ObjectType {
         let source_map: FieldMap<'_> = source_type.into();
         let to_map: FieldMap<'_> = self.into();
         to_map.check_populate_from(&source_map)
+    }
+
+    pub(crate) fn is_auth(&self) -> bool {
+        match self.is_auth {
+            AuthOrNot::IsAuth => true,
+            AuthOrNot::IsNotAuth => false,
+        }
     }
 }
 

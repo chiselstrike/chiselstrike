@@ -3,8 +3,7 @@
 use crate::datastore::crud;
 use crate::datastore::expr::{BinaryExpr, BinaryOp, Expr, Literal, PropertyAccess};
 use crate::policies::{FieldPolicies, Policies};
-use crate::types::TypeSystem;
-use crate::types::{Field, ObjectType, Type, TypeSystemError};
+use crate::types::{Field, ObjectType, Type, TypeSystem, TypeSystemError};
 
 use anyhow::{anyhow, Context, Result};
 use enum_as_inner::EnumAsInner;
@@ -887,7 +886,7 @@ mod tests {
 
     fn make_object(name: &str, fields: Vec<Field>) -> Arc<ObjectType> {
         let desc = types::NewObject::new(name, VERSION);
-        Arc::new(ObjectType::new(desc, fields).unwrap())
+        Arc::new(ObjectType::new(desc, fields, types::AuthOrNot::IsNotAuth).unwrap())
     }
 
     fn make_field(name: &str, ty: Type) -> Field {

@@ -191,7 +191,7 @@ fn convert_operator(op_str: Option<&str>) -> Result<BinaryOp> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::types::{Field, FieldDescriptor, ObjectDescriptor};
+    use crate::types::{AuthOrNot::IsNotAuth, Field, FieldDescriptor, ObjectDescriptor};
 
     use itertools::Itertools;
 
@@ -241,7 +241,7 @@ mod tests {
 
     fn make_obj(name: &'static str, fields: Vec<Field>) -> Arc<ObjectType> {
         let d = FakeObject { name };
-        Arc::new(ObjectType::new(d, fields).unwrap())
+        Arc::new(ObjectType::new(d, fields, IsNotAuth).unwrap())
     }
 
     fn url(query_string: &str) -> String {

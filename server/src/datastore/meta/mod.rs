@@ -6,6 +6,7 @@ use crate::api::{ApiInfo, ApiInfoMap};
 use crate::datastore::{DbConnection, Kind};
 use crate::policies::Policies;
 use crate::prefix_map::PrefixMap;
+use crate::types::AuthOrNot::IsNotAuth;
 use crate::types::{
     ExistingField, ExistingObject, Field, FieldDelta, ObjectDelta, ObjectType, TypeSystem,
 };
@@ -394,7 +395,7 @@ impl MetaService {
             let desc = ExistingObject::new(type_name, backing_table, type_id)?;
             let fields = self.load_type_fields(&ts, type_id).await?;
 
-            let ty = ObjectType::new(desc, fields)?;
+            let ty = ObjectType::new(desc, fields, IsNotAuth)?;
             ts.add_type(Arc::new(ty))?;
         }
         Ok(ts)

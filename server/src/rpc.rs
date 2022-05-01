@@ -12,6 +12,7 @@ use crate::prefix_map::PrefixMap;
 use crate::runtime;
 use crate::server::CommandTrait;
 use crate::server::CoordinatorChannel;
+use crate::types::AuthOrNot::IsNotAuth;
 use crate::types::{Field, NewField, NewObject, ObjectType, Type, TypeSystem, TypeSystemError};
 use anyhow::{Context, Result};
 use async_lock::Mutex;
@@ -325,6 +326,7 @@ impl RpcService {
             let ty = Arc::new(ObjectType::new(
                 NewObject::new(&name, &api_version),
                 fields,
+                IsNotAuth,
             )?);
             new_types.insert(name.to_owned(), ty.clone());
 

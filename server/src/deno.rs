@@ -520,6 +520,10 @@ struct StoreContent {
     value: JsonObject,
 }
 
+fn is_auth_path(api_version: &str, path: &str) -> bool {
+    api_version == "__chiselstrike" && path.starts_with("/auth/")
+}
+
 #[op]
 async fn op_chisel_store(
     state: Rc<RefCell<OpState>>,
@@ -535,6 +539,9 @@ async fn op_chisel_store(
             Ok(Type::Object(ty)) => ty,
             _ => anyhow::bail!("Cannot save into type {}.", type_name),
         };
+        if ty.is_auth() && !is_auth_path(&c.api_version, &c.path) {
+            anyhow::bail!("Cannot save into type {}.", type_name);
+        }
 
         let query_engine = query_engine_arc(&state);
         (query_engine, ty)

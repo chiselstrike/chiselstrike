@@ -46,3 +46,16 @@ $CURL $CHISELD_HOST/dev/store
 $CURL -X POST $CHISELD_HOST/dev/store
 
 # CHECK: Ok984
+
+## Can't save auth types from user endpoints:
+cat << EOF > "$TEMPDIR/endpoints/store.ts"
+import { NextAuthUser } from '@chiselstrike/api';
+export default NextAuthUser.crud();
+EOF
+$CHISEL apply
+# CHECK: End point defined: /dev/store
+
+$CURL -d '{"name":"Foo", "email":"foo@t.co"}' $CHISELD_HOST/dev/store
+# CHECK: Error: Cannot save into type NextAuthUser.
+$CURL -X PUT -d '{"name":"Foo", "email":"foo@t.co"}' $CHISELD_HOST/dev/store/abcd-1234-efgh-5678
+# CHECK: Error: Cannot save into type NextAuthUser.
