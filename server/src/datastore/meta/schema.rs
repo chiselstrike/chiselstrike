@@ -75,13 +75,6 @@ enum Policies {
     PolicyStr,
 }
 
-#[derive(Iden)]
-enum Sessions {
-    Table,
-    Token,
-    UserId,
-}
-
 pub(crate) static CURRENT_VERSION: &str = "0.7";
 
 // Evolves from a version and returns the new version it evolved to
@@ -196,13 +189,6 @@ pub(crate) fn tables() -> Vec<TableCreateStatement> {
         .col(ColumnDef::new(Endpoints::Code).text())
         .to_owned();
 
-    let sessions = Table::create()
-        .table(Sessions::Table)
-        .if_not_exists()
-        .col(ColumnDef::new(Sessions::Token).uuid().primary_key())
-        .col(ColumnDef::new(Sessions::UserId).text())
-        .to_owned();
-
     let policies = Table::create()
         .table(Policies::Table)
         .if_not_exists()
@@ -219,7 +205,6 @@ pub(crate) fn tables() -> Vec<TableCreateStatement> {
         type_fields,
         field_labels,
         endpoints,
-        sessions,
         policies,
     ]
 }
