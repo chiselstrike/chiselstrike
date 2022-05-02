@@ -13,7 +13,7 @@ use yaml_rust::YamlLoader;
 pub(crate) enum Kind {
     /// How this policy transforms values read from storage.
     Transform(fn(Value) -> Value),
-    /// Field is of OAuthUser type and must match the user currently logged in.
+    /// Field is of NextAuthUser type and must match the user currently logged in.
     MatchLogin,
 }
 

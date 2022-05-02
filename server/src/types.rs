@@ -60,8 +60,6 @@ impl VersionTypes {
     }
 }
 
-pub(crate) const OAUTHUSER_TYPE_NAME: &str = "OAuthUser";
-
 fn string_field(name: &str) -> Field {
     Field {
         id: None,
@@ -105,22 +103,6 @@ impl Default for TypeSystem {
         ts.builtin_types.insert("string".into(), Type::String);
         ts.builtin_types.insert("number".into(), Type::Float);
         ts.builtin_types.insert("boolean".into(), Type::Boolean);
-        ts.add_builtin_object_type(
-            OAUTHUSER_TYPE_NAME,
-            vec![Field {
-                id: None,
-                name: "username".into(),
-                type_: Type::String,
-                labels: vec![],
-                default: None,
-                effective_default: None,
-                is_optional: false,
-                api_version: "__chiselstrike".into(),
-                is_unique: false,
-            }],
-            "oauth_user",
-            IsAuth,
-        );
         ts.add_builtin_object_type(
             "NextAuthUser",
             vec![
