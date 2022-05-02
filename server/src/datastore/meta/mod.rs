@@ -69,8 +69,13 @@ async fn update_field_query(
         };
 
         let querystr = format!(
-            "UPDATE fields SET field_type = $1, is_optional = $2::bool, is_unique = $4::bool {} WHERE field_id = $4",
-            default_stmt
+            r#"
+            UPDATE fields
+            SET
+                field_type = $1,
+                is_optional = $2::bool,
+                is_unique = $4::bool {default_stmt}
+            WHERE field_id = $4"#
         );
         let mut query = sqlx::query(&querystr);
 
@@ -88,7 +93,7 @@ async fn update_field_query(
     }
 
     if let Some(labels) = &delta.labels {
-        let flush = sqlx::query("DELETE FROM field_labels where field_id = $1").bind(field_id);
+        let flush = sqlx::query("DELETE FROM field_labels WHERE field_id = $1").bind(field_id);
         execute!(transaction, flush)?;
 
         for label in labels.iter() {
@@ -112,10 +117,10 @@ async fn remove_field_query(
     let query = sqlx::query("DELETE FROM fields WHERE field_id = $1").bind(field_id);
     execute!(transaction, query)?;
 
-    let query = sqlx::query("DELETE from field_names WHERE field_id = $1").bind(field_id);
+    let query = sqlx::query("DELETE FROM field_names WHERE field_id = $1").bind(field_id);
     execute!(transaction, query)?;
 
-    let query = sqlx::query("DELETE from field_labels WHERE field_id = $1").bind(field_id);
+    let query = sqlx::query("DELETE FROM field_labels WHERE field_id = $1").bind(field_id);
     execute!(transaction, query)?;
 
     Ok(())
@@ -133,7 +138,12 @@ async fn insert_field_query(
 
     let add_field = match &field.user_provided_default() {
         None => {
-            let query = sqlx::query("INSERT INTO fields (field_type, type_id, is_optional, is_unique) VALUES ($1, $2, $3, $4) RETURNING *");
+            let query = sqlx::query(
+                r#"
+                INSERT INTO fields (field_type, type_id, is_optional, is_unique)
+                VALUES ($1, $2, $3, $4)
+                RETURNING *"#,
+            );
             query
                 .bind(field.type_.name())
                 .bind(type_id)
@@ -141,7 +151,17 @@ async fn insert_field_query(
                 .bind(field.is_unique)
         }
         Some(value) => {
-            let query = sqlx::query("INSERT INTO fields (field_type, type_id, default_value, is_optional, is_unique) VALUES ($1, $2, $3, $4, $5) RETURNING *");
+            let query = sqlx::query(
+                r#"
+                INSERT INTO fields (
+                    field_type,
+                    type_id,
+                    default_value,
+                    is_optional,
+                    is_unique)
+                VALUES ($1, $2, $3, $4, $5)
+                RETURNING *"#,
+            );
             query
                 .bind(field.type_.name())
                 .bind(type_id)
@@ -150,8 +170,11 @@ async fn insert_field_query(
                 .bind(field.is_unique)
         }
     };
-    let add_field_name =
-        sqlx::query("INSERT INTO field_names (field_name, field_id) VALUES ($1, $2)");
+    let add_field_name = sqlx::query(
+        r#"
+        INSERT INTO field_names (field_name, field_id)
+        VALUES ($1, $2)"#,
+    );
 
     let row = fetch_one!(transaction, add_field)?;
 
@@ -188,7 +211,7 @@ impl MetaService {
 
     async fn get_version(transaction: &mut Transaction<'_, Any>) -> anyhow::Result<String> {
         let query = sqlx::query(
-            "SELECT version FROM chisel_version where version_id = 'chiselstrike' limit 1",
+            "SELECT version FROM chisel_version WHERE version_id = 'chiselstrike' LIMIT 1",
         );
         match fetch_all!(transaction, query) {
             Err(_) => Ok("0".to_string()),
@@ -205,8 +228,18 @@ impl MetaService {
 
     async fn count_tables(&self, transaction: &mut Transaction<'_, Any>) -> anyhow::Result<usize> {
         let query = match self.kind {
-            Kind::Sqlite => sqlx::query("SELECT name FROM sqlite_schema WHERE type ='table' AND name NOT LIKE 'sqlite_%'"),
-            Kind::Postgres => sqlx::query("SELECT tablename as name FROM pg_catalog.pg_tables where schemaname != 'pg_catalog' and schemaname != 'information_schema'"),
+            Kind::Sqlite => sqlx::query(
+                r#"
+                SELECT name
+                FROM sqlite_schema
+                WHERE type ='table' AND name NOT LIKE 'sqlite_%'"#,
+            ),
+            Kind::Postgres => sqlx::query(
+                r#"
+                SELECT tablename AS name
+                FROM pg_catalog.pg_tables
+                WHERE schemaname != 'pg_catalog' AND schemaname != 'information_schema'"#,
+            ),
         };
         let rows = fetch_all!(transaction, query)?;
         Ok(rows.len())
@@ -248,9 +281,15 @@ impl MetaService {
                 execute!(transaction, query)?;
             }
 
-            let query = sqlx::query("INSERT INTO chisel_version (version, version_id) VALUES ($1, $2) ON CONFLICT(version_id) DO UPDATE SET version = $1 WHERE chisel_version.version_id = $2")
-                .bind(new_version.as_str())
-                .bind("chiselstrike");
+            let query = sqlx::query(
+                r#"
+                INSERT INTO chisel_version (version, version_id)
+                VALUES ($1, $2)
+                ON CONFLICT(version_id) DO UPDATE SET version = $1
+                WHERE chisel_version.version_id = $2"#,
+            )
+            .bind(new_version.as_str())
+            .bind("chiselstrike");
 
             execute!(transaction, query)?;
             version = new_version;
@@ -283,8 +322,16 @@ impl MetaService {
         api_version: &str,
         info: &ApiInfo,
     ) -> anyhow::Result<()> {
-        let add_api = sqlx::query("INSERT INTO api_info (api_version, app_name, version_tag) VALUES ($1, $2, $3) ON CONFLICT(api_version) DO UPDATE SET app_name = $2, version_tag = $3 WHERE api_info.api_version = $1")
-            .bind(api_version.to_owned()).bind(info.name.clone()).bind(info.tag.clone());
+        let add_api = sqlx::query(
+            r#"
+            INSERT INTO api_info (api_version, app_name, version_tag)
+            VALUES ($1, $2, $3)
+            ON CONFLICT(api_version) DO UPDATE SET app_name = $2, version_tag = $3
+            WHERE api_info.api_version = $1"#,
+        )
+        .bind(api_version.to_owned())
+        .bind(info.name.clone())
+        .bind(info.tag.clone());
         execute!(transaction, add_api)?;
         Ok(())
     }
@@ -307,7 +354,7 @@ impl MetaService {
     pub(crate) async fn persist_endpoints(&self, routes: &PrefixMap<String>) -> anyhow::Result<()> {
         let mut transaction = self.pool.begin().await?;
 
-        let drop = sqlx::query("DELETE from endpoints");
+        let drop = sqlx::query("DELETE FROM endpoints");
         execute!(transaction, drop)?;
 
         for (path, code) in routes.iter() {
@@ -323,7 +370,15 @@ impl MetaService {
 
     /// Load the type system from metadata store.
     pub(crate) async fn load_type_system<'r>(&self) -> anyhow::Result<TypeSystem> {
-        let query = sqlx::query("SELECT types.type_id AS type_id, types.backing_table AS backing_table, type_names.name AS type_name FROM types INNER JOIN type_names ON types.type_id = type_names.type_id");
+        let query = sqlx::query(
+            r#"
+            SELECT
+                types.type_id AS type_id,
+                types.backing_table AS backing_table,
+                type_names.name AS type_name
+            FROM types
+            INNER JOIN type_names ON types.type_id = type_names.type_id"#,
+        );
         let rows = fetch_all!(&self.pool, query)?;
 
         let mut ts = TypeSystem::default();
@@ -341,7 +396,19 @@ impl MetaService {
     }
 
     async fn load_type_fields(&self, ts: &TypeSystem, type_id: i32) -> anyhow::Result<Vec<Field>> {
-        let query = sqlx::query("SELECT fields.field_id AS field_id, field_names.field_name AS field_name, fields.field_type AS field_type, fields.default_value as default_value, fields.is_optional as is_optional, fields.is_unique as is_unique FROM field_names INNER JOIN fields ON fields.type_id = $1 AND field_names.field_id = fields.field_id;");
+        let query = sqlx::query(
+            r#"
+            SELECT
+                fields.field_id AS field_id,
+                field_names.field_name AS field_name,
+                fields.field_type AS field_type,
+                fields.default_value AS default_value,
+                fields.is_optional AS is_optional,
+                fields.is_unique AS is_unique
+            FROM field_names
+            INNER JOIN fields
+                ON fields.type_id = $1 AND field_names.field_id = fields.field_id;"#,
+        );
         let query = query.bind(type_id);
         let rows = fetch_all!(&self.pool, query)?;
 
@@ -446,7 +513,15 @@ impl MetaService {
         version: &str,
         policy: &str,
     ) -> anyhow::Result<()> {
-        let add_policy = sqlx::query("INSERT INTO policies (policy_str, version) VALUES ($1, $2) ON CONFLICT(version) DO UPDATE SET policy_str = $1 WHERE policies.version = $2").bind(policy.to_owned()).bind(version.to_owned());
+        let add_policy = sqlx::query(
+            r#"
+            INSERT INTO policies (policy_str, version)
+            VALUES ($1, $2)
+            ON CONFLICT(version) DO UPDATE SET policy_str = $1
+            WHERE policies.version = $2"#,
+        )
+        .bind(policy.to_owned())
+        .bind(version.to_owned());
         execute!(transaction, add_policy)?;
         Ok(())
     }
@@ -457,7 +532,7 @@ impl MetaService {
         version: &str,
     ) -> anyhow::Result<()> {
         let delete_policy =
-            sqlx::query("DELETE from policies WHERE version = $1").bind(version.to_owned());
+            sqlx::query("DELETE FROM policies WHERE version = $1").bind(version.to_owned());
         execute!(transaction, delete_policy)?;
         Ok(())
     }
