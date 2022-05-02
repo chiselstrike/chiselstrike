@@ -59,3 +59,29 @@ $CURL -d '{"name":"Foo", "email":"foo@t.co"}' $CHISELD_HOST/dev/store
 # CHECK: Error: Cannot save into type NextAuthUser.
 $CURL -X PUT -d '{"name":"Foo", "email":"foo@t.co"}' $CHISELD_HOST/dev/store/abcd-1234-efgh-5678
 # CHECK: Error: Cannot save into type NextAuthUser.
+
+## Can't modify auth types via nested fields:
+cat << EOF > "$TEMPDIR/models/post.ts"
+import { ChiselEntity, NextAuthUser } from '@chiselstrike/api'
+export class Post extends ChiselEntity {
+    text: string = "Lorem Ipsum";
+    author: NextAuthUser;
+}
+EOF
+
+cat << EOF > "$TEMPDIR/endpoints/store.ts"
+import { Post } from '../models/post.ts';
+export default Post.crud();
+EOF
+
+$CHISEL apply
+# CHECK: Model defined: Post
+# CHECK: End point defined: /dev/store
+
+$CURL -d '{"author":{"email": "foo@t.co"}}' $CHISELD_HOST/dev/store
+# CHECK: Error: Cannot save into type NextAuthUser.
+$CURL -d '{"author":{"id":"ID123", "email": "foo@t.co"}}' $CHISELD_HOST/dev/store
+# CHECK: HTTP/1.1 200 OK
+# CHECK: "email": "foo@t.co"
+echo There are currently `$CURL $CHISELD_HOST/__chiselstrike/auth/users | grep foo@t.co | wc -l` users.
+# CHECK: There are currently 0 users.

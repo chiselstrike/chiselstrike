@@ -4,7 +4,7 @@ use crate::datastore::query::{
     Mutation, QueriedEntity, QueryField, QueryPlan, SqlValue, TargetDatabase,
 };
 use crate::datastore::{DbConnection, Kind};
-use crate::types::{Field, ObjectDelta, ObjectType, Type, OAUTHUSER_TYPE_NAME};
+use crate::types::{Field, ObjectDelta, ObjectType, Type};
 use crate::JsonObject;
 use anyhow::{anyhow, Context as AnyhowContext, Result};
 use async_lock::Mutex;
@@ -524,10 +524,15 @@ impl QueryEngine {
                         .context("unexpected json type (expected an object)")
                         .with_context(incompatible_data)?;
 
-                    let nested_id = if nested_type.name() == OAUTHUSER_TYPE_NAME {
+                    let nested_id = if nested_type.is_auth() {
                         match nested_value.get("id") {
-                            Some(serde_json::Value::String(id)) => id.clone(), // Could be wrong id, but it won't make a new user.
-                            _ => anyhow::bail!("Cannot save into type {}.", OAUTHUSER_TYPE_NAME),
+                            // We could check if the nested value matches a database row, at the cost of
+                            // significant code complication and slowdown.  But that still wouldn't prevent
+                            // problems, as that row can be modified by another thread after our check but before
+                            // this save completes.  Better to check at compilation time that the endpoint code
+                            // doesn't attempt to modify auth types.
+                            Some(serde_json::Value::String(id)) => id.clone(),
+                            _ => anyhow::bail!("Cannot save into type {}.", nested_type.name()),
                         }
                     } else {
                         let (nested_inserts, nested_ids) =
