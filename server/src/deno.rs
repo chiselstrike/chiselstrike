@@ -237,6 +237,7 @@ fn build_extensions() -> Vec<Extension> {
             op_chisel_auth_callback::decl(),
             op_chisel_auth_user::decl(),
             op_chisel_start_request::decl(),
+            op_chisel_internal_error::decl(),
         ])
         .build()]
 }
@@ -852,14 +853,67 @@ impl Future for ResolveFuture {
     }
 }
 
-fn resolve_promise(
-    js_promise: v8::Global<v8::Value>,
-) -> impl Future<Output = Result<v8::Global<v8::Value>>> {
-    ResolveFuture { js_promise }
+fn to_v8_func<'a>(
+    scope: &mut v8::HandleScope<'a>,
+    func: impl v8::MapFnTo<v8::FunctionCallback>,
+) -> v8::Local<'a, v8::Function> {
+    let func = v8::FunctionTemplate::new(scope, func);
+    func.get_function(scope).unwrap()
+}
+
+// This has to be a macro because rust doesn't support &str const
+// generic parameters.
+macro_rules! wrap_object {
+    ( $scope:expr, $key:expr) => {{
+        let func = |scope: &mut v8::HandleScope,
+                    args: v8::FunctionCallbackArguments,
+                    mut rv: v8::ReturnValue| {
+            let arg = args.get(0);
+            let ret = v8::Object::new(scope);
+            let key = v8::String::new(scope, $key).unwrap().into();
+            ret.set(scope, key, arg);
+            rv.set(ret.into());
+        };
+        to_v8_func($scope, func)
+    }};
+}
+
+async fn resolve_promise(js_promise: v8::Global<v8::Value>) -> Result<v8::Global<v8::Value>> {
+    // We have to make sure no exceptions are produced without a
+    // handler. The way we do that is by wrapping the produced object
+    // in then2 and then extracting the produced value or error, which
+    // is mapped to a Result.
+    let js_promise = {
+        let mut service = get();
+        let runtime = &mut service.worker.js_runtime;
+        let scope = &mut runtime.handle_scope();
+        let local = v8::Local::new(scope, js_promise.clone());
+        let local: v8::Local<v8::Promise> = local.try_into().unwrap();
+        let on_fulfilled = wrap_object!(scope, "value");
+        let on_rejected = wrap_object!(scope, "error");
+        let promise = local.then2(scope, on_fulfilled, on_rejected).unwrap();
+        let promise: v8::Local<v8::Value> = promise.into();
+        v8::Global::new(scope, promise)
+    };
+
+    let obj = ResolveFuture { js_promise }.await.unwrap();
+
+    let mut service = get();
+    let runtime = &mut service.worker.js_runtime;
+    let scope = &mut runtime.handle_scope();
+    let obj = obj.open(scope).to_object(scope).unwrap();
+    let key = v8::String::new(scope, "value").unwrap().into();
+    if obj.has(scope, key).unwrap() {
+        let v = obj.get(scope, key).unwrap();
+        return Ok(v8::Global::new(scope, v));
+    }
+    let key = v8::String::new(scope, "error").unwrap().into();
+    assert!(obj.has(scope, key).unwrap());
+    anyhow::bail!(obj.get(scope, key).unwrap().to_rust_string_lossy(scope));
 }
 
 async fn get_read_future(read: v8::Global<v8::Function>) -> Result<Option<(Box<[u8]>, ())>> {
-    let js_promise = {
+    let read_result = {
         let mut service = get();
         let runtime = &mut service.worker.js_runtime;
         let scope = &mut runtime.handle_scope();
@@ -870,7 +924,6 @@ async fn get_read_future(read: v8::Global<v8::Function>) -> Result<Option<(Box<[
             .ok_or(Error::NotAResponse)?;
         v8::Global::new(scope, res)
     };
-    let read_result = resolve_promise(js_promise).await?;
     let mut service = get();
     let runtime = &mut service.worker.js_runtime;
     let scope = &mut runtime.handle_scope();
@@ -1024,6 +1077,11 @@ pub(crate) async fn set_type_system(type_system: TypeSystem) {
 
 pub(crate) async fn update_secrets(secrets: JsonObject) {
     to_worker(WorkerMsg::SetCurrentSecrets(secrets.clone())).await;
+}
+
+#[op]
+fn op_chisel_internal_error() {
+    panic!("Internal error, please report this as a bug to ChiselStrike");
 }
 
 #[op]
