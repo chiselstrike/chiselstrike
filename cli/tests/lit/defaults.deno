@@ -81,6 +81,9 @@ EOF
 
 cd "$TEMPDIR"
 $CHISEL apply
+# CHECK: End point defined: /dev/crud_foo
+# CHECK: End point defined: /dev/readold
+
 
 $CURL -o - $CHISELD_HOST/dev/readold
 $CURL -o - $CHISELD_HOST/dev/crud_foo
@@ -125,3 +128,35 @@ $CURL "$CHISELD_HOST/dev/crud_foo?.d=2" | count_results
 # CHECK: Number of results: 1
 # CHECK: "a": "dfl1"
 
+
+cat << EOF > "$TEMPDIR/endpoints/find_many.ts"
+import { responseFromJson } from "@chiselstrike/api";
+import { Foo } from "../models/types.ts";
+
+export default async function chisel(req: Request) {
+    const url = new URL(req.url);
+    const key = url.searchParams.get("key")!;
+    const value = url.searchParams.get("value")!;
+    const filter = {[key]: value} as Partial<Foo>;
+    const results = await Foo.findMany(filter);
+    return responseFromJson(results);
+}
+EOF
+
+cd "$TEMPDIR"
+$CHISEL apply
+# CHECK: End point defined: /dev/find_many
+
+$CURL -o - "$CHISELD_HOST/dev/find_many?key=a&value=xaxa" | count_results
+# CHECK: Number of results: 0
+
+$CURL -o - "$CHISELD_HOST/dev/find_many?key=a&value=dfl1" | count_results
+# CHECK: Number of results: 1
+# CHECK: "a": "dfl1"
+
+$CURL -o - "$CHISELD_HOST/dev/find_many?key=nfs&value=xaxa" | count_results
+# CHECK: Number of results: 0
+
+$CURL -o - "$CHISELD_HOST/dev/find_many?key=nfs&value=oldval" | count_results
+# CHECK: Number of results: 1
+# CHECK: "nfs": "oldval"
