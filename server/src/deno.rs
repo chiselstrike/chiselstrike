@@ -1128,11 +1128,15 @@ async fn special_response(
     userid: &Option<String>,
 ) -> Result<Option<Response<Body>>> {
     let req_path = req.uri().path();
-    if !req_path.starts_with("/__chiselstrike") {
+    // TODO: Make this optional, for users who want to reject some OPTIONS requests.
+    if req.method() == "OPTIONS" {
+        // Makes CORS preflights pass.
+        return Ok(Some(Response::builder().body("ok".to_string().into())?));
+    }
+    if req_path.starts_with("/__chiselstrike/auth/") {
         let auth_header = req.headers().get("ChiselAuth");
         let expected_secret = current_secrets(&state.borrow())
             .and_then(|sec| sec.get("CHISEL_API_AUTH_SECRET").cloned());
-
         match (expected_secret, auth_header) {
             (Some(_), None) => return Ok(Some(ApiService::forbidden("ChiselAuth")?)),
             (Some(serde_json::Value::String(s)), Some(h)) if s != *h => {
@@ -1140,15 +1144,8 @@ async fn special_response(
             }
             _ => (),
         }
-
-        // TODO: Make this optional, for users who want to reject some OPTIONS requests.
-        if req.method() == "OPTIONS" {
-            // Makes CORS preflights pass.
-            return Ok(Some(Response::builder().body("ok".to_string().into())?));
-        }
-
+    } else {
         let username = get_username_from_id(state.clone(), userid.clone()).await;
-
         let rp = match RequestPath::try_from(req_path) {
             Ok(rp) => rp,
             Err(_) => return Ok(Some(ApiService::not_found()?)),
