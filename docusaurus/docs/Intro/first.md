@@ -186,7 +186,7 @@ update, and delete ([CRUD](https://en.wikipedia.org/wiki/Create,_read,_update_an
 ChiselStrike makes REST as easy as it gets. To generate a REST collection for BlogComment, including a `POST` method
 so we can add comments to the database, we can create the following endpoints file:
 
-```typescript title="my-backend/endpoints/BlogComment.ts"
+```typescript title="my-backend/endpoints/comments.ts"
 import { BlogComment } from "../models/BlogComment";
 export default BlogComment.crud();
 ```
