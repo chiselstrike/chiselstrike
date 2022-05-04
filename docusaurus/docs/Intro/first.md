@@ -175,7 +175,7 @@ Model defined: BlogComment
 Now you are able to store `BlogComment` objects!  However, we still need to surface those entities through a web-services API endpoint.
 That comes next!
 
-## Our First Endpoint
+## Combining Endpoints And Models
 
 We're big fans of [REST](https://en.wikipedia.org/wiki/Representational_state_transfer), but don't strictly require it in ChiselStrike.
 
