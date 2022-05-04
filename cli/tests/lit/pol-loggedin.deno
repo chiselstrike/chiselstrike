@@ -69,10 +69,10 @@ rm "$TEMPDIR/policies/pol.yaml"
 
 rm "$TEMPDIR/models/person.ts" #1201
 cat << EOF > "$TEMPDIR/models/post.ts"
-import { ChiselEntity, NextAuthUser, labels } from '@chiselstrike/api'
+import { ChiselEntity, AuthUser, labels } from '@chiselstrike/api'
 export class Post extends ChiselEntity {
     text: string = "Lorem Ipsum";
-    @labels("protect") author: NextAuthUser;
+    @labels("protect") author: AuthUser;
 }
 export class Blog extends ChiselEntity {
   post1?: Post;

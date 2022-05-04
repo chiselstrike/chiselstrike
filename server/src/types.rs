@@ -104,38 +104,38 @@ impl Default for TypeSystem {
         ts.builtin_types.insert("number".into(), Type::Float);
         ts.builtin_types.insert("boolean".into(), Type::Boolean);
         ts.add_builtin_object_type(
-            "NextAuthUser",
+            "AuthUser",
             vec![
                 optional_string_field("emailVerified"),
                 optional_string_field("name"),
                 optional_string_field("email"),
                 optional_string_field("image"),
             ],
-            "nextauth_user",
+            "auth_user",
             IsAuth,
         );
         ts.add_builtin_object_type(
-            "NextAuthSession",
+            "AuthSession",
             vec![
                 string_field("sessionToken"),
                 string_field("userId"),
                 string_field("expires"),
             ],
-            "nextauth_session",
+            "auth_session",
             IsAuth,
         );
         ts.add_builtin_object_type(
-            "NextAuthToken",
+            "AuthToken",
             vec![
                 string_field("identifier"),
                 string_field("expires"),
                 string_field("token"),
             ],
-            "nextauth_token",
+            "auth_token",
             IsAuth,
         );
         ts.add_builtin_object_type(
-            "NextAuthAccount",
+            "AuthAccount",
             vec![
                 string_field("providerAccountId"),
                 string_field("userId"),
@@ -151,7 +151,7 @@ impl Default for TypeSystem {
                 optional_string_field("oauth_token"),
                 optional_number_field("expires_at"),
             ],
-            "nextauth_account",
+            "auth_account",
             IsAuth,
         );
 

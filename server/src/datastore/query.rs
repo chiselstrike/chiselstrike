@@ -416,7 +416,7 @@ impl QueryPlan {
                     property: field.name.to_owned(),
                     object: property_chain.clone().into(),
                 };
-                if nested_ty.name() == "NextAuthUser" {
+                if nested_ty.name() == "AuthUser" {
                     if field_policies.match_login.contains(&field.name) {
                         let expr = BinaryExpr {
                             left: Box::new(property_access.into()),

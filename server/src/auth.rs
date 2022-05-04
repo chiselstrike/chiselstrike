@@ -13,10 +13,10 @@ use std::cell::RefCell;
 use std::rc::Rc;
 use std::sync::Arc;
 
-fn get_nextauth_user_type(state: &OpState) -> Result<Arc<ObjectType>> {
-    match lookup_builtin_type(state, "NextAuthUser") {
+fn get_auth_user_type(state: &OpState) -> Result<Arc<ObjectType>> {
+    match lookup_builtin_type(state, "AuthUser") {
         Ok(Type::Object(t)) => Ok(t),
-        _ => anyhow::bail!("Internal error: type NextAuthUser not found"),
+        _ => anyhow::bail!("Internal error: type AuthUser not found"),
     }
 }
 
@@ -39,10 +39,10 @@ export default {type_name}.crud()"#
 }
 
 pub(crate) async fn init(api: &mut ApiService) -> Result<()> {
-    add_crud_endpoint_for_type("NextAuthUser", "users", api).await?;
-    add_crud_endpoint_for_type("NextAuthSession", "sessions", api).await?;
-    add_crud_endpoint_for_type("NextAuthToken", "tokens", api).await?;
-    add_crud_endpoint_for_type("NextAuthAccount", "accounts", api).await
+    add_crud_endpoint_for_type("AuthUser", "users", api).await?;
+    add_crud_endpoint_for_type("AuthSession", "sessions", api).await?;
+    add_crud_endpoint_for_type("AuthToken", "tokens", api).await?;
+    add_crud_endpoint_for_type("AuthAccount", "accounts", api).await
 }
 
 /// Extracts the username of the logged-in user, or None if there was no login.
@@ -53,7 +53,7 @@ pub(crate) async fn get_username_from_id(
     let (qeng, user_type) = {
         let state = state.borrow();
         let qeng = query_engine_arc(&state);
-        let user_type = get_nextauth_user_type(&state);
+        let user_type = get_auth_user_type(&state);
         (qeng, user_type)
     };
     match (userid, user_type) {
