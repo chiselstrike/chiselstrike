@@ -26,13 +26,12 @@ if [ "x$TEST_DATABASE" == "xpostgres" ]; then
 
     psql "$DATABASE_URL_PREFIX" -c "CREATE DATABASE $DATADB"
 
-    DATADB_URL="$DATABASE_URL_PREFIX/$DATADB"
+    DB_URL="$DATABASE_URL_PREFIX/$DATADB"
 else
-    METADB_URL="sqlite://$TEMPDIR/chiseld.db?mode=rwc"
-    DATADB_URL="sqlite://$TEMPDIR/chiseld-data.db?mode=rwc"
+    DB_URL="sqlite://$TEMPDIR/chiseld.db?mode=rwc"
 fi
 
-$CHISELD --webui -m "$DATADB_URL" -d "$DATADB_URL" --api-listen-addr "$CHISELD_HOST" --internal-routes-listen-addr "$CHISELD_INTERNAL" --rpc-listen-addr $CHISELD_RPC_HOST &
+$CHISELD --webui --db-uri "$DB_URL" --api-listen-addr "$CHISELD_HOST" --internal-routes-listen-addr "$CHISELD_INTERNAL" --rpc-listen-addr $CHISELD_RPC_HOST &
 PID=$!
 
 function cleanup() {
