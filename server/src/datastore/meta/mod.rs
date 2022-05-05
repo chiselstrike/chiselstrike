@@ -13,7 +13,9 @@ use crate::types::{
 use anyhow::Context;
 use sqlx::any::{Any, AnyPool};
 use sqlx::{Execute, Executor, Row, Transaction};
+use std::path::Path;
 use std::sync::Arc;
+use tokio::fs;
 
 /// Meta service.
 ///
@@ -59,6 +61,18 @@ where
         .fetch_all(executor)
         .await
         .with_context(|| format!("Executing query {}", qstr))
+}
+
+async fn file_exists(file: &Path) -> anyhow::Result<bool> {
+    match fs::metadata(file).await {
+        Ok(_) => Ok(true),
+        Err(x) => match x.kind() {
+            std::io::ErrorKind::NotFound => Ok(false),
+            _ => {
+                anyhow::bail!("Can't read {}", file.display());
+            }
+        },
+    }
 }
 
 async fn update_field_query(
@@ -230,6 +244,113 @@ impl MetaService {
                 }
             }
         }
+    }
+
+    /// Try to migrate an old-style (split meta + data) sqlite layout to
+    /// a single file.
+    ///
+    /// For Postgres this is a lot more complex because it is not possible to
+    /// do cross-database transactions. But this handles the local dev case,
+    /// which is what is most relevant at the moment.
+    pub(crate) async fn maybe_migrate_sqlite_database<P: AsRef<Path>, T: AsRef<Path>>(
+        &self,
+        sources: &[P],
+        to: T,
+    ) -> anyhow::Result<()> {
+        let to = to.as_ref();
+        match self.kind {
+            Kind::Sqlite => {}
+            _ => anyhow::bail!("Can't migrate postgres tables yet"),
+        }
+
+        // For the old files, either none of them exists (in which case
+        // we're ok), or all of them exists. The case in which some of them
+        // exists we're better off not touching, and erroring out.
+        let mut not_found = vec![];
+        for src in sources {
+            let src = src.as_ref();
+            if !file_exists(src).await? {
+                not_found.push(src);
+            }
+        }
+
+        if not_found.len() == sources.len() {
+            return Ok(());
+        }
+
+        if !not_found.is_empty() {
+            anyhow::bail!(
+                "Some of the old sqlite files were not found: {:?}",
+                not_found
+            );
+        }
+
+        let mut transaction = self.start_transaction().await?;
+        match self
+            .maybe_migrate_sqlite_database_inner(&mut transaction, sources)
+            .await
+        {
+            Err(x) => Err(x),
+            Ok(true) => {
+                let mut full_str = format!(
+                    "Migrated your data to {}. You can now delete the following files:",
+                    to.display()
+                );
+                for src in sources {
+                    let s = src.as_ref().display();
+                    full_str += &format!("\n\t{}\n\t{}-wal\n\t{}-shm", s, s, s);
+                }
+
+                info!("{}", &full_str);
+                Ok(())
+            }
+            Ok(false) => Ok(()),
+        }?;
+        Self::commit_transaction(transaction).await?;
+        Ok(())
+    }
+
+    async fn maybe_migrate_sqlite_database_inner<P: AsRef<Path>>(
+        &self,
+        transaction: &mut Transaction<'_, Any>,
+        sources: &[P],
+    ) -> anyhow::Result<bool> {
+        // this sqlite instance already has data, nothing to migrate.
+        if self.count_tables(transaction).await? != 0 {
+            return Ok(false);
+        }
+
+        for (idx, src) in sources.iter().enumerate() {
+            let src = src.as_ref().to_str().unwrap();
+            let db = format!("db{}", idx);
+
+            let attach = format!("attach database '{}' as '{}'", src, db);
+            execute(transaction, sqlx::query::<sqlx::Any>(&attach)).await?;
+
+            let query = format!(
+                r#"
+                    SELECT sql,name
+                    FROM '{}'.sqlite_schema
+                    WHERE type ='table' AND name NOT LIKE 'sqlite_%'"#,
+                db
+            );
+            // function takes an Executor, which is causing the compiler to move this.
+            // so &mut * it
+            let rows = fetch_all(&mut *transaction, sqlx::query::<sqlx::Any>(&query)).await?;
+            for row in rows {
+                let sql: &str = row.get("sql");
+                let sql = sql.replace("CREATE TABLE", "CREATE TABLE IF NOT EXISTS");
+                execute(transaction, sqlx::query::<sqlx::Any>(&sql)).await?;
+                let name: &str = row.get("name");
+                let copy = format!(
+                    r#"
+                    INSERT INTO '{}' SELECT * from '{}'.{}"#,
+                    name, db, name
+                );
+                execute(transaction, sqlx::query::<sqlx::Any>(&copy)).await?;
+            }
+        }
+        Ok(true)
     }
 
     async fn count_tables(&self, transaction: &mut Transaction<'_, Any>) -> anyhow::Result<usize> {
@@ -586,6 +707,7 @@ impl MetaService {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::datastore::{query::tests::*, QueryEngine};
     use anyhow::Result;
     use tempdir::TempDir;
 
@@ -621,6 +743,125 @@ mod tests {
         MetaService::commit_transaction(transaction).await.unwrap();
         assert_eq!(version, schema::CURRENT_VERSION);
 
+        Ok(())
+    }
+
+    #[tokio::test]
+    // test that we can join a split meta and data db into one
+    async fn migrate_split_db() -> Result<()> {
+        let tmp_dir = TempDir::new("migrate_split_db")?;
+
+        let meta_path = tmp_dir.path().join("chisel-meta.db");
+        fs::copy("./test_files/split_db/chiseld-old-meta.db", &meta_path)
+            .await
+            .unwrap();
+
+        let data_path = tmp_dir.path().join("chisel-data.db");
+        fs::copy("./test_files/split_db/chiseld-old-data.db", &data_path)
+            .await
+            .unwrap();
+
+        let new_path = tmp_dir.path().join("chisel.db");
+        let conn_str = format!("sqlite://{}?mode=rwc", new_path.display());
+
+        let conn = DbConnection::connect(&conn_str, 1).await?;
+        let meta = MetaService::local_connection(&conn, 1).await.unwrap();
+        meta.maybe_migrate_sqlite_database(&[&meta_path, &data_path], &new_path)
+            .await
+            .unwrap();
+
+        let query = QueryEngine::local_connection(&conn, 1).await.unwrap();
+
+        let ts = meta.load_type_system().await.unwrap();
+        let ty = ts.lookup_custom_type("BlogComment", "dev").unwrap();
+        let rows = fetch_rows(&query, &ty).await;
+        assert_eq!(rows.len(), 10);
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn migrate_split_db_missing_file() -> Result<()> {
+        let tmp_dir = TempDir::new("migrate_split_db_missing_files")?;
+
+        let data_path = tmp_dir.path().join("chisel-data.db");
+        let meta_path = tmp_dir.path().join("chisel-meta.db");
+        fs::copy("./test_files/split_db/chiseld-old-meta.db", &meta_path)
+            .await
+            .unwrap();
+
+        let new_path = tmp_dir.path().join("chisel.db");
+        let conn_str = format!("sqlite://{}?mode=rwc", new_path.display());
+
+        let conn = DbConnection::connect(&conn_str, 1).await?;
+        let meta = MetaService::local_connection(&conn, 1).await.unwrap();
+        meta.maybe_migrate_sqlite_database(&[&meta_path, &data_path], &new_path)
+            .await
+            .unwrap_err();
+
+        // still exists, wasn't deleted
+        fs::metadata(meta_path).await.unwrap();
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn migrate_split_db_bad_file() -> Result<()> {
+        let tmp_dir = TempDir::new("migrate_split_db_bad_file")?;
+
+        // duplicated entries should cause the migration to fail (because we're forcing those files
+        // to be the same)
+        let data_path = tmp_dir.path().join("chisel-meta.db");
+        let meta_path = tmp_dir.path().join("chisel-meta.db");
+        fs::copy("./test_files/split_db/chiseld-old-meta.db", &meta_path)
+            .await
+            .unwrap();
+
+        let new_path = tmp_dir.path().join("chisel.db");
+        let conn_str = format!("sqlite://{}?mode=rwc", new_path.display());
+
+        let conn = DbConnection::connect(&conn_str, 1).await?;
+        let meta = MetaService::local_connection(&conn, 1).await.unwrap();
+        meta.maybe_migrate_sqlite_database(&[&meta_path, &data_path], &new_path)
+            .await
+            .unwrap_err();
+
+        // original still exists, werent't deleted
+        fs::metadata(data_path).await.unwrap();
+        fs::metadata(meta_path).await.unwrap();
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn migrate_split_db_untouched() -> Result<()> {
+        let tmp_dir = TempDir::new("migrate_split_db_untouched")?;
+
+        let data_path = tmp_dir.path().join("chisel-data.db");
+        fs::copy("./test_files/split_db/chiseld-old-data.db", &data_path)
+            .await
+            .unwrap();
+
+        let meta_path = tmp_dir.path().join("chisel-meta.db");
+        fs::copy("./test_files/split_db/chiseld-old-meta.db", &meta_path)
+            .await
+            .unwrap();
+
+        let new_path = tmp_dir.path().join("chisel-new.db");
+        fs::copy("./test_files/split_db/chiseld-old-meta.db", &new_path)
+            .await
+            .unwrap();
+
+        // meta db has data, won't migrate. This shouldn't trigger an error because this is
+        // the path we take on most boots after migration
+        let conn_str = format!("sqlite://{}?mode=rwc", meta_path.display());
+
+        let conn = DbConnection::connect(&conn_str, 1).await?;
+        let meta = MetaService::local_connection(&conn, 1).await.unwrap();
+        meta.maybe_migrate_sqlite_database(&[&meta_path, &data_path], &new_path)
+            .await
+            .unwrap();
+
+        // original still exists, werent't deleted
+        fs::metadata(data_path).await.unwrap();
+        fs::metadata(meta_path).await.unwrap();
         Ok(())
     }
 }

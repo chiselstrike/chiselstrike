@@ -22,6 +22,7 @@ use futures::FutureExt;
 use futures::StreamExt;
 use std::net::SocketAddr;
 use std::panic;
+use std::path::PathBuf;
 use std::rc::Rc;
 use std::sync::Arc;
 use std::time::Duration;
@@ -41,12 +42,15 @@ pub struct Opt {
     /// Internal routes (for k8s) listen address
     #[structopt(short, long, default_value = "127.0.0.1:9090")]
     internal_routes_listen_addr: SocketAddr,
-    /// Metadata database URI.
+    /// Metadata database URI. [deprecated: use --db-uri instead]
     #[structopt(short, long, default_value = "sqlite://chiseld.db?mode=rwc")]
-    metadata_db_uri: String,
-    /// Data database URI.
+    _metadata_db_uri: String,
+    /// Data database URI. [deprecated: use --db-uri instead]
     #[structopt(short, long, default_value = "sqlite://chiseld-data.db?mode=rwc")]
-    data_db_uri: String,
+    _data_db_uri: String,
+    /// Database URI.
+    #[structopt(long, default_value = "sqlite://.chiseld.db?mode=rwc")]
+    db_uri: String,
     /// Should we wait for a debugger before executing any JS?
     #[structopt(long)]
     inspect_brk: bool,
@@ -85,8 +89,7 @@ pub struct SharedState {
     api_listen_addr: String,
     inspect_brk: bool,
     executor_threads: usize,
-    data_db: DbConnection,
-    metadata_db: DbConnection,
+    db: DbConnection,
     nr_connections: usize,
 }
 
@@ -137,7 +140,7 @@ async fn run(state: SharedState, mut cmd: ExecutorChannel) -> Result<()> {
         }
     }
 
-    let meta = MetaService::local_connection(&state.metadata_db, state.nr_connections).await?;
+    let meta = MetaService::local_connection(&state.db, state.nr_connections).await?;
     let ts = meta.load_type_system().await?;
 
     let routes = meta.load_endpoints().await?;
@@ -149,7 +152,7 @@ async fn run(state: SharedState, mut cmd: ExecutorChannel) -> Result<()> {
     crate::introspect::init(&api_service);
 
     let query_engine =
-        Arc::new(QueryEngine::local_connection(&state.data_db, state.nr_connections).await?);
+        Arc::new(QueryEngine::local_connection(&state.db, state.nr_connections).await?);
     ts.create_builtin_backing_tables(query_engine.as_ref())
         .await?;
     let api_service = Rc::new(api_service);
@@ -218,14 +221,37 @@ impl CoordinatorChannel {
     }
 }
 
+fn extract(s: &str) -> Option<String> {
+    let sqlite = regex::Regex::new("sqlite://(?P<fname>[^?]+)").unwrap();
+    sqlite
+        .captures(s)
+        .map(|caps| caps.name("fname").unwrap().as_str().to_string())
+}
+
+fn find_legacy_sqlite_dbs(opt: &Opt) -> Vec<PathBuf> {
+    let mut sources = vec![];
+    if let Some(x) = extract(&opt._metadata_db_uri) {
+        sources.push(PathBuf::from(x));
+    }
+    if let Some(x) = extract(&opt._data_db_uri) {
+        sources.push(PathBuf::from(x));
+    }
+    sources
+}
+
 pub async fn run_shared_state(
     opt: Opt,
 ) -> Result<(SharedTasks, SharedState, Vec<ExecutorChannel>)> {
-    let meta_conn = DbConnection::connect(&opt.metadata_db_uri, opt.nr_connections).await?;
-    let data_db = DbConnection::connect(&opt.data_db_uri, opt.nr_connections).await?;
+    let db_conn = DbConnection::connect(&opt.db_uri, opt.nr_connections).await?;
+    let meta = MetaService::local_connection(&db_conn, opt.nr_connections).await?;
 
-    let meta = MetaService::local_connection(&meta_conn, opt.nr_connections).await?;
-    let query_engine = QueryEngine::local_connection(&data_db, opt.nr_connections).await?;
+    let legacy_dbs = find_legacy_sqlite_dbs(&opt);
+    if extract(&opt.db_uri).is_some() && legacy_dbs.len() == 2 {
+        meta.maybe_migrate_sqlite_database(&legacy_dbs, &opt.db_uri)
+            .await?;
+    }
+
+    let query_engine = QueryEngine::local_connection(&db_conn, opt.nr_connections).await?;
 
     meta.create_schema().await?;
 
@@ -359,8 +385,7 @@ pub async fn run_shared_state(
         api_listen_addr: opt.api_listen_addr,
         inspect_brk: opt.inspect_brk,
         executor_threads: opt.executor_threads,
-        data_db,
-        metadata_db: meta_conn,
+        db: db_conn,
         nr_connections: opt.nr_connections,
     };
 
