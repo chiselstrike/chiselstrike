@@ -438,3 +438,35 @@ $CHISEL apply
 
 $CURL -o - $CHISELD_HOST/dev/filter_with_expression
 # CHECK: expression error: entity 'Biography' doesn't have field 'something_else'
+
+
+## Filter by unary boolean predicate.
+
+cat << EOF > "$TEMPDIR/endpoints/filter_with_expression.ts"
+import { Person } from "../models/types.ts";
+
+export default async function chisel(req: Request) {
+    const url = new URL(req.url);
+    const all = url.searchParams.get("return_all") == "true";
+    console.log(url.searchParams.get("return_all"), all);
+    const filtered = Person.cursor()
+        .__filterWithExpression((p) => {
+            return all;
+        }, {
+            exprType: "Literal",
+            value: all
+        });
+
+    const results = (await filtered.toArray()).map(p => p.name).sort();
+    return new Response("[" + results.join(", ") + "]");
+}
+EOF
+
+cd "$TEMPDIR"
+$CHISEL apply
+
+$CURL -o - $CHISELD_HOST/dev/filter_with_expression?return_all=true
+# CHECK: [Glauber, Jan, Pekka]
+
+$CURL -o - $CHISELD_HOST/dev/filter_with_expression?return_all=false
+# CHECK: []

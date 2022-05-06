@@ -856,7 +856,7 @@ impl Field {
         let effective_default = if let Type::Boolean = &desc.ty() {
             default
                 .clone()
-                .map(|x| if x == "false" { "0" } else { "1" })
+                .map(|x| if x == "false" { "false" } else { "true" })
                 .map(|x| x.to_string())
         } else {
             default.clone()

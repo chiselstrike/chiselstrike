@@ -95,7 +95,7 @@ impl TryFrom<&Field> for ColumnDef {
             Type::String => column_def.text(),
             Type::Id => column_def.text().primary_key(),
             Type::Float => column_def.double(),
-            Type::Boolean => column_def.integer(),
+            Type::Boolean => column_def.boolean(),
             Type::Object(_) => column_def.text(), // Foreign key, must the be same type as Type::Id
         };
 
@@ -118,7 +118,7 @@ impl SqlWithArguments {
         let mut sqlx_query = sqlx::query(&self.sql);
         for arg in &self.args {
             match arg {
-                SqlValue::Bool(arg) => sqlx_query = sqlx_query.bind(*arg as i64),
+                SqlValue::Bool(arg) => sqlx_query = sqlx_query.bind(arg),
                 SqlValue::F64(arg) => sqlx_query = sqlx_query.bind(arg),
                 SqlValue::String(arg) => sqlx_query = sqlx_query.bind(arg),
             };
@@ -320,7 +320,7 @@ impl QueryEngine {
         Ok(())
     }
 
-    fn row_to_json(entity: &QueriedEntity, row: &AnyRow) -> Result<ResultRow> {
+    fn row_to_json(db_kind: Kind, entity: &QueriedEntity, row: &AnyRow) -> Result<ResultRow> {
         let mut ret = JsonObject::default();
         for s_field in &entity.fields {
             match s_field {
@@ -353,11 +353,13 @@ impl QueryEngine {
                         Type::Boolean => {
                             // Similarly to the float issue, type information is not filled in
                             // *if* this value was put in as a result of coalesce() (default).
-                            //
-                            // Also the database has integers, and we need to map it back to a
-                            // boolean type on json.
-                            let val: i32 = row.get_unchecked(column_idx);
-                            json!(val != 0)
+                            match db_kind {
+                                Kind::Sqlite => {
+                                    let val: String = row.get_unchecked(column_idx);
+                                    json!(val == "1" || val.to_lowercase() == "true")
+                                }
+                                _ => to_json!(bool),
+                            }
                         }
                         Type::Object(_) => anyhow::bail!("object is not a scalar"),
                     };
@@ -376,7 +378,7 @@ impl QueryEngine {
                     if *is_optional && column_is_null(row, id_idx(child_entity)) {
                         continue;
                     }
-                    let mut val = json!(Self::row_to_json(child_entity, row)?);
+                    let mut val = json!(Self::row_to_json(db_kind, child_entity, row)?);
                     if let Some(tr) = transform {
                         // Apply policy transformation
                         val = tr(val);
@@ -414,9 +416,10 @@ impl QueryEngine {
     ) -> anyhow::Result<QueryResults> {
         let query = query_plan.build_query(&self.target_db())?;
         let allowed_fields = query.allowed_fields;
+        let db_kind = self.kind;
 
         let stream = new_query_results(query.raw_sql, tr);
-        let stream = stream.map(move |row| Self::row_to_json(&query.entity, &row?));
+        let stream = stream.map(move |row| Self::row_to_json(db_kind, &query.entity, &row?));
         let stream = Box::pin(stream.map(move |o| Self::project(o, &allowed_fields)));
         Ok(stream)
     }
