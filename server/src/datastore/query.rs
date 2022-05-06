@@ -435,7 +435,7 @@ impl QueryPlan {
         }
     }
 
-    fn make_column_string(&self, target: &TargetDatabase) -> String {
+    fn make_column_string(&self) -> String {
         let mut column_string = String::new();
         for c in &self.columns {
             let col = match c.field.default_value() {
@@ -450,13 +450,6 @@ impl QueryPlan {
             };
             column_string += &col;
         }
-        // Adds row number selection for DELETE.
-        let row_id = target.as_sqlite().map_or("ctid", |_| "rowid");
-        column_string += &format!(
-            "\"{}\".\"{row_id}\" AS \"{row_id}\",",
-            self.base_type().backing_table(),
-            row_id = row_id
-        );
         column_string.pop();
         column_string
     }
@@ -607,8 +600,8 @@ impl QueryPlan {
         }
     }
 
-    fn make_core_select(&self, target: &TargetDatabase) -> String {
-        let column_string = self.make_column_string(target);
+    fn make_core_select(&self) -> String {
+        let column_string = self.make_column_string();
         let join_string = self.make_join_string();
         format!(
             "SELECT {} FROM \"{}\" {}",
@@ -673,7 +666,7 @@ impl QueryPlan {
     }
 
     fn make_raw_query(&self, target: &TargetDatabase) -> Result<String> {
-        let mut sql_query = self.make_core_select(target);
+        let mut sql_query = self.make_core_select();
         let mut remaining_ops: &[QueryOp] = &self.operators[..];
         while !remaining_ops.is_empty() {
             let (ops, remainder) = self.split_on_first_take(remaining_ops);
@@ -838,11 +831,14 @@ impl Mutation {
 
     pub(crate) fn build_sql(&self, target: TargetDatabase) -> Result<String> {
         let select_sql = self.filter_query_plan.build_query(&target)?.raw_sql;
-        let row_id = target.as_sqlite().map_or("ctid", |_| "rowid");
+        let id_column = ColumnAlias {
+            field_name: "id".to_owned(),
+            table_name: self.base_entity.backing_table().to_owned(),
+        };
         let raw_sql = format!(
             r#"DELETE FROM "{base_table}"
-                WHERE {row_id} IN (
-                    SELECT {row_id} FROM ({select_sql}) as subquery
+                WHERE "id" IN (
+                    SELECT "{id_column}" FROM ({select_sql}) as subquery
                 )"#,
             base_table = &self.base_entity.backing_table(),
         );
