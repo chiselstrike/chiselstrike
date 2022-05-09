@@ -17,8 +17,8 @@ export default async function chisel(req: Request) {
     }
 
     const filtered = await Person.findMany({"first_name": first_name}, 1);
-    const results = filtered.map(p => p.first_name);
-    return new Response("[" + results.join(", ") + "]");
+    const name: string = filtered[0].first_name;
+    return new Response("[" + name + "]");
 }
 EOF
 
