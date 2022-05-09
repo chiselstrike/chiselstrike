@@ -82,3 +82,29 @@ $CHISEL apply 2>&1 | $RMCOLOR|| true
 #CHECK: Caused by:
 #CHECK:     Compilation failed:
 #CHECK:     endpoints/error.ts:7:20 - error TS2339: Property 'first_name' does not exist on type 'Pick<Person, "last_name">'.
+
+cat << EOF > "$TEMPDIR/endpoints/error.ts"
+import { Person } from "../models/person.ts";
+
+export default async function chisel(req: Request) {
+    await Person.build({a: 42}).save();
+    return new Response("");
+}
+EOF
+
+$CHISEL apply 2>&1 | $RMCOLOR|| true
+# CHECK: endpoints/error.ts:4:25 - error TS2345: Argument of type '{ a: number; }' is not assignable to parameter of type 'Partial<Person>'
+# CHECK:     Object literal may only specify known properties, and 'a' does not exist in type 'Partial<Person>'.
+
+cat << EOF > "$TEMPDIR/endpoints/error.ts"
+import { Person } from "../models/person.ts";
+
+export default async function chisel(req: Request) {
+    await Person.build({height: "1.80"}).save();
+    return new Response("");
+}
+EOF
+
+$CHISEL apply 2>&1 | $RMCOLOR|| true
+# CHECK: endpoints/error.ts:4:25 - error TS2322: Type 'string' is not assignable to type 'number'.
+# CHECK:  The expected type comes from property 'height' which is declared here on type 'Partial<Person>'

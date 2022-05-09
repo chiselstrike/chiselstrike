@@ -564,7 +564,7 @@ export class ChiselEntity {
      */
     static build<T extends ChiselEntity>(
         this: { new (): T },
-        ...properties: Record<string, unknown>[]
+        ...properties: Partial<T>[]
     ): T {
         const result = new this();
         Object.assign(result, ...properties);
