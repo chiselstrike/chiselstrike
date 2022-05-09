@@ -1,0 +1,32 @@
+# SPDX-FileCopyrightText: © 2021 ChiselStrike <info@chiselstrike.com>
+
+# RUN: sh -e @file
+
+cat << EOF > "$TEMPDIR/models/person.ts"
+import { ChiselEntity } from "@chiselstrike/api";
+
+export class Person extends ChiselEntity {
+    name: string;
+}
+EOF
+
+
+cat << EOF > "$TEMPDIR/endpoints/build.ts"
+import { Person } from "../models/person.ts";
+
+export default async function chisel(req: Request) {
+    await Person.build({}).save();
+    return new Response("");
+}
+EOF
+
+cd "$TEMPDIR"
+
+# FIXME, We should detect this error at compile time.
+$CHISEL apply
+
+# CHECK: End point defined: /dev/build
+
+$CURL -X POST $CHISELD_HOST/dev/build
+
+# CHECK: Error: provided data for field `name` are incompatible with given type `Person`
