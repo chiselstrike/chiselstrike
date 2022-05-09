@@ -45,14 +45,18 @@ macro_rules! fetch_one {
     }};
 }
 
-macro_rules! fetch_all {
-    ( $pool:expr, $query:expr) => {{
-        let qstr = $query.sql();
-        $query
-            .fetch_all($pool)
-            .await
-            .with_context(|| format!("Executing query {}", qstr))
-    }};
+async fn fetch_all<'a, E>(
+    executor: E,
+    query: sqlx::query::Query<'a, sqlx::Any, sqlx::any::AnyArguments<'a>>,
+) -> anyhow::Result<Vec<sqlx::any::AnyRow>>
+where
+    E: Executor<'a, Database = sqlx::Any>,
+{
+    let qstr = query.sql();
+    query
+        .fetch_all(executor)
+        .await
+        .with_context(|| format!("Executing query {}", qstr))
 }
 
 async fn update_field_query(
@@ -213,7 +217,7 @@ impl MetaService {
         let query = sqlx::query(
             "SELECT version FROM chisel_version WHERE version_id = 'chiselstrike' LIMIT 1",
         );
-        match fetch_all!(transaction, query) {
+        match fetch_all(transaction, query).await {
             Err(_) => Ok("0".to_string()),
             Ok(rows) => {
                 if let Some(row) = rows.into_iter().next() {
@@ -241,7 +245,7 @@ impl MetaService {
                 WHERE schemaname != 'pg_catalog' AND schemaname != 'information_schema'"#,
             ),
         };
-        let rows = fetch_all!(transaction, query)?;
+        let rows = fetch_all(transaction, query).await?;
         Ok(rows.len())
     }
 
@@ -302,7 +306,7 @@ impl MetaService {
     /// Load information about the current API versions present in this system
     pub(crate) async fn load_api_info(&self) -> anyhow::Result<ApiInfoMap> {
         let query = sqlx::query("SELECT api_version, app_name, version_tag FROM api_info");
-        let rows = fetch_all!(&self.pool, query)?;
+        let rows = fetch_all(&self.pool, query).await?;
 
         let mut info = ApiInfoMap::default();
         for row in rows {
@@ -339,7 +343,7 @@ impl MetaService {
     /// Load the existing endpoints from from metadata store.
     pub(crate) async fn load_endpoints<'r>(&self) -> anyhow::Result<PrefixMap<String>> {
         let query = sqlx::query("SELECT path, code FROM endpoints");
-        let rows = fetch_all!(&self.pool, query)?;
+        let rows = fetch_all(&self.pool, query).await?;
 
         let mut routes = PrefixMap::default();
         for row in rows {
@@ -379,7 +383,7 @@ impl MetaService {
             FROM types
             INNER JOIN type_names ON types.type_id = type_names.type_id"#,
         );
-        let rows = fetch_all!(&self.pool, query)?;
+        let rows = fetch_all(&self.pool, query).await?;
 
         let mut ts = TypeSystem::default();
         for row in rows {
@@ -410,7 +414,7 @@ impl MetaService {
                 ON fields.type_id = $1 AND field_names.field_id = fields.field_id;"#,
         );
         let query = query.bind(type_id);
-        let rows = fetch_all!(&self.pool, query)?;
+        let rows = fetch_all(&self.pool, query).await?;
 
         let mut fields = Vec::new();
         for row in rows {
@@ -438,7 +442,7 @@ impl MetaService {
 
             let query = labels_query.bind(field_id);
 
-            let rows = fetch_all!(&self.pool, query)?;
+            let rows = fetch_all(&self.pool, query).await?;
 
             let labels = rows
                 .iter()
@@ -543,7 +547,7 @@ impl MetaService {
     pub(crate) async fn load_policies(&self) -> anyhow::Result<Policies> {
         let get_policy = sqlx::query("SELECT version, policy_str FROM policies");
 
-        let rows = fetch_all!(&self.pool, get_policy)?;
+        let rows = fetch_all(&self.pool, get_policy).await?;
 
         let mut policies = Policies::default();
         for row in rows {
@@ -593,7 +597,7 @@ impl MetaService {
     pub(crate) async fn get_user_id(&self, token: &str) -> anyhow::Result<String> {
         let query = sqlx::query("SELECT user_id FROM sessions WHERE token=$1::uuid").bind(token);
 
-        let mut rows = fetch_all!(&self.pool, query)?;
+        let mut rows = fetch_all(&self.pool, query).await?;
         let row = rows
             .pop()
             .ok_or_else(|| anyhow!("token {} not found", token))?;
