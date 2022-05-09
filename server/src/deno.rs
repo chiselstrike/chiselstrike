@@ -48,10 +48,10 @@ use deno_runtime::web_worker::WebWorker;
 use deno_runtime::web_worker::WebWorkerOptions;
 use deno_runtime::worker::{MainWorker, WorkerOptions};
 use deno_runtime::BootstrapOptions;
-use futures::future;
 use futures::stream::{try_unfold, Stream};
 use futures::task::LocalFutureObj;
 use futures::FutureExt;
+use futures::{future, StreamExt};
 use hyper::body::HttpBody;
 use hyper::Method;
 use hyper::Uri;
@@ -228,7 +228,7 @@ fn build_extensions() -> Vec<Extension> {
             op_chisel_entity_delete::decl(),
             op_chisel_crud_delete::decl(),
             op_chisel_get_secret::decl(),
-            op_chisel_crud_query_create::decl(),
+            op_chisel_crud_query::decl(),
             op_chisel_relational_query_create::decl(),
             op_chisel_query_next::decl(),
             op_chisel_commit_transaction::decl(),
@@ -674,23 +674,38 @@ struct CrudQueryParams {
 }
 
 #[op]
-fn op_chisel_crud_query_create(
-    op_state: &mut OpState,
+async fn op_chisel_crud_query(
+    state: Rc<RefCell<OpState>>,
     params: CrudQueryParams,
     context: ChiselRequestContext,
-) -> Result<ResourceId> {
-    let query_plan = QueryPlan::from_crud_url(
-        &RequestContext {
-            policies: current_policies(op_state),
-            ts: current_type_system(op_state),
-            api_version: context.api_version,
-            user_id: context.user_id,
-            path: context.path,
-        },
-        &params.type_name,
-        &params.url,
-    )?;
-    create_query(op_state, query_plan)
+) -> Result<Vec<JsonObject>> {
+    let stream = {
+        // Contextualize stream creation to prevent state RC borrow living across await
+        let op_state = &state.borrow();
+        let query_plan = QueryPlan::from_crud_url(
+            &RequestContext {
+                policies: current_policies(op_state),
+                ts: current_type_system(op_state),
+                api_version: context.api_version,
+                user_id: context.user_id,
+                path: context.path,
+            },
+            &params.type_name,
+            &params.url,
+        )?;
+
+        let transaction = current_transaction(op_state);
+        let query_engine = query_engine_arc(op_state);
+        query_engine.query(transaction, query_plan)?
+    };
+    let results = stream
+        .collect::<Vec<_>>()
+        .await
+        .into_iter()
+        .collect::<Result<Vec<_>>>()
+        .context("failed to collect result rows from the database")?;
+
+    Ok(results)
 }
 
 #[op]
