@@ -9,7 +9,7 @@ $CHISEL apply
 $CURL $CHISELD_HOST/__chiselstrike/auth/users
 # CHECK: HTTP/1.1 200 OK
 
-echo '{ "CHISEL_API_AUTH_SECRET" : "1234" }' > ${TEMPDIR}/.env
+echo '{ "CHISELD_AUTH_SECRET" : "1234" }' > ${TEMPDIR}/.env
 $CHISEL restart
 # CHECK: Server restarted successfully.
 
