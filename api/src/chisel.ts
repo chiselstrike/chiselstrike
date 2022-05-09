@@ -1017,40 +1017,15 @@ async function fetchEntitiesCrud<T extends ChiselEntity>(
     type: { new (): T },
     url: string,
 ): Promise<T[]> {
-    const iter = {
-        [Symbol.asyncIterator]: async function* () {
-            const rid = Deno.core.opSync(
-                "op_chisel_crud_query_create",
-                {
-                    typeName: type.name,
-                    url,
-                },
-                requestContext,
-            );
-            try {
-                while (true) {
-                    const properties = await Deno.core.opAsync(
-                        "op_chisel_query_next",
-                        rid,
-                    );
-                    if (properties == undefined) {
-                        break;
-                    }
-                    const result = new type();
-                    Object.assign(result, properties);
-                    yield result;
-                }
-            } finally {
-                Deno.core.opSync("op_close", rid);
-            }
+    const results = await Deno.core.opAsync(
+        "op_chisel_crud_query",
+        {
+            typeName: type.name,
+            url,
         },
-    };
-
-    const arr = [];
-    for await (const t of iter) {
-        arr.push(t);
-    }
-    return arr;
+        requestContext,
+    );
+    return results.results;
 }
 
 async function deleteEntitiesCrud<T extends ChiselEntity>(
