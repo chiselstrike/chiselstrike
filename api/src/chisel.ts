@@ -400,7 +400,7 @@ export class ChiselCursor<T> {
      *
      * Use this with caution as the result set can be very big.
      * It is recommended that you take() first to cap the maximum number of elements. */
-    async toArray(): Promise<Partial<T>[]> {
+    async toArray(): Promise<T[]> {
         const arr = [];
         for await (const t of this) {
             arr.push(t);
@@ -609,7 +609,7 @@ export class ChiselEntity {
     static async findAll<T>(
         this: { new (): T },
         take?: number,
-    ): Promise<Partial<T>[]> {
+    ): Promise<T[]> {
         let it = chiselIterator<T>(this);
         if (take) {
             it = it.take(take);
@@ -622,7 +622,7 @@ export class ChiselEntity {
         this: { new (): T },
         restrictions: Partial<T>,
         take?: number,
-    ): Promise<Partial<T>[]> {
+    ): Promise<T[]> {
         let it = chiselIterator<T>(this).filter(restrictions);
         if (take) {
             it = it.take(take);
@@ -905,7 +905,7 @@ export function regExParamParse(str: string, loose: boolean) {
 type ChiselEntityClass<T extends ChiselEntity> = {
     new (): T;
     findOne: (_: { id: string }) => Promise<T | undefined>;
-    findMany: (_: Partial<T>) => Promise<Partial<T>[]>;
+    findMany: (_: Partial<T>) => Promise<T[]>;
     build: (...properties: Record<string, unknown>[]) => T;
     delete: (restrictions: Partial<T>) => Promise<void>;
     cursor: () => ChiselCursor<T>;

@@ -47,7 +47,7 @@ $CHISEL apply 2>&1 | $RMCOLOR|| true
 #CHECK: Error: parsing endpoint /dev/error
 #CHECK: Caused by:
 #CHECK:     Compilation failed:
-#CHECK:     endpoints/error.ts:7:20 - error TS2339: Property 'nickname' does not exist on type 'Partial<Person>'.
+#CHECK:     endpoints/error.ts:7:20 - error TS2339: Property 'nickname' does not exist on type 'Person'.
 
 cat << EOF > "$TEMPDIR/endpoints/error.ts"
 import { Person } from "../models/person.ts";
