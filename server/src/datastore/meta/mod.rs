@@ -25,24 +25,26 @@ pub(crate) struct MetaService {
     pool: AnyPool,
 }
 
-macro_rules! execute {
-    ( $transaction:expr, $query:expr ) => {{
-        let qstr = $query.sql();
-        $transaction
-            .execute($query)
-            .await
-            .with_context(|| format!("Executing query {}", qstr))
-    }};
+async fn execute<'a, 'b>(
+    transaction: &mut Transaction<'b, sqlx::Any>,
+    query: sqlx::query::Query<'a, sqlx::Any, sqlx::any::AnyArguments<'a>>,
+) -> anyhow::Result<sqlx::any::AnyQueryResult> {
+    let qstr = query.sql();
+    transaction
+        .execute(query)
+        .await
+        .with_context(|| format!("Executing query {}", qstr))
 }
 
-macro_rules! fetch_one {
-    ( $transaction:expr, $query:expr) => {{
-        let qstr = $query.sql();
-        $transaction
-            .fetch_one($query)
-            .await
-            .with_context(|| format!("Executing query {}", qstr))
-    }};
+async fn fetch_one<'a, 'b>(
+    transaction: &mut Transaction<'b, sqlx::Any>,
+    query: sqlx::query::Query<'a, sqlx::Any, sqlx::any::AnyArguments<'a>>,
+) -> anyhow::Result<sqlx::any::AnyRow> {
+    let qstr = query.sql();
+    transaction
+        .fetch_one(query)
+        .await
+        .with_context(|| format!("Executing query {}", qstr))
 }
 
 async fn fetch_all<'a, E>(
@@ -93,18 +95,18 @@ async fn update_field_query(
             query = query.bind(value.to_owned());
         }
 
-        execute!(transaction, query)?;
+        execute(transaction, query).await?;
     }
 
     if let Some(labels) = &delta.labels {
         let flush = sqlx::query("DELETE FROM field_labels WHERE field_id = $1").bind(field_id);
-        execute!(transaction, flush)?;
+        execute(transaction, flush).await?;
 
         for label in labels.iter() {
             let q = sqlx::query("INSERT INTO field_labels (label_name, field_id) VALUES ($1, $2)")
                 .bind(label)
                 .bind(field_id);
-            execute!(transaction, q)?;
+            execute(transaction, q).await?;
         }
     }
     Ok(())
@@ -119,13 +121,13 @@ async fn remove_field_query(
         .context("logical error. Trying to delete field without id")?;
 
     let query = sqlx::query("DELETE FROM fields WHERE field_id = $1").bind(field_id);
-    execute!(transaction, query)?;
+    execute(transaction, query).await?;
 
     let query = sqlx::query("DELETE FROM field_names WHERE field_id = $1").bind(field_id);
-    execute!(transaction, query)?;
+    execute(transaction, query).await?;
 
     let query = sqlx::query("DELETE FROM field_labels WHERE field_id = $1").bind(field_id);
-    execute!(transaction, query)?;
+    execute(transaction, query).await?;
 
     Ok(())
 }
@@ -180,7 +182,7 @@ async fn insert_field_query(
         VALUES ($1, $2)"#,
     );
 
-    let row = fetch_one!(transaction, add_field)?;
+    let row = fetch_one(transaction, add_field).await?;
 
     let field_id: i32 = row.get("field_id");
     let full_name = field.persisted_name(ty);
@@ -189,13 +191,13 @@ async fn insert_field_query(
     anyhow::ensure!(split == 3, "Expected version and type information as part of the field name. Got {}. Should have caught sooner! Aborting", full_name);
 
     let add_field_name = add_field_name.bind(full_name).bind(field_id);
-    execute!(transaction, add_field_name)?;
+    execute(transaction, add_field_name).await?;
 
     for label in &field.labels {
         let q = sqlx::query("INSERT INTO field_labels (label_name, field_id) VALUES ($1, $2)")
             .bind(label)
             .bind(field_id);
-        execute!(transaction, q)?;
+        execute(transaction, q).await?;
     }
     Ok(())
 }
@@ -263,7 +265,7 @@ impl MetaService {
         for table in tables {
             let query = table.build_any(query_builder);
             let query = sqlx::query(&query);
-            execute!(transaction, query)?;
+            execute(&mut transaction, query).await?;
         }
 
         if new_install {
@@ -271,7 +273,7 @@ impl MetaService {
                 sqlx::query("INSERT INTO chisel_version (version, version_id) VALUES ($1, $2)")
                     .bind(schema::CURRENT_VERSION)
                     .bind("chiselstrike");
-            execute!(transaction, query)?;
+            execute(&mut transaction, query).await?;
         }
 
         let mut version = Self::get_version(&mut transaction).await?;
@@ -282,7 +284,7 @@ impl MetaService {
             for statement in statements {
                 let query = statement.build_any(query_builder);
                 let query = sqlx::query(&query);
-                execute!(transaction, query)?;
+                execute(&mut transaction, query).await?;
             }
 
             let query = sqlx::query(
@@ -295,7 +297,7 @@ impl MetaService {
             .bind(new_version.as_str())
             .bind("chiselstrike");
 
-            execute!(transaction, query)?;
+            execute(&mut transaction, query).await?;
             version = new_version;
         }
 
@@ -336,7 +338,7 @@ impl MetaService {
         .bind(api_version.to_owned())
         .bind(info.name.clone())
         .bind(info.tag.clone());
-        execute!(transaction, add_api)?;
+        execute(transaction, add_api).await?;
         Ok(())
     }
 
@@ -359,14 +361,14 @@ impl MetaService {
         let mut transaction = self.pool.begin().await?;
 
         let drop = sqlx::query("DELETE FROM endpoints");
-        execute!(transaction, drop)?;
+        execute(&mut transaction, drop).await?;
 
         for (path, code) in routes.iter() {
             let new_route = sqlx::query("INSERT INTO endpoints (path, code) VALUES ($1, $2)")
                 .bind(path.to_str())
                 .bind(code);
 
-            execute!(transaction, new_route)?;
+            execute(&mut transaction, new_route).await?;
         }
         transaction.commit().await?;
         Ok(())
@@ -470,8 +472,8 @@ impl MetaService {
         let del_type = sqlx::query("DELETE FROM types WHERE type_id = $1").bind(type_id);
         let del_type_name = sqlx::query("DELETE FROM type_names WHERE type_id = $1").bind(type_id);
 
-        execute!(transaction, del_type)?;
-        execute!(transaction, del_type_name)?;
+        execute(transaction, del_type).await?;
+        execute(transaction, del_type_name).await?;
 
         Ok(())
     }
@@ -526,7 +528,7 @@ impl MetaService {
         )
         .bind(policy.to_owned())
         .bind(version.to_owned());
-        execute!(transaction, add_policy)?;
+        execute(transaction, add_policy).await?;
         Ok(())
     }
 
@@ -537,7 +539,7 @@ impl MetaService {
     ) -> anyhow::Result<()> {
         let delete_policy =
             sqlx::query("DELETE FROM policies WHERE version = $1").bind(version.to_owned());
-        execute!(transaction, delete_policy)?;
+        execute(transaction, delete_policy).await?;
         Ok(())
     }
 
@@ -568,11 +570,11 @@ impl MetaService {
         let add_type_name = sqlx::query("INSERT INTO type_names (type_id, name) VALUES ($1, $2)");
 
         let add_type = add_type.bind(ty.backing_table().to_owned());
-        let row = fetch_one!(transaction, add_type)?;
+        let row = fetch_one(transaction, add_type).await?;
 
         let id: i32 = row.get("type_id");
         let add_type_name = add_type_name.bind(id).bind(ty.persisted_name());
-        execute!(transaction, add_type_name)?;
+        execute(transaction, add_type_name).await?;
 
         for field in ty.user_fields() {
             insert_field_query(transaction, ty, Some(id), field).await?;
@@ -588,7 +590,7 @@ impl MetaService {
             .bind(userid);
         let mut transaction = self.pool.begin().await?;
 
-        execute!(transaction, insert)?;
+        execute(&mut transaction, insert).await?;
 
         transaction.commit().await?;
         Ok(token)
