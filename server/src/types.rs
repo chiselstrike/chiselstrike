@@ -1,5 +1,6 @@
 // SPDX-FileCopyrightText: © 2021 ChiselStrike <info@chiselstrike.com>
 
+use crate::auth::{AUTH_ACCOUNT_NAME, AUTH_SESSION_NAME, AUTH_TOKEN_NAME, AUTH_USER_NAME};
 use crate::datastore::query::QueryPlan;
 use crate::datastore::QueryEngine;
 use crate::types::AuthOrNot::IsAuth;
@@ -104,7 +105,7 @@ impl Default for TypeSystem {
         ts.builtin_types.insert("number".into(), Type::Float);
         ts.builtin_types.insert("boolean".into(), Type::Boolean);
         ts.add_builtin_object_type(
-            "AuthUser",
+            AUTH_USER_NAME,
             vec![
                 optional_string_field("emailVerified"),
                 optional_string_field("name"),
@@ -115,7 +116,7 @@ impl Default for TypeSystem {
             IsAuth,
         );
         ts.add_builtin_object_type(
-            "AuthSession",
+            AUTH_SESSION_NAME,
             vec![
                 string_field("sessionToken"),
                 string_field("userId"),
@@ -125,7 +126,7 @@ impl Default for TypeSystem {
             IsAuth,
         );
         ts.add_builtin_object_type(
-            "AuthToken",
+            AUTH_TOKEN_NAME,
             vec![
                 string_field("identifier"),
                 string_field("expires"),
@@ -135,7 +136,7 @@ impl Default for TypeSystem {
             IsAuth,
         );
         ts.add_builtin_object_type(
-            "AuthAccount",
+            AUTH_ACCOUNT_NAME,
             vec![
                 string_field("providerAccountId"),
                 string_field("userId"),

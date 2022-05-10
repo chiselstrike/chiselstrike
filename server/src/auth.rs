@@ -13,8 +13,13 @@ use std::cell::RefCell;
 use std::rc::Rc;
 use std::sync::Arc;
 
+pub(crate) const AUTH_USER_NAME: &str = "AuthUser";
+pub(crate) const AUTH_SESSION_NAME: &str = "AuthSession";
+pub(crate) const AUTH_TOKEN_NAME: &str = "AuthToken";
+pub(crate) const AUTH_ACCOUNT_NAME: &str = "AuthAccount";
+
 fn get_auth_user_type(state: &OpState) -> Result<Arc<ObjectType>> {
-    match lookup_builtin_type(state, "AuthUser") {
+    match lookup_builtin_type(state, AUTH_USER_NAME) {
         Ok(Type::Object(t)) => Ok(t),
         _ => anyhow::bail!("Internal error: type AuthUser not found"),
     }
@@ -39,10 +44,10 @@ export default {type_name}.crud()"#
 }
 
 pub(crate) async fn init(api: &mut ApiService) -> Result<()> {
-    add_crud_endpoint_for_type("AuthUser", "users", api).await?;
-    add_crud_endpoint_for_type("AuthSession", "sessions", api).await?;
-    add_crud_endpoint_for_type("AuthToken", "tokens", api).await?;
-    add_crud_endpoint_for_type("AuthAccount", "accounts", api).await
+    add_crud_endpoint_for_type(AUTH_USER_NAME, "users", api).await?;
+    add_crud_endpoint_for_type(AUTH_SESSION_NAME, "sessions", api).await?;
+    add_crud_endpoint_for_type(AUTH_TOKEN_NAME, "tokens", api).await?;
+    add_crud_endpoint_for_type(AUTH_ACCOUNT_NAME, "accounts", api).await
 }
 
 /// Extracts the username of the logged-in user, or None if there was no login.

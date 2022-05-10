@@ -1,5 +1,6 @@
 // SPDX-FileCopyrightText: © 2021 ChiselStrike <info@chiselstrike.com>
 
+use crate::auth::AUTH_USER_NAME;
 use crate::datastore::crud;
 use crate::datastore::expr::{BinaryExpr, BinaryOp, Expr, Literal, PropertyAccess};
 use crate::policies::{FieldPolicies, Policies};
@@ -416,7 +417,7 @@ impl QueryPlan {
                     property: field.name.to_owned(),
                     object: property_chain.clone().into(),
                 };
-                if nested_ty.name() == "AuthUser" {
+                if nested_ty.name() == AUTH_USER_NAME {
                     if field_policies.match_login.contains(&field.name) {
                         let expr = BinaryExpr {
                             left: Box::new(property_access.into()),
