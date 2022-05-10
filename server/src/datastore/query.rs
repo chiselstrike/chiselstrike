@@ -1,10 +1,9 @@
 // SPDX-FileCopyrightText: © 2021 ChiselStrike <info@chiselstrike.com>
 
 use crate::auth::AUTH_USER_NAME;
-use crate::datastore::crud;
 use crate::datastore::expr::{BinaryExpr, BinaryOp, Expr, Literal, PropertyAccess};
 use crate::policies::{FieldPolicies, Policies};
-use crate::types::{Field, ObjectType, Type, TypeSystem, TypeSystemError};
+use crate::types::{Field, ObjectType, Type, TypeSystem};
 
 use anyhow::{anyhow, Context, Result};
 use enum_as_inner::EnumAsInner;
@@ -14,7 +13,6 @@ use std::collections::HashMap;
 use std::collections::HashSet;
 use std::fmt;
 use std::sync::Arc;
-use url::Url;
 
 #[derive(Debug, Clone, EnumAsInner)]
 pub(crate) enum SqlValue {
@@ -257,32 +255,26 @@ impl QueryPlan {
     }
 
     fn from_entity_name(c: &RequestContext, entity_name: &str) -> Result<Self> {
-        let ty = match c.ts.lookup_builtin_type(entity_name) {
-            Ok(Type::Object(ty)) => ty,
-            Err(TypeSystemError::NotABuiltinType(_)) => {
-                c.ts.lookup_custom_type(entity_name, &c.api_version)?
-            }
-            _ => anyhow::bail!("Unexpected type name as select base type: {}", entity_name),
-        };
+        let ty =
+            c.ts.lookup_object_type(entity_name, &c.api_version)
+                .context("unable to construct QueryPlan from unknown entity name")?;
 
         let mut builder = Self::new(ty.clone());
         builder.entity = builder.load_entity(c, &ty);
         Ok(builder)
     }
 
-    /// Constructs query plan from CRUD URL query parameters. It parses the query
-    /// string contain within given `url` and loads provided querying parameters
-    /// into the query plan.
-    pub(crate) fn from_crud_url(
-        context: &RequestContext,
-        entity_name: &str,
-        url: &str,
+    /// Constructs QueryPlan from `entity_name` and application of given
+    /// `operators.
+    pub(crate) fn from_ops(
+        c: &RequestContext,
+        ty: &Arc<ObjectType>,
+        operators: Vec<QueryOp>,
     ) -> Result<Self> {
-        let mut builder = Self::from_entity_name(context, entity_name)?;
-        let operators = crud::query_str_to_ops(builder.base_type(), url)?;
-        builder.extend_operators(operators);
-
-        Ok(builder)
+        let mut query_plan = Self::new(ty.clone());
+        query_plan.entity = query_plan.load_entity(c, ty);
+        query_plan.extend_operators(operators);
+        Ok(query_plan)
     }
 
     /// Constructs a query plan from a query `op_chain` and
@@ -804,31 +796,6 @@ impl Mutation {
         })
     }
 
-    pub(crate) fn delete_from_crud_url(
-        c: &RequestContext,
-        type_name: &str,
-        url: &str,
-    ) -> Result<Self> {
-        let base_entity = match c.ts.lookup_type(type_name, &c.api_version) {
-            Ok(Type::Object(ty)) => ty,
-            Ok(ty) => anyhow::bail!("Cannot delete scalar type {type_name} ({})", ty.name()),
-            Err(_) => anyhow::bail!("Cannot delete from type `{type_name}`, type not found"),
-        };
-        let filter_expr = crud::url_to_filter(&base_entity, url)
-            .context("failed to convert crud URL to filter expression")?;
-        if filter_expr.is_none() {
-            let q =
-                Url::parse(url).with_context(|| format!("failed to parse query string '{url}'"))?;
-            let delete_all = q
-                .query_pairs()
-                .any(|(key, value)| key == "all" && value == "true");
-            if !delete_all {
-                anyhow::bail!("crud delete requires a filter to be set or `all=true` parameter.")
-            }
-        }
-        Self::delete_from_expr(c, type_name, &filter_expr)
-    }
-
     pub(crate) fn build_sql(&self, target: TargetDatabase) -> Result<String> {
         let select_sql = self.filter_query_plan.build_query(&target)?.raw_sql;
         let id_column = ColumnAlias {
@@ -847,7 +814,7 @@ impl Mutation {
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use super::*;
     use futures::StreamExt;
     use serde_json::json;
@@ -857,9 +824,9 @@ mod tests {
     use crate::types;
     use crate::JsonObject;
 
-    const VERSION: &str = "version_1";
+    pub(crate) const VERSION: &str = "version_1";
 
-    fn binary(fields: &[&'static str], op: BinaryOp, literal: Literal) -> Expr {
+    pub(crate) fn binary(fields: &[&'static str], op: BinaryOp, literal: Literal) -> Expr {
         assert!(!fields.len() > 0);
         let mut field_chain = Expr::Parameter { position: 0 };
         for field_name in fields {
@@ -877,7 +844,7 @@ mod tests {
         .into()
     }
 
-    fn make_type_system(entities: &[&Arc<ObjectType>]) -> TypeSystem {
+    pub(crate) fn make_type_system(entities: &[&Arc<ObjectType>]) -> TypeSystem {
         let mut ts = TypeSystem::default();
         for &ty in entities {
             ts.add_type(ty.clone()).unwrap();
@@ -885,12 +852,12 @@ mod tests {
         ts
     }
 
-    fn make_object(name: &str, fields: Vec<Field>) -> Arc<ObjectType> {
+    pub(crate) fn make_object(name: &str, fields: Vec<Field>) -> Arc<ObjectType> {
         let desc = types::NewObject::new(name, VERSION);
         Arc::new(ObjectType::new(desc, fields, types::AuthOrNot::IsNotAuth).unwrap())
     }
 
-    fn make_field(name: &str, ty: Type) -> Field {
+    pub(crate) fn make_field(name: &str, ty: Type) -> Field {
         let desc = types::NewField::new(name, ty, VERSION).unwrap();
         Field::new(desc, vec![], None, false, false)
     }
@@ -910,14 +877,16 @@ mod tests {
         QueryEngine::commit_transaction(tr).await.unwrap();
     }
 
-    async fn setup_clear_db(entities: &[&Arc<ObjectType>]) -> (QueryEngine, NamedTempFile) {
+    pub(crate) async fn setup_clear_db(
+        entities: &[&Arc<ObjectType>],
+    ) -> (QueryEngine, NamedTempFile) {
         let db_file = NamedTempFile::new().unwrap();
         let qe = init_query_engine(&db_file).await;
         init_database(&qe, entities).await;
         (qe, db_file)
     }
 
-    async fn add_row(
+    pub(crate) async fn add_row(
         query_engine: &QueryEngine,
         entity: &Arc<ObjectType>,
         values: &serde_json::Value,
@@ -936,7 +905,7 @@ mod tests {
         }));
     }
 
-    async fn fetch_rows(qe: &QueryEngine, entity: &Arc<ObjectType>) -> Vec<JsonObject> {
+    pub(crate) async fn fetch_rows(qe: &QueryEngine, entity: &Arc<ObjectType>) -> Vec<JsonObject> {
         let query_plan = QueryPlan::from_type(entity);
         fetch_rows_with_plan(qe, query_plan).await
     }
@@ -1088,63 +1057,6 @@ mod tests {
 
             let expr = binary(&["ceo", "name"], BinaryOp::Eq, "John".into());
             let mutation = delete_with_expr("Company", expr);
-            qe.mutate(mutation).await.unwrap();
-
-            assert_eq!(fetch_rows(&qe, &COMPANY_TY).await.len(), 0);
-        }
-    }
-
-    #[tokio::test]
-    async fn test_delete_from_crud_url() {
-        fn url(query_string: &str) -> String {
-            format!("http://wtf?{}", query_string)
-        }
-
-        let delete_from_url = |entity_name: &str, url: &str| {
-            Mutation::delete_from_crud_url(
-                &RequestContext {
-                    policies: &Policies::default(),
-                    ts: &make_type_system(&*ENTITIES),
-                    api_version: VERSION.to_owned(),
-                    user_id: None,
-                    path: "".to_string(),
-                },
-                entity_name,
-                url,
-            )
-            .unwrap()
-        };
-
-        let john = json!({"name": "John", "age": json!(20f32)});
-        let alan = json!({"name": "Alan", "age": json!(30f32)});
-        {
-            let (qe, _db_file) = setup_clear_db(&*ENTITIES).await;
-            add_row(&qe, &PERSON_TY, &john).await;
-
-            let mutation = delete_from_url("Person", &url(".name=John"));
-            qe.mutate(mutation).await.unwrap();
-
-            assert_eq!(fetch_rows(&qe, &PERSON_TY).await.len(), 0);
-        }
-        {
-            let (qe, _db_file) = setup_clear_db(&*ENTITIES).await;
-            add_row(&qe, &PERSON_TY, &john).await;
-            add_row(&qe, &PERSON_TY, &alan).await;
-
-            let mutation = delete_from_url("Person", &url(".age=30"));
-            qe.mutate(mutation).await.unwrap();
-
-            let rows = fetch_rows(&qe, &PERSON_TY).await;
-            assert_eq!(rows.len(), 1);
-            assert_eq!(rows[0]["name"], "John");
-        }
-
-        let chiselstrike = json!({"name": "ChiselStrike", "ceo": john});
-        {
-            let (qe, _db_file) = setup_clear_db(&*ENTITIES).await;
-            add_row(&qe, &COMPANY_TY, &chiselstrike).await;
-
-            let mutation = delete_from_url("Company", &url(".ceo.name=John"));
             qe.mutate(mutation).await.unwrap();
 
             assert_eq!(fetch_rows(&qe, &COMPANY_TY).await.len(), 0);
