@@ -373,6 +373,27 @@ impl TypeSystem {
         }
     }
 
+    /// Tries to lookup a type of name `type_name` of version `api_version` that
+    /// is an object. That means it's either a built-in object type like
+    /// `AuthUser` or a user-defined entity object.
+    ///
+    /// # Errors
+    ///
+    /// If the looked up type does not exists, the function returns a `NoSuchType`.
+    pub(crate) fn lookup_object_type(
+        &self,
+        type_name: &str,
+        api_version: &str,
+    ) -> Result<Arc<ObjectType>, TypeSystemError> {
+        match self.lookup_builtin_type(type_name) {
+            Ok(Type::Object(ty)) => Ok(ty),
+            Err(TypeSystemError::NotABuiltinType(_)) => {
+                self.lookup_custom_type(type_name, api_version)
+            }
+            _ => Err(TypeSystemError::NoSuchType(type_name.to_owned())),
+        }
+    }
+
     pub(crate) async fn populate_types<T: AsRef<str>, F: AsRef<str>>(
         &self,
         engine: Arc<QueryEngine>,

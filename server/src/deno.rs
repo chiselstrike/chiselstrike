@@ -3,6 +3,7 @@
 use crate::api::ApiService;
 use crate::api::{response_template, Body, RequestPath};
 use crate::auth::get_username_from_id;
+use crate::datastore::crud;
 use crate::datastore::engine::extract_transaction;
 use crate::datastore::engine::IdTree;
 use crate::datastore::engine::TransactionStatic;
@@ -621,7 +622,7 @@ async fn op_chisel_crud_delete(
 ) -> Result<()> {
     let mutation = {
         let state = state.borrow_mut();
-        Mutation::delete_from_crud_url(
+        crud::delete_from_url(
             &RequestContext {
                 policies: current_policies(&state),
                 ts: current_type_system(&state),
@@ -682,7 +683,7 @@ async fn op_chisel_crud_query(
     let stream = {
         // Contextualize stream creation to prevent state RC borrow living across await
         let op_state = &state.borrow();
-        let query_plan = QueryPlan::from_crud_url(
+        let query_plan = crud::query_plan_from_url(
             &RequestContext {
                 policies: current_policies(op_state),
                 ts: current_type_system(op_state),

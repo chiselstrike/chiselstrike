@@ -1,5 +1,5 @@
 use crate::datastore::expr::{BinaryExpr, BinaryOp, Expr, Literal, PropertyAccess};
-use crate::datastore::query::{QueryOp, SortKey};
+use crate::datastore::query::{Mutation, QueryOp, QueryPlan, RequestContext, SortKey};
 use crate::types::{ObjectType, Type};
 
 use anyhow::{Context, Result};
@@ -7,7 +7,22 @@ use url::Url;
 
 use std::sync::Arc;
 
-pub(crate) fn query_str_to_ops(base_type: &Arc<ObjectType>, url: &str) -> Result<Vec<QueryOp>> {
+/// Constructs QueryPlan from given CRUD url.
+pub(crate) fn query_plan_from_url(
+    c: &RequestContext,
+    entity_name: &str,
+    url: &str,
+) -> Result<QueryPlan> {
+    let base_type =
+        c.ts.lookup_object_type(entity_name, &c.api_version)
+            .context("unable to construct QueryPlan from unknown entity name")?;
+
+    let operators = query_str_to_ops(&base_type, url)?;
+    let query_plan = QueryPlan::from_ops(c, &base_type, operators)?;
+    Ok(query_plan)
+}
+
+fn query_str_to_ops(base_type: &Arc<ObjectType>, url: &str) -> Result<Vec<QueryOp>> {
     let q = Url::parse(url).with_context(|| format!("failed to parse query string '{}'", url))?;
 
     let mut limit: Option<QueryOp> = None;
@@ -37,7 +52,28 @@ pub(crate) fn query_str_to_ops(base_type: &Arc<ObjectType>, url: &str) -> Result
     Ok(ops)
 }
 
-pub(crate) fn url_to_filter(base_type: &Arc<ObjectType>, url: &str) -> Result<Option<Expr>> {
+/// Constructs Delete Mutation from CRUD url.
+pub(crate) fn delete_from_url(c: &RequestContext, type_name: &str, url: &str) -> Result<Mutation> {
+    let base_entity = match c.ts.lookup_type(type_name, &c.api_version) {
+        Ok(Type::Object(ty)) => ty,
+        Ok(ty) => anyhow::bail!("Cannot delete scalar type {type_name} ({})", ty.name()),
+        Err(_) => anyhow::bail!("Cannot delete from type `{type_name}`, type not found"),
+    };
+    let filter_expr = url_to_filter(&base_entity, url)
+        .context("failed to convert crud URL to filter expression")?;
+    if filter_expr.is_none() {
+        let q = Url::parse(url).with_context(|| format!("failed to parse query string '{url}'"))?;
+        let delete_all = q
+            .query_pairs()
+            .any(|(key, value)| key == "all" && value == "true");
+        if !delete_all {
+            anyhow::bail!("crud delete requires a filter to be set or `all=true` parameter.")
+        }
+    }
+    Mutation::delete_from_expr(c, type_name, &filter_expr)
+}
+
+fn url_to_filter(base_type: &Arc<ObjectType>, url: &str) -> Result<Option<Expr>> {
     let mut filter = None;
     let q = Url::parse(url).with_context(|| format!("failed to parse query string '{}'", url))?;
     for (param_key, value) in q.query_pairs().into_owned() {
@@ -191,9 +227,15 @@ fn convert_operator(op_str: Option<&str>) -> Result<BinaryOp> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::types::{AuthOrNot::IsNotAuth, Field, FieldDescriptor, ObjectDescriptor};
+    use crate::datastore::query::tests::{
+        add_row, binary, fetch_rows, make_field, make_object, make_type_system, setup_clear_db,
+        VERSION,
+    };
+    use crate::policies::Policies;
+    use crate::types::{FieldDescriptor, ObjectDescriptor, TypeSystem};
 
     use itertools::Itertools;
+    use serde_json::json;
 
     pub(crate) struct FakeField {
         name: &'static str,
@@ -234,41 +276,32 @@ mod tests {
         }
     }
 
-    fn make_field(name: &'static str, type_: Type) -> Field {
-        let d = FakeField { name, ty: type_ };
-        Field::new(d, vec![], None, false, false)
-    }
-
-    fn make_obj(name: &'static str, fields: Vec<Field>) -> Arc<ObjectType> {
-        let d = FakeObject { name };
-        Arc::new(ObjectType::new(d, fields, IsNotAuth).unwrap())
-    }
-
     fn url(query_string: &str) -> String {
         format!("http://xxx?{}", query_string)
     }
 
-    fn binary(fields: &[&'static str], op: BinaryOp, literal: Literal) -> Expr {
-        assert!(!fields.len() > 0);
-        let mut field_chain = Expr::Parameter { position: 0 };
-        for field_name in fields {
-            field_chain = PropertyAccess {
-                property: field_name.to_string(),
-                object: field_chain.into(),
-            }
-            .into();
-        }
-        BinaryExpr {
-            left: Box::new(field_chain),
-            op,
-            right: Box::new(literal.into()),
-        }
-        .into()
+    lazy_static! {
+        static ref PERSON_TY: Arc<ObjectType> = make_object(
+            "Person",
+            vec![
+                make_field("name", Type::String),
+                make_field("age", Type::Float),
+            ],
+        );
+        static ref COMPANY_TY: Arc<ObjectType> = make_object(
+            "Company",
+            vec![
+                make_field("name", Type::String),
+                make_field("ceo", Type::Object(PERSON_TY.clone())),
+            ],
+        );
+        static ref ENTITIES: [&'static Arc<ObjectType>; 2] = [&*PERSON_TY, &*COMPANY_TY];
+        static ref TS: TypeSystem = make_type_system(&*ENTITIES);
     }
 
     #[test]
     fn test_query_str_to_ops() {
-        let base_type = make_obj(
+        let base_type = make_object(
             "Person",
             vec![
                 make_field("name", Type::String),
@@ -390,14 +423,14 @@ mod tests {
 
     #[test]
     fn test_parse_filter() {
-        let person_type = make_obj(
+        let person_type = make_object(
             "Person",
             vec![
                 make_field("name", Type::String),
                 make_field("age", Type::Float),
             ],
         );
-        let base_type = make_obj(
+        let base_type = make_object(
             "Company",
             vec![
                 make_field("name", Type::String),
@@ -457,7 +490,7 @@ mod tests {
 
     #[test]
     fn test_query_str_to_ops_errors() {
-        let base_type = make_obj(
+        let base_type = make_object(
             "Person",
             vec![
                 make_field("name", Type::String),
@@ -484,5 +517,62 @@ mod tests {
         assert!(query_str_to_ops(&base_type, &url(".age~neq~lt=4")).is_err());
         assert!(query_str_to_ops(&base_type, &url(".age.nothing=4")).is_err());
         assert!(query_str_to_ops(&base_type, &url(".=123")).is_err());
+    }
+
+    #[tokio::test]
+    async fn test_delete_from_crud_url() {
+        fn url(query_string: &str) -> String {
+            format!("http://wtf?{}", query_string)
+        }
+
+        let delete_from_url = |entity_name: &str, url: &str| {
+            delete_from_url(
+                &RequestContext {
+                    policies: &Policies::default(),
+                    ts: &make_type_system(&*ENTITIES),
+                    api_version: VERSION.to_owned(),
+                    user_id: None,
+                    path: "".to_string(),
+                },
+                entity_name,
+                url,
+            )
+            .unwrap()
+        };
+
+        let john = json!({"name": "John", "age": json!(20f32)});
+        let alan = json!({"name": "Alan", "age": json!(30f32)});
+        {
+            let (qe, _db_file) = setup_clear_db(&*ENTITIES).await;
+            add_row(&qe, &PERSON_TY, &john).await;
+
+            let mutation = delete_from_url("Person", &url(".name=John"));
+            qe.mutate(mutation).await.unwrap();
+
+            assert_eq!(fetch_rows(&qe, &PERSON_TY).await.len(), 0);
+        }
+        {
+            let (qe, _db_file) = setup_clear_db(&*ENTITIES).await;
+            add_row(&qe, &PERSON_TY, &john).await;
+            add_row(&qe, &PERSON_TY, &alan).await;
+
+            let mutation = delete_from_url("Person", &url(".age=30"));
+            qe.mutate(mutation).await.unwrap();
+
+            let rows = fetch_rows(&qe, &PERSON_TY).await;
+            assert_eq!(rows.len(), 1);
+            assert_eq!(rows[0]["name"], "John");
+        }
+
+        let chiselstrike = json!({"name": "ChiselStrike", "ceo": john});
+        {
+            let (qe, _db_file) = setup_clear_db(&*ENTITIES).await;
+            add_row(&qe, &COMPANY_TY, &chiselstrike).await;
+
+            let mutation = delete_from_url("Company", &url(".ceo.name=John"));
+            qe.mutate(mutation).await.unwrap();
+
+            assert_eq!(fetch_rows(&qe, &COMPANY_TY).await.len(), 0);
+        }
     }
 }
