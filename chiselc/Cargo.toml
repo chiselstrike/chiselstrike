@@ -1,0 +1,15 @@
+[package]
+name = "chiselc"
+version = "0.10.0-dev.0"
+authors = ["ChiselStrike"]
+edition = "2021"
+
+[dependencies]
+anyhow = "1.0.57"
+structopt = "0.3.26"
+swc_atoms = "0.2.11"
+swc_common = "0.17.4"
+swc_ecmascript = { version = "0.143.0", features = ["codegen", "parser", "visit", "transforms", "typescript"] }
+
+[dev-dependencies]
+lit = "1.0.4"
