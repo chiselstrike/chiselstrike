@@ -1,13 +1,31 @@
 use crate::datastore::expr::{BinaryExpr, BinaryOp, Expr, Literal, PropertyAccess};
-use crate::datastore::query::{QueryOp, SortKey};
-use crate::types::{ObjectType, Type};
+use crate::datastore::query::{Mutation, QueryOp, QueryPlan, RequestContext, SortKey};
+use crate::types::{ObjectType, Type, TypeSystemError};
 
 use anyhow::{Context, Result};
 use url::Url;
 
 use std::sync::Arc;
 
-pub(crate) fn query_str_to_ops(base_type: &Arc<ObjectType>, url: &str) -> Result<Vec<QueryOp>> {
+pub(crate) fn query_plan_from_url(
+    c: &RequestContext,
+    entity_name: &str,
+    url: &str,
+) -> Result<QueryPlan> {
+    let base_type = match c.ts.lookup_builtin_type(entity_name) {
+        Ok(Type::Object(ty)) => ty,
+        Err(TypeSystemError::NotABuiltinType(_)) => {
+            c.ts.lookup_custom_type(entity_name, &c.api_version)?
+        }
+        _ => anyhow::bail!("Unexpected type name as query base type: {}", entity_name),
+    };
+
+    let operators = query_str_to_ops(&base_type, url)?;
+    let query_plan = QueryPlan::from_ops(c, entity_name, operators)?;
+    Ok(query_plan)
+}
+
+fn query_str_to_ops(base_type: &Arc<ObjectType>, url: &str) -> Result<Vec<QueryOp>> {
     let q = Url::parse(url).with_context(|| format!("failed to parse query string '{}'", url))?;
 
     let mut limit: Option<QueryOp> = None;
@@ -37,7 +55,27 @@ pub(crate) fn query_str_to_ops(base_type: &Arc<ObjectType>, url: &str) -> Result
     Ok(ops)
 }
 
-pub(crate) fn url_to_filter(base_type: &Arc<ObjectType>, url: &str) -> Result<Option<Expr>> {
+pub(crate) fn delete_from_url(c: &RequestContext, type_name: &str, url: &str) -> Result<Mutation> {
+    let base_entity = match c.ts.lookup_type(type_name, &c.api_version) {
+        Ok(Type::Object(ty)) => ty,
+        Ok(ty) => anyhow::bail!("Cannot delete scalar type {type_name} ({})", ty.name()),
+        Err(_) => anyhow::bail!("Cannot delete from type `{type_name}`, type not found"),
+    };
+    let filter_expr = url_to_filter(&base_entity, url)
+        .context("failed to convert crud URL to filter expression")?;
+    if filter_expr.is_none() {
+        let q = Url::parse(url).with_context(|| format!("failed to parse query string '{url}'"))?;
+        let delete_all = q
+            .query_pairs()
+            .any(|(key, value)| key == "all" && value == "true");
+        if !delete_all {
+            anyhow::bail!("crud delete requires a filter to be set or `all=true` parameter.")
+        }
+    }
+    Mutation::delete_from_expr(c, type_name, &filter_expr)
+}
+
+fn url_to_filter(base_type: &Arc<ObjectType>, url: &str) -> Result<Option<Expr>> {
     let mut filter = None;
     let q = Url::parse(url).with_context(|| format!("failed to parse query string '{}'", url))?;
     for (param_key, value) in q.query_pairs().into_owned() {
