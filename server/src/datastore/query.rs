@@ -1,12 +1,11 @@
 // SPDX-FileCopyrightText: © 2021 ChiselStrike <info@chiselstrike.com>
 
 use crate::auth::AUTH_USER_NAME;
-use crate::datastore::crud;
 use crate::datastore::expr::{BinaryExpr, BinaryOp, Expr, Literal, PropertyAccess};
 use crate::policies::{FieldPolicies, Policies};
 use crate::types::{Field, ObjectType, Type, TypeSystem, TypeSystemError};
 
-use anyhow::{anyhow, Context, Result};
+use anyhow::{anyhow, Result};
 use enum_as_inner::EnumAsInner;
 use serde_derive::Deserialize;
 use serde_json::value::Value;
@@ -14,7 +13,6 @@ use std::collections::HashMap;
 use std::collections::HashSet;
 use std::fmt;
 use std::sync::Arc;
-use url::Url;
 
 #[derive(Debug, Clone, EnumAsInner)]
 pub(crate) enum SqlValue {
@@ -270,18 +268,13 @@ impl QueryPlan {
         Ok(builder)
     }
 
-    /// Constructs query plan from CRUD URL query parameters. It parses the query
-    /// string contain within given `url` and loads provided querying parameters
-    /// into the query plan.
-    pub(crate) fn from_crud_url(
+    pub(crate) fn from_ops(
         context: &RequestContext,
         entity_name: &str,
-        url: &str,
+        operators: Vec<QueryOp>,
     ) -> Result<Self> {
         let mut builder = Self::from_entity_name(context, entity_name)?;
-        let operators = crud::query_str_to_ops(builder.base_type(), url)?;
         builder.extend_operators(operators);
-
         Ok(builder)
     }
 
@@ -804,31 +797,6 @@ impl Mutation {
         })
     }
 
-    pub(crate) fn delete_from_crud_url(
-        c: &RequestContext,
-        type_name: &str,
-        url: &str,
-    ) -> Result<Self> {
-        let base_entity = match c.ts.lookup_type(type_name, &c.api_version) {
-            Ok(Type::Object(ty)) => ty,
-            Ok(ty) => anyhow::bail!("Cannot delete scalar type {type_name} ({})", ty.name()),
-            Err(_) => anyhow::bail!("Cannot delete from type `{type_name}`, type not found"),
-        };
-        let filter_expr = crud::url_to_filter(&base_entity, url)
-            .context("failed to convert crud URL to filter expression")?;
-        if filter_expr.is_none() {
-            let q =
-                Url::parse(url).with_context(|| format!("failed to parse query string '{url}'"))?;
-            let delete_all = q
-                .query_pairs()
-                .any(|(key, value)| key == "all" && value == "true");
-            if !delete_all {
-                anyhow::bail!("crud delete requires a filter to be set or `all=true` parameter.")
-            }
-        }
-        Self::delete_from_expr(c, type_name, &filter_expr)
-    }
-
     pub(crate) fn build_sql(&self, target: TargetDatabase) -> Result<String> {
         let select_sql = self.filter_query_plan.build_query(&target)?.raw_sql;
         let id_column = ColumnAlias {
@@ -853,6 +821,7 @@ mod tests {
     use serde_json::json;
     use tempfile::NamedTempFile;
 
+    use crate::datastore::crud;
     use crate::datastore::{DbConnection, QueryEngine};
     use crate::types;
     use crate::JsonObject;
@@ -1101,7 +1070,7 @@ mod tests {
         }
 
         let delete_from_url = |entity_name: &str, url: &str| {
-            Mutation::delete_from_crud_url(
+            crud::delete_from_url(
                 &RequestContext {
                     policies: &Policies::default(),
                     ts: &make_type_system(&*ENTITIES),
