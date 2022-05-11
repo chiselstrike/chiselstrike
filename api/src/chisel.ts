@@ -1028,7 +1028,7 @@ async function fetchEntitiesCrud<T extends ChiselEntity>(
         },
         requestContext,
     );
-    return results;
+    return results.results;
 }
 
 async function deleteEntitiesCrud<T extends ChiselEntity>(
