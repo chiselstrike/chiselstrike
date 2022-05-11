@@ -687,7 +687,7 @@ async fn op_chisel_crud_query(
     state: Rc<RefCell<OpState>>,
     params: crud::QueryParams,
     context: ChiselRequestContext,
-) -> Result<Vec<JsonObject>> {
+) -> Result<JsonObject> {
     // Contextualize stream creation to prevent state RC borrow living across await
     {
         let op_state = &state.borrow();

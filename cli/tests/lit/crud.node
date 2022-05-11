@@ -198,9 +198,9 @@ $CURL -X PUT -d '{"age":98422}' $CHISELD_HOST/dev/persons/cef5d492-d7e3-4c45-9a5
 $CURL -X PUT -d '{"age":2938}' $CHISELD_HOST/dev/persons/cef5d492-d7e3-4c45-9a55-5929b9ab8292 # Repeated PUT of the same id.
 # CHECK: HTTP/1.1 200 OK
 # CHECK: "age": 2938
-echo there is just `$CURL --no-include $CHISELD_HOST/dev/persons | jq 'length'` entry
+echo there is just `$CURL --no-include $CHISELD_HOST/dev/persons | jq '.results | length'` entry
 # CHECK: there is just 1 entry
-$CURL --no-include $CHISELD_HOST/dev/persons | jq '.[] | .age'
+$CURL --no-include $CHISELD_HOST/dev/persons | jq '.results | .[] | .age'
 # CHECK: 2938
 
 $CURL -X PUT -d '{"age":98422}' $CHISELD_HOST/dev/persons/ # PUT without ID.

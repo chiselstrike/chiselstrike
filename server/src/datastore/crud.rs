@@ -7,6 +7,7 @@ use anyhow::{Context, Result};
 use deno_core::futures;
 use futures::{Future, StreamExt};
 use serde_derive::{Deserialize, Serialize};
+use serde_json::json;
 use std::sync::Arc;
 use url::Url;
 
@@ -23,7 +24,7 @@ pub(crate) fn run_query(
     params: QueryParams,
     query_engine: Arc<QueryEngine>,
     tr: TransactionStatic,
-) -> impl Future<Output = Result<Vec<JsonObject>>> {
+) -> impl Future<Output = Result<JsonObject>> {
     let fut = run_query_impl(context, params, query_engine, tr);
     async move { fut?.await }
 }
@@ -33,7 +34,7 @@ fn run_query_impl(
     params: QueryParams,
     query_engine: Arc<QueryEngine>,
     tr: TransactionStatic,
-) -> Result<impl Future<Output = Result<Vec<JsonObject>>>> {
+) -> Result<impl Future<Output = Result<JsonObject>>> {
     let base_type = &context
         .ts
         .lookup_object_type(&params.type_name, &context.api_version)
@@ -45,13 +46,54 @@ fn run_query_impl(
     let stream = query_engine.query(tr.clone(), query_plan)?;
 
     Ok(async move {
-        stream
+        let results = stream
             .collect::<Vec<_>>()
             .await
             .into_iter()
             .collect::<Result<Vec<_>>>()
-            .context("failed to collect result rows from the database")
+            .context("failed to collect result rows from the database")?;
+
+        let mut ret = JsonObject::new();
+        if !results.is_empty() && query.page_size == results.len() as u64 {
+            let last_element = results.last().unwrap();
+            let next_page = next_page_url(&params.url, &query, last_element)?;
+            ret.insert("next_page".into(), json!(next_page));
+        }
+
+        ret.insert("results".into(), json!(results));
+        Ok(ret)
     })
+}
+
+fn next_page_url(url: &Url, query: &Query, last_element: &JsonObject) -> Result<Url> {
+    assert!(!query.sort.keys.is_empty());
+
+    let mut axes = vec![];
+    for key in query.sort.keys.iter().cloned() {
+        let value = last_element
+            .get(&key.field_name)
+            .cloned()
+            .with_context(|| {
+                format!("failed to create cursor axis for field `{}", key.field_name)
+            })?;
+        axes.push(CursorAxis { key, value });
+    }
+    let cursor = serde_json::to_vec(&axes).context("failed to serialize cursor to json")?;
+    let cursor = base64::encode(cursor);
+
+    let mut next_url = url.clone();
+    next_url.set_query(Some(""));
+    for (key, value) in url.query_pairs() {
+        if key == "page_after" || key == "sort" {
+            continue;
+        }
+        next_url.query_pairs_mut().append_pair(&key, &value);
+    }
+    next_url
+        .query_pairs_mut()
+        .append_pair("page_after", &cursor);
+
+    Ok(next_url)
 }
 
 /// Constructs Delete Mutation from CRUD url.
@@ -77,8 +119,9 @@ pub(crate) fn delete_from_url(c: &RequestContext, type_name: &str, url: &str) ->
 
 /// Query is used in the process of parsing crud url query to rust representation.
 struct Query {
-    limit: Option<u64>,
+    page_size: u64,
     offset: Option<u64>,
+    cursor: Option<Cursor>,
     sort: SortBy,
     /// Filters restricting the result set. They will be joined in AND-fashion.
     filters: Vec<Expr>,
@@ -87,8 +130,9 @@ struct Query {
 impl Query {
     fn new() -> Self {
         Query {
-            limit: None,
+            page_size: 1000,
             offset: None,
+            cursor: None,
             sort: SortBy {
                 keys: vec![SortKey {
                     field_name: "id".into(),
@@ -105,17 +149,23 @@ impl Query {
         for (param_key, value) in url.query_pairs().into_owned() {
             match param_key.as_str() {
                 "sort" => q.sort = parse_sort(base_type, &value)?,
-                "limit" => {
-                    let l = value.parse().with_context(|| {
+                "limit" | "page_size" => {
+                    q.page_size = value.parse().with_context(|| {
                         format!("failed to parse {param_key}. Expected u64, got '{}'", value)
                     })?;
-                    q.limit = Some(l);
                 }
                 "offset" => {
                     let o = value.parse().with_context(|| {
                         format!("failed to parse offset. Expected u64, got '{}'", value)
                     })?;
                     q.offset = Some(o);
+                }
+                "page_after" => {
+                    anyhow::ensure!(
+                        q.cursor.is_none(),
+                        "only one occurrence of page_after is allowed."
+                    );
+                    q.cursor = parse_cursor(base_type, &value)?.into();
                 }
                 _ => {
                     if let Some(param_key) = param_key.strip_prefix('.') {
@@ -127,6 +177,12 @@ impl Query {
                     }
                 }
             }
+        }
+        // We need to ensure sorting by ID for cursors to work.
+        ensure_sort_by_id(&mut q.sort);
+        if let Some(cursor) = &q.cursor {
+            q.sort = cursor.sort.clone();
+            q.filters.push(cursor.filter.clone());
         }
         Ok(q)
     }
@@ -141,11 +197,101 @@ impl Query {
         if let Some(offset) = self.offset {
             ops.push(QueryOp::Skip { count: offset });
         }
-        if let Some(limit) = self.limit {
-            ops.push(QueryOp::Take { count: limit });
-        }
+        ops.push(QueryOp::Take {
+            count: self.page_size,
+        });
         Ok(ops)
     }
+}
+
+fn ensure_sort_by_id(sort: &mut SortBy) {
+    if !sort.keys.iter().any(|k| k.field_name == "id") {
+        sort.keys.push(SortKey {
+            field_name: "id".into(),
+            ascending: true,
+        });
+    }
+}
+
+#[derive(Debug, Clone)]
+struct Cursor {
+    filter: Expr,
+    sort: SortBy,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+struct CursorAxis {
+    key: SortKey,
+    value: serde_json::Value,
+}
+
+/// Tries to parse cursor from url parameter `value`. The core of this function is
+/// creating the sort Axes (each axis represents one dimension in lexicographical sort)
+/// and then using them to create a filter that filters for entries that are after
+/// the last element in the given sort..
+fn parse_cursor(base_type: &Arc<ObjectType>, value: &str) -> Result<Cursor> {
+    let cursor =
+        base64::decode(value).context("Failed to decode cursor from base64 encoded string")?;
+    let axes: Vec<CursorAxis> = serde_json::from_slice(&cursor)
+        .context("failed to deserialize cursor to individual axes")?;
+    anyhow::ensure!(!axes.is_empty(), "cursor mustn't be empty");
+
+    let mut cmp_pairs: Vec<(Expr, BinaryOp, Expr)> = vec![];
+    for axis in &axes {
+        let op = if axis.key.ascending {
+            BinaryOp::Gt
+        } else {
+            BinaryOp::Lt
+        };
+        let (property_chain, field_type) = make_property_chain(base_type, &[&axis.key.field_name])?;
+        let literal = json_to_literal(&field_type, &axis.value)
+            .context("Failed to convert axis value to literal")?;
+
+        cmp_pairs.push((property_chain, op, literal));
+    }
+    let mut expr = None;
+    for (i, (lhs, op, rhs)) in cmp_pairs.iter().enumerate() {
+        let mut e: Expr = BinaryExpr::new(op.clone(), lhs.clone(), rhs.clone()).into();
+        expr = expr
+            .map_or(e.clone(), |expr| {
+                for (lhs, _, rhs) in &cmp_pairs[0..i] {
+                    let eq = BinaryExpr::eq(lhs.clone(), rhs.clone());
+                    e = BinaryExpr::and(eq, e);
+                }
+                BinaryExpr::or(expr, e)
+            })
+            .into();
+    }
+
+    Ok(Cursor {
+        filter: expr.unwrap(),
+        sort: SortBy {
+            keys: axes.iter().map(|a| a.key.clone()).collect(),
+        },
+    })
+}
+
+fn json_to_literal(field_type: &Type, value: &serde_json::Value) -> Result<Expr> {
+    macro_rules! convert {
+        ($as_type:ident, $ty_name:literal) => {{
+            value
+                .$as_type()
+                .with_context(|| {
+                    format!("failed to convert filter value '{}' to {}", value, $ty_name)
+                })?
+                .to_owned()
+        }};
+    }
+    let literal = match field_type {
+        Type::Object(ty) => anyhow::bail!(
+            "trying to filter by property of type '{}' which is not supported",
+            ty.name()
+        ),
+        Type::String | Type::Id => Literal::String(convert!(as_str, "string")),
+        Type::Float => Literal::F64(convert!(as_f64, "float")),
+        Type::Boolean => Literal::Bool(convert!(as_bool, "bool")),
+    };
+    Ok(Expr::Literal { value: literal })
 }
 
 /// Parses all CRUD query-string filters over `base_type` from provided `url`.
@@ -417,7 +563,7 @@ mod tests {
         }
     }
 
-    async fn run_query(entity_name: &str, url: Url, qe: &QueryEngine) -> Result<Vec<JsonObject>> {
+    async fn run_query(entity_name: &str, url: Url, qe: &QueryEngine) -> Result<JsonObject> {
         let qe = Arc::new(qe.clone());
         let tr = qe.clone().start_transaction_static().await.unwrap();
         super::run_query(
@@ -444,8 +590,11 @@ mod tests {
         collect_names(&r)
     }
 
-    fn collect_names(r: &[JsonObject]) -> Vec<String> {
-        r.iter()
+    fn collect_names(r: &JsonObject) -> Vec<String> {
+        r["results"]
+            .as_array()
+            .unwrap()
+            .iter()
             .map(|x| x["name"].as_str().unwrap().to_string())
             .collect()
     }
@@ -468,6 +617,9 @@ mod tests {
         assert_eq!(r, vec!["Alan", "John", "Steve"]);
 
         let r = run_query_vec("Person", url("limit=2"), qe).await;
+        assert_eq!(r.len(), 2);
+
+        let r = run_query_vec("Person", url("page_size=2"), qe).await;
         assert_eq!(r.len(), 2);
 
         // Test Sorting
@@ -502,7 +654,7 @@ mod tests {
 
         // Test permutations of parameters
         {
-            let raw_ops = vec!["limit=2", "offset=1", "sort=age"];
+            let raw_ops = vec!["page_size=2", "offset=1", "sort=age"];
             for perm in raw_ops.iter().permutations(raw_ops.len()) {
                 let query_string = perm.iter().join("&");
                 let r = run_query_vec("Person", url(&query_string), qe).await;
@@ -513,7 +665,7 @@ mod tests {
                 );
             }
 
-            let raw_ops = vec!["limit=2", "offset=1", "sort=name", ".age~gt=20"];
+            let raw_ops = vec!["page_size=2", "offset=1", "sort=name", ".age~gt=20"];
             for perm in raw_ops.iter().permutations(raw_ops.len()) {
                 let query_string = perm.iter().join("&");
                 let r = run_query_vec("Person", url(&query_string), qe).await;
@@ -523,6 +675,54 @@ mod tests {
                     "unexpected result for query string '{query_string}'",
                 );
             }
+        }
+
+        // Test cursors
+        {
+            let mut page_url = url("page_size=1");
+            let mut all_names = vec![];
+            for i in 0..5 {
+                let r = run_query("Person", page_url.clone(), qe).await.unwrap();
+                let names = collect_names(&r);
+                all_names.extend(names.clone());
+                if i == 4 {
+                    assert!(names.is_empty());
+                    assert!(!r.contains_key("next_page"));
+                } else {
+                    assert_eq!(names.len(), 1);
+                    let next_page = r["next_page"].as_str().unwrap();
+                    page_url = Url::parse(next_page).unwrap();
+                }
+            }
+            all_names.sort();
+            assert_eq!(all_names, vec!["Alan", "Alex", "John", "Steve"]);
+        }
+        {
+            let mut page_url = url("sort=name&page_size=2");
+            let mut all_names = vec![];
+            for i in 0..3 {
+                let r = run_query("Person", page_url.clone(), qe).await.unwrap();
+                let names = collect_names(&r);
+                all_names.extend(names.clone());
+                if i == 2 {
+                    assert!(names.is_empty());
+                    assert!(!r.contains_key("next_page"));
+                } else {
+                    assert_eq!(names.len(), 2);
+                    let next_page = r["next_page"].as_str().unwrap();
+                    page_url = Url::parse(next_page).unwrap();
+                }
+            }
+            assert_eq!(all_names, vec!["Alan", "Alex", "John", "Steve"]);
+        }
+        {
+            let r = run_query("Person", url("sort=name&page_size=5"), qe)
+                .await
+                .unwrap();
+
+            assert!(!r.contains_key("next_page"));
+            let names = collect_names(&r);
+            assert_eq!(names, vec!["Alan", "Alex", "John", "Steve"]);
         }
     }
 

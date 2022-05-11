@@ -145,7 +145,7 @@ $CURL --no-include -d '{
 
 # CHECK: Chiselstrike
 
-$CURL --no-include $CHISELD_HOST/dev/companies | jq '.[] | .name, .ceo.firstName, .ceo.lastName, .accountant, .secretSauce'
+$CURL --no-include $CHISELD_HOST/dev/companies | jq '.results | .[] | .name, .ceo.firstName, .ceo.lastName, .accountant, .secretSauce'
 
 # CHECK: Chiselstrike
 # CHECK: xxxxx
