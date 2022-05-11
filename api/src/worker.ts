@@ -131,6 +131,25 @@ function closeResources() {
     }
 }
 
+async function sendBody(
+    reader: ReadableStreamDefaultReader<Uint8Array> | undefined,
+    id: number,
+) {
+    if (reader) {
+        for (let i = 0;; i += 1) {
+            const v = await reader.read();
+            // FIXME: Is this the correct way to yield in async JS?
+            if (i % 16 == 0) {
+                await new Promise((resolve) => setTimeout(resolve, 0));
+            }
+            if (v.done || currentRequestId === undefined) {
+                break;
+            }
+            sendBodyPart(v.value, id);
+        }
+    }
+}
+
 let currentRequestId: number | undefined;
 async function callHandlerImpl(
     path: string,
@@ -185,19 +204,7 @@ async function callHandlerImpl(
         resHeaders.push(h);
     }
     const reader = res.body?.getReader();
-    if (reader) {
-        for (let i = 0;; i += 1) {
-            const v = await reader.read();
-            // FIXME: Is this the correct way to yield in async JS?
-            if (i % 16 == 0) {
-                await new Promise((resolve) => setTimeout(resolve, 0));
-            }
-            if (v.done || currentRequestId === undefined) {
-                break;
-            }
-            sendBodyPart(v.value, id);
-        }
-    }
+    await sendBody(reader, id);
     const status = res.status;
 
     closeResources();
