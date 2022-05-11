@@ -2,7 +2,7 @@
 
 use crate::chisel::chisel_rpc_client::ChiselRpcClient;
 use crate::chisel::{ChiselApplyRequest, EndPointCreationRequest, PolicyUpdateRequest};
-use crate::project::{read_manifest, read_to_string, Module};
+use crate::project::{read_manifest, read_to_string, Module, Optimize};
 use anyhow::{anyhow, Context, Result};
 use compile::compile_ts_code as swc_compile;
 use std::collections::HashMap;
@@ -97,7 +97,7 @@ pub(crate) async fn apply<S: ToString>(
         .iter()
         .map(|type_req| type_req.name.clone())
         .collect();
-    let chiselc_available = is_chiselc_available();
+    let use_chiselc = is_chiselc_available() && manifest.optimize == Optimize::Yes;
     if manifest.modules == Module::Node {
         let tsc = match type_check {
             TypeChecking::Yes => Some(npx(
@@ -133,7 +133,7 @@ pub(crate) async fn apply<S: ToString>(
             keep_tmp_alive.push(f);
             keep_tmp_alive.push(out);
 
-            if chiselc_available {
+            if use_chiselc {
                 // Spawn `chiselc` and pipe its output to `esbuild`.
                 let chiselc_cmd = chiselc_spawn(&bundler_entry_fname, &entities)?;
                 let cmd = npx(
@@ -230,7 +230,7 @@ pub(crate) async fn apply<S: ToString>(
             };
 
             let code = types_string.clone() + &code;
-            let code = if is_chiselc_available() {
+            let code = if use_chiselc {
                 let output = chiselc_output(code, &entities)?;
                 output_to_string(&output).unwrap()
             } else {
