@@ -20,5 +20,4 @@ $CHISEL apply
 
 $CURL $CHISELD_HOST/dev/stream 2>&1 || true
 
-# FIXME, we are returning 500 because we currently read the full body in the worker
-# CHECK: 500 Internal Server Error
+# CHECK: Empty reply from server

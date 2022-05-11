@@ -31,8 +31,12 @@ const requestContext = Chisel.requestContext;
 const ChiselRequest = Chisel.ChiselRequest;
 const loggedInUser = Chisel.loggedInUser;
 
-function sendBodyPart(value: Uint8Array | undefined, id: number) {
-    postMessage({ msg: "body", value, id });
+function sendBodyPart(
+    value: Uint8Array | undefined,
+    id: number,
+    err?: unknown,
+) {
+    postMessage({ msg: "body", value, err, id });
 }
 
 async function handleMsg(func: () => unknown) {
@@ -138,22 +142,28 @@ async function sendBody(
     id: number,
 ) {
     try {
-        if (reader === undefined) {
-            return;
-        }
-        for (let i = 0;; i += 1) {
-            const v = await reader.read();
-            // FIXME: Is this the correct way to yield in async JS?
-            if (i % 16 == 0) {
-                await new Promise((resolve) => setTimeout(resolve, 0));
+        if (reader !== undefined) {
+            for (let i = 0;; i += 1) {
+                const v = await reader.read();
+                // FIXME: Is this the correct way to yield in async JS?
+                if (i % 16 == 0) {
+                    await new Promise((resolve) => setTimeout(resolve, 0));
+                }
+                if (v.done || currentRequestId === undefined) {
+                    break;
+                }
+                sendBodyPart(v.value, id);
             }
-            if (v.done || currentRequestId === undefined) {
-                break;
-            }
-            sendBodyPart(v.value, id);
         }
-    } finally {
+        closeResources();
+        await Deno.core.opAsync("op_chisel_commit_transaction");
+
         sendBodyPart(undefined, id);
+    } catch (e) {
+        closeResources();
+        Deno.core.opSync("op_chisel_rollback_transaction");
+
+        sendBodyPart(undefined, id, e);
     }
 }
 
@@ -212,11 +222,12 @@ async function callHandlerImpl(
         resHeaders.push(h);
     }
     const reader = res.body?.getReader();
-    await sendBody(reader, id);
-    const status = res.status;
 
-    closeResources();
-    await Deno.core.opAsync("op_chisel_commit_transaction");
+    // Don't wait on sendBody as we want to send the body as a
+    // background job.
+    sendBody(reader, id);
+
+    const status = res.status;
     return { status, headers: resHeaders };
 }
 

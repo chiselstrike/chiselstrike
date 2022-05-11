@@ -24,17 +24,18 @@ endpointWorker.onerror = function (e) {
     throw e;
 };
 
-const bodyParts: Record<number, Uint8Array[]> = {};
+const bodyParts: Record<number, { value?: Uint8Array; err?: Error }[]> = {};
 let bodyDone = false;
 let resolveBody: (() => void) | undefined = undefined;
 endpointWorker.onmessage = function (event) {
     const { msg, id, value, err } = event.data;
     if (msg == "body") {
-        if (value !== undefined) {
+        if (err !== undefined || value !== undefined) {
             if (id in bodyParts) {
-                bodyParts[id].push(value);
+                bodyParts[id].push({ value, err });
             }
-        } else {
+        }
+        if (err !== undefined || value === undefined) {
             bodyDone = true;
             if (resolveBody !== undefined) {
                 resolveBody();
@@ -115,6 +116,12 @@ export function endOfRequest(id: number) {
     delete bodyParts[id];
 }
 
+function clear() {
+    // Clear for the next request
+    bodyDone = false;
+    endMsgProcessing();
+}
+
 export async function callHandler(
     path: string,
     apiVersion: string,
@@ -130,23 +137,35 @@ export async function callHandler(
             apiVersion,
             id,
         }) as { status: number; headers: number };
-
-        if (!bodyDone) {
-            const p = new Promise<void>((resolve) => {
-                resolveBody = resolve;
-            });
-            await p;
-        }
-    } finally {
-        endMsgProcessing();
+    } catch (e) {
+        clear();
+        throw e;
     }
-    // Clear for the next request
-    bodyDone = false;
+
+    let bodyDonePromise: Promise<void>;
+    if (!bodyDone) {
+        bodyDonePromise = new Promise<void>((resolve) => {
+            resolveBody = resolve;
+        });
+        // Don't await for the new promise. We want a background task
+        // to run clear once we have received the full body.
+        bodyDonePromise.then(clear);
+    } else {
+        clear();
+    }
 
     // The read function is called repeatedly until it returns
     // undefined.
-    const read = function () {
-        return bodyParts[id].shift();
+    const read = async function () {
+        // FIXME: waiting for the full body
+        await bodyDonePromise;
+
+        const elem = bodyParts[id].shift();
+        const err = elem?.err;
+        if (err !== undefined) {
+            throw err;
+        }
+        return elem?.value;
     };
     return {
         "status": res.status,

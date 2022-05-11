@@ -37,9 +37,9 @@ cd "$TEMPDIR"
 
 $CHISEL apply
 
-$CURL $CHISELD_HOST/dev/error
+$CURL $CHISELD_HOST/dev/error 2>&1 || true
 
-# CHECK: 500 Internal Server Error
+# CHECK: [[(Empty reply from server)|(transfer closed with outstanding read data remaining)]]
 
 $CURL -o output $CHISELD_HOST/dev/ok
 

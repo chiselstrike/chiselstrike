@@ -49,10 +49,12 @@ cd "$TEMPDIR"
 
 $CHISEL apply
 
-$CURL --data '' $CHISELD_HOST/dev/stream
+$CURL --data '' $CHISELD_HOST/dev/stream 2>&1 || true
 
-# CHECK: HTTP/1.1 500 Internal Server Error
-# CHECK: Error: Error in stream
+# If the first call to pull completes quickly enough hyper will send
+# an empty response. Otherwise we get the headers while hyper waits
+# for pull. Handle both error messages:
+# CHECK: [[(Empty reply from server)|(transfer closed with outstanding read data remaining)]]
 
 $CURL $CHISELD_HOST/dev/add
 
