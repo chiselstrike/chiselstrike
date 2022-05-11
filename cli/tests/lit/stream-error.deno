@@ -10,7 +10,7 @@ export class Data extends ChiselEntity {
 }
 EOF
 
-cat << EOF > "$TEMPDIR/endpoints/stream.js"
+cat << EOF > "$TEMPDIR/endpoints/stream.ts"
 import { Data } from "../models/types.ts";
 
 export default async function chisel(req: Request) {
@@ -33,6 +33,18 @@ export default async function chisel(req: Request) {
 }
 EOF
 
+cat << EOF > "$TEMPDIR/endpoints/add.ts"
+import { Data } from "../models/types.ts";
+
+export default async function chisel(req: Request) {
+    let total = 0;
+    for await (const v of Data.cursor()) {
+        total += v.num;
+    }
+    return new Response("Total is: " + total + ".\n");
+}
+EOF
+
 cd "$TEMPDIR"
 
 $CHISEL apply
@@ -41,3 +53,7 @@ $CURL --data '' $CHISELD_HOST/dev/stream
 
 # CHECK: HTTP/1.1 500 Internal Server Error
 # CHECK: Error: Error in stream
+
+$CURL $CHISELD_HOST/dev/add
+
+# CHECK: Total is: 0.
