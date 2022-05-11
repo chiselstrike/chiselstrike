@@ -25,11 +25,21 @@ endpointWorker.onerror = function (e) {
 };
 
 const bodyParts: Record<number, Uint8Array[]> = {};
+let bodyDone = false;
+let resolveBody: (() => void) | undefined = undefined;
 endpointWorker.onmessage = function (event) {
     const { msg, id, value, err } = event.data;
     if (msg == "body") {
-        if (id in bodyParts) {
-            bodyParts[id].push(value);
+        if (value !== undefined) {
+            if (id in bodyParts) {
+                bodyParts[id].push(value);
+            }
+        } else {
+            bodyDone = true;
+            if (resolveBody !== undefined) {
+                resolveBody();
+                resolveBody = undefined;
+            }
         }
     } else {
         const resolver = resolvers[0];
@@ -112,12 +122,26 @@ export async function callHandler(
 ) {
     bodyParts[id] = [];
 
-    const res = await toWorker({
-        cmd: "callHandler",
-        path,
-        apiVersion,
-        id,
-    }) as { status: number; headers: number };
+    let res;
+    try {
+        res = await sendMsg({
+            cmd: "callHandler",
+            path,
+            apiVersion,
+            id,
+        }) as { status: number; headers: number };
+
+        if (!bodyDone) {
+            const p = new Promise<void>((resolve) => {
+                resolveBody = resolve;
+            });
+            await p;
+        }
+    } finally {
+        endMsgProcessing();
+    }
+    // Clear for the next request
+    bodyDone = false;
 
     // The read function is called repeatedly until it returns
     // undefined.

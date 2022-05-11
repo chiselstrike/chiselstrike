@@ -31,7 +31,7 @@ const requestContext = Chisel.requestContext;
 const ChiselRequest = Chisel.ChiselRequest;
 const loggedInUser = Chisel.loggedInUser;
 
-function sendBodyPart(value: Uint8Array, id: number) {
+function sendBodyPart(value: Uint8Array | undefined, id: number) {
     postMessage({ msg: "body", value, id });
 }
 
@@ -137,19 +137,23 @@ async function sendBody(
     reader: ReadableStreamDefaultReader<Uint8Array> | undefined,
     id: number,
 ) {
-    if (reader === undefined) {
-        return;
-    }
-    for (let i = 0;; i += 1) {
-        const v = await reader.read();
-        // FIXME: Is this the correct way to yield in async JS?
-        if (i % 16 == 0) {
-            await new Promise((resolve) => setTimeout(resolve, 0));
+    try {
+        if (reader === undefined) {
+            return;
         }
-        if (v.done || currentRequestId === undefined) {
-            break;
+        for (let i = 0;; i += 1) {
+            const v = await reader.read();
+            // FIXME: Is this the correct way to yield in async JS?
+            if (i % 16 == 0) {
+                await new Promise((resolve) => setTimeout(resolve, 0));
+            }
+            if (v.done || currentRequestId === undefined) {
+                break;
+            }
+            sendBodyPart(v.value, id);
         }
-        sendBodyPart(v.value, id);
+    } finally {
+        sendBodyPart(undefined, id);
     }
 }
 
@@ -166,6 +170,7 @@ async function callHandlerImpl(
     const start = await Deno.core.opAsync("op_chisel_start_request");
     if (start.Special) {
         sendBodyPart(start.Special.body, id);
+        sendBodyPart(undefined, id);
         return start.Special;
     }
     const { userid, url, method, headers, body_rid } = start.Js;
