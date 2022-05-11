@@ -121,7 +121,7 @@ $CURL -d '{"first_name":"Eve","last_name":"Elgin","age":50,"human":true,"height"
 # CHECK: last_name: "Elgin"
 # CHECK: status: 200
 
-$CURL $CHISELD_HOST/dev/persons # GET all
+$CURL $CHISELD_HOST/dev/persons?sort=last_name # GET all
 # CHECK: HTTP/1.1 200 OK
 # CHECK: content-type: text/yaml
 # CHECK: data:
@@ -169,7 +169,7 @@ $CURL -X DELETE "$CHISELD_HOST/dev/persons?filter=\\{%22age%22:40\\}" # Filtered
 # CHECK: content-type: text/yaml
 # CHECK: error: "Method Not Allowed"
 # CHECK: status: 405
-$CURL $CHISELD_HOST/dev/persons
+$CURL $CHISELD_HOST/dev/persons?sort=last_name
 # CHECK: data:
 # CHECK: last_name: "Anderson"
 # CHECK: last_name: "Brown"
@@ -183,7 +183,7 @@ $CURL -X DELETE $CHISELD_HOST/dev/persons # DELETE all
 # CHECK: content-type: text/yaml
 # CHECK: error: "Method Not Allowed"
 # CHECK: status: 405
-$CURL $CHISELD_HOST/dev/persons
+$CURL $CHISELD_HOST/dev/persons?sort=last_name
 # CHECK: data:
 # CHECK: last_name: "Anderson"
 # CHECK: last_name: "Brown"
