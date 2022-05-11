@@ -42,7 +42,7 @@ endpointWorker.onmessage = function (event) {
     }
 };
 
-async function toWorker(msg: unknown) {
+function sendMsg(msg: unknown) {
     const p = new Promise((resolve, reject) => {
         resolvers.push({ resolve, reject, msg });
     });
@@ -53,15 +53,23 @@ async function toWorker(msg: unknown) {
     if (resolvers.length == 1) {
         endpointWorker.postMessage(resolvers[0].msg);
     }
+    return p;
+}
+
+async function toWorker(msg: unknown) {
     try {
-        return await p;
+        return await sendMsg(msg);
     } finally {
-        resolvers.shift();
-        // If a message was scheduled while the worker was busy, post
-        // it now.
-        if (resolvers.length != 0) {
-            endpointWorker.postMessage(resolvers[0].msg);
-        }
+        endMsgProcessing();
+    }
+}
+
+function endMsgProcessing() {
+    resolvers.shift();
+    // If a message was scheduled while the worker was busy, post
+    // it now.
+    if (resolvers.length != 0) {
+        endpointWorker.postMessage(resolvers[0].msg);
     }
 }
 
