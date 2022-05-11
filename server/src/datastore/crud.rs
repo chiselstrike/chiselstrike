@@ -79,7 +79,7 @@ pub(crate) fn delete_from_url(c: &RequestContext, type_name: &str, url: &str) ->
 struct Query {
     limit: Option<u64>,
     offset: Option<u64>,
-    sort: Option<SortBy>,
+    sort: SortBy,
     /// Filters restricting the result set. They will be joined in AND-fashion.
     filters: Vec<Expr>,
 }
@@ -89,7 +89,12 @@ impl Query {
         Query {
             limit: None,
             offset: None,
-            sort: None,
+            sort: SortBy {
+                keys: vec![SortKey {
+                    field_name: "id".into(),
+                    ascending: true,
+                }],
+            },
             filters: vec![],
         }
     }
@@ -99,7 +104,7 @@ impl Query {
         let mut q = Query::new();
         for (param_key, value) in url.query_pairs().into_owned() {
             match param_key.as_str() {
-                "sort" => q.sort = parse_sort(base_type, &value)?.into(),
+                "sort" => q.sort = parse_sort(base_type, &value)?,
                 "limit" => {
                     let l = value.parse().with_context(|| {
                         format!("failed to parse {param_key}. Expected u64, got '{}'", value)
@@ -129,11 +134,7 @@ impl Query {
     /// Makes query ops based on the CRUD parameters that were parsed by `from_url` method.
     /// The query ops can be used to retrieve desired results from the database.
     fn make_query_ops(&self) -> Result<Vec<QueryOp>> {
-        let mut ops = vec![];
-
-        if let Some(sort) = &self.sort {
-            ops.push(QueryOp::SortBy(sort.clone()));
-        }
+        let mut ops = vec![QueryOp::SortBy(self.sort.clone())];
         for f_expr in self.filters.iter().cloned() {
             ops.push(QueryOp::Filter { expression: f_expr });
         }
