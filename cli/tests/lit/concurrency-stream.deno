@@ -1,0 +1,43 @@
+# SPDX-FileCopyrightText: © 2022 ChiselStrike <info@chiselstrike.com>
+
+# RUN: sh -e @file
+
+# Test that we don't mixup the output from multiple endpoint
+# invocations when streaming.
+
+cat << EOF > "$TEMPDIR/endpoints/stream.ts"
+export default async function chisel(req: Request) {
+    let i = 0;
+    let stream = new ReadableStream({
+        async pull(controller) {
+            await new Promise((resolve) => setTimeout(resolve, 0));
+            const string = "line" + i + "\n";
+            i += 1;
+            const textEncoder = new TextEncoder();
+            const utf8 = new Uint8Array(string.length);
+            textEncoder.encodeInto(string, utf8);
+            controller.enqueue(utf8);
+            if (i == 100) {
+                controller.close();
+            }
+        }
+    });
+
+    return new Response(stream);
+}
+EOF
+
+cd "$TEMPDIR"
+
+$CHISEL apply
+
+NUM=100
+for i in $(seq 1 $NUM); do
+    $CURL -o - $CHISELD_HOST/dev/stream | grep line > log.$i &
+done
+
+wait
+
+for i in $(seq 1 $NUM); do
+    wc -l log.$i | grep $NUM
+done

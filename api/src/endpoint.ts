@@ -24,7 +24,7 @@ endpointWorker.onerror = function (e) {
     throw e;
 };
 
-const bodyParts: Uint8Array[] = [];
+let bodyParts: Uint8Array[] = [];
 endpointWorker.onmessage = function (event) {
     const d = event.data;
     if (d.msg == "body") {
@@ -112,10 +112,13 @@ export async function callHandler(
         id,
     }) as { status: number; headers: number };
 
+    const bodyPartsCopy = bodyParts;
+    bodyParts = [];
+
     // The read function is called repeatedly until it returns
     // undefined.
     const read = function () {
-        return bodyParts.shift();
+        return bodyPartsCopy.shift();
     };
     return {
         "status": res.status,
