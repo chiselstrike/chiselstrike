@@ -488,7 +488,7 @@ export class ChiselCursor<T> {
  * @property {string} version - The current API Version
  * @property {string} endpoint - The current endpoint being called.
  * @property {string} pathParams - This is essentially the URL's path, but with everything before the endpoint name removed.
- * @property {OAuthUser} user - The currently logged in user. `undefined` if there isn't one.
+ * @property {AuthUser} user - The currently logged in user. `undefined` if there isn't one.
  */
 export class ChiselRequest extends Request {
     constructor(
@@ -497,7 +497,7 @@ export class ChiselRequest extends Request {
         public version: string,
         public endpoint: string,
         public pathParams: string,
-        public user?: OAuthUser | undefined,
+        public user?: AuthUser | undefined,
     ) {
         super(input, init);
     }
@@ -767,8 +767,11 @@ function restrictionsToFilterExpr<T extends ChiselEntity>(
     return expr;
 }
 
-export class OAuthUser extends ChiselEntity {
-    username: string | undefined = undefined;
+export class AuthUser extends ChiselEntity {
+    emailVerified?: string;
+    name?: string;
+    email?: string;
+    image?: string;
 }
 
 /**
@@ -820,12 +823,12 @@ export function unique(_target: unknown, _name: string): void {
 }
 
 /** Returns the currently logged-in user or null if no one is logged in. */
-export async function loggedInUser(): Promise<OAuthUser | undefined> {
+export async function loggedInUser(): Promise<AuthUser | undefined> {
     const id = requestContext.userId;
     if (id === undefined) {
         return undefined;
     }
-    return await OAuthUser.findOne({ id });
+    return await AuthUser.findOne({ id });
 }
 
 function ensureNotGet() {

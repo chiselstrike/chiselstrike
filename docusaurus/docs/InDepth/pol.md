@@ -164,15 +164,21 @@ file `my-backend/policies/pol.yml` like this:
 ```yaml title="my-backend/policies/pol.yml"
 endpoints:
   - path: /comments
-    users: ^admin$
+    users: ^admin@example.com$
 ```
 
-This says that only the `admin` username can access the `/comments`
+This says that only the user `admin@example.com` can access the `/comments`
 endpoint.
+
+:::note
+We currently match `users` against the user's email -- the only field
+NextAuth guarantees to be unique.  Your feedback is welcome as we
+evolve this aspect of our product.
+:::
 
 The `endpoints` section can have any number of `path` items, each
 affecting a different path prefix.  The `users` attribute is a regular
-expression that the logged-in username must match in order to access
+expression that the logged-in user's email must match in order to access
 endpoints under the given path.
 
 `path` values may overlap, in which case longer overrides shorter.
@@ -187,8 +193,8 @@ you can set `users` to `.*`.
 
 ### Restricting Data Access to Matching User
 
-As explained in ["Tracking Logins in the
-Backend"](login#tracking-logins-in-the-backend), you can store the
+As explained in ["Accessing User Info in the
+Backend"](login#accessing-user-info-in-the-backend), you can store the
 logged-in user as a field in your entities.  Let's continue the
 example from that link here.  Please edit the file `models/models.ts`
 like this:
@@ -198,7 +204,7 @@ import { ChiselEntity } from "@chiselstrike/api"
 
 export class BlogComment extends ChiselEntity {
     content: string = "";
-    @labels("protect") author: OAuthUser;
+    @labels("protect") author: AuthUser;
 }
 ```
 
@@ -211,7 +217,7 @@ labels:
 ```
 
 The `match_login` transformation compares fields labeled with
-`protect` (if they are of OAuthUser type) to the value of
+`protect` (if they are of AuthUser type) to the value of
 `loggedInUser()`.  When the field value doesn't match, the row is
 ignored.  So in this case, when endpoints read BlogComment entities,
 they will see only the rows whose `author` matches the currently

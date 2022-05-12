@@ -1,7 +1,9 @@
 // SPDX-FileCopyrightText: © 2021 ChiselStrike <info@chiselstrike.com>
 
+use crate::auth::{AUTH_ACCOUNT_NAME, AUTH_SESSION_NAME, AUTH_TOKEN_NAME, AUTH_USER_NAME};
 use crate::datastore::query::QueryPlan;
 use crate::datastore::QueryEngine;
+use crate::types::AuthOrNot::IsAuth;
 use anyhow::Context;
 use derive_new::new;
 use futures::StreamExt;
@@ -59,8 +61,6 @@ impl VersionTypes {
     }
 }
 
-pub(crate) const OAUTHUSER_TYPE_NAME: &str = "OAuthUser";
-
 fn string_field(name: &str) -> Field {
     Field {
         id: None,
@@ -105,50 +105,38 @@ impl Default for TypeSystem {
         ts.builtin_types.insert("number".into(), Type::Float);
         ts.builtin_types.insert("boolean".into(), Type::Boolean);
         ts.add_builtin_object_type(
-            OAUTHUSER_TYPE_NAME,
-            vec![Field {
-                id: None,
-                name: "username".into(),
-                type_: Type::String,
-                labels: vec![],
-                default: None,
-                effective_default: None,
-                is_optional: false,
-                api_version: "__chiselstrike".into(),
-                is_unique: false,
-            }],
-            "oauth_user",
-        );
-        ts.add_builtin_object_type(
-            "NextAuthUser",
+            AUTH_USER_NAME,
             vec![
                 optional_string_field("emailVerified"),
                 optional_string_field("name"),
                 optional_string_field("email"),
                 optional_string_field("image"),
             ],
-            "nextauth_user",
+            "auth_user",
+            IsAuth,
         );
         ts.add_builtin_object_type(
-            "NextAuthSession",
+            AUTH_SESSION_NAME,
             vec![
                 string_field("sessionToken"),
                 string_field("userId"),
                 string_field("expires"),
             ],
-            "nextauth_session",
+            "auth_session",
+            IsAuth,
         );
         ts.add_builtin_object_type(
-            "NextAuthToken",
+            AUTH_TOKEN_NAME,
             vec![
                 string_field("identifier"),
                 string_field("expires"),
                 string_field("token"),
             ],
-            "nextauth_token",
+            "auth_token",
+            IsAuth,
         );
         ts.add_builtin_object_type(
-            "NextAuthAccount",
+            AUTH_ACCOUNT_NAME,
             vec![
                 string_field("providerAccountId"),
                 string_field("userId"),
@@ -164,7 +152,8 @@ impl Default for TypeSystem {
                 optional_string_field("oauth_token"),
                 optional_number_field("expires_at"),
             ],
-            "nextauth_account",
+            "auth_account",
+            IsAuth,
         );
 
         ts
@@ -440,13 +429,14 @@ impl TypeSystem {
         type_name: &'static str,
         fields: Vec<Field>,
         backing_table_name: &'static str,
+        is_auth: AuthOrNot,
     ) {
         self.builtin_types.insert(type_name.into(), {
             let desc = InternalObject {
                 name: type_name,
                 backing_table: backing_table_name,
             };
-            Type::Object(Arc::new(ObjectType::new(desc, fields).unwrap()))
+            Type::Object(Arc::new(ObjectType::new(desc, fields, is_auth).unwrap()))
         });
     }
 }
@@ -613,6 +603,13 @@ impl<'a> ObjectDescriptor for NewObject<'a> {
     }
 }
 
+/// Whether a type is used in authentication.
+#[derive(Debug)]
+pub(crate) enum AuthOrNot {
+    IsAuth,
+    IsNotAuth,
+}
+
 #[derive(Debug)]
 pub(crate) struct ObjectType {
     /// id of this object in the meta-database. Will be None for objects that are not persisted yet
@@ -625,12 +622,17 @@ pub(crate) struct ObjectType {
     chisel_id: Field,
     /// Name of the backing table for this type.
     backing_table: String,
+    is_auth: AuthOrNot,
 
     pub(crate) api_version: String,
 }
 
 impl ObjectType {
-    pub(crate) fn new<D: ObjectDescriptor>(desc: D, fields: Vec<Field>) -> anyhow::Result<Self> {
+    pub(crate) fn new<D: ObjectDescriptor>(
+        desc: D,
+        fields: Vec<Field>,
+        is_auth: AuthOrNot,
+    ) -> anyhow::Result<Self> {
         let backing_table = desc.backing_table();
         let api_version = desc.api_version();
 
@@ -660,6 +662,7 @@ impl ObjectType {
             backing_table,
             fields,
             chisel_id,
+            is_auth,
         })
     }
 
@@ -695,6 +698,13 @@ impl ObjectType {
         let source_map: FieldMap<'_> = source_type.into();
         let to_map: FieldMap<'_> = self.into();
         to_map.check_populate_from(&source_map)
+    }
+
+    pub(crate) fn is_auth(&self) -> bool {
+        match self.is_auth {
+            AuthOrNot::IsAuth => true,
+            AuthOrNot::IsNotAuth => false,
+        }
     }
 }
 

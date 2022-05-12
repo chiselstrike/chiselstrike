@@ -1,10 +1,10 @@
 // SPDX-FileCopyrightText: © 2021 ChiselStrike <info@chiselstrike.com>
 
+use crate::auth::AUTH_USER_NAME;
 use crate::datastore::crud;
 use crate::datastore::expr::{BinaryExpr, BinaryOp, Expr, Literal, PropertyAccess};
 use crate::policies::{FieldPolicies, Policies};
-use crate::types::TypeSystem;
-use crate::types::{Field, ObjectType, Type, TypeSystemError, OAUTHUSER_TYPE_NAME};
+use crate::types::{Field, ObjectType, Type, TypeSystem, TypeSystemError};
 
 use anyhow::{anyhow, Context, Result};
 use enum_as_inner::EnumAsInner;
@@ -417,7 +417,7 @@ impl QueryPlan {
                     property: field.name.to_owned(),
                     object: property_chain.clone().into(),
                 };
-                if nested_ty.name() == OAUTHUSER_TYPE_NAME {
+                if nested_ty.name() == AUTH_USER_NAME {
                     if field_policies.match_login.contains(&field.name) {
                         let expr = BinaryExpr {
                             left: Box::new(property_access.into()),
@@ -887,7 +887,7 @@ mod tests {
 
     fn make_object(name: &str, fields: Vec<Field>) -> Arc<ObjectType> {
         let desc = types::NewObject::new(name, VERSION);
-        Arc::new(ObjectType::new(desc, fields).unwrap())
+        Arc::new(ObjectType::new(desc, fields, types::AuthOrNot::IsNotAuth).unwrap())
     }
 
     fn make_field(name: &str, ty: Type) -> Field {

@@ -4,22 +4,27 @@
 
 cd "$TEMPDIR"
 $CHISEL apply
+# CHECK: End point defined: /dev/hello
 
-$CURL $CHISELD_HOST/dev/hello
+$CURL $CHISELD_HOST/__chiselstrike/auth/users
 # CHECK: HTTP/1.1 200 OK
-# CHECK: hello world
 
-echo '{ "CHISEL_API_AUTH_SECRET" : "1234" }' > ${TEMPDIR}/.env
+echo '{ "CHISELD_AUTH_SECRET" : "1234" }' > ${TEMPDIR}/.env
 $CHISEL restart
-$CURL $CHISELD_HOST/dev/hello
-# CHECK: HTTP/1.1 403 Forbidden
+# CHECK: Server restarted successfully.
 
-$CURL -H "ChiselAuth:1234" $CHISELD_HOST/dev/hello
+$CURL $CHISELD_HOST/dev/hello
 # CHECK: HTTP/1.1 200 OK
 # CHECK: hello world
 
-$CURL -H "ChiselAuth:12345" $CHISELD_HOST/dev/hello
+$CURL -H "ChiselAuth:1234" $CHISELD_HOST/__chiselstrike/auth/users
+# CHECK: HTTP/1.1 200 OK
+
+$CURL -H "ChiselAuth:12345" $CHISELD_HOST/__chiselstrike/auth/users
 # CHECK: HTTP/1.1 403 Forbidden
 
-$CURL -H "ChiselAuth:" $CHISELD_HOST/dev/hello
+$CURL -H "ChiselAuth:" $CHISELD_HOST/__chiselstrike/auth/users
+# CHECK: HTTP/1.1 403 Forbidden
+
+$CURL $CHISELD_HOST/__chiselstrike/auth/users
 # CHECK: HTTP/1.1 403 Forbidden

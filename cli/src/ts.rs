@@ -146,7 +146,7 @@ fn validate_type_vec(type_vec: &[AddTypeRequest], valid_types: &BTreeSet<String>
     builtin_types.insert("string");
     builtin_types.insert("number");
     builtin_types.insert("boolean");
-    builtin_types.insert("OAuthUser");
+    builtin_types.insert("AuthUser");
 
     for t in type_vec {
         for field in t.field_defs.iter() {

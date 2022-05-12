@@ -3,7 +3,6 @@
 use crate::api::ApiService;
 use crate::api::{response_template, Body, RequestPath};
 use crate::auth::get_username_from_id;
-use crate::auth::handle_callback;
 use crate::datastore::engine::extract_transaction;
 use crate::datastore::engine::IdTree;
 use crate::datastore::engine::TransactionStatic;
@@ -237,8 +236,6 @@ fn build_extensions() -> Vec<Extension> {
             op_chisel_create_transaction::decl(),
             op_chisel_init_worker::decl(),
             op_chisel_read_worker_channel::decl(),
-            op_chisel_auth_callback::decl(),
-            op_chisel_auth_user::decl(),
             op_chisel_start_request::decl(),
             op_chisel_internal_error::decl(),
         ])
@@ -538,6 +535,10 @@ struct StoreContent {
     value: JsonObject,
 }
 
+fn is_auth_path(api_version: &str, path: &str) -> bool {
+    api_version == "__chiselstrike" && path.starts_with("/auth/")
+}
+
 #[op]
 async fn op_chisel_store(
     state: Rc<RefCell<OpState>>,
@@ -553,6 +554,9 @@ async fn op_chisel_store(
             Ok(Type::Object(ty)) => ty,
             _ => anyhow::bail!("Cannot save into type {}.", type_name),
         };
+        if ty.is_auth() && !is_auth_path(&c.api_version, &c.path) {
+            anyhow::bail!("Cannot save into type {}.", type_name);
+        }
 
         let query_engine = query_engine_arc(&state);
         (query_engine, ty)
@@ -1044,10 +1048,6 @@ pub(crate) async fn set_meta(meta: MetaService) {
     to_worker(WorkerMsg::SetMeta(meta)).await;
 }
 
-pub(crate) fn get_meta(st: &OpState) -> Rc<MetaService> {
-    st.borrow::<Rc<MetaService>>().clone()
-}
-
 pub(crate) fn query_engine_arc(st: &OpState) -> Arc<QueryEngine> {
     st.borrow::<Arc<QueryEngine>>().clone()
 }
@@ -1178,11 +1178,15 @@ async fn special_response(
     userid: &Option<String>,
 ) -> Result<Option<Response<Body>>> {
     let req_path = req.uri().path();
-    if !req_path.starts_with("/__chiselstrike") {
+    // TODO: Make this optional, for users who want to reject some OPTIONS requests.
+    if req.method() == "OPTIONS" {
+        // Makes CORS preflights pass.
+        return Ok(Some(Response::builder().body("ok".to_string().into())?));
+    }
+    if req_path.starts_with("/__chiselstrike/auth/") {
         let auth_header = req.headers().get("ChiselAuth");
         let expected_secret = current_secrets(&state.borrow())
-            .and_then(|sec| sec.get("CHISEL_API_AUTH_SECRET").cloned());
-
+            .and_then(|sec| sec.get("CHISELD_AUTH_SECRET").cloned());
         match (expected_secret, auth_header) {
             (Some(_), None) => return Ok(Some(ApiService::forbidden("ChiselAuth")?)),
             (Some(serde_json::Value::String(s)), Some(h)) if s != *h => {
@@ -1190,15 +1194,8 @@ async fn special_response(
             }
             _ => (),
         }
-
-        // TODO: Make this optional, for users who want to reject some OPTIONS requests.
-        if req.method() == "OPTIONS" {
-            // Makes CORS preflights pass.
-            return Ok(Some(Response::builder().body("ok".to_string().into())?));
-        }
-
+    } else {
         let username = get_username_from_id(state.clone(), userid.clone()).await;
-
         let rp = match RequestPath::try_from(req_path) {
             Ok(rp) => rp,
             Err(_) => return Ok(Some(ApiService::not_found()?)),
@@ -1236,32 +1233,6 @@ async fn convert_response(mut res: Response<Body>) -> Result<ResponseParts> {
         body: body.into(),
         headers,
     })
-}
-
-// FIXME: It would probably be cleaner to move more of this to
-// javascript.
-#[op]
-async fn op_chisel_auth_callback(
-    state: Rc<RefCell<OpState>>,
-    url: String,
-) -> Result<ResponseParts> {
-    let res = handle_callback(state, url.parse()?).await?;
-    convert_response(res).await
-}
-
-// FIXME: It would probably be cleaner to move more of this to
-// javascript.
-#[op]
-async fn op_chisel_auth_user(
-    state: Rc<RefCell<OpState>>,
-    userid: Option<String>,
-) -> Result<ResponseParts> {
-    let username = get_username_from_id(state.clone(), userid).await;
-    let res = match username {
-        None => anyhow::bail!("Error finding logged-in user; perhaps no one is logged in?"),
-        Some(username) => Response::builder().body(username.into()).unwrap(),
-    };
-    convert_response(res).await
 }
 
 pub(crate) async fn run_js(path: String, req: Request<hyper::Body>) -> Result<Response<Body>> {
@@ -1443,7 +1414,17 @@ async fn op_chisel_start_request(state: Rc<RefCell<OpState>>) -> Result<StartReq
         Ok(WorkerMsg::HandleRequest(req)) => req,
         _ => unreachable!("Wrong message"),
     };
-    let userid = crate::auth::get_user(state.clone(), &req).await?;
+    let userid = match req.headers().get("ChiselUID").map(|v| v.to_str()) {
+        Some(Ok(str)) => Some(str.to_string()),
+        Some(Err(e)) => {
+            warn!(
+                "Weird bytes in ChiselUID value on request {:?}, error {:?}",
+                req, e
+            );
+            None
+        }
+        None => None,
+    };
     if let Some(resp) = special_response(state.clone(), &req, &userid).await? {
         let resp = convert_response(resp).await?;
         return Ok(StartRequestRes::Special(resp));

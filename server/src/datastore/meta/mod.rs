@@ -6,14 +6,14 @@ use crate::api::{ApiInfo, ApiInfoMap};
 use crate::datastore::{DbConnection, Kind};
 use crate::policies::Policies;
 use crate::prefix_map::PrefixMap;
+use crate::types::AuthOrNot::IsNotAuth;
 use crate::types::{
     ExistingField, ExistingObject, Field, FieldDelta, ObjectDelta, ObjectType, TypeSystem,
 };
-use anyhow::{anyhow, Context};
+use anyhow::Context;
 use sqlx::any::{Any, AnyPool};
 use sqlx::{Execute, Executor, Row, Transaction};
 use std::sync::Arc;
-use uuid::Uuid;
 
 /// Meta service.
 ///
@@ -395,7 +395,7 @@ impl MetaService {
             let desc = ExistingObject::new(type_name, backing_table, type_id)?;
             let fields = self.load_type_fields(&ts, type_id).await?;
 
-            let ty = ObjectType::new(desc, fields)?;
+            let ty = ObjectType::new(desc, fields, IsNotAuth)?;
             ts.add_type(Arc::new(ty))?;
         }
         Ok(ts)
@@ -580,31 +580,6 @@ impl MetaService {
             insert_field_query(transaction, ty, Some(id), field).await?;
         }
         Ok(())
-    }
-
-    pub(crate) async fn new_session_token(&self, userid: &str) -> anyhow::Result<String> {
-        let token = Uuid::new_v4().to_string();
-        // TODO: Expire tokens.
-        let insert = sqlx::query("INSERT INTO sessions(token, user_id) VALUES($1::uuid, $2)")
-            .bind(&token)
-            .bind(userid);
-        let mut transaction = self.pool.begin().await?;
-
-        execute(&mut transaction, insert).await?;
-
-        transaction.commit().await?;
-        Ok(token)
-    }
-
-    pub(crate) async fn get_user_id(&self, token: &str) -> anyhow::Result<String> {
-        let query = sqlx::query("SELECT user_id FROM sessions WHERE token=$1::uuid").bind(token);
-
-        let mut rows = fetch_all(&self.pool, query).await?;
-        let row = rows
-            .pop()
-            .ok_or_else(|| anyhow!("token {} not found", token))?;
-        let id: &str = row.get("user_id");
-        Ok(id.into())
     }
 }
 
