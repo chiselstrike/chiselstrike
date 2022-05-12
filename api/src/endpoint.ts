@@ -112,7 +112,7 @@ export async function callHandler(
         id,
     }) as { status: number; headers: number };
 
-    // The read function is called repeatedly until it return
+    // The read function is called repeatedly until it returns
     // undefined.
     const read = function () {
         return bodyParts.shift();
