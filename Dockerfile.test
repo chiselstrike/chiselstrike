@@ -1,5 +1,0 @@
-ARG BASEIMG
-FROM ghcr.io/chiselstrike/chiselstrike:$BASEIMG
-
-COPY integration-tests.sh integration-tests.sh
-CMD ./integration-tests.sh

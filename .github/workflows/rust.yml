@@ -28,34 +28,9 @@ jobs:
         username: ${{ github.actor }}
         password: ${{ secrets.GITHUB_TOKEN }}
 
-    - name: Extract metadata (tags, labels) for Docker
-      id: meta
-      uses: docker/metadata-action@98669ae865ea3cffbcbaa878cf57c20bbf1c6c38
-      with:
-        images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
-
     - name: Make some room available
       id: makeroom
       run: "sudo rm -rf /usr/local/lib/android && sudo rm -rf /usr/share/dotnet"
-
-    - name: Find desired image
-      id: findimg
-      run: echo "::set-output name=img_name::$(md5sum Dockerfile.test.baseimg | awk '{print $1}')"
-
-    - name: Verify existence of docker base image
-      run: docker manifest inspect ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.findimg.outputs.img_name }}
-      id: testimg
-      continue-on-error: true
-
-    - name: Build and push test Docker base image if needed
-      uses: docker/build-push-action@ad44023a93711e3deb337508980b4b5e9bcdc5dc
-      if: steps.testimg.outcome == 'failure'
-      with:
-        context: .
-        file: Dockerfile.test.baseimg
-        push: true
-        tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.findimg.outputs.img_name }}
-        labels: ${{ steps.meta.outputs.labels }}
 
     - name: Install lld
       id: lld
