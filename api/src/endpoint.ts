@@ -105,12 +105,18 @@ export async function callHandler(
     apiVersion: string,
     id: number,
 ) {
-    const res = await toWorker({
-        cmd: "callHandler",
-        path,
-        apiVersion,
-        id,
-    }) as { status: number; headers: number };
+    let res;
+    try {
+        res = await toWorker({
+            cmd: "callHandler",
+            path,
+            apiVersion,
+            id,
+        }) as { status: number; headers: number };
+    } catch (e) {
+        bodyParts = [];
+        throw e;
+    }
 
     const bodyPartsCopy = bodyParts;
     bodyParts = [];
