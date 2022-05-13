@@ -231,7 +231,7 @@ pub(crate) async fn apply<S: ToString>(
 
             let code = types_string.clone() + &code;
             let code = if use_chiselc {
-                chiselc_output(code, &entities)?
+                chiselc_output(code, "js", &entities)?
             } else {
                 swc_compile(code)?
             };
@@ -363,8 +363,8 @@ fn chiselc_spawn(input: &str, entities: &[String]) -> Result<std::process::Child
 }
 
 /// Spawn `chiselc`, wait for the process to complete, and return its output.
-fn chiselc_output(code: String, entities: &[String]) -> Result<String> {
-    let mut args: Vec<&str> = vec!["--target", "js"];
+fn chiselc_output(code: String, target: &str, entities: &[String]) -> Result<String> {
+    let mut args: Vec<&str> = vec!["--target", target];
     if !entities.is_empty() {
         args.push("-e");
         for entity in entities.iter() {
