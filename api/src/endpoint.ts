@@ -24,18 +24,30 @@ endpointWorker.onerror = function (e) {
     throw e;
 };
 
-const bodyParts: Record<number, { value?: Uint8Array; err?: Error }[]> = {};
+type BodyState = {
+    parts: { value?: Uint8Array; err?: Error }[];
+    done: boolean;
+    resolve?: () => void;
+};
+
+const bodyParts: Record<number, BodyState> = {};
 let bodyDone = false;
 let resolveBody: (() => void) | undefined = undefined;
 endpointWorker.onmessage = function (event) {
     const { msg, id, value, err } = event.data;
     if (msg == "body") {
-        if (err !== undefined || value !== undefined) {
-            if (id in bodyParts) {
-                bodyParts[id].push({ value, err });
-            }
+        const state = bodyParts[id];
+        if (state?.resolve !== undefined) {
+            state.resolve();
+            state.resolve = undefined;
+        }
+        if ((err !== undefined || value !== undefined) && state !== undefined) {
+            state.parts.push({ value, err });
         }
         if (err !== undefined || value === undefined) {
+            if (state !== undefined) {
+                state.done = true;
+            }
             bodyDone = true;
             if (resolveBody !== undefined) {
                 resolveBody();
@@ -127,7 +139,7 @@ export async function callHandler(
     apiVersion: string,
     id: number,
 ) {
-    bodyParts[id] = [];
+    bodyParts[id] = { parts: [], done: false };
 
     let res;
     try {
@@ -157,10 +169,15 @@ export async function callHandler(
     // The read function is called repeatedly until it returns
     // undefined.
     const read = async function () {
-        // FIXME: waiting for the full body
-        await bodyDonePromise;
+        const state = bodyParts[id];
 
-        const elem = bodyParts[id].shift();
+        if (state.parts.length === 0 && !state.done) {
+            await new Promise<void>((resolve) => {
+                state.resolve = resolve;
+            });
+        }
+
+        const elem = state.parts.shift();
         const err = elem?.err;
         if (err !== undefined) {
             throw err;
