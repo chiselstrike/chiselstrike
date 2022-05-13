@@ -231,8 +231,7 @@ pub(crate) async fn apply<S: ToString>(
 
             let code = types_string.clone() + &code;
             let code = if use_chiselc {
-                let output = chiselc_output(code, &entities)?;
-                output_to_string(&output).unwrap()
+                chiselc_output(code, &entities)?
             } else {
                 swc_compile(code)?
             };
@@ -364,7 +363,7 @@ fn chiselc_spawn(input: &str, entities: &[String]) -> Result<std::process::Child
 }
 
 /// Spawn `chiselc`, wait for the process to complete, and return its output.
-fn chiselc_output(code: String, entities: &[String]) -> Result<std::process::Output> {
+fn chiselc_output(code: String, entities: &[String]) -> Result<String> {
     let mut args: Vec<&str> = vec!["--target", "js"];
     if !entities.is_empty() {
         args.push("-e");
@@ -384,7 +383,7 @@ fn chiselc_output(code: String, entities: &[String]) -> Result<std::process::Out
             .expect("Failed to write to stdin");
     });
     let output = cmd.wait_with_output().expect("Failed to read stdout");
-    Ok(output)
+    Ok(output_to_string(&output).unwrap())
 }
 
 fn npx(
