@@ -20,7 +20,7 @@ EOF
 
 cat << EOF > "$TEMPDIR/endpoints/ok.ts"
 export default async function chisel(req: Request) {
-    return new Response("OK\n");
+    return new Response("EXPECTED\n");
 }
 EOF
 
@@ -33,6 +33,8 @@ pid=$!
 sleep 1
 kill $pid
 
-$CURL -o output $CHISELD_HOST/dev/ok
+$CURL $CHISELD_HOST/dev/ok | tee output
 
 grep -c "INFINITE" output | grep 0
+
+# CHECK: EXPECTED
