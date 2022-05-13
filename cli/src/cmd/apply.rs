@@ -203,7 +203,7 @@ fn chiselc_spawn(input: &str, output: &str, entities: &[String]) -> Result<tokio
 }
 
 /// Spawn `chiselc`, wait for the process to complete, and return its output.
-fn chiselc_output(code: String, entities: &[String]) -> Result<std::process::Output> {
+fn chiselc_output(code: String, entities: &[String]) -> Result<String> {
     let mut args: Vec<&str> = vec!["--target", "js"];
     if !entities.is_empty() {
         args.push("-e");
@@ -223,7 +223,7 @@ fn chiselc_output(code: String, entities: &[String]) -> Result<std::process::Out
             .expect("Failed to write to stdin");
     });
     let output = cmd.wait_with_output().expect("Failed to read stdout");
-    Ok(output)
+    Ok(output_to_string(&output).unwrap())
 }
 
 fn get_git_version() -> Option<String> {

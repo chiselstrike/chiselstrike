@@ -2,7 +2,6 @@
 
 use crate::chisel::EndPointCreationRequest;
 use crate::cmd::apply::chiselc_output;
-use crate::cmd::apply::output_to_string;
 use crate::project::Endpoint;
 use anyhow::{anyhow, Context, Result};
 use compile::compile_ts_code as swc_compile;
@@ -32,8 +31,7 @@ pub(crate) async fn apply(
         let code = output.remove(path).unwrap();
         let code = types_string.to_owned() + &code;
         let code = if use_chiselc {
-            let output = chiselc_output(code, entities)?;
-            output_to_string(&output).unwrap()
+            chiselc_output(code, entities)?
         } else {
             swc_compile(code)?
         };
