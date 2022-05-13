@@ -1,5 +1,6 @@
 //! AST rewriter that transforms TypeScript code into query expressions.
 
+use crate::filtering::FilterProperties;
 use crate::query::BinaryExpr as QBinaryExpr;
 use crate::query::BinaryOp as QBinaryOp;
 use crate::query::Expr as QExpr;
@@ -31,6 +32,8 @@ pub enum Target {
     JavaScript,
     /// Emit TypeScript using ChiselStrike query expressions.
     TypeScript,
+    /// Emit properties that are used in ChiselStrike filter() calls as JSON. The runtime uses this information for auto-indexing purposes.
+    FilterProperties,
 }
 
 type TargetParseError = &'static str;
@@ -41,22 +44,27 @@ impl FromStr for Target {
         match target {
             "js" => Ok(Target::JavaScript),
             "ts" => Ok(Target::TypeScript),
+            "filter-properties" => Ok(Target::FilterProperties),
             _ => Err("Unknown target"),
         }
     }
 }
 
 pub struct Rewriter {
-    target: Target,
     symbols: Symbols,
+    // Accumulated predicate indexes.
+    pub indexes: Vec<FilterProperties>,
 }
 
 impl Rewriter {
-    pub fn new(target: Target, symbols: Symbols) -> Self {
-        Self { target, symbols }
+    pub fn new(symbols: Symbols) -> Self {
+        Self {
+            symbols,
+            indexes: vec![],
+        }
     }
 
-    pub fn rewrite(&self, module: Module) -> Module {
+    pub fn rewrite(&mut self, module: Module) -> Module {
         let mut body = Vec::new();
         for item in module.body {
             body.push(self.rewrite_item(&item));
@@ -68,7 +76,7 @@ impl Rewriter {
         }
     }
 
-    fn rewrite_item(&self, item: &ModuleItem) -> ModuleItem {
+    fn rewrite_item(&mut self, item: &ModuleItem) -> ModuleItem {
         match item {
             ModuleItem::ModuleDecl(decl) => {
                 let decl = self.rewrite_module_decl(decl);
@@ -81,7 +89,7 @@ impl Rewriter {
         }
     }
 
-    fn rewrite_module_decl(&self, module_decl: &ModuleDecl) -> ModuleDecl {
+    fn rewrite_module_decl(&mut self, module_decl: &ModuleDecl) -> ModuleDecl {
         match module_decl {
             ModuleDecl::ExportDefaultDecl(ExportDefaultDecl {
                 span,
@@ -97,7 +105,7 @@ impl Rewriter {
         }
     }
 
-    fn rewrite_fn_expr(&self, fn_expr: &FnExpr) -> FnExpr {
+    fn rewrite_fn_expr(&mut self, fn_expr: &FnExpr) -> FnExpr {
         let body = fn_expr
             .function
             .body
@@ -118,7 +126,7 @@ impl Rewriter {
         }
     }
 
-    fn rewrite_stmt(&self, stmt: &Stmt) -> Stmt {
+    fn rewrite_stmt(&mut self, stmt: &Stmt) -> Stmt {
         match stmt {
             Stmt::Decl(decl) => {
                 let decl = self.rewrite_decl(decl);
@@ -136,7 +144,7 @@ impl Rewriter {
         }
     }
 
-    fn rewrite_decl(&self, decl: &Decl) -> Decl {
+    fn rewrite_decl(&mut self, decl: &Decl) -> Decl {
         match decl {
             Decl::Var(var_decl) => {
                 let mut decls = Vec::new();
@@ -155,7 +163,7 @@ impl Rewriter {
         }
     }
 
-    fn rewrite_var_declarator(&self, var_declarator: &VarDeclarator) -> VarDeclarator {
+    fn rewrite_var_declarator(&mut self, var_declarator: &VarDeclarator) -> VarDeclarator {
         let init = var_declarator
             .init
             .as_ref()
@@ -168,7 +176,7 @@ impl Rewriter {
         }
     }
 
-    fn rewrite_expr(&self, expr: &Expr) -> Expr {
+    fn rewrite_expr(&mut self, expr: &Expr) -> Expr {
         match expr {
             Expr::Arrow(arrow_expr) => {
                 let arrow_expr = self.rewrite_arrow_expr(arrow_expr);
@@ -190,7 +198,7 @@ impl Rewriter {
         }
     }
 
-    fn rewrite_arrow_expr(&self, arrow_expr: &ArrowExpr) -> ArrowExpr {
+    fn rewrite_arrow_expr(&mut self, arrow_expr: &ArrowExpr) -> ArrowExpr {
         let body = match &arrow_expr.body {
             BlockStmtOrExpr::BlockStmt(block_stmt) => {
                 let block_stmt = self.rewrite_block_stmt(block_stmt);
@@ -212,7 +220,7 @@ impl Rewriter {
         }
     }
 
-    fn rewrite_block_stmt(&self, block_stmt: &BlockStmt) -> BlockStmt {
+    fn rewrite_block_stmt(&mut self, block_stmt: &BlockStmt) -> BlockStmt {
         let mut stmts = vec![];
         for stmt in &block_stmt.stmts {
             stmts.push(self.rewrite_stmt(stmt));
@@ -223,14 +231,14 @@ impl Rewriter {
         }
     }
 
-    fn rewrite_await_expr(&self, await_expr: &AwaitExpr) -> AwaitExpr {
+    fn rewrite_await_expr(&mut self, await_expr: &AwaitExpr) -> AwaitExpr {
         AwaitExpr {
             span: await_expr.span,
             arg: Box::new(self.rewrite_expr(&await_expr.arg)),
         }
     }
 
-    fn rewrite_callee(&self, callee: &Callee) -> Callee {
+    fn rewrite_callee(&mut self, callee: &Callee) -> Callee {
         match callee {
             Callee::Super(Super { span }) => Callee::Super(Super { span: *span }),
             Callee::Import(import) => Callee::Import(*import),
@@ -238,7 +246,7 @@ impl Rewriter {
         }
     }
 
-    fn rewrite_expr_or_spread(&self, expr_or_spread: &ExprOrSpread) -> ExprOrSpread {
+    fn rewrite_expr_or_spread(&mut self, expr_or_spread: &ExprOrSpread) -> ExprOrSpread {
         let expr = self.rewrite_expr(&*expr_or_spread.expr);
         ExprOrSpread {
             spread: expr_or_spread.spread,
@@ -246,13 +254,13 @@ impl Rewriter {
         }
     }
 
-    fn rewrite_call_expr(&self, call_expr: &CallExpr) -> CallExpr {
-        if let Some(filter) = infer_filter(call_expr, &self.symbols) {
-            match self.target {
-                Target::JavaScript | Target::TypeScript => {
-                    return self.to_ts_expr(call_expr, &filter);
-                }
-            }
+    fn rewrite_call_expr(&mut self, call_expr: &CallExpr) -> CallExpr {
+        let (filter, index) = infer_filter(call_expr, &self.symbols);
+        if let Some(index) = index {
+            self.indexes.push(index);
+        }
+        if let Some(filter) = filter {
+            return self.to_ts_expr(call_expr, &filter);
         }
         let args = call_expr
             .args
@@ -454,7 +462,7 @@ impl Rewriter {
         Expr::Object(ObjectLit { span, props })
     }
 
-    fn rewrite_member_expr(&self, member_expr: &MemberExpr) -> MemberExpr {
+    fn rewrite_member_expr(&mut self, member_expr: &MemberExpr) -> MemberExpr {
         MemberExpr {
             span: member_expr.span,
             obj: Box::new(self.rewrite_expr(&member_expr.obj)),

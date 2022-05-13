@@ -83,9 +83,9 @@ pub fn compile(
         anyhow!("Parse failed: {}", err_buf.get())
     })?;
 
-    let rewriter = Rewriter::new(target.clone(), symbols);
+    let mut rewriter = Rewriter::new(symbols);
     let module = rewriter.rewrite(module);
-
+    // If we're emitting JavaScript, get rid of TypeScript types.
     let module = match target {
         Target::JavaScript => {
             let globals = Globals::default();
@@ -98,17 +98,22 @@ pub fn compile(
         }
         _ => module,
     };
-    {
-        let mut emitter = Emitter {
-            cfg: swc_ecmascript::codegen::Config {
-                ..Default::default()
-            },
-            cm: cm.clone(),
-            comments: None,
-            wr: JsWriter::new(cm, "\n", &mut output, None),
-        };
-        emitter.emit_module(&module).unwrap();
+    // Emit the final output, depending on the target.
+    match target {
+        Target::JavaScript | Target::TypeScript => {
+            let mut emitter = Emitter {
+                cfg: swc_ecmascript::codegen::Config {
+                    ..Default::default()
+                },
+                cm: cm.clone(),
+                comments: None,
+                wr: JsWriter::new(cm, "\n", &mut output, None),
+            };
+            emitter.emit_module(&module).unwrap();
+        }
+        Target::FilterProperties => {
+            println!("{}", serde_json::to_string(&rewriter.indexes)?);
+        }
     }
-
     Ok(())
 }
