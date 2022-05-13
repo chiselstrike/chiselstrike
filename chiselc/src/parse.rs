@@ -83,32 +83,37 @@ pub fn compile(
         anyhow!("Parse failed: {}", err_buf.get())
     })?;
 
-    let rewriter = Rewriter::new(target.clone(), symbols);
+    let mut rewriter = Rewriter::new(symbols);
     let module = rewriter.rewrite(module);
-
-    let module = match target {
-        Target::JavaScript => {
-            let globals = Globals::default();
-            GLOBALS.set(&globals, || {
-                let top_level_mark = Mark::fresh(Mark::root());
-                module.fold_with(&mut swc_ecmascript::transforms::typescript::strip(
-                    top_level_mark,
-                ))
-            })
+    match target {
+        Target::JavaScript | Target::TypeScript => {
+            let module = match target {
+                Target::JavaScript => {
+                    let globals = Globals::default();
+                    GLOBALS.set(&globals, || {
+                        let top_level_mark = Mark::fresh(Mark::root());
+                        module.fold_with(&mut swc_ecmascript::transforms::typescript::strip(
+                            top_level_mark,
+                        ))
+                    })
+                }
+                _ => module,
+            };
+            {
+                let mut emitter = Emitter {
+                    cfg: swc_ecmascript::codegen::Config {
+                        ..Default::default()
+                    },
+                    cm: cm.clone(),
+                    comments: None,
+                    wr: JsWriter::new(cm, "\n", &mut output, None),
+                };
+                emitter.emit_module(&module).unwrap();
+            }
         }
-        _ => module,
-    };
-    {
-        let mut emitter = Emitter {
-            cfg: swc_ecmascript::codegen::Config {
-                ..Default::default()
-            },
-            cm: cm.clone(),
-            comments: None,
-            wr: JsWriter::new(cm, "\n", &mut output, None),
-        };
-        emitter.emit_module(&module).unwrap();
+        Target::IndexJSON => {
+            println!("{}", serde_json::to_string(&rewriter.indexes)?);
+        }
     }
-
     Ok(())
 }

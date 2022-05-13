@@ -6,6 +6,9 @@ edition = "2021"
 
 [dependencies]
 anyhow = "1.0.57"
+indexmap = "1.8.1"
+serde = "1.0.137"
+serde_json = "1.0.81"
 structopt = "0.3.26"
 swc_atoms = "0.2.11"
 swc_common = "0.17.4"

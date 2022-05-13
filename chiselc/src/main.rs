@@ -1,3 +1,4 @@
+mod indexing;
 mod parse;
 mod query;
 mod rewrite;

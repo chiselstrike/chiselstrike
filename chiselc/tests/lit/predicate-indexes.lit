@@ -1,0 +1,10 @@
+// Extract predicate indexes
+// RUN: @chiselc @file -e Person --target index-json
+
+await Person.cursor().filter({ name: "Pekka", age: 39 }).toArray();
+
+await Person.cursor().filter((p) => { return p.age > 4 }).toArray();
+
+await Person.cursor().filter((p) => { return p.age < 4 || (p.age > 10 && p.age != 12) });
+
+// CHECK: [{"entity_name":"Person","properties":["name","age"]},{"entity_name":"Person","properties":["age"]},{"entity_name":"Person","properties":["age"]}]

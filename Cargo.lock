@@ -496,7 +496,10 @@ name = "chiselc"
 version = "0.10.0-dev.0"
 dependencies = [
  "anyhow",
+ "indexmap",
  "lit 1.0.4 (registry+https://github.com/rust-lang/crates.io-index)",
+ "serde",
+ "serde_json",
  "structopt",
  "swc_atoms",
  "swc_common",
@@ -2134,9 +2137,9 @@ checksum = "cb56e1aa765b4b4f3aadfab769793b7087bb03a4ea4920644a6d238e2df5b9ed"
 
 [[package]]
 name = "indexmap"
-version = "1.8.0"
+version = "1.8.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "282a6247722caba404c065016bbfa522806e51714c34f5dfc3e4a3a46fcb4223"
+checksum = "0f647032dfaa1f8b6dc29bd3edb7bbef4861b8b8007ebb118d6db284fd59f6ee"
 dependencies = [
  "autocfg 1.1.0",
  "hashbrown",
