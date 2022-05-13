@@ -203,8 +203,8 @@ fn chiselc_spawn(input: &str, output: &str, entities: &[String]) -> Result<tokio
 }
 
 /// Spawn `chiselc`, wait for the process to complete, and return its output.
-fn chiselc_output(code: String, entities: &[String]) -> Result<String> {
-    let mut args: Vec<&str> = vec!["--target", "js"];
+fn chiselc_output(code: String, target: &str, entities: &[String]) -> Result<String> {
+    let mut args: Vec<&str> = vec!["--target", target];
     if !entities.is_empty() {
         args.push("-e");
         for entity in entities.iter() {

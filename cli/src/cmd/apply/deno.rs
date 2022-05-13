@@ -31,7 +31,7 @@ pub(crate) async fn apply(
         let code = output.remove(path).unwrap();
         let code = types_string.to_owned() + &code;
         let code = if use_chiselc {
-            chiselc_output(code, entities)?
+            chiselc_output(code, "js", entities)?
         } else {
             swc_compile(code)?
         };
