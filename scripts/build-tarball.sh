@@ -13,6 +13,7 @@ program="chiselstrike"
 
 files=(
   chisel
+  chiselc
   chiseld
 )
 

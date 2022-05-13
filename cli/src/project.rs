@@ -29,6 +29,20 @@ impl Default for Module {
     }
 }
 
+#[derive(Deserialize, PartialEq)]
+pub(crate) enum Optimize {
+    #[serde(rename = "yes")]
+    Yes,
+    #[serde(rename = "no")]
+    No,
+}
+
+impl Default for Optimize {
+    fn default() -> Self {
+        Optimize::Yes
+    }
+}
+
 #[derive(PartialOrd, PartialEq, Eq, Ord)]
 pub(crate) struct Endpoint {
     pub(crate) name: String,
@@ -52,6 +66,9 @@ pub(crate) struct Manifest {
     /// Whether to use deno-style or node-style modules
     #[serde(default)]
     pub(crate) modules: Module,
+    /// Enable or disable query optimization with the `chiselc` compiler.
+    #[serde(default)]
+    pub(crate) optimize: Optimize,
 }
 
 impl Manifest {

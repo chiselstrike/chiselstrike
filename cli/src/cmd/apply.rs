@@ -2,12 +2,14 @@
 
 use crate::chisel::chisel_rpc_client::ChiselRpcClient;
 use crate::chisel::{ChiselApplyRequest, EndPointCreationRequest, PolicyUpdateRequest};
-use crate::project::{read_manifest, read_to_string, Module};
+use crate::project::{read_manifest, read_to_string, Module, Optimize};
 use anyhow::{anyhow, Context, Result};
 use compile::compile_ts_code as swc_compile;
 use std::collections::HashMap;
 use std::env;
 use std::io::Write;
+use std::path::PathBuf;
+use std::process::Stdio;
 use tempfile::Builder;
 use tempfile::NamedTempFile;
 use tokio::task::{spawn_blocking, JoinHandle};
@@ -91,12 +93,17 @@ pub(crate) async fn apply<S: ToString>(
     for t in &models {
         types_string += &read_to_string(&t)?;
     }
-
+    let entities: Vec<String> = types_req
+        .iter()
+        .map(|type_req| type_req.name.clone())
+        .collect();
+    let use_chiselc = is_chiselc_available() && manifest.optimize == Optimize::Yes;
     if manifest.modules == Module::Node {
         let tsc = match type_check {
             TypeChecking::Yes => Some(npx(
                 "tsc",
                 &["--noemit", "--pretty", "--allowJs", "--checkJs"],
+                None,
             )),
             TypeChecking::No => None,
         };
@@ -126,9 +133,27 @@ pub(crate) async fn apply<S: ToString>(
             keep_tmp_alive.push(f);
             keep_tmp_alive.push(out);
 
-            endpoint_futures.push((
-                bundler_output_file.clone(),
-                npx(
+            if use_chiselc {
+                // Spawn `chiselc` and pipe its output to `esbuild`.
+                let chiselc_cmd = chiselc_spawn(&bundler_entry_fname, &entities)?;
+                let cmd = npx(
+                    "esbuild",
+                    &[
+                        "--bundle",
+                        "--color=true",
+                        "--target=esnext",
+                        "--external:@chiselstrike",
+                        "--format=esm",
+                        "--tree-shaking=true",
+                        "--tsconfig=./tsconfig.json",
+                        "--platform=node",
+                        &format!("--outfile={}", bundler_output_file),
+                    ],
+                    chiselc_cmd.stdout,
+                );
+                endpoint_futures.push((bundler_output_file.clone(), cmd));
+            } else {
+                let cmd = npx(
                     "esbuild",
                     &[
                         &bundler_entry_fname,
@@ -142,8 +167,10 @@ pub(crate) async fn apply<S: ToString>(
                         "--platform=node",
                         &format!("--outfile={}", bundler_output_file),
                     ],
-                ),
-            ));
+                    None,
+                );
+                endpoint_futures.push((bundler_output_file.clone(), cmd));
+            }
         }
 
         for (endpoint, execution) in endpoints.iter().zip(endpoint_futures.into_iter()) {
@@ -203,7 +230,12 @@ pub(crate) async fn apply<S: ToString>(
             };
 
             let code = types_string.clone() + &code;
-            let code = swc_compile(code)?;
+            let code = if use_chiselc {
+                let output = chiselc_output(code, &entities)?;
+                output_to_string(&output).unwrap()
+            } else {
+                swc_compile(code)?
+            };
             endpoints_req.push(EndPointCreationRequest {
                 path: f.name.clone(),
                 code,
@@ -294,9 +326,77 @@ fn output_to_string(out: &std::process::Output) -> Option<String> {
     )
 }
 
-fn npx(command: &str, args: &[&str]) -> JoinHandle<Result<std::process::Output>> {
+fn chiselc_cmd() -> Result<PathBuf> {
+    let mut cmd = std::env::current_exe()?;
+    cmd.pop();
+    cmd.push("chiselc");
+    Ok(cmd)
+}
+
+fn is_chiselc_available() -> bool {
+    let cmd = match chiselc_cmd() {
+        Ok(cmd) => cmd,
+        _ => return false,
+    };
+    let mut cmd = std::process::Command::new(cmd);
+    cmd.args(&["--version"]);
+    match cmd.output() {
+        Ok(output) => output.status.success(),
+        _ => false,
+    }
+}
+
+/// Spawn `chiselc` and return a reference to the child process.
+fn chiselc_spawn(input: &str, entities: &[String]) -> Result<std::process::Child> {
+    let mut args: Vec<&str> = vec![input, "--target", "js"];
+    if !entities.is_empty() {
+        args.push("-e");
+        for entity in entities.iter() {
+            args.push(entity);
+        }
+    }
+    let cmd = std::process::Command::new(chiselc_cmd()?)
+        .args(args)
+        .stdout(Stdio::piped())
+        .spawn()?;
+    Ok(cmd)
+}
+
+/// Spawn `chiselc`, wait for the process to complete, and return its output.
+fn chiselc_output(code: String, entities: &[String]) -> Result<std::process::Output> {
+    let mut args: Vec<&str> = vec!["--target", "js"];
+    if !entities.is_empty() {
+        args.push("-e");
+        for entity in entities.iter() {
+            args.push(entity);
+        }
+    }
+    let mut cmd = std::process::Command::new(chiselc_cmd()?)
+        .args(args)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .spawn()?;
+    let mut stdin = cmd.stdin.take().expect("Failed to open stdin");
+    std::thread::spawn(move || {
+        stdin
+            .write_all(code.as_bytes())
+            .expect("Failed to write to stdin");
+    });
+    let output = cmd.wait_with_output().expect("Failed to read stdout");
+    Ok(output)
+}
+
+fn npx(
+    command: &str,
+    args: &[&str],
+    stdin: Option<std::process::ChildStdout>,
+) -> JoinHandle<Result<std::process::Output>> {
     let mut cmd = std::process::Command::new("npx");
     cmd.arg(command).args(args);
+
+    if let Some(stdin) = stdin {
+        cmd.stdin(stdin);
+    }
 
     spawn_blocking(move || {
         cmd.output()
