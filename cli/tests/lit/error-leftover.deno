@@ -1,0 +1,46 @@
+# SPDX-FileCopyrightText: © 2022 ChiselStrike <info@chiselstrike.com>
+
+# RUN: sh -e @file
+
+# Test that we cleanup when a endpoint fails in the middle.
+
+cat << EOF > "$TEMPDIR/endpoints/error.ts"
+export default async function chisel(req: Request) {
+    let i = 0;
+    let stream = new ReadableStream({
+        async pull(controller) {
+            if (i > 0) {
+                throw new Error("Error in stream");
+            }
+            i += 1;
+            await new Promise((resolve) => setTimeout(resolve, 0));
+            const string = "WILL ERROR\n";
+            const textEncoder = new TextEncoder();
+            const utf8 = new Uint8Array(string.length);
+            textEncoder.encodeInto(string, utf8);
+            controller.enqueue(utf8);
+        }
+    });
+
+    return new Response(stream);
+}
+EOF
+
+cat << EOF > "$TEMPDIR/endpoints/ok.ts"
+export default async function chisel(req: Request) {
+    return new Response("OK\n");
+}
+EOF
+
+
+cd "$TEMPDIR"
+
+$CHISEL apply
+
+$CURL $CHISELD_HOST/dev/error
+
+# CHECK: 500 Internal Server Error
+
+$CURL -o output $CHISELD_HOST/dev/ok
+
+grep -c "WILL ERROR" output | grep 0
