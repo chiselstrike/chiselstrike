@@ -1,10 +1,13 @@
 // SPDX-FileCopyrightText: © 2021 ChiselStrike <info@chiselstrike.com>
 
 use crate::chisel::chisel_rpc_client::ChiselRpcClient;
-use crate::chisel::{ChiselApplyRequest, EndPointCreationRequest, PolicyUpdateRequest};
+use crate::chisel::{
+    ChiselApplyRequest, EndPointCreationRequest, IndexCandidate, PolicyUpdateRequest,
+};
 use crate::project::{read_manifest, read_to_string, Module, Optimize};
 use anyhow::{anyhow, Context, Result};
 use compile::compile_ts_code as swc_compile;
+use serde_json::Value;
 use std::collections::HashMap;
 use std::env;
 use std::io::Write;
@@ -80,6 +83,7 @@ pub(crate) async fn apply<S: ToString>(
 
     let types_req = crate::ts::parse_types(&models)?;
     let mut endpoints_req = vec![];
+    let mut index_candidates_req = vec![];
     let mut policy_req = vec![];
 
     let import_str = "import * as ChiselAlias from \"@chiselstrike/api\";
@@ -191,8 +195,27 @@ pub(crate) async fn apply<S: ToString>(
 
             endpoints_req.push(EndPointCreationRequest {
                 path: endpoint.name.clone(),
-                code,
+                code: code.clone(),
             });
+            if use_chiselc {
+                let indexes = chiselc_output(code.clone(), "index-json", &entities)?;
+                let indexes: Value = serde_json::from_str(&indexes)?;
+                if let Some(indexes) = indexes.as_array() {
+                    for index in indexes {
+                        let entity_name = index["entity_name"].to_string();
+                        let properties = match index["properties"].as_array() {
+                            Some(properties) => {
+                                properties.iter().map(|prop| prop.to_string()).collect()
+                            }
+                            None => vec![],
+                        };
+                        index_candidates_req.push(IndexCandidate {
+                            entity_name,
+                            properties,
+                        });
+                    }
+                }
+            }
         }
 
         if let Some(tsc) = tsc {
@@ -229,9 +252,9 @@ pub(crate) async fn apply<S: ToString>(
                 read_to_string(&f.file_path)?
             };
 
-            let code = types_string.clone() + &code;
+            let original_code = types_string.clone() + &code;
             let code = if use_chiselc {
-                chiselc_output(code, "js", &entities)?
+                chiselc_output(original_code.clone(), "js", &entities)?
             } else {
                 swc_compile(code)?
             };
@@ -239,6 +262,25 @@ pub(crate) async fn apply<S: ToString>(
                 path: f.name.clone(),
                 code,
             });
+            if use_chiselc {
+                let indexes = chiselc_output(original_code.clone(), "index-json", &entities)?;
+                let indexes: Value = serde_json::from_str(&indexes)?;
+                if let Some(indexes) = indexes.as_array() {
+                    for index in indexes {
+                        let entity_name = index["entity_name"].to_string();
+                        let properties = match index["properties"].as_array() {
+                            Some(properties) => {
+                                properties.iter().map(|prop| prop.to_string()).collect()
+                            }
+                            None => vec![],
+                        };
+                        index_candidates_req.push(IndexCandidate {
+                            entity_name,
+                            properties,
+                        });
+                    }
+                }
+            }
         }
     }
 
@@ -283,8 +325,8 @@ pub(crate) async fn apply<S: ToString>(
         client
             .apply(tonic::Request::new(ChiselApplyRequest {
                 types: types_req,
-                index_candidates: vec![],
                 endpoints: endpoints_req,
+                index_candidates: index_candidates_req,
                 policies: policy_req,
                 allow_type_deletion: allow_type_deletion.into(),
                 version,

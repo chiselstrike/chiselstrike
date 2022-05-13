@@ -1,6 +1,6 @@
 use crate::query::Filter;
-use serde::Serialize;
 use indexmap::IndexSet;
+use serde::Serialize;
 use swc_ecmascript::ast::{ObjectLit, Prop, PropName, PropOrSpread};
 
 /// An index.
