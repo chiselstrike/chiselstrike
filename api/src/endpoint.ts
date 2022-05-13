@@ -26,19 +26,18 @@ endpointWorker.onerror = function (e) {
 
 const bodyParts: Record<number, Uint8Array[]> = {};
 endpointWorker.onmessage = function (event) {
-    const d = event.data;
-    if (d.msg == "body") {
-        if (!(d.id in bodyParts)) {
-            bodyParts[d.id] = [];
+    const { msg, id, value, err } = event.data;
+    if (msg == "body") {
+        if (!(id in bodyParts)) {
+            bodyParts[id] = [];
         }
-        bodyParts[d.id].push(d.value);
+        bodyParts[id].push(value);
     } else {
         const resolver = resolvers[0];
-        const e = d.err;
-        if (e) {
-            resolver.reject(e);
+        if (err) {
+            resolver.reject(err);
         } else {
-            resolver.resolve(d.value);
+            resolver.resolve(value);
         }
     }
 };
