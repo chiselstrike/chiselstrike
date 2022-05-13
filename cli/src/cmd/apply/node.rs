@@ -1,7 +1,8 @@
 // SPDX-FileCopyrightText: © 2022 ChiselStrike <info@chiselstrike.com>
 
-use crate::chisel::EndPointCreationRequest;
+use crate::chisel::{EndPointCreationRequest, IndexCandidate};
 use crate::cmd::apply::chiselc_spawn;
+use crate::cmd::apply::parse_indexes;
 use crate::cmd::apply::TypeChecking;
 use crate::project::read_to_string;
 use crate::project::Endpoint;
@@ -17,8 +18,9 @@ pub(crate) async fn apply(
     entities: &[String],
     use_chiselc: bool,
     type_check: &TypeChecking,
-) -> Result<Vec<EndPointCreationRequest>> {
+) -> Result<(Vec<EndPointCreationRequest>, Vec<IndexCandidate>)> {
     let mut endpoints_req = vec![];
+    let mut index_candidates_req = vec![];
     let tsc = match type_check {
         TypeChecking::Yes => Some(npx(
             "tsc",
@@ -35,11 +37,12 @@ pub(crate) async fn apply(
     let gen_dir = cwd.join(".gen");
     fs::create_dir_all(&gen_dir)?;
 
-    let chiselc_futures: Vec<(_, _)> = endpoints
+    let chiselc_futures: Vec<(_, _, _)> = endpoints
         .iter()
         .map(|endpoint| {
             if use_chiselc {
-                let gen_file_path = gen_dir.join(endpoint.file_path.file_name().unwrap());
+                let endpoint_file_path = endpoint.file_path.clone();
+                let gen_file_path = gen_dir.join(endpoint_file_path.file_name().unwrap());
                 let chiselc = chiselc_spawn(
                     endpoint.file_path.to_str().unwrap(),
                     gen_file_path.to_str().unwrap(),
@@ -47,19 +50,19 @@ pub(crate) async fn apply(
                 )
                 .unwrap();
                 let future = chiselc;
-                let path = gen_file_path
+                let import_path = gen_file_path
                     .strip_prefix(cwd.clone())
                     .unwrap()
                     .to_path_buf();
-                (Some(Box::new(future)), path)
+                (Some(Box::new(future)), endpoint_file_path, import_path)
             } else {
                 let path = endpoint.file_path.to_owned();
-                (None, path)
+                (None, path.clone(), path)
             }
         })
         .collect();
 
-    for (mut chiselc_future, endpoint_file_path) in chiselc_futures {
+    for (mut chiselc_future, endpoint_file_path, import_path) in chiselc_futures {
         if let Some(mut chiselc_future) = chiselc_future.take() {
             chiselc_future.wait().await?;
         }
@@ -68,7 +71,7 @@ pub(crate) async fn apply(
 
         let mut f = Builder::new().suffix(".ts").tempfile()?;
         let inner = f.as_file_mut();
-        let mut import_path = endpoint_file_path.clone();
+        let mut import_path = import_path.clone();
         import_path.set_extension("");
 
         let code = format!(
@@ -98,11 +101,11 @@ pub(crate) async fn apply(
             ],
             None,
         );
-        endpoint_futures.push((bundler_output_file.clone(), cmd));
+        endpoint_futures.push((endpoint_file_path.clone(), bundler_output_file.clone(), cmd));
     }
 
     for (endpoint, execution) in endpoints.iter().zip(endpoint_futures.into_iter()) {
-        let (bundler_output_file, res) = execution;
+        let (endpoint_file_path, bundler_output_file, res) = execution;
         let res = res.await.unwrap()?;
 
         if !res.status.success() {
@@ -119,8 +122,13 @@ pub(crate) async fn apply(
 
         endpoints_req.push(EndPointCreationRequest {
             path: endpoint.name.clone(),
-            code,
+            code: code.clone(),
         });
+        if use_chiselc {
+            let code = read_to_string(endpoint_file_path.clone())?;
+            let mut indexes = parse_indexes(code, entities)?;
+            index_candidates_req.append(&mut indexes);
+        }
     }
 
     if let Some(tsc) = tsc {
@@ -131,7 +139,7 @@ pub(crate) async fn apply(
             anyhow::bail!("{}\n{}", out, err);
         }
     }
-    Ok(endpoints_req)
+    Ok((endpoints_req, index_candidates_req))
 }
 
 fn npx(
