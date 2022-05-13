@@ -24,11 +24,14 @@ endpointWorker.onerror = function (e) {
     throw e;
 };
 
-let bodyParts: Uint8Array[] = [];
+const bodyParts: Record<number, Uint8Array[]> = {};
 endpointWorker.onmessage = function (event) {
     const d = event.data;
     if (d.msg == "body") {
-        bodyParts.push(d.value);
+        if (!(d.id in bodyParts)) {
+            bodyParts[d.id] = [];
+        }
+        bodyParts[d.id].push(d.value);
     } else {
         const resolver = resolvers[0];
         const e = d.err;
@@ -98,6 +101,7 @@ export async function activateEndpoint(path: string) {
 
 export function endOfRequest(id: number) {
     endpointWorker.postMessage({ cmd: "endOfRequest", id });
+    delete bodyParts[id];
 }
 
 export async function callHandler(
@@ -105,26 +109,17 @@ export async function callHandler(
     apiVersion: string,
     id: number,
 ) {
-    let res;
-    try {
-        res = await toWorker({
-            cmd: "callHandler",
-            path,
-            apiVersion,
-            id,
-        }) as { status: number; headers: number };
-    } catch (e) {
-        bodyParts = [];
-        throw e;
-    }
-
-    const bodyPartsCopy = bodyParts;
-    bodyParts = [];
+    const res = await toWorker({
+        cmd: "callHandler",
+        path,
+        apiVersion,
+        id,
+    }) as { status: number; headers: number };
 
     // The read function is called repeatedly until it returns
     // undefined.
     const read = function () {
-        return bodyPartsCopy.shift();
+        return bodyParts[id].shift();
     };
     return {
         "status": res.status,

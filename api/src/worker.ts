@@ -29,8 +29,8 @@ const requestContext = Chisel.requestContext;
 const ChiselRequest = Chisel.ChiselRequest;
 const loggedInUser = Chisel.loggedInUser;
 
-function sendBodyPart(value: Uint8Array) {
-    postMessage({ msg: "body", value });
+function sendBodyPart(value: Uint8Array, id: number) {
+    postMessage({ msg: "body", value, id });
 }
 
 async function handleMsg(func: () => unknown) {
@@ -143,7 +143,7 @@ async function callHandlerImpl(
 
     const start = await Deno.core.opAsync("op_chisel_start_request");
     if (start.Special) {
-        sendBodyPart(start.Special.body);
+        sendBodyPart(start.Special.body, id);
         return start.Special;
     }
     const { userid, url, method, headers, body_rid } = start.Js;
@@ -195,7 +195,7 @@ async function callHandlerImpl(
             if (v.done || currentRequestId === undefined) {
                 break;
             }
-            sendBodyPart(v.value);
+            sendBodyPart(v.value, id);
         }
     }
     const status = res.status;
