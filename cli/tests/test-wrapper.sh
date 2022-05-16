@@ -37,7 +37,7 @@ PID=$!
 
 function cleanup() {
     kill $PID
-    wait
+    wait $PID
     rm -rf "$TEMPDIR"
     if [ "x$TEST_DATABASE" == "xpostgres" ]; then
         psql "$DATABASE_URL_PREFIX" -c "DROP DATABASE $DATADB"
