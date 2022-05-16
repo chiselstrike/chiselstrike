@@ -193,6 +193,7 @@ async fn run(state: SharedState, mut cmd: ExecutorChannel) -> Result<()> {
         api_task.await??;
     }
     command_task.await?;
+    deno::shutdown();
     Ok(())
 }
 

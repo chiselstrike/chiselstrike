@@ -65,6 +65,7 @@ use serde_derive::Serialize;
 use std::cell::Cell;
 use std::cell::RefCell;
 use std::collections::HashMap;
+use std::collections::HashSet;
 use std::convert::TryInto;
 use std::fmt::Debug;
 use std::future::Future;
@@ -238,7 +239,6 @@ fn build_extensions() -> Vec<Extension> {
             op_chisel_init_worker::decl(),
             op_chisel_read_worker_channel::decl(),
             op_chisel_start_request::decl(),
-            op_chisel_internal_error::decl(),
         ])
         .build()]
 }
@@ -816,6 +816,38 @@ async fn op_chisel_read_worker_channel(state: Rc<RefCell<OpState>>) -> Result<()
     Ok(())
 }
 
+thread_local! {
+    static REJECTED: RefCell<HashSet<v8::Global<v8::Promise>>> = RefCell::new(HashSet::new());
+}
+
+pub(crate) fn shutdown() {
+    REJECTED.with(|r| {
+        assert!(r.borrow().is_empty());
+    });
+}
+
+extern "C" fn promise_reject_callback(message: v8::PromiseRejectMessage) {
+    use v8::PromiseRejectEvent::*;
+
+    let scope = &mut unsafe { v8::CallbackScope::new(&message) };
+    let promise = message.get_promise();
+    let promise = v8::Global::new(scope, promise);
+    match message.get_event() {
+        PromiseRejectWithNoHandler => {
+            REJECTED.with(|r| {
+                r.borrow_mut().insert(promise);
+            });
+        }
+        PromiseHandlerAddedAfterReject => {
+            REJECTED.with(|r| {
+                r.borrow_mut().remove(&promise);
+            });
+        }
+        PromiseRejectAfterResolved => {}
+        PromiseResolveAfterResolved => {}
+    }
+}
+
 pub(crate) async fn init_deno(inspect_brk: bool) -> Result<()> {
     let (service, init_worker) = DenoService::new(inspect_brk).await;
     DENO.with(|d| {
@@ -828,6 +860,7 @@ pub(crate) async fn init_deno(inspect_brk: bool) -> Result<()> {
     let service: &mut DenoService = &mut service;
     let runtime = &mut service.worker.js_runtime;
     let scope = &mut runtime.handle_scope();
+    scope.set_promise_reject_callback(promise_reject_callback);
     let undefined = v8::undefined(scope).into();
     let id = v8::Number::new(scope, service.worker_channel_id as f64).into();
     init_worker
@@ -1109,11 +1142,6 @@ pub(crate) async fn set_type_system(type_system: TypeSystem) {
 
 pub(crate) async fn update_secrets(secrets: JsonObject) {
     to_worker(WorkerMsg::SetCurrentSecrets(secrets.clone())).await;
-}
-
-#[op]
-fn op_chisel_internal_error() {
-    panic!("Internal error, please report this as a bug to ChiselStrike");
 }
 
 #[op]
