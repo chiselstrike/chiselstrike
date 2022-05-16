@@ -31,6 +31,7 @@ async fn webapply(body: Body, rpc_addr: &SocketAddr) -> Result<Response<Body>> {
     client
         .apply(tonic::Request::new(ChiselApplyRequest {
             types: vec![],
+            index_candidates: vec![],
             endpoints: vec![EndPointCreationRequest {
                 path: "ep1".into(),
                 code: body.endpoint,

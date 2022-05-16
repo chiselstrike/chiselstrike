@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: © 2021 ChiselStrike <info@chiselstrike.com>
 
 use crate::auth::{AUTH_ACCOUNT_NAME, AUTH_SESSION_NAME, AUTH_TOKEN_NAME, AUTH_USER_NAME};
-use crate::datastore::query::QueryPlan;
+use crate::datastore::query::{truncate_identifier, QueryPlan};
 use crate::datastore::QueryEngine;
 use crate::types::AuthOrNot::IsAuth;
 use anyhow::Context;
@@ -321,7 +321,22 @@ impl TypeSystem {
             added_fields,
             removed_fields,
             updated_fields,
+            removed_indexes: Self::find_removed_indexes(old_type, &new_type),
         })
+    }
+
+    fn find_removed_indexes(old_type: &ObjectType, new_type: &ObjectType) -> Vec<DbIndex> {
+        let mut removed_indexes = vec![];
+        for old_idx in old_type.indexes() {
+            let contains_idx = new_type
+                .indexes()
+                .iter()
+                .any(|new_idx| new_idx.fields == old_idx.fields);
+            if !contains_idx {
+                removed_indexes.push(old_idx.clone());
+            }
+        }
+        removed_indexes
     }
 
     /// Looks up a custom type with name `type_name` across API versions
@@ -457,7 +472,9 @@ impl TypeSystem {
                 name: type_name,
                 backing_table: backing_table_name,
             };
-            Type::Object(Arc::new(ObjectType::new(desc, fields, is_auth).unwrap()))
+            Type::Object(Arc::new(
+                ObjectType::new(desc, fields, vec![], is_auth).unwrap(),
+            ))
         });
     }
 }
@@ -639,6 +656,8 @@ pub(crate) struct ObjectType {
     name: String,
     /// Fields of this type.
     fields: Vec<Field>,
+    /// Indexes that are to be created in the database to accelerate queries.
+    indexes: Vec<DbIndex>,
     /// user-visible ID of this object.
     chisel_id: Field,
     /// Name of the backing table for this type.
@@ -652,6 +671,7 @@ impl ObjectType {
     pub(crate) fn new<D: ObjectDescriptor>(
         desc: D,
         fields: Vec<Field>,
+        indexes: Vec<DbIndex>,
         is_auth: AuthOrNot,
     ) -> anyhow::Result<Self> {
         let backing_table = desc.backing_table();
@@ -664,6 +684,16 @@ impl ObjectType {
                 api_version,
                 field.api_version
             );
+        }
+        for index in &indexes {
+            for field_name in &index.fields {
+                anyhow::ensure!(
+                    fields.iter().any(|f| &f.name == field_name),
+                    "trying to create an index over field '{}' which is not present on type '{}'",
+                    field_name,
+                    desc.name()
+                );
+            }
         }
         let chisel_id = Field {
             id: None,
@@ -682,6 +712,7 @@ impl ObjectType {
             api_version,
             backing_table,
             fields,
+            indexes,
             chisel_id,
             is_auth,
         })
@@ -727,11 +758,53 @@ impl ObjectType {
             AuthOrNot::IsNotAuth => false,
         }
     }
+
+    pub(crate) fn indexes(&self) -> &Vec<DbIndex> {
+        &self.indexes
+    }
 }
 
 impl PartialEq for ObjectType {
     fn eq(&self, another: &Self) -> bool {
         self.name == another.name && self.api_version == another.api_version
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub(crate) struct DbIndex {
+    /// Id of this index in the meta database. Before it's creation, it will be None.
+    pub(crate) meta_id: Option<i32>,
+    /// Name of the index in database. Before it's creation, it will be None.
+    backing_table: Option<String>,
+    pub(crate) fields: Vec<String>,
+}
+
+impl DbIndex {
+    pub(crate) fn new(meta_id: i32, backing_table: String, fields: Vec<String>) -> Self {
+        Self {
+            meta_id: Some(meta_id),
+            backing_table: Some(backing_table),
+            fields,
+        }
+    }
+
+    pub(crate) fn new_from_fields(fields: Vec<String>) -> Self {
+        Self {
+            meta_id: None,
+            backing_table: None,
+            fields,
+        }
+    }
+
+    pub(crate) fn name(&self) -> Option<String> {
+        self.meta_id.map(|id| {
+            let name = format!(
+                "index_{id}_{}__{}",
+                self.backing_table.as_ref().unwrap(),
+                self.fields.join("_")
+            );
+            truncate_identifier(&name).to_owned()
+        })
     }
 }
 
@@ -951,4 +1024,5 @@ pub(crate) struct ObjectDelta {
     pub(crate) added_fields: Vec<Field>,
     pub(crate) removed_fields: Vec<Field>,
     pub(crate) updated_fields: Vec<FieldDelta>,
+    pub(crate) removed_indexes: Vec<DbIndex>,
 }

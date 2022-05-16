@@ -15,7 +15,7 @@ use futures::FutureExt;
 use futures::StreamExt;
 use itertools::Itertools;
 use pin_project::pin_project;
-use sea_query::{Alias, ColumnDef, Table};
+use sea_query::{Alias, ColumnDef, Index, Table};
 use serde::Serialize;
 use serde_json::json;
 use sqlx::any::{Any, AnyArguments, AnyPool, AnyRow};
@@ -208,13 +208,31 @@ impl QueryEngine {
         transaction: &mut Transaction<'_, Any>,
         ty: &ObjectType,
     ) -> Result<()> {
+        // using a macro as async closures are unstable
+        macro_rules! do_query {
+            ( $table:expr ) => {{
+                let table = $table.build_any(DbConnection::get_query_builder(&self.kind));
+                let table = sqlx::query(&table);
+
+                transaction.execute(table).await
+            }};
+        }
+        for removed_idx in ty.indexes() {
+            let drop_idx = Index::drop()
+                .name(
+                    &removed_idx
+                        .name()
+                        .context("index must have a name when dropped")?,
+                )
+                .table(Alias::new(ty.backing_table()))
+                .to_owned();
+            do_query!(drop_idx)?;
+        }
+
         let drop_table = Table::drop()
             .table(Alias::new(ty.backing_table()))
             .to_owned();
-        let drop_table = drop_table.build_any(DbConnection::get_query_builder(&self.kind));
-        let drop_table = sqlx::query(&drop_table);
-
-        transaction.execute(drop_table).await?;
+        do_query!(drop_table)?;
         Ok(())
     }
 
@@ -255,6 +273,20 @@ impl QueryEngine {
 
         let create_table = sqlx::query(&create_table);
         transaction.execute(create_table).await?;
+
+        for index in ty.indexes() {
+            let idx_name = index
+                .name()
+                .context("index must have a name at a time of table creation")?;
+            let create_index = sqlx::query(
+                r#"
+                CREATE INDEX IF NOT EXISTS $1 ON $2;
+            "#,
+            )
+            .bind(idx_name)
+            .bind(ty.backing_table());
+            transaction.execute(create_index).await?;
+        }
         Ok(())
     }
 
@@ -272,6 +304,18 @@ impl QueryEngine {
 
                 transaction.execute(table).await
             }};
+        }
+
+        for removed_idx in &delta.removed_indexes {
+            let drop_idx = Index::drop()
+                .name(
+                    &removed_idx
+                        .name()
+                        .context("index must have a name when dropped")?,
+                )
+                .table(Alias::new(old_ty.backing_table()))
+                .to_owned();
+            do_query!(drop_idx)?;
         }
 
         // SQLite doesn't support multiple add column statements

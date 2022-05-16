@@ -284,6 +284,7 @@ pub(crate) async fn apply<S: ToString>(
         client
             .apply(tonic::Request::new(ChiselApplyRequest {
                 types: types_req,
+                index_candidates: vec![],
                 endpoints: endpoints_req,
                 policies: policy_req,
                 allow_type_deletion: allow_type_deletion.into(),

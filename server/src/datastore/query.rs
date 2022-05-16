@@ -358,7 +358,7 @@ impl QueryPlan {
                     nested_ty.name()
                 );
                 // PostgreSQL has a limit on identifiers to be at most 63 bytes long.
-                let nested_table = max_prefix(nested_table.as_str(), 63).to_owned();
+                let nested_table = truncate_identifier(nested_table.as_str()).to_owned();
                 self.join_counter += 1;
 
                 self.make_scalar_field(field, current_table, field_policy);
@@ -711,6 +711,12 @@ fn max_prefix(s: &str, max_len: usize) -> &str {
     &s[..idx]
 }
 
+/// Truncates Database identifier (column/table name) to 63 bytes to make it
+/// Postgres-compatible.
+pub(crate) fn truncate_identifier(s: &str) -> &str {
+    max_prefix(s, 63)
+}
+
 #[derive(Debug, Clone, Deserialize)]
 #[serde(tag = "type")]
 pub(crate) enum QueryOpChain {
@@ -854,7 +860,7 @@ pub(crate) mod tests {
 
     pub(crate) fn make_object(name: &str, fields: Vec<Field>) -> Arc<ObjectType> {
         let desc = types::NewObject::new(name, VERSION);
-        Arc::new(ObjectType::new(desc, fields, types::AuthOrNot::IsNotAuth).unwrap())
+        Arc::new(ObjectType::new(desc, fields, vec![], types::AuthOrNot::IsNotAuth).unwrap())
     }
 
     pub(crate) fn make_field(name: &str, ty: Type) -> Field {

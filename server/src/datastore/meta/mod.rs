@@ -8,7 +8,7 @@ use crate::policies::Policies;
 use crate::prefix_map::PrefixMap;
 use crate::types::AuthOrNot::IsNotAuth;
 use crate::types::{
-    ExistingField, ExistingObject, Field, FieldDelta, ObjectDelta, ObjectType, TypeSystem,
+    DbIndex, ExistingField, ExistingObject, Field, FieldDelta, ObjectDelta, ObjectType, TypeSystem,
 };
 use anyhow::Context;
 use sqlx::any::{Any, AnyPool};
@@ -394,8 +394,9 @@ impl MetaService {
             let type_name: &str = row.get("type_name");
             let desc = ExistingObject::new(type_name, backing_table, type_id)?;
             let fields = self.load_type_fields(&ts, type_id).await?;
+            let indexes = self.load_type_indexes(type_id, backing_table).await?;
 
-            let ty = ObjectType::new(desc, fields, IsNotAuth)?;
+            let ty = ObjectType::new(desc, fields, indexes, IsNotAuth)?;
             ts.add_type(Arc::new(ty))?;
         }
         Ok(ts)
@@ -456,6 +457,33 @@ impl MetaService {
         Ok(fields)
     }
 
+    async fn load_type_indexes(
+        &self,
+        type_id: i32,
+        backing_table: &str,
+    ) -> anyhow::Result<Vec<DbIndex>> {
+        let query = sqlx::query(
+            r#"
+            SELECT
+                index_id,
+                fields
+            FROM indexes
+            WHERE type_id = $1"#,
+        )
+        .bind(type_id);
+        let rows = fetch_all(&self.pool, query).await?;
+
+        let mut indexes = vec![];
+        for row in rows {
+            let index_id: i32 = row.get("index_id");
+            // FIXME: bind fields to fields table.
+            let fields: &str = row.get("fields");
+            let fields = fields.split(';').map(|s| s.to_string()).collect();
+            indexes.push(DbIndex::new(index_id, backing_table.to_owned(), fields));
+        }
+        Ok(indexes)
+    }
+
     pub(crate) async fn remove_type(
         &self,
         transaction: &mut Transaction<'_, Any>,
@@ -495,6 +523,15 @@ impl MetaService {
         for field in delta.updated_fields.iter() {
             update_field_query(transaction, field).await?;
         }
+
+        for index in &delta.removed_indexes {
+            let index_id = index
+                .meta_id
+                .context("index id must be known when updating type")?;
+            let del_index = sqlx::query("DELETE FROM indexes WHERE index_id = $1").bind(index_id);
+            execute(transaction, del_index).await?;
+        }
+
         Ok(())
     }
 
@@ -578,6 +615,13 @@ impl MetaService {
 
         for field in ty.user_fields() {
             insert_field_query(transaction, ty, Some(id), field).await?;
+        }
+        for index in ty.indexes() {
+            let fields = index.fields.join(";");
+            let add_index = sqlx::query("INSERT INTO indexes (type_id, fields) VALUES ($1, $2)")
+                .bind(id)
+                .bind(fields);
+            execute(transaction, add_index).await?;
         }
         Ok(())
     }
