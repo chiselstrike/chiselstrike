@@ -1,5 +1,5 @@
 use crate::symbols::Symbols;
-use swc_ecmascript::ast::{Callee, Expr, MemberProp, Pat};
+use swc_ecmascript::ast::{Expr, MemberProp, Pat};
 
 pub fn is_ident_member_prop(member_prop: &MemberProp, value: &str) -> bool {
     match member_prop {
@@ -17,21 +17,15 @@ pub fn ident_to_string(expr: &Expr) -> Option<String> {
 
 pub fn is_call_to_entity_method(expr: &Expr, method: &str, symbols: &Symbols) -> bool {
     match expr {
-        Expr::Call(call_expr) => match &call_expr.callee {
-            Callee::Expr(expr) => match &**expr {
-                Expr::Member(member_expr) => {
-                    let expr = &member_expr.obj;
-                    if let Some(ty) = ident_to_string(expr) {
-                        if !symbols.is_entity(&ty) {
-                            return false;
-                        }
-                    }
-                    is_ident_member_prop(&member_expr.prop, method)
+        Expr::Member(member_expr) => {
+            let expr = &member_expr.obj;
+            if let Some(ty) = ident_to_string(expr) {
+                if !symbols.is_entity(&ty) {
+                    return false;
                 }
-                _ => false,
-            },
-            _ => false,
-        },
+            }
+            is_ident_member_prop(&member_expr.prop, method)
+        }
         _ => false,
     }
 }
