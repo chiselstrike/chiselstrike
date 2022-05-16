@@ -42,11 +42,6 @@ endpointWorker.onmessage = function (event) {
     }
 };
 
-Deno.core.setPromiseRejectCallback((type, promise, reason) => {
-    console.error("BAD PROMISE", type, promise, reason, new Error().stack);
-    Deno.core.opSync("op_chisel_internal_error");
-});
-
 async function toWorker(msg: unknown) {
     const p = new Promise((resolve, reject) => {
         resolvers.push({ resolve, reject, msg });
