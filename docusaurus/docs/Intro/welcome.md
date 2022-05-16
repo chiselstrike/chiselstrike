@@ -4,7 +4,7 @@ slug: /
 ---
 # Welcome to ChiselStrike!
 
-We're so happy you're here! Chiselstrike is a new platform for developing and hosting data services. If you 
+We're so happy you're here! ChiselStrike is a new platform for developing and hosting data services. If you 
 want to get a new frontend working with live data in production, ChiselStrike is going to be the fastest way.
 
 All apps need data, but building services around them often involves crafting tedious boilerplate
