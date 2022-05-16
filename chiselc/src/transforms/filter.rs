@@ -96,9 +96,8 @@ pub fn infer_filter(
 fn is_rewritable_filter(callee: &Callee, symbols: &Symbols) -> bool {
     match callee {
         Callee::Expr(expr) => match &**expr {
-            Expr::Member(member_expr) => {
-                is_ident_member_prop(&member_expr.prop, "filter")
-                    && is_call_to_entity_method(&member_expr.obj, "cursor", symbols)
+            Expr::Member(member_expr) if is_ident_member_prop(&member_expr.prop, "filter") => {
+                is_call_to_entity_method(&member_expr.obj, "cursor", symbols)
             }
             _ => false,
         },
