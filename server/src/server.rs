@@ -268,8 +268,9 @@ pub async fn run_shared_state(
 
     let secret_commands = commands2.clone();
 
+    let secret_shutdown = signal_rx.clone();
     // Spawn periodic hot-reload of secrets.  This doesn't load secrets immediately, though.
-    let secret_reader = tokio::task::spawn(async move {
+    let _secret_reader = tokio::task::spawn(async move {
         use std::collections::hash_map::DefaultHasher;
         use std::hash::{Hash, Hasher};
 
@@ -282,7 +283,13 @@ pub async fn run_shared_state(
         let mut last_hash = 0;
         let mut last_try_was_failure = false;
         loop {
-            sleep(Duration::from_millis(1000)).await;
+            futures::select! {
+                _ = sleep(Duration::from_millis(1000)).fuse() => {},
+                _ = secret_shutdown.recv().fuse() => {
+                    break;
+                }
+            };
+
             match get_secrets().await {
                 Ok(secrets) => {
                     last_try_was_failure = false;
@@ -330,7 +337,6 @@ pub async fn run_shared_state(
     let rpc_rx = signal_rx.clone();
     let shutdown = async move {
         rpc_rx.recv().await.ok();
-        secret_reader.abort();
     };
 
     let rpc_task = crate::rpc::spawn(rpc, opt.rpc_listen_addr, start_wait, shutdown);
