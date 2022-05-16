@@ -13,14 +13,16 @@ use crate::runtime;
 use crate::server::CommandTrait;
 use crate::server::CoordinatorChannel;
 use crate::types::AuthOrNot::IsNotAuth;
-use crate::types::{Field, NewField, NewObject, ObjectType, Type, TypeSystem, TypeSystemError};
+use crate::types::{
+    DbIndex, Field, NewField, NewObject, ObjectType, Type, TypeSystem, TypeSystemError,
+};
 use anyhow::{Context, Result};
 use async_lock::Mutex;
 use chisel::chisel_rpc_server::{ChiselRpc, ChiselRpcServer};
 use chisel::{
     ChiselApplyRequest, ChiselApplyResponse, ChiselDeleteRequest, ChiselDeleteResponse,
-    DescribeRequest, DescribeResponse, PopulateRequest, PopulateResponse, RestartRequest,
-    RestartResponse, StatusRequest, StatusResponse,
+    DescribeRequest, DescribeResponse, IndexCandidate, PopulateRequest, PopulateResponse,
+    RestartRequest, RestartResponse, StatusRequest, StatusResponse,
 };
 use deno_core::futures;
 use futures::FutureExt;
@@ -297,6 +299,7 @@ or
 
         let mut decorators = BTreeSet::default();
         let mut new_types = HashMap::<String, Arc<ObjectType>>::default();
+        let indexes = Self::aggregate_indexes(&apply_request.index_candidates);
 
         // No changes are made to the type system in this loop. We re-read the database after we
         // apply the changes, and this way we don't have to deal with the case of succeding to
@@ -332,10 +335,12 @@ or
                     field.is_unique,
                 ));
             }
+            let ty_indexes = indexes.get(&name).cloned().unwrap_or_default();
 
             let ty = Arc::new(ObjectType::new(
                 NewObject::new(&name, &api_version),
                 fields,
+                ty_indexes,
                 IsNotAuth,
             )?);
             new_types.insert(name.to_owned(), ty.clone());
@@ -386,6 +391,27 @@ or
             .policies
             .versions
             .insert(api_version.to_owned(), policy.clone());
+
+        // Refresh to_insert types so that they have fresh meta ids (e.g. new  DbIndexes
+        // need their meta id to be created in the storage database).
+        let to_insert = to_insert
+            .iter()
+            .map(|ty| {
+                state
+                    .type_system
+                    .lookup_custom_type(ty.name(), &api_version)
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+
+        let to_update = to_update
+            .into_iter()
+            .map(|(ty, delta)| {
+                let updated_ty = state
+                    .type_system
+                    .lookup_custom_type(ty.name(), &api_version);
+                updated_ty.map(|ty| (ty, delta))
+            })
+            .collect::<Result<Vec<_>, _>>()?;
 
         // Update the data database after all the metdata is up2date.
         // We will not get a single transaction because in the general case those things
@@ -459,6 +485,19 @@ or
             endpoints: endpoint_routes.iter().map(|x| x.0.clone()).collect(),
             labels,
         }))
+    }
+
+    fn aggregate_indexes(indexes: &Vec<IndexCandidate>) -> HashMap<String, Vec<DbIndex>> {
+        let mut index_map = HashMap::<String, Vec<DbIndex>>::new();
+        for candidate in indexes {
+            let idx = DbIndex::new_from_fields(candidate.properties.clone());
+            if let Some(type_indexes) = index_map.get_mut(&candidate.entity_name) {
+                type_indexes.push(idx);
+            } else {
+                index_map.insert(candidate.entity_name.clone(), vec![idx]);
+            }
+        }
+        index_map
     }
 }
 

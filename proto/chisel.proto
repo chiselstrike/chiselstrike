@@ -72,6 +72,7 @@ message PolicyUpdateRequest {
 
 message ChiselApplyRequest {
    repeated AddTypeRequest types = 1;
+   repeated IndexCandidate index_candidates = 8;
    repeated EndPointCreationRequest endpoints = 2;
    repeated PolicyUpdateRequest policies = 3;
    bool allow_type_deletion = 4;
@@ -101,6 +102,11 @@ message PopulateRequest {
 
 message PopulateResponse {
     string msg = 1;
+}
+
+message IndexCandidate {
+    string entity_name = 1;
+    repeated string properties = 2;
 }
 
 service ChiselRpc {

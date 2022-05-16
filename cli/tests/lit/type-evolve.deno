@@ -134,3 +134,36 @@ $CHISEL apply
 $CURL $CHISELD_HOST/dev/find
 # CHECK: HTTP/1.1 200 OK
 # CHECK: tst A true tst
+
+
+## Test field deletion with index
+
+cat << EOF > "$TEMPDIR/endpoints/test_indexes.ts"
+import { Evolving } from "../models/types.ts";
+
+export default async function chisel(req: Request) {
+    const filtered = Evolving.cursor()
+        .filter((e: Evolving) => {
+            return e.a == "xx";
+        });
+    const results = (await filtered.toArray()).map(p => p.a);
+    return new Response("[" + results.join(", ") + "]");
+}
+EOF
+
+$CHISEL apply
+# CHECK: End point defined: /dev/test_indexes
+
+
+cat << EOF > "$TEMPDIR/models/types.ts"
+import { ChiselEntity } from "@chiselstrike/api";
+
+export class Evolving extends ChiselEntity {
+    b: boolean = true;
+}
+EOF
+
+rm $TEMPDIR/endpoints/test_indexes.ts
+
+$CHISEL apply --allow-type-deletion
+# CHECK: Model defined: Evolving
