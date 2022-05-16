@@ -8,7 +8,7 @@ use crate::query::Operator as QOperator;
 use crate::query::PropertyAccessExpr as QPropertyAccessExpr;
 use crate::query::Scan as QScan;
 use crate::symbols::Symbols;
-use crate::utils::{is_call_to_entity_cursor, is_ident_member_prop, pat_to_string};
+use crate::utils::{is_call_to_entity_method, is_ident_member_prop, pat_to_string};
 use anyhow::{anyhow, Result};
 
 use swc_ecmascript::ast::{
@@ -98,7 +98,7 @@ fn is_rewritable_filter(callee: &Callee, symbols: &Symbols) -> bool {
         Callee::Expr(expr) => match &**expr {
             Expr::Member(member_expr) => {
                 is_ident_member_prop(&member_expr.prop, "filter")
-                    && is_call_to_entity_cursor(&member_expr.obj, symbols)
+                    && is_call_to_entity_method(&member_expr.obj, "cursor", symbols)
             }
             _ => false,
         },

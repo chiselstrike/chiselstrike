@@ -15,7 +15,7 @@ pub fn ident_to_string(expr: &Expr) -> Option<String> {
     }
 }
 
-pub fn is_call_to_entity_cursor(expr: &Expr, symbols: &Symbols) -> bool {
+pub fn is_call_to_entity_method(expr: &Expr, method: &str, symbols: &Symbols) -> bool {
     match expr {
         Expr::Call(call_expr) => match &call_expr.callee {
             Callee::Expr(expr) => match &**expr {
@@ -26,7 +26,7 @@ pub fn is_call_to_entity_cursor(expr: &Expr, symbols: &Symbols) -> bool {
                             return false;
                         }
                     }
-                    is_ident_member_prop(&member_expr.prop, "cursor")
+                    is_ident_member_prop(&member_expr.prop, method)
                 }
                 _ => false,
             },
