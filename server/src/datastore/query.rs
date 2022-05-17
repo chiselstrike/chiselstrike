@@ -7,7 +7,7 @@ use crate::types::{Field, ObjectType, Type, TypeSystem};
 
 use anyhow::{anyhow, Context, Result};
 use enum_as_inner::EnumAsInner;
-use serde_derive::Deserialize;
+use serde_derive::{Deserialize, Serialize};
 use serde_json::value::Value;
 use std::collections::HashMap;
 use std::collections::HashSet;
@@ -129,11 +129,17 @@ struct Join {
 
 /// SortKey specifies a `field_name` and ordering in which sorting should be done.
 #[cfg_attr(test, derive(PartialEq))]
-#[derive(Debug, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub(crate) struct SortKey {
     #[serde(rename = "fieldName")]
     pub field_name: String,
     pub ascending: bool,
+}
+
+#[cfg_attr(test, derive(PartialEq))]
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub(crate) struct SortBy {
+    pub keys: Vec<SortKey>,
 }
 
 /// Operators used to mutate the result set.
@@ -149,7 +155,7 @@ pub(crate) enum QueryOp {
     /// Skips the first `count` rows.
     Skip { count: u64 },
     /// Lexicographically sorts elements using `SortKey`s.
-    SortBy { keys: Vec<SortKey> },
+    SortBy(SortBy),
 }
 
 struct Column {
@@ -551,10 +557,10 @@ impl QueryPlan {
         Ok(format!("\"{}\"", c_alias))
     }
 
-    fn make_sort_string(&self, sort: Option<&Vec<SortKey>>) -> Result<String> {
+    fn make_sort_string(&self, sort: Option<&SortBy>) -> Result<String> {
         let sort_str = if let Some(sort) = sort {
             let mut order_tokens = vec![];
-            for sort_key in sort {
+            for sort_key in &sort.keys {
                 if !self.base_type().has_field(&sort_key.field_name) {
                     anyhow::bail!(
                         "entity '{}' has no field named '{}'",
@@ -637,7 +643,7 @@ impl QueryPlan {
         expr
     }
 
-    fn find_last_sort_by<'a>(&self, ops: &'a [QueryOp]) -> Option<&'a Vec<SortKey>> {
+    fn find_last_sort_by<'a>(&self, ops: &'a [QueryOp]) -> Option<&'a SortBy> {
         ops.iter()
             .rfind(|op| op.as_sort_by().is_some())
             .map(|op| op.as_sort_by().unwrap())
@@ -748,16 +754,16 @@ pub(crate) enum QueryOpChain {
 /// are to be applied on the resulting entity elements in order that
 /// is defined by the vector.
 fn convert_ops(op: QueryOpChain) -> Result<(String, Vec<QueryOp>)> {
-    use QueryOpChain::*;
-    let (query_op, inner) = match op {
-        BaseEntity { name } => {
+    use QueryOpChain as Op;
+    let (query_op, inner): (QueryOp, _) = match op {
+        Op::BaseEntity { name } => {
             return Ok((name, vec![]));
         }
-        Filter { expression, inner } => (QueryOp::Filter { expression }, inner),
-        Projection { fields, inner } => (QueryOp::Projection { fields }, inner),
-        Take { count, inner } => (QueryOp::Take { count }, inner),
-        Skip { count, inner } => (QueryOp::Skip { count }, inner),
-        SortBy { keys, inner } => (QueryOp::SortBy { keys }, inner),
+        Op::Filter { expression, inner } => (QueryOp::Filter { expression }, inner),
+        Op::Projection { fields, inner } => (QueryOp::Projection { fields }, inner),
+        Op::Take { count, inner } => (QueryOp::Take { count }, inner),
+        Op::Skip { count, inner } => (QueryOp::Skip { count }, inner),
+        Op::SortBy { keys, inner } => (QueryOp::SortBy(SortBy { keys }), inner),
     };
     let (entity_name, mut ops) = convert_ops(*inner)?;
     ops.push(query_op);
