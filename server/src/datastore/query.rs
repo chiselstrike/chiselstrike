@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: © 2021 ChiselStrike <info@chiselstrike.com>
 
 use crate::auth::AUTH_USER_NAME;
-use crate::datastore::expr::{BinaryExpr, BinaryOp, Expr, Literal, PropertyAccess};
+use crate::datastore::expr::{BinaryExpr, Expr, Literal, PropertyAccess};
 use crate::policies::{FieldPolicies, Policies};
 use crate::types::{Field, ObjectType, Type, TypeSystem};
 
@@ -417,14 +417,8 @@ impl QueryPlan {
                 };
                 if nested_ty.name() == AUTH_USER_NAME {
                     if field_policies.match_login.contains(&field.name) {
-                        let expr = BinaryExpr {
-                            left: Box::new(property_access.into()),
-                            op: BinaryOp::Eq,
-                            right: Box::new(user_id.clone().into()),
-                        };
-                        self.operators.push(QueryOp::Filter {
-                            expression: expr.into(),
-                        });
+                        let expr = BinaryExpr::eq(property_access.into(), user_id.clone().into());
+                        self.operators.push(QueryOp::Filter { expression: expr });
                     }
                 } else {
                     self.add_login_filters_recursive(context, nested_ty, property_access.into());
@@ -629,12 +623,8 @@ impl QueryPlan {
         for op in ops {
             if let QueryOp::Filter { expression } = op {
                 if let Some(filter_expr) = expr {
-                    let new_expr = BinaryExpr {
-                        left: Box::new(filter_expr),
-                        op: BinaryOp::And,
-                        right: Box::new(expression.clone()),
-                    };
-                    expr = Some(new_expr.into());
+                    let new_expr = BinaryExpr::and(filter_expr, expression.clone());
+                    expr = Some(new_expr);
                 } else {
                     expr = Some(expression.clone());
                 }
@@ -826,6 +816,7 @@ pub(crate) mod tests {
     use serde_json::json;
     use tempfile::NamedTempFile;
 
+    use crate::datastore::expr::BinaryOp;
     use crate::datastore::{DbConnection, QueryEngine};
     use crate::types;
     use crate::JsonObject;
@@ -842,12 +833,7 @@ pub(crate) mod tests {
             }
             .into();
         }
-        BinaryExpr {
-            left: Box::new(field_chain),
-            op,
-            right: Box::new(literal.into()),
-        }
-        .into()
+        BinaryExpr::new(op, field_chain, literal.into()).into()
     }
 
     pub(crate) fn make_type_system(entities: &[&Arc<ObjectType>]) -> TypeSystem {
