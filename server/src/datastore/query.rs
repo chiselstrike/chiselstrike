@@ -274,11 +274,10 @@ impl QueryPlan {
     /// `operators.
     pub(crate) fn from_ops(
         c: &RequestContext,
-        ty: &Arc<ObjectType>,
+        entity_name: &str,
         operators: Vec<QueryOp>,
     ) -> Result<Self> {
-        let mut query_plan = Self::new(ty.clone());
-        query_plan.entity = query_plan.load_entity(c, ty);
+        let mut query_plan = Self::from_entity_name(c, entity_name)?;
         query_plan.extend_operators(operators);
         Ok(query_plan)
     }
