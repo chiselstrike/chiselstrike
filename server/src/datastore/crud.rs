@@ -83,14 +83,7 @@ fn url_to_filter(base_type: &Arc<ObjectType>, url: &str) -> Result<Option<Expr>>
                 parse_filter(base_type, param_key, &value).context("failed to parse filter")?;
 
             filter = filter
-                .map_or(expression.clone(), |e| {
-                    BinaryExpr {
-                        left: Box::new(expression),
-                        op: BinaryOp::And,
-                        right: Box::new(e),
-                    }
-                    .into()
-                })
+                .map_or(expression.clone(), |e| BinaryExpr::and(expression, e))
                 .into();
         }
     }
@@ -199,12 +192,8 @@ fn parse_filter(base_type: &Arc<ObjectType>, param_key: &str, value: &str) -> Re
         Type::Boolean => Literal::Bool(value.parse::<bool>().with_context(|| err_msg("bool"))?),
     };
 
-    let expr = Expr::Binary(BinaryExpr {
-        left: Box::new(property_chain),
-        op: convert_operator(operator)?,
-        right: Box::new(literal.into()),
-    });
-    Ok(expr)
+    let op = convert_operator(operator)?;
+    Ok(BinaryExpr::new(op, property_chain, literal.into()).into())
 }
 
 fn convert_operator(op_str: Option<&str>) -> Result<BinaryOp> {

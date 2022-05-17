@@ -145,6 +145,36 @@ pub(crate) struct BinaryExpr {
     pub right: Box<Expr>,
 }
 
+macro_rules! make_op_method {
+    ($MethodName:ident, $EnumName:ident) => {
+        #[allow(dead_code)]
+        pub fn $MethodName(lhs: Expr, rhs: Expr) -> Expr {
+            Self::new(BinaryOp::$EnumName, lhs, rhs).into()
+        }
+    };
+}
+
+impl BinaryExpr {
+    pub(crate) fn new(op: BinaryOp, lhs: Expr, rhs: Expr) -> Self {
+        BinaryExpr {
+            left: Box::new(lhs),
+            op,
+            right: Box::new(rhs),
+        }
+    }
+
+    make_op_method! {eq, Eq}
+    make_op_method! {not_eq, NotEq}
+    make_op_method! {lt, Lt}
+    make_op_method! {lt_eq, LtEq}
+    make_op_method! {gt, Gt}
+    make_op_method! {gt_eq, GtEq}
+    make_op_method! {and, And}
+    make_op_method! {or, Or}
+    make_op_method! {like, Like}
+    make_op_method! {not_like, NotLike}
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
