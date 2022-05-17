@@ -28,7 +28,7 @@ EOF
 
 cat << EOF > "$TEMPDIR/endpoints/ok.ts"
 export default async function chisel(req: Request) {
-    return new Response("OK\n");
+    return new Response("EXPECTED\n");
 }
 EOF
 
@@ -41,6 +41,8 @@ $CURL $CHISELD_HOST/dev/error
 
 # CHECK: 500 Internal Server Error
 
-$CURL -o output $CHISELD_HOST/dev/ok
+$CURL $CHISELD_HOST/dev/ok | tee output
 
 grep -c "WILL ERROR" output | grep 0
+
+# CHECK: EXPECTED
