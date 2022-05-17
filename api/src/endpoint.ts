@@ -28,9 +28,6 @@ const bodyParts: Record<number, Uint8Array[]> = {};
 endpointWorker.onmessage = function (event) {
     const { msg, id, value, err } = event.data;
     if (msg == "body") {
-        if (!(id in bodyParts)) {
-            bodyParts[id] = [];
-        }
         bodyParts[id].push(value);
     } else {
         const resolver = resolvers[0];
@@ -111,6 +108,8 @@ export async function callHandler(
     apiVersion: string,
     id: number,
 ) {
+    bodyParts[id] = [];
+
     const res = await toWorker({
         cmd: "callHandler",
         path,
