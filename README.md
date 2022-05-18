@@ -62,7 +62,7 @@ worrying about the underlying database - anymore than you worry about what happe
 ### Is ChiselStrike an ORM?
 
 Maybe? ChiselStrike has some aspects that overlap with traditional ORMs: it allows you to access database abstractions
-in your favorite programming language. However, in traditional ORMs you start from the database, and export it up. Changes
+in your programming language. However, in traditional ORMs you start from the database, and export it up. Changes
 are done to the database schema, which is then bubbled up through *migrations*, and elements of the database invariably leak
 to the API.
 
@@ -106,7 +106,7 @@ const all = await BlogComment.findMany(p => p.isHuman);
 
 ### Is ChiselStrike a TypeScript runtime?
 
-ChiselStrike includes a TypeScript runtime - the fantastic and beloved Deno. That's the last piece of the puzzle
+ChiselStrike includes a TypeScript runtime - the fantastic and beloved [Deno](https://github.com/denoland/deno). That's the last piece of the puzzle
 with the data API and the database bundles. That allows you to develop everything locally from your laptop and integrate
 with your favorite frontend framework. Be it Next.js, Gatsby, Remix, we're cool with any of them!
 
@@ -119,7 +119,7 @@ and allows you to specify authentication entities directly from your TypeScript 
 
 You can then add a policy file that details which fields can be accessed, and which endpoints are available.
 
-For example, you can automatically store the blog authors as part of the models,
+For example, you can store the blog authors as part of the models,
 
 ```typescript
 import { ChiselEntity, AuthUser } from "@chiselstrike/api"
