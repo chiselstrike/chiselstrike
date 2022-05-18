@@ -982,7 +982,7 @@ async fn resolve_promise(js_promise: v8::Global<v8::Value>) -> Result<v8::Global
 
 type ReadFutureState = v8::Global<v8::Function>;
 async fn get_read_future(read: ReadFutureState) -> Result<Option<(Box<[u8]>, ReadFutureState)>> {
-    let read_result = {
+    let js_promise = {
         let mut service = get();
         let runtime = &mut service.worker.js_runtime;
         let scope = &mut runtime.handle_scope();
@@ -993,6 +993,7 @@ async fn get_read_future(read: ReadFutureState) -> Result<Option<(Box<[u8]>, Rea
             .ok_or(Error::NotAResponse)?;
         v8::Global::new(scope, res)
     };
+    let read_result = resolve_promise(js_promise).await?;
     let mut service = get();
     let runtime = &mut service.worker.js_runtime;
     let scope = &mut runtime.handle_scope();

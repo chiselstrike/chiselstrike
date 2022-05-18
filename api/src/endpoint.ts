@@ -24,12 +24,35 @@ endpointWorker.onerror = function (e) {
     throw e;
 };
 
-const bodyParts: Record<number, Uint8Array[]> = {};
+type BodyState = {
+    parts: { value?: Uint8Array; err?: Error }[];
+    done: boolean;
+    resolve?: () => void;
+};
+
+const bodyParts: Record<number, BodyState> = {};
+let bodyDone = false;
+let resolveBody: (() => void) | undefined = undefined;
 endpointWorker.onmessage = function (event) {
     const { msg, id, value, err } = event.data;
     if (msg == "body") {
-        if (id in bodyParts) {
-            bodyParts[id].push(value);
+        const state = bodyParts[id];
+        if (state?.resolve !== undefined) {
+            state.resolve();
+            state.resolve = undefined;
+        }
+        if ((err !== undefined || value !== undefined) && state !== undefined) {
+            state.parts.push({ value, err });
+        }
+        if (err !== undefined || value === undefined) {
+            if (state !== undefined) {
+                state.done = true;
+            }
+            bodyDone = true;
+            if (resolveBody !== undefined) {
+                resolveBody();
+                resolveBody = undefined;
+            }
         }
     } else {
         const resolver = resolvers[0];
@@ -105,24 +128,61 @@ export function endOfRequest(id: number) {
     delete bodyParts[id];
 }
 
+function clear() {
+    // Clear for the next request
+    bodyDone = false;
+    endMsgProcessing();
+}
+
 export async function callHandler(
     path: string,
     apiVersion: string,
     id: number,
 ) {
-    bodyParts[id] = [];
+    bodyParts[id] = { parts: [], done: false };
 
-    const res = await toWorker({
-        cmd: "callHandler",
-        path,
-        apiVersion,
-        id,
-    }) as { status: number; headers: number };
+    let res;
+    try {
+        res = await sendMsg({
+            cmd: "callHandler",
+            path,
+            apiVersion,
+            id,
+        }) as { status: number; headers: number };
+    } catch (e) {
+        clear();
+        throw e;
+    }
+
+    let bodyDonePromise: Promise<void>;
+    if (!bodyDone) {
+        bodyDonePromise = new Promise<void>((resolve) => {
+            resolveBody = resolve;
+        });
+        // Don't await for the new promise. We want a background task
+        // to run clear once we have received the full body.
+        bodyDonePromise.then(clear);
+    } else {
+        clear();
+    }
 
     // The read function is called repeatedly until it returns
     // undefined.
-    const read = function () {
-        return bodyParts[id].shift();
+    const read = async function () {
+        const state = bodyParts[id];
+
+        if (state.parts.length === 0 && !state.done) {
+            await new Promise<void>((resolve) => {
+                state.resolve = resolve;
+            });
+        }
+
+        const elem = state.parts.shift();
+        const err = elem?.err;
+        if (err !== undefined) {
+            throw err;
+        }
+        return elem?.value;
     };
     return {
         "status": res.status,
