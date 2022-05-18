@@ -1,5 +1,7 @@
 // SPDX-FileCopyrightText: © 2021 ChiselStrike <info@chiselstrike.com>
-export default async function chisel(req) {
+import { Person } from "../models/person.ts";
+
+export default async function chisel(req: Request) {
     const lines = (await req.text()).split('\n');
     for (const line of lines) {
         const r = line.split(',');

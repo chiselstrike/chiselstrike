@@ -3,7 +3,7 @@
 # RUN: sh -e @file
 
 cp examples/person.ts "$TEMPDIR/models"
-cp examples/store.js "$TEMPDIR/endpoints"
+cp examples/store.ts "$TEMPDIR/endpoints"
 
 cd "$TEMPDIR"
 $CHISEL apply

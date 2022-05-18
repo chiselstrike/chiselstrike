@@ -1,5 +1,7 @@
 // SPDX-FileCopyrightText: © 2021 ChiselStrike <info@chiselstrike.com>
-export default async function chisel(req) {
+import { Person } from "../models/person.ts";
+
+export default async function chisel(req: Request) {
     let req_json = await req.json();
     let response = "";
     let filter_obj = {[req_json.field_name]: req_json.value};
