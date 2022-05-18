@@ -203,6 +203,8 @@ pub(crate) struct CreateProjectOptions {
     pub(crate) force: bool,
     /// Generate example code for project.
     pub(crate) examples: bool,
+    /// Enable the optimizer.
+    pub(crate) optimize: bool,
 }
 
 /// Writes contents to a file in a directory.
@@ -243,6 +245,10 @@ pub(crate) fn create_project(path: &Path, opts: CreateProjectOptions) -> Result<
     // creating through chisel instead of npx: default to deno resolution
     let mut toml = String::from(include_str!("template/Chisel.toml"));
     toml.push_str("modules = \"deno\"\n");
+    toml.push_str(&format!(
+        "optimize = \"{}\"\n",
+        if opts.optimize { "yes" } else { "no" }
+    ));
     write(&toml, path, "Chisel.toml")?;
 
     write_template!(

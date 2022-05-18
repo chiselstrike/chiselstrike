@@ -48,6 +48,9 @@ enum Command {
         /// Skip generating example code.
         #[structopt(long)]
         no_examples: bool,
+        /// Enable the optimizer
+        #[structopt(long, parse(try_from_str), default_value = "true")]
+        optimize: bool,
     },
     /// Describe the endpoints, types, and policies.
     Describe,
@@ -64,6 +67,9 @@ enum Command {
         /// Skip generating example code.
         #[structopt(long)]
         no_examples: bool,
+        /// Enable the optimizer
+        #[structopt(long, parse(try_from_str), default_value = "true")]
+        optimize: bool,
     },
     /// Start the ChiselStrike server.
     Start,
@@ -129,11 +135,16 @@ async fn main() -> Result<()> {
     let opt = Opt::from_args();
     let server_url = opt.rpc_addr;
     match opt.cmd {
-        Command::Init { force, no_examples } => {
+        Command::Init {
+            force,
+            no_examples,
+            optimize,
+        } => {
             let cwd = env::current_dir()?;
             let opts = CreateProjectOptions {
                 force,
                 examples: !no_examples,
+                optimize,
             };
             create_project(&cwd, opts)?;
         }
@@ -193,7 +204,11 @@ async fn main() -> Result<()> {
         Command::Dev { type_check } => {
             cmd_dev(server_url.clone(), type_check).await?;
         }
-        Command::New { path, no_examples } => {
+        Command::New {
+            path,
+            no_examples,
+            optimize,
+        } => {
             let path = Path::new(&path);
             if let Err(e) = fs::create_dir(path) {
                 match e.kind() {
@@ -212,6 +227,7 @@ async fn main() -> Result<()> {
             let opts = CreateProjectOptions {
                 force: false,
                 examples: !no_examples,
+                optimize,
             };
             create_project(path, opts)?;
         }
