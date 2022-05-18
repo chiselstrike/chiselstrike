@@ -4,7 +4,7 @@
     "main": "lib/chisel.js",
     "types": "lib/chisel.d.ts",
     "author": "Pekka Enberg <penberg@chiselstrike.com>",
-    "license": "Proprietary",
+    "license": "Apache-2.0",
     "scripts": {
         "build": "true"
     },

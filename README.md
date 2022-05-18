@@ -157,7 +157,7 @@ framework in no time.
 
 ## Contributing
 
-To build from source:
+To build and develop from source:
 
 ```console
 git submodule update --init --recursive
@@ -165,6 +165,20 @@ cargo build
 ```
 
 That will build the `chiseld` server and `chisel` utility.
+
+You can now use `npx` to install a local version of the API:
+```console
+npx ./packages/create-chiselstrike-app --chisel-version="file:../packages/chiselstrike-api" my-backend
+```
+
+And then replace instances of `npm run` with direct calls to the new binaries. For example, instead of
+`npm run dev`, run
+
+```console
+cd my-backend
+../target/debug/chisel dev
+```
+
 
 Also, consider:
 

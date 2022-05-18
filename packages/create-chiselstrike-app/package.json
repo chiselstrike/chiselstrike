@@ -3,7 +3,7 @@
     "version": "0.10.0-dev.0",
     "description": "Create ChiselStrike-powered backends with one command",
     "author": "ChiselStrike Inc.",
-    "license": "Proprietary",
+    "license": "Apache-2.0",
     "main": "./dist/index.js",
     "bin": {
         "create-chiselstrike-app": "./dist/index.js"
