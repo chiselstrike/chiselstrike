@@ -3,7 +3,7 @@
 # RUN: sh -e @file
 
 cp examples/person.ts "$TEMPDIR/models"
-cp examples/store.js "$TEMPDIR/endpoints/ins.js"
+cp examples/store.ts "$TEMPDIR/endpoints/ins.ts"
 
 cat << EOF > "$TEMPDIR/endpoints/count.ts"
 import { Person } from "../models/person.ts";
