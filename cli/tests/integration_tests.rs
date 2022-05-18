@@ -19,7 +19,7 @@ use structopt::StructOpt;
 
 mod common;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 enum Database {
     Postgres,
     Sqlite,
@@ -48,7 +48,7 @@ impl FromStr for Database {
     }
 }
 
-#[derive(Debug, StructOpt)]
+#[derive(Debug, StructOpt, Clone)]
 #[structopt(name = "lit_test", about = "Runs integration tests")]
 struct Opt {
     /// Name of a signle lit test to run (e.g. `populate.lit`)
@@ -79,13 +79,30 @@ fn main() {
 
     let opt = Opt::from_args();
 
-    let repo = repo_dir();
     let bd = bin_dir();
     let mut args = vec!["build"];
     if bd.ends_with("release") {
         args.push("--release");
     }
     run("cargo", args);
+
+    let ok_without_optimization = run_tests(opt.clone(), false);
+    let ok_with_optimization = run_tests(opt, true);
+    std::process::exit(if ok_with_optimization && ok_without_optimization {
+        0
+    } else {
+        1
+    });
+}
+
+fn run_tests(opt: Opt, optimize: bool) -> bool {
+    if optimize {
+        eprintln!("Running tests with optimization");
+    } else {
+        eprintln!("Running tests without optimization");
+    }
+    let repo = repo_dir();
+    let bd = bin_dir();
 
     let chiseld = bd.join("chiseld").to_str().unwrap().to_string();
 
@@ -100,6 +117,8 @@ fn main() {
     env::set_var("CURL", "curl -N -S -s -i -w '\\n'");
     env::set_var("CREATE_APP", create_app);
     env::set_var("TEST_DATABASE", opt.database.to_string());
+
+    env::set_var("OPTIMIZE", format!("{}", optimize));
 
     let database_user = opt.database_user.unwrap_or_else(whoami::username);
     let mut database_url_prefix = "postgres://".to_string();
@@ -168,7 +187,7 @@ fn main() {
         passed.load(Ordering::SeqCst),
         &lit::config::Config::default(),
     );
-    std::process::exit(if passed.load(Ordering::SeqCst) { 0 } else { 1 });
+    passed.load(Ordering::SeqCst)
 }
 
 struct GuardedEventHandler {
