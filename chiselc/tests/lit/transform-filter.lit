@@ -57,6 +57,15 @@ const people = await Person.cursor()
 // CHECK:     }
 // CHECK: }).toArray();
 
+// The lambda has an expression statement so we should not transform it.
+const people = await Person.cursor()
+  .filter((p) => {
+    p.age > 4;
+  }).toArray();
+// CHECK: const people = await Person.cursor().filter((p)=>{
+// CHECK:     p.age > 4;
+// CHECK: }).toArray();
+
 await Person.cursor().filter((p) => { return p.age < 4 });
 // CHECK: await Person.cursor().__filterWithExpression((p)=>{
 // CHECK:     return p.age < 4;

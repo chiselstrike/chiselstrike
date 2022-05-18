@@ -44,7 +44,7 @@ pub fn infer_filter(call_expr: &CallExpr, symbols: &Symbols) -> Option<Box<QOper
             let return_stmt = match &block_stmt.stmts[0] {
                 Stmt::Return(return_stmt) => return_stmt,
                 _ => {
-                    todo!();
+                    return None;
                 }
             };
             match &return_stmt.arg {
