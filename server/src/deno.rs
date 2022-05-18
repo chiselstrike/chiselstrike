@@ -72,7 +72,6 @@ use std::convert::TryInto;
 use std::fmt::Debug;
 use std::future::Future;
 use std::io::Read;
-use std::io::Write;
 use std::net::SocketAddr;
 use std::ops::DerefMut;
 use std::pin::Pin;
@@ -81,14 +80,7 @@ use std::rc::Weak;
 use std::sync::Arc;
 use std::sync::Mutex;
 use std::task::{Context, Poll};
-use tempfile::Builder;
 use utils::without_extension;
-
-// FIXME: This should not be here. The client should download and
-// compile modules, the server should not get code out of the
-// internet.
-use tsc_compile::compile_ts_code;
-use tsc_compile::CompileOptions;
 
 enum WorkerMsg {
     SetMeta(MetaService),
@@ -163,33 +155,6 @@ fn wrap(specifier: &ModuleSpecifier, code: String) -> Result<ModuleSource> {
     })
 }
 
-async fn compile(code: &str, lib: Option<&str>) -> Result<String> {
-    let mut f = Builder::new().suffix(".ts").tempfile()?;
-    let inner = f.as_file_mut();
-    inner.write_all(code.as_bytes())?;
-    inner.flush()?;
-    let path = f.path().to_str().unwrap();
-    let opts = CompileOptions {
-        extra_default_lib: lib,
-        ..Default::default()
-    };
-    Ok(compile_ts_code(&[path], opts).await?.remove(path).unwrap())
-}
-
-async fn load_code(code_opt: Option<String>, specifier: ModuleSpecifier) -> Result<ModuleSource> {
-    let code = if let Some(code) = code_opt {
-        code
-    } else {
-        let mut code = utils::get_ok(specifier.clone()).await?.text().await?;
-        let last = specifier.path_segments().unwrap().rev().next().unwrap();
-        if last.ends_with(".ts") {
-            code = compile(&code, None).await?;
-        }
-        code
-    };
-    wrap(&specifier, code)
-}
-
 impl deno_core::ModuleLoader for ModuleLoader {
     fn resolve(
         &self,
@@ -215,8 +180,9 @@ impl deno_core::ModuleLoader for ModuleLoader {
         _is_dyn_import: bool,
     ) -> Pin<Box<ModuleSourceFuture>> {
         let handle = self.inner.lock().unwrap();
-        let code = handle.code_map.get(specifier).cloned();
-        load_code(code, specifier.clone()).boxed_local()
+        let code = handle.code_map.get(specifier).unwrap().clone();
+        let specifier = specifier.clone();
+        async move { wrap(&specifier, code) }.boxed_local()
     }
 }
 
