@@ -297,94 +297,117 @@ impl Resolver for ModuleResolver {
     }
 }
 
+pub struct Compiler {
+    pub runtime: JsRuntime,
+}
+
+impl Default for Compiler {
+    fn default() -> Compiler {
+        let ext = Extension::builder()
+            .ops(vec![
+                fetch::decl(),
+                read::decl(),
+                write::decl(),
+                get_cwd::decl(),
+                dir_exists::decl(),
+                file_exists::decl(),
+                diagnostic::decl(),
+            ])
+            .build();
+
+        let runtime = JsRuntime::new(RuntimeOptions {
+            extensions: vec![ext],
+            startup_snapshot: Some(Snapshot::Static(SNAPSHOT)),
+            ..Default::default()
+        });
+
+        Compiler { runtime }
+    }
+}
+
+impl Compiler {
+    pub async fn compile_ts_code(
+        &mut self,
+        file_name: &str,
+        opts: CompileOptions<'_>,
+    ) -> Result<HashMap<String, String>> {
+        let url = "file://".to_string() + &abs(file_name);
+        let url = Url::parse(&url)?;
+
+        let mut extra_libs = HashMap::new();
+        let mut to_url = HashMap::new();
+        for (k, v) in &opts.extra_libs {
+            let u = Url::parse(&("chisel:///".to_string() + k + ".ts")).unwrap();
+            extra_libs.insert(u.clone(), v.clone());
+            to_url.insert(k.clone(), u);
+        }
+
+        let mut loader = ModuleLoader { extra_libs };
+        let resolver = ModuleResolver { extra_libs: to_url };
+
+        let maybe_imports = if let Some(path) = opts.extra_default_lib {
+            let dummy_url = Url::parse("chisel://std").unwrap();
+            let path = "file://".to_string() + &abs(path);
+            Some(vec![(dummy_url, vec![path])])
+        } else {
+            None
+        };
+
+        let graph = deno_graph::create_graph(
+            vec![(url, ModuleKind::Esm)],
+            false,
+            maybe_imports,
+            &mut loader,
+            Some(&resolver),
+            None,
+            None,
+            None,
+        )
+        .await;
+
+        graph.valid()?;
+
+        self.runtime.op_state().borrow_mut().put(DownloadMap::new(
+            file_name,
+            opts.extra_libs,
+            graph,
+        ));
+
+        let global_context = self.runtime.global_context();
+        let ok = {
+            let scope = &mut self.runtime.handle_scope();
+            let file = v8::String::new(scope, &abs(file_name)).unwrap().into();
+            let lib = match opts.extra_default_lib {
+                Some(v) => v8::String::new(scope, &abs(v)).unwrap().into(),
+                None => v8::undefined(scope).into(),
+            };
+            let global_proxy = global_context.open(scope).global(scope);
+            let compile: v8::Local<v8::Function> =
+                get_member(global_proxy, scope, "compile").unwrap();
+            let emit_declarations = v8::Boolean::new(scope, opts.emit_declarations).into();
+            compile
+                .call(scope, global_proxy.into(), &[file, lib, emit_declarations])
+                .unwrap()
+                .is_true()
+        };
+
+        let op_state = self.runtime.op_state();
+        let op_state = op_state.borrow();
+        let map = op_state.borrow::<DownloadMap>();
+        if ok {
+            Ok(map.written.clone())
+        } else {
+            Err(anyhow!("Compilation failed:\n{}", map.diagnostics))
+        }
+    }
+}
+
 pub async fn compile_ts_code(
     file_name: &str,
     opts: CompileOptions<'_>,
 ) -> Result<HashMap<String, String>> {
-    let url = "file://".to_string() + &abs(file_name);
-    let url = Url::parse(&url)?;
-
-    let mut extra_libs = HashMap::new();
-    let mut to_url = HashMap::new();
-    for (k, v) in &opts.extra_libs {
-        let u = Url::parse(&("chisel:///".to_string() + k + ".ts")).unwrap();
-        extra_libs.insert(u.clone(), v.clone());
-        to_url.insert(k.clone(), u);
-    }
-
-    let mut loader = ModuleLoader { extra_libs };
-    let resolver = ModuleResolver { extra_libs: to_url };
-
-    let maybe_imports = if let Some(path) = opts.extra_default_lib {
-        let dummy_url = Url::parse("chisel://std").unwrap();
-        let path = "file://".to_string() + &abs(path);
-        Some(vec![(dummy_url, vec![path])])
-    } else {
-        None
-    };
-
-    let graph = deno_graph::create_graph(
-        vec![(url, ModuleKind::Esm)],
-        false,
-        maybe_imports,
-        &mut loader,
-        Some(&resolver),
-        None,
-        None,
-        None,
-    )
-    .await;
-
-    graph.valid()?;
-
-    let ext = Extension::builder()
-        .ops(vec![
-            fetch::decl(),
-            read::decl(),
-            write::decl(),
-            get_cwd::decl(),
-            dir_exists::decl(),
-            file_exists::decl(),
-            diagnostic::decl(),
-        ])
-        .build();
-
-    let mut runtime = JsRuntime::new(RuntimeOptions {
-        extensions: vec![ext],
-        startup_snapshot: Some(Snapshot::Static(SNAPSHOT)),
-        ..Default::default()
-    });
-
-    runtime
-        .op_state()
-        .borrow_mut()
-        .put(DownloadMap::new(file_name, opts.extra_libs, graph));
-
-    let global_context = runtime.global_context();
-    let ok = {
-        let scope = &mut runtime.handle_scope();
-        let file = v8::String::new(scope, &abs(file_name)).unwrap().into();
-        let lib = match opts.extra_default_lib {
-            Some(v) => v8::String::new(scope, &abs(v)).unwrap().into(),
-            None => v8::undefined(scope).into(),
-        };
-        let global_proxy = global_context.open(scope).global(scope);
-        let compile: v8::Local<v8::Function> = get_member(global_proxy, scope, "compile").unwrap();
-        let emit_declarations = v8::Boolean::new(scope, opts.emit_declarations).into();
-        compile
-            .call(scope, global_proxy.into(), &[file, lib, emit_declarations])
-            .unwrap()
-            .is_true()
-    };
-
-    let op_state = runtime.op_state();
-    let op_state = op_state.borrow();
-    let map = op_state.borrow::<DownloadMap>();
-    if ok {
-        Ok(map.written.clone())
-    } else {
-        Err(anyhow!("Compilation failed:\n{}", map.diagnostics))
-    }
+    let mut compiler = Compiler::default();
+    compiler.compile_ts_code(file_name, opts).await
 }
 
 #[cfg(test)]
