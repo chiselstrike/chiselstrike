@@ -120,8 +120,8 @@ labels:
     transform: match_login
 EOF
 $CHISEL apply
-echo -n result count:
-$CURL -H ChiselUID\:$id_al $CHISELD_HOST/dev/po | grep text | wc -l
+count=$($CURL -H ChiselUID\:$id_al $CHISELD_HOST/dev/po | grep text | wc -l | tr -d '[:space:]')
+echo "result count:$count"
 # CHECK: result count:2
 $CURL -H ChiselUID\:$id_al $CHISELD_HOST/dev/po
 # CHECK: HTTP/1.1 200 OK
@@ -190,8 +190,8 @@ EOF
 $CHISEL apply
 # CHECK:Policy defined for label protect
 
-echo -n result count:
-$CURL -H ChiselUID\:$id_al $CHISELD_HOST/dev/blogs | grep 'blog post by' | wc -l
+count=$($CURL -H ChiselUID\:$id_al $CHISELD_HOST/dev/blogs | grep 'blog post by' | wc -l | tr -d '[:space:]')
+echo "result count:$count"
 # CHECK: result count:2
 $CURL -H ChiselUID\:$id_al $CHISELD_HOST/dev/blogs
 # CHECK: HTTP/1.1 200 OK
