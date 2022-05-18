@@ -198,23 +198,8 @@ pub(crate) async fn apply<S: ToString>(
                 code: code.clone(),
             });
             if use_chiselc {
-                let indexes = chiselc_output(code.clone(), "index-json", &entities)?;
-                let indexes: Value = serde_json::from_str(&indexes)?;
-                if let Some(indexes) = indexes.as_array() {
-                    for index in indexes {
-                        let entity_name = index["entity_name"].to_string();
-                        let properties = match index["properties"].as_array() {
-                            Some(properties) => {
-                                properties.iter().map(|prop| prop.to_string()).collect()
-                            }
-                            None => vec![],
-                        };
-                        index_candidates_req.push(IndexCandidate {
-                            entity_name,
-                            properties,
-                        });
-                    }
-                }
+                let mut indexes = parse_indexes(code.clone(), &entities)?;
+                index_candidates_req.append(&mut indexes);
             }
         }
 
@@ -263,23 +248,8 @@ pub(crate) async fn apply<S: ToString>(
                 code,
             });
             if use_chiselc {
-                let indexes = chiselc_output(original_code.clone(), "index-json", &entities)?;
-                let indexes: Value = serde_json::from_str(&indexes)?;
-                if let Some(indexes) = indexes.as_array() {
-                    for index in indexes {
-                        let entity_name = index["entity_name"].to_string();
-                        let properties = match index["properties"].as_array() {
-                            Some(properties) => {
-                                properties.iter().map(|prop| prop.to_string()).collect()
-                            }
-                            None => vec![],
-                        };
-                        index_candidates_req.push(IndexCandidate {
-                            entity_name,
-                            properties,
-                        });
-                    }
-                }
+                let mut indexes = parse_indexes(original_code, &entities)?;
+                index_candidates_req.append(&mut indexes);
             }
         }
     }
@@ -349,6 +319,26 @@ pub(crate) async fn apply<S: ToString>(
     }
 
     Ok(())
+}
+
+fn parse_indexes(code: String, entities: &[String]) -> Result<Vec<IndexCandidate>> {
+    let mut index_candidates_req = vec![];
+    let indexes = chiselc_output(code, "index-json", entities)?;
+    let indexes: Value = serde_json::from_str(&indexes)?;
+    if let Some(indexes) = indexes.as_array() {
+        for index in indexes {
+            let entity_name = index["entity_name"].to_string();
+            let properties = match index["properties"].as_array() {
+                Some(properties) => properties.iter().map(|prop| prop.to_string()).collect(),
+                None => vec![],
+            };
+            index_candidates_req.push(IndexCandidate {
+                entity_name,
+                properties,
+            });
+        }
+    }
+    Ok(index_candidates_req)
 }
 
 fn to_tempfile(data: &str, suffix: &str) -> Result<NamedTempFile> {
