@@ -327,9 +327,9 @@ fn parse_indexes(code: String, entities: &[String]) -> Result<Vec<IndexCandidate
     let indexes: Value = serde_json::from_str(&indexes)?;
     if let Some(indexes) = indexes.as_array() {
         for index in indexes {
-            let entity_name = index["entity_name"].to_string();
+            let entity_name = index["entity_name"].as_str().unwrap().to_string();
             let properties = match index["properties"].as_array() {
-                Some(properties) => properties.iter().map(|prop| prop.to_string()).collect(),
+                Some(properties) => properties.iter().map(|prop| prop.as_str().unwrap().to_string()).collect(),
                 None => vec![],
             };
             index_candidates_req.push(IndexCandidate {
