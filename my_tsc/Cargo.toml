@@ -6,9 +6,9 @@ edition = "2021"
 
 [dependencies]
 deno_runtime = { path = "../third_party/deno/runtime" }
+endpoint_tsc = { path = "../endpoint_tsc" }
 structopt = "0.3.23"
 tokio = "1.11.0"
-tsc_compile = { path = "../tsc_compile" }
 
 [[bin]]
 name = "my_tsc"
