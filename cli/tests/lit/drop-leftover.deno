@@ -35,6 +35,6 @@ kill $pid
 
 $CURL $CHISELD_HOST/dev/ok | tee output
 
-grep -c "INFINITE" output | grep 0
+grep -c "INFINITE" output | grep ^0
 
 # CHECK: EXPECTED
