@@ -6,8 +6,8 @@ edition = "2021"
 
 [dependencies]
 anyhow = "1.0"
-api = { path = "../api" }
 compile = { path = "../compile" }
+endpoint_tsc = { path = "../endpoint_tsc" }
 futures = "0.3.17"
 handlebars = "4.2.2"
 notify = "5.0.0-pre.12"
@@ -21,7 +21,6 @@ tempfile = "3.2.0"
 tokio = { version = "1.11.0", features = ["rt-multi-thread", "net", "fs"] }
 toml = "0.5.8"
 tonic = "0.5.2"
-tsc_compile = { path = "../tsc_compile" }
 
 [build-dependencies]
 anyhow = "1.0"

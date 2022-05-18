@@ -1,0 +1,14 @@
+[package]
+name = "endpoint_tsc"
+version = "0.10.0-dev.0"
+authors = ["ChiselStrike"]
+edition = "2021"
+
+[dependencies]
+tsc_compile = { path = "../tsc_compile" }
+anyhow = "1.0"
+api = { path = "../api" }
+tempfile = "3.2.0"
+
+[lib]
+name = "endpoint_tsc"

@@ -5,16 +5,13 @@ use crate::chisel::{ChiselApplyRequest, EndPointCreationRequest, PolicyUpdateReq
 use crate::project::{read_manifest, read_to_string, Module, Optimize};
 use anyhow::{anyhow, Context, Result};
 use compile::compile_ts_code as swc_compile;
-use std::collections::HashMap;
+use endpoint_tsc::compile_endpoint;
 use std::env;
 use std::io::Write;
 use std::path::PathBuf;
 use std::process::Stdio;
 use tempfile::Builder;
-use tempfile::NamedTempFile;
 use tokio::task::{spawn_blocking, JoinHandle};
-use tsc_compile::compile_ts_code;
-use tsc_compile::CompileOptions;
 
 static DEFAULT_APP_NAME: &str = "ChiselStrike Application";
 
@@ -81,13 +78,6 @@ pub(crate) async fn apply<S: ToString>(
     let types_req = crate::ts::parse_types(&models)?;
     let mut endpoints_req = vec![];
     let mut policy_req = vec![];
-
-    let import_str = "import * as ChiselAlias from \"@chiselstrike/api\";
-         declare global {
-             var Chisel: typeof ChiselAlias;
-         }"
-    .to_string();
-    let import_temp = to_tempfile(&import_str, ".d.ts")?;
 
     let mut types_string = String::new();
     for t in &models {
@@ -204,24 +194,12 @@ pub(crate) async fn apply<S: ToString>(
             }
         }
     } else {
-        let mods: HashMap<String, String> = [(
-            "@chiselstrike/api".to_string(),
-            api::chisel_d_ts().to_string(),
-        )]
-        .into_iter()
-        .collect();
-
         for f in endpoints.iter() {
             let ext = f.file_path.extension().unwrap().to_str().unwrap();
             let path = f.file_path.to_str().unwrap();
 
             let code = if ext == "ts" {
-                let opts = CompileOptions {
-                    extra_default_lib: Some(import_temp.path().to_str().unwrap()),
-                    extra_libs: mods.clone(),
-                    ..Default::default()
-                };
-                let mut code = compile_ts_code(path, opts)
+                let mut code = compile_endpoint(path)
                     .await
                     .with_context(|| format!("parsing endpoint /{}/{}", version, f.name))?;
                 code.remove(path).unwrap()
@@ -307,14 +285,6 @@ pub(crate) async fn apply<S: ToString>(
     }
 
     Ok(())
-}
-
-fn to_tempfile(data: &str, suffix: &str) -> Result<NamedTempFile> {
-    let mut f = Builder::new().suffix(suffix).tempfile()?;
-    let inner = f.as_file_mut();
-    inner.write_all(data.as_bytes())?;
-    inner.flush()?;
-    Ok(f)
 }
 
 fn output_to_string(out: &std::process::Output) -> Option<String> {

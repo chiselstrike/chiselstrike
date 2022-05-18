@@ -545,8 +545,8 @@ name = "cli"
 version = "0.10.0-dev.0"
 dependencies = [
  "anyhow",
- "api",
  "compile",
+ "endpoint_tsc",
  "futures",
  "glob",
  "handlebars",
@@ -566,7 +566,6 @@ dependencies = [
  "toml",
  "tonic",
  "tonic-build",
- "tsc_compile",
  "vergen",
  "whoami",
 ]
@@ -1372,6 +1371,16 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7896dc8abb250ffdda33912550faa54c88ec8b998dec0b2c55ab224921ce11df"
 dependencies = [
  "cfg-if 1.0.0",
+]
+
+[[package]]
+name = "endpoint_tsc"
+version = "0.10.0-dev.0"
+dependencies = [
+ "anyhow",
+ "api",
+ "tempfile",
+ "tsc_compile",
 ]
 
 [[package]]
@@ -2645,9 +2654,9 @@ name = "my_tsc"
 version = "0.10.0-dev.0"
 dependencies = [
  "deno_runtime",
+ "endpoint_tsc",
  "structopt",
  "tokio",
- "tsc_compile",
 ]
 
 [[package]]
