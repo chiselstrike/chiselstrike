@@ -233,9 +233,10 @@ impl RpcService {
         let mut endpoint_routes = vec![];
         for (path, code) in apply_request.sources {
             let path = without_extension(&path);
-            let name = path.strip_prefix("endpoints/").unwrap();
-            let path = format!("/{}/{}", api_version, name);
-            endpoint_routes.push((path, code));
+            if let Some(path) = path.strip_prefix("endpoints/") {
+                let path = format!("/{}/{}", api_version, path);
+                endpoint_routes.push((path, code));
+            }
         }
         endpoint_routes.sort_unstable();
 

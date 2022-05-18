@@ -16,7 +16,6 @@ pub(crate) async fn apply(
     optimize: bool,
     auto_index: bool,
 ) -> Result<(HashMap<String, String>, Vec<IndexCandidate>)> {
-    let mut endpoints_req = HashMap::new();
     let mut index_candidates_req = vec![];
     let paths: Result<Vec<_>> = endpoints
         .iter()
@@ -27,18 +26,17 @@ pub(crate) async fn apply(
         .context("parsing endpoints")?;
     for f in endpoints.iter() {
         let path = f.to_str().unwrap();
-        let code = output.remove(path).unwrap();
-        let code = types_string.to_owned() + &code;
-        let code = if optimize {
+        let orig = output.get_mut(path).unwrap();
+        let code = types_string.to_owned() + orig;
+        *orig = if optimize {
             chiselc_output(code, "js", entities)?
         } else {
             swc_compile(code)?
         };
-        endpoints_req.insert(f.display().to_string(), code.clone());
         if auto_index {
-            let mut indexes = parse_indexes(code.clone(), entities)?;
+            let mut indexes = parse_indexes(orig.clone(), entities)?;
             index_candidates_req.append(&mut indexes);
         }
     }
-    Ok((endpoints_req, index_candidates_req))
+    Ok((output, index_candidates_req))
 }
