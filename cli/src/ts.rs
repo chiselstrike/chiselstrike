@@ -1,7 +1,5 @@
 use crate::chisel::{AddTypeRequest, FieldDefinition};
 use anyhow::{anyhow, bail, ensure, Context, Result};
-use compile::swc_common;
-use compile::swc_ecmascript;
 use std::collections::BTreeSet;
 use std::path::Path;
 use swc_common::sync::Lrc;

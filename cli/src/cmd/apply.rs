@@ -77,10 +77,6 @@ pub(crate) async fn apply<S: ToString>(
     let types_req = crate::ts::parse_types(&models)?;
     let mut policy_req = vec![];
 
-    let mut types_string = String::new();
-    for t in &models {
-        types_string += &read_to_string(&t)?;
-    }
     let entities: Vec<String> = types_req
         .iter()
         .map(|type_req| type_req.name.clone())
@@ -96,7 +92,7 @@ pub(crate) async fn apply<S: ToString>(
     let (endpoints_req, index_candidates_req) = if manifest.modules == Module::Node {
         node::apply(&endpoints, &entities, optimize, auto_index, &type_check).await
     } else {
-        deno::apply(&endpoints, &entities, &types_string, optimize, auto_index).await
+        deno::apply(&endpoints, &entities, optimize, auto_index).await
     }?;
 
     for p in policies {

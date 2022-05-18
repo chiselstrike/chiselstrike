@@ -1461,7 +1461,8 @@ pub(crate) async fn compile_endpoints(sources: HashMap<String, String>) -> Resul
             }
             if path.split('/').nth(2) != Some("endpoints") {
                 // Non endpoint files like models/...
-                // Ignore for now.
+                let url = Url::parse(&format!("file://{}", path)).unwrap();
+                code_map.insert(url, code);
                 continue;
             }
 

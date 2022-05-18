@@ -4,7 +4,6 @@ use crate::chisel::IndexCandidate;
 use crate::cmd::apply::chiselc_output;
 use crate::cmd::apply::parse_indexes;
 use anyhow::{anyhow, Context, Result};
-use compile::compile_ts_code as swc_compile;
 use endpoint_tsc::compile_endpoints;
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -12,7 +11,6 @@ use std::path::PathBuf;
 pub(crate) async fn apply(
     endpoints: &[PathBuf],
     entities: &[String],
-    types_string: &str,
     optimize: bool,
     auto_index: bool,
 ) -> Result<(HashMap<String, String>, Vec<IndexCandidate>)> {
@@ -27,12 +25,10 @@ pub(crate) async fn apply(
     for f in endpoints.iter() {
         let path = f.to_str().unwrap();
         let orig = output.get_mut(path).unwrap();
-        let code = types_string.to_owned() + orig;
-        *orig = if optimize {
-            chiselc_output(code, "js", entities)?
-        } else {
-            swc_compile(code)?
-        };
+        if optimize {
+            *orig = chiselc_output(orig.to_string(), "js", entities)?;
+        }
+
         if auto_index {
             let mut indexes = parse_indexes(orig.clone(), entities)?;
             index_candidates_req.append(&mut indexes);

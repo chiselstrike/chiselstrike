@@ -3,8 +3,8 @@
 # RUN: sh -e @file
 
 cp examples/person.ts "$TEMPDIR/models"
-cp examples/store.js "$TEMPDIR/endpoints/ins.js"
-cp examples/find.js "$TEMPDIR/endpoints/"
+cp examples/store.ts "$TEMPDIR/endpoints/ins.ts"
+cp examples/find.ts "$TEMPDIR/endpoints/"
 
 cd "$TEMPDIR"
 $CHISEL apply
@@ -41,6 +41,8 @@ $CURL -o - $CHISELD_HOST/dev/find
 # CHECK: hello xxxxx
 
 cat << EOF > "$TEMPDIR/models/person.ts"
+import { labels } from "@chiselstrike/api";
+
 export class Person extends Chisel.ChiselEntity {
   @labels("L1", "L2", "L3") first_name: string;
   @labels("pii", "L2") last_name: string;

@@ -4,9 +4,11 @@
 
 cp examples/person.ts "$TEMPDIR/models"
 mkdir -p "$TEMPDIR/endpoints/a/b/c"
-cp examples/find.js "$TEMPDIR/endpoints"
-cp examples/find.js "$TEMPDIR/endpoints/a/b/c/findc1.js"
-cp examples/find.js "$TEMPDIR/endpoints/a/b/c/findc2.js"
+cp examples/find.ts "$TEMPDIR/endpoints"
+cp examples/find.ts "$TEMPDIR/endpoints/a/b/c/findc1.ts"
+cp examples/find.ts "$TEMPDIR/endpoints/a/b/c/findc2.ts"
+sed -i 's|../models/person.ts|../../../../models/person.ts|' "$TEMPDIR/endpoints/a/b/c/findc1.ts" "$TEMPDIR/endpoints/a/b/c/findc2.ts"
+
 cat << EOF > "$TEMPDIR/policies/pol.yaml"
 endpoints:
   - path: /find
@@ -67,7 +69,6 @@ $CHISEL apply 2>&1 || echo # (swallow the apply abort)
 # CHECK: Error: Repeated path in user authorization: "/find"
 rm "$TEMPDIR/policies/pol.yaml"
 
-rm "$TEMPDIR/models/person.ts" #1201
 cat << EOF > "$TEMPDIR/models/post.ts"
 import { ChiselEntity, AuthUser, labels } from '@chiselstrike/api'
 export class Post extends ChiselEntity {
