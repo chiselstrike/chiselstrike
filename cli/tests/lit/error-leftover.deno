@@ -43,6 +43,6 @@ $CURL $CHISELD_HOST/dev/error
 
 $CURL $CHISELD_HOST/dev/ok | tee output
 
-grep -c "WILL ERROR" output | grep 0
+grep -c "WILL ERROR" output | grep ^0
 
 # CHECK: EXPECTED
