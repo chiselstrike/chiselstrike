@@ -35,7 +35,6 @@ cwd=$(pwd)
 
 cd "$cwd/packages/chiselstrike-api" && npm version --no-git-tag-version $version && npm update
 cd "$cwd/packages/chiselstrike-cli" && npm version --no-git-tag-version $version && npm update
-cd "$cwd/packages/chiselstrike-frontend" && npm version --no-git-tag-version $version && npm update
 cd "$cwd/packages/create-chiselstrike-app" && npm version --no-git-tag-version $version && npm update
 
 git commit -a -m "ChiselStrike v$version"
