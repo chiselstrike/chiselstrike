@@ -10,7 +10,7 @@
     "scripts": {
         "postinstall": "node ./install.js"
     },
-    "license": "Proprietary",
+    "license": "Apache-2.0",
     "dependencies": {
         "binary-install": "^0.1.0",
         "esbuild": "^0.14.14",
