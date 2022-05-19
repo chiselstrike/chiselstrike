@@ -14,7 +14,7 @@ struct Opt {
 #[tokio::main]
 async fn main() {
     let opt = Opt::from_args();
-    let mut compiler = Compiler::default();
+    let mut compiler = Compiler::new(false);
 
     let mut _maybe_inspector = None;
     if opt.inspect {
