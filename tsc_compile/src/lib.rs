@@ -123,7 +123,7 @@ fn fetch(s: &mut OpState, path: String, base: String) -> Result<String> {
     with_map(fetch_impl, s, path, base)
 }
 
-fn read_impl(map: &mut DownloadMap, path: String, _: ()) -> Result<String> {
+fn read_impl(map: &mut DownloadMap, path: String) -> Result<String> {
     if let Some(v) = map.extra_libs.get(&path) {
         return Ok(v.to_string());
     }
@@ -144,7 +144,15 @@ fn read_impl(map: &mut DownloadMap, path: String, _: ()) -> Result<String> {
 
 #[op]
 fn read(s: &mut OpState, path: String) -> Result<String> {
-    with_map(read_impl, s, path, ())
+    if let Some(map) = s.try_borrow_mut::<DownloadMap>() {
+        read_impl(map, path)
+    } else {
+        let content = tsc_compile_build::read(&path);
+        if content.is_empty() {
+            panic!("Unexpected file during bootstrap: {}", path);
+        }
+        Ok(content.to_string())
+    }
 }
 
 fn write_impl(map: &mut DownloadMap, mut path: String, content: String) -> Result<()> {
@@ -170,7 +178,12 @@ fn write_impl(map: &mut DownloadMap, mut path: String, content: String) -> Resul
 
 #[op]
 fn write(s: &mut OpState, path: String, content: String) -> Result<()> {
-    with_map(write_impl, s, path, content)
+    if let Some(map) = s.try_borrow_mut::<DownloadMap>() {
+        write_impl(map, path, content)
+    } else {
+        // Don't write anything during bootstrap.
+        Ok(())
+    }
 }
 
 #[op]
@@ -301,8 +314,8 @@ pub struct Compiler {
     pub runtime: JsRuntime,
 }
 
-impl Default for Compiler {
-    fn default() -> Compiler {
+impl Compiler {
+    pub fn new(use_snapshot: bool) -> Compiler {
         let ext = Extension::builder()
             .ops(vec![
                 fetch::decl(),
@@ -315,17 +328,26 @@ impl Default for Compiler {
             ])
             .build();
 
-        let runtime = JsRuntime::new(RuntimeOptions {
+        let startup_snapshot = if use_snapshot {
+            Some(Snapshot::Static(SNAPSHOT))
+        } else {
+            None
+        };
+        let mut runtime = JsRuntime::new(RuntimeOptions {
             extensions: vec![ext],
-            startup_snapshot: Some(Snapshot::Static(SNAPSHOT)),
+            startup_snapshot,
             ..Default::default()
         });
 
+        if !use_snapshot {
+            for (p, code) in tsc_compile_build::JS_FILES {
+                runtime.execute_script(p, code).unwrap();
+            }
+        }
+
         Compiler { runtime }
     }
-}
 
-impl Compiler {
     pub async fn compile_ts_code(
         &mut self,
         file_name: &str,
@@ -406,7 +428,7 @@ pub async fn compile_ts_code(
     file_name: &str,
     opts: CompileOptions<'_>,
 ) -> Result<HashMap<String, String>> {
-    let mut compiler = Compiler::default();
+    let mut compiler = Compiler::new(true);
     compiler.compile_ts_code(file_name, opts).await
 }
 

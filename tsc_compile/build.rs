@@ -53,10 +53,8 @@ fn main() {
         ..Default::default()
     });
 
-    for p in ["../third_party/deno/cli/tsc/00_typescript.js", "src/tsc.js"] {
-        println!("cargo:rerun-if-changed={}", p);
-        let code = std::fs::read_to_string(p).unwrap();
-        runtime.execute_script(p, &code).unwrap();
+    for (p, code) in tsc_compile_build::JS_FILES {
+        runtime.execute_script(p, code).unwrap();
     }
 
     let snapshot = runtime.snapshot();

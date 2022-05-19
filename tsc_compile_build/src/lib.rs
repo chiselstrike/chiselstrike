@@ -1,3 +1,11 @@
+pub const JS_FILES: [(&str, &str); 2] = [
+    (
+        "00_typescript.js",
+        include_str!("../../third_party/deno/cli/tsc/00_typescript.js"),
+    ),
+    ("tsc.js", include_str!("tsc.js")),
+];
+
 pub fn read(path: &str) -> &'static str {
     if path == "bootstrap.ts" {
         return "/// <reference lib=\"deno.core\" />
