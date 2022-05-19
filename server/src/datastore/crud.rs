@@ -216,13 +216,16 @@ fn convert_operator(op_str: Option<&str>) -> Result<BinaryOp> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::datastore::engine::QueryEngine;
     use crate::datastore::query::tests::{
         add_row, binary, fetch_rows, make_field, make_object, make_type_system, setup_clear_db,
         VERSION,
     };
     use crate::policies::Policies;
     use crate::types::{FieldDescriptor, ObjectDescriptor, TypeSystem};
+    use crate::JsonObject;
 
+    use futures::StreamExt;
     use itertools::Itertools;
     use serde_json::json;
 
@@ -286,128 +289,6 @@ mod tests {
         );
         static ref ENTITIES: [&'static Arc<ObjectType>; 2] = [&*PERSON_TY, &*COMPANY_TY];
         static ref TS: TypeSystem = make_type_system(&*ENTITIES);
-    }
-
-    #[test]
-    fn test_query_str_to_ops() {
-        let base_type = make_object(
-            "Person",
-            vec![
-                make_field("name", Type::String),
-                make_field("age", Type::Float),
-            ],
-        );
-        {
-            let ops = query_str_to_ops(&base_type, &url("limit=2")).unwrap();
-            assert!(ops.len() == 1);
-            let op = ops.first().unwrap();
-            assert!(matches!(op, QueryOp::Take { count: 2 }));
-        }
-        {
-            let ops = query_str_to_ops(&base_type, &url("offset=3")).unwrap();
-            assert!(ops.len() == 1);
-            let op = ops.first().unwrap();
-            assert!(matches!(op, QueryOp::Skip { count: 3 }));
-        }
-        {
-            let ops1 = query_str_to_ops(&base_type, &url("sort=age")).unwrap();
-            assert_eq!(
-                ops1,
-                vec![QueryOp::SortBy(SortBy {
-                    keys: vec![SortKey {
-                        field_name: "age".into(),
-                        ascending: true
-                    }]
-                })]
-            );
-            let ops2 = query_str_to_ops(&base_type, &url("sort=%2Bage")).unwrap();
-            assert_eq!(ops1, ops2);
-            let ops3 = query_str_to_ops(&base_type, &url("sort=-age")).unwrap();
-            assert_eq!(
-                ops3,
-                vec![QueryOp::SortBy(SortBy {
-                    keys: vec![SortKey {
-                        field_name: "age".into(),
-                        ascending: false
-                    }]
-                })]
-            );
-        }
-        {
-            let ops = query_str_to_ops(&base_type, &url(".age=10")).unwrap();
-            assert_eq!(
-                ops,
-                vec![QueryOp::Filter {
-                    expression: binary(&["age"], BinaryOp::Eq, (10.).into())
-                }]
-            );
-
-            let ops =
-                query_str_to_ops(&base_type, &url(".age~lte=10&.name~unlike=foo%25")).unwrap();
-            assert_eq!(
-                ops,
-                vec![
-                    QueryOp::Filter {
-                        expression: binary(&["age"], BinaryOp::LtEq, (10.).into())
-                    },
-                    QueryOp::Filter {
-                        expression: binary(&["name"], BinaryOp::NotLike, "foo%".into())
-                    }
-                ]
-            );
-        }
-        {
-            let raw_ops = vec!["limit=3", "offset=7", "sort=age"];
-            for perm in raw_ops.iter().permutations(raw_ops.len()) {
-                let query_string = perm.iter().join("&");
-                let ops = query_str_to_ops(&base_type, &url(&query_string)).unwrap();
-
-                assert_eq!(
-                    ops,
-                    vec![
-                        QueryOp::SortBy(SortBy {
-                            keys: vec![SortKey {
-                                field_name: "age".into(),
-                                ascending: true
-                            }]
-                        }),
-                        QueryOp::Skip { count: 7 },
-                        QueryOp::Take { count: 3 },
-                    ],
-                    "unexpected ops for query string '{}'",
-                    query_string
-                );
-            }
-        }
-        {
-            let raw_ops = vec!["limit=3", "offset=7", "sort=age", ".age~gte=10"];
-            for perm in raw_ops.iter().permutations(raw_ops.len()) {
-                let query_string = perm.iter().join("&");
-                let ops1 = query_str_to_ops(&base_type, &url(&query_string)).unwrap();
-
-                assert!(
-                    ops1.len() == 4,
-                    "unexpected ops length, query string: {}",
-                    query_string
-                );
-                assert!(
-                    ops1.iter().any(|op| op.as_sort_by().is_some()),
-                    "ops don't contain sort, query string: {}",
-                    query_string
-                );
-                assert!(
-                    ops1.iter().any(|op| op.as_filter().is_some()),
-                    "ops don't contain filter, query string: {}",
-                    query_string
-                );
-                assert_eq!(
-                    &ops1[ops1.len() - 2..],
-                    vec![QueryOp::Skip { count: 7 }, QueryOp::Take { count: 3 },],
-                    "unexpected two ops for query string '{}'",
-                    query_string
-                );
-            }
-        }
     }
 
     #[test]
@@ -477,35 +358,150 @@ mod tests {
         }
     }
 
-    #[test]
-    fn test_query_str_to_ops_errors() {
-        let base_type = make_object(
-            "Person",
-            vec![
-                make_field("name", Type::String),
-                make_field("age", Type::Float),
-            ],
-        );
-        assert!(query_str_to_ops(&base_type, &url("limit=two")).is_err());
-        assert!(query_str_to_ops(&base_type, &url("limit=true")).is_err());
+    async fn run_query(
+        entity_name: &str,
+        url: String,
+        qe: &QueryEngine,
+    ) -> Result<Vec<JsonObject>> {
+        let qe = Arc::new(qe.clone());
+        let tr = qe.clone().start_transaction_static().await.unwrap();
 
-        assert!(query_str_to_ops(&base_type, &url("offset=two")).is_err());
-        assert!(query_str_to_ops(&base_type, &url("offset=true")).is_err());
+        let context = RequestContext {
+            policies: &Policies::default(),
+            ts: &make_type_system(&*ENTITIES),
+            api_version: VERSION.to_owned(),
+            user_id: None,
+            path: "".to_string(),
+        };
 
-        assert!(query_str_to_ops(&base_type, &url("sort=age1")).is_err());
-        assert!(query_str_to_ops(&base_type, &url("sort=%2Bnotname")).is_err());
-        assert!(query_str_to_ops(&base_type, &url("sort=-notname")).is_err());
-        assert!(query_str_to_ops(&base_type, &url("sort=--age")).is_err());
-        assert!(query_str_to_ops(&base_type, &url("sort=age aa")).is_err());
+        let query_plan = query_plan_from_url(&context, entity_name, &url)?;
+        let stream = qe.query(tr, query_plan)?;
 
-        assert!(query_str_to_ops(&base_type, &url(".agex=4")).is_err());
-        assert!(query_str_to_ops(&base_type, &url("..age=4")).is_err());
-        assert!(query_str_to_ops(&base_type, &url(".age=four")).is_err());
-        assert!(query_str_to_ops(&base_type, &url(".age=true")).is_err());
-        assert!(query_str_to_ops(&base_type, &url(".age~ltt=4")).is_err());
-        assert!(query_str_to_ops(&base_type, &url(".age~neq~lt=4")).is_err());
-        assert!(query_str_to_ops(&base_type, &url(".age.nothing=4")).is_err());
-        assert!(query_str_to_ops(&base_type, &url(".=123")).is_err());
+        let results = stream
+            .collect::<Vec<_>>()
+            .await
+            .into_iter()
+            .collect::<Result<_>>()
+            .context("failed to collect result rows from the database")?;
+        Ok(results)
+    }
+
+    async fn run_query_vec(entity_name: &str, url: String, qe: &QueryEngine) -> Vec<String> {
+        let r = run_query(entity_name, url, qe).await.unwrap();
+        collect_names(&r)
+    }
+
+    fn collect_names(r: &[JsonObject]) -> Vec<String> {
+        r.iter()
+            .map(|x| x["name"].as_str().unwrap().to_string())
+            .collect()
+    }
+
+    #[tokio::test]
+    async fn test_run_query() {
+        let alan = json!({"name": "Alan", "age": json!(30f32)});
+        let alex = json!({"name": "Alex", "age": json!(40f32)});
+        let john = json!({"name": "John", "age": json!(20f32)});
+        let steve = json!({"name": "Steve", "age": json!(29f32)});
+
+        let (query_engine, _db_file) = setup_clear_db(&*ENTITIES).await;
+        let qe = &query_engine;
+        add_row(qe, &PERSON_TY, &alan).await;
+        add_row(qe, &PERSON_TY, &john).await;
+        add_row(qe, &PERSON_TY, &steve).await;
+
+        let mut r = run_query_vec("Person", url(""), qe).await;
+        r.sort();
+        assert_eq!(r, vec!["Alan", "John", "Steve"]);
+
+        let r = run_query_vec("Person", url("limit=2"), qe).await;
+        assert_eq!(r.len(), 2);
+
+        // Test Sorting
+        let r = run_query_vec("Person", url("sort=age"), qe).await;
+        assert_eq!(r, vec!["John", "Steve", "Alan"]);
+
+        let r = run_query_vec("Person", url("sort=%2Bage"), qe).await;
+        assert_eq!(r, vec!["John", "Steve", "Alan"]);
+
+        let r = run_query_vec("Person", url("sort=-age"), qe).await;
+        assert_eq!(r, vec!["Alan", "Steve", "John"]);
+
+        // Test Offset
+        let r = run_query_vec("Person", url("sort=name&offset=1"), qe).await;
+        assert_eq!(r, vec!["John", "Steve"]);
+
+        // Test filtering
+        let r = run_query_vec("Person", url(".age=10"), qe).await;
+        assert_eq!(r, Vec::<String>::new());
+
+        let r = run_query_vec("Person", url(".age=29"), qe).await;
+        assert_eq!(r, vec!["Steve"]);
+
+        let r = run_query_vec("Person", url(".age~lt=29&.name~like=%25n"), qe).await;
+        assert_eq!(r, vec!["John"]);
+
+        let mut r = run_query_vec("Person", url(".name~unlike=Al%25"), qe).await;
+        r.sort();
+        assert_eq!(r, vec!["John", "Steve"]);
+
+        add_row(qe, &PERSON_TY, &alex).await;
+
+        // Test permutations of parameters
+        {
+            let raw_ops = vec!["limit=2", "offset=1", "sort=age"];
+            for perm in raw_ops.iter().permutations(raw_ops.len()) {
+                let query_string = perm.iter().join("&");
+                let r = run_query_vec("Person", url(&query_string), qe).await;
+                assert_eq!(
+                    r,
+                    vec!["Steve", "Alan"],
+                    "unexpected result for query string '{query_string}'",
+                );
+            }
+
+            let raw_ops = vec!["limit=2", "offset=1", "sort=name", ".age~gt=20"];
+            for perm in raw_ops.iter().permutations(raw_ops.len()) {
+                let query_string = perm.iter().join("&");
+                let r = run_query_vec("Person", url(&query_string), qe).await;
+                assert_eq!(
+                    r,
+                    vec!["Alex", "Steve"],
+                    "unexpected result for query string '{query_string}'",
+                );
+            }
+        }
+    }
+
+    #[tokio::test]
+    async fn test_query_str_to_ops_errors() {
+        let (query_engine, _db_file) = setup_clear_db(&*ENTITIES).await;
+        let qe = &query_engine;
+
+        assert!(run_query("Person", url("limit=two"), qe).await.is_err());
+        assert!(run_query("Person", url("limit=true"), qe).await.is_err());
+
+        assert!(run_query("Person", url("offset=two"), qe).await.is_err());
+        assert!(run_query("Person", url("offset=true"), qe).await.is_err());
+
+        assert!(run_query("Person", url("sort=age1"), qe).await.is_err());
+        assert!(run_query("Person", url("sort=%2Bnotname"), qe)
+            .await
+            .is_err());
+        assert!(run_query("Person", url("sort=-notname"), qe).await.is_err());
+        assert!(run_query("Person", url("sort=--age"), qe).await.is_err());
+        assert!(run_query("Person", url("sort=age aa"), qe).await.is_err());
+
+        assert!(run_query("Person", url(".agex=4"), qe).await.is_err());
+        assert!(run_query("Person", url("..age=4"), qe).await.is_err());
+        assert!(run_query("Person", url(".age=four"), qe).await.is_err());
+        assert!(run_query("Person", url(".age=true"), qe).await.is_err());
+        assert!(run_query("Person", url(".age~ltt=4"), qe).await.is_err());
+        assert!(run_query("Person", url(".age~neq~lt=4"), qe).await.is_err());
+        assert!(run_query("Person", url(".age.nothing=4"), qe)
+            .await
+            .is_err());
+        assert!(run_query("Person", url(".=123"), qe).await.is_err());
     }
 
     #[tokio::test]
