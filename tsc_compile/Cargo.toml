@@ -16,6 +16,7 @@ tokio = { version = "1.11.0", features = ["rt-multi-thread", "macros"] }
 
 [build-dependencies]
 deno_core = { path = "../third_party/deno/core" }
+tsc_compile_build = { path = "../tsc_compile_build" }
 
 [lib]
 name = "tsc_compile"

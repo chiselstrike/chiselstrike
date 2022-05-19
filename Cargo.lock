@@ -5077,8 +5077,13 @@ dependencies = [
  "deno_graph",
  "tempfile",
  "tokio",
+ "tsc_compile_build",
  "utils",
 ]
+
+[[package]]
+name = "tsc_compile_build"
+version = "0.10.0-dev.0"
 
 [[package]]
 name = "tungstenite"

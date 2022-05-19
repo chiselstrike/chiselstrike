@@ -1,0 +1,8 @@
+[package]
+name = "tsc_compile_build"
+version = "0.10.0-dev.0"
+authors = ["ChiselStrike"]
+edition = "2021"
+
+[lib]
+name = "tsc_compile_build"
