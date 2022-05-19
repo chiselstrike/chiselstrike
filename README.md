@@ -9,13 +9,16 @@
 
 ## Quick start
 
-To get a CRUD API working in 30 seconds or less:
+To get a CRUD API working in 30 seconds or less, first create a new project:
 
-```typescript
+```console
 npx -y create-chiselstrike-app my-app
 cd my-app
+```
 
-# add the model
+Add a model, by writing the following TypeScript code to the `models/BlogComment.ts`:
+
+```typescript
 cat << EOF >models/BlogComment.ts
 import { ChiselEntity } from "@chiselstrike/api"
 
@@ -24,18 +27,25 @@ export class BlogComment extends ChiselEntity {
     by: string = "";
 }
 EOF
+```
 
-# add the endpoint
+Add an endpoint, by writing the following TypeScript code to the `endpoints/comments.ts`:
+
+```typescript
 cat << EOF >endpoints/comments.ts
 import { BlogComment } from "../models/BlogComment";
 export default BlogComment.crud();
 EOF
+```
 
+Start the development server with:
+
+```console
 npm run dev
 ```
 
 And there you go, you can now do:
-```
+```console
 curl -X POST -d '{"content": "First comment", "by": "Jill"}' localhost:8080/dev/comments
 ```
 
