@@ -673,14 +673,50 @@ export class ChiselEntity {
         return await it.toArray();
     }
 
+    /**
+     * Returns a single object of type T for which the given `predicate` returns true.
+     *
+     * If more than one match is found, any is returned
+     */
+    static async findOne<T extends ChiselEntity>(
+        this: { new (): T },
+        predicate: (arg: T) => boolean,
+    ): Promise<T | undefined>;
+
     /** Returns a single object that matches the `Partial` object `restrictions` passed as its parameter.
      *
      * If more than one match is found, any is returned. */
     static async findOne<T extends ChiselEntity>(
         this: { new (): T },
         restrictions: Partial<T>,
+    ): Promise<T | undefined>;
+
+    static async findOne<T extends ChiselEntity>(
+        this: { new (): T },
+        arg1: ((arg: T) => boolean) | Partial<T>,
     ): Promise<T | undefined> {
-        const it = chiselIterator<T>(this).filter(restrictions).take(1);
+        let it = undefined;
+        if (typeof arg1 == "function") {
+            it = chiselIterator<T>(this).filter(arg1);
+        } else {
+            it = chiselIterator<T>(this).filter(arg1);
+        }
+        for await (const value of it) {
+            return value;
+        }
+        return undefined;
+    }
+
+    // findOne function used by Chisel Compiler. Not intended for direct usage.
+    static async __findOne<T extends ChiselEntity>(
+        this: { new (): T },
+        predicate: (arg: T) => boolean,
+        expression: Record<string, unknown>,
+    ): Promise<T | undefined> {
+        const it = chiselIterator<T>(this).__filterWithExpression(
+            predicate,
+            expression,
+        );
         for await (const value of it) {
             return value;
         }

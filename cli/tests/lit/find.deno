@@ -50,12 +50,59 @@ export default async function chisel(req: Request) {
 }
 EOF
 
+cat << EOF > "$TEMPDIR/endpoints/find_one.ts"
+import { Person } from "../models/person.ts";
+
+export default async function chisel(req: Request) {
+    const url = new URL(req.url);
+    const use_predicate = (url.searchParams.get("use_predicate") ?? "false") == "true";
+    const use_expr = (url.searchParams.get("use_expr") ?? "false") == "true";
+    const first_name = url.searchParams.get("first_name");
+    if (first_name == undefined) {
+        throw Error("first_name parameter must be specified.");
+    }
+
+    let the_one = undefined;
+    if (use_expr) {
+        the_one = await Person.__findOne(
+            p => p.first_name == first_name,
+            {
+                exprType: "Binary",
+                left: {
+                  exprType: "Property",
+                  property: "first_name",
+                  object: {
+                    exprType: "Parameter",
+                    position: 0
+                  }
+                },
+                op: "Eq",
+                right: {
+                  exprType: "Literal",
+                  value: first_name
+                }
+            }
+        );
+    } else if (use_predicate) {
+        the_one = await Person.findOne(p => p.first_name == first_name);
+    } else {
+        the_one = await Person.findOne({"first_name": first_name});
+    }
+    let name = "undefined";
+    if (the_one !== undefined) {
+        name = the_one.first_name
+    }
+    return new Response("[" + name + "]");
+}
+EOF
+
 cd "$TEMPDIR"
 $CHISEL apply
 
 # CHECK: Model defined: Person
 # CHECK: End point defined: /dev/find
 # CHECK: End point defined: /dev/find_many
+# CHECK: End point defined: /dev/find_one
 # CHECK: End point defined: /dev/ins
 
 
@@ -113,4 +160,26 @@ $CURL -o - "$CHISELD_HOST/dev/find_many?first_name=Pekka"
 $CURL -o - "$CHISELD_HOST/dev/find_many?first_name=Pekka&use_predicate=true"
 # CHECK: [Pekka]
 $CURL -o - "$CHISELD_HOST/dev/find_many?first_name=Pekka&use_expr=true"
+# CHECK: [Pekka]
+
+
+$CURL -o - "$CHISELD_HOST/dev/find_one?first_name=Glauber"
+# CHECK: [Glauber]
+$CURL -o - "$CHISELD_HOST/dev/find_one?first_name=Glauber&use_predicate=true"
+# CHECK: [Glauber]
+$CURL -o - "$CHISELD_HOST/dev/find_one?first_name=Glauber&use_expr=true"
+# CHECK: [Glauber]
+
+$CURL -o - "$CHISELD_HOST/dev/find_one?first_name=Jan"
+# CHECK: [Jan]
+$CURL -o - "$CHISELD_HOST/dev/find_one?first_name=Jan&use_predicate=true"
+# CHECK: [Jan]
+$CURL -o - "$CHISELD_HOST/dev/find_one?first_name=Jan&use_expr=true"
+# CHECK: [Jan]
+
+$CURL -o - "$CHISELD_HOST/dev/find_one?first_name=Pekka"
+# CHECK: [Pekka]
+$CURL -o - "$CHISELD_HOST/dev/find_one?first_name=Pekka&use_predicate=true"
+# CHECK: [Pekka]
+$CURL -o - "$CHISELD_HOST/dev/find_one?first_name=Pekka&use_expr=true"
 # CHECK: [Pekka]
