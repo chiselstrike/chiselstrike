@@ -97,6 +97,12 @@ fn get_field_value(handler: &Handler, x: &Option<Box<Expr>>) -> Result<Option<(S
                 let val_type = lit_name(k).into();
                 Ok(Some((val, val_type)))
             }
+            Expr::Unary(k) => {
+                let op = k.op;
+                let value = get_field_value(handler, &Some(k.arg.clone()))?
+                    .ok_or_else(|| swc_err(handler, k, "unexpected empty expression"))?;
+                Ok(Some((format!("{}{}", op, value.0), value.1)))
+            }
             x => Err(swc_err(handler, x, "expression not supported")),
         },
     }
