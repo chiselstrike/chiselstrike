@@ -51,8 +51,7 @@ use deno_runtime::worker::{MainWorker, WorkerOptions};
 use deno_runtime::BootstrapOptions;
 use futures::stream::{try_unfold, Stream};
 use futures::task::LocalFutureObj;
-use futures::FutureExt;
-use futures::{future, StreamExt};
+use futures::{future, FutureExt};
 use hyper::body::HttpBody;
 use hyper::Method;
 use hyper::Uri;
@@ -667,23 +666,19 @@ fn op_chisel_get_secret(op_state: &mut OpState, key: String) -> Result<Option<se
     Ok(ret)
 }
 
-#[derive(Deserialize)]
-struct CrudQueryParams {
-    #[serde(rename = "typeName")]
-    type_name: String,
-    url: String,
-}
-
 #[op]
 async fn op_chisel_crud_query(
     state: Rc<RefCell<OpState>>,
-    params: CrudQueryParams,
+    params: crud::QueryParams,
     context: ChiselRequestContext,
 ) -> Result<Vec<JsonObject>> {
-    let stream = {
-        // Contextualize stream creation to prevent state RC borrow living across await
+    // Contextualize stream creation to prevent state RC borrow living across await
+    {
         let op_state = &state.borrow();
-        let query_plan = crud::query_plan_from_url(
+        let transaction = current_transaction(op_state);
+        let query_engine = query_engine_arc(op_state);
+
+        crud::run_query(
             &RequestContext {
                 policies: current_policies(op_state),
                 ts: current_type_system(op_state),
@@ -691,22 +686,12 @@ async fn op_chisel_crud_query(
                 user_id: context.user_id,
                 path: context.path,
             },
-            &params.type_name,
-            &params.url,
-        )?;
-
-        let transaction = current_transaction(op_state);
-        let query_engine = query_engine_arc(op_state);
-        query_engine.query(transaction, query_plan)?
-    };
-    let results = stream
-        .collect::<Vec<_>>()
-        .await
-        .into_iter()
-        .collect::<Result<Vec<_>>>()
-        .context("failed to collect result rows from the database")?;
-
-    Ok(results)
+            params,
+            query_engine,
+            transaction,
+        )
+    }
+    .await
 }
 
 #[op]
