@@ -517,7 +517,7 @@ export class ChiselRequest extends Request {
     }
 }
 
-export function chiselIterator<T>(
+export function chiselIterator<T extends ChiselEntity>(
     type: { new (): T },
 ) {
     const b = new BaseEntity<T>(type.name);
@@ -597,7 +597,7 @@ export class ChiselEntity {
     /** Returns a `ChiselCursor` containing all elements of type T known to ChiselStrike.
      *
      * Note that `ChiselCursor` is a lazy iterator, so this doesn't mean a query will be generating fetching all elements at this point. */
-    static cursor<T>(
+    static cursor<T extends ChiselEntity>(
         this: { new (): T },
     ): ChiselCursor<T> {
         return chiselIterator<T>(this);
@@ -606,7 +606,7 @@ export class ChiselEntity {
     /**
      * Return all entities of type T.
      */
-    static async findAll<T>(
+    static async findAll<T extends ChiselEntity>(
         this: { new (): T },
         take?: number,
     ): Promise<T[]> {
@@ -622,7 +622,7 @@ export class ChiselEntity {
      * You can optionaly specify `take` parameter that will limit the number of
      * results to at most `take` elements.
      */
-    static async findMany<T>(
+    static async findMany<T extends ChiselEntity>(
         this: { new (): T },
         predicate: (arg: T) => boolean,
         take?: number,
@@ -633,13 +633,13 @@ export class ChiselEntity {
      * You can optionaly specify `take` parameter that will limit the number of
      * results to at most `take` elements.
      */
-    static async findMany<T>(
+    static async findMany<T extends ChiselEntity>(
         this: { new (): T },
         restrictions: Partial<T>,
         take?: number,
     ): Promise<T[]>;
 
-    static async findMany<T>(
+    static async findMany<T extends ChiselEntity>(
         this: { new (): T },
         arg1: ((arg: T) => boolean) | Partial<T>,
         take?: number,
@@ -657,7 +657,7 @@ export class ChiselEntity {
     }
 
     // FindMany function used by Chisel Compiler. Not intended for direct usage.
-    static async __findMany<T>(
+    static async __findMany<T extends ChiselEntity>(
         this: { new (): T },
         predicate: (arg: T) => boolean,
         expression: Record<string, unknown>,
