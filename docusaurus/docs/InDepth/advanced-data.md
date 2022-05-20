@@ -49,7 +49,7 @@ export default async function chisel(req) {
         await created.save();
         return created;
     } else if (req.method == 'GET') {
-        const comments = await BlogPost.findMany({});
+        const comments = await BlogPost.findMany(b => true);
         return comments;
     } else {
         return new Response("Wrong method", { status: 405 });

@@ -617,14 +617,57 @@ export class ChiselEntity {
         return await it.toArray();
     }
 
-    /** Restricts this iterator to contain just the objects that match the `Partial` object `restrictions`. */
+    /**
+     * Returns all entities of type T for which the given `predicate` returns true.
+     * You can optionaly specify `take` parameter that will limit the number of
+     * results to at most `take` elements.
+     */
+    static async findMany<T>(
+        this: { new (): T },
+        predicate: (arg: T) => boolean,
+        take?: number,
+    ): Promise<T[]>;
+
+    /**
+     * Returns all entities of type T matching given `restrictions`.
+     * You can optionaly specify `take` parameter that will limit the number of
+     * results to at most `take` elements.
+     */
     static async findMany<T>(
         this: { new (): T },
         restrictions: Partial<T>,
         take?: number,
+    ): Promise<T[]>;
+
+    static async findMany<T>(
+        this: { new (): T },
+        arg1: ((arg: T) => boolean) | Partial<T>,
+        take?: number,
     ): Promise<T[]> {
-        let it = chiselIterator<T>(this).filter(restrictions);
-        if (take) {
+        let it = undefined;
+        if (typeof arg1 == "function") {
+            it = chiselIterator<T>(this).filter(arg1);
+        } else {
+            it = chiselIterator<T>(this).filter(arg1);
+        }
+        if (take !== undefined) {
+            it = it.take(take);
+        }
+        return await it.toArray();
+    }
+
+    // FindMany function used by Chisel Compiler. Not intended for direct usage.
+    static async __findMany<T>(
+        this: { new (): T },
+        predicate: (arg: T) => boolean,
+        expression: Record<string, unknown>,
+        take?: number,
+    ): Promise<T[]> {
+        let it = chiselIterator<T>(this).__filterWithExpression(
+            predicate,
+            expression,
+        );
+        if (take !== undefined) {
             it = it.take(take);
         }
         return await it.toArray();
