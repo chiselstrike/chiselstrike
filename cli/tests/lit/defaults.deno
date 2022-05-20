@@ -2,6 +2,24 @@
 
 # RUN: sh -e @file
 
+cd "$TEMPDIR"
+## check that unary expressions as defaults are valid
+cat << EOF > "$TEMPDIR/models/types.ts"
+export class Unary extends ChiselEntity { a: number = +1; b: number = 0; c: number = -1 ;}
+EOF
+$CHISEL apply
+
+# CHECK: Model defined: Unary
+
+$CHISEL restart
+$CHISEL describe
+
+# CHECK: class Unary {
+# CHECK: a: number = +1;
+# CHECK: b: number = 0;
+# CHECK: c: number = -1;
+# CHECK: }
+
 cat << EOF > "$TEMPDIR/models/types.ts"
 export class Foo extends Chisel.ChiselEntity {
 	a: string = "dfl1";
@@ -37,8 +55,7 @@ export default async function chisel(req: Request) {
 }
 EOF
 
-cd "$TEMPDIR"
-$CHISEL apply
+$CHISEL apply --allow-type-deletion
 
 $CURL -X POST $CHISELD_HOST/dev/default
 # CHECK: HTTP/1.1 200 OK
