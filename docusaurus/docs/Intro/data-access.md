@@ -175,6 +175,20 @@ which returns additional results:
 "Found alice,bob"
 ```
 
+:::note
+`findMany` can be called with a predicate lambda as well:
+
+```typescript title="my-backend/endpoints/find-many.ts"
+import { responseFromJson } from "@chiselstrike/api"
+import { User } from "../models/User"
+
+export default async function (req) {
+  const user = await User.findMany(user => user.city == "Cambridge");
+  return responseFromJson('Found ' + user.map(user => user.username));
+}
+```
+:::
+
 You can also pass an empty restrictions object to `findMany()` and you will get all the entities of that type.
 
 To do that, invoke the `/dev/find-many` test endpoint with an empty JSON document:
@@ -192,8 +206,8 @@ and see `curl` report:
 ```
 
 :::note
-The `findMany()` method is convenient, but if there are too many results, this can consume a lot of time and memory. 
-In future releases of ChiselStrike, the runtime will enforce a maximum number of entities from `findMany()` at API level 
+The `findMany()` method is convenient, but if there are too many results, this can consume a lot of time and memory.
+In future releases of ChiselStrike, the runtime will enforce a maximum number of entities from `findMany()` at API level
 and pagination in result sets will be available for REST-API consumers.
 :::
 

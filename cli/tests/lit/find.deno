@@ -11,12 +11,40 @@ import { Person } from "../models/person.ts";
 
 export default async function chisel(req: Request) {
     const url = new URL(req.url);
+    const use_predicate = (url.searchParams.get("use_predicate") ?? "false") == "true";
+    const use_expr = (url.searchParams.get("use_expr") ?? "false") == "true";
     const first_name = url.searchParams.get("first_name");
     if (first_name == undefined) {
         throw Error("first_name parameter must be specified.");
     }
 
-    const filtered = await Person.findMany({"first_name": first_name}, 1);
+    let filtered = undefined;
+    if (use_expr) {
+        filtered = await Person.__findMany(
+            p => p.first_name == first_name,
+            {
+                exprType: "Binary",
+                left: {
+                  exprType: "Property",
+                  property: "first_name",
+                  object: {
+                    exprType: "Parameter",
+                    position: 0
+                  }
+                },
+                op: "Eq",
+                right: {
+                  exprType: "Literal",
+                  value: first_name
+                }
+            },
+            1
+        );
+    } else if (use_predicate) {
+        filtered = await Person.findMany(p => p.first_name == first_name, 1);
+    } else {
+        filtered = await Person.findMany({"first_name": first_name}, 1);
+    }
     const name: string = filtered[0].first_name;
     return new Response("[" + name + "]");
 }
@@ -66,11 +94,23 @@ $CURL --data '{
 }' -o - $CHISELD_HOST/dev/ins
 # CHECK: ok
 
-$CURL -o - $CHISELD_HOST/dev/find_many?first_name="Glauber"
+$CURL -o - "$CHISELD_HOST/dev/find_many?first_name=Glauber"
+# CHECK: [Glauber]
+$CURL -o - "$CHISELD_HOST/dev/find_many?first_name=Glauber&use_predicate=true"
+# CHECK: [Glauber]
+$CURL -o - "$CHISELD_HOST/dev/find_many?first_name=Glauber&use_expr=true"
 # CHECK: [Glauber]
 
-$CURL -o - $CHISELD_HOST/dev/find_many?first_name="Jan"
+$CURL -o - "$CHISELD_HOST/dev/find_many?first_name=Jan"
+# CHECK: [Jan]
+$CURL -o - "$CHISELD_HOST/dev/find_many?first_name=Jan&use_predicate=true"
+# CHECK: [Jan]
+$CURL -o - "$CHISELD_HOST/dev/find_many?first_name=Jan&use_expr=true"
 # CHECK: [Jan]
 
-$CURL -o - $CHISELD_HOST/dev/find_many?first_name="Pekka"
+$CURL -o - "$CHISELD_HOST/dev/find_many?first_name=Pekka"
+# CHECK: [Pekka]
+$CURL -o - "$CHISELD_HOST/dev/find_many?first_name=Pekka&use_predicate=true"
+# CHECK: [Pekka]
+$CURL -o - "$CHISELD_HOST/dev/find_many?first_name=Pekka&use_expr=true"
 # CHECK: [Pekka]
