@@ -1,16 +1,55 @@
+use crate::datastore::engine::{QueryEngine, TransactionStatic};
 use crate::datastore::expr::{BinaryExpr, BinaryOp, Expr, Literal, PropertyAccess};
 use crate::datastore::query::{Mutation, QueryOp, QueryPlan, RequestContext, SortBy, SortKey};
 use crate::types::{ObjectType, Type};
+use crate::JsonObject;
 use anyhow::{Context, Result};
+use futures::{Future, Stream, StreamExt};
+use serde_derive::{Deserialize, Serialize};
 use std::sync::Arc;
 use url::Url;
 
+#[derive(Clone, Serialize, Deserialize)]
+pub(crate) struct QueryParams {
+    #[serde(rename = "typeName")]
+    type_name: String,
+    url: String,
+}
+
+/// Parses CRUD `params` and runs the query with provided `query_engine` returning
+/// JSON of results.
+pub(crate) fn run_query(
+    context: &RequestContext<'_>,
+    params: QueryParams,
+    query_engine: Arc<QueryEngine>,
+    tr: TransactionStatic,
+) -> impl Future<Output = Result<Vec<JsonObject>>> {
+    let stream = make_stream(context, params, query_engine, tr);
+    async {
+        stream?
+            .collect::<Vec<Result<JsonObject>>>()
+            .await
+            .into_iter()
+            .collect::<Result<_>>()
+            .context("failed to collect result rows from the database")
+    }
+}
+
+fn make_stream(
+    context: &RequestContext<'_>,
+    params: QueryParams,
+    query_engine: Arc<QueryEngine>,
+    tr: TransactionStatic,
+) -> Result<impl Stream<Item = Result<JsonObject>>> {
+    let stream = {
+        let query_plan = query_plan_from_url(context, &params.type_name, &params.url)?;
+        query_engine.query(tr.clone(), query_plan)?
+    };
+    Ok(stream)
+}
+
 /// Constructs QueryPlan from given CRUD url.
-pub(crate) fn query_plan_from_url(
-    c: &RequestContext,
-    entity_name: &str,
-    url: &str,
-) -> Result<QueryPlan> {
+fn query_plan_from_url(c: &RequestContext, entity_name: &str, url: &str) -> Result<QueryPlan> {
     let base_type =
         c.ts.lookup_object_type(entity_name, &c.api_version)
             .context("unable to construct QueryPlan from unknown entity name")?;
@@ -223,7 +262,6 @@ mod tests {
     use crate::types::{FieldDescriptor, ObjectDescriptor, TypeSystem};
     use crate::JsonObject;
 
-    use futures::StreamExt;
     use itertools::Itertools;
     use serde_json::json;
 
@@ -363,25 +401,22 @@ mod tests {
     ) -> Result<Vec<JsonObject>> {
         let qe = Arc::new(qe.clone());
         let tr = qe.clone().start_transaction_static().await.unwrap();
-
-        let context = RequestContext {
-            policies: &Policies::default(),
-            ts: &make_type_system(&*ENTITIES),
-            api_version: VERSION.to_owned(),
-            user_id: None,
-            path: "".to_string(),
-        };
-
-        let query_plan = query_plan_from_url(&context, entity_name, &url)?;
-        let stream = qe.query(tr, query_plan)?;
-
-        let results = stream
-            .collect::<Vec<_>>()
-            .await
-            .into_iter()
-            .collect::<Result<_>>()
-            .context("failed to collect result rows from the database")?;
-        Ok(results)
+        super::run_query(
+            &RequestContext {
+                policies: &Policies::default(),
+                ts: &make_type_system(&*ENTITIES),
+                api_version: VERSION.to_owned(),
+                user_id: None,
+                path: "".to_string(),
+            },
+            QueryParams {
+                type_name: entity_name.to_owned(),
+                url: url.to_owned(),
+            },
+            qe,
+            tr,
+        )
+        .await
     }
 
     async fn run_query_vec(entity_name: &str, url: String, qe: &QueryEngine) -> Vec<String> {
