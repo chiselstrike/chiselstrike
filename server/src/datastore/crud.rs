@@ -1,11 +1,9 @@
 use crate::datastore::expr::{BinaryExpr, BinaryOp, Expr, Literal, PropertyAccess};
 use crate::datastore::query::{Mutation, QueryOp, QueryPlan, RequestContext, SortBy, SortKey};
 use crate::types::{ObjectType, Type};
-
 use anyhow::{Context, Result};
-use url::Url;
-
 use std::sync::Arc;
+use url::Url;
 
 /// Constructs QueryPlan from given CRUD url.
 pub(crate) fn query_plan_from_url(
