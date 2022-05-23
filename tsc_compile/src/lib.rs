@@ -43,9 +43,6 @@ struct DownloadMap {
     // maps absolute path without extension to the input as written.
     input_files: HashMap<String, String>,
 
-    // User provided libraries
-    extra_libs: HashMap<String, String>,
-
     // Precomputed module graph
     graph: ModuleGraph,
 
@@ -60,16 +57,11 @@ impl DownloadMap {
         self.url_to_path.insert(url.clone(), path.clone());
         self.path_to_url.insert(path, url);
     }
-    fn new(
-        file_name: &str,
-        extra_libs: HashMap<String, String>,
-        graph: ModuleGraph,
-    ) -> DownloadMap {
+    fn new(file_name: &str, graph: ModuleGraph) -> DownloadMap {
         let mut input_files = HashMap::new();
         input_files.insert(abs(without_extension(file_name)), file_name.to_string());
         DownloadMap {
             input_files,
-            extra_libs,
             graph,
             path_to_url: Default::default(),
             url_to_path: Default::default(),
@@ -80,9 +72,6 @@ impl DownloadMap {
 }
 
 fn fetch_impl(map: &mut DownloadMap, path: String, mut base: String) -> Result<String> {
-    if map.extra_libs.contains_key(&path) {
-        return Ok(path);
-    }
     if let Some(url) = map.path_to_url.get(&base) {
         base = url.to_string();
     } else {
@@ -124,10 +113,6 @@ fn fetch(s: &mut OpState, path: String, base: String) -> Result<String> {
 }
 
 fn read_impl(map: &mut DownloadMap, path: String) -> Result<String> {
-    if let Some(v) = map.extra_libs.get(&path) {
-        return Ok(v.to_string());
-    }
-
     let url = if let Some(url) = map.path_to_url.get(&path) {
         url.clone()
     } else {
@@ -389,11 +374,10 @@ impl Compiler {
 
         graph.valid()?;
 
-        self.runtime.op_state().borrow_mut().put(DownloadMap::new(
-            file_name,
-            opts.extra_libs,
-            graph,
-        ));
+        self.runtime
+            .op_state()
+            .borrow_mut()
+            .put(DownloadMap::new(file_name, graph));
 
         let global_context = self.runtime.global_context();
         let ok = {
