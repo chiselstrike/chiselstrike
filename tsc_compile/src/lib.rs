@@ -18,6 +18,7 @@ use deno_graph::source::LoadResult;
 use deno_graph::source::Loader;
 use deno_graph::source::ResolveResponse;
 use deno_graph::source::Resolver;
+use deno_graph::MediaType;
 use deno_graph::ModuleGraph;
 use deno_graph::ModuleKind;
 use serde::de::DeserializeOwned;
@@ -31,12 +32,6 @@ use std::sync::Arc;
 
 #[derive(Debug)]
 struct DownloadMap {
-    // map download path to urls and content
-    path_to_url: HashMap<String, Url>,
-
-    // maps url to the download path.
-    url_to_path: HashMap<Url, String>,
-
     // Map a location (url or input file) to what it was compiled to.
     written: HashMap<String, String>,
 
@@ -47,28 +42,9 @@ struct DownloadMap {
 }
 
 impl DownloadMap {
-    fn len(&self) -> usize {
-        self.path_to_url.len()
-    }
-    // This creates a mapping from the given url to a temporary path
-    // in the download directory. The created path is returned.
-    fn insert(&mut self, url: Url) -> String {
-        let extension = {
-            let module = self.graph.get(&url).unwrap();
-            module.media_type.as_ts_extension().to_string()
-        };
-
-        let n = self.len();
-        let path = format!("/path/to/downloaded/files/{}.{}", n, extension);
-        self.url_to_path.insert(url.clone(), path.clone());
-        self.path_to_url.insert(path.clone(), url);
-        path
-    }
     fn new(graph: ModuleGraph) -> DownloadMap {
         DownloadMap {
             graph,
-            path_to_url: Default::default(),
-            url_to_path: Default::default(),
             written: Default::default(),
             diagnostics: Default::default(),
         }
@@ -76,17 +52,13 @@ impl DownloadMap {
 }
 
 fn fetch_impl(map: &mut DownloadMap, path: String, base: String) -> Result<String> {
-    let url = map.path_to_url.get(&base).unwrap();
+    let url = Url::parse(&base).unwrap();
     let resolved = map
         .graph
-        .resolve_dependency(&path, url, true)
+        .resolve_dependency(&path, &url, true)
         .ok_or_else(|| anyhow!("Could not resolve '{}' in '{}'", path, url))?
         .clone();
-    if let Some(path) = map.url_to_path.get(&resolved) {
-        return Ok(path.clone());
-    }
-
-    Ok(map.insert(resolved))
+    Ok(resolved.to_string())
 }
 
 fn with_map<T1, T2, R, F>(func: F, s: &mut OpState, a: T1, b: T2) -> Result<R>
@@ -106,8 +78,8 @@ fn fetch(s: &mut OpState, path: String, base: String) -> Result<String> {
 }
 
 fn read_impl(map: &mut DownloadMap, path: String) -> Result<String> {
-    let url = map.path_to_url.get(&path).unwrap();
-    let module = match map.graph.try_get(url) {
+    let url = Url::parse(&path)?;
+    let module = match map.graph.try_get(&url) {
         Ok(Some(m)) => m,
         Ok(None) => anyhow::bail!("URL was not loaded"),
         Err(e) => return Err(e.into()),
@@ -128,22 +100,7 @@ fn read(s: &mut OpState, path: String) -> Result<String> {
     }
 }
 
-fn map_name_impl(map: &mut DownloadMap, path: String, _: ()) -> Result<String> {
-    let res = if let Some(url) = map.path_to_url.get(&path) {
-        url.to_string()
-    } else {
-        path
-    };
-    Ok(res)
-}
-
-#[op]
-fn map_name(s: &mut OpState, path: String) -> Result<String> {
-    with_map(map_name_impl, s, path, ())
-}
-
-fn write_impl(map: &mut DownloadMap, mut path: String, content: String) -> Result<()> {
-    path = path.strip_prefix("chisel:/").unwrap().to_string();
+fn write_impl(map: &mut DownloadMap, path: String, content: String) -> Result<()> {
     map.written.insert(path, content);
     Ok(())
 }
@@ -302,7 +259,6 @@ impl Compiler {
                 dir_exists::decl(),
                 file_exists::decl(),
                 diagnostic::decl(),
-                map_name::decl(),
             ])
             .build();
 
@@ -370,18 +326,15 @@ impl Compiler {
 
         graph.valid()?;
 
-        let mut map = DownloadMap::new(graph);
-        let dpath = map.insert(url.clone());
-        let extra_default_lib = extra_default_lib.as_ref().map(|p| {
-            let url = Url::parse(p).unwrap();
-            map.insert(url)
-        });
-        self.runtime.op_state().borrow_mut().put(map);
+        self.runtime
+            .op_state()
+            .borrow_mut()
+            .put(DownloadMap::new(graph));
 
         let global_context = self.runtime.global_context();
-        let ok = {
+        {
             let scope = &mut self.runtime.handle_scope();
-            let file = v8::String::new(scope, &dpath).unwrap().into();
+            let file = v8::String::new(scope, url.as_str()).unwrap().into();
             let lib = match extra_default_lib {
                 Some(v) => v8::String::new(scope, &v).unwrap().into(),
                 None => v8::undefined(scope).into(),
@@ -392,26 +345,30 @@ impl Compiler {
             let emit_declarations = v8::Boolean::new(scope, opts.emit_declarations).into();
             compile
                 .call(scope, global_proxy.into(), &[file, lib, emit_declarations])
-                .unwrap()
-                .is_true()
-        };
+                .unwrap();
+        }
 
         let op_state = self.runtime.op_state();
         let mut op_state = op_state.borrow_mut();
         let map = op_state.take::<DownloadMap>();
-        if ok {
+        if map.diagnostics.is_empty() {
             let mut prefix_map: HashMap<&str, &Url> = HashMap::default();
-            for (k, v) in &map.path_to_url {
-                prefix_map.insert(without_extension(k), v);
-            }
             let mut ret: HashMap<String, String> = HashMap::default();
+            for m in map.graph.modules() {
+                let url = &m.specifier;
+                prefix_map.insert(without_extension(url.as_str()), url);
+                if m.media_type == MediaType::JavaScript {
+                    let source = m.maybe_source.as_ref().unwrap().to_string();
+                    ret.insert(url.to_string(), source);
+                }
+            }
             for (k, v) in map.written {
                 let prefix = without_extension(&k);
                 let is_dts = k.ends_with(".d.ts");
                 let source = prefix_map[prefix];
                 let source = if *source == url {
                     file_name.to_string()
-                } else if is_dts {
+                } else if is_dts || source.scheme() == "chisel" {
                     continue;
                 } else {
                     source.to_string()
