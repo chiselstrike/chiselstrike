@@ -18,12 +18,11 @@ impl Compiler {
     }
 
     pub async fn compile_endpoint(&mut self, file_name: &str) -> Result<HashMap<String, String>> {
-        let mods: HashMap<String, String> = [(
+        let mods = HashMap::from([(
             "@chiselstrike/api".to_string(),
             api::chisel_d_ts().to_string(),
-        )]
-        .into_iter()
-        .collect();
+        )]);
+
         let chisel_global = include_str!("chisel-global.d.ts");
         let temp = to_tempfile(chisel_global, ".d.ts")?;
 
