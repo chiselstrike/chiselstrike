@@ -127,35 +127,37 @@ fn url_to_filter(base_type: &Arc<ObjectType>, url: &str) -> Result<Option<Expr>>
     Ok(filter)
 }
 
+fn parse_sort(base_type: &Arc<ObjectType>, value: &str) -> Result<SortBy> {
+    let mut ascending = true;
+    let field_name = if let Some(suffix) = value.strip_prefix(&['-', '+']) {
+        if value.starts_with('-') {
+            ascending = false;
+        }
+        suffix
+    } else {
+        value
+    };
+    anyhow::ensure!(
+        base_type.has_field(field_name),
+        "trying to sort by non-existent field '{}' on entity {}",
+        field_name,
+        base_type.name(),
+    );
+    Ok(SortBy {
+        keys: vec![SortKey {
+            field_name: field_name.to_owned(),
+            ascending,
+        }],
+    })
+}
+
 fn parse_query_parameter(
     base_type: &Arc<ObjectType>,
     param_key: &str,
     value: &str,
 ) -> Result<Option<QueryOp>> {
     let op = match param_key {
-        "sort" => {
-            let mut ascending = true;
-            let field_name = if let Some(suffix) = value.strip_prefix(&['-', '+']) {
-                if value.starts_with('-') {
-                    ascending = false;
-                }
-                suffix
-            } else {
-                value
-            };
-            anyhow::ensure!(
-                base_type.has_field(field_name),
-                "trying to sort by non-existent field '{}' on entity {}",
-                field_name,
-                base_type.name(),
-            );
-            QueryOp::SortBy(SortBy {
-                keys: vec![SortKey {
-                    field_name: field_name.to_owned(),
-                    ascending,
-                }],
-            })
-        }
+        "sort" => QueryOp::SortBy(parse_sort(base_type, value)?),
         "limit" => {
             let count = value
                 .parse()
