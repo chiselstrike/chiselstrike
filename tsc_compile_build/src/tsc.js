@@ -120,12 +120,9 @@
             isolatedModules: true,
             lib: defaultLibs,
             module: ts.ModuleKind.ESNext,
-            noEmitOnError: true,
             noImplicitAny: true,
-            outDir: "chisel://",
             removeComments: true,
             strictPropertyInitialization: false, // we don't support constructors, so don't be strict about this
-            rootDir: "/",
             strict: true,
             target: ts.ScriptTarget.ESNext,
             types: [],
@@ -139,9 +136,13 @@
             .concat(emitResult.diagnostics);
 
         allDiagnostics = ts.sortAndDeduplicateDiagnostics(allDiagnostics);
-        for (const diag of allDiagnostics) {
-            diag.file.fileName = Deno.core.opSync("map_name", diag.file.fileName);
-        }
+        allDiagnostics = allDiagnostics.filter(({code}) => {
+            // Ignore the error
+            //   Cannot write file '...' because it would overwrite input file.
+            // It happens when trying to compile an URL that doesn't end in .ts
+            // as TSC thinks it will be overwriting the input.
+            return code != 5055;
+        });
         if (allDiagnostics.length != 0) {
             const diag = ts.formatDiagnosticsWithColorAndContext(
                 allDiagnostics,
@@ -149,7 +150,6 @@
             );
             Deno.core.opSync("diagnostic", diag);
         }
-        return !emitResult.emitSkipped;
     }
 
     function compile(file, lib, emitDeclarations) {
