@@ -116,8 +116,8 @@ fn url_to_filter(base_type: &Arc<ObjectType>, url: &str) -> Result<Option<Expr>>
     for (param_key, value) in q.query_pairs().into_owned() {
         let param_key = param_key.to_string();
         if let Some(param_key) = param_key.strip_prefix('.') {
-            let expression =
-                parse_filter(base_type, param_key, &value).context("failed to parse filter")?;
+            let expression = filter_from_param(base_type, param_key, &value)
+                .context("failed to parse filter")?;
 
             filter = filter
                 .map_or(expression.clone(), |e| BinaryExpr::and(expression, e))
@@ -172,8 +172,8 @@ fn parse_query_parameter(
         }
         _ => {
             if let Some(param_key) = param_key.strip_prefix('.') {
-                let expression =
-                    parse_filter(base_type, param_key, value).context("failed to parse filter")?;
+                let expression = filter_from_param(base_type, param_key, value)
+                    .context("failed to parse filter")?;
                 QueryOp::Filter { expression }
             } else {
                 return Ok(None);
@@ -183,7 +183,8 @@ fn parse_query_parameter(
     Ok(Some(op))
 }
 
-fn parse_filter(base_type: &Arc<ObjectType>, param_key: &str, value: &str) -> Result<Expr> {
+/// Constructs results filter by parsing query string's `param_key` and `value`.
+fn filter_from_param(base_type: &Arc<ObjectType>, param_key: &str, value: &str) -> Result<Expr> {
     let tokens: Vec<_> = param_key.split('~').collect();
     anyhow::ensure!(
         tokens.len() <= 2,
@@ -192,10 +193,35 @@ fn parse_filter(base_type: &Arc<ObjectType>, param_key: &str, value: &str) -> Re
     );
     let fields: Vec<_> = tokens[0].split('.').collect();
     let operator = tokens.get(1).copied();
+    let operator = convert_operator(operator)?;
 
+    let (property_chain, field_type) = make_property_chain(base_type, &fields)?;
+
+    let err_msg = |ty_name| format!("failed to convert filter value '{}' to {}", value, ty_name);
+    let literal = match field_type {
+        Type::Object(ty) => anyhow::bail!(
+            "trying to filter by property '{}' of type '{}' which is not supported",
+            fields.last().unwrap(),
+            ty.name()
+        ),
+        Type::String | Type::Id => Literal::String(value.to_owned()),
+        Type::Float => Literal::F64(value.parse::<f64>().with_context(|| err_msg("f64"))?),
+        Type::Boolean => Literal::Bool(value.parse::<bool>().with_context(|| err_msg("bool"))?),
+    };
+
+    Ok(BinaryExpr::new(operator, property_chain, literal.into()).into())
+}
+
+/// Converts `fields` of `base_type` into PropertyAccess expression while ensuring that
+/// provided fields are, in fact, applicable to `base_type`.
+fn make_property_chain(base_type: &Arc<ObjectType>, fields: &[&str]) -> Result<(Expr, Type)> {
+    anyhow::ensure!(
+        !fields.is_empty(),
+        "cannot make property chain from no fields"
+    );
     let mut property_chain = Expr::Parameter { position: 0 };
     let mut last_type = Type::Object(base_type.clone());
-    for &field_str in &fields {
+    for &field_str in fields {
         if let Type::Object(entity) = last_type {
             if let Some(field) = entity.get_field(field_str) {
                 last_type = field.type_.clone();
@@ -218,21 +244,7 @@ fn parse_filter(base_type: &Arc<ObjectType>, param_key: &str, value: &str) -> Re
             object: Box::new(property_chain),
         });
     }
-
-    let err_msg = |ty_name| format!("failed to convert filter value '{}' to {}", value, ty_name);
-    let literal = match last_type {
-        Type::Object(ty) => anyhow::bail!(
-            "trying to filter by property '{}' of type '{}' which is not supported",
-            fields.last().unwrap(),
-            ty.name()
-        ),
-        Type::String | Type::Id => Literal::String(value.to_owned()),
-        Type::Float => Literal::F64(value.parse::<f64>().with_context(|| err_msg("f64"))?),
-        Type::Boolean => Literal::Bool(value.parse::<bool>().with_context(|| err_msg("bool"))?),
-    };
-
-    let op = convert_operator(operator)?;
-    Ok(BinaryExpr::new(op, property_chain, literal.into()).into())
+    Ok((property_chain, last_type))
 }
 
 fn convert_operator(op_str: Option<&str>) -> Result<BinaryOp> {
@@ -347,7 +359,8 @@ mod tests {
                 make_field("ceo", Type::Object(person_type)),
             ],
         );
-        let filter_expr = |key: &str, value: &str| parse_filter(&base_type, key, value).unwrap();
+        let filter_expr =
+            |key: &str, value: &str| filter_from_param(&base_type, key, value).unwrap();
         let ops = [
             (BinaryOp::Eq, ""),
             (BinaryOp::NotEq, "~ne"),
