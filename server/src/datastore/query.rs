@@ -270,7 +270,7 @@ impl QueryPlan {
         Ok(builder)
     }
 
-    /// Constructs QueryPlan from `entity_name` and application of given
+    /// Constructs QueryPlan from type `ty` and application of given
     /// `operators.
     pub(crate) fn from_ops(
         c: &RequestContext,
