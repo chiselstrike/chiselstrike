@@ -101,18 +101,29 @@ impl<'a> Query<'a> {
 
         let mut q = Query::new(c, base_type.clone());
         for (param_key, value) in url.query_pairs().into_owned() {
-            let op = parse_query_parameter(base_type, &param_key, &value).with_context(|| {
-                format!(
-                    "failed to parse query param '{}' with value '{}'",
-                    param_key, value
-                )
-            })?;
-            match op {
-                Some(QueryOp::SortBy(s)) => q.sort = Some(s),
-                Some(QueryOp::Take { count }) => q.limit = Some(count),
-                Some(QueryOp::Skip { count }) => q.offset = Some(count),
-                Some(QueryOp::Filter { expression }) => q.filters.push(expression),
-                None | Some(QueryOp::Projection { .. }) => {}
+            match param_key.as_str() {
+                "sort" => q.sort = parse_sort(base_type, &value)?.into(),
+                "limit" => {
+                    let l = value.parse().with_context(|| {
+                        format!("failed to parse {param_key}. Expected u64, got '{}'", value)
+                    })?;
+                    q.limit = Some(l);
+                }
+                "offset" => {
+                    let o = value.parse().with_context(|| {
+                        format!("failed to parse offset. Expected u64, got '{}'", value)
+                    })?;
+                    q.offset = Some(o);
+                }
+                _ => {
+                    if let Some(param_key) = param_key.strip_prefix('.') {
+                        let expr =
+                            filter_from_param(base_type, param_key, &value).with_context(|| {
+                                format!("failed to parse filter {param_key}={value}")
+                            })?;
+                        q.filters.push(expr);
+                    }
+                }
             }
         }
         Ok(q)
@@ -139,6 +150,7 @@ impl<'a> Query<'a> {
     }
 }
 
+/// Parses all CRUD query-string filters over `base_type` from provided `url`.
 fn url_to_filter(base_type: &Arc<ObjectType>, url: &str) -> Result<Option<Expr>> {
     let mut filter = None;
     let q = Url::parse(url).with_context(|| format!("failed to parse query string '{}'", url))?;
@@ -178,38 +190,6 @@ fn parse_sort(base_type: &Arc<ObjectType>, value: &str) -> Result<SortBy> {
             ascending,
         }],
     })
-}
-
-fn parse_query_parameter(
-    base_type: &Arc<ObjectType>,
-    param_key: &str,
-    value: &str,
-) -> Result<Option<QueryOp>> {
-    let op = match param_key {
-        "sort" => QueryOp::SortBy(parse_sort(base_type, value)?),
-        "limit" => {
-            let count = value
-                .parse()
-                .with_context(|| format!("failed to parse limit. Expected u64, got '{}'", value))?;
-            QueryOp::Take { count }
-        }
-        "offset" => {
-            let count = value.parse().with_context(|| {
-                format!("failed to parse offset. Expected u64, got '{}'", value)
-            })?;
-            QueryOp::Skip { count }
-        }
-        _ => {
-            if let Some(param_key) = param_key.strip_prefix('.') {
-                let expression = filter_from_param(base_type, param_key, value)
-                    .context("failed to parse filter")?;
-                QueryOp::Filter { expression }
-            } else {
-                return Ok(None);
-            }
-        }
-    };
-    Ok(Some(op))
 }
 
 /// Constructs results filter by parsing query string's `param_key` and `value`.
