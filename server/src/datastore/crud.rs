@@ -42,7 +42,7 @@ fn make_stream(
     tr: TransactionStatic,
 ) -> Result<impl Stream<Item = Result<JsonObject>>> {
     let url = Url::parse(&params.url)
-        .with_context(|| format!("failed to parse query string '{}'", params.url))?;
+        .with_context(|| format!("crud endpoint failed to parse url: '{}'", params.url))?;
     let query_plan = query_plan_from_url(context, &params.type_name, &url)?;
     query_engine.query(tr.clone(), query_plan)
 }
