@@ -53,9 +53,19 @@ impl DownloadMap {
     fn len(&self) -> usize {
         self.path_to_url.len()
     }
-    fn insert(&mut self, path: String, url: Url) {
+    // This creates a mapping from the given url to a temporary path
+    // in the download directory. The created path is returned.
+    fn insert(&mut self, url: Url) -> String {
+        let extension = {
+            let module = self.graph.get(&url).unwrap();
+            module.media_type.as_ts_extension().to_string()
+        };
+
+        let n = self.len();
+        let path = format!("/path/to/downloaded/files/{}.{}", n, extension);
         self.url_to_path.insert(url.clone(), path.clone());
-        self.path_to_url.insert(path, url);
+        self.path_to_url.insert(path.clone(), url);
+        path
     }
     fn new(file_name: &str, graph: ModuleGraph) -> DownloadMap {
         let mut input_files = HashMap::new();
@@ -88,12 +98,7 @@ fn fetch_impl(map: &mut DownloadMap, path: String, mut base: String) -> Result<S
         return Ok(path.clone());
     }
 
-    let n = map.len();
-    let module = map.graph.get(&resolved).unwrap();
-    let extension = module.media_type.as_ts_extension();
-    let path = format!("/path/to/downloaded/files/{}.{}", n, extension);
-    map.insert(path.clone(), resolved);
-    Ok(path)
+    Ok(map.insert(resolved))
 }
 
 fn with_map<T1, T2, R, F>(func: F, s: &mut OpState, a: T1, b: T2) -> Result<R>
