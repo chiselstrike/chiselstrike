@@ -139,6 +139,7 @@ impl<'a> Query<'a> {
     }
 }
 
+/// Parses all CRUD query-string filters over `base_type` from provided `url`.
 fn url_to_filter(base_type: &Arc<ObjectType>, url: &str) -> Result<Option<Expr>> {
     let mut filter = None;
     let q = Url::parse(url).with_context(|| format!("failed to parse query string '{}'", url))?;
