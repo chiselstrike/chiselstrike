@@ -41,12 +41,14 @@ fn make_stream(
     query_engine: Arc<QueryEngine>,
     tr: TransactionStatic,
 ) -> Result<impl Stream<Item = Result<JsonObject>>> {
-    let query_plan = query_plan_from_url(context, &params.type_name, &params.url)?;
+    let url = Url::parse(&params.url)
+        .with_context(|| format!("failed to parse query string '{}'", params.url))?;
+    let query_plan = query_plan_from_url(context, &params.type_name, &url)?;
     query_engine.query(tr.clone(), query_plan)
 }
 
 /// Constructs QueryPlan from given CRUD url.
-fn query_plan_from_url(c: &RequestContext, entity_name: &str, url: &str) -> Result<QueryPlan> {
+fn query_plan_from_url(c: &RequestContext, entity_name: &str, url: &Url) -> Result<QueryPlan> {
     let base_type =
         c.ts.lookup_object_type(entity_name, &c.api_version)
             .context("unable to construct QueryPlan from unknown entity name")?;
@@ -56,9 +58,7 @@ fn query_plan_from_url(c: &RequestContext, entity_name: &str, url: &str) -> Resu
     Ok(query_plan)
 }
 
-fn query_str_to_ops(base_type: &Arc<ObjectType>, url: &str) -> Result<Vec<QueryOp>> {
-    let q = Url::parse(url).with_context(|| format!("failed to parse query string '{}'", url))?;
-
+fn query_str_to_ops(base_type: &Arc<ObjectType>, q: &Url) -> Result<Vec<QueryOp>> {
     let mut limit: Option<QueryOp> = None;
     let mut offset: Option<QueryOp> = None;
     let mut ops = vec![];
