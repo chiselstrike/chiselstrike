@@ -43,6 +43,20 @@ impl Default for Optimize {
     }
 }
 
+#[derive(Deserialize, PartialEq)]
+pub(crate) enum AutoIndex {
+    #[serde(rename = "yes")]
+    Yes,
+    #[serde(rename = "no")]
+    No,
+}
+
+impl Default for AutoIndex {
+    fn default() -> Self {
+        AutoIndex::No
+    }
+}
+
 #[derive(PartialOrd, PartialEq, Eq, Ord)]
 pub(crate) struct Endpoint {
     pub(crate) name: String,
@@ -69,6 +83,9 @@ pub(crate) struct Manifest {
     /// Enable or disable query optimization with the `chiselc` compiler.
     #[serde(default)]
     pub(crate) optimize: Optimize,
+    /// Enable or disable auto-indexing.
+    #[serde(default)]
+    pub(crate) auto_index: AutoIndex,
 }
 
 impl Manifest {
@@ -205,6 +222,8 @@ pub(crate) struct CreateProjectOptions {
     pub(crate) examples: bool,
     /// Enable the optimizer.
     pub(crate) optimize: bool,
+    /// Enable auto-indexing.
+    pub(crate) auto_index: bool,
 }
 
 /// Writes contents to a file in a directory.
@@ -248,6 +267,10 @@ pub(crate) fn create_project(path: &Path, opts: CreateProjectOptions) -> Result<
     toml.push_str(&format!(
         "optimize = \"{}\"\n",
         if opts.optimize { "yes" } else { "no" }
+    ));
+    toml.push_str(&format!(
+        "auto_index = \"{}\"\n",
+        if opts.auto_index { "yes" } else { "no" }
     ));
     write(&toml, path, "Chisel.toml")?;
 

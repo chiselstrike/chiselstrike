@@ -12,7 +12,8 @@ pub(crate) async fn apply(
     endpoints: &[Endpoint],
     entities: &[String],
     types_string: &str,
-    use_chiselc: bool,
+    optimize: bool,
+    auto_index: bool,
 ) -> Result<(Vec<EndPointCreationRequest>, Vec<IndexCandidate>)> {
     let mut endpoints_req = vec![];
     let mut index_candidates_req = vec![];
@@ -31,7 +32,7 @@ pub(crate) async fn apply(
         let path = f.file_path.to_str().unwrap();
         let code = output.remove(path).unwrap();
         let code = types_string.to_owned() + &code;
-        let code = if use_chiselc {
+        let code = if optimize {
             chiselc_output(code, "js", entities)?
         } else {
             swc_compile(code)?
@@ -40,7 +41,7 @@ pub(crate) async fn apply(
             path: f.name.clone(),
             code: code.clone(),
         });
-        if use_chiselc {
+        if auto_index {
             let mut indexes = parse_indexes(code.clone(), entities)?;
             index_candidates_req.append(&mut indexes);
         }

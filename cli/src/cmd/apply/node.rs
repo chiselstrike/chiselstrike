@@ -16,7 +16,8 @@ use tokio::task::{spawn_blocking, JoinHandle};
 pub(crate) async fn apply(
     endpoints: &[Endpoint],
     entities: &[String],
-    use_chiselc: bool,
+    optimize: bool,
+    auto_index: bool,
     type_check: &TypeChecking,
 ) -> Result<(Vec<EndPointCreationRequest>, Vec<IndexCandidate>)> {
     let mut endpoints_req = vec![];
@@ -40,7 +41,7 @@ pub(crate) async fn apply(
     let chiselc_futures: Vec<(_, _, _)> = endpoints
         .iter()
         .map(|endpoint| {
-            if use_chiselc {
+            if optimize {
                 let endpoint_file_path = endpoint.file_path.clone();
                 let gen_file_path = gen_dir.join(endpoint_file_path.file_name().unwrap());
                 let chiselc = chiselc_spawn(
@@ -124,7 +125,7 @@ pub(crate) async fn apply(
             path: endpoint.name.clone(),
             code: code.clone(),
         });
-        if use_chiselc {
+        if auto_index {
             let code = read_to_string(endpoint_file_path.clone())?;
             let mut indexes = parse_indexes(code, entities)?;
             index_candidates_req.append(&mut indexes);

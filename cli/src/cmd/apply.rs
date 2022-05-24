@@ -5,7 +5,7 @@ pub mod node;
 
 use crate::chisel::chisel_rpc_client::ChiselRpcClient;
 use crate::chisel::{ChiselApplyRequest, IndexCandidate, PolicyUpdateRequest};
-use crate::project::{read_manifest, read_to_string, Module, Optimize};
+use crate::project::{read_manifest, read_to_string, AutoIndex, Module, Optimize};
 use anyhow::{anyhow, Context, Result};
 use serde_json::Value;
 use std::io::Write;
@@ -85,11 +85,12 @@ pub(crate) async fn apply<S: ToString>(
         .iter()
         .map(|type_req| type_req.name.clone())
         .collect();
-    let use_chiselc = is_chiselc_available() && manifest.optimize == Optimize::Yes;
+    let optimize = is_chiselc_available() && manifest.optimize == Optimize::Yes;
+    let auto_index = is_chiselc_available() && manifest.auto_index == AutoIndex::Yes;
     let (endpoints_req, index_candidates_req) = if manifest.modules == Module::Node {
-        node::apply(&endpoints, &entities, use_chiselc, &type_check).await
+        node::apply(&endpoints, &entities, optimize, auto_index, &type_check).await
     } else {
-        deno::apply(&endpoints, &entities, &types_string, use_chiselc).await
+        deno::apply(&endpoints, &entities, &types_string, optimize, auto_index).await
     }?;
 
     for p in policies {
