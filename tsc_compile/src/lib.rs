@@ -145,6 +145,20 @@ fn read(s: &mut OpState, path: String) -> Result<String> {
     }
 }
 
+fn map_name_impl(map: &mut DownloadMap, path: String, _: ()) -> Result<String> {
+    let res = if let Some(url) = map.path_to_url.get(&path) {
+        url.to_string()
+    } else {
+        path
+    };
+    Ok(res)
+}
+
+#[op]
+fn map_name(s: &mut OpState, path: String) -> Result<String> {
+    with_map(map_name_impl, s, path, ())
+}
+
 fn write_impl(map: &mut DownloadMap, mut path: String, content: String) -> Result<()> {
     path = path.strip_prefix("chisel:/").unwrap().to_string();
     if let Some(url) = map.path_to_url.get(&path) {
@@ -315,6 +329,7 @@ impl Compiler {
                 dir_exists::decl(),
                 file_exists::decl(),
                 diagnostic::decl(),
+                map_name::decl(),
             ])
             .build();
 
@@ -710,9 +725,8 @@ export default foo;
             .unwrap_err()
             .to_string();
         let err = console::strip_ansi_codes(&err);
-        // FIXME: We should not be pointing to the download path.
         assert!(err.contains(
-            "downloaded/files/0..ts:1:14 - error TS2322: Type 'number' is not assignable to type 'string'"
+            "tests/wrong_type.ts:1:14 - error TS2322: Type 'number' is not assignable to type 'string'"
         ));
     }
 }

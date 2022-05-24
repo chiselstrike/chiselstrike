@@ -139,6 +139,9 @@
             .concat(emitResult.diagnostics);
 
         allDiagnostics = ts.sortAndDeduplicateDiagnostics(allDiagnostics);
+        for (const diag of allDiagnostics) {
+            diag.file.fileName = Deno.core.opSync("map_name", diag.file.fileName);
+        }
         if (allDiagnostics.length != 0) {
             const diag = ts.formatDiagnosticsWithColorAndContext(
                 allDiagnostics,
