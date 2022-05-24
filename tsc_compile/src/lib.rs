@@ -234,7 +234,12 @@ fn abs(path: &str) -> String {
 }
 
 fn without_extension(path: &str) -> &str {
-    path.rsplit_once('.').map_or(path, |p| p.0)
+    for suffix in [".d.ts", ".ts", ".js"] {
+        if let Some(s) = path.strip_suffix(suffix) {
+            return s;
+        }
+    }
+    path
 }
 
 static SNAPSHOT: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/SNAPSHOT.bin"));
