@@ -51,14 +51,13 @@ fn query_plan_from_url(c: &RequestContext, entity_name: &str, url: &str) -> Resu
         c.ts.lookup_object_type(entity_name, &c.api_version)
             .context("unable to construct QueryPlan from unknown entity name")?;
 
-    let operators = query_str_to_ops(&base_type, url)?;
+    let url = Url::parse(url).with_context(|| format!("failed to parse query string '{}'", url))?;
+    let operators = query_str_to_ops(&base_type, &url)?;
     let query_plan = QueryPlan::from_ops(c, &base_type, operators)?;
     Ok(query_plan)
 }
 
-fn query_str_to_ops(base_type: &Arc<ObjectType>, url: &str) -> Result<Vec<QueryOp>> {
-    let q = Url::parse(url).with_context(|| format!("failed to parse query string '{}'", url))?;
-
+fn query_str_to_ops(base_type: &Arc<ObjectType>, q: &Url) -> Result<Vec<QueryOp>> {
     let mut limit: Option<QueryOp> = None;
     let mut offset: Option<QueryOp> = None;
     let mut ops = vec![];
