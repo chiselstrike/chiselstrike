@@ -42,48 +42,10 @@ fn make_stream(
     tr: TransactionStatic,
 ) -> Result<impl Stream<Item = Result<JsonObject>>> {
     let url = Url::parse(&params.url)
-        .with_context(|| format!("failed to parse query string '{}'", params.url))?;
-    let query_plan = query_plan_from_url(context, &params.type_name, &url)?;
+        .with_context(|| format!("crud endpoint failed to parse url: '{}'", params.url))?;
+    let query = Query::from_url(context, &params.type_name, &url)?;
+    let query_plan = query.make_query_plan()?;
     query_engine.query(tr.clone(), query_plan)
-}
-
-/// Constructs QueryPlan from given CRUD url.
-fn query_plan_from_url(c: &RequestContext, entity_name: &str, url: &Url) -> Result<QueryPlan> {
-    let base_type =
-        c.ts.lookup_object_type(entity_name, &c.api_version)
-            .context("unable to construct QueryPlan from unknown entity name")?;
-
-    let operators = query_str_to_ops(&base_type, url)?;
-    let query_plan = QueryPlan::from_ops(c, &base_type, operators)?;
-    Ok(query_plan)
-}
-
-fn query_str_to_ops(base_type: &Arc<ObjectType>, q: &Url) -> Result<Vec<QueryOp>> {
-    let mut limit: Option<QueryOp> = None;
-    let mut offset: Option<QueryOp> = None;
-    let mut ops = vec![];
-    for (param_key, value) in q.query_pairs().into_owned() {
-        let param_key = param_key.to_string();
-        let op = parse_query_parameter(base_type, &param_key, &value).with_context(|| {
-            format!(
-                "failed to parse query param '{}' with value '{}'",
-                param_key, value
-            )
-        })?;
-        match op {
-            Some(QueryOp::Skip { .. }) => offset = op,
-            Some(QueryOp::Take { .. }) => limit = op,
-            Some(op) => ops.push(op),
-            _ => {}
-        }
-    }
-    if let Some(offset) = offset {
-        ops.push(offset);
-    }
-    if let Some(limit) = limit {
-        ops.push(limit);
-    }
-    Ok(ops)
 }
 
 /// Constructs Delete Mutation from CRUD url.
@@ -105,6 +67,76 @@ pub(crate) fn delete_from_url(c: &RequestContext, type_name: &str, url: &str) ->
         }
     }
     Mutation::delete_from_expr(c, type_name, &filter_expr)
+}
+
+/// Query is used in the process of parsing crud url query to rust representation.
+struct Query<'a> {
+    context: &'a RequestContext<'a>,
+    base_type: Arc<ObjectType>,
+    limit: Option<u64>,
+    offset: Option<u64>,
+    sort: Option<SortBy>,
+    /// Filters restricting the result set. They will be joined in AND-fashion.
+    filters: Vec<Expr>,
+}
+
+impl<'a> Query<'a> {
+    fn new(context: &'a RequestContext, base_type: Arc<ObjectType>) -> Self {
+        Query {
+            context,
+            base_type,
+            limit: None,
+            offset: None,
+            sort: None,
+            filters: vec![],
+        }
+    }
+
+    /// Parses provided `url` and builds a `Query` that can be used to build a `QueryPlan`.
+    fn from_url(c: &'a RequestContext, entity_name: &str, url: &Url) -> Result<Self> {
+        let base_type = &c
+            .ts
+            .lookup_object_type(entity_name, &c.api_version)
+            .context("unexpected type name as crud query base type")?;
+
+        let mut q = Query::new(c, base_type.clone());
+        for (param_key, value) in url.query_pairs().into_owned() {
+            let op = parse_query_parameter(base_type, &param_key, &value).with_context(|| {
+                format!(
+                    "failed to parse query param '{}' with value '{}'",
+                    param_key, value
+                )
+            })?;
+            match op {
+                Some(QueryOp::SortBy(s)) => q.sort = Some(s),
+                Some(QueryOp::Take { count }) => q.limit = Some(count),
+                Some(QueryOp::Skip { count }) => q.offset = Some(count),
+                Some(QueryOp::Filter { expression }) => q.filters.push(expression),
+                None | Some(QueryOp::Projection { .. }) => {}
+            }
+        }
+        Ok(q)
+    }
+
+    /// Makes `QueryPlan` based on the CRUD parameters that were parsed by `from_url` method.
+    /// The `QueryPlan` can be used to retrieve desired results from the database.
+    fn make_query_plan(&self) -> Result<QueryPlan> {
+        let mut ops = vec![];
+
+        if let Some(sort) = &self.sort {
+            ops.push(QueryOp::SortBy(sort.clone()));
+        }
+        for f_expr in self.filters.iter().cloned() {
+            ops.push(QueryOp::Filter { expression: f_expr });
+        }
+        if let Some(offset) = self.offset {
+            ops.push(QueryOp::Skip { count: offset });
+        }
+        if let Some(limit) = self.limit {
+            ops.push(QueryOp::Take { count: limit });
+        }
+        QueryPlan::from_ops(self.context, &self.base_type, ops)
+    }
 }
 
 fn url_to_filter(base_type: &Arc<ObjectType>, url: &str) -> Result<Option<Expr>> {
