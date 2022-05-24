@@ -41,18 +41,19 @@ fn make_stream(
     query_engine: Arc<QueryEngine>,
     tr: TransactionStatic,
 ) -> Result<impl Stream<Item = Result<JsonObject>>> {
-    let query_plan = query_plan_from_url(context, &params.type_name, &params.url)?;
+    let url = Url::parse(&params.url)
+        .with_context(|| format!("failed to parse query string '{}'", params.url))?;
+    let query_plan = query_plan_from_url(context, &params.type_name, &url)?;
     query_engine.query(tr.clone(), query_plan)
 }
 
 /// Constructs QueryPlan from given CRUD url.
-fn query_plan_from_url(c: &RequestContext, entity_name: &str, url: &str) -> Result<QueryPlan> {
+fn query_plan_from_url(c: &RequestContext, entity_name: &str, url: &Url) -> Result<QueryPlan> {
     let base_type =
         c.ts.lookup_object_type(entity_name, &c.api_version)
             .context("unable to construct QueryPlan from unknown entity name")?;
 
-    let url = Url::parse(url).with_context(|| format!("failed to parse query string '{}'", url))?;
-    let operators = query_str_to_ops(&base_type, &url)?;
+    let operators = query_str_to_ops(&base_type, url)?;
     let query_plan = QueryPlan::from_ops(c, &base_type, operators)?;
     Ok(query_plan)
 }
