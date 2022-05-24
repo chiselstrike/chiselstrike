@@ -44,7 +44,7 @@ fn make_stream(
     let url = Url::parse(&params.url)
         .with_context(|| format!("crud endpoint failed to parse url: '{}'", params.url))?;
     let query = Query::from_url(context, &params.type_name, &url)?;
-    let query_plan = query.make_query_plan()?;
+    let query_plan = QueryPlan::from_ops(context, &query.base_type, query.to_ops())?;
     query_engine.query(tr.clone(), query_plan)
 }
 
@@ -70,8 +70,7 @@ pub(crate) fn delete_from_url(c: &RequestContext, type_name: &str, url: &str) ->
 }
 
 /// Query is used in the process of parsing crud url query to rust representation.
-struct Query<'a> {
-    context: &'a RequestContext<'a>,
+struct Query {
     base_type: Arc<ObjectType>,
     limit: Option<u64>,
     offset: Option<u64>,
@@ -80,10 +79,9 @@ struct Query<'a> {
     filters: Vec<Expr>,
 }
 
-impl<'a> Query<'a> {
-    fn new(context: &'a RequestContext, base_type: Arc<ObjectType>) -> Self {
+impl Query {
+    fn new(base_type: Arc<ObjectType>) -> Self {
         Query {
-            context,
             base_type,
             limit: None,
             offset: None,
@@ -93,13 +91,13 @@ impl<'a> Query<'a> {
     }
 
     /// Parses provided `url` and builds a `Query` that can be used to build a `QueryPlan`.
-    fn from_url(c: &'a RequestContext, entity_name: &str, url: &Url) -> Result<Self> {
+    fn from_url(c: &RequestContext, entity_name: &str, url: &Url) -> Result<Self> {
         let base_type = &c
             .ts
             .lookup_object_type(entity_name, &c.api_version)
             .context("unexpected type name as crud query base type")?;
 
-        let mut q = Query::new(c, base_type.clone());
+        let mut q = Query::new(base_type.clone());
         for (param_key, value) in url.query_pairs().into_owned() {
             match param_key.as_str() {
                 "sort" => q.sort = parse_sort(base_type, &value)?.into(),
@@ -131,9 +129,8 @@ impl<'a> Query<'a> {
 
     /// Makes `QueryPlan` based on the CRUD parameters that were parsed by `from_url` method.
     /// The `QueryPlan` can be used to retrieve desired results from the database.
-    fn make_query_plan(&self) -> Result<QueryPlan> {
+    fn to_ops(&self) -> Vec<QueryOp> {
         let mut ops = vec![];
-
         if let Some(sort) = &self.sort {
             ops.push(QueryOp::SortBy(sort.clone()));
         }
@@ -146,7 +143,7 @@ impl<'a> Query<'a> {
         if let Some(limit) = self.limit {
             ops.push(QueryOp::Take { count: limit });
         }
-        QueryPlan::from_ops(self.context, &self.base_type, ops)
+        ops
     }
 }
 
