@@ -41,11 +41,8 @@ fn make_stream(
     query_engine: Arc<QueryEngine>,
     tr: TransactionStatic,
 ) -> Result<impl Stream<Item = Result<JsonObject>>> {
-    let stream = {
-        let query_plan = query_plan_from_url(context, &params.type_name, &params.url)?;
-        query_engine.query(tr.clone(), query_plan)?
-    };
-    Ok(stream)
+    let query_plan = query_plan_from_url(context, &params.type_name, &params.url)?;
+    query_engine.query(tr.clone(), query_plan)
 }
 
 /// Constructs QueryPlan from given CRUD url.
