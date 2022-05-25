@@ -4,7 +4,7 @@ use crate::datastore::query::{Mutation, QueryOp, QueryPlan, RequestContext, Sort
 use crate::types::{ObjectType, Type};
 use crate::JsonObject;
 use anyhow::{Context, Result};
-use futures::{Future, Stream, StreamExt};
+use futures::{Future, StreamExt};
 use serde_derive::{Deserialize, Serialize};
 use std::sync::Arc;
 use url::Url;
@@ -16,31 +16,23 @@ pub(crate) struct QueryParams {
     url: Url,
 }
 
-/// Parses CRUD `params` and runs the query with provided `query_engine` returning
-/// JSON of results.
+/// Parses CRUD `params` and runs the query with provided `query_engine`.
 pub(crate) fn run_query(
     context: &RequestContext<'_>,
     params: QueryParams,
     query_engine: Arc<QueryEngine>,
     tr: TransactionStatic,
 ) -> impl Future<Output = Result<Vec<JsonObject>>> {
-    let stream = make_stream(context, params, query_engine, tr);
-    async {
-        stream?
-            .collect::<Vec<Result<JsonObject>>>()
-            .await
-            .into_iter()
-            .collect::<Result<_>>()
-            .context("failed to collect result rows from the database")
-    }
+    let fut = run_query_impl(context, params, query_engine, tr);
+    async move { fut?.await }
 }
 
-fn make_stream(
+fn run_query_impl(
     context: &RequestContext<'_>,
     params: QueryParams,
     query_engine: Arc<QueryEngine>,
     tr: TransactionStatic,
-) -> Result<impl Stream<Item = Result<JsonObject>>> {
+) -> Result<impl Future<Output = Result<Vec<JsonObject>>>> {
     let base_type = &context
         .ts
         .lookup_object_type(&params.type_name, &context.api_version)
@@ -49,7 +41,16 @@ fn make_stream(
     let query = Query::from_url(base_type, &params.url)?;
     let ops = query.make_query_ops()?;
     let query_plan = QueryPlan::from_ops(context, base_type, ops)?;
-    query_engine.query(tr.clone(), query_plan)
+    let stream = query_engine.query(tr.clone(), query_plan)?;
+
+    Ok(async move {
+        stream
+            .collect::<Vec<_>>()
+            .await
+            .into_iter()
+            .collect::<Result<Vec<_>>>()
+            .context("failed to collect result rows from the database")
+    })
 }
 
 /// Constructs Delete Mutation from CRUD url.
