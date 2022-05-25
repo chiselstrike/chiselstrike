@@ -75,17 +75,11 @@ impl DownloadMap {
     }
 }
 
-fn fetch_impl(map: &mut DownloadMap, path: String, mut base: String) -> Result<String> {
-    if let Some(url) = map.path_to_url.get(&base) {
-        base = url.to_string();
-    } else {
-        assert!(base.as_bytes()[0] == b'/');
-        base = "file://".to_string() + &base;
-    }
-    let url = Url::parse(&base).unwrap();
+fn fetch_impl(map: &mut DownloadMap, path: String, base: String) -> Result<String> {
+    let url = map.path_to_url.get(&base).unwrap();
     let resolved = map
         .graph
-        .resolve_dependency(&path, &url, true)
+        .resolve_dependency(&path, url, true)
         .ok_or_else(|| anyhow!("Could not resolve '{}' in '{}'", path, url))?
         .clone();
     if let Some(path) = map.url_to_path.get(&resolved) {
@@ -112,13 +106,8 @@ fn fetch(s: &mut OpState, path: String, base: String) -> Result<String> {
 }
 
 fn read_impl(map: &mut DownloadMap, path: String) -> Result<String> {
-    let url = if let Some(url) = map.path_to_url.get(&path) {
-        url.clone()
-    } else {
-        let url = "file://".to_string() + &path;
-        Url::parse(&url)?
-    };
-    let module = match map.graph.try_get(&url) {
+    let url = map.path_to_url.get(&path).unwrap();
+    let module = match map.graph.try_get(url) {
         Ok(Some(m)) => m,
         Ok(None) => anyhow::bail!("URL was not loaded"),
         Err(e) => return Err(e.into()),
@@ -356,10 +345,13 @@ impl Compiler {
         let mut loader = ModuleLoader { extra_libs };
         let resolver = ModuleResolver { extra_libs: to_url };
 
-        let maybe_imports = if let Some(path) = opts.extra_default_lib {
+        let extra_default_lib = opts
+            .extra_default_lib
+            .map(|path| "file://".to_string() + &abs(path));
+
+        let maybe_imports = if let Some(path) = &extra_default_lib {
             let dummy_url = Url::parse("chisel://std").unwrap();
-            let path = "file://".to_string() + &abs(path);
-            Some(vec![(dummy_url, vec![path])])
+            Some(vec![(dummy_url, vec![path.to_string()])])
         } else {
             None
         };
@@ -380,14 +372,18 @@ impl Compiler {
 
         let mut map = DownloadMap::new(graph);
         let dpath = map.insert(url.clone());
+        let extra_default_lib = extra_default_lib.as_ref().map(|p| {
+            let url = Url::parse(p).unwrap();
+            map.insert(url)
+        });
         self.runtime.op_state().borrow_mut().put(map);
 
         let global_context = self.runtime.global_context();
         let ok = {
             let scope = &mut self.runtime.handle_scope();
             let file = v8::String::new(scope, &dpath).unwrap().into();
-            let lib = match opts.extra_default_lib {
-                Some(v) => v8::String::new(scope, &abs(v)).unwrap().into(),
+            let lib = match extra_default_lib {
+                Some(v) => v8::String::new(scope, &v).unwrap().into(),
                 None => v8::undefined(scope).into(),
             };
             let global_proxy = global_context.open(scope).global(scope);
@@ -412,12 +408,8 @@ impl Compiler {
             for (k, v) in map.written {
                 let prefix = without_extension(&k);
                 let is_dts = k.ends_with(".d.ts");
-                let source = if let Some(s) = prefix_map.get(prefix) {
-                    s.to_string()
-                } else {
-                    k
-                };
-                let source = if source == url.to_string() {
+                let source = prefix_map[prefix];
+                let source = if *source == url {
                     file_name.to_string()
                 } else if is_dts {
                     continue;
