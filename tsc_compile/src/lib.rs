@@ -170,7 +170,13 @@ fn write_impl(map: &mut DownloadMap, mut path: String, content: String) -> Resul
         };
         path = match map.input_files.get(prefix) {
             Some(path) => path.clone(),
-            None => return Ok(()),
+            None => {
+                if is_dts {
+                    return Ok(());
+                } else {
+                    path
+                }
+            }
         };
         if is_dts {
             path = without_extension(&path).to_string() + ".d.ts";
@@ -386,7 +392,7 @@ impl Compiler {
         };
 
         let graph = deno_graph::create_graph(
-            vec![(url, ModuleKind::Esm)],
+            vec![(url.clone(), ModuleKind::Esm)],
             false,
             maybe_imports,
             &mut loader,
@@ -426,7 +432,32 @@ impl Compiler {
         let mut op_state = op_state.borrow_mut();
         let map = op_state.take::<DownloadMap>();
         if ok {
-            Ok(map.written)
+            let mut prefix_map: HashMap<&str, &Url> = HashMap::default();
+            for (k, v) in &map.path_to_url {
+                prefix_map.insert(without_extension(k), v);
+            }
+            let mut ret: HashMap<String, String> = HashMap::default();
+            for (k, v) in map.written {
+                let prefix = without_extension(&k);
+                let is_dts = k.ends_with(".d.ts");
+                let source = if let Some(s) = prefix_map.get(prefix) {
+                    s.to_string()
+                } else {
+                    k
+                };
+                let source = if source == url.to_string() {
+                    file_name.to_string()
+                } else {
+                    source.to_string()
+                };
+                let key = if is_dts {
+                    without_extension(&source).to_string() + ".d.ts"
+                } else {
+                    source
+                };
+                ret.insert(key, v);
+            }
+            Ok(ret)
         } else {
             Err(anyhow!("Compilation failed:\n{}", map.diagnostics))
         }
@@ -738,11 +769,11 @@ export default foo;
     #[tokio::test]
     async fn output_imported() {
         let path = &abs("tests/output_imported_a.ts");
+        let import = format!("file://{}b.ts", path.strip_suffix("a.ts").unwrap());
         let written = compile_ts_code(path, Default::default()).await.unwrap();
         let mut keys: Vec<_> = written.keys().collect();
         keys.sort_unstable();
-        // FIXME: We are mising output_imported_b.ts
-        let mut expected = vec![path];
+        let mut expected = vec![&import, path];
         expected.sort_unstable();
         assert_eq!(keys, expected);
     }
