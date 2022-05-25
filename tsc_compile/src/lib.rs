@@ -734,4 +734,16 @@ export default foo;
             "tests/wrong_type.ts:1:14 - error TS2322: Type 'number' is not assignable to type 'string'"
         ));
     }
+
+    #[tokio::test]
+    async fn output_imported() {
+        let path = &abs("tests/output_imported_a.ts");
+        let written = compile_ts_code(path, Default::default()).await.unwrap();
+        let mut keys: Vec<_> = written.keys().collect();
+        keys.sort_unstable();
+        // FIXME: We are mising output_imported_b.ts
+        let mut expected = vec![path];
+        expected.sort_unstable();
+        assert_eq!(keys, expected);
+    }
 }
