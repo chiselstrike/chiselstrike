@@ -85,8 +85,14 @@ pub(crate) async fn apply<S: ToString>(
         .iter()
         .map(|type_req| type_req.name.clone())
         .collect();
-    let optimize = is_chiselc_available() && manifest.optimize == Optimize::Yes;
-    let auto_index = is_chiselc_available() && manifest.auto_index == AutoIndex::Yes;
+    let chiselc_available = is_chiselc_available();
+    if !chiselc_available {
+        println!(
+            "Warning: no ChiselStrike compiler (`chiselc`) found. Some your queries might be slow."
+        );
+    }
+    let optimize = chiselc_available && manifest.optimize == Optimize::Yes;
+    let auto_index = chiselc_available && manifest.auto_index == AutoIndex::Yes;
     let (endpoints_req, index_candidates_req) = if manifest.modules == Module::Node {
         node::apply(&endpoints, &entities, optimize, auto_index, &type_check).await
     } else {
