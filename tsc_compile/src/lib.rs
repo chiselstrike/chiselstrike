@@ -688,4 +688,31 @@ export default foo;
         assert!(err.contains("Could not resolve './deno_types_imp.js' in 'file:///"));
         Ok(())
     }
+
+    #[tokio::test]
+    async fn wrong_type() {
+        // Test where tsc produced errors point to.
+        let err = compile_ts_code("tests/wrong_type.ts", Default::default())
+            .await
+            .unwrap_err()
+            .to_string();
+        let err = console::strip_ansi_codes(&err);
+        assert!(err.contains(
+            "tests/wrong_type.ts:1:14 - error TS2322: Type 'number' is not assignable to type 'string'."
+        ));
+    }
+
+    #[tokio::test]
+    async fn wrong_type_in_import() {
+        // Test where tsc produced errors in imports point to.
+        let err = compile_ts_code("tests/wrong_type_import.ts", Default::default())
+            .await
+            .unwrap_err()
+            .to_string();
+        let err = console::strip_ansi_codes(&err);
+        // FIXME: We should not be pointing to the download path.
+        assert!(err.contains(
+            "downloaded/files/0..ts:1:14 - error TS2322: Type 'number' is not assignable to type 'string'"
+        ));
+    }
 }
