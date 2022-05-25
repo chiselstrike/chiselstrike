@@ -40,9 +40,6 @@ struct DownloadMap {
     // Map a location (url or input file) to what it was compiled to.
     written: HashMap<String, String>,
 
-    // maps absolute path without extension to the input as written.
-    input_files: HashMap<String, String>,
-
     // Precomputed module graph
     graph: ModuleGraph,
 
@@ -67,11 +64,8 @@ impl DownloadMap {
         self.path_to_url.insert(path.clone(), url);
         path
     }
-    fn new(file_name: &str, graph: ModuleGraph) -> DownloadMap {
-        let mut input_files = HashMap::new();
-        input_files.insert(abs(without_extension(file_name)), file_name.to_string());
+    fn new(graph: ModuleGraph) -> DownloadMap {
         DownloadMap {
-            input_files,
             graph,
             path_to_url: Default::default(),
             url_to_path: Default::default(),
@@ -161,27 +155,6 @@ fn map_name(s: &mut OpState, path: String) -> Result<String> {
 
 fn write_impl(map: &mut DownloadMap, mut path: String, content: String) -> Result<()> {
     path = path.strip_prefix("chisel:/").unwrap().to_string();
-    if let Some(url) = map.path_to_url.get(&path) {
-        path = url.to_string();
-    } else {
-        let (prefix, is_dts) = match path.strip_suffix(".d.ts") {
-            None => (without_extension(&path), false),
-            Some(prefix) => (prefix, true),
-        };
-        path = match map.input_files.get(prefix) {
-            Some(path) => path.clone(),
-            None => {
-                if is_dts {
-                    return Ok(());
-                } else {
-                    path
-                }
-            }
-        };
-        if is_dts {
-            path = without_extension(&path).to_string() + ".d.ts";
-        }
-    }
     map.written.insert(path, content);
     Ok(())
 }
@@ -405,15 +378,14 @@ impl Compiler {
 
         graph.valid()?;
 
-        self.runtime
-            .op_state()
-            .borrow_mut()
-            .put(DownloadMap::new(file_name, graph));
+        let mut map = DownloadMap::new(graph);
+        let dpath = map.insert(url.clone());
+        self.runtime.op_state().borrow_mut().put(map);
 
         let global_context = self.runtime.global_context();
         let ok = {
             let scope = &mut self.runtime.handle_scope();
-            let file = v8::String::new(scope, &abs(file_name)).unwrap().into();
+            let file = v8::String::new(scope, &dpath).unwrap().into();
             let lib = match opts.extra_default_lib {
                 Some(v) => v8::String::new(scope, &abs(v)).unwrap().into(),
                 None => v8::undefined(scope).into(),
@@ -447,6 +419,8 @@ impl Compiler {
                 };
                 let source = if source == url.to_string() {
                     file_name.to_string()
+                } else if is_dts {
+                    continue;
                 } else {
                     source.to_string()
                 };
