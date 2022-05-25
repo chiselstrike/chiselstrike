@@ -423,10 +423,10 @@ impl Compiler {
         };
 
         let op_state = self.runtime.op_state();
-        let op_state = op_state.borrow();
-        let map = op_state.borrow::<DownloadMap>();
+        let mut op_state = op_state.borrow_mut();
+        let map = op_state.take::<DownloadMap>();
         if ok {
-            Ok(map.written.clone())
+            Ok(map.written)
         } else {
             Err(anyhow!("Compilation failed:\n{}", map.diagnostics))
         }
