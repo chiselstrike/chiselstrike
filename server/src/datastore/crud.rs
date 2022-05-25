@@ -13,7 +13,7 @@ use url::Url;
 pub(crate) struct QueryParams {
     #[serde(rename = "typeName")]
     type_name: String,
-    url: String,
+    url: Url,
 }
 
 /// Parses CRUD `params` and runs the query with provided `query_engine` returning
@@ -41,17 +41,14 @@ fn make_stream(
     query_engine: Arc<QueryEngine>,
     tr: TransactionStatic,
 ) -> Result<impl Stream<Item = Result<JsonObject>>> {
-    let url = Url::parse(&params.url)
-        .with_context(|| format!("crud endpoint failed to parse url: '{}'", params.url))?;
     let base_type = &context
         .ts
         .lookup_object_type(&params.type_name, &context.api_version)
         .context("unexpected type name as crud query base type")?;
 
-    let query = Query::from_url(base_type, &url)?;
+    let query = Query::from_url(base_type, &params.url)?;
     let ops = query.make_query_ops()?;
     let query_plan = QueryPlan::from_ops(context, base_type, ops)?;
-
     query_engine.query(tr.clone(), query_plan)
 }
 
@@ -325,8 +322,8 @@ mod tests {
         }
     }
 
-    fn url(query_string: &str) -> String {
-        format!("http://xxx?{}", query_string)
+    fn url(query_string: &str) -> Url {
+        Url::parse(&format!("http://xxx?{}", query_string)).unwrap()
     }
 
     lazy_static! {
@@ -416,11 +413,7 @@ mod tests {
         }
     }
 
-    async fn run_query(
-        entity_name: &str,
-        url: String,
-        qe: &QueryEngine,
-    ) -> Result<Vec<JsonObject>> {
+    async fn run_query(entity_name: &str, url: Url, qe: &QueryEngine) -> Result<Vec<JsonObject>> {
         let qe = Arc::new(qe.clone());
         let tr = qe.clone().start_transaction_static().await.unwrap();
         super::run_query(
@@ -433,7 +426,7 @@ mod tests {
             },
             QueryParams {
                 type_name: entity_name.to_owned(),
-                url: url.to_owned(),
+                url,
             },
             qe,
             tr,
@@ -441,7 +434,7 @@ mod tests {
         .await
     }
 
-    async fn run_query_vec(entity_name: &str, url: String, qe: &QueryEngine) -> Vec<String> {
+    async fn run_query_vec(entity_name: &str, url: Url, qe: &QueryEngine) -> Vec<String> {
         let r = run_query(entity_name, url, qe).await.unwrap();
         collect_names(&r)
     }
