@@ -43,8 +43,15 @@ fn make_stream(
 ) -> Result<impl Stream<Item = Result<JsonObject>>> {
     let url = Url::parse(&params.url)
         .with_context(|| format!("crud endpoint failed to parse url: '{}'", params.url))?;
-    let query = Query::from_url(context, &params.type_name, &url)?;
-    let query_plan = query.make_query_plan()?;
+    let base_type = &context
+        .ts
+        .lookup_object_type(&params.type_name, &context.api_version)
+        .context("unexpected type name as crud query base type")?;
+
+    let query = Query::from_url(base_type, &url)?;
+    let ops = query.make_query_ops()?;
+    let query_plan = QueryPlan::from_ops(context, base_type, ops)?;
+
     query_engine.query(tr.clone(), query_plan)
 }
 
@@ -70,9 +77,7 @@ pub(crate) fn delete_from_url(c: &RequestContext, type_name: &str, url: &str) ->
 }
 
 /// Query is used in the process of parsing crud url query to rust representation.
-struct Query<'a> {
-    context: &'a RequestContext<'a>,
-    base_type: Arc<ObjectType>,
+struct Query {
     limit: Option<u64>,
     offset: Option<u64>,
     sort: Option<SortBy>,
@@ -80,11 +85,9 @@ struct Query<'a> {
     filters: Vec<Expr>,
 }
 
-impl<'a> Query<'a> {
-    fn new(context: &'a RequestContext, base_type: Arc<ObjectType>) -> Self {
+impl Query {
+    fn new() -> Self {
         Query {
-            context,
-            base_type,
             limit: None,
             offset: None,
             sort: None,
@@ -93,13 +96,8 @@ impl<'a> Query<'a> {
     }
 
     /// Parses provided `url` and builds a `Query` that can be used to build a `QueryPlan`.
-    fn from_url(c: &'a RequestContext, entity_name: &str, url: &Url) -> Result<Self> {
-        let base_type = &c
-            .ts
-            .lookup_object_type(entity_name, &c.api_version)
-            .context("unexpected type name as crud query base type")?;
-
-        let mut q = Query::new(c, base_type.clone());
+    fn from_url(base_type: &Arc<ObjectType>, url: &Url) -> Result<Self> {
+        let mut q = Query::new();
         for (param_key, value) in url.query_pairs().into_owned() {
             match param_key.as_str() {
                 "sort" => q.sort = parse_sort(base_type, &value)?.into(),
@@ -129,9 +127,9 @@ impl<'a> Query<'a> {
         Ok(q)
     }
 
-    /// Makes `QueryPlan` based on the CRUD parameters that were parsed by `from_url` method.
-    /// The `QueryPlan` can be used to retrieve desired results from the database.
-    fn make_query_plan(&self) -> Result<QueryPlan> {
+    /// Makes query ops based on the CRUD parameters that were parsed by `from_url` method.
+    /// The query ops can be used to retrieve desired results from the database.
+    fn make_query_ops(&self) -> Result<Vec<QueryOp>> {
         let mut ops = vec![];
 
         if let Some(sort) = &self.sort {
@@ -146,7 +144,7 @@ impl<'a> Query<'a> {
         if let Some(limit) = self.limit {
             ops.push(QueryOp::Take { count: limit });
         }
-        QueryPlan::from_ops(self.context, &self.base_type, ops)
+        Ok(ops)
     }
 }
 
