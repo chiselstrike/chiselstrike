@@ -551,7 +551,7 @@ dependencies = [
  "glob",
  "handlebars",
  "itertools 0.10.3",
- "lit 1.0.4 (git+https://github.com/chiselstrike/lit?rev=b3137dd)",
+ "lit 1.0.4 (git+https://github.com/chiselstrike/lit?rev=607b0b9)",
  "notify",
  "prost",
  "rayon",
@@ -2484,7 +2484,7 @@ dependencies = [
 [[package]]
 name = "lit"
 version = "1.0.4"
-source = "git+https://github.com/chiselstrike/lit?rev=b3137dd#b3137dda5778a5e63c2250825b60407e0530f75f"
+source = "git+https://github.com/chiselstrike/lit?rev=607b0b9#607b0b9af934e55fdf3814e9186468c9b91b7cae"
 dependencies = [
  "clap",
  "error-chain 0.12.4",
