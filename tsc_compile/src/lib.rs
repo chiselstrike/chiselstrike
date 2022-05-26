@@ -331,7 +331,7 @@ impl Compiler {
         file_name: &str,
         opts: CompileOptions<'_>,
     ) -> Result<HashMap<String, String>> {
-        let url = "file://".to_string() + &abs(file_name);
+        let url = format!("file://{}", abs(file_name));
         let url = Url::parse(&url)?;
 
         let mut extra_libs = HashMap::new();
@@ -347,7 +347,7 @@ impl Compiler {
 
         let extra_default_lib = opts
             .extra_default_lib
-            .map(|path| "file://".to_string() + &abs(path));
+            .map(|path| format!("file://{}", abs(path)));
 
         let maybe_imports = if let Some(path) = &extra_default_lib {
             let dummy_url = Url::parse("chisel://std").unwrap();
