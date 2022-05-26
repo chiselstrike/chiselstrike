@@ -27,7 +27,9 @@ use std::collections::HashMap;
 use std::env;
 use std::fs;
 use std::future::Future;
+use std::path::Component;
 use std::path::Path;
+use std::path::PathBuf;
 use std::sync::Arc;
 
 #[derive(Debug)]
@@ -164,11 +166,24 @@ where
     Ok(res)
 }
 
+// This is similar to PathBuf::push, but folds "/./" and "/../". This
+// is similar to what TSC own path handling does.
+fn join_path(mut base: PathBuf, rel: &Path) -> PathBuf {
+    for c in rel.components() {
+        match c {
+            Component::Prefix(_) | Component::RootDir => return rel.to_path_buf(),
+            Component::CurDir => {}
+            Component::ParentDir => assert!(base.pop()),
+            Component::Normal(p) => base.push(p),
+        }
+    }
+    base
+}
+
 // Paths are passed to javascript, which uses UTF-16, no point in
 // pretending we can handle non unicode PathBufs.
 fn abs(path: &str) -> String {
-    let mut p = env::current_dir().unwrap();
-    p.push(path);
+    let p = join_path(env::current_dir().unwrap(), Path::new(path));
     p.into_os_string().into_string().unwrap()
 }
 
@@ -689,27 +704,39 @@ export default foo;
         ));
     }
 
-    #[tokio::test]
-    async fn output_imported() {
-        let path = &abs("tests/output_imported_a.ts");
-        let import = format!("file://{}b.ts", path.strip_suffix("a.ts").unwrap());
+    async fn check_output_imported(path: &str) {
+        let abs_a = abs(path);
+        let import = format!("file://{}b.ts", abs_a.strip_suffix("a.ts").unwrap());
         let written = compile_ts_code(path, Default::default()).await.unwrap();
         let mut keys: Vec<_> = written.keys().collect();
         keys.sort_unstable();
-        let mut expected = vec![&import, path];
+        let mut expected = vec![import.as_str(), path];
+        expected.sort_unstable();
+        assert_eq!(keys, expected);
+    }
+
+    #[tokio::test]
+    async fn output_imported() {
+        check_output_imported("tests/output_imported_a.ts").await;
+        check_output_imported("./tests/output_imported_a.ts").await;
+        check_output_imported(&abs("tests/output_imported_a.ts")).await;
+    }
+
+    async fn check_import_js(path: &str) {
+        let abs_a = abs(path);
+        let import = format!("file://{}b.js", abs_a.strip_suffix("a.ts").unwrap());
+        let written = compile_ts_code(path, Default::default()).await.unwrap();
+        let mut keys: Vec<_> = written.keys().collect();
+        keys.sort_unstable();
+        let mut expected = vec![import.as_str(), path];
         expected.sort_unstable();
         assert_eq!(keys, expected);
     }
 
     #[tokio::test]
     async fn import_js() {
-        let path = &abs("tests/import_js_a.ts");
-        let import = format!("file://{}b.js", path.strip_suffix("a.ts").unwrap());
-        let written = compile_ts_code(path, Default::default()).await.unwrap();
-        let mut keys: Vec<_> = written.keys().collect();
-        keys.sort_unstable();
-        let mut expected = vec![&import, path];
-        expected.sort_unstable();
-        assert_eq!(keys, expected);
+        check_import_js("tests/import_js_a.ts").await;
+        check_import_js("./tests/import_js_a.ts").await;
+        check_import_js(&abs("tests/import_js_a.ts")).await;
     }
 }
