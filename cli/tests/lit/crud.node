@@ -60,11 +60,11 @@ $CURL "$CHISELD_HOST/dev/persons?sort=-age"
 
 count_results () {
     results=$(cat)
-    printf "$results" \
+    printf '%s' "$results" \
         | grep -o "last_name" \
         | wc -l \
         | xargs printf 'Number of names: %d\n';
-    printf "$results";
+    printf '%s' "$results";
 }
 
 $CURL "$CHISELD_HOST/dev/persons?sort=first_name&limit=3" | count_results

@@ -110,11 +110,11 @@ $CURL -o - $CHISELD_HOST/dev/crud_foo
 
 count_results () {
     results=$(cat)
-    printf "$results" \
+    printf '%s' "$results" \
         | grep -o "\"a\":" \
         | wc -l \
         | xargs printf 'Number of results: %d\n';
-    printf "$results";
+    printf '%s' "$results";
 }
 
 $CURL "$CHISELD_HOST/dev/crud_foo?.a=xxx" | count_results
