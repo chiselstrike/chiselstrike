@@ -739,4 +739,25 @@ export default foo;
         check_import_js("./tests/import_js_a.ts").await;
         check_import_js(&abs("tests/import_js_a.ts")).await;
     }
+
+    async fn check_relative(path: &str) {
+        let abs_a = abs(path);
+        let import = format!(
+            "file://{}_b/bar.ts",
+            abs_a.strip_suffix("_a/foo.ts").unwrap()
+        );
+        let written = compile_ts_code(path, Default::default()).await.unwrap();
+        let mut keys: Vec<_> = written.keys().collect();
+        keys.sort_unstable();
+        let mut expected = vec![import.as_str(), path];
+        expected.sort_unstable();
+        assert_eq!(keys, expected);
+    }
+
+    #[tokio::test]
+    async fn relative() {
+        check_relative("tests/relative_a/foo.ts").await;
+        check_relative("./tests/relative_a/foo.ts").await;
+        check_relative(&abs("tests/relative_a/foo.ts")).await;
+    }
 }
