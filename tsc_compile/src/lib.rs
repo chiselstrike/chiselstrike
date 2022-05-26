@@ -302,6 +302,7 @@ impl Compiler {
         file_name: &str,
         opts: CompileOptions<'_>,
     ) -> Result<HashMap<String, String>> {
+        let dir_path = Path::new(file_name).parent().unwrap().to_path_buf();
         let url = format!("file://{}", abs(file_name));
         let url = Url::parse(&url)?;
 
@@ -365,7 +366,7 @@ impl Compiler {
 
         let op_state = self.runtime.op_state();
         let mut op_state = op_state.borrow_mut();
-        let map = op_state.take::<DownloadMap>();
+        let mut map = op_state.take::<DownloadMap>();
         if map.diagnostics.is_empty() {
             let mut prefix_map: HashMap<&str, &Url> = HashMap::default();
             let mut ret: HashMap<String, String> = HashMap::default();
@@ -374,7 +375,7 @@ impl Compiler {
                 prefix_map.insert(without_extension(url.as_str()), url);
                 if m.media_type == MediaType::JavaScript {
                     let source = m.maybe_source.as_ref().unwrap().to_string();
-                    ret.insert(url.to_string(), source);
+                    map.written.insert(url.to_string(), source);
                 }
             }
             for (k, v) in map.written {
@@ -385,6 +386,10 @@ impl Compiler {
                     file_name.to_string()
                 } else if is_dts || source.scheme() == "chisel" {
                     continue;
+                } else if let Some(rel) = url.make_relative(source) {
+                    join_path(dir_path.clone(), Path::new(&rel))
+                        .display()
+                        .to_string()
                 } else {
                     source.to_string()
                 };
@@ -716,12 +721,7 @@ export default foo;
     }
 
     async fn check_import(path: String, suffix_a: &str, suffix_b: &str) {
-        let abs_a = abs(&path);
-        let import = format!(
-            "file://{}{}",
-            abs_a.strip_suffix(suffix_a).unwrap(),
-            suffix_b
-        );
+        let import = format!("{}{}", path.strip_suffix(suffix_a).unwrap(), suffix_b);
         let written = compile_ts_code(&path, Default::default()).await.unwrap();
         let mut keys: Vec<_> = written.keys().collect();
         keys.sort_unstable();
@@ -746,6 +746,15 @@ export default foo;
     #[tokio::test]
     async fn import_js() {
         test_with_path_variants(check_import_js, "tests/import_js_a.ts").await;
+    }
+
+    async fn check_pure_js(path: String) {
+        check_import(path, "a.js", "b.js").await;
+    }
+
+    #[tokio::test]
+    async fn pure_js() {
+        test_with_path_variants(check_pure_js, "tests/import_js_a.js").await;
     }
 
     async fn check_relative(path: String) {
