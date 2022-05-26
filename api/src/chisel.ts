@@ -389,6 +389,48 @@ export class ChiselCursor<T> {
         );
     }
 
+    /**
+     * Finds minimal value over all elements using their `key` attribute.
+     *
+     * @param key specifies which attribute of `T` is to be used to chose the minimum.
+     * @returns minimal value of attribute called `key` across all elements. Undefined
+     * values are ignored. If there are no elements or non-undefined values,
+     * the function returns undefined.
+     */
+    async minBy<K extends keyof T>(key: K): Promise<T[K] | undefined> {
+        let min = undefined;
+        for await (const e of this) {
+            const val = e[key];
+            if (min === undefined) {
+                min = val;
+            } else if (val !== undefined && val < min) {
+                min = val;
+            }
+        }
+        return min;
+    }
+
+    /**
+     * Finds maximal value over all elements using their `key` attribute.
+     *
+     * @param key specifies which attribute of `T` is to be used to chose the maximum.
+     * @returns maximal value of attribute called `key` across all elements. Undefined
+     * values are ignored. If there are no elements or non-undefined values,
+     * the function returns undefined.
+     */
+    async maxBy<K extends keyof T>(key: K): Promise<T[K] | undefined> {
+        let max = undefined;
+        for await (const e of this) {
+            const val = e[key];
+            if (max === undefined) {
+                max = val;
+            } else if (val !== undefined && val > max) {
+                max = val;
+            }
+        }
+        return max;
+    }
+
     /** Executes the function `func` for each element of this cursor. */
     async forEach(func: (arg: T) => void): Promise<void> {
         for await (const t of this) {
