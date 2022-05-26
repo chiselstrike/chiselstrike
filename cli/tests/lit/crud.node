@@ -61,7 +61,7 @@ $CURL "$CHISELD_HOST/dev/persons?sort=-age"
 count_results () {
     results=$(cat)
     printf '%s' "$results" \
-        | grep -o "last_name" \
+        | grep -o "\"last_name\":" \
         | wc -l \
         | xargs printf 'Number of names: %d\n';
     printf '%s' "$results";
@@ -148,6 +148,26 @@ $CURL $CHISELD_HOST/dev/persons/$id # GET by id
 # CHECK: "first_name": "Dawn"
 $CURL $CHISELD_HOST/dev/persons/i-will-never-exist-ya-know # GET by invalid id
 # CHECK: HTTP/1.1 404 Not Found
+
+## Test paging
+
+resp=$($CURL --no-include "$CHISELD_HOST/dev/persons?sort=last_name&page_size=2&.last_name~ne=Brown")
+echo "$resp" | count_results
+# CHECK: Number of names: 2
+# CHECK: "last_name": "Anderson"
+# CHECK: "last_name": "Chong"
+
+resp=$($CURL --no-include $(echo "$resp" | jq -r '.next_page'))
+echo "$resp" | count_results
+# CHECK: Number of names: 2
+# CHECK: "last_name": "Draper"
+# CHECK: "last_name": "Elgin"
+
+resp=$($CURL --no-include $(echo "$resp" | jq -r '.next_page'))
+echo "$resp" | count_results
+# CHECK: Number of names: 0
+
+## Test delete
 
 $CURL -X DELETE $CHISELD_HOST/dev/persons/$id # DELETE by id
 # CHECK: HTTP/1.1 200 OK
