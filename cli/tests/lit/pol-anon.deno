@@ -131,40 +131,24 @@ cat << EOF > "$TEMPDIR/endpoints/companies.ts"
 import { crud } from "@chiselstrike/api";
 import { Company } from "../models/company.ts";
 
-export default crud(
-  Company,
-  "",
-  {
-    defaultCreateResponse: (body: unknown, status: number) => {
-      return new Response(
-        JSON.stringify(
-          body,
-          ["name", "ceo", "accountant", "firstName", "lastName", "secretSauce"],
-          4
-        ), { status }
-      );
-    }
-  }
-);
+export default Company.crud();
 EOF
 
 $CHISEL apply
 
-$CURL -d '{
+$CURL --no-include -d '{
   "name": "Chiselstrike",
   "ceo": {"firstName": "Glauber", "lastName": "Costa"},
   "accountant": {"firstName": "Edward", "lastName": "Ohare"},
   "secretSauce": "pumpkin"
-}' $CHISELD_HOST/dev/companies
+}' $CHISELD_HOST/dev/companies | jq '.name'
 
-# CHECK: HTTP/1.1 200 OK
-# CHECK: "name": "Chiselstrike"
+# CHECK: Chiselstrike
 
-$CURL $CHISELD_HOST/dev/companies
-# CHECK: HTTP/1.1 200 OK
-# CHECK: "name": "Chiselstrike"
-# CHECK: "ceo":
-# CHECK: "firstName": "xxxxx"
-# CHECK: "lastName": "Costa"
-# CHECK: "accountant": "xxxxx"
-# CHECK: "secretSauce": "xxxxx"
+$CURL --no-include $CHISELD_HOST/dev/companies | jq '.[] | .name, .ceo.firstName, .ceo.lastName, .accountant, .secretSauce'
+
+# CHECK: Chiselstrike
+# CHECK: xxxxx
+# CHECK: Costa
+# CHECK: xxxxx
+# CHECK: xxxxx
