@@ -66,7 +66,7 @@ $CURL $CHISELD_HOST/dev
 # CHECK: "title": "glauber",
 
 # jq doesn't like the standard output including headers because it is not json
-TITLE=$(curl -s $CHISELD_HOST/dev | jq '.info.version')
+TITLE=$($CURL --no-include $CHISELD_HOST/dev | jq '.info.version')
 EXPECTED="\"1.0.0-$(git rev-parse --short HEAD)\""
 
 if [ "$TITLE" = "$EXPECTED" ]; then echo "match"; fi
