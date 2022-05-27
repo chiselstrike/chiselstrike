@@ -11,7 +11,7 @@
     "dependencies": {
         "@chiselstrike/api": "{{chiselVersion}}",
         "esbuild": "^0.14.14",
-        "typescript": "^4.5.4"
+        "typescript": "4.6.2"
     },
     "devDependencies": {
         "@chiselstrike/cli": "{{chiselVersion}}"
