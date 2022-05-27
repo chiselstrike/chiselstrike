@@ -700,4 +700,16 @@ export default foo;
         expected.sort_unstable();
         assert_eq!(keys, expected);
     }
+
+    #[tokio::test]
+    async fn import_js() {
+        let path = &abs("tests/import_js_a.ts");
+        let import = format!("file://{}b.js", path.strip_suffix("a.ts").unwrap());
+        let written = compile_ts_code(path, Default::default()).await.unwrap();
+        let mut keys: Vec<_> = written.keys().collect();
+        keys.sort_unstable();
+        let mut expected = vec![&import, path];
+        expected.sort_unstable();
+        assert_eq!(keys, expected);
+    }
 }
