@@ -1,17 +1,15 @@
 // SPDX-FileCopyrightText: © 2021 ChiselStrike <info@chiselstrike.com>
 
+pub mod deno;
+pub mod node;
+
 use crate::chisel::chisel_rpc_client::ChiselRpcClient;
-use crate::chisel::{ChiselApplyRequest, EndPointCreationRequest, PolicyUpdateRequest};
+use crate::chisel::{ChiselApplyRequest, PolicyUpdateRequest};
 use crate::project::{read_manifest, read_to_string, Module, Optimize};
 use anyhow::{anyhow, Context, Result};
-use compile::compile_ts_code as swc_compile;
-use endpoint_tsc::compile_endpoint;
-use std::env;
 use std::io::Write;
 use std::path::PathBuf;
 use std::process::Stdio;
-use tempfile::Builder;
-use tokio::task::{spawn_blocking, JoinHandle};
 
 static DEFAULT_APP_NAME: &str = "ChiselStrike Application";
 
@@ -76,7 +74,6 @@ pub(crate) async fn apply<S: ToString>(
     let policies = manifest.policies()?;
 
     let types_req = crate::ts::parse_types(&models)?;
-    let mut endpoints_req = vec![];
     let mut policy_req = vec![];
 
     let mut types_string = String::new();
@@ -88,138 +85,11 @@ pub(crate) async fn apply<S: ToString>(
         .map(|type_req| type_req.name.clone())
         .collect();
     let use_chiselc = is_chiselc_available() && manifest.optimize == Optimize::Yes;
-    if manifest.modules == Module::Node {
-        let tsc = match type_check {
-            TypeChecking::Yes => Some(npx(
-                "tsc",
-                &["--noemit", "--pretty", "--allowJs", "--checkJs"],
-                None,
-            )),
-            TypeChecking::No => None,
-        };
-
-        let mut endpoint_futures = vec![];
-        let mut keep_tmp_alive = vec![];
-
-        let cwd = env::current_dir()?;
-
-        for endpoint in endpoints.iter() {
-            let out = Builder::new().suffix(".ts").tempfile()?;
-            let bundler_output_file = out.path().to_str().unwrap().to_owned();
-
-            let mut f = Builder::new().suffix(".ts").tempfile()?;
-            let inner = f.as_file_mut();
-            let mut import_path = endpoint.file_path.to_owned();
-            import_path.set_extension("");
-
-            let code = format!(
-                "import fun from \"{}/{}\";\nexport default fun",
-                cwd.display(),
-                import_path.display()
-            );
-            inner.write_all(code.as_bytes())?;
-            inner.flush()?;
-            let bundler_entry_fname = f.path().to_str().unwrap().to_owned();
-            keep_tmp_alive.push(f);
-            keep_tmp_alive.push(out);
-
-            if use_chiselc {
-                // Spawn `chiselc` and pipe its output to `esbuild`.
-                let chiselc_cmd = chiselc_spawn(&bundler_entry_fname, &entities)?;
-                let cmd = npx(
-                    "esbuild",
-                    &[
-                        "--bundle",
-                        "--color=true",
-                        "--target=esnext",
-                        "--external:@chiselstrike",
-                        "--format=esm",
-                        "--tree-shaking=true",
-                        "--tsconfig=./tsconfig.json",
-                        "--platform=node",
-                        &format!("--outfile={}", bundler_output_file),
-                    ],
-                    chiselc_cmd.stdout,
-                );
-                endpoint_futures.push((bundler_output_file.clone(), cmd));
-            } else {
-                let cmd = npx(
-                    "esbuild",
-                    &[
-                        &bundler_entry_fname,
-                        "--bundle",
-                        "--color=true",
-                        "--target=esnext",
-                        "--external:@chiselstrike",
-                        "--format=esm",
-                        "--tree-shaking=true",
-                        "--tsconfig=./tsconfig.json",
-                        "--platform=node",
-                        &format!("--outfile={}", bundler_output_file),
-                    ],
-                    None,
-                );
-                endpoint_futures.push((bundler_output_file.clone(), cmd));
-            }
-        }
-
-        for (endpoint, execution) in endpoints.iter().zip(endpoint_futures.into_iter()) {
-            let (bundler_output_file, res) = execution;
-            let res = res.await.unwrap()?;
-
-            if !res.status.success() {
-                let out = String::from_utf8(res.stdout).expect("command output not utf-8");
-                let err = String::from_utf8(res.stderr).expect("command output not utf-8");
-
-                return Err(anyhow!(
-                    "compiling endpoint {}",
-                    endpoint.file_path.display()
-                ))
-                .with_context(|| format!("{}\n{}", out, err));
-            }
-            let code = read_to_string(bundler_output_file)?;
-
-            endpoints_req.push(EndPointCreationRequest {
-                path: endpoint.name.clone(),
-                code,
-            });
-        }
-
-        if let Some(tsc) = tsc {
-            let tsc_res = tsc.await.unwrap()?;
-            if !tsc_res.status.success() {
-                let out = String::from_utf8(tsc_res.stdout).expect("command output not utf-8");
-                let err = String::from_utf8(tsc_res.stderr).expect("command output not utf-8");
-                anyhow::bail!("{}\n{}", out, err);
-            }
-        }
+    let endpoints_req = if manifest.modules == Module::Node {
+        node::apply(&endpoints, &entities, use_chiselc, &type_check).await
     } else {
-        for f in endpoints.iter() {
-            let ext = f.file_path.extension().unwrap().to_str().unwrap();
-            let path = f.file_path.to_str().unwrap();
-
-            let code = if ext == "ts" {
-                let mut code = compile_endpoint(path)
-                    .await
-                    .with_context(|| format!("parsing endpoint /{}/{}", version, f.name))?;
-                code.remove(path).unwrap()
-            } else {
-                read_to_string(&f.file_path)?
-            };
-
-            let code = types_string.clone() + &code;
-            let code = if use_chiselc {
-                let output = chiselc_output(code, &entities)?;
-                output_to_string(&output).unwrap()
-            } else {
-                swc_compile(code)?
-            };
-            endpoints_req.push(EndPointCreationRequest {
-                path: f.name.clone(),
-                code,
-            });
-        }
-    }
+        deno::apply(&version, &endpoints, &entities, &types_string, use_chiselc).await
+    }?;
 
     for p in policies {
         policy_req.push(PolicyUpdateRequest {
@@ -354,24 +224,6 @@ fn chiselc_output(code: String, entities: &[String]) -> Result<std::process::Out
     });
     let output = cmd.wait_with_output().expect("Failed to read stdout");
     Ok(output)
-}
-
-fn npx(
-    command: &str,
-    args: &[&str],
-    stdin: Option<std::process::ChildStdout>,
-) -> JoinHandle<Result<std::process::Output>> {
-    let mut cmd = std::process::Command::new("npx");
-    cmd.arg(command).args(args);
-
-    if let Some(stdin) = stdin {
-        cmd.stdin(stdin);
-    }
-
-    spawn_blocking(move || {
-        cmd.output()
-            .with_context(|| "trying to execute `npx esbuild`. Is npx on your PATH?".to_string())
-    })
 }
 
 fn get_git_version() -> Option<String> {
