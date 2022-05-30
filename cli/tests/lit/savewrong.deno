@@ -19,7 +19,7 @@ EOF
 
 $CHISEL apply 2>&1 | $RMCOLOR|| true
 
-# CHECK:  Error: parsing endpoint /dev/store
+# CHECK:  Error: parsing endpoints
 # CHECK:  Caused by:
 # CHECK:      Compilation failed:
 # CHECK:      endpoints/store.ts:5:12 - error TS2339: Property 'invalidField' does not exist on type 'Person'.

@@ -168,7 +168,7 @@ async fn compile(code: &str, lib: Option<&str>) -> Result<String> {
         extra_default_lib: lib,
         ..Default::default()
     };
-    Ok(compile_ts_code(path, opts).await?.remove(path).unwrap())
+    Ok(compile_ts_code(&[path], opts).await?.remove(path).unwrap())
 }
 
 async fn load_code(code_opt: Option<String>, specifier: ModuleSpecifier) -> Result<ModuleSource> {

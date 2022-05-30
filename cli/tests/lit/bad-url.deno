@@ -13,6 +13,6 @@ EOF
 cd "$TEMPDIR"
 $CHISEL apply 2>&1 || true
 
-# CHECK: Error: parsing endpoint /dev/bad
+# CHECK: Error: parsing endpoints
 # CHECK: Caused by:
 # CHECK: HTTP request failed

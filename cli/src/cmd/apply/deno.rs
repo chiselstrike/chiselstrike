@@ -4,25 +4,32 @@ use crate::chisel::EndPointCreationRequest;
 use crate::cmd::apply::chiselc_output;
 use crate::cmd::apply::output_to_string;
 use crate::project::Endpoint;
-use anyhow::{Context, Result};
+use anyhow::{anyhow, Context, Result};
 use compile::compile_ts_code as swc_compile;
-use endpoint_tsc::compile_endpoint;
+use endpoint_tsc::compile_endpoints;
 
-pub(crate) async fn apply<S: ToString + std::fmt::Display>(
-    version: &S,
+pub(crate) async fn apply(
     endpoints: &[Endpoint],
     entities: &[String],
     types_string: &str,
     use_chiselc: bool,
 ) -> Result<Vec<EndPointCreationRequest>> {
     let mut endpoints_req = vec![];
+    let paths: Result<Vec<_>> = endpoints
+        .iter()
+        .map(|f| {
+            f.file_path
+                .to_str()
+                .ok_or_else(|| anyhow!("Path is not UTF8"))
+        })
+        .collect();
+    let mut output = compile_endpoints(&paths?)
+        .await
+        .context("parsing endpoints")?;
+
     for f in endpoints.iter() {
         let path = f.file_path.to_str().unwrap();
-
-        let mut code = compile_endpoint(path)
-            .await
-            .with_context(|| format!("parsing endpoint /{}/{}", version, f.name))?;
-        let code = code.remove(path).unwrap();
+        let code = output.remove(path).unwrap();
         let code = types_string.to_owned() + &code;
         let code = if use_chiselc {
             let output = chiselc_output(code, entities)?;

@@ -18,7 +18,10 @@ impl Compiler {
         Compiler { tsc }
     }
 
-    pub async fn compile_endpoint(&mut self, file_name: &str) -> Result<HashMap<String, String>> {
+    pub async fn compile_endpoints(
+        &mut self,
+        file_names: &[&str],
+    ) -> Result<HashMap<String, String>> {
         let mods = HashMap::from([(
             "@chiselstrike/api".to_string(),
             api::chisel_d_ts().to_string(),
@@ -33,7 +36,7 @@ impl Compiler {
             ..Default::default()
         };
 
-        self.tsc.compile_ts_code(file_name, opts).await
+        self.tsc.compile_ts_code(file_names, opts).await
     }
 }
 
@@ -45,7 +48,7 @@ fn to_tempfile(data: &str, suffix: &str) -> Result<NamedTempFile> {
     Ok(f)
 }
 
-pub async fn compile_endpoint(file_name: &str) -> Result<HashMap<String, String>> {
+pub async fn compile_endpoints(file_names: &[&str]) -> Result<HashMap<String, String>> {
     let mut compiler = Compiler::new(true);
-    compiler.compile_endpoint(file_name).await
+    compiler.compile_endpoints(file_names).await
 }

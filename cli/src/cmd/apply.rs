@@ -88,7 +88,7 @@ pub(crate) async fn apply<S: ToString>(
     let endpoints_req = if manifest.modules == Module::Node {
         node::apply(&endpoints, &entities, use_chiselc, &type_check).await
     } else {
-        deno::apply(&version, &endpoints, &entities, &types_string, use_chiselc).await
+        deno::apply(&endpoints, &entities, &types_string, use_chiselc).await
     }?;
 
     for p in policies {

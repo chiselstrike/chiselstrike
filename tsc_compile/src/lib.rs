@@ -260,6 +260,17 @@ impl Resolver for ModuleResolver {
     }
 }
 
+// If the given source can be made relative to one of the urls, return
+// the relative path to, and the original file name of, that url.
+fn find_relative<'a>(urls: &HashMap<Url, &'a str>, source: &Url) -> Option<(String, &'a str)> {
+    for (url, name) in urls {
+        if let Some(rel) = url.make_relative(source) {
+            return Some((rel, name));
+        }
+    }
+    None
+}
+
 pub struct Compiler {
     pub runtime: JsRuntime,
 }
@@ -300,19 +311,23 @@ impl Compiler {
 
     pub async fn compile_ts_code(
         &mut self,
-        file_name: &str,
+        file_names: &[&str],
         opts: CompileOptions<'_>,
     ) -> Result<HashMap<String, String>> {
-        let dir_path = Path::new(file_name).parent().unwrap().to_path_buf();
-        let url = format!("file://{}", abs(file_name));
-        let url = Url::parse(&url)?;
+        let mut url_to_name: HashMap<Url, &str> = HashMap::new();
+        let mut urls = Vec::new();
+        for name in file_names {
+            let url = Url::parse(&format!("file://{}", abs(name)))?;
+            urls.push((url.clone(), ModuleKind::Esm));
+            url_to_name.insert(url, name);
+        }
 
         let mut extra_libs = HashMap::new();
         let mut to_url = HashMap::new();
         for (k, v) in &opts.extra_libs {
-            let u = Url::parse(&("chisel:///".to_string() + k + ".ts")).unwrap();
-            extra_libs.insert(u.clone(), v.clone());
-            to_url.insert(k.clone(), u);
+            let url = Url::parse(&("chisel:///".to_string() + k + ".ts")).unwrap();
+            extra_libs.insert(url.clone(), v.clone());
+            to_url.insert(k.clone(), url);
         }
 
         let mut loader = ModuleLoader { extra_libs };
@@ -330,7 +345,7 @@ impl Compiler {
         };
 
         let graph = deno_graph::create_graph(
-            vec![(url.clone(), ModuleKind::Esm)],
+            urls.clone(),
             false,
             maybe_imports,
             &mut loader,
@@ -351,7 +366,6 @@ impl Compiler {
         let global_context = self.runtime.global_context();
         {
             let scope = &mut self.runtime.handle_scope();
-            let file = v8::String::new(scope, url.as_str()).unwrap().into();
             let lib = match extra_default_lib {
                 Some(v) => v8::String::new(scope, &v).unwrap().into(),
                 None => v8::undefined(scope).into(),
@@ -360,9 +374,13 @@ impl Compiler {
             let compile: v8::Local<v8::Function> =
                 get_member(global_proxy, scope, "compile").unwrap();
             let emit_declarations = v8::Boolean::new(scope, opts.emit_declarations).into();
-            compile
-                .call(scope, global_proxy.into(), &[file, lib, emit_declarations])
-                .unwrap();
+
+            for url in &urls {
+                let file = v8::String::new(scope, url.0.as_str()).unwrap().into();
+                compile
+                    .call(scope, global_proxy.into(), &[file, lib, emit_declarations])
+                    .unwrap();
+            }
         }
 
         let op_state = self.runtime.op_state();
@@ -383,11 +401,12 @@ impl Compiler {
                 let prefix = without_extension(&k);
                 let is_dts = k.ends_with(".d.ts");
                 let source = prefix_map[prefix];
-                let source = if *source == url {
-                    file_name.to_string()
+                let source = if let Some(n) = url_to_name.get(source) {
+                    n.to_string()
                 } else if is_dts || source.scheme() == "chisel" {
                     continue;
-                } else if let Some(rel) = url.make_relative(source) {
+                } else if let Some((rel, source)) = find_relative(&url_to_name, source) {
+                    let dir_path = Path::new(source).parent().unwrap().to_path_buf();
                     join_path(dir_path.clone(), Path::new(&rel))
                         .display()
                         .to_string()
@@ -409,11 +428,11 @@ impl Compiler {
 }
 
 pub async fn compile_ts_code(
-    file_name: &str,
+    file_names: &[&str],
     opts: CompileOptions<'_>,
 ) -> Result<HashMap<String, String>> {
     let mut compiler = Compiler::new(true);
-    compiler.compile_ts_code(file_name, opts).await
+    compiler.compile_ts_code(file_names, opts).await
 }
 
 #[cfg(test)]
@@ -447,7 +466,7 @@ mod tests {
             emit_declarations: true,
             ..Default::default()
         };
-        let written = compile_ts_code(path, opts).await.unwrap();
+        let written = compile_ts_code(&[path], opts).await.unwrap();
         let mut keys: Vec<_> = written.keys().collect();
         keys.sort();
 
@@ -466,7 +485,7 @@ mod tests {
     }
 
     async fn check_test2_ts(path: &str) {
-        let written = compile_ts_code(path, Default::default()).await.unwrap();
+        let written = compile_ts_code(&[path], Default::default()).await.unwrap();
         let body = written[path].clone();
         assert!(body.starts_with("import { zed } from"));
     }
@@ -487,13 +506,13 @@ mod tests {
 
     #[tokio::test]
     async fn test3() -> Result<()> {
-        compile_ts_code("tests/test3.ts", Default::default()).await?;
+        compile_ts_code(&["tests/test3.ts"], Default::default()).await?;
         Ok(())
     }
 
     #[tokio::test]
     async fn test4() {
-        let err = compile_ts_code("tests/test4.ts", Default::default())
+        let err = compile_ts_code(&["tests/test4.ts"], Default::default())
             .await
             .unwrap_err()
             .to_string();
@@ -520,21 +539,21 @@ mod tests {
 
     #[tokio::test]
     async fn test5() -> Result<()> {
-        compile_ts_code("tests/test5.ts", opts_lib1()).await?;
-        compile_ts_code("tests/test5.ts", opts_lib2()).await?;
+        compile_ts_code(&["tests/test5.ts"], opts_lib1()).await?;
+        compile_ts_code(&["tests/test5.ts"], opts_lib2()).await?;
         Ok(())
     }
 
     #[tokio::test]
     async fn test6() -> Result<()> {
-        compile_ts_code("tests/test6.ts", opts_lib1()).await?;
-        compile_ts_code("tests/test6.ts", opts_lib2()).await?;
+        compile_ts_code(&["tests/test6.ts"], opts_lib1()).await?;
+        compile_ts_code(&["tests/test6.ts"], opts_lib2()).await?;
         Ok(())
     }
 
     #[tokio::test]
     async fn test7() -> Result<()> {
-        compile_ts_code("tests/test7.ts", Default::default()).await?;
+        compile_ts_code(&["tests/test7.ts"], Default::default()).await?;
         Ok(())
     }
 
@@ -548,7 +567,7 @@ mod tests {
             extra_libs: libs,
             ..Default::default()
         };
-        compile_ts_code(f.path(), opts).await?;
+        compile_ts_code(&[f.path()], opts).await?;
         Ok(())
     }
 
@@ -556,7 +575,7 @@ mod tests {
     async fn diagnostics() -> Result<()> {
         for _ in 0..2 {
             let f = write_temp(b"export {}; zed;")?;
-            let err = compile_ts_code(f.path(), Default::default()).await;
+            let err = compile_ts_code(&[f.path()], Default::default()).await;
             let err = err.unwrap_err().to_string();
             assert!(err.contains("Cannot find name 'zed'"));
         }
@@ -566,13 +585,13 @@ mod tests {
     #[tokio::test]
     async fn property_constructor_not_strict() -> Result<()> {
         let f = write_temp(b"export class Foo { a: number };")?;
-        compile_ts_code(f.path(), Default::default()).await?;
+        compile_ts_code(&[f.path()], Default::default()).await?;
         Ok(())
     }
 
     #[tokio::test]
     async fn missing_file() -> Result<()> {
-        let err = compile_ts_code("/no/such/file.ts", Default::default())
+        let err = compile_ts_code(&["/no/such/file.ts"], Default::default())
             .await
             .unwrap_err()
             .to_string();
@@ -582,7 +601,7 @@ mod tests {
 
     #[tokio::test]
     async fn no_extension() -> Result<()> {
-        let err = compile_ts_code("/no/such/file", Default::default())
+        let err = compile_ts_code(&["/no/such/file"], Default::default())
             .await
             .unwrap_err()
             .to_string();
@@ -599,7 +618,7 @@ export function foo<R>(bar: ReadableStream<R>): AsyncIterableIterator<R> {
 }
 "#,
         )?;
-        compile_ts_code(f.path(), Default::default()).await?;
+        compile_ts_code(&[f.path()], Default::default()).await?;
         Ok(())
     }
 
@@ -612,7 +631,7 @@ export function foo(h: Headers) {
 }
 "#,
         )?;
-        compile_ts_code(f.path(), Default::default()).await?;
+        compile_ts_code(&[f.path()], Default::default()).await?;
         Ok(())
     }
 
@@ -626,7 +645,7 @@ foo.prototype.bar = foo;
 export default foo;
 "#,
         )?;
-        compile_ts_code(f.path(), Default::default()).await?;
+        compile_ts_code(&[f.path()], Default::default()).await?;
         Ok(())
     }
 
@@ -638,7 +657,7 @@ export default foo;
             .tempfile()?;
         f.write_all(b"import {foo} from \"bar\";")?;
         let path = f.path().to_str().unwrap();
-        let err = compile_ts_code(path, Default::default())
+        let err = compile_ts_code(&[path], Default::default())
             .await
             .unwrap_err()
             .to_string();
@@ -652,32 +671,32 @@ export default foo;
     #[tokio::test]
     async fn handlebars() -> Result<()> {
         let f = write_temp(b"import handlebars from \"https://cdn.skypack.dev/handlebars\";")?;
-        compile_ts_code(f.path(), Default::default()).await?;
+        compile_ts_code(&[f.path()], Default::default()).await?;
         Ok(())
     }
 
     #[tokio::test]
     async fn deno_types() -> Result<()> {
-        compile_ts_code("tests/deno_types.ts", Default::default()).await?;
+        compile_ts_code(&["tests/deno_types.ts"], Default::default()).await?;
         Ok(())
     }
 
     #[tokio::test]
     async fn random_uuid() -> Result<()> {
         let f = write_temp(b"export const foo = crypto.randomUUID();")?;
-        compile_ts_code(f.path(), Default::default()).await?;
+        compile_ts_code(&[f.path()], Default::default()).await?;
         Ok(())
     }
 
     #[tokio::test]
     async fn synthetic_default() -> Result<()> {
-        compile_ts_code("tests/synthetic_default.ts", Default::default()).await?;
+        compile_ts_code(&["tests/synthetic_default.ts"], Default::default()).await?;
         Ok(())
     }
 
     #[tokio::test]
     async fn missing_deno_types() -> Result<()> {
-        let err = compile_ts_code("tests/missing_deno_types.ts", Default::default())
+        let err = compile_ts_code(&["tests/missing_deno_types.ts"], Default::default())
             .await
             .unwrap_err()
             .to_string();
@@ -688,7 +707,7 @@ export default foo;
     #[tokio::test]
     async fn wrong_type() {
         // Test where tsc produced errors point to.
-        let err = compile_ts_code("tests/wrong_type.ts", Default::default())
+        let err = compile_ts_code(&["tests/wrong_type.ts"], Default::default())
             .await
             .unwrap_err()
             .to_string();
@@ -701,7 +720,7 @@ export default foo;
     #[tokio::test]
     async fn wrong_type_in_import() {
         // Test where tsc produced errors in imports point to.
-        let err = compile_ts_code("tests/wrong_type_import.ts", Default::default())
+        let err = compile_ts_code(&["tests/wrong_type_import.ts"], Default::default())
             .await
             .unwrap_err()
             .to_string();
@@ -723,7 +742,7 @@ export default foo;
 
     async fn check_import(path: String, suffix_a: &str, suffix_b: &str) {
         let import = format!("{}{}", path.strip_suffix(suffix_a).unwrap(), suffix_b);
-        let written = compile_ts_code(&path, Default::default()).await.unwrap();
+        let written = compile_ts_code(&[&path], Default::default()).await.unwrap();
         let mut keys: Vec<_> = written.keys().collect();
         keys.sort_unstable();
         let mut expected = vec![import.as_str(), path.as_str()];
