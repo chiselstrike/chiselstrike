@@ -8,8 +8,8 @@ export class Person extends Chisel.ChiselEntity {
 }
 EOF
 
-cat << EOF > "$TEMPDIR/endpoints/store_person.js"
-import { Person } from "../types.ts";
+cat << EOF > "$TEMPDIR/endpoints/store_person.ts"
+import { Person } from "../models/types.ts";
 
 export default async function chisel(req: Request) {
     const req_json = await req.json();

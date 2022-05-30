@@ -2,7 +2,7 @@
 
 # RUN: sh -e @file
 
-cat << EOF > "$TEMPDIR/endpoints/test1.js"
+cat << EOF > "$TEMPDIR/endpoints/test1.ts"
 import { getSecret } from "@chiselstrike/api"
 
 const issue728 = getSecret("somesecret");
@@ -32,7 +32,7 @@ $CHISEL restart
 # CHECK: Server restarted successfully.
 
 cat << EOF > "$TEMPDIR/endpoints/test2.js"
-export default async function chisel(req: Request) {
+export default async function chisel(req) {
     return new Response(foo());
 }
 EOF

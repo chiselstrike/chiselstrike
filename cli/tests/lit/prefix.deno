@@ -2,14 +2,14 @@
 
 # RUN: sh -e @file
 
-cat << EOF > "$TEMPDIR/endpoints/foo.js"
+cat << EOF > "$TEMPDIR/endpoints/foo.ts"
 export default async function chisel(req: Request) {
     return new Response("foo with url " + req.url);
 }
 EOF
 
 mkdir "$TEMPDIR/endpoints/foo"
-cat << EOF > "$TEMPDIR/endpoints/foo/bar.js"
+cat << EOF > "$TEMPDIR/endpoints/foo/bar.ts"
 export default async function chisel(req: Request) {
     return new Response("foo/bar with url " + req.url);
 }

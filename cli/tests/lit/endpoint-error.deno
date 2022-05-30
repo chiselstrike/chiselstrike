@@ -2,7 +2,7 @@
 
 # RUN: sh -e @file
 
-cat << EOF > "$TEMPDIR/endpoints/test.js"
+cat << EOF > "$TEMPDIR/endpoints/test.ts"
 // Intentionally invalid, there is no default export
 export async function chisel(req: Request) {
     return new Response("foo");
@@ -22,7 +22,7 @@ $CURL -o - $CHISELD_HOST/dev/test
 
 # CHECK: HTTP/1.1 404 Not Found
 
-cat << EOF > "$TEMPDIR/endpoints/test.js"
+cat << EOF > "$TEMPDIR/endpoints/test.ts"
 // Now it is OK
 export default async function chisel(req: Request) {
     return new Response("foo");
