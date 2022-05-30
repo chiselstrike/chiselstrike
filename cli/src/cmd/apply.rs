@@ -187,17 +187,16 @@ fn is_chiselc_available() -> bool {
 }
 
 /// Spawn `chiselc` and return a reference to the child process.
-fn chiselc_spawn(input: &str, entities: &[String]) -> Result<std::process::Child> {
-    let mut args: Vec<&str> = vec![input, "--target", "js"];
+fn chiselc_spawn(input: &str, output: &str, entities: &[String]) -> Result<tokio::process::Child> {
+    let mut args: Vec<&str> = vec![input, "--output", output, "--target", "js"];
     if !entities.is_empty() {
         args.push("-e");
         for entity in entities.iter() {
             args.push(entity);
         }
     }
-    let cmd = std::process::Command::new(chiselc_cmd()?)
+    let cmd = tokio::process::Command::new(chiselc_cmd()?)
         .args(args)
-        .stdout(Stdio::piped())
         .spawn()?;
     Ok(cmd)
 }

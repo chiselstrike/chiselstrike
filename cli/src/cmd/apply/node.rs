@@ -7,6 +7,7 @@ use crate::project::read_to_string;
 use crate::project::Endpoint;
 use anyhow::{anyhow, Context, Result};
 use std::env;
+use std::fs::{self};
 use std::io::Write;
 use tempfile::Builder;
 use tokio::task::{spawn_blocking, JoinHandle};
@@ -31,14 +32,43 @@ pub(crate) async fn apply(
     let mut keep_tmp_alive = vec![];
 
     let cwd = env::current_dir()?;
+    let gen_dir = cwd.join(".gen");
+    fs::create_dir_all(&gen_dir)?;
 
-    for endpoint in endpoints.iter() {
+    let chiselc_futures: Vec<(_, _)> = endpoints
+        .iter()
+        .map(|endpoint| {
+            if use_chiselc {
+                let gen_file_path = gen_dir.join(endpoint.file_path.file_name().unwrap());
+                let chiselc = chiselc_spawn(
+                    endpoint.file_path.to_str().unwrap(),
+                    gen_file_path.to_str().unwrap(),
+                    entities,
+                )
+                .unwrap();
+                let future = chiselc;
+                let path = gen_file_path
+                    .strip_prefix(cwd.clone())
+                    .unwrap()
+                    .to_path_buf();
+                (Some(Box::new(future)), path)
+            } else {
+                let path = endpoint.file_path.to_owned();
+                (None, path)
+            }
+        })
+        .collect();
+
+    for (mut chiselc_future, endpoint_file_path) in chiselc_futures {
+        if let Some(mut chiselc_future) = chiselc_future.take() {
+            chiselc_future.wait().await?;
+        }
         let out = Builder::new().suffix(".ts").tempfile()?;
         let bundler_output_file = out.path().to_str().unwrap().to_owned();
 
         let mut f = Builder::new().suffix(".ts").tempfile()?;
         let inner = f.as_file_mut();
-        let mut import_path = endpoint.file_path.to_owned();
+        let mut import_path = endpoint_file_path.clone();
         import_path.set_extension("");
 
         let code = format!(
@@ -52,44 +82,23 @@ pub(crate) async fn apply(
         keep_tmp_alive.push(f);
         keep_tmp_alive.push(out);
 
-        if use_chiselc {
-            // Spawn `chiselc` and pipe its output to `esbuild`.
-            let chiselc_cmd = chiselc_spawn(&bundler_entry_fname, entities)?;
-            let cmd = npx(
-                "esbuild",
-                &[
-                    "--bundle",
-                    "--color=true",
-                    "--target=esnext",
-                    "--external:@chiselstrike",
-                    "--format=esm",
-                    "--tree-shaking=true",
-                    "--tsconfig=./tsconfig.json",
-                    "--platform=node",
-                    &format!("--outfile={}", bundler_output_file),
-                ],
-                chiselc_cmd.stdout,
-            );
-            endpoint_futures.push((bundler_output_file.clone(), cmd));
-        } else {
-            let cmd = npx(
-                "esbuild",
-                &[
-                    &bundler_entry_fname,
-                    "--bundle",
-                    "--color=true",
-                    "--target=esnext",
-                    "--external:@chiselstrike",
-                    "--format=esm",
-                    "--tree-shaking=true",
-                    "--tsconfig=./tsconfig.json",
-                    "--platform=node",
-                    &format!("--outfile={}", bundler_output_file),
-                ],
-                None,
-            );
-            endpoint_futures.push((bundler_output_file.clone(), cmd));
-        }
+        let cmd = npx(
+            "esbuild",
+            &[
+                &bundler_entry_fname,
+                "--bundle",
+                "--color=true",
+                "--target=esnext",
+                "--external:@chiselstrike",
+                "--format=esm",
+                "--tree-shaking=true",
+                "--tsconfig=./tsconfig.json",
+                "--platform=node",
+                &format!("--outfile={}", bundler_output_file),
+            ],
+            None,
+        );
+        endpoint_futures.push((bundler_output_file.clone(), cmd));
     }
 
     for (endpoint, execution) in endpoints.iter().zip(endpoint_futures.into_iter()) {
