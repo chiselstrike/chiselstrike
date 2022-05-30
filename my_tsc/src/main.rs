@@ -29,5 +29,5 @@ async fn main() {
             .wait_for_session_and_break_on_next_statement();
     }
 
-    compiler.compile_endpoint(&opt.file).await.unwrap();
+    compiler.compile_endpoints(&[&opt.file]).await.unwrap();
 }

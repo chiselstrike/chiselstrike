@@ -15,7 +15,7 @@ async fn compile(stem: &str) -> Result<()> {
         emit_declarations: true,
         ..Default::default()
     };
-    let mut map = compile_ts_code(src, opts).await?;
+    let mut map = compile_ts_code(&[src], opts).await?;
     let code = map.remove(src).unwrap();
 
     let out = PathBuf::from(env::var_os("OUT_DIR").unwrap());

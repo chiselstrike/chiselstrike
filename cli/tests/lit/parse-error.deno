@@ -13,7 +13,7 @@ EOF
 cd "$TEMPDIR"
 
 $CHISEL apply 2>&1 | $RMCOLOR || true
-# CHECK: Error: parsing endpoint /dev/error
+# CHECK: Error: parsing endpoints
 # CHECK: Caused by:
 # CHECK:     The module's source code could not be parsed: Expected ',', got 'string literal (bar, "bar")' at file:///[[.*]]/endpoints/error.ts:2:31
 
@@ -25,7 +25,7 @@ export default async function chisel(req: Request) {
 EOF
 
 $CHISEL apply 2>&1 | $RMCOLOR|| true
-#CHECK: Error: parsing endpoint /dev/error
+#CHECK: Error: parsing endpoints
 #CHECK: Caused by:
 #CHECK:     Compilation failed:
 #CHECK:     endpoints/error.ts:1:13 - error TS2304: Cannot find name 'foo'.
@@ -44,7 +44,7 @@ export default async function chisel(req: Request) {
 EOF
 
 $CHISEL apply 2>&1 | $RMCOLOR|| true
-#CHECK: Error: parsing endpoint /dev/error
+#CHECK: Error: parsing endpoints
 #CHECK: Caused by:
 #CHECK:     Compilation failed:
 #CHECK:     endpoints/error.ts:7:20 - error TS2339: Property 'nickname' does not exist on type 'Person'.
@@ -58,7 +58,7 @@ export default async function chisel(req: Request) {
 EOF
 
 $CHISEL apply 2>&1 | $RMCOLOR|| true
-#CHECK: Error: parsing endpoint /dev/error
+#CHECK: Error: parsing endpoints
 #CHECK: Caused by:
 #CHECK:     Compilation failed:
 #CHECK:      endpoints/error.ts:4:32 - error TS2339: Property 'first_name' does not exist on type 'typeof Person'.
@@ -78,7 +78,7 @@ export default async function chisel(req: Request) {
 EOF
 
 $CHISEL apply 2>&1 | $RMCOLOR|| true
-#CHECK: Error: parsing endpoint /dev/error
+#CHECK: Error: parsing endpoints
 #CHECK: Caused by:
 #CHECK:     Compilation failed:
 #CHECK:     endpoints/error.ts:7:20 - error TS2339: Property 'first_name' does not exist on type 'Pick<Person, "last_name">'.
