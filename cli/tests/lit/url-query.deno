@@ -2,13 +2,14 @@
 
 # RUN: sh -e @file
 
-cat << EOF > "$TEMPDIR/endpoints/title.js"
+cat << EOF > "$TEMPDIR/endpoints/title.ts"
 const titles = {'glauber': 'CEO', 'dejan': 'CTO'}
+type keys = 'glauber' | 'dejan';
 
 export default async function chisel(req: Request) {
     let u = new URL(req.url);
-    let name = u.searchParams.get('name');
-    let ret = name in titles ? titles[name] : 'coder';
+    let name = u.searchParams.get('name')!;
+    let ret = name in titles ? titles[name as keys] : 'coder';
     return new Response(ret);
 }
 EOF

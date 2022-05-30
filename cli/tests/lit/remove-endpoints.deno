@@ -5,19 +5,19 @@
 mkdir -p "$TEMPDIR/endpoints"
 cd "$TEMPDIR"
 
-cat << EOF > ./endpoints/end.js
+cat << EOF > ./endpoints/end.ts
 export default async function chisel(req: Request) {
     return new Response("");
 }
 EOF
 
-cat << EOF > ./endpoints/endpoint.js
+cat << EOF > ./endpoints/endpoint.ts
 export default async function chisel(req: Request) {
     return new Response("");
 }
 EOF
 
-cat << EOF > ./endpoints/endpo.js
+cat << EOF > ./endpoints/endpo.ts
 export default async function chisel(req: Request) {
     return new Response("");
 }
@@ -35,7 +35,7 @@ $CURL -o - $CHISELD_HOST/dev/endpo
 $CURL -o - $CHISELD_HOST/dev/endpoint
 # CHECK: HTTP/1.1 200 OK
 
-rm ./endpoints/end.js
+rm ./endpoints/end.ts
 
 $CHISEL apply
 
@@ -46,7 +46,7 @@ $CURL -o - $CHISELD_HOST/dev/endpo
 $CURL -o - $CHISELD_HOST/dev/endpoint
 # CHECK: HTTP/1.1 200 OK
 
-rm ./endpoints/endpoint.js
+rm ./endpoints/endpoint.ts
 
 $CHISEL apply
 

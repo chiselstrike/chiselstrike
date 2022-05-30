@@ -13,7 +13,7 @@ export class Company extends Chisel.ChiselEntity {
 }
 EOF
 
-cat << EOF > "$TEMPDIR/endpoints/store_adalbrecht.js"
+cat << EOF > "$TEMPDIR/endpoints/store_adalbrecht.ts"
 import { Company, Person } from "../models/types.ts";
 
 export default async function chisel(req: Request) {
@@ -88,14 +88,14 @@ $CURL -o - $CHISELD_HOST/dev/query_companies
 
 ## Test find + update
 
-cat << EOF > "$TEMPDIR/endpoints/update.js"
+cat << EOF > "$TEMPDIR/endpoints/update.ts"
 import { Company, Person } from "../models/types.ts";
 
 export default async function chisel(req: Request) {
     const company = await Company.findOne({"name": "Bananas inc."})
-    company.ceo.lastName = "Someone completely different";
+    company!.ceo!.lastName = "Someone completely different";
 
-    await company.save();
+    await company!.save();
 
     return new Response('Successfully updated');
 }

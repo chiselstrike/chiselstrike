@@ -128,19 +128,19 @@ $CURL -H ChiselUID\:$id_al $CHISELD_HOST/dev/po
 # CHECK: "text": "first post by al"
 # CHECK: "text": "second post by al"
 
-cat << EOF > "$TEMPDIR/endpoints/blogs.js"
-import { Post } from '../models/post.ts';
+cat << EOF > "$TEMPDIR/endpoints/blogs.ts"
+import { Blog, Post } from '../models/post.ts';
 import { loggedInUser, responseFromJson } from '@chiselstrike/api';
 export default async function chisel(req: Request) {
     if (req.method == 'POST') {
         const b = Blog.build(await req.json());
         const author = await loggedInUser();
         if (author === undefined) return responseFromJson('Must be logged in', 401);
-        b.post1.author = author;
+        b.post1!.author = author;
         await b.save();
         return new Response('saved post successfully');
     } else if (req.method == 'GET') {
-        const r = (await Blog.cursor().toArray()).map(b => b.post1.text);
+        const r = (await Blog.cursor().toArray()).map(b => b.post1!.text);
         return responseFromJson(r);
     }
 }

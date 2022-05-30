@@ -67,8 +67,8 @@ export class Company extends Chisel.ChiselEntity {
 }
 EOF
 
-cat << EOF > "$TEMPDIR/endpoints/store_adalbrecht.js"
-import { Company } from "../types.ts";
+cat << EOF > "$TEMPDIR/endpoints/store_adalbrecht.ts"
+import { Company, Employee } from "../models/types.ts";
 
 export default async function chisel(req: Request) {
     let ceo = new Employee();
