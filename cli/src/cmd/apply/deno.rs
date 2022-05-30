@@ -3,7 +3,6 @@
 use crate::chisel::EndPointCreationRequest;
 use crate::cmd::apply::chiselc_output;
 use crate::cmd::apply::output_to_string;
-use crate::project::read_to_string;
 use crate::project::Endpoint;
 use anyhow::{Context, Result};
 use compile::compile_ts_code as swc_compile;
@@ -18,18 +17,12 @@ pub(crate) async fn apply<S: ToString + std::fmt::Display>(
 ) -> Result<Vec<EndPointCreationRequest>> {
     let mut endpoints_req = vec![];
     for f in endpoints.iter() {
-        let ext = f.file_path.extension().unwrap().to_str().unwrap();
         let path = f.file_path.to_str().unwrap();
 
-        let code = if ext == "ts" {
-            let mut code = compile_endpoint(path)
-                .await
-                .with_context(|| format!("parsing endpoint /{}/{}", version, f.name))?;
-            code.remove(path).unwrap()
-        } else {
-            read_to_string(&f.file_path)?
-        };
-
+        let mut code = compile_endpoint(path)
+            .await
+            .with_context(|| format!("parsing endpoint /{}/{}", version, f.name))?;
+        let code = code.remove(path).unwrap();
         let code = types_string.to_owned() + &code;
         let code = if use_chiselc {
             let output = chiselc_output(code, entities)?;
