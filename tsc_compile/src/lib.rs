@@ -715,15 +715,23 @@ export default foo;
         func(abs(path)).await;
     }
 
-    async fn check_output_imported(path: String) {
+    async fn check_import(path: String, suffix_a: &str, suffix_b: &str) {
         let abs_a = abs(&path);
-        let import = format!("file://{}b.ts", abs_a.strip_suffix("a.ts").unwrap());
+        let import = format!(
+            "file://{}{}",
+            abs_a.strip_suffix(suffix_a).unwrap(),
+            suffix_b
+        );
         let written = compile_ts_code(&path, Default::default()).await.unwrap();
         let mut keys: Vec<_> = written.keys().collect();
         keys.sort_unstable();
         let mut expected = vec![import.as_str(), path.as_str()];
         expected.sort_unstable();
         assert_eq!(keys, expected);
+    }
+
+    async fn check_output_imported(path: String) {
+        check_import(path, "a.ts", "b.ts").await;
     }
 
     #[tokio::test]
@@ -732,14 +740,7 @@ export default foo;
     }
 
     async fn check_import_js(path: String) {
-        let abs_a = abs(&path);
-        let import = format!("file://{}b.js", abs_a.strip_suffix("a.ts").unwrap());
-        let written = compile_ts_code(&path, Default::default()).await.unwrap();
-        let mut keys: Vec<_> = written.keys().collect();
-        keys.sort_unstable();
-        let mut expected = vec![import.as_str(), path.as_ref()];
-        expected.sort_unstable();
-        assert_eq!(keys, expected);
+        check_import(path, "a.ts", "b.js").await;
     }
 
     #[tokio::test]
@@ -748,17 +749,7 @@ export default foo;
     }
 
     async fn check_relative(path: String) {
-        let abs_a = abs(&path);
-        let import = format!(
-            "file://{}_b/bar.ts",
-            abs_a.strip_suffix("_a/foo.ts").unwrap()
-        );
-        let written = compile_ts_code(&path, Default::default()).await.unwrap();
-        let mut keys: Vec<_> = written.keys().collect();
-        keys.sort_unstable();
-        let mut expected = vec![import.as_str(), path.as_str()];
-        expected.sort_unstable();
-        assert_eq!(keys, expected);
+        check_import(path, "_a/foo.ts", "_b/bar.ts").await;
     }
 
     #[tokio::test]
