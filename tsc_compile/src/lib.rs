@@ -417,6 +417,7 @@ mod tests {
     use super::CompileOptions;
     use anyhow::Result;
     use deno_core::anyhow;
+    use std::future::Future;
     use std::io::Write;
     use tempfile::Builder;
     use tempfile::NamedTempFile;
@@ -704,60 +705,64 @@ export default foo;
         ));
     }
 
-    async fn check_output_imported(path: &str) {
-        let abs_a = abs(path);
+    async fn test_with_path_variants<F, Fut>(func: F, path: &str)
+    where
+        F: Fn(String) -> Fut,
+        Fut: Future<Output = ()>,
+    {
+        func(path.to_string()).await;
+        func(format!("./{}", path)).await;
+        func(abs(path)).await;
+    }
+
+    async fn check_output_imported(path: String) {
+        let abs_a = abs(&path);
         let import = format!("file://{}b.ts", abs_a.strip_suffix("a.ts").unwrap());
-        let written = compile_ts_code(path, Default::default()).await.unwrap();
+        let written = compile_ts_code(&path, Default::default()).await.unwrap();
         let mut keys: Vec<_> = written.keys().collect();
         keys.sort_unstable();
-        let mut expected = vec![import.as_str(), path];
+        let mut expected = vec![import.as_str(), path.as_str()];
         expected.sort_unstable();
         assert_eq!(keys, expected);
     }
 
     #[tokio::test]
     async fn output_imported() {
-        check_output_imported("tests/output_imported_a.ts").await;
-        check_output_imported("./tests/output_imported_a.ts").await;
-        check_output_imported(&abs("tests/output_imported_a.ts")).await;
+        test_with_path_variants(check_output_imported, "tests/output_imported_a.ts").await;
     }
 
-    async fn check_import_js(path: &str) {
-        let abs_a = abs(path);
+    async fn check_import_js(path: String) {
+        let abs_a = abs(&path);
         let import = format!("file://{}b.js", abs_a.strip_suffix("a.ts").unwrap());
-        let written = compile_ts_code(path, Default::default()).await.unwrap();
+        let written = compile_ts_code(&path, Default::default()).await.unwrap();
         let mut keys: Vec<_> = written.keys().collect();
         keys.sort_unstable();
-        let mut expected = vec![import.as_str(), path];
+        let mut expected = vec![import.as_str(), path.as_ref()];
         expected.sort_unstable();
         assert_eq!(keys, expected);
     }
 
     #[tokio::test]
     async fn import_js() {
-        check_import_js("tests/import_js_a.ts").await;
-        check_import_js("./tests/import_js_a.ts").await;
-        check_import_js(&abs("tests/import_js_a.ts")).await;
+        test_with_path_variants(check_import_js, "tests/import_js_a.ts").await;
     }
 
-    async fn check_relative(path: &str) {
-        let abs_a = abs(path);
+    async fn check_relative(path: String) {
+        let abs_a = abs(&path);
         let import = format!(
             "file://{}_b/bar.ts",
             abs_a.strip_suffix("_a/foo.ts").unwrap()
         );
-        let written = compile_ts_code(path, Default::default()).await.unwrap();
+        let written = compile_ts_code(&path, Default::default()).await.unwrap();
         let mut keys: Vec<_> = written.keys().collect();
         keys.sort_unstable();
-        let mut expected = vec![import.as_str(), path];
+        let mut expected = vec![import.as_str(), path.as_str()];
         expected.sort_unstable();
         assert_eq!(keys, expected);
     }
 
     #[tokio::test]
     async fn relative() {
-        check_relative("tests/relative_a/foo.ts").await;
-        check_relative("./tests/relative_a/foo.ts").await;
-        check_relative(&abs("tests/relative_a/foo.ts")).await;
+        test_with_path_variants(check_relative, "tests/relative_a/foo.ts").await;
     }
 }
