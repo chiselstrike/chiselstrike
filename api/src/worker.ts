@@ -186,6 +186,7 @@ async function callHandlerImpl(
     const { userid, url, method, headers, body_rid } = start.Js;
     requestContext.method = method;
     requestContext.userId = userid;
+    requestContext.headers = headers;
 
     // FIXME: maybe defer creating the transaction until we need one, to avoid doing it for
     // endpoints that don't do any data access. For now, because we always create it above,

@@ -961,11 +961,13 @@ function ensureNotGet() {
 export const requestContext: {
     path: string;
     method: string;
+    headers: Record<string, string>;
     apiVersion: string;
     userId?: string;
 } = {
     path: "",
     method: "",
+    headers: {},
     apiVersion: "",
 };
 

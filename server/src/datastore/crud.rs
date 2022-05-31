@@ -284,6 +284,7 @@ mod tests {
 
     use itertools::Itertools;
     use serde_json::json;
+    use std::collections::HashMap;
 
     pub(crate) struct FakeField {
         name: &'static str,
@@ -425,6 +426,7 @@ mod tests {
                 api_version: VERSION.to_owned(),
                 user_id: None,
                 path: "".to_string(),
+                _headers: HashMap::default(),
             },
             QueryParams {
                 type_name: entity_name.to_owned(),
@@ -568,6 +570,7 @@ mod tests {
                     api_version: VERSION.to_owned(),
                     user_id: None,
                     path: "".to_string(),
+                    _headers: HashMap::default(),
                 },
                 entity_name,
                 url,
