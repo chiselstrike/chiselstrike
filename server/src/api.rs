@@ -2,6 +2,7 @@
 
 use crate::prefix_map::PrefixMap;
 use anyhow::{Error, Result};
+use deno_core::futures;
 use futures::future::LocalBoxFuture;
 use futures::ready;
 use futures::stream::Stream;

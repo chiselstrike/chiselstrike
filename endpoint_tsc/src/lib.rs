@@ -5,6 +5,7 @@ use std::collections::HashMap;
 use std::io::Write;
 use tempfile::Builder;
 use tempfile::NamedTempFile;
+pub use tsc_compile;
 use tsc_compile::CompileOptions;
 
 pub struct Compiler {

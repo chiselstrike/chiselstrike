@@ -26,6 +26,7 @@ use api::worker_js;
 use async_channel::Receiver;
 use async_channel::Sender;
 use deno_core::error::AnyError;
+use deno_core::futures;
 use deno_core::op;
 use deno_core::v8;
 use deno_core::CancelFuture;

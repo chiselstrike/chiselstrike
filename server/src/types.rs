@@ -5,6 +5,7 @@ use crate::datastore::query::QueryPlan;
 use crate::datastore::QueryEngine;
 use crate::types::AuthOrNot::IsAuth;
 use anyhow::Context;
+use deno_core::futures;
 use derive_new::new;
 use futures::StreamExt;
 use std::collections::{BTreeMap, HashMap};

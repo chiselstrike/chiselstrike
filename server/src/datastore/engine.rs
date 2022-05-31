@@ -9,6 +9,7 @@ use crate::JsonObject;
 use anyhow::{anyhow, Context as AnyhowContext, Result};
 use async_lock::Mutex;
 use async_lock::MutexGuardArc;
+use deno_core::futures;
 use futures::stream::BoxStream;
 use futures::stream::Stream;
 use futures::FutureExt;
