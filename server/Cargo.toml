@@ -10,7 +10,7 @@ must_not_suspend = []
 
 [dependencies]
 aes-gcm = "0.9.4"
-anyhow = { version = "1.0.45", features = ["backtrace"] }
+anyhow = { version = "1.0", features = ["backtrace"] }
 api = { path = "../api" }
 async-channel = "1.6.1"
 async-lock = "2.5.0"
@@ -66,7 +66,8 @@ tempdir = "0.3.7"
 [build-dependencies]
 # FIXME: We have additional dependencies here to work around
 # https://github.com/rust-lang/cargo/issues/6313
-anyhow = "1.0"
+# We don't need backtrace in here, but this avoids a duplicated build.
+anyhow = { version = "1.0", features = ["backtrace"] }
 libc = { version = "0.2.99", features = ["extra_traits", "align"] }
 log = { version = "0.4.14", features = ["std"] }
 tonic-build = "0.5.2"
