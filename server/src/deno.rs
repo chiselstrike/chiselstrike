@@ -522,6 +522,8 @@ struct ChiselRequestContext {
     /// Current HTTP method.
     #[serde(rename = "method")]
     _method: String,
+    /// Current HTTP request headers.
+    headers: HashMap<String, String>,
     /// Schema version to be used with the request.
     #[serde(rename = "apiVersion")]
     api_version: String,
@@ -595,6 +597,7 @@ async fn op_chisel_entity_delete(
                 api_version: context.api_version,
                 user_id: context.user_id,
                 path: context.path,
+                _headers: context.headers,
             },
             &params.type_name,
             &params.filter_expr,
@@ -629,6 +632,7 @@ async fn op_chisel_crud_delete(
                 api_version: context.api_version,
                 user_id: context.user_id,
                 path: context.path,
+                _headers: context.headers,
             },
             &params.type_name,
             &params.url,
@@ -686,6 +690,7 @@ async fn op_chisel_crud_query(
                 api_version: context.api_version,
                 user_id: context.user_id,
                 path: context.path,
+                _headers: context.headers,
             },
             params,
             query_engine,
@@ -708,6 +713,7 @@ fn op_chisel_relational_query_create(
             api_version: context.api_version,
             user_id: context.user_id,
             path: context.path,
+            _headers: context.headers,
         },
         op_chain,
     )?;
