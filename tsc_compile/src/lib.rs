@@ -1,6 +1,7 @@
 // SPDX-FileCopyrightText: © 2022 ChiselStrike <info@chiselstrike.com>
 
 use anyhow::{anyhow, Context, Result};
+pub use deno_core;
 use deno_core::anyhow;
 use deno_core::op;
 use deno_core::serde;

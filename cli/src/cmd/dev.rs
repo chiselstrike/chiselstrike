@@ -5,6 +5,8 @@ use crate::project::read_manifest;
 use crate::server::{start_server, wait};
 use crate::DEFAULT_API_VERSION;
 use anyhow::Result;
+use deno_core::futures;
+use endpoint_tsc::tsc_compile;
 use futures::channel::mpsc::channel;
 use futures::{SinkExt, StreamExt};
 use notify::{event::ModifyKind, Event, EventKind, RecommendedWatcher, RecursiveMode, Watcher};
@@ -12,6 +14,7 @@ use std::collections::HashSet;
 use std::path::Path;
 use std::path::PathBuf;
 use std::time::Duration;
+use tsc_compile::deno_core;
 
 pub(crate) async fn cmd_dev(server_url: String, type_check: bool) -> Result<()> {
     let type_check = type_check.into();

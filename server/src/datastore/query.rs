@@ -812,6 +812,7 @@ impl Mutation {
 #[cfg(test)]
 pub(crate) mod tests {
     use super::*;
+    use deno_core::futures;
     use futures::StreamExt;
     use serde_json::json;
     use tempfile::NamedTempFile;

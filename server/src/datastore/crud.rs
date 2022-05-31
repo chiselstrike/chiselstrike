@@ -4,6 +4,7 @@ use crate::datastore::query::{Mutation, QueryOp, QueryPlan, RequestContext, Sort
 use crate::types::{ObjectType, Type};
 use crate::JsonObject;
 use anyhow::{Context, Result};
+use deno_core::futures;
 use futures::{Future, StreamExt};
 use serde_derive::{Deserialize, Serialize};
 use std::sync::Arc;

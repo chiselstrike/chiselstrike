@@ -22,6 +22,7 @@ use chisel::{
     DescribeRequest, DescribeResponse, PopulateRequest, PopulateResponse, RestartRequest,
     RestartResponse, StatusRequest, StatusResponse,
 };
+use deno_core::futures;
 use futures::FutureExt;
 use std::collections::{BTreeSet, HashMap};
 use std::net::SocketAddr;

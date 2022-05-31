@@ -11,6 +11,7 @@
 use crate::api::{response_template, ApiService, Body};
 use crate::runtime;
 use anyhow::Result;
+use deno_core::futures;
 use futures::FutureExt;
 use hyper::{Request, Response};
 use openapi::{Info, Operations, Spec};

@@ -17,6 +17,7 @@ use crate::secrets::get_secrets;
 use crate::JsonObject;
 use anyhow::Result;
 use async_lock::Mutex;
+use deno_core::futures;
 use futures::future::LocalBoxFuture;
 use futures::FutureExt;
 use futures::StreamExt;
