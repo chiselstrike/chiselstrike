@@ -27,7 +27,9 @@ use std::collections::HashMap;
 use std::env;
 use std::fs;
 use std::future::Future;
+use std::path::Component;
 use std::path::Path;
+use std::path::PathBuf;
 use std::sync::Arc;
 
 #[derive(Debug)]
@@ -164,11 +166,24 @@ where
     Ok(res)
 }
 
+// This is similar to PathBuf::push, but folds "/./" and "/../". This
+// is similar to what TSC own path handling does.
+fn join_path(mut base: PathBuf, rel: &Path) -> PathBuf {
+    for c in rel.components() {
+        match c {
+            Component::Prefix(_) | Component::RootDir => return rel.to_path_buf(),
+            Component::CurDir => {}
+            Component::ParentDir => assert!(base.pop()),
+            Component::Normal(p) => base.push(p),
+        }
+    }
+    base
+}
+
 // Paths are passed to javascript, which uses UTF-16, no point in
 // pretending we can handle non unicode PathBufs.
 fn abs(path: &str) -> String {
-    let mut p = env::current_dir().unwrap();
-    p.push(path);
+    let p = join_path(env::current_dir().unwrap(), Path::new(path));
     p.into_os_string().into_string().unwrap()
 }
 
@@ -402,6 +417,7 @@ mod tests {
     use super::CompileOptions;
     use anyhow::Result;
     use deno_core::anyhow;
+    use std::future::Future;
     use std::io::Write;
     use tempfile::Builder;
     use tempfile::NamedTempFile;
@@ -689,27 +705,55 @@ export default foo;
         ));
     }
 
-    #[tokio::test]
-    async fn output_imported() {
-        let path = &abs("tests/output_imported_a.ts");
-        let import = format!("file://{}b.ts", path.strip_suffix("a.ts").unwrap());
-        let written = compile_ts_code(path, Default::default()).await.unwrap();
+    async fn test_with_path_variants<F, Fut>(func: F, path: &str)
+    where
+        F: Fn(String) -> Fut,
+        Fut: Future<Output = ()>,
+    {
+        func(path.to_string()).await;
+        func(format!("./{}", path)).await;
+        func(abs(path)).await;
+    }
+
+    async fn check_import(path: String, suffix_a: &str, suffix_b: &str) {
+        let abs_a = abs(&path);
+        let import = format!(
+            "file://{}{}",
+            abs_a.strip_suffix(suffix_a).unwrap(),
+            suffix_b
+        );
+        let written = compile_ts_code(&path, Default::default()).await.unwrap();
         let mut keys: Vec<_> = written.keys().collect();
         keys.sort_unstable();
-        let mut expected = vec![&import, path];
+        let mut expected = vec![import.as_str(), path.as_str()];
         expected.sort_unstable();
         assert_eq!(keys, expected);
     }
 
+    async fn check_output_imported(path: String) {
+        check_import(path, "a.ts", "b.ts").await;
+    }
+
+    #[tokio::test]
+    async fn output_imported() {
+        test_with_path_variants(check_output_imported, "tests/output_imported_a.ts").await;
+    }
+
+    async fn check_import_js(path: String) {
+        check_import(path, "a.ts", "b.js").await;
+    }
+
     #[tokio::test]
     async fn import_js() {
-        let path = &abs("tests/import_js_a.ts");
-        let import = format!("file://{}b.js", path.strip_suffix("a.ts").unwrap());
-        let written = compile_ts_code(path, Default::default()).await.unwrap();
-        let mut keys: Vec<_> = written.keys().collect();
-        keys.sort_unstable();
-        let mut expected = vec![&import, path];
-        expected.sort_unstable();
-        assert_eq!(keys, expected);
+        test_with_path_variants(check_import_js, "tests/import_js_a.ts").await;
+    }
+
+    async fn check_relative(path: String) {
+        check_import(path, "_a/foo.ts", "_b/bar.ts").await;
+    }
+
+    #[tokio::test]
+    async fn relative() {
+        test_with_path_variants(check_relative, "tests/relative_a/foo.ts").await;
     }
 }
