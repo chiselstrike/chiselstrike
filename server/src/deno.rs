@@ -532,6 +532,23 @@ struct ChiselRequestContext {
     user_id: Option<String>,
 }
 
+impl RequestContext<'_> {
+    fn new<'a>(
+        policies: &'a Policies,
+        ts: &'a TypeSystem,
+        context: ChiselRequestContext,
+    ) -> RequestContext<'a> {
+        RequestContext {
+            policies,
+            ts,
+            api_version: context.api_version,
+            user_id: context.user_id,
+            path: context.path,
+            _headers: context.headers,
+        }
+    }
+}
+
 #[derive(Deserialize)]
 struct StoreContent {
     name: String,
@@ -591,14 +608,11 @@ async fn op_chisel_entity_delete(
     let mutation = {
         let state = state.borrow_mut();
         Mutation::delete_from_expr(
-            &RequestContext {
-                policies: current_policies(&state),
-                ts: current_type_system(&state),
-                api_version: context.api_version,
-                user_id: context.user_id,
-                path: context.path,
-                _headers: context.headers,
-            },
+            &RequestContext::new(
+                current_policies(&state),
+                current_type_system(&state),
+                context,
+            ),
             &params.type_name,
             &params.filter_expr,
         )
@@ -626,14 +640,11 @@ async fn op_chisel_crud_delete(
     let mutation = {
         let state = state.borrow_mut();
         crud::delete_from_url(
-            &RequestContext {
-                policies: current_policies(&state),
-                ts: current_type_system(&state),
-                api_version: context.api_version,
-                user_id: context.user_id,
-                path: context.path,
-                _headers: context.headers,
-            },
+            &RequestContext::new(
+                current_policies(&state),
+                current_type_system(&state),
+                context,
+            ),
             &params.type_name,
             &params.url,
         )
@@ -684,14 +695,11 @@ async fn op_chisel_crud_query(
         let query_engine = query_engine_arc(op_state);
 
         crud::run_query(
-            &RequestContext {
-                policies: current_policies(op_state),
-                ts: current_type_system(op_state),
-                api_version: context.api_version,
-                user_id: context.user_id,
-                path: context.path,
-                _headers: context.headers,
-            },
+            &RequestContext::new(
+                current_policies(op_state),
+                current_type_system(op_state),
+                context,
+            ),
             params,
             query_engine,
             transaction,
@@ -707,14 +715,11 @@ fn op_chisel_relational_query_create(
     context: ChiselRequestContext,
 ) -> Result<ResourceId> {
     let query_plan = QueryPlan::from_op_chain(
-        &RequestContext {
-            policies: current_policies(op_state),
-            ts: current_type_system(op_state),
-            api_version: context.api_version,
-            user_id: context.user_id,
-            path: context.path,
-            _headers: context.headers,
-        },
+        &RequestContext::new(
+            current_policies(op_state),
+            current_type_system(op_state),
+            context,
+        ),
         op_chain,
     )?;
     create_query(op_state, query_plan)
