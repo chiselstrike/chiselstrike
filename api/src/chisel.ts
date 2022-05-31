@@ -468,18 +468,14 @@ export class ChiselCursor<T> {
     private makeTransformedQueryIter(
         op: Operator<T>,
     ): AsyncIterable<T> | undefined {
-        if (op.type == OpType.BaseEntity) {
+        if (op.inner === undefined) {
             return undefined;
-        } else if (op.inner === undefined) {
-            throw new Error(
-                "internal error: expected inner operator, got undefined",
-            );
         }
         let iter = this.makeTransformedQueryIter(op.inner);
-        if (iter !== undefined) {
-            return op.apply(iter);
-        } else if (op.type == OpType.PredicateFilter) {
+        if (iter === undefined && op.type == OpType.PredicateFilter) {
             iter = this.makeQueryIter(op.inner);
+        }
+        if (iter !== undefined) {
             return op.apply(iter);
         } else {
             return undefined;
