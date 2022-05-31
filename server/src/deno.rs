@@ -544,7 +544,7 @@ impl RequestContext<'_> {
             api_version: context.api_version,
             user_id: context.user_id,
             path: context.path,
-            _headers: context.headers,
+            headers: context.headers,
         }
     }
 }

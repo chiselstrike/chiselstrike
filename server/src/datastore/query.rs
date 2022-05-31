@@ -41,7 +41,7 @@ pub(crate) struct RequestContext<'a> {
     /// Current URL path from which this request originated.
     pub path: String,
     /// Current HTTP headers.
-    pub _headers: HashMap<String, String>,
+    pub headers: HashMap<String, String>,
 }
 
 impl RequestContext<'_> {
@@ -945,7 +945,7 @@ pub(crate) mod tests {
                     api_version: VERSION.to_owned(),
                     user_id: None,
                     path: "".to_string(),
-                    _headers: HashMap::default(),
+                    headers: HashMap::default(),
                 },
                 op_chain,
             )
@@ -1013,7 +1013,7 @@ pub(crate) mod tests {
                     api_version: VERSION.to_owned(),
                     user_id: None,
                     path: "".to_string(),
-                    _headers: HashMap::default(),
+                    headers: HashMap::default(),
                 },
                 entity_name,
                 &Some(expr),

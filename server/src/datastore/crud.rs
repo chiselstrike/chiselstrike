@@ -35,6 +35,7 @@ fn run_query_impl(
     query_engine: Arc<QueryEngine>,
     tr: TransactionStatic,
 ) -> Result<impl Future<Output = Result<JsonObject>>> {
+    let host = context.headers.get("host").cloned();
     let base_type = &context
         .ts
         .lookup_object_type(&params.type_name, &context.api_version)
@@ -56,7 +57,7 @@ fn run_query_impl(
         let mut ret = JsonObject::new();
         if !results.is_empty() && query.page_size == results.len() as u64 {
             let last_element = results.last().unwrap();
-            let next_page = next_page_url(&params.url, &query, last_element)?;
+            let next_page = next_page_url(&params.url, &host, &query, last_element)?;
             ret.insert("next_page".into(), json!(next_page));
         }
 
@@ -65,7 +66,12 @@ fn run_query_impl(
     })
 }
 
-fn next_page_url(url: &Url, query: &Query, last_element: &JsonObject) -> Result<Url> {
+fn next_page_url(
+    url: &Url,
+    host: &Option<String>,
+    query: &Query,
+    last_element: &JsonObject,
+) -> Result<Url> {
     assert!(!query.sort.keys.is_empty());
 
     let mut axes = vec![];
@@ -81,7 +87,7 @@ fn next_page_url(url: &Url, query: &Query, last_element: &JsonObject) -> Result<
     let cursor = serde_json::to_vec(&axes).context("failed to serialize cursor to json")?;
     let cursor = base64::encode(cursor);
 
-    let mut next_url = url.clone();
+    let mut next_url = replace_host_address(url.clone(), host)?;
     next_url.set_query(Some(""));
     for (key, value) in url.query_pairs() {
         if key == "page_after" || key == "sort" {
@@ -417,6 +423,26 @@ fn convert_operator(op_str: Option<&str>) -> Result<BinaryOp> {
     Ok(op)
 }
 
+fn replace_host_address(mut url: Url, host_address: &Option<String>) -> Result<Url> {
+    if let Some(host_address) = host_address {
+        let address_tokens: Vec<_> = host_address.split(':').collect();
+        anyhow::ensure!(
+            address_tokens.len() <= 2,
+            "unexpected number of tokens in host address"
+        );
+        let host = address_tokens.get(0).copied();
+        let port: Option<u16> = address_tokens
+            .get(1)
+            .map(|p| p.parse())
+            .transpose()
+            .context("Failed to parse address port")?;
+        url.set_host(host)?;
+        url.set_port(port)
+            .map_err(|_| anyhow::anyhow!("Failed to set url port"))?;
+    }
+    Ok(url)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -496,6 +522,51 @@ mod tests {
     }
 
     #[test]
+    fn test_replace_host_address() {
+        fn check_replace(url: &str, host_address: &str, expected_url: &str) {
+            let url = Url::parse(url).unwrap();
+            let new_url = replace_host_address(url, &Some(host_address.to_owned())).unwrap();
+            assert_eq!(new_url.as_str(), expected_url);
+        }
+
+        check_replace(
+            "http://example.com/foo",
+            "example.com:999",
+            "http://example.com:999/foo",
+        );
+        check_replace(
+            "http://example.com:777/foo",
+            "example.com:999",
+            "http://example.com:999/foo",
+        );
+        check_replace(
+            "http://example.com/foo",
+            "example.com:999",
+            "http://example.com:999/foo",
+        );
+        check_replace(
+            "http://192.168.1.1:777/foo",
+            "example.com:999",
+            "http://example.com:999/foo",
+        );
+        check_replace(
+            "http://192.168.1.1:777/foo",
+            "example.com",
+            "http://example.com/foo",
+        );
+        check_replace(
+            "http://example.com:777/foo",
+            "192.168.1.1:999",
+            "http://192.168.1.1:999/foo",
+        );
+        check_replace(
+            "http://example.com:777/foo",
+            "192.168.1.1",
+            "http://192.168.1.1/foo",
+        );
+    }
+
+    #[test]
     fn test_parse_filter() {
         let person_type = make_object(
             "Person",
@@ -564,6 +635,15 @@ mod tests {
     }
 
     async fn run_query(entity_name: &str, url: Url, qe: &QueryEngine) -> Result<JsonObject> {
+        run_query_with_headers(entity_name, url, qe, HashMap::default()).await
+    }
+
+    async fn run_query_with_headers(
+        entity_name: &str,
+        url: Url,
+        qe: &QueryEngine,
+        headers: HashMap<String, String>,
+    ) -> Result<JsonObject> {
         let qe = Arc::new(qe.clone());
         let tr = qe.clone().start_transaction_static().await.unwrap();
         super::run_query(
@@ -573,7 +653,7 @@ mod tests {
                 api_version: VERSION.to_owned(),
                 user_id: None,
                 path: "".to_string(),
-                _headers: HashMap::default(),
+                headers,
             },
             QueryParams {
                 type_name: entity_name.to_owned(),
@@ -724,6 +804,18 @@ mod tests {
             let names = collect_names(&r);
             assert_eq!(names, vec!["Alan", "Alex", "John", "Steve"]);
         }
+        // Check HOST header handling.
+        {
+            let headers = HashMap::<String, String>::from_iter([(
+                "host".to_string(),
+                "myhost.com:666".to_string(),
+            )]);
+            let r = run_query_with_headers("Person", url("page_size=1"), qe, headers)
+                .await
+                .unwrap();
+            let next_page = r["next_page"].as_str().unwrap();
+            assert!(next_page.starts_with("http://myhost.com:666"));
+        }
     }
 
     #[tokio::test]
@@ -771,7 +863,7 @@ mod tests {
                     api_version: VERSION.to_owned(),
                     user_id: None,
                     path: "".to_string(),
-                    _headers: HashMap::default(),
+                    headers: HashMap::default(),
                 },
                 entity_name,
                 url,
