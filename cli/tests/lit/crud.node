@@ -61,7 +61,7 @@ $CURL "$CHISELD_HOST/dev/persons?sort=-age"
 count_results () {
     results=$(cat)
     printf '%s' "$results" \
-        | grep -o "last_name" \
+        | grep -o "\"last_name\":" \
         | wc -l \
         | xargs printf 'Number of names: %d\n';
     printf '%s' "$results";
@@ -149,6 +149,26 @@ $CURL $CHISELD_HOST/dev/persons/$id # GET by id
 $CURL $CHISELD_HOST/dev/persons/i-will-never-exist-ya-know # GET by invalid id
 # CHECK: HTTP/1.1 404 Not Found
 
+## Test paging
+
+resp=$($CURL --no-include "$CHISELD_HOST/dev/persons?sort=last_name&page_size=2&.last_name~ne=Brown")
+echo "$resp" | count_results
+# CHECK: Number of names: 2
+# CHECK: "last_name": "Anderson"
+# CHECK: "last_name": "Chong"
+
+resp=$($CURL --no-include $(echo "$resp" | jq -r '.next_page'))
+echo "$resp" | count_results
+# CHECK: Number of names: 2
+# CHECK: "last_name": "Draper"
+# CHECK: "last_name": "Elgin"
+
+resp=$($CURL --no-include $(echo "$resp" | jq -r '.next_page'))
+echo "$resp" | count_results
+# CHECK: Number of names: 0
+
+## Test delete
+
 $CURL -X DELETE $CHISELD_HOST/dev/persons/$id # DELETE by id
 # CHECK: HTTP/1.1 200 OK
 # CHECK: Deleted ID
@@ -198,9 +218,9 @@ $CURL -X PUT -d '{"age":98422}' $CHISELD_HOST/dev/persons/cef5d492-d7e3-4c45-9a5
 $CURL -X PUT -d '{"age":2938}' $CHISELD_HOST/dev/persons/cef5d492-d7e3-4c45-9a55-5929b9ab8292 # Repeated PUT of the same id.
 # CHECK: HTTP/1.1 200 OK
 # CHECK: "age": 2938
-echo there is just `$CURL --no-include $CHISELD_HOST/dev/persons | jq 'length'` entry
+echo there is just `$CURL --no-include $CHISELD_HOST/dev/persons | jq '.results | length'` entry
 # CHECK: there is just 1 entry
-$CURL --no-include $CHISELD_HOST/dev/persons | jq '.[] | .age'
+$CURL --no-include $CHISELD_HOST/dev/persons | jq '.results | .[] | .age'
 # CHECK: 2938
 
 $CURL -X PUT -d '{"age":98422}' $CHISELD_HOST/dev/persons/ # PUT without ID.

@@ -544,7 +544,7 @@ impl RequestContext<'_> {
             api_version: context.api_version,
             user_id: context.user_id,
             path: context.path,
-            _headers: context.headers,
+            headers: context.headers,
         }
     }
 }
@@ -687,7 +687,7 @@ async fn op_chisel_crud_query(
     state: Rc<RefCell<OpState>>,
     params: crud::QueryParams,
     context: ChiselRequestContext,
-) -> Result<Vec<JsonObject>> {
+) -> Result<JsonObject> {
     // Contextualize stream creation to prevent state RC borrow living across await
     {
         let op_state = &state.borrow();
