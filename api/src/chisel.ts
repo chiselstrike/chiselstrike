@@ -4,26 +4,17 @@
 /// <reference lib="dom" />
 /// <reference lib="dom.iterable" />
 
-enum OpType {
-    BaseEntity = "BaseEntity",
-    Take = "Take",
-    Skip = "Skip",
-    ColumnsSelect = "ColumnsSelect",
-    PredicateFilter = "PredicateFilter",
-    ExpressionFilter = "ExpressionFilter",
-    SortBy = "SortBy",
-}
-
 /**
- * Base class for various Operators applicable on `ChiselCursor`. Each operator
- * should extend this class and pass on its `type` identifier from the `OpType`
- * enum.
+ * Base class for various Operators applicable on `ChiselCursor`.
  */
 abstract class Operator<T> {
+    // Read by rust
+    readonly type;
     constructor(
-        public readonly type: OpType,
         public readonly inner: Operator<T> | undefined,
-    ) {}
+    ) {
+        this.type = this.constructor.name;
+    }
 
     /** Applies specified Operator `op` on each element of passed iterable
      * `iter` creating a new iterable.
@@ -32,16 +23,16 @@ abstract class Operator<T> {
         iter: AsyncIterable<T>,
     ): AsyncIterable<T>;
 
-    /** Recursively examines operator chain searching for `opType` operator.
+    /** Recursively examines operator chain searching for `ctor` operator.
      * Returns true if found, false otherwise.
      */
-    public containsType(opType: OpType): boolean {
-        if (this.type == opType) {
+    public containsType(ctor: new (...args: never[]) => unknown): boolean {
+        if (this instanceof ctor) {
             return true;
         } else if (this.inner === undefined) {
             return false;
         } else {
-            return this.inner.containsType(opType);
+            return this.inner.containsType(ctor);
         }
     }
 }
@@ -53,7 +44,7 @@ class BaseEntity<T> extends Operator<T> {
     constructor(
         public name: string,
     ) {
-        super(OpType.BaseEntity, undefined);
+        super(undefined);
     }
 
     apply(
@@ -72,7 +63,7 @@ class Take<T> extends Operator<T> {
         public readonly count: number,
         inner: Operator<T>,
     ) {
-        super(OpType.Take, inner);
+        super(inner);
     }
 
     apply(
@@ -104,7 +95,7 @@ class Skip<T> extends Operator<T> {
         public readonly count: number,
         inner: Operator<T>,
     ) {
-        super(OpType.Skip, inner);
+        super(inner);
     }
 
     apply(
@@ -133,7 +124,7 @@ class ColumnsSelect<T, C extends (keyof T)[]>
         public columns: C,
         inner: Operator<T>,
     ) {
-        super(OpType.ColumnsSelect, inner);
+        super(inner);
     }
 
     apply(
@@ -165,7 +156,7 @@ class PredicateFilter<T> extends Operator<T> {
         public predicate: (arg: T) => boolean,
         inner: Operator<T>,
     ) {
-        super(OpType.PredicateFilter, inner);
+        super(inner);
     }
 
     apply(
@@ -197,7 +188,7 @@ class ExpressionFilter<T> extends Operator<T> {
         public expression: Record<string, unknown>,
         inner: Operator<T>,
     ) {
-        super(OpType.ExpressionFilter, inner);
+        super(inner);
     }
 
     apply(
@@ -235,7 +226,7 @@ class SortBy<T> extends Operator<T> {
         private keys: SortKey<T>[],
         inner: Operator<T>,
     ) {
-        super(OpType.SortBy, inner);
+        super(inner);
     }
 
     apply(
@@ -472,7 +463,7 @@ export class ChiselCursor<T> {
             return undefined;
         }
         let iter = this.makeTransformedQueryIter(op.inner);
-        if (iter === undefined && op.type == OpType.PredicateFilter) {
+        if (iter === undefined && op instanceof PredicateFilter) {
             iter = this.makeQueryIter(op.inner);
         }
         if (iter !== undefined) {
@@ -485,7 +476,7 @@ export class ChiselCursor<T> {
     private makeQueryIter(
         op: Operator<T>,
     ): AsyncIterable<T> {
-        const ctor = op.containsType(OpType.ColumnsSelect)
+        const ctor = op.containsType(ColumnsSelect)
             ? undefined
             : this.baseConstructor;
         return {
