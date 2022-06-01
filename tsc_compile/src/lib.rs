@@ -375,12 +375,14 @@ impl Compiler {
                 get_member(global_proxy, scope, "compile").unwrap();
             let emit_declarations = v8::Boolean::new(scope, opts.emit_declarations).into();
 
-            for url in &urls {
-                let file = v8::String::new(scope, url.0.as_str()).unwrap().into();
-                compile
-                    .call(scope, global_proxy.into(), &[file, lib, emit_declarations])
-                    .unwrap();
-            }
+            let urls: Vec<_> = urls
+                .iter()
+                .map(|url| v8::String::new(scope, url.0.as_str()).unwrap().into())
+                .collect();
+            let urls = v8::Array::new_with_elements(scope, &urls).into();
+            compile
+                .call(scope, global_proxy.into(), &[urls, lib, emit_declarations])
+                .unwrap();
         }
 
         let op_state = self.runtime.op_state();
