@@ -84,8 +84,7 @@ fn next_page_url(
             })?;
         axes.push(CursorAxis { key, value });
     }
-    let cursor = serde_json::to_vec(&axes).context("failed to serialize cursor to json")?;
-    let cursor = base64::encode(cursor);
+    let cursor = Cursor::new(axes).to_string()?;
 
     let mut next_url = replace_host_address(url.clone(), host)?;
     next_url.set_query(Some(""));
@@ -171,7 +170,7 @@ impl Query {
                         q.cursor.is_none(),
                         "only one occurrence of page_after is allowed."
                     );
-                    q.cursor = parse_cursor(base_type, &value)?.into();
+                    q.cursor = Cursor::from_string(&value)?.into();
                 }
                 _ => {
                     if let Some(param_key) = param_key.strip_prefix('.') {
@@ -187,8 +186,8 @@ impl Query {
         // We need to ensure sorting by ID for cursors to work.
         ensure_sort_by_id(&mut q.sort);
         if let Some(cursor) = &q.cursor {
-            q.sort = cursor.sort.clone();
-            q.filters.push(cursor.filter.clone());
+            q.sort = cursor.get_sort();
+            q.filters.push(cursor.get_filter(base_type)?);
         }
         Ok(q)
     }
@@ -219,10 +218,9 @@ fn ensure_sort_by_id(sort: &mut SortBy) {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 struct Cursor {
-    filter: Expr,
-    sort: SortBy,
+    axes: Vec<CursorAxis>,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -231,50 +229,68 @@ struct CursorAxis {
     value: serde_json::Value,
 }
 
-/// Tries to parse cursor from url parameter `value`. The core of this function is
-/// creating the sort Axes (each axis represents one dimension in lexicographical sort)
-/// and then using them to create a filter that filters for entries that are after
-/// the last element in the given sort..
-fn parse_cursor(base_type: &Arc<ObjectType>, value: &str) -> Result<Cursor> {
-    let cursor =
-        base64::decode(value).context("Failed to decode cursor from base64 encoded string")?;
-    let axes: Vec<CursorAxis> = serde_json::from_slice(&cursor)
-        .context("failed to deserialize cursor to individual axes")?;
-    anyhow::ensure!(!axes.is_empty(), "cursor mustn't be empty");
-
-    let mut cmp_pairs: Vec<(Expr, BinaryOp, Expr)> = vec![];
-    for axis in &axes {
-        let op = if axis.key.ascending {
-            BinaryOp::Gt
-        } else {
-            BinaryOp::Lt
-        };
-        let (property_chain, field_type) = make_property_chain(base_type, &[&axis.key.field_name])?;
-        let literal = json_to_literal(&field_type, &axis.value)
-            .context("Failed to convert axis value to literal")?;
-
-        cmp_pairs.push((property_chain, op, literal));
-    }
-    let mut expr = None;
-    for (i, (lhs, op, rhs)) in cmp_pairs.iter().enumerate() {
-        let mut e: Expr = BinaryExpr::new(op.clone(), lhs.clone(), rhs.clone()).into();
-        expr = expr
-            .map_or(e.clone(), |expr| {
-                for (lhs, _, rhs) in &cmp_pairs[0..i] {
-                    let eq = BinaryExpr::eq(lhs.clone(), rhs.clone());
-                    e = BinaryExpr::and(eq, e);
-                }
-                BinaryExpr::or(expr, e)
-            })
-            .into();
+impl Cursor {
+    fn new(axes: Vec<CursorAxis>) -> Self {
+        assert!(!axes.is_empty());
+        Self { axes }
     }
 
-    Ok(Cursor {
-        filter: expr.unwrap(),
-        sort: SortBy {
-            keys: axes.iter().map(|a| a.key.clone()).collect(),
-        },
-    })
+    /// Parses Cursor from base64 encoded JSON.
+    fn from_string(cursor_str: &str) -> Result<Self> {
+        let cursor_json = base64::decode(cursor_str)
+            .context("Failed to decode cursor from base64 encoded string")?;
+        let axes: Vec<CursorAxis> =
+            serde_json::from_slice(&cursor_json).context("failed to deserialize cursor's axes")?;
+        anyhow::ensure!(!axes.is_empty(), "cursor mustn't have no sort axes");
+        Ok(Self { axes })
+    }
+
+    /// Serializes cursor to base64 encoded JSON.
+    fn to_string(&self) -> Result<String> {
+        let cursor =
+            serde_json::to_vec(&self.axes).context("failed to serialize cursor axes to json")?;
+        Ok(base64::encode(cursor))
+    }
+
+    fn get_sort(&self) -> SortBy {
+        SortBy {
+            keys: self.axes.iter().map(|a| a.key.clone()).collect(),
+        }
+    }
+
+    /// The crux of this function is using the sort axes (each axis represents one dimension
+    /// in lexicographical sort) to create a filter that filters for entries that are after
+    /// the last element in the given sort.
+    fn get_filter(&self, base_type: &Arc<ObjectType>) -> Result<Expr> {
+        let mut cmp_pairs: Vec<(Expr, BinaryOp, Expr)> = vec![];
+        for axis in &self.axes {
+            let op = if axis.key.ascending {
+                BinaryOp::Gt
+            } else {
+                BinaryOp::Lt
+            };
+            let (property_chain, field_type) =
+                make_property_chain(base_type, &[&axis.key.field_name])?;
+            let literal = json_to_literal(&field_type, &axis.value)
+                .context("Failed to convert axis value to literal")?;
+
+            cmp_pairs.push((property_chain, op, literal));
+        }
+        let mut expr = None;
+        for (i, (lhs, op, rhs)) in cmp_pairs.iter().enumerate() {
+            let mut e: Expr = BinaryExpr::new(op.clone(), lhs.clone(), rhs.clone()).into();
+            expr = expr
+                .map_or(e.clone(), |expr| {
+                    for (lhs, _, rhs) in &cmp_pairs[0..i] {
+                        let eq = BinaryExpr::eq(lhs.clone(), rhs.clone());
+                        e = BinaryExpr::and(eq, e);
+                    }
+                    BinaryExpr::or(expr, e)
+                })
+                .into();
+        }
+        Ok(expr.unwrap())
+    }
 }
 
 fn json_to_literal(field_type: &Type, value: &serde_json::Value) -> Result<Expr> {
