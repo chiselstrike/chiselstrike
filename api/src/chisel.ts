@@ -897,8 +897,8 @@ type JSONValue =
     | { [x: string]: JSONValue }
     | Array<JSONValue>;
 
-export function getSecret(key: string): JSONValue | undefined {
-    return Deno.core.opSync("op_chisel_get_secret", key) ?? undefined;
+export function getSecret(key: string): JSONValue {
+    return Deno.core.opSync("op_chisel_get_secret", key);
 }
 
 export function responseFromJson(body: unknown, status = 200) {
