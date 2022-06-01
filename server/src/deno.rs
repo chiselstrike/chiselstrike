@@ -674,11 +674,8 @@ impl Resource for QueryStreamResource {
 
 #[op]
 fn op_chisel_get_secret(op_state: &mut OpState, key: String) -> Result<Option<serde_json::Value>> {
-    let ret = if let Some(secrets) = current_secrets(op_state) {
-        secrets.get(&key).cloned()
-    } else {
-        None
-    };
+    let secrets = current_secrets(op_state);
+    let ret = secrets.get(&key).cloned();
     Ok(ret)
 }
 
@@ -1083,8 +1080,8 @@ fn set_current_transaction(st: &mut OpState, transaction: TransactionStatic) {
     st.put(transaction);
 }
 
-fn current_secrets(st: &OpState) -> Option<&JsonObject> {
-    st.try_borrow()
+fn current_secrets(st: &OpState) -> &JsonObject {
+    st.borrow()
 }
 
 fn current_type_system(st: &OpState) -> &TypeSystem {
@@ -1228,7 +1225,8 @@ async fn special_response(
     if req_path.starts_with("/__chiselstrike/auth/") {
         let auth_header = req.headers().get("ChiselAuth");
         let expected_secret = current_secrets(&state.borrow())
-            .and_then(|sec| sec.get("CHISELD_AUTH_SECRET").cloned());
+            .get("CHISELD_AUTH_SECRET")
+            .cloned();
         match (expected_secret, auth_header) {
             (Some(_), None) => return Ok(Some(ApiService::forbidden("ChiselAuth")?)),
             (Some(serde_json::Value::String(s)), Some(h)) if s != *h => {
