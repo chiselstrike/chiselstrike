@@ -4,6 +4,14 @@
 /// <reference lib="dom" />
 /// <reference lib="dom.iterable" />
 
+function opSync(opName: string, a?: unknown, b?: unknown): unknown {
+    return Deno.core.opSync(opName, a, b);
+}
+
+function opAsync(opName: string, a?: unknown, b?: unknown): Promise<unknown> {
+    return Deno.core.opAsync(opName, a, b);
+}
+
 /**
  * Base class for various Operators applicable on `ChiselCursor`.
  */
@@ -481,19 +489,19 @@ export class ChiselCursor<T> {
             : this.baseConstructor;
         return {
             [Symbol.asyncIterator]: async function* () {
-                const rid = Deno.core.opSync(
+                const rid = opSync(
                     "op_chisel_relational_query_create",
                     op,
                     requestContext,
-                );
+                ) as number;
                 try {
                     while (true) {
-                        const properties = await Deno.core.opAsync(
+                        const properties = await opAsync(
                             "op_chisel_query_next",
                             rid,
-                        );
+                        ) as T | null; // FIXME: This is wrong, we can get less than T with ColumnsSelect.
 
-                        if (properties == undefined) {
+                        if (properties === null) {
                             break;
                         }
                         if (ctor !== undefined) {
@@ -603,11 +611,11 @@ export class ChiselEntity {
     /** saves the current object into the backend */
     async save() {
         ensureNotGet();
-        const jsonIds = await Deno.core.opAsync("op_chisel_store", {
+        type IdsJson = { id: string; children: Record<string, IdsJson> };
+        const jsonIds = await opAsync("op_chisel_store", {
             name: this.constructor.name,
             value: this,
-        }, requestContext);
-        type IdsJson = { id: string; children: Record<string, IdsJson> };
+        }, requestContext) as IdsJson;
         function backfillIds(this_: ChiselEntity, jsonIds: IdsJson) {
             this_.id = jsonIds.id;
             for (const [fieldName, value] of Object.entries(jsonIds.children)) {
@@ -769,7 +777,7 @@ export class ChiselEntity {
         restrictions: Partial<T>,
     ): Promise<void> {
         ensureNotGet();
-        await Deno.core.opAsync("op_chisel_entity_delete", {
+        await opAsync("op_chisel_entity_delete", {
             typeName: this.name,
             filterExpr: restrictionsToFilterExpr(restrictions),
         }, requestContext);
@@ -895,7 +903,9 @@ type JSONValue =
     | Array<JSONValue>;
 
 export function getSecret(key: string): JSONValue | undefined {
-    const { Some } = Deno.core.opSync("op_chisel_get_secret", key);
+    const { Some } = opSync("op_chisel_get_secret", key) as {
+        Some?: JSONValue;
+    };
     return Some;
 }
 
@@ -1124,7 +1134,7 @@ async function fetchEntitiesCrud<T extends ChiselEntity>(
     type: { new (): T },
     url: string,
 ): Promise<T[]> {
-    const results = await Deno.core.opAsync(
+    const results = await opAsync(
         "op_chisel_crud_query",
         {
             typeName: type.name,
@@ -1132,14 +1142,14 @@ async function fetchEntitiesCrud<T extends ChiselEntity>(
         },
         requestContext,
     );
-    return results;
+    return results as T[];
 }
 
 async function deleteEntitiesCrud<T extends ChiselEntity>(
     type: { new (): T },
     url: string,
 ): Promise<void> {
-    await Deno.core.opAsync(
+    await opAsync(
         "op_chisel_crud_delete",
         {
             typeName: type.name,
