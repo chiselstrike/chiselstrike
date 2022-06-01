@@ -35,8 +35,7 @@ prost = "0.8.0"
 rand = "0.8.4"
 regex = "1"
 rsa = "0.5.0"
-# pin rustls until they fix this issue (there is a fix but not a release: https://github.com/chiselstrike/chiselstrike/issues/1064)
-rustls = "=0.20.2"
+rustls = "0.20.6"
 sea-query = { version = "0.17.1", features = ["thread-safe"] }
 serde = "1.0.133"
 serde_derive = "1.0.133"
