@@ -70,6 +70,7 @@ pub fn read(path: &str) -> &'static str {
                 "lib.deno.window.d.ts",
                 "lib.dom.asynciterable.d.ts",
                 "lib.dom.d.ts",
+                "lib.dom.extras.d.ts",
                 "lib.dom.iterable.d.ts",
                 "lib.es2015.collection.d.ts",
                 "lib.es2015.core.d.ts",
