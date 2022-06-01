@@ -151,7 +151,7 @@ struct ModuleLoader {
 
 fn wrap(specifier: &ModuleSpecifier, code: String) -> Result<ModuleSource> {
     Ok(ModuleSource {
-        code,
+        code: code.into_bytes().into_boxed_slice(),
         module_type: ModuleType::JavaScript,
         module_url_specified: specifier.to_string(),
         module_url_found: specifier.to_string(),
@@ -265,17 +265,17 @@ fn create_web_worker(
 
         // FIXME: Send a patch refactoring WebWorkerOptions and WorkerOptions
         let options = WebWorkerOptions {
+            format_js_error_fn: None,
+            source_map_getter: None,
+            stdio: Default::default(),
             bootstrap: bootstrap.clone(),
             extensions,
             unsafely_ignore_certificate_errors: None,
             root_cert_store: None,
-            user_agent: "hello_runtime".to_string(),
             seed: None,
             module_loader,
             create_web_worker_cb,
             preload_module_cb: preload_module_cb.clone(),
-            js_error_create_fn: None,
-            use_deno_namespace: args.use_deno_namespace,
             worker_type: args.worker_type,
             maybe_inspector_server: maybe_inspector_server.clone(),
             get_error_class_fn: None,
@@ -324,7 +324,7 @@ impl DenoService {
         }
 
         let bootstrap = BootstrapOptions {
-            apply_source_maps: false,
+            user_agent: "hello_runtime".to_string(),
             args: vec![],
             cpu_count: 1,
             debug_flag: false,
@@ -345,13 +345,14 @@ impl DenoService {
             inner.clone(),
         );
         let opts = WorkerOptions {
+            format_js_error_fn: None,
+            source_map_getter: None,
+            stdio: Default::default(),
             bootstrap,
             extensions,
             unsafely_ignore_certificate_errors: None,
             root_cert_store: None,
-            user_agent: "hello_runtime".to_string(),
             seed: None,
-            js_error_create_fn: None,
             create_web_worker_cb,
             maybe_inspector_server: inspector.clone(),
             should_break_on_first_statement: false,

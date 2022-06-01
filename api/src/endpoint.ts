@@ -7,9 +7,6 @@
 const endpointWorker = new Worker("file:///worker.js", {
     type: "module",
     name: "endpointWorker",
-    deno: {
-        namespace: true,
-    },
 });
 type Resolver = {
     resolve: (value: unknown) => void;
