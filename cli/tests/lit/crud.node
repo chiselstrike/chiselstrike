@@ -163,9 +163,15 @@ echo "$resp" | count_results
 # CHECK: "last_name": "Draper"
 # CHECK: "last_name": "Elgin"
 
-resp=$($CURL --no-include $(echo "$resp" | jq -r '.next_page'))
-echo "$resp" | count_results
+resp1=$($CURL --no-include $(echo "$resp" | jq -r '.next_page'))
+echo "$resp1" | count_results
 # CHECK: Number of names: 0
+
+resp2=$($CURL --no-include $(echo "$resp" | jq -r '.prev_page'))
+echo "$resp2" | count_results
+# CHECK: Number of names: 2
+# CHECK: "last_name": "Anderson"
+# CHECK: "last_name": "Chong"
 
 ## Test delete
 
