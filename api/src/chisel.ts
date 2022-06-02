@@ -607,17 +607,14 @@ export class ChiselEntity {
             name: this.constructor.name,
             value: this,
         }, requestContext);
-        type IdsJson = Map<string, IdsJson>;
+        type IdsJson = { id: string; children: { [index: string]: IdsJson } };
         function backfillIds(this_: ChiselEntity, jsonIds: IdsJson) {
-            for (const [fieldName, value] of Object.entries(jsonIds)) {
-                if (fieldName == "id") {
-                    this_.id = value as string;
-                } else {
-                    const child = (this_ as unknown as Record<string, unknown>)[
-                        fieldName
-                    ];
-                    backfillIds(child as ChiselEntity, value);
-                }
+            this_.id = jsonIds.id;
+            for (const [fieldName, value] of Object.entries(jsonIds.children)) {
+                const child = (this_ as unknown as Record<string, unknown>)[
+                    fieldName
+                ];
+                backfillIds(child as ChiselEntity, value);
             }
         }
         backfillIds(this, jsonIds);

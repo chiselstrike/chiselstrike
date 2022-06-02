@@ -150,7 +150,6 @@ impl SqlWithArguments {
 #[derive(Debug, Serialize)]
 pub(crate) struct IdTree {
     pub(crate) id: String,
-    #[serde(flatten)]
     children: HashMap<String, IdTree>,
 }
 
