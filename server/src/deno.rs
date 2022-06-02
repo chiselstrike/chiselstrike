@@ -673,11 +673,19 @@ impl Resource for QueryStreamResource {
     }
 }
 
+#[derive(Serialize)]
+enum Secret {
+    None,
+    Some(serde_json::Value),
+}
+
 #[op]
-fn op_chisel_get_secret(op_state: &mut OpState, key: String) -> Result<Option<serde_json::Value>> {
+fn op_chisel_get_secret(op_state: &mut OpState, key: String) -> Secret {
     let secrets = current_secrets(op_state);
-    let ret = secrets.get(&key).cloned();
-    Ok(ret)
+    match secrets.get(&key).cloned() {
+        None => Secret::None,
+        Some(v) => Secret::Some(v),
+    }
 }
 
 #[op]
