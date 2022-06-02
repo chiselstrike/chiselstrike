@@ -134,14 +134,12 @@ async fn run(state: SharedState, mut cmd: ExecutorChannel) -> Result<()> {
     init_deno(state.inspect_brk).await?;
 
     // Ensure we read the secrets before spawning an ApiService; secrets may dictate API authorization.
-    if let Ok(secrets) = get_secrets().await {
-        match serde_json::from_str(&secrets) {
-            Err(e) => {
-                warn!("Could not read secrets: {:?}", e);
-                update_secrets(Default::default()).await;
-            }
-            Ok(json) => update_secrets(json).await,
+    match get_secrets().await {
+        Err(e) => {
+            warn!("Could not read secrets: {:?}", e);
+            update_secrets(Default::default()).await;
         }
+        Ok(json) => update_secrets(json).await,
     }
 
     let meta = MetaService::local_connection(&state.db, state.nr_connections).await?;
@@ -302,16 +300,7 @@ pub async fn run_shared_state(
     let secret_shutdown = signal_rx.clone();
     // Spawn periodic hot-reload of secrets.  This doesn't load secrets immediately, though.
     let _secret_reader = tokio::task::spawn(async move {
-        use std::collections::hash_map::DefaultHasher;
-        use std::hash::{Hash, Hasher};
-
-        let calculate_hash = |t: &str| {
-            let mut s = DefaultHasher::new();
-            t.hash(&mut s);
-            s.finish()
-        };
-
-        let mut last_hash = 0;
+        let mut last_secrets = JsonObject::default();
         let mut last_try_was_failure = false;
         loop {
             futures::select! {
@@ -324,34 +313,27 @@ pub async fn run_shared_state(
             match get_secrets().await {
                 Ok(secrets) => {
                     last_try_was_failure = false;
-                    let hash = calculate_hash(&secrets);
-                    if hash == last_hash {
+                    if last_secrets == secrets {
                         continue;
                     }
-                    let val: JsonObject = match serde_json::from_str(&secrets) {
-                        Err(x) => {
-                            warn!("Could not read secrets: {:?}", x);
-                            serde_json::Map::new()
-                        }
-                        Ok(x) => x,
-                    };
-                    last_hash = hash;
-
-                    for cmd in &secret_commands {
-                        let v = val.clone();
-                        let payload = send_command!({
-                            update_secrets(v).await;
-                            Ok(())
-                        });
-                        cmd.send(payload).await.unwrap();
-                    }
+                    last_secrets = secrets;
                 }
                 Err(x) => {
                     if !last_try_was_failure {
                         warn!("Could not read secrets: {:?}", x);
                     }
                     last_try_was_failure = true;
+                    last_secrets = JsonObject::default();
                 }
+            }
+
+            for cmd in &secret_commands {
+                let v = last_secrets.clone();
+                let payload = send_command!({
+                    update_secrets(v).await;
+                    Ok(())
+                });
+                cmd.send(payload).await.unwrap();
             }
         }
     });
