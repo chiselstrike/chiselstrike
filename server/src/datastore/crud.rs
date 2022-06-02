@@ -852,41 +852,65 @@ mod tests {
         }
 
         // Test cursors
-        {
-            let mut page_url = url("page_size=1");
+        async fn run_cursor_test(
+            qe: &QueryEngine,
+            mut page_url: Url,
+            n_steps: usize,
+            page_size: usize,
+        ) -> Vec<String> {
+            let get_url = |raw: &serde_json::Value| Url::parse(raw.as_str().unwrap()).unwrap();
             let mut all_names = vec![];
-            for i in 0..5 {
+            for i in 0..n_steps {
                 let r = run_query("Person", page_url.clone(), qe).await.unwrap();
+
+                // Check backward cursors
+                if i == 0 || i == n_steps - 1 {
+                    // FIXME: The last page should always (except for no results at all) include
+                    // link for previous page.
+                    assert!(!r.contains_key("prev_page"));
+                } else {
+                    // Check that previous page returns the same results as
+                    // before using next_page.
+                    let prev_page = get_url(&r["prev_page"]);
+                    let r = run_query("Person", prev_page.clone(), qe).await.unwrap();
+                    let prev_names = collect_names(&r);
+                    assert_eq!(prev_names.len(), page_size);
+                    assert_eq!(prev_names, all_names[all_names.len() - page_size..]);
+
+                    // Check that a sequence page1 -> page["prev_page"] (page2) -> page2["next_page"] (page3)
+                    // is a cycle, i.e. page1 == page3.
+                    let loopback_page = get_url(&r["next_page"]);
+                    assert_eq!(page_url, loopback_page);
+
+                    if i == 1 {
+                        // We go from the second page to first and beyond to an empty page.
+                        let prev_page = get_url(&r["prev_page"]);
+                        let r = run_query("Person", prev_page.clone(), qe).await.unwrap();
+                        // FIXME: It should be possible to get back from an empty page.
+                        assert!(!r.contains_key("next_page"));
+                    }
+                }
+
                 let names = collect_names(&r);
                 all_names.extend(names.clone());
-                if i == 4 {
+                // Check forward cursors
+                if i == n_steps - 1 {
                     assert!(names.is_empty());
                     assert!(!r.contains_key("next_page"));
                 } else {
-                    assert_eq!(names.len(), 1);
-                    let next_page = r["next_page"].as_str().unwrap();
-                    page_url = Url::parse(next_page).unwrap();
+                    assert_eq!(names.len(), page_size);
+                    page_url = get_url(&r["next_page"]);
                 }
             }
+            all_names
+        }
+        {
+            let mut all_names = run_cursor_test(qe, url("page_size=1"), 5, 1).await;
             all_names.sort();
             assert_eq!(all_names, vec!["Alan", "Alex", "John", "Steve"]);
         }
         {
-            let mut page_url = url("sort=name&page_size=2");
-            let mut all_names = vec![];
-            for i in 0..3 {
-                let r = run_query("Person", page_url.clone(), qe).await.unwrap();
-                let names = collect_names(&r);
-                all_names.extend(names.clone());
-                if i == 2 {
-                    assert!(names.is_empty());
-                    assert!(!r.contains_key("next_page"));
-                } else {
-                    assert_eq!(names.len(), 2);
-                    let next_page = r["next_page"].as_str().unwrap();
-                    page_url = Url::parse(next_page).unwrap();
-                }
-            }
+            let all_names = run_cursor_test(qe, url("sort=name&page_size=2"), 3, 2).await;
             assert_eq!(all_names, vec!["Alan", "Alex", "John", "Steve"]);
         }
         {
@@ -895,6 +919,7 @@ mod tests {
                 .unwrap();
 
             assert!(!r.contains_key("next_page"));
+            assert!(!r.contains_key("prev_page"));
             let names = collect_names(&r);
             assert_eq!(names, vec!["Alan", "Alex", "John", "Steve"]);
         }
