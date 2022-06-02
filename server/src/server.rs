@@ -136,7 +136,10 @@ async fn run(state: SharedState, mut cmd: ExecutorChannel) -> Result<()> {
     // Ensure we read the secrets before spawning an ApiService; secrets may dictate API authorization.
     if let Ok(secrets) = get_secrets().await {
         match serde_json::from_str(&secrets) {
-            Err(e) => warn!("Could not read secrets: {:?}", e),
+            Err(e) => {
+                warn!("Could not read secrets: {:?}", e);
+                update_secrets(Default::default()).await;
+            }
             Ok(json) => update_secrets(json).await,
         }
     }
