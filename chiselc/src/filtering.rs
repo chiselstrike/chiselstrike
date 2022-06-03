@@ -32,7 +32,9 @@ impl FilterProperties {
             match prop {
                 PropOrSpread::Prop(prop) => match &**prop {
                     Prop::KeyValue(key_value_prop) => {
-                        properties.insert(prop_name_to_string(&key_value_prop.key));
+                        if let Some(prop_name) = prop_name_to_string(&key_value_prop.key) {
+                            properties.insert(prop_name);
+                        }
                     }
                     Prop::Shorthand(ident) => {
                         properties.insert(ident.sym.to_string());
@@ -57,12 +59,10 @@ impl FilterProperties {
     }
 }
 
-fn prop_name_to_string(prop_name: &PropName) -> String {
+fn prop_name_to_string(prop_name: &PropName) -> Option<String> {
     match prop_name {
-        PropName::Ident(ident) => ident.sym.to_string(),
-        PropName::Str(s) => s.value.to_string(),
-        _ => {
-            todo!();
-        }
+        PropName::Ident(ident) => Some(ident.sym.to_string()),
+        PropName::Str(s) => Some(s.value.to_string()),
+        _ => None,
     }
 }
