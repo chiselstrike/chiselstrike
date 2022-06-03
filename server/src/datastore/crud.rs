@@ -47,18 +47,30 @@ fn run_query_impl(
     let stream = query_engine.query(tr.clone(), query_plan)?;
 
     Ok(async move {
-        let results = stream
+        let mut results = stream
             .collect::<Vec<_>>()
             .await
             .into_iter()
             .collect::<Result<Vec<_>>>()
             .context("failed to collect result rows from the database")?;
 
+        // When backwards cursor is specified, the sort is reversed, hence we
+        // need to reverse the results to get the original ordering.
+        if let Some(cursor) = &query.cursor {
+            if !cursor.forward {
+                results.reverse();
+            }
+        }
+
         let mut ret = JsonObject::new();
-        if !results.is_empty() && query.page_size == results.len() as u64 {
-            let last_element = results.last().unwrap();
-            let next_page = next_page_url(&params.url, &host, &query, last_element)?;
+
+        let next_page = get_next_page(&params, &query, &host, &results)?;
+        if let Some(next_page) = next_page {
             ret.insert("next_page".into(), json!(next_page));
+        }
+        let prev_page = get_prev_page(&params, &query, &host, &results)?;
+        if let Some(prev_page) = prev_page {
+            ret.insert("prev_page".into(), json!(prev_page));
         }
 
         ret.insert("results".into(), json!(results));
@@ -66,17 +78,75 @@ fn run_query_impl(
     })
 }
 
-fn next_page_url(
+/// Evaluates current query circumstances and potentially generates
+/// next page url if there is a potential for retrieving elements that succeed
+/// current resulting elements in query's sort.
+fn get_next_page(
+    params: &QueryParams,
+    query: &Query,
+    host: &Option<String>,
+    results: &[JsonObject],
+) -> Result<Option<Url>> {
+    if results.is_empty() {
+        return Ok(None);
+    }
+
+    let has_bwd_cursor = query.cursor.as_ref().map(|c| !c.forward).unwrap_or(false);
+    if query.page_size == results.len() as u64 || has_bwd_cursor {
+        let last_element = results.last().unwrap();
+        let url = make_page_url(&params.url, host, query, last_element, true)?;
+        return Ok(Some(url));
+    }
+    Ok(None)
+}
+
+/// Evaluates current query circumstances and potentially generates
+/// prev page url if there is a potential for retrieving elements that precede
+/// current resulting elements in query's sort.
+fn get_prev_page(
+    params: &QueryParams,
+    query: &Query,
+    host: &Option<String>,
+    results: &[JsonObject],
+) -> Result<Option<Url>> {
+    if results.is_empty() || query.cursor.is_none() {
+        return Ok(None);
+    }
+
+    let has_fwd_cursor = query.cursor.as_ref().map(|c| c.forward).unwrap_or(false);
+    if query.page_size == results.len() as u64 || has_fwd_cursor {
+        let first_element = results.first().unwrap();
+        let url = make_page_url(&params.url, host, query, first_element, false)?;
+        return Ok(Some(url));
+    }
+    Ok(None)
+}
+
+/// Generates URL that can be used to retrieve previous/next page.
+/// It does this by modifying the current `url`, potentially replacing
+/// host address with `host` and generating cursor based on the current
+/// `query`, `pivot_element` (element that is first/last on the current page)
+/// and `forward` indicator (if true, `next_page` url will be generated,
+/// otherwise `prev_page`).
+fn make_page_url(
     url: &Url,
     host: &Option<String>,
     query: &Query,
-    last_element: &JsonObject,
+    pivot_element: &JsonObject,
+    forward: bool,
 ) -> Result<Url> {
-    assert!(!query.sort.keys.is_empty());
+    // If cursor is available, we must use its sort keys as query's
+    // sort keys are reversed for backwards paging.
+    let sort_keys = if let Some(cursor) = &query.cursor {
+        cursor.axes.iter().map(|a| a.key.clone()).collect()
+    } else {
+        query.sort.keys.clone()
+    };
+    assert!(!sort_keys.is_empty());
 
     let mut axes = vec![];
-    for key in query.sort.keys.iter().cloned() {
-        let value = last_element
+    for key in sort_keys {
+        let value = pivot_element
             .get(&key.field_name)
             .cloned()
             .with_context(|| {
@@ -84,22 +154,20 @@ fn next_page_url(
             })?;
         axes.push(CursorAxis { key, value });
     }
-    let cursor = serde_json::to_vec(&axes).context("failed to serialize cursor to json")?;
-    let cursor = base64::encode(cursor);
+    let cursor = Cursor::new(axes, forward).to_string()?;
 
-    let mut next_url = replace_host_address(url.clone(), host)?;
-    next_url.set_query(Some(""));
+    let mut page_url = replace_host_address(url.clone(), host)?;
+    page_url.set_query(Some(""));
     for (key, value) in url.query_pairs() {
-        if key == "page_after" || key == "sort" {
+        if key == "page_before" || key == "page_after" || key == "sort" {
             continue;
         }
-        next_url.query_pairs_mut().append_pair(&key, &value);
+        page_url.query_pairs_mut().append_pair(&key, &value);
     }
-    next_url
-        .query_pairs_mut()
-        .append_pair("page_after", &cursor);
+    let page_key = if forward { "page_after" } else { "page_before" };
+    page_url.query_pairs_mut().append_pair(page_key, &cursor);
 
-    Ok(next_url)
+    Ok(page_url)
 }
 
 /// Constructs Delete Mutation from CRUD url.
@@ -166,12 +234,12 @@ impl Query {
                     })?;
                     q.offset = Some(o);
                 }
-                "page_after" => {
+                "page_after" | "page_before" => {
                     anyhow::ensure!(
                         q.cursor.is_none(),
-                        "only one occurrence of page_after is allowed."
+                        "only one occurrence of page_before/page_after is allowed."
                     );
-                    q.cursor = parse_cursor(base_type, &value)?.into();
+                    q.cursor = Cursor::from_string(&value, param_key == "page_after")?.into();
                 }
                 _ => {
                     if let Some(param_key) = param_key.strip_prefix('.') {
@@ -187,8 +255,8 @@ impl Query {
         // We need to ensure sorting by ID for cursors to work.
         ensure_sort_by_id(&mut q.sort);
         if let Some(cursor) = &q.cursor {
-            q.sort = cursor.sort.clone();
-            q.filters.push(cursor.filter.clone());
+            q.sort = cursor.get_sort();
+            q.filters.push(cursor.get_filter(base_type)?);
         }
         Ok(q)
     }
@@ -219,10 +287,10 @@ fn ensure_sort_by_id(sort: &mut SortBy) {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 struct Cursor {
-    filter: Expr,
-    sort: SortBy,
+    axes: Vec<CursorAxis>,
+    forward: bool,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -231,50 +299,76 @@ struct CursorAxis {
     value: serde_json::Value,
 }
 
-/// Tries to parse cursor from url parameter `value`. The core of this function is
-/// creating the sort Axes (each axis represents one dimension in lexicographical sort)
-/// and then using them to create a filter that filters for entries that are after
-/// the last element in the given sort..
-fn parse_cursor(base_type: &Arc<ObjectType>, value: &str) -> Result<Cursor> {
-    let cursor =
-        base64::decode(value).context("Failed to decode cursor from base64 encoded string")?;
-    let axes: Vec<CursorAxis> = serde_json::from_slice(&cursor)
-        .context("failed to deserialize cursor to individual axes")?;
-    anyhow::ensure!(!axes.is_empty(), "cursor mustn't be empty");
-
-    let mut cmp_pairs: Vec<(Expr, BinaryOp, Expr)> = vec![];
-    for axis in &axes {
-        let op = if axis.key.ascending {
-            BinaryOp::Gt
-        } else {
-            BinaryOp::Lt
-        };
-        let (property_chain, field_type) = make_property_chain(base_type, &[&axis.key.field_name])?;
-        let literal = json_to_literal(&field_type, &axis.value)
-            .context("Failed to convert axis value to literal")?;
-
-        cmp_pairs.push((property_chain, op, literal));
-    }
-    let mut expr = None;
-    for (i, (lhs, op, rhs)) in cmp_pairs.iter().enumerate() {
-        let mut e: Expr = BinaryExpr::new(op.clone(), lhs.clone(), rhs.clone()).into();
-        expr = expr
-            .map_or(e.clone(), |expr| {
-                for (lhs, _, rhs) in &cmp_pairs[0..i] {
-                    let eq = BinaryExpr::eq(lhs.clone(), rhs.clone());
-                    e = BinaryExpr::and(eq, e);
-                }
-                BinaryExpr::or(expr, e)
-            })
-            .into();
+impl Cursor {
+    fn new(axes: Vec<CursorAxis>, forward: bool) -> Self {
+        assert!(!axes.is_empty());
+        Self { axes, forward }
     }
 
-    Ok(Cursor {
-        filter: expr.unwrap(),
-        sort: SortBy {
-            keys: axes.iter().map(|a| a.key.clone()).collect(),
-        },
-    })
+    /// Parses Cursor from base64 encoded JSON.
+    fn from_string(cursor_str: &str, forward: bool) -> Result<Self> {
+        let cursor_json = base64::decode(cursor_str)
+            .context("Failed to decode cursor from base64 encoded string")?;
+        let axes: Vec<CursorAxis> =
+            serde_json::from_slice(&cursor_json).context("failed to deserialize cursor's axes")?;
+        anyhow::ensure!(!axes.is_empty(), "cursor mustn't have no sort axes");
+        Ok(Self { axes, forward })
+    }
+
+    /// Serializes cursor to base64 encoded JSON.
+    fn to_string(&self) -> Result<String> {
+        let cursor =
+            serde_json::to_vec(&self.axes).context("failed to serialize cursor axes to json")?;
+        Ok(base64::encode(cursor))
+    }
+
+    fn get_sort(&self) -> SortBy {
+        SortBy {
+            keys: self
+                .axes
+                .iter()
+                .map(|axis| {
+                    let mut key = axis.key.clone();
+                    key.ascending = key.ascending == self.forward;
+                    key
+                })
+                .collect(),
+        }
+    }
+
+    /// The crux of this function is using the sort axes (each axis represents one dimension
+    /// in lexicographical sort) to create a filter that filters for entries that are after
+    /// the last element in the given sort.
+    fn get_filter(&self, base_type: &Arc<ObjectType>) -> Result<Expr> {
+        let mut cmp_pairs: Vec<(Expr, BinaryOp, Expr)> = vec![];
+        for axis in &self.axes {
+            let op = if axis.key.ascending == self.forward {
+                BinaryOp::Gt
+            } else {
+                BinaryOp::Lt
+            };
+            let (property_chain, field_type) =
+                make_property_chain(base_type, &[&axis.key.field_name])?;
+            let literal = json_to_literal(&field_type, &axis.value)
+                .context("Failed to convert axis value to literal")?;
+
+            cmp_pairs.push((property_chain, op, literal));
+        }
+        let mut expr = None;
+        for (i, (lhs, op, rhs)) in cmp_pairs.iter().enumerate() {
+            let mut e: Expr = BinaryExpr::new(op.clone(), lhs.clone(), rhs.clone()).into();
+            expr = expr
+                .map_or(e.clone(), |expr| {
+                    for (lhs, _, rhs) in &cmp_pairs[0..i] {
+                        let eq = BinaryExpr::eq(lhs.clone(), rhs.clone());
+                        e = BinaryExpr::and(eq, e);
+                    }
+                    BinaryExpr::or(expr, e)
+                })
+                .into();
+        }
+        Ok(expr.unwrap())
+    }
 }
 
 fn json_to_literal(field_type: &Type, value: &serde_json::Value) -> Result<Expr> {
@@ -758,41 +852,65 @@ mod tests {
         }
 
         // Test cursors
-        {
-            let mut page_url = url("page_size=1");
+        async fn run_cursor_test(
+            qe: &QueryEngine,
+            mut page_url: Url,
+            n_steps: usize,
+            page_size: usize,
+        ) -> Vec<String> {
+            let get_url = |raw: &serde_json::Value| Url::parse(raw.as_str().unwrap()).unwrap();
             let mut all_names = vec![];
-            for i in 0..5 {
+            for i in 0..n_steps {
                 let r = run_query("Person", page_url.clone(), qe).await.unwrap();
+
+                // Check backward cursors
+                if i == 0 || i == n_steps - 1 {
+                    // FIXME: The last page should always (except for no results at all) include
+                    // link for previous page.
+                    assert!(!r.contains_key("prev_page"));
+                } else {
+                    // Check that previous page returns the same results as
+                    // before using next_page.
+                    let prev_page = get_url(&r["prev_page"]);
+                    let r = run_query("Person", prev_page.clone(), qe).await.unwrap();
+                    let prev_names = collect_names(&r);
+                    assert_eq!(prev_names.len(), page_size);
+                    assert_eq!(prev_names, all_names[all_names.len() - page_size..]);
+
+                    // Check that a sequence page1 -> page["prev_page"] (page2) -> page2["next_page"] (page3)
+                    // is a cycle, i.e. page1 == page3.
+                    let loopback_page = get_url(&r["next_page"]);
+                    assert_eq!(page_url, loopback_page);
+
+                    if i == 1 {
+                        // We go from the second page to first and beyond to an empty page.
+                        let prev_page = get_url(&r["prev_page"]);
+                        let r = run_query("Person", prev_page.clone(), qe).await.unwrap();
+                        // FIXME: It should be possible to get back from an empty page.
+                        assert!(!r.contains_key("next_page"));
+                    }
+                }
+
                 let names = collect_names(&r);
                 all_names.extend(names.clone());
-                if i == 4 {
+                // Check forward cursors
+                if i == n_steps - 1 {
                     assert!(names.is_empty());
                     assert!(!r.contains_key("next_page"));
                 } else {
-                    assert_eq!(names.len(), 1);
-                    let next_page = r["next_page"].as_str().unwrap();
-                    page_url = Url::parse(next_page).unwrap();
+                    assert_eq!(names.len(), page_size);
+                    page_url = get_url(&r["next_page"]);
                 }
             }
+            all_names
+        }
+        {
+            let mut all_names = run_cursor_test(qe, url("page_size=1"), 5, 1).await;
             all_names.sort();
             assert_eq!(all_names, vec!["Alan", "Alex", "John", "Steve"]);
         }
         {
-            let mut page_url = url("sort=name&page_size=2");
-            let mut all_names = vec![];
-            for i in 0..3 {
-                let r = run_query("Person", page_url.clone(), qe).await.unwrap();
-                let names = collect_names(&r);
-                all_names.extend(names.clone());
-                if i == 2 {
-                    assert!(names.is_empty());
-                    assert!(!r.contains_key("next_page"));
-                } else {
-                    assert_eq!(names.len(), 2);
-                    let next_page = r["next_page"].as_str().unwrap();
-                    page_url = Url::parse(next_page).unwrap();
-                }
-            }
+            let all_names = run_cursor_test(qe, url("sort=name&page_size=2"), 3, 2).await;
             assert_eq!(all_names, vec!["Alan", "Alex", "John", "Steve"]);
         }
         {
@@ -801,6 +919,7 @@ mod tests {
                 .unwrap();
 
             assert!(!r.contains_key("next_page"));
+            assert!(!r.contains_key("prev_page"));
             let names = collect_names(&r);
             assert_eq!(names, vec!["Alan", "Alex", "John", "Steve"]);
         }
