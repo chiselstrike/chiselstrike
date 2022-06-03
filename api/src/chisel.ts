@@ -443,9 +443,9 @@ export class ChiselCursor<T> {
 
     /** ChiselCursor implements asyncIterator, meaning you can use it in any asynchronous context. */
     [Symbol.asyncIterator](): AsyncIterator<T> {
-        let iter = this.makeTransformedQueryIter(this.inner);
+        let iter = this.evalOpsRecursive(this.inner);
         if (iter === undefined) {
-            iter = this.makeQueryIter(this.inner);
+            iter = this.runChiselQuery(this.inner);
         }
         return iter[Symbol.asyncIterator]();
     }
@@ -456,15 +456,15 @@ export class ChiselCursor<T> {
      * TypeScript. In such a case, the function returns the resulting AsyncIterable.
      * If no PredicateFilter is found, undefined is returned.
      */
-    private makeTransformedQueryIter(
+    private evalOpsRecursive(
         op: Operator<T>,
     ): AsyncIterable<T> | undefined {
         if (op.inner === undefined) {
             return undefined;
         }
-        let iter = this.makeTransformedQueryIter(op.inner);
+        let iter = this.evalOpsRecursive(op.inner);
         if (iter === undefined && op instanceof PredicateFilter) {
-            iter = this.makeQueryIter(op.inner);
+            iter = this.runChiselQuery(op.inner);
         }
         if (iter !== undefined) {
             return op.apply(iter);
@@ -473,7 +473,7 @@ export class ChiselCursor<T> {
         }
     }
 
-    private makeQueryIter(
+    private runChiselQuery(
         op: Operator<T>,
     ): AsyncIterable<T> {
         const ctor = op.containsType(ColumnsSelect)
