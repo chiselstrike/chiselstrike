@@ -607,7 +607,7 @@ export class ChiselEntity {
             name: this.constructor.name,
             value: this,
         }, requestContext);
-        type IdsJson = { id: string; children: { [index: string]: IdsJson } };
+        type IdsJson = { id: string; children: Record<string, IdsJson> };
         function backfillIds(this_: ChiselEntity, jsonIds: IdsJson) {
             this_.id = jsonIds.id;
             for (const [fieldName, value] of Object.entries(jsonIds.children)) {
