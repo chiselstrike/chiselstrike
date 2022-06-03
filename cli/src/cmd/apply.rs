@@ -4,9 +4,10 @@ pub mod deno;
 pub mod node;
 
 use crate::chisel::chisel_rpc_client::ChiselRpcClient;
-use crate::chisel::{ChiselApplyRequest, PolicyUpdateRequest};
-use crate::project::{read_manifest, read_to_string, Module, Optimize};
+use crate::chisel::{ChiselApplyRequest, IndexCandidate, PolicyUpdateRequest};
+use crate::project::{read_manifest, read_to_string, AutoIndex, Module, Optimize};
 use anyhow::{anyhow, Context, Result};
+use serde_json::Value;
 use std::io::Write;
 use std::path::PathBuf;
 use std::process::Stdio;
@@ -84,11 +85,12 @@ pub(crate) async fn apply<S: ToString>(
         .iter()
         .map(|type_req| type_req.name.clone())
         .collect();
-    let use_chiselc = is_chiselc_available() && manifest.optimize == Optimize::Yes;
-    let endpoints_req = if manifest.modules == Module::Node {
-        node::apply(&endpoints, &entities, use_chiselc, &type_check).await
+    let optimize = is_chiselc_available() && manifest.optimize == Optimize::Yes;
+    let auto_index = is_chiselc_available() && manifest.auto_index == AutoIndex::Yes;
+    let (endpoints_req, index_candidates_req) = if manifest.modules == Module::Node {
+        node::apply(&endpoints, &entities, optimize, auto_index, &type_check).await
     } else {
-        deno::apply(&endpoints, &entities, &types_string, use_chiselc).await
+        deno::apply(&endpoints, &entities, &types_string, optimize, auto_index).await
     }?;
 
     for p in policies {
@@ -133,6 +135,7 @@ pub(crate) async fn apply<S: ToString>(
             .apply(tonic::Request::new(ChiselApplyRequest {
                 types: types_req,
                 endpoints: endpoints_req,
+                index_candidates: index_candidates_req,
                 policies: policy_req,
                 allow_type_deletion: allow_type_deletion.into(),
                 version,
@@ -155,6 +158,29 @@ pub(crate) async fn apply<S: ToString>(
     }
 
     Ok(())
+}
+
+fn parse_indexes(code: String, entities: &[String]) -> Result<Vec<IndexCandidate>> {
+    let mut index_candidates_req = vec![];
+    let indexes = chiselc_output(code, "filter-properties", entities)?;
+    let indexes: Value = serde_json::from_str(&indexes)?;
+    if let Some(indexes) = indexes.as_array() {
+        for index in indexes {
+            let entity_name = index["entity_name"].as_str().unwrap().to_string();
+            let properties = match index["properties"].as_array() {
+                Some(properties) => properties
+                    .iter()
+                    .map(|prop| prop.as_str().unwrap().to_string())
+                    .collect(),
+                None => vec![],
+            };
+            index_candidates_req.push(IndexCandidate {
+                entity_name,
+                properties,
+            });
+        }
+    }
+    Ok(index_candidates_req)
 }
 
 fn output_to_string(out: &std::process::Output) -> Option<String> {
@@ -202,8 +228,8 @@ fn chiselc_spawn(input: &str, output: &str, entities: &[String]) -> Result<tokio
 }
 
 /// Spawn `chiselc`, wait for the process to complete, and return its output.
-fn chiselc_output(code: String, entities: &[String]) -> Result<std::process::Output> {
-    let mut args: Vec<&str> = vec!["--target", "js"];
+fn chiselc_output(code: String, target: &str, entities: &[String]) -> Result<String> {
+    let mut args: Vec<&str> = vec!["--target", target];
     if !entities.is_empty() {
         args.push("-e");
         for entity in entities.iter() {
@@ -222,7 +248,7 @@ fn chiselc_output(code: String, entities: &[String]) -> Result<std::process::Out
             .expect("Failed to write to stdin");
     });
     let output = cmd.wait_with_output().expect("Failed to read stdout");
-    Ok(output)
+    Ok(output_to_string(&output).unwrap())
 }
 
 fn get_git_version() -> Option<String> {

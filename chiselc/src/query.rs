@@ -4,6 +4,8 @@
 //! represent queries. The queries are then transformed into this query
 //! intermediate representation.
 
+use indexmap::IndexSet;
+
 /// An expression.
 #[derive(Debug)]
 #[allow(clippy::enum_variant_names)]
@@ -81,4 +83,25 @@ pub struct Filter {
     pub predicate: Expr,
     /// The input query operator that is filtered.
     pub input: Box<Operator>,
+}
+
+impl Filter {
+    pub fn properties(&self) -> IndexSet<String> {
+        let mut props = IndexSet::new();
+        expr_to_props(&self.predicate, &mut props);
+        props
+    }
+}
+
+fn expr_to_props(expr: &Expr, props: &mut IndexSet<String>) {
+    match expr {
+        Expr::BinaryExpr(binary_expr) => {
+            expr_to_props(&binary_expr.left, props);
+            expr_to_props(&binary_expr.right, props);
+        }
+        Expr::PropertyAccess(property_access) => {
+            props.insert(property_access.property.clone());
+        }
+        _ => { /* Nothing to do */ }
+    }
 }

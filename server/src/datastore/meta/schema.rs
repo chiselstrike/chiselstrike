@@ -62,6 +62,14 @@ enum FieldLabels {
 }
 
 #[derive(Iden)]
+enum Indexes {
+    Table,
+    IndexId,
+    TypeId,
+    Fields,
+}
+
+#[derive(Iden)]
 enum Endpoints {
     Table,
     Path,
@@ -182,6 +190,24 @@ pub(crate) fn tables() -> Vec<TableCreateStatement> {
                 .on_delete(ForeignKeyAction::Cascade),
         )
         .to_owned();
+    let indexes = Table::create()
+        .table(Indexes::Table)
+        .if_not_exists()
+        .col(
+            ColumnDef::new(Indexes::IndexId)
+                .integer()
+                .auto_increment()
+                .primary_key(),
+        )
+        .col(ColumnDef::new(Indexes::TypeId).integer())
+        .col(ColumnDef::new(Indexes::Fields).text())
+        .foreign_key(
+            ForeignKey::create()
+                .from(Indexes::Table, Indexes::TypeId)
+                .to(Types::Table, Types::TypeId)
+                .on_delete(ForeignKeyAction::Cascade),
+        )
+        .to_owned();
     let endpoints = Table::create()
         .table(Endpoints::Table)
         .if_not_exists()
@@ -204,6 +230,7 @@ pub(crate) fn tables() -> Vec<TableCreateStatement> {
         fields,
         type_fields,
         field_labels,
+        indexes,
         endpoints,
         policies,
     ]

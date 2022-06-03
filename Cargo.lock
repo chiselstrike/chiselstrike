@@ -496,7 +496,10 @@ name = "chiselc"
 version = "0.10.0-dev.0"
 dependencies = [
  "anyhow",
+ "indexmap",
  "lit 1.0.4 (registry+https://github.com/rust-lang/crates.io-index)",
+ "serde",
+ "serde_json",
  "structopt",
  "swc_atoms",
  "swc_common",

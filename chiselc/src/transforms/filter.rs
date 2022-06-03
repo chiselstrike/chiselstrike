@@ -1,3 +1,4 @@
+use crate::filtering::FilterProperties;
 use crate::query::BinaryExpr as QBinaryExpr;
 use crate::query::BinaryOp as QBinaryOp;
 use crate::query::Expr as QExpr;
@@ -16,22 +17,33 @@ use swc_ecmascript::ast::{
 };
 
 /// Infer filter operator from the lambda predicate of to filter()
-pub fn infer_filter(call_expr: &CallExpr, symbols: &Symbols) -> Option<Box<QOperator>> {
+pub fn infer_filter(
+    call_expr: &CallExpr,
+    symbols: &Symbols,
+) -> (Option<Box<QOperator>>, Option<FilterProperties>) {
     if !is_rewritable_filter(&call_expr.callee, symbols) {
-        return None;
+        return (None, None);
     }
     let entity_type = match lookup_callee_entity_type(&call_expr.callee) {
         Ok(entity_type) => entity_type,
-        _ => return None,
+        _ => return (None, None),
     };
     let args = &call_expr.args;
     assert_eq!(args.len(), 1);
     let arg = &args[0];
     let arrow = match &*arg.expr {
         Expr::Arrow(arrow_expr) => arrow_expr,
+        Expr::Object(object_lit) => {
+            /*
+             * Filter by restriction object, nothing to transform, but let's
+             * grab predicate indexes.
+             */
+            let props = FilterProperties::from_object_lit(entity_type, object_lit);
+            return (None, props);
+        }
         _ => {
-            /* Filter by restriction object, nothing to transform.  */
-            return None;
+            /* filter() call that has a parameter type we don't recognize, nothing to transform.  */
+            return (None, None);
         }
     };
     let params = &arrow.params;
@@ -44,7 +56,7 @@ pub fn infer_filter(call_expr: &CallExpr, symbols: &Symbols) -> Option<Box<QOper
             let return_stmt = match &block_stmt.stmts[0] {
                 Stmt::Return(return_stmt) => return_stmt,
                 _ => {
-                    return None;
+                    return (None, None);
                 }
             };
             match &return_stmt.arg {
@@ -67,16 +79,18 @@ pub fn infer_filter(call_expr: &CallExpr, symbols: &Symbols) -> Option<Box<QOper
     };
     let expr = match expr {
         Ok(expr) => expr,
-        Err(_) => return None,
+        Err(_) => return (None, None),
     };
-    Some(Box::new(QOperator::Filter(QFilter {
+    let filter = QFilter {
         parameters: vec![param.clone()],
         input: Box::new(QOperator::Scan(QScan {
-            entity_type,
+            entity_type: entity_type.clone(),
             alias: param,
         })),
         predicate: expr,
-    })))
+    };
+    let props = FilterProperties::from_filter(entity_type, &filter);
+    (Some(Box::new(QOperator::Filter(filter))), props)
 }
 
 fn is_rewritable_filter(callee: &Callee, symbols: &Symbols) -> bool {

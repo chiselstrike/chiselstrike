@@ -51,6 +51,9 @@ enum Command {
         /// Enable the optimizer
         #[structopt(long, parse(try_from_str), default_value = "true")]
         optimize: bool,
+        /// Enable auto-indexing.
+        #[structopt(long, parse(try_from_str), default_value = "false")]
+        auto_index: bool,
     },
     /// Describe the endpoints, types, and policies.
     Describe,
@@ -70,6 +73,9 @@ enum Command {
         /// Enable the optimizer
         #[structopt(long, parse(try_from_str), default_value = "true")]
         optimize: bool,
+        /// Enable auto-indexing.
+        #[structopt(long, parse(try_from_str), default_value = "false")]
+        auto_index: bool,
     },
     /// Start the ChiselStrike server.
     Start,
@@ -139,12 +145,14 @@ async fn main() -> Result<()> {
             force,
             no_examples,
             optimize,
+            auto_index,
         } => {
             let cwd = env::current_dir()?;
             let opts = CreateProjectOptions {
                 force,
                 examples: !no_examples,
                 optimize,
+                auto_index,
             };
             create_project(&cwd, opts)?;
         }
@@ -208,6 +216,7 @@ async fn main() -> Result<()> {
             path,
             no_examples,
             optimize,
+            auto_index,
         } => {
             let path = Path::new(&path);
             if let Err(e) = fs::create_dir(path) {
@@ -228,6 +237,7 @@ async fn main() -> Result<()> {
                 force: false,
                 examples: !no_examples,
                 optimize,
+                auto_index,
             };
             create_project(path, opts)?;
         }

@@ -1,3 +1,4 @@
+mod filtering;
 mod parse;
 mod query;
 mod rewrite;
