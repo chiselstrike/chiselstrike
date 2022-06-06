@@ -87,12 +87,7 @@ fn get_next_page(
     host: &Option<String>,
     results: &[JsonObject],
 ) -> Result<Option<Url>> {
-    if results.is_empty() {
-        return Ok(None);
-    }
-
-    let has_bwd_cursor = query.cursor.as_ref().map(|c| !c.forward).unwrap_or(false);
-    if query.page_size == results.len() as u64 || has_bwd_cursor {
+    if !results.is_empty() {
         let last_element = results.last().unwrap();
         let url = make_page_url(&params.url, host, query, last_element, true)?;
         return Ok(Some(url));
@@ -109,12 +104,7 @@ fn get_prev_page(
     host: &Option<String>,
     results: &[JsonObject],
 ) -> Result<Option<Url>> {
-    if results.is_empty() || query.cursor.is_none() {
-        return Ok(None);
-    }
-
-    let has_fwd_cursor = query.cursor.as_ref().map(|c| c.forward).unwrap_or(false);
-    if query.page_size == results.len() as u64 || has_fwd_cursor {
+    if !results.is_empty() {
         let first_element = results.first().unwrap();
         let url = make_page_url(&params.url, host, query, first_element, false)?;
         return Ok(Some(url));
@@ -864,11 +854,11 @@ mod tests {
                 let r = run_query("Person", page_url.clone(), qe).await.unwrap();
 
                 // Check backward cursors
-                if i == 0 || i == n_steps - 1 {
+                if i == n_steps - 1 {
                     // FIXME: The last page should always (except for no results at all) include
                     // link for previous page.
                     assert!(!r.contains_key("prev_page"));
-                } else {
+                } else if i != 0 {
                     // Check that previous page returns the same results as
                     // before using next_page.
                     let prev_page = get_url(&r["prev_page"]);
@@ -918,8 +908,8 @@ mod tests {
                 .await
                 .unwrap();
 
-            assert!(!r.contains_key("next_page"));
-            assert!(!r.contains_key("prev_page"));
+            assert!(r.contains_key("next_page"));
+            assert!(r.contains_key("prev_page"));
             let names = collect_names(&r);
             assert_eq!(names, vec!["Alan", "Alex", "John", "Steve"]);
         }
