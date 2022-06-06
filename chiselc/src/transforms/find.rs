@@ -6,7 +6,7 @@ use crate::utils::is_call_to_entity_method;
 
 use swc_ecmascript::ast::{CallExpr, Callee};
 
-/// Infer filter operator from the lambda predicate of `findMany`.
+/// Infer filter operator from the lambda predicate of `find{Many,One}`.
 pub fn infer_find(
     call_expr: &CallExpr,
     symbols: &Symbols,
@@ -25,6 +25,9 @@ pub fn infer_find(
 fn infer_rewritable_find(call_expr: &CallExpr, symbols: &Symbols) -> Option<String> {
     if is_rewritable_find("findMany", &call_expr.callee, symbols) {
         return Some("__findMany".to_string());
+    }
+    if is_rewritable_find("findOne", &call_expr.callee, symbols) {
+        return Some("__findOne".to_string());
     }
     None
 }
