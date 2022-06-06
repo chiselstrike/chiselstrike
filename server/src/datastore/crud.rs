@@ -87,12 +87,7 @@ fn get_next_page(
     host: &Option<String>,
     results: &[JsonObject],
 ) -> Result<Option<Url>> {
-    if !results.is_empty() {
-        let last_element = results.last().unwrap();
-        let url = make_page_url(&params.url, host, query, last_element, true)?;
-        return Ok(Some(url));
-    }
-    Ok(None)
+    get_page(params, query, host, results, true)
 }
 
 /// Evaluates current query circumstances and potentially generates
@@ -104,27 +99,36 @@ fn get_prev_page(
     host: &Option<String>,
     results: &[JsonObject],
 ) -> Result<Option<Url>> {
+    get_page(params, query, host, results, false)
+}
+
+fn get_page(
+    params: &QueryParams,
+    query: &Query,
+    host: &Option<String>,
+    results: &[JsonObject],
+    forward: bool,
+) -> Result<Option<Url>> {
     if !results.is_empty() {
-        let first_element = results.first().unwrap();
-        let url = make_page_url(&params.url, host, query, first_element, false)?;
+        let pivot = if forward {
+            results.last().unwrap()
+        } else {
+            results.first().unwrap()
+        };
+        let cursor = cursor_from_pivot(query, pivot, forward)?;
+        let url = make_page_url(&params.url, host, &cursor, forward)?;
         return Ok(Some(url));
+    } else if let Some(cursor) = &query.cursor {
+        if cursor.forward != forward {
+            let cursor = cursor.reversed();
+            let url = make_page_url(&params.url, host, &cursor, forward)?;
+            return Ok(Some(url));
+        }
     }
     Ok(None)
 }
 
-/// Generates URL that can be used to retrieve previous/next page.
-/// It does this by modifying the current `url`, potentially replacing
-/// host address with `host` and generating cursor based on the current
-/// `query`, `pivot_element` (element that is first/last on the current page)
-/// and `forward` indicator (if true, `next_page` url will be generated,
-/// otherwise `prev_page`).
-fn make_page_url(
-    url: &Url,
-    host: &Option<String>,
-    query: &Query,
-    pivot_element: &JsonObject,
-    forward: bool,
-) -> Result<Url> {
+fn cursor_from_pivot(query: &Query, pivot_element: &JsonObject, forward: bool) -> Result<Cursor> {
     // If cursor is available, we must use its sort keys as query's
     // sort keys are reversed for backwards paging.
     let sort_keys = if let Some(cursor) = &query.cursor {
@@ -144,7 +148,15 @@ fn make_page_url(
             })?;
         axes.push(CursorAxis { key, value });
     }
-    let cursor = Cursor::new(axes, forward).to_string()?;
+    let cursor = Cursor::new(axes, forward);
+    Ok(cursor)
+}
+
+/// Generates URL that can be used to retrieve previous/next page.
+/// It does this by modifying the current `url`, potentially replacing
+/// host address with `host` and generating url based on the current cursor.
+fn make_page_url(url: &Url, host: &Option<String>, cursor: &Cursor, forward: bool) -> Result<Url> {
+    let cursor = cursor.to_string()?;
 
     let mut page_url = replace_host_address(url.clone(), host)?;
     page_url.set_query(Some(""));
@@ -229,7 +241,14 @@ impl Query {
                         q.cursor.is_none(),
                         "only one occurrence of page_before/page_after is allowed."
                     );
-                    q.cursor = Cursor::from_string(&value, param_key == "page_after")?.into();
+                    let mut cursor = Cursor::from_string(&value)?;
+                    let forward_cursor = param_key == "page_after";
+                    // If cursor orientation doesn't match the desired orientation, it needs to
+                    // be reversed.
+                    if cursor.forward != forward_cursor {
+                        cursor = cursor.reversed();
+                    }
+                    q.cursor = Some(cursor);
                 }
                 _ => {
                     if let Some(param_key) = param_key.strip_prefix('.') {
@@ -281,6 +300,7 @@ fn ensure_sort_by_id(sort: &mut SortBy) {
 struct Cursor {
     axes: Vec<CursorAxis>,
     forward: bool,
+    inclusive: bool,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -292,24 +312,44 @@ struct CursorAxis {
 impl Cursor {
     fn new(axes: Vec<CursorAxis>, forward: bool) -> Self {
         assert!(!axes.is_empty());
-        Self { axes, forward }
+        Self {
+            axes,
+            forward,
+            inclusive: false,
+        }
     }
 
     /// Parses Cursor from base64 encoded JSON.
-    fn from_string(cursor_str: &str, forward: bool) -> Result<Self> {
+    fn from_string(cursor_str: &str) -> Result<Self> {
         let cursor_json = base64::decode(cursor_str)
             .context("Failed to decode cursor from base64 encoded string")?;
-        let axes: Vec<CursorAxis> =
+        let cursor: Cursor =
             serde_json::from_slice(&cursor_json).context("failed to deserialize cursor's axes")?;
-        anyhow::ensure!(!axes.is_empty(), "cursor mustn't have no sort axes");
-        Ok(Self { axes, forward })
+        anyhow::ensure!(!cursor.axes.is_empty(), "cursor mustn't have no sort axes");
+        Ok(cursor)
     }
 
     /// Serializes cursor to base64 encoded JSON.
     fn to_string(&self) -> Result<String> {
-        let cursor =
-            serde_json::to_vec(&self.axes).context("failed to serialize cursor axes to json")?;
+        let cursor = serde_json::to_string(&self).context("failed to serialize cursor to json")?;
         Ok(base64::encode(cursor))
+    }
+
+    fn reversed(&self) -> Self {
+        let axes = self
+            .axes
+            .iter()
+            .cloned()
+            .map(|mut axis| {
+                axis.key.ascending = !axis.key.ascending;
+                axis
+            })
+            .collect();
+        Self {
+            axes,
+            forward: !self.forward,
+            inclusive: !self.inclusive,
+        }
     }
 
     fn get_sort(&self) -> SortBy {
@@ -333,7 +373,13 @@ impl Cursor {
         let mut cmp_pairs: Vec<(Expr, BinaryOp, Expr)> = vec![];
         for axis in &self.axes {
             let op = if axis.key.ascending == self.forward {
-                BinaryOp::Gt
+                if self.inclusive {
+                    BinaryOp::GtEq
+                } else {
+                    BinaryOp::Gt
+                }
+            } else if self.inclusive {
+                BinaryOp::LtEq
             } else {
                 BinaryOp::Lt
             };
@@ -854,10 +900,8 @@ mod tests {
                 let r = run_query("Person", page_url.clone(), qe).await.unwrap();
 
                 // Check backward cursors
-                if i == n_steps - 1 {
-                    // FIXME: The last page should always (except for no results at all) include
-                    // link for previous page.
-                    assert!(!r.contains_key("prev_page"));
+                if i == 0 || i == n_steps - 1 {
+                    assert!(r.contains_key("prev_page"));
                 } else if i != 0 {
                     // Check that previous page returns the same results as
                     // before using next_page.
@@ -876,8 +920,7 @@ mod tests {
                         // We go from the second page to first and beyond to an empty page.
                         let prev_page = get_url(&r["prev_page"]);
                         let r = run_query("Person", prev_page.clone(), qe).await.unwrap();
-                        // FIXME: It should be possible to get back from an empty page.
-                        assert!(!r.contains_key("next_page"));
+                        assert!(r.contains_key("next_page"));
                     }
                 }
 
