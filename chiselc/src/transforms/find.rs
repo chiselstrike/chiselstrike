@@ -11,14 +11,22 @@ pub fn infer_find(
     call_expr: &CallExpr,
     symbols: &Symbols,
 ) -> (Option<Box<QOperator>>, Option<FilterProperties>) {
-    if !is_rewritable_find("findMany", &call_expr.callee, symbols) {
-        return (None, None);
-    }
+    let function = match infer_rewritable_find(call_expr, symbols) {
+        Some(function) => function,
+        None => return (None, None),
+    };
     let entity_type = match lookup_callee_entity_type(&call_expr.callee) {
         Ok(entity_type) => entity_type,
         _ => return (None, None),
     };
-    extract_filter(call_expr, entity_type, "__findMany".to_string())
+    extract_filter(call_expr, entity_type, function)
+}
+
+fn infer_rewritable_find(call_expr: &CallExpr, symbols: &Symbols) -> Option<String> {
+    if is_rewritable_find("findMany", &call_expr.callee, symbols) {
+        return Some("__findMany".to_string());
+    }
+    None
 }
 
 fn is_rewritable_find(function: &str, callee: &Callee, symbols: &Symbols) -> bool {
