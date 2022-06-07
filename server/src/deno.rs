@@ -89,11 +89,6 @@ use tsc_compile::CompileOptions;
 
 use url::Url;
 
-struct VersionedCode {
-    code: String,
-    version: u64,
-}
-
 enum WorkerMsg {
     SetMeta(MetaService),
     HandleRequest(Request<hyper::Body>),
@@ -142,18 +137,15 @@ enum Error {
 }
 
 struct ModuleLoaderInner {
-    code_map: HashMap<String, VersionedCode>,
+    versions: HashMap<String, u64>,
+    code_map: HashMap<Url, String>,
 }
 
 impl ModuleLoaderInner {
     fn insert_path(&mut self, path: &str, code: &str) {
-        self.code_map.insert(
-            path.to_string(),
-            VersionedCode {
-                code: code.to_string(),
-                version: 0,
-            },
-        );
+        let url = Url::parse(&format!("file://{}", path)).unwrap();
+        self.code_map.insert(url, code.to_string());
+        self.versions.insert(path.to_string(), 0);
     }
 }
 
@@ -222,13 +214,7 @@ impl deno_core::ModuleLoader for ModuleLoader {
         _is_dyn_import: bool,
     ) -> Pin<Box<ModuleSourceFuture>> {
         let handle = self.inner.lock().unwrap();
-        let code = if specifier.scheme() == "file" {
-            let path = specifier.to_file_path().unwrap();
-            let path = path.to_str().unwrap();
-            Some(handle.code_map.get(path).unwrap().code.clone())
-        } else {
-            None
-        };
+        let code = handle.code_map.get(specifier).cloned();
         load_code(code, specifier.clone()).boxed_local()
     }
 }
@@ -324,6 +310,7 @@ impl DenoService {
             Arc::new(|worker| LocalFutureObj::new(Box::new(future::ready(Ok(worker)))));
         let inner = Arc::new(std::sync::Mutex::new(ModuleLoaderInner {
             code_map: HashMap::new(),
+            versions: HashMap::new(),
         }));
         let module_loader = Rc::new(ModuleLoader {
             inner: inner.clone(),
@@ -1483,6 +1470,7 @@ pub(crate) async fn compile_endpoints(sources: HashMap<String, String>) -> Resul
         let service: &mut DenoService = &mut service;
 
         let mut handle = service.module_loader.lock().unwrap();
+        let handle: &mut ModuleLoaderInner = &mut *handle;
         let code_map = &mut handle.code_map;
 
         let runtime = &mut service.worker.js_runtime;
@@ -1491,19 +1479,15 @@ pub(crate) async fn compile_endpoints(sources: HashMap<String, String>) -> Resul
         let mut endpoints: Vec<v8::Local<'_, v8::Value>> = vec![];
 
         for (path, code) in sources {
-            let mut entry = code_map
-                .entry(format!("{}.js", path))
-                .and_modify(|v| v.version += 1)
-                .or_insert(VersionedCode {
-                    code: "".to_string(),
-                    version: 0,
-                });
-            entry.code = code;
+            let version = handle.versions.entry(path.clone());
+            let version = *version.and_modify(|v| *v += 1).or_insert(0);
+            let url = Url::parse(&format!("file://{}.js?ver={}", path, version)).unwrap();
+            code_map.insert(url, code);
 
             let path = RequestPath::try_from(path.as_ref()).unwrap();
             let api_version = v8::String::new(scope, path.api_version()).unwrap().into();
             let path = v8::String::new(scope, path.path()).unwrap().into();
-            let version = v8::Number::new(scope, entry.version as f64).into();
+            let version = v8::Number::new(scope, version as f64).into();
             let endpoint = v8::Object::new(scope);
             let path_key = v8::String::new(scope, "path").unwrap();
             endpoint.set(scope, path_key.into(), path);
