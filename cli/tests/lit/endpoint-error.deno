@@ -15,7 +15,7 @@ set +e
 $CHISEL apply 2>&1
 set -e
 
-# CHECK: Error: parsing endpoint /dev/test
+# CHECK: Error: parsing endpoints
 # CHECK: expected type `v8::data::Function`, got `v8::data::Value`
 
 $CURL -o - $CHISELD_HOST/dev/test
