@@ -530,12 +530,12 @@ impl QueryEngine {
     ) -> Result<()> {
         if let Some(transaction) = transaction {
             for q in queries {
-                transaction.fetch_one(q.get_sqlx()).await?;
+                transaction.execute(q.get_sqlx()).await?;
             }
         } else {
             let mut transaction = self.start_transaction().await?;
             for q in queries {
-                transaction.fetch_one(q.get_sqlx()).await?;
+                transaction.execute(q.get_sqlx()).await?;
             }
             QueryEngine::commit_transaction(transaction).await?;
         }
@@ -719,7 +719,7 @@ impl QueryEngine {
         }
 
         Ok(std::format!(
-            "INSERT INTO \"{}\" ({}) VALUES ({}) ON CONFLICT ({}) DO UPDATE SET {} WHERE \"{}\".\"{}\" = {} RETURNING *",
+            "INSERT INTO \"{}\" ({}) VALUES ({}) ON CONFLICT ({}) DO UPDATE SET {} WHERE \"{}\".\"{}\" = {}",
             &ty.backing_table(),
             field_names.into_iter().map(|f| format!("\"{}\"", f)).join(","),
             field_binds,
