@@ -22,6 +22,13 @@ pub fn infer_filter(
         Ok(entity_type) => entity_type,
         _ => return (None, None),
     };
+    extract_filter(call_expr, entity_type)
+}
+
+fn extract_filter(
+    call_expr: &CallExpr,
+    entity_type: String,
+) -> (Option<Box<QOperator>>, Option<FilterProperties>) {
     let args = &call_expr.args;
     assert_eq!(args.len(), 1);
     let arg = &args[0];
