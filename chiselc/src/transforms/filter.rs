@@ -22,12 +22,13 @@ pub fn infer_filter(
         Ok(entity_type) => entity_type,
         _ => return (None, None),
     };
-    extract_filter(call_expr, entity_type)
+    extract_filter(call_expr, entity_type, "__filterWithExpression".to_string())
 }
 
 fn extract_filter(
     call_expr: &CallExpr,
     entity_type: String,
+    function: String,
 ) -> (Option<Box<QOperator>>, Option<FilterProperties>) {
     let args = &call_expr.args;
     assert_eq!(args.len(), 1);
@@ -83,7 +84,7 @@ fn extract_filter(
         Err(_) => return (None, None),
     };
     let filter = QFilter {
-        function: "__filterWithExpression".to_string(),
+        function,
         parameters: vec![param.clone()],
         input: Box::new(QOperator::Scan(QScan {
             entity_type: entity_type.clone(),
