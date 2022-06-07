@@ -130,17 +130,30 @@ pub(crate) async fn add_endpoint<S: AsRef<str>>(
     Ok(())
 }
 
+async fn read_secrets() -> JsonObject {
+    static LAST_TRY_WAS_FAILURE: Mutex<bool> = Mutex::new(false);
+    let secrets = get_secrets().await;
+    let mut was_failure = LAST_TRY_WAS_FAILURE.lock().await;
+    match secrets {
+        Ok(secrets) => {
+            *was_failure = false;
+            secrets
+        }
+        Err(e) => {
+            if !*was_failure {
+                warn!("Could not read secrets: {:?}", e);
+            }
+            *was_failure = true;
+            Default::default()
+        }
+    }
+}
+
 async fn run(state: SharedState, mut cmd: ExecutorChannel) -> Result<()> {
     init_deno(state.inspect_brk).await?;
 
     // Ensure we read the secrets before spawning an ApiService; secrets may dictate API authorization.
-    match get_secrets().await {
-        Err(e) => {
-            warn!("Could not read secrets: {:?}", e);
-            update_secrets(Default::default()).await;
-        }
-        Ok(json) => update_secrets(json).await,
-    }
+    update_secrets(read_secrets().await).await;
 
     let meta = MetaService::local_connection(&state.db, state.nr_connections).await?;
     let ts = meta.load_type_system().await?;
@@ -301,7 +314,6 @@ pub async fn run_shared_state(
     // Spawn periodic hot-reload of secrets.  This doesn't load secrets immediately, though.
     let _secret_reader = tokio::task::spawn(async move {
         let mut last_secrets = JsonObject::default();
-        let mut last_try_was_failure = false;
         loop {
             futures::select! {
                 _ = sleep(Duration::from_millis(1000)).fuse() => {},
@@ -310,22 +322,11 @@ pub async fn run_shared_state(
                 }
             };
 
-            match get_secrets().await {
-                Ok(secrets) => {
-                    last_try_was_failure = false;
-                    if last_secrets == secrets {
-                        continue;
-                    }
-                    last_secrets = secrets;
-                }
-                Err(x) => {
-                    if !last_try_was_failure {
-                        warn!("Could not read secrets: {:?}", x);
-                    }
-                    last_try_was_failure = true;
-                    last_secrets = JsonObject::default();
-                }
+            let secrets = read_secrets().await;
+            if secrets == last_secrets {
+                continue;
             }
+            last_secrets = secrets;
 
             for cmd in &secret_commands {
                 let v = last_secrets.clone();
