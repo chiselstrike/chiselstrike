@@ -62,36 +62,34 @@ function readWorkerChannel() {
     });
 }
 
-function importEndpoint(
-    path: string,
-    apiVersion: string,
-    version: number,
-) {
+type Endpoint = { path: string; apiVersion: string; version: number };
+
+function importEndpoints(endpoints: [Endpoint]) {
     handleMsg(() => {
-        return importEndpointImpl(path, apiVersion, version);
+        return importEndpointsImpl(endpoints);
     });
 }
 
-async function importEndpointImpl(
-    path: string,
-    apiVersion: string,
-    version: number,
-) {
-    requestContext.path = path;
-    path = "/" + apiVersion + path;
+async function importEndpointsImpl(endpoints: [Endpoint]) {
+    for (const endpoint of endpoints) {
+        const { path, apiVersion, version } = endpoint;
 
-    // Modules are never unloaded, so we need to create an unique
-    // path. This will not be a problem once we publish the entire app
-    // at once, since then we can create a new isolate for it.
-    const url = `file:///${path}.js?ver=${version}`;
-    const mod = await import(url);
-    const handler = mod.default;
-    if (typeof handler !== "function") {
-        throw new Error(
-            "expected type `v8::data::Function`, got `v8::data::Value`",
-        );
+        requestContext.path = path;
+        const fullPath = "/" + apiVersion + path;
+
+        // Modules are never unloaded, so we need to create an unique
+        // path. This will not be a problem once we publish the entire app
+        // at once, since then we can create a new isolate for it.
+        const url = `file:///${fullPath}.js?ver=${version}`;
+        const mod = await import(url);
+        const handler = mod.default;
+        if (typeof handler !== "function") {
+            throw new Error(
+                "expected type `v8::data::Function`, got `v8::data::Value`",
+            );
+        }
+        nextHandlers[fullPath] = handler;
     }
-    nextHandlers[path] = handler;
 }
 
 function activateEndpoint(path: string) {
@@ -263,8 +261,8 @@ onmessage = function (e) {
         case "initWorker":
             initWorker(d.id);
             break;
-        case "importEndpoint":
-            importEndpoint(d.path, d.apiVersion, d.version);
+        case "importEndpoints":
+            importEndpoints(d.endpoints);
             break;
         case "activateEndpoint":
             activateEndpoint(d.path);
