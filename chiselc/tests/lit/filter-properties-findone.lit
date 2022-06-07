@@ -1,0 +1,18 @@
+// Extract predicate indexes
+// RUN: @chiselc @file -e Person --target filter-properties
+
+await Person.findOne({ name: "Pekka", age: 39 });
+
+await Person.findOne({ });
+
+await Person.findOne((p) => { return p.age > 4 });
+
+await Person.findOne((p) => { return p.age < 4 || (p.age > 10 && p.age != 12) });
+
+await Person.findOne((p) => { return true; });
+
+const property = 'name';
+
+await Person.findOne({ [property]: "Pekka" });
+
+// CHECK: [{"entity_name":"Person","properties":["name","age"]},{"entity_name":"Person","properties":["age"]},{"entity_name":"Person","properties":["age"]}]
