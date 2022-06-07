@@ -812,7 +812,6 @@ mod tests {
     #[tokio::test]
     async fn test_run_query() {
         let alan = json!({"name": "Alan", "age": json!(30f32)});
-        let alex = json!({"name": "Alex", "age": json!(40f32)});
         let john = json!({"name": "John", "age": json!(20f32)});
         let steve = json!({"name": "Steve", "age": json!(29f32)});
 
@@ -860,8 +859,8 @@ mod tests {
         r.sort();
         assert_eq!(r, vec!["John", "Steve"]);
 
+        let alex = json!({"name": "Alex", "age": json!(40f32)});
         add_row(qe, &PERSON_TY, &alex).await;
-
         // Test permutations of parameters
         {
             let raw_ops = vec!["page_size=2", "offset=1", "sort=age"];
@@ -886,15 +885,32 @@ mod tests {
                 );
             }
         }
+    }
 
-        // Test cursors
+    #[tokio::test]
+    async fn test_paging() {
+        let alan = json!({"name": "Alan", "age": json!(30f32)});
+        let alex = json!({"name": "Alex", "age": json!(40f32)});
+        let john = json!({"name": "John", "age": json!(20f32)});
+        let steve = json!({"name": "Steve", "age": json!(29f32)});
+
+        let (query_engine, _db_file) = setup_clear_db(&*ENTITIES).await;
+        let qe = &query_engine;
+        add_row(qe, &PERSON_TY, &alan).await;
+        add_row(qe, &PERSON_TY, &john).await;
+        add_row(qe, &PERSON_TY, &steve).await;
+        add_row(qe, &PERSON_TY, &alex).await;
+
+        fn get_url(raw: &serde_json::Value) -> Url {
+            Url::parse(raw.as_str().unwrap()).unwrap()
+        }
+
         async fn run_cursor_test(
             qe: &QueryEngine,
             mut page_url: Url,
             n_steps: usize,
             page_size: usize,
         ) -> Vec<String> {
-            let get_url = |raw: &serde_json::Value| Url::parse(raw.as_str().unwrap()).unwrap();
             let mut all_names = vec![];
             for i in 0..n_steps {
                 let r = run_query("Person", page_url.clone(), qe).await.unwrap();
