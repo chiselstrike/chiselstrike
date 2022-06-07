@@ -10,6 +10,7 @@ use crate::query::Operator;
 use crate::query::PropertyAccessExpr;
 use crate::symbols::Symbols;
 use crate::transforms::filter::infer_filter;
+use crate::transforms::find::infer_find;
 use std::str::FromStr;
 use swc_ecmascript::ast::ExportDefaultDecl;
 use swc_ecmascript::ast::FnExpr;
@@ -256,6 +257,13 @@ impl Rewriter {
 
     fn rewrite_call_expr(&mut self, call_expr: &CallExpr) -> CallExpr {
         let (filter, index) = infer_filter(call_expr, &self.symbols);
+        if let Some(index) = index {
+            self.indexes.push(index);
+        }
+        if let Some(filter) = filter {
+            return self.to_ts_expr(call_expr, &filter);
+        }
+        let (filter, index) = infer_find(call_expr, &self.symbols);
         if let Some(index) = index {
             self.indexes.push(index);
         }
