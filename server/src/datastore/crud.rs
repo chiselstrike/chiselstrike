@@ -336,17 +336,8 @@ impl Cursor {
     }
 
     fn reversed(&self) -> Self {
-        let axes = self
-            .axes
-            .iter()
-            .cloned()
-            .map(|mut axis| {
-                axis.key.ascending = !axis.key.ascending;
-                axis
-            })
-            .collect();
         Self {
-            axes,
+            axes: self.axes.clone(),
             forward: !self.forward,
             inclusive: !self.inclusive,
         }
@@ -905,6 +896,65 @@ mod tests {
             Url::parse(raw.as_str().unwrap()).unwrap()
         }
 
+        // Simple forward step.
+        {
+            let r = run_query("Person", url("sort=name&page_size=2"), qe)
+                .await
+                .unwrap();
+            let names = collect_names(&r);
+            assert_eq!(names, vec!["Alan", "Alex"]);
+
+            assert!(r.contains_key("next_page"));
+            let next_page = get_url(&r["next_page"]);
+            let r = run_query("Person", next_page, qe).await.unwrap();
+            let names = collect_names(&r);
+            assert_eq!(names, vec!["John", "Steve"]);
+        }
+
+        // Empty pre-first page loop
+        {
+            let r = run_query("Person", url("sort=name&page_size=1"), qe)
+                .await
+                .unwrap();
+            let names = collect_names(&r);
+            assert_eq!(names, vec!["Alan"]);
+
+            assert!(r.contains_key("prev_page"));
+            let prev_page = get_url(&r["prev_page"]);
+
+            let r = run_query("Person", prev_page.clone(), qe).await.unwrap();
+            let names = collect_names(&r);
+            assert!(names.is_empty());
+
+            assert!(r.contains_key("next_page"));
+            let first_page = get_url(&r["next_page"]);
+            let r = run_query("Person", first_page.clone(), qe).await.unwrap();
+            let names = collect_names(&r);
+            assert_eq!(names, vec!["Alan"]);
+        }
+
+        // Empty last page loop
+        {
+            let r = run_query("Person", url("sort=name&page_size=4"), qe)
+                .await
+                .unwrap();
+            let names = collect_names(&r);
+            assert_eq!(names, vec!["Alan", "Alex", "John", "Steve"]);
+
+            assert!(r.contains_key("next_page"));
+            let next_page = get_url(&r["next_page"]);
+
+            let r = run_query("Person", next_page.clone(), qe).await.unwrap();
+            let names = collect_names(&r);
+            assert!(names.is_empty());
+
+            assert!(r.contains_key("prev_page"));
+            let last_page = get_url(&r["prev_page"]);
+            let r = run_query("Person", last_page.clone(), qe).await.unwrap();
+            let names = collect_names(&r);
+            assert_eq!(names, vec!["Alan", "Alex", "John", "Steve"]);
+        }
+
         async fn run_cursor_test(
             qe: &QueryEngine,
             mut page_url: Url,
@@ -916,7 +966,7 @@ mod tests {
                 let r = run_query("Person", page_url.clone(), qe).await.unwrap();
 
                 // Check backward cursors
-                if i == 0 || i == n_steps - 1 {
+                if i == 0 {
                     assert!(r.contains_key("prev_page"));
                 } else if i != 0 {
                     // Check that previous page returns the same results as
