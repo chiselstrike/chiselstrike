@@ -83,6 +83,7 @@ fn extract_filter(
         Err(_) => return (None, None),
     };
     let filter = QFilter {
+        function: "__filterWithExpression".to_string(),
         parameters: vec![param.clone()],
         input: Box::new(QOperator::Scan(QScan {
             entity_type: entity_type.clone(),

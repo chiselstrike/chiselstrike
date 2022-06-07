@@ -77,6 +77,8 @@ pub struct Scan {
 /// Filter operator.
 #[derive(Debug)]
 pub struct Filter {
+    /// The ChiselStrike internal function to call.
+    pub function: String,
     /// The parameters to this filter.
     pub parameters: Vec<String>,
     /// The predicate expression to filter by.

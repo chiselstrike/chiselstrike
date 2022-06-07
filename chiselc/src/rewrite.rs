@@ -278,7 +278,7 @@ impl Rewriter {
     fn to_ts_expr(&self, call_expr: &CallExpr, filter: &Operator) -> CallExpr {
         match filter {
             Operator::Filter(filter) => {
-                let callee = self.rewrite_filter_callee(&call_expr.callee);
+                let callee = self.rewrite_filter_callee(&call_expr.callee, &filter.function);
                 let expr = self.filter_to_ts(filter, call_expr.span);
                 let expr = ExprOrSpread {
                     spread: None,
@@ -300,14 +300,14 @@ impl Rewriter {
     }
 
     /// Rewrites the filter() call with __filterWithExpression().
-    fn rewrite_filter_callee(&self, callee: &Callee) -> Callee {
+    fn rewrite_filter_callee(&self, callee: &Callee, function: &str) -> Callee {
         match callee {
             Callee::Expr(expr) => match &**expr {
                 Expr::Member(member_expr) => {
                     let mut member_expr = member_expr.clone();
                     let prop = MemberProp::Ident(Ident {
                         span: member_expr.span,
-                        sym: JsWord::from("__filterWithExpression"),
+                        sym: JsWord::from(function),
                         optional: false,
                     });
                     member_expr.prop = prop;
