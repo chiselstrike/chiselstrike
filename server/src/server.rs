@@ -9,7 +9,7 @@ use crate::deno::set_policies;
 use crate::deno::set_query_engine;
 use crate::deno::set_type_system;
 use crate::deno::update_secrets;
-use crate::deno::{activate_endpoint, compile_endpoint};
+use crate::deno::{activate_endpoint, compile_endpoints};
 use crate::rpc::{GlobalRpcState, RpcService};
 use crate::runtime;
 use crate::runtime::Runtime;
@@ -21,6 +21,7 @@ use deno_core::futures;
 use futures::future::LocalBoxFuture;
 use futures::FutureExt;
 use futures::StreamExt;
+use std::collections::HashMap;
 use std::net::SocketAddr;
 use std::panic;
 use std::path::PathBuf;
@@ -119,7 +120,9 @@ pub(crate) async fn add_endpoint<S: AsRef<str>>(
 ) -> Result<()> {
     let path = path.as_ref();
 
-    compile_endpoint(path.to_string(), code).await?;
+    let mut sources = HashMap::new();
+    sources.insert(path.to_string(), code);
+    compile_endpoints(sources).await?;
     activate_endpoint(path).await?;
 
     let func = Arc::new({

@@ -232,7 +232,9 @@ impl RpcService {
             let cmd_path = path.clone();
             let code = code.clone();
             let cmd = send_command!({
-                deno::compile_endpoint(cmd_path, code).await?;
+                let mut sources = HashMap::new();
+                sources.insert(cmd_path, code);
+                deno::compile_endpoints(sources).await?;
                 Ok(())
             });
             state

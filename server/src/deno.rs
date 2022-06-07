@@ -1491,37 +1491,43 @@ fn get() -> RcMut<DenoService> {
     })
 }
 
-pub(crate) async fn compile_endpoint(path: String, code: String) -> Result<()> {
+pub(crate) async fn compile_endpoints(sources: HashMap<String, String>) -> Result<()> {
     let promise = {
         let mut service = get();
         let service: &mut DenoService = &mut service;
 
         let mut handle = service.module_loader.lock().unwrap();
         let code_map = &mut handle.code_map;
-        let mut entry = code_map
-            .entry(format!("{}.js", path))
-            .and_modify(|v| v.version += 1)
-            .or_insert(VersionedCode {
-                code: "".to_string(),
-                version: 0,
-            });
-        entry.code = code;
 
         let runtime = &mut service.worker.js_runtime;
         let scope = &mut runtime.handle_scope();
         let import_endpoints = service.import_endpoints.open(scope);
-        let path = RequestPath::try_from(path.as_ref()).unwrap();
-        let api_version = v8::String::new(scope, path.api_version()).unwrap().into();
-        let path = v8::String::new(scope, path.path()).unwrap().into();
-        let version = v8::Number::new(scope, entry.version as f64).into();
-        let endpoint = v8::Object::new(scope);
-        let path_key = v8::String::new(scope, "path").unwrap();
-        endpoint.set(scope, path_key.into(), path);
-        let api_version_key = v8::String::new(scope, "apiVersion").unwrap();
-        endpoint.set(scope, api_version_key.into(), api_version);
-        let version_key = v8::String::new(scope, "version").unwrap();
-        endpoint.set(scope, version_key.into(), version);
-        let endpoints = v8::Array::new_with_elements(scope, &[endpoint.into()]).into();
+        let mut endpoints: Vec<v8::Local<'_, v8::Value>> = vec![];
+
+        for (path, code) in sources {
+            let mut entry = code_map
+                .entry(format!("{}.js", path))
+                .and_modify(|v| v.version += 1)
+                .or_insert(VersionedCode {
+                    code: "".to_string(),
+                    version: 0,
+                });
+            entry.code = code;
+
+            let path = RequestPath::try_from(path.as_ref()).unwrap();
+            let api_version = v8::String::new(scope, path.api_version()).unwrap().into();
+            let path = v8::String::new(scope, path.path()).unwrap().into();
+            let version = v8::Number::new(scope, entry.version as f64).into();
+            let endpoint = v8::Object::new(scope);
+            let path_key = v8::String::new(scope, "path").unwrap();
+            endpoint.set(scope, path_key.into(), path);
+            let api_version_key = v8::String::new(scope, "apiVersion").unwrap();
+            endpoint.set(scope, api_version_key.into(), api_version);
+            let version_key = v8::String::new(scope, "version").unwrap();
+            endpoint.set(scope, version_key.into(), version);
+            endpoints.push(endpoint.into());
+        }
+        let endpoints = v8::Array::new_with_elements(scope, &endpoints).into();
         let undefined = v8::undefined(scope).into();
         let promise = import_endpoints
             .call(scope, undefined, &[endpoints])
