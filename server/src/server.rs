@@ -113,23 +113,21 @@ impl SharedTasks {
     }
 }
 
-pub(crate) async fn add_endpoint<S: AsRef<str>>(
-    path: S,
-    code: String,
+pub(crate) async fn add_endpoints(
+    sources: HashMap<String, String>,
     api_service: &ApiService,
 ) -> Result<()> {
-    let path = path.as_ref();
+    compile_endpoints(sources.clone()).await?;
 
-    let mut sources = HashMap::new();
-    sources.insert(path.to_string(), code);
-    compile_endpoints(sources).await?;
-    activate_endpoint(path).await?;
+    for path in sources.keys() {
+        activate_endpoint(path).await?;
 
-    let func = Arc::new({
-        let path = path.to_string();
-        move |req| deno::run_js(path.clone(), req).boxed_local()
-    });
-    api_service.add_route(path.into(), func);
+        let func = Arc::new({
+            let path = path.to_string();
+            move |req| deno::run_js(path.clone(), req).boxed_local()
+        });
+        api_service.add_route(path.into(), func);
+    }
     Ok(())
 }
 
@@ -174,9 +172,11 @@ async fn run(state: SharedState, mut cmd: ExecutorChannel) -> Result<()> {
     set_policies(policies).await;
     set_meta(meta).await;
 
-    for (path, code) in routes.iter() {
-        add_endpoint(path.to_str().unwrap(), code.to_string(), &api_service).await?;
-    }
+    let sources = routes
+        .iter()
+        .map(|(k, v)| (k.to_str().unwrap().to_string(), v.clone()))
+        .collect();
+    add_endpoints(sources, &api_service).await?;
 
     let command_task = tokio::task::spawn_local(async move {
         while let Some(item) = cmd.rx.next().await {
