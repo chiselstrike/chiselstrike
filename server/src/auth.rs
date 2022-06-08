@@ -10,6 +10,7 @@ use anyhow::Result;
 use deno_core::OpState;
 use sqlx::Row;
 use std::cell::RefCell;
+use std::collections::HashMap;
 use std::rc::Rc;
 use std::sync::Arc;
 
@@ -30,7 +31,8 @@ async fn add_crud_endpoint_for_type(
     endpoint_name: &str,
     api: &mut ApiService,
 ) -> Result<()> {
-    crate::server::add_endpoint(
+    let mut sources = HashMap::new();
+    sources.insert(
         format!("/__chiselstrike/auth/{}", endpoint_name),
         format!(
             r#"
@@ -38,9 +40,9 @@ import {{ ChiselEntity }} from "@chiselstrike/api"
 class {type_name} extends ChiselEntity {{}}
 export default {type_name}.crud()"#
         ),
-        api,
-    )
-    .await
+    );
+
+    crate::server::add_endpoints(sources, api).await
 }
 
 pub(crate) async fn init(api: &mut ApiService) -> Result<()> {

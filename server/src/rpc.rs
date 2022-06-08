@@ -228,18 +228,12 @@ impl RpcService {
         // Do this before any permanent changes to any of the databases. Otherwise
         // we end up with bad code commited to the meta database and will fail to load
         // chiseld next time, as it tries to replenish the endpoints
-        for (path, code) in &endpoint_routes {
-            let cmd_path = path.clone();
-            let code = code.clone();
-            let cmd = send_command!({
-                deno::compile_endpoint(cmd_path, code).await?;
-                Ok(())
-            });
-            state
-                .send_command(cmd)
-                .await
-                .with_context(|| format!("parsing endpoint {}", path))?;
-        }
+        let endpoints = endpoint_routes.clone().into_iter().collect();
+        let cmd = send_command!({
+            deno::compile_endpoints(endpoints).await?;
+            Ok(())
+        });
+        state.send_command(cmd).await.context("parsing endpoints")?;
 
         anyhow::ensure!(
             "__chiselstrike" != &api_version,

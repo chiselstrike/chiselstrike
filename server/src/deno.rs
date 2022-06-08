@@ -125,7 +125,7 @@ struct DenoService {
 
     module_loader: Arc<std::sync::Mutex<ModuleLoaderInner>>,
 
-    import_endpoint: v8::Global<v8::Function>,
+    import_endpoints: v8::Global<v8::Function>,
     activate_endpoint: v8::Global<v8::Function>,
     call_handler: v8::Global<v8::Function>,
     read_worker_channel: v8::Global<v8::Function>,
@@ -422,7 +422,7 @@ impl DenoService {
             .unwrap();
 
         let (
-            import_endpoint,
+            import_endpoints,
             activate_endpoint,
             call_handler,
             init_worker,
@@ -436,9 +436,9 @@ impl DenoService {
             let module = runtime.resolve_value(promise).await.unwrap();
             let scope = &mut runtime.handle_scope();
             let module = v8::Local::new(scope, module).try_into().unwrap();
-            let import_endpoint: v8::Local<v8::Function> =
-                get_member(module, scope, "importEndpoint").unwrap();
-            let import_endpoint = v8::Global::new(scope, import_endpoint);
+            let import_endpoints: v8::Local<v8::Function> =
+                get_member(module, scope, "importEndpoints").unwrap();
+            let import_endpoints = v8::Global::new(scope, import_endpoints);
             let activate_endpoint: v8::Local<v8::Function> =
                 get_member(module, scope, "activateEndpoint").unwrap();
             let activate_endpoint = v8::Global::new(scope, activate_endpoint);
@@ -456,7 +456,7 @@ impl DenoService {
             let end_of_request = v8::Global::new(scope, end_of_request);
 
             (
-                import_endpoint,
+                import_endpoints,
                 activate_endpoint,
                 call_handler,
                 init_worker,
@@ -474,7 +474,7 @@ impl DenoService {
                 worker,
                 inspector,
                 module_loader: inner,
-                import_endpoint,
+                import_endpoints,
                 activate_endpoint,
                 call_handler,
                 to_worker: to_worker_sender,
@@ -1491,32 +1491,46 @@ fn get() -> RcMut<DenoService> {
     })
 }
 
-pub(crate) async fn compile_endpoint(path: String, code: String) -> Result<()> {
+pub(crate) async fn compile_endpoints(sources: HashMap<String, String>) -> Result<()> {
     let promise = {
         let mut service = get();
         let service: &mut DenoService = &mut service;
 
         let mut handle = service.module_loader.lock().unwrap();
         let code_map = &mut handle.code_map;
-        let mut entry = code_map
-            .entry(format!("{}.js", path))
-            .and_modify(|v| v.version += 1)
-            .or_insert(VersionedCode {
-                code: "".to_string(),
-                version: 0,
-            });
-        entry.code = code;
 
         let runtime = &mut service.worker.js_runtime;
         let scope = &mut runtime.handle_scope();
-        let import_endpoint = service.import_endpoint.open(scope);
-        let path = RequestPath::try_from(path.as_ref()).unwrap();
-        let api_version = v8::String::new(scope, path.api_version()).unwrap().into();
-        let path = v8::String::new(scope, path.path()).unwrap().into();
-        let version = v8::Number::new(scope, entry.version as f64).into();
+        let import_endpoints = service.import_endpoints.open(scope);
+        let mut endpoints: Vec<v8::Local<'_, v8::Value>> = vec![];
+
+        for (path, code) in sources {
+            let mut entry = code_map
+                .entry(format!("{}.js", path))
+                .and_modify(|v| v.version += 1)
+                .or_insert(VersionedCode {
+                    code: "".to_string(),
+                    version: 0,
+                });
+            entry.code = code;
+
+            let path = RequestPath::try_from(path.as_ref()).unwrap();
+            let api_version = v8::String::new(scope, path.api_version()).unwrap().into();
+            let path = v8::String::new(scope, path.path()).unwrap().into();
+            let version = v8::Number::new(scope, entry.version as f64).into();
+            let endpoint = v8::Object::new(scope);
+            let path_key = v8::String::new(scope, "path").unwrap();
+            endpoint.set(scope, path_key.into(), path);
+            let api_version_key = v8::String::new(scope, "apiVersion").unwrap();
+            endpoint.set(scope, api_version_key.into(), api_version);
+            let version_key = v8::String::new(scope, "version").unwrap();
+            endpoint.set(scope, version_key.into(), version);
+            endpoints.push(endpoint.into());
+        }
+        let endpoints = v8::Array::new_with_elements(scope, &endpoints).into();
         let undefined = v8::undefined(scope).into();
-        let promise = import_endpoint
-            .call(scope, undefined, &[path, api_version, version])
+        let promise = import_endpoints
+            .call(scope, undefined, &[endpoints])
             .unwrap();
         v8::Global::new(scope, promise)
     };

@@ -100,16 +100,12 @@ export async function readWorkerChannel() {
     await toWorker({ cmd: "readWorkerChannel" });
 }
 
-export async function importEndpoint(
-    path: string,
-    apiVersion: string,
-    version: number,
-) {
+type Endpoint = { path: string; apiVersion: string; version: number };
+
+export async function importEndpoints(endpoints: [Endpoint]) {
     await toWorker({
-        cmd: "importEndpoint",
-        path,
-        apiVersion,
-        version,
+        cmd: "importEndpoints",
+        endpoints,
     });
 }
 
