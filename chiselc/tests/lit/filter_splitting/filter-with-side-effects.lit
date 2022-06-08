@@ -1,0 +1,23 @@
+// Test splitting a filter with side-effects.
+// RUN: @chiselc @file -e Person
+
+Person.cursor().filter(person => person.age > 40 && fetch("foobar"))
+
+// CHECK: Person.cursor().__filter((person)=>person.age > 40
+// CHECK: , {
+// CHECK:     exprType: "Binary",
+// CHECK:     left: {
+// CHECK:         exprType: "Property",
+// CHECK:         object: {
+// CHECK:             exprType: "Parameter",
+// CHECK:             position: 0
+// CHECK:         },
+// CHECK:         property: "age"
+// CHECK:     },
+// CHECK:     op: "Gt",
+// CHECK:     right: {
+// CHECK:         exprType: "Literal",
+// CHECK:         value: 40
+// CHECK:     }
+// CHECK: }).filter((person)=>fetch("foobar")
+// CHECK: );

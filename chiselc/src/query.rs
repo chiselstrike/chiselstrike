@@ -82,6 +82,10 @@ pub struct Filter {
     pub function: String,
     /// The original call expression of the filter.
     pub call_expr: CallExpr,
+    /// The pure (no side-effects) part of the filter expression AST.
+    pub pure: Box<swc_ecmascript::ast::Expr>,
+    /// The impure (possible side-effects) part of the filter expression AST.
+    pub impure: Option<Box<swc_ecmascript::ast::Expr>>,
     /// The parameters to this filter.
     pub parameters: Vec<String>,
     /// The predicate expression to filter by.
