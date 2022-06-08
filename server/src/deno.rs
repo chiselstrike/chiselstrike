@@ -416,10 +416,8 @@ impl DenoService {
             );
         }
 
-        worker
-            .execute_main_module(&ModuleSpecifier::parse(&format!("file://{}", main_path)).unwrap())
-            .await
-            .unwrap();
+        let main_url = Url::parse(&format!("file://{}", main_path)).unwrap();
+        worker.execute_main_module(&main_url).await.unwrap();
 
         let (
             import_endpoints,
