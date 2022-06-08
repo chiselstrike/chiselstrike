@@ -75,9 +75,7 @@ pub fn extract_filter(
                 Some(expr) => match &**expr {
                     Expr::Bin(bin_expr) => convert_bin_expr(bin_expr),
                     Expr::Lit(Lit::Bool(value)) => Ok(QExpr::Literal(QLiteral::Bool(value.value))),
-                    _ => {
-                        todo!();
-                    }
+                    _ => todo!("Unsupported filter predicate expression: {:?}", expr),
                 },
                 None => {
                     todo!();
