@@ -72,22 +72,13 @@ pub fn extract_filter(
                 }
             };
             match &return_stmt.arg {
-                Some(expr) => match &**expr {
-                    Expr::Bin(bin_expr) => convert_bin_expr(bin_expr),
-                    Expr::Lit(Lit::Bool(value)) => Ok(QExpr::Literal(QLiteral::Bool(value.value))),
-                    _ => {
-                        todo!();
-                    }
-                },
+                Some(expr) => convert_filter_expr(&**expr),
                 None => {
                     todo!();
                 }
             }
         }
-        BlockStmtOrExpr::Expr(expr) => match &**expr {
-            Expr::Bin(bin_expr) => convert_bin_expr(bin_expr),
-            _ => todo!("Unsupported filter predicate expression: {:?}", expr),
-        },
+        BlockStmtOrExpr::Expr(expr) => convert_filter_expr(&**expr),
     };
     let expr = match expr {
         Ok(expr) => expr,
@@ -104,6 +95,14 @@ pub fn extract_filter(
     };
     let props = FilterProperties::from_filter(entity_type, &filter);
     (Some(Box::new(QOperator::Filter(filter))), props)
+}
+
+fn convert_filter_expr(expr: &Expr) -> Result<QExpr> {
+    match expr {
+        Expr::Bin(bin_expr) => convert_bin_expr(bin_expr),
+        Expr::Lit(Lit::Bool(value)) => Ok(QExpr::Literal(QLiteral::Bool(value.value))),
+        _ => todo!("Unsupported filter predicate expression: {:?}", expr),
+    }
 }
 
 pub fn convert_bin_expr(expr: &BinExpr) -> Result<QExpr> {
