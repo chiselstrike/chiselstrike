@@ -145,6 +145,18 @@ struct ModuleLoaderInner {
     code_map: HashMap<String, VersionedCode>,
 }
 
+impl ModuleLoaderInner {
+    fn insert_path(&mut self, path: &str, code: &str) {
+        self.code_map.insert(
+            path.to_string(),
+            VersionedCode {
+                code: code.to_string(),
+                version: 0,
+            },
+        );
+    }
+}
+
 struct ModuleLoader {
     inner: Arc<std::sync::Mutex<ModuleLoaderInner>>,
 }
@@ -384,36 +396,10 @@ impl DenoService {
         let endpoint_path = "/endpoint.ts";
         {
             let mut handle = inner.lock().unwrap();
-            let code_map = &mut handle.code_map;
-            code_map.insert(
-                main_path.to_string(),
-                VersionedCode {
-                    code: include_str!("./main.js").to_string(),
-                    version: 0,
-                },
-            );
-
-            code_map.insert(
-                "/chisel.ts".to_string(),
-                VersionedCode {
-                    code: chisel_js().to_string(),
-                    version: 0,
-                },
-            );
-            code_map.insert(
-                endpoint_path.to_string(),
-                VersionedCode {
-                    code: endpoint_js().to_string(),
-                    version: 0,
-                },
-            );
-            code_map.insert(
-                "/worker.js".to_string(),
-                VersionedCode {
-                    code: worker_js().to_string(),
-                    version: 0,
-                },
-            );
+            handle.insert_path(main_path, include_str!("./main.js"));
+            handle.insert_path("/chisel.ts", chisel_js());
+            handle.insert_path(endpoint_path, endpoint_js());
+            handle.insert_path("/worker.js", worker_js());
         }
 
         worker
