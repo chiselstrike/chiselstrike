@@ -116,12 +116,12 @@ fn get_page(
             results.first().unwrap()
         };
         let cursor = cursor_from_pivot(query, pivot, forward)?;
-        let url = make_page_url(&params.url, host, &cursor, forward)?;
+        let url = make_page_url(&params.url, host, &cursor)?;
         return Ok(Some(url));
     } else if let Some(cursor) = &query.cursor {
         if cursor.forward != forward {
             let cursor = cursor.reversed();
-            let url = make_page_url(&params.url, host, &cursor, forward)?;
+            let url = make_page_url(&params.url, host, &cursor)?;
             return Ok(Some(url));
         }
     }
@@ -155,19 +155,18 @@ fn cursor_from_pivot(query: &Query, pivot_element: &JsonObject, forward: bool) -
 /// Generates URL that can be used to retrieve previous/next page.
 /// It does this by modifying the current `url`, potentially replacing
 /// host address with `host` and generating url based on the current cursor.
-fn make_page_url(url: &Url, host: &Option<String>, cursor: &Cursor, forward: bool) -> Result<Url> {
+fn make_page_url(url: &Url, host: &Option<String>, cursor: &Cursor) -> Result<Url> {
     let cursor = cursor.to_string()?;
 
     let mut page_url = replace_host_address(url.clone(), host)?;
     page_url.set_query(Some(""));
     for (key, value) in url.query_pairs() {
-        if key == "page_before" || key == "page_after" || key == "sort" {
+        if key == "cursor" || key == "sort" {
             continue;
         }
         page_url.query_pairs_mut().append_pair(&key, &value);
     }
-    let page_key = if forward { "page_after" } else { "page_before" };
-    page_url.query_pairs_mut().append_pair(page_key, &cursor);
+    page_url.query_pairs_mut().append_pair("cursor", &cursor);
 
     Ok(page_url)
 }
@@ -236,18 +235,12 @@ impl Query {
                     })?;
                     q.offset = Some(o);
                 }
-                "page_after" | "page_before" => {
+                "cursor" => {
                     anyhow::ensure!(
                         q.cursor.is_none(),
-                        "only one occurrence of page_before/page_after is allowed."
+                        "only one occurrence of cursor is allowed."
                     );
-                    let mut cursor = Cursor::from_string(&value)?;
-                    let forward_cursor = param_key == "page_after";
-                    // If cursor orientation doesn't match the desired orientation, it needs to
-                    // be reversed.
-                    if cursor.forward != forward_cursor {
-                        cursor = cursor.reversed();
-                    }
+                    let cursor = Cursor::from_string(&value)?;
                     q.cursor = Some(cursor);
                 }
                 _ => {
