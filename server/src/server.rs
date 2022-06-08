@@ -131,21 +131,26 @@ pub(crate) async fn add_endpoints(
     Ok(())
 }
 
-async fn read_secrets() -> JsonObject {
+async fn read_secrets() -> Result<JsonObject> {
     static LAST_TRY_WAS_FAILURE: Mutex<bool> = Mutex::new(false);
     let secrets = get_secrets().await;
     let mut was_failure = LAST_TRY_WAS_FAILURE.lock().await;
     match secrets {
         Ok(secrets) => {
             *was_failure = false;
-            secrets
+            Ok(secrets)
         }
         Err(e) => {
             if !*was_failure {
                 warn!("Could not read secrets: {:?}", e);
             }
             *was_failure = true;
-            Default::default()
+            if e.is::<serde_json::Error>() {
+                // Map broken files to empty secrets.
+                Ok(Default::default())
+            } else {
+                Err(e)
+            }
         }
     }
 }
@@ -154,7 +159,11 @@ async fn run(state: SharedState, mut cmd: ExecutorChannel) -> Result<()> {
     init_deno(state.inspect_brk).await?;
 
     // Ensure we read the secrets before spawning an ApiService; secrets may dictate API authorization.
-    update_secrets(read_secrets().await).await;
+    let secret = match read_secrets().await {
+        Ok(v) => v,
+        Err(_) => Default::default(), // During startup, map io error to empty secrets.
+    };
+    update_secrets(secret).await;
 
     let meta = MetaService::local_connection(&state.db, state.nr_connections).await?;
     let ts = meta.load_type_system().await?;
@@ -324,7 +333,11 @@ pub async fn run_shared_state(
                 }
             };
 
-            let secrets = read_secrets().await;
+            let secrets = match read_secrets().await {
+                Ok(s) => s,
+                Err(_) => continue, // ignore IO errors
+            };
+
             for cmd in &secret_commands {
                 let v = secrets.clone();
                 let payload = send_command!({
