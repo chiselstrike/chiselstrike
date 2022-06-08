@@ -37,9 +37,9 @@ regex = "1"
 rsa = "0.5.0"
 rustls = "0.20.6"
 sea-query = { version = "0.17.1", features = ["thread-safe"] }
-serde = "1.0.133"
-serde_derive = "1.0.133"
-serde_json = "1.0.68"
+serde = "1.0.137"
+serde_derive = "1.0.137"
+serde_json = "1.0.81"
 sha2 = "0.9.9"
 socket2 = { version = "0.3.18", features = ["unix", "reuseport"] }
 sqlx = { version = "0.5.12", features = [
