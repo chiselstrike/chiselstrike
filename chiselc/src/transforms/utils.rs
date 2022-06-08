@@ -7,6 +7,7 @@ use crate::query::Literal as QLiteral;
 use crate::query::Operator as QOperator;
 use crate::query::PropertyAccessExpr as QPropertyAccessExpr;
 use crate::query::Scan as QScan;
+use crate::transforms::filter_splitting::{rewrite_filter_arrow, split_expr};
 use crate::utils::pat_to_string;
 use anyhow::{anyhow, Result};
 
@@ -62,7 +63,7 @@ pub fn extract_filter(
     assert_eq!(params.len(), 1);
     let param = &params[0];
     let param = pat_to_string(param).unwrap();
-    let expr = match &arrow.body {
+    let (pure, impure) = match &arrow.body {
         BlockStmtOrExpr::BlockStmt(block_stmt) => {
             assert_eq!(block_stmt.stmts.len(), 1);
             let return_stmt = match &block_stmt.stmts[0] {
@@ -72,21 +73,25 @@ pub fn extract_filter(
                 }
             };
             match &return_stmt.arg {
-                Some(expr) => convert_filter_expr(&**expr),
+                Some(expr) => split_expr(expr),
                 None => {
                     todo!();
                 }
             }
         }
-        BlockStmtOrExpr::Expr(expr) => convert_filter_expr(&**expr),
+        BlockStmtOrExpr::Expr(expr) => split_expr(expr),
     };
-    let expr = match expr {
+    let expr = match convert_filter_expr(&pure) {
         Ok(expr) => expr,
         Err(_) => return (None, None),
     };
+    let pure = Box::new(rewrite_filter_arrow(arrow, pure));
+    let impure = impure.map(|impure| Box::new(rewrite_filter_arrow(arrow, impure)));
     let filter = QFilter {
         function,
         call_expr: call_expr.to_owned(),
+        pure,
+        impure,
         parameters: vec![param.clone()],
         input: Box::new(QOperator::Scan(QScan {
             entity_type: entity_type.clone(),

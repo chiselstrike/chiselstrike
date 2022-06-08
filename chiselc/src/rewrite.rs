@@ -300,19 +300,56 @@ impl Rewriter {
 fn to_ts_expr(filter: &Operator) -> CallExpr {
     match filter {
         Operator::Filter(filter) => {
-            let callee = rewrite_filter_callee(&filter.call_expr.callee, &filter.function);
+            /*
+             * A filter consists of a pure expression (no side-effects) and an
+             * optional impure expression (with possible side-effects). Each
+             * part is transformed into a method call. The pure expression is
+             * transformed into a `__filter()` call (that the runtime
+             * optimizes) and the impure part is transformed into a normal
+             * `filter()` call that is evaluated at runtime.
+             */
+            let pure_callee = rewrite_filter_callee(&filter.call_expr.callee, &filter.function);
             let expr = filter_to_ts(filter, filter.call_expr.span);
             let expr = ExprOrSpread {
                 spread: None,
                 expr: Box::new(expr),
             };
-            let mut args = filter.call_expr.args.clone();
-            args.push(expr);
-            CallExpr {
+            let pure_args = vec![
+                ExprOrSpread {
+                    spread: None,
+                    expr: filter.pure.clone(),
+                },
+                expr,
+            ];
+            let pure_call = CallExpr {
                 span: filter.call_expr.span,
-                callee,
-                args,
-                type_args: filter.call_expr.type_args.clone(),
+                callee: pure_callee,
+                args: pure_args,
+                type_args: None,
+            };
+            if let Some(impure) = &filter.impure {
+                let impure_prop = MemberProp::Ident(Ident {
+                    span: filter.call_expr.span,
+                    sym: JsWord::from("filter"),
+                    optional: false,
+                });
+                let impure_callee = Callee::Expr(Box::new(Expr::Member(MemberExpr {
+                    span: filter.call_expr.span,
+                    obj: Box::new(Expr::Call(pure_call)),
+                    prop: impure_prop,
+                })));
+                let impure = ExprOrSpread {
+                    spread: None,
+                    expr: impure.clone(),
+                };
+                CallExpr {
+                    span: filter.call_expr.span,
+                    callee: impure_callee,
+                    args: vec![impure],
+                    type_args: None,
+                }
+            } else {
+                pure_call
             }
         }
         _ => {
