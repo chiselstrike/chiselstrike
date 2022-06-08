@@ -6,7 +6,7 @@ provides a cursor API for building queries.
 This composable system also means that you can even write functions that build up queries programmatically
 and pass them around as arguments.
 
-The `ChiselEntity` base class provides a `cursor()` method to obtain a `ChiselCursor`.  The `ChiselCursor` class provides a variety of composable operations, such as `filter()`, `take()`, `select()`, 
+The `ChiselEntity` base class provides a `cursor()` method to obtain a `ChiselCursor`.  The `ChiselCursor` class provides a variety of composable operations, such as `filter()`, `take()`, `select()`,
 for building queries.
 
 For example, the `findOne()` example could be written using the cursor-based API as:
@@ -36,14 +36,17 @@ and see `curl` report:
 
 The methods provided by `ChiselCursor` are:
 
-| Method                | Description |
-| --------------------- | ----------- |
-| `filter(predicate)`   | Restrict this cursor to contain only entities matching the given function `predicate`. |
-| `filter(restrictions)`| Restrict this cursor to contain only entities matching the given `restrictions`. |
-| `forEach(function)`   | Execute `function` for every entity in this cursor. |
-| `select(...fields)`   | Return another cursor with a projection of each entity by `fields`.      |
-| `take(count)`         | Take `count` entities from this cursor. |
-| `toArray()`           | Convert this cursor to an array.  |
+| Method                  | Description |
+| ---------------------   | ----------- |
+| `filter(predicate)`     | Restrict this cursor to contain only entities matching the given function `predicate`. |
+| `filter(restrictions)`  | Restrict this cursor to contain only entities matching the given `restrictions`. |
+| `forEach(function)`     | Execute `function` for every entity in this cursor. |
+| `select(...fields)`     | Return another cursor with a projection of each entity by `fields`.      |
+| `take(count)`           | Take `count` entities from this cursor. |
+| `sortBy(key, ascending)`| Require the elements to be sorted by a given `key` (field) of the entity. |
+| `minBy(key)`            | Select minimal value over entities' `key` (field) |
+| `maxBy(key)`            | Select maximal value over entities' `key` (field) |
+| `toArray()`             | Convert this cursor to an array.  |
 
 <!-- FIXME : without examples it's unclear what a restrictions object or a function predicate is, this needs a simpler explanation with examples. -->
 
