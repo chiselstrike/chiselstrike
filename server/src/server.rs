@@ -316,7 +316,6 @@ pub async fn run_shared_state(
     let secret_shutdown = signal_rx.clone();
     // Spawn periodic hot-reload of secrets.  This doesn't load secrets immediately, though.
     let _secret_reader = tokio::task::spawn(async move {
-        let mut last_secrets = JsonObject::default();
         loop {
             futures::select! {
                 _ = sleep(Duration::from_millis(1000)).fuse() => {},
@@ -326,13 +325,8 @@ pub async fn run_shared_state(
             };
 
             let secrets = read_secrets().await;
-            if secrets == last_secrets {
-                continue;
-            }
-            last_secrets = secrets;
-
             for cmd in &secret_commands {
-                let v = last_secrets.clone();
+                let v = secrets.clone();
                 let payload = send_command!({
                     update_secrets(v).await;
                     Ok(())
