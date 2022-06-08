@@ -264,5 +264,12 @@ await Person.cursor().filter(p => { return true; });
 // CHECK:     value: true
 // CHECK: });
 
+await Person.cursor().filter(p => true);
+// CHECK: await Person.cursor().__filterWithExpression((p)=>true
+// CHECK: , {
+// CHECK:     exprType: "Literal",
+// CHECK:     value: true
+// CHECK: });
+
 await Person.cursor().filter({});
 // CHECK: await Person.cursor().filter({})
