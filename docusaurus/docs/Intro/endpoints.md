@@ -6,8 +6,8 @@ In this section we'll show how to move beyond simple CRUD requests, as shown in 
 
 <!-- FIXME: move into extra chapter? -->
 
-CRUD generation is customizable; more detail and syntax around this and also security policy is coming soon but 
-here is a lower-level example that forbids DELETE, POST, and PUT while wrapping the GET result 
+CRUD generation is customizable; more detail and syntax around this and also security policy is coming soon but
+here is a lower-level example that forbids DELETE, POST, and PUT while wrapping the GET result
 with either `{"data": VALUE}` or `{"error": "message"}` depending on the result.
 
 <!-- FIXME: replace with class based alternates once available -->
@@ -27,7 +27,7 @@ export default crud(
         createResponses: {
             GET: (body: unknown, status: number) => {
                 if (status < 400) {
-                    return responseFromJson({ data: body }, status);
+                    return responseFromJson({ data: body["results"] }, status);
                 }
                 return responseFromJson({ error: body }, status);
             },
@@ -98,7 +98,7 @@ error checking in this example.
 
 With this endpoint example, we're now getting to know ChiselStrike's API and runtime better. Notice how
 we were able to parse the request under `POST` with our own custom validation, and then use
-the `build` API to construct an object that is then persisted with `save`.  We'll explain the use of the 
+the `build` API to construct an object that is then persisted with `save`.  We'll explain the use of the
 data model more in [Data Access](Intro/data-access).
 
 Finally, notice how we can return a standard `Response` in some cases, but also can also use the convenience method
@@ -126,28 +126,30 @@ curl -s localhost:8080/dev/comments
 and we should see something like the following:
 
 ```json
-[
-    {
-        "content": "First comment",
-        "by": "Jill"
-    },
-    {
-        "content": "Second comment",
-        "by": "Jack"
-    },
-    {
-        "content": "Third comment",
-        "by": "Jim"
-    },
-    {
-        "content": "Fourth comment",
-        "by": "Jack"
-    },
-    {
-        "content": "Fifth comment",
-        "by": "Jill"
-    }
-]
+{
+    "results": [
+        {
+            "content": "First comment",
+            "by": "Jill"
+        },
+        {
+            "content": "Second comment",
+            "by": "Jack"
+        },
+        {
+            "content": "Third comment",
+            "by": "Jim"
+        },
+        {
+            "content": "Fourth comment",
+            "by": "Jack"
+        },
+        {
+            "content": "Fifth comment",
+            "by": "Jill"
+        }
+    ]
+}
 ```
 
 
@@ -155,3 +157,91 @@ and we should see something like the following:
 It's time to explore our API in greater depth, then you can set out and explore other documentation sections according
 to your interests!
 
+## CRUD paging
+
+Most of the examples we have used so far used rather small datasets. In the real world, datasets tend
+to grow rather quickly and, for example, we can easily imagine storing thousands of comments.
+Retrieving them all at once would be inefficient and usually unnecessary. That's where CRUD's
+built-in paging comes into play.
+
+The default page size is set to be 1000 elements. Let's restrict that a bit more to see how it works:
+
+```bash
+curl -g localhost:8080/dev/comments?sort=by&.by~like=Ji%25&page_size=2
+```
+
+which gives us
+
+```json
+{
+    "results": [
+        {
+            "content": "First comment",
+            "by": "Jill"
+        },
+        {
+            "content": "Fifth comment",
+            "by": "Jill"
+        }
+    ],
+    "next_page": "localhost:8080/dev/comments?.by~like=Ji%25&page_size=2&cursor=eyJheGV..."
+}
+```
+
+Apparently, we got a new entry in the response - `next_page`. This is a link that will take us to the
+next page of results. You can notice that the `sort` parameter is gone. That is because it's now
+embedded in a new parameter `cursor` in which we encoded how to get to the next page. While you can't
+modify the sort, you can freely modify other parameters like filtering or page size.
+
+Based on the parameters, the **cursor will ensure that you will only get entities that come after the
+last element on the current page**. This is a very useful property as it makes sure that you don't
+get duplicate elements if insertion happens when transitioning between pages (similarly for deletions).
+
+So let's continue and follow the next_page link:
+
+```bash
+curl -g localhost:8080/dev/comments?.by~like=Ji%25&page_size=2&cursor=eyJheGV...
+```
+
+```json
+{
+    "results": [
+        {
+            "content": "Third comment",
+            "by": "Jim"
+        },
+    ],
+    "prev_page": "localhost:8080/dev/comments?.by~like=Ji%25&page_size=2&cursor=GVzIjpe..."
+}
+```
+
+This gives us the reminder of the results as well as a link to the previous page that would take us
+back where we came from. Similarly to the next page situation, the `cursor` parameter in this case
+ensures that you will get elements that come before the first element of current page, in current
+sort.
+
+### Why cursor-based paging?
+
+Compared to the classical offset-based paging, cursor paging has two main benefits.
+
+First big advantage is that cursor-based paging is **stable**. This means that if you do insertions
+resp. deletions while transitioning between pages, you won't miss entries resp. won't get duplicates.
+Those problems can be very annoying to deal with.
+
+Second advantage is **efficiency**. Paging using the standard offset approach can be very inefficient
+when filters are used. The reason for this is that the database needs to go through all candidate
+rows and apply the filter until it finds offset-number of valid entries and only then it starts
+filling the page.
+
+Cursor-based paging on the other hand leverages the user-specified sort (primary key sorting is used
+if no sort is specified) and uses the elements as pivots. This way we can directly jump to the pivot
+using index and start filling the page from there.
+
+### HOST header
+
+To construct the next/prev page links, we need to know what host and possibly port to use. It's not
+trivial to retrieve it automatically due to proxies etc., hence we utilize the `HOST` HTTP header
+from your request. For example `curl` sets it automatically and many HTTP libraries do the same.
+
+If `HOST` header is not specified, we will try to guess it, but it's highly recomended that it's
+provided.
