@@ -17,7 +17,7 @@ transformed like this whenever it is accessed".
 
 Let's first examine more precisely how you define which data we're
 talking about.  This is done using _labels_: TypeScript decorators on
-the fields of your models.  
+the fields of your models.
 
 For instance, suppose we have a BlogComment object defined and add the "labels"
 decorator as shown below:
@@ -68,29 +68,31 @@ curl -s localhost:8080/dev/comments
 
 The `curl` command reports:
 
-```console
-[
-    {
-        "id": "a4ca3ab3-2e26-4da6-a5de-418c1e6b9b83",
-        "content": "First comment",
-        "by": "xxxxx"
-    },
-    {
-        "id": "fed312d7-b36b-4f34-bb04-fba327a3f440",
-        "content": "Second comment",
-        "by": "xxxxx"
-    },
-    {
-        "id": "adc89862-dfaa-43ab-a639-477111afc55e",
-        "content": "Third comment",
-        "by": "xxxxx"
-    },
-    {
-        "id": "5bfef47e-371b-44e8-a2dd-88260b5c3f2c",
-        "content": "Fourth comment",
-        "by": "xxxxx"
-    }
-]
+```json
+{
+    "results": [
+        {
+            "id": "a4ca3ab3-2e26-4da6-a5de-418c1e6b9b83",
+            "content": "First comment",
+            "by": "xxxxx"
+        },
+        {
+            "id": "fed312d7-b36b-4f34-bb04-fba327a3f440",
+            "content": "Second comment",
+            "by": "xxxxx"
+        },
+        {
+            "id": "adc89862-dfaa-43ab-a639-477111afc55e",
+            "content": "Third comment",
+            "by": "xxxxx"
+        },
+        {
+            "id": "5bfef47e-371b-44e8-a2dd-88260b5c3f2c",
+            "content": "Fourth comment",
+            "by": "xxxxx"
+        }
+    ]
+}
 ```
 
 The `pii` fields were anonymized!  It is not possible for any
@@ -124,29 +126,31 @@ curl -s localhost:8080/dev/comments
 
 The `curl` command reports:
 
-```console
-[
-    {
-        "id": "a4ca3ab3-2e26-4da6-a5de-418c1e6b9b83",
-        "content": "First comment",
-        "by": "Jill"
-    },
-    {
-        "id": "fed312d7-b36b-4f34-bb04-fba327a3f440",
-        "content": "Second comment",
-        "by": "Jack"
-    },
-    {
-        "id": "adc89862-dfaa-43ab-a639-477111afc55e",
-        "content": "Third comment",
-        "by": "Jim"
-    },
-    {
-        "id": "5bfef47e-371b-44e8-a2dd-88260b5c3f2c",
-        "content": "Fourth comment",
-        "by": "Jack"
-    }
-]
+```json
+{
+    "results": [
+        {
+            "id": "a4ca3ab3-2e26-4da6-a5de-418c1e6b9b83",
+            "content": "First comment",
+            "by": "Jill"
+        },
+        {
+            "id": "fed312d7-b36b-4f34-bb04-fba327a3f440",
+            "content": "Second comment",
+            "by": "Jack"
+        },
+        {
+            "id": "adc89862-dfaa-43ab-a639-477111afc55e",
+            "content": "Third comment",
+            "by": "Jim"
+        },
+        {
+            "id": "5bfef47e-371b-44e8-a2dd-88260b5c3f2c",
+            "content": "Fourth comment",
+            "by": "Jack"
+        }
+    ]
+}
 ```
 
 As you can see, this endpoint now operates with the raw, untransformed
