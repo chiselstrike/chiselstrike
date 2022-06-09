@@ -221,11 +221,11 @@ impl RpcService {
         let api_info = ApiInfo::new(app_name, api_version_tag);
 
         let mut endpoint_routes = vec![];
-        for endpoint in apply_request.endpoints {
-            let path = without_extension(&endpoint.path);
+        for (path, code) in apply_request.sources {
+            let path = without_extension(&path);
             let name = path.strip_prefix("endpoints/").unwrap();
             let path = format!("/{}/{}", api_version, name);
-            endpoint_routes.push((path, endpoint.code));
+            endpoint_routes.push((path, code));
         }
         endpoint_routes.sort_unstable();
 

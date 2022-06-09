@@ -55,11 +55,6 @@ message DescribeResponse {
   repeated VersionDefinition version_defs = 1;
 }
 
-message EndPointCreationRequest {
-  string path = 1;
-  string code = 2;
-}
-
 message RestartRequest { }
 
 message RestartResponse {
@@ -73,7 +68,12 @@ message PolicyUpdateRequest {
 message ChiselApplyRequest {
    repeated AddTypeRequest types = 1;
    repeated IndexCandidate index_candidates = 8;
-   repeated EndPointCreationRequest endpoints = 2;
+
+   // Location to code map. Includes all modules compiled into JS. The
+   // endpoints themselves start with "endpoints/"
+   // FIXME: It is missing non-endpoints for now.
+   map<string, string> sources = 2;
+
    repeated PolicyUpdateRequest policies = 3;
    bool allow_type_deletion = 4;
    string version = 5;

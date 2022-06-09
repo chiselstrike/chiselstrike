@@ -1,11 +1,12 @@
 // SPDX-FileCopyrightText: © 2022 ChiselStrike <info@chiselstrike.com>
 
-use crate::chisel::{EndPointCreationRequest, IndexCandidate};
+use crate::chisel::IndexCandidate;
 use crate::cmd::apply::chiselc_spawn;
 use crate::cmd::apply::parse_indexes;
 use crate::cmd::apply::TypeChecking;
 use crate::project::read_to_string;
 use anyhow::{anyhow, Context, Result};
+use std::collections::HashMap;
 use std::env;
 use std::fs::{self};
 use std::io::Write;
@@ -19,8 +20,8 @@ pub(crate) async fn apply(
     optimize: bool,
     auto_index: bool,
     type_check: &TypeChecking,
-) -> Result<(Vec<EndPointCreationRequest>, Vec<IndexCandidate>)> {
-    let mut endpoints_req = vec![];
+) -> Result<(HashMap<String, String>, Vec<IndexCandidate>)> {
+    let mut endpoints_req = HashMap::new();
     let mut index_candidates_req = vec![];
     let tsc = match type_check {
         TypeChecking::Yes => Some(npx(
@@ -118,10 +119,7 @@ pub(crate) async fn apply(
         }
         let code = read_to_string(bundler_output_file)?;
 
-        endpoints_req.push(EndPointCreationRequest {
-            path: endpoint.display().to_string(),
-            code,
-        });
+        endpoints_req.insert(endpoint.display().to_string(), code);
         if auto_index {
             let code = read_to_string(endpoint_file_path.clone())?;
             let mut indexes = parse_indexes(code, entities)?;

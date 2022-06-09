@@ -140,7 +140,7 @@ pub(crate) async fn apply<S: ToString>(
         client
             .apply(tonic::Request::new(ChiselApplyRequest {
                 types: types_req,
-                endpoints: endpoints_req,
+                sources: endpoints_req,
                 index_candidates: index_candidates_req,
                 policies: policy_req,
                 allow_type_deletion: allow_type_deletion.into(),
