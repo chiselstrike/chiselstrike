@@ -1,13 +1,12 @@
 // SPDX-FileCopyrightText: © 2021 ChiselStrike <info@chiselstrike.com>
 
-use crate::chisel::{
-    chisel_rpc_client::ChiselRpcClient, ChiselApplyRequest, EndPointCreationRequest,
-};
+use crate::chisel::{chisel_rpc_client::ChiselRpcClient, ChiselApplyRequest};
 use anyhow::Result;
 use hyper::service::{make_service_fn, service_fn};
 use hyper::{Body, Request, Response, Server};
 use once_cell::sync::OnceCell;
 use serde_derive::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::net::SocketAddr;
 
 /// If set, serve the web UI using this address for gRPC calls.
@@ -28,14 +27,13 @@ struct WebUIPostBody {
 async fn webapply(body: Body, rpc_addr: &SocketAddr) -> Result<Response<Body>> {
     let body: WebUIPostBody = serde_json::from_slice(&hyper::body::to_bytes(body).await?)?;
     let mut client = ChiselRpcClient::connect(format!("http://{}", rpc_addr)).await?;
+    let mut endpoints = HashMap::new();
+    endpoints.insert("endpoints/ep1.js".to_string(), body.endpoint);
     client
         .apply(tonic::Request::new(ChiselApplyRequest {
             types: vec![],
             index_candidates: vec![],
-            endpoints: vec![EndPointCreationRequest {
-                path: "endpoints/ep1.js".into(),
-                code: body.endpoint,
-            }],
+            sources: endpoints,
             policies: vec![],
             allow_type_deletion: true,
             version: "dev".into(),
