@@ -14,7 +14,7 @@ const main = async () => {
     }).toArray();
 };
 // CHECK: const main = async ()=>{
-// CHECK:     const people = await Person.cursor().__filterWithExpression((p)=>{
+// CHECK:     const people = await Person.cursor().__filter((p)=>{
 // CHECK:         return p.age > 4;
 // CHECK:     }, {
 // CHECK:         exprType: "Binary",
@@ -38,7 +38,7 @@ const people = await Person.cursor()
   .filter((p) => {
     return p.age > 4
   }).toArray();
-// CHECK: const people = await Person.cursor().__filterWithExpression((p)=>{
+// CHECK: const people = await Person.cursor().__filter((p)=>{
 // CHECK:     return p.age > 4;
 // CHECK: }, {
 // CHECK:     exprType: "Binary",
@@ -67,7 +67,7 @@ const people = await Person.cursor()
 // CHECK: }).toArray();
 
 await Person.cursor().filter((p) => { return p.age < 4 });
-// CHECK: await Person.cursor().__filterWithExpression((p)=>{
+// CHECK: await Person.cursor().__filter((p)=>{
 // CHECK:     return p.age < 4;
 // CHECK: }, {
 // CHECK:    exprType: "Binary",
@@ -87,7 +87,7 @@ await Person.cursor().filter((p) => { return p.age < 4 });
 // CHECK: });
 
 await Person.cursor().filter((p) => { return p.age > 4 });
-// CHECK: await Person.cursor().__filterWithExpression((p)=>{
+// CHECK: await Person.cursor().__filter((p)=>{
 // CHECK:     return p.age > 4;
 // CHECK: }, {
 // CHECK:     exprType: "Binary",
@@ -107,7 +107,7 @@ await Person.cursor().filter((p) => { return p.age > 4 });
 // CHECK: });
 
 await Person.cursor().filter((p) => { return p.age <= 4 });
-// CHECK: await Person.cursor().__filterWithExpression((p)=>{
+// CHECK: await Person.cursor().__filter((p)=>{
 // CHECK:     return p.age <= 4;
 // CHECK: }, {
 // CHECK:     exprType: "Binary",
@@ -127,7 +127,7 @@ await Person.cursor().filter((p) => { return p.age <= 4 });
 // CHECK: });
 
 await Person.cursor().filter((p) => { return p.age != 4 });
-// CHECK: await Person.cursor().__filterWithExpression((p)=>{
+// CHECK: await Person.cursor().__filter((p)=>{
 // CHECK:     return p.age != 4;
 // CHECK: }, {
 // CHECK:     exprType: "Binary",
@@ -147,7 +147,7 @@ await Person.cursor().filter((p) => { return p.age != 4 });
 // CHECK: });
 
 await Person.cursor().filter((p) => p.age < 4);
-// CHECK: await Person.cursor().__filterWithExpression((p)=>p.age < 4
+// CHECK: await Person.cursor().__filter((p)=>p.age < 4
 // CHECK: , {
 // CHECK:     exprType: "Binary",
 // CHECK:     left: {
@@ -166,7 +166,7 @@ await Person.cursor().filter((p) => p.age < 4);
 // CHECK: });
 
 await Person.cursor().filter((p) => { return p.age < 4 || (p.age > 10 && p.age != 12) });
-// CHECK: await Person.cursor().__filterWithExpression((p)=>{
+// CHECK: await Person.cursor().__filter((p)=>{
 // CHECK:     return p.age < 4 || (p.age > 10 && p.age != 12);
 // CHECK: }, {
 // CHECK:     exprType: "Binary",
@@ -226,7 +226,7 @@ await Person.cursor().filter((p) => { return p.age < 4 || (p.age > 10 && p.age !
 // CHECK: });
 
 await Person.cursor().filter((p) => { return p.name == 'Alice' })
-// CHECK: await Person.cursor().__filterWithExpression((p)=>{
+// CHECK: await Person.cursor().__filter((p)=>{
 // CHECK:     return p.name == 'Alice';
 // CHECK: }, {
 // CHECK:     exprType: "Binary",
@@ -257,7 +257,7 @@ await Person.cursor().filter((p) => { return foo(p) || (p.age > 10 && p.age != 1
 // CHECK: });
 
 await Person.cursor().filter(p => { return true; });
-// CHECK: await Person.cursor().__filterWithExpression((p)=>{
+// CHECK: await Person.cursor().__filter((p)=>{
 // CHECK:     return true;
 // CHECK: }, {
 // CHECK:     exprType: "Literal",
@@ -265,7 +265,7 @@ await Person.cursor().filter(p => { return true; });
 // CHECK: });
 
 await Person.cursor().filter(p => true);
-// CHECK: await Person.cursor().__filterWithExpression((p)=>true
+// CHECK: await Person.cursor().__filter((p)=>true
 // CHECK: , {
 // CHECK:     exprType: "Literal",
 // CHECK:     value: true

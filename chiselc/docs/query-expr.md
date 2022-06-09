@@ -27,7 +27,7 @@ BlogPost.cursor().filter({
 
 ## Filtering
 
-The `ChiselCursor.filter(<predicate>)` method call is transformed into a `__filterWithExpression(<predicate>, <expression>)` method call where `<expression>` is an object that represents the query expression.
+The `ChiselCursor.filter(<predicate>)` method call is transformed into a `__filter(<predicate>, <expression>)` method call where `<expression>` is an object that represents the query expression.
 
 ## Query Expressions
 

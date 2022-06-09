@@ -287,7 +287,7 @@ import { Person } from "../models/types.ts";
 
 export default async function chisel(req: Request) {
     const filtered = Person.cursor()
-        .__filterWithExpression((p) => {
+        .__filter((p) => {
             return p.age == 89;
         }, {
             exprType: "Binary",
@@ -325,7 +325,7 @@ import { Person } from "../models/types.ts";
 
 export default async function chisel(req: Request) {
     const filtered = Person.cursor()
-        .__filterWithExpression((p) => {
+        .__filter((p) => {
             return p.biography.title == "The importance of being erinaceous";
         }, {
             exprType: "Binary",
@@ -367,7 +367,7 @@ import { Person } from "../models/types.ts";
 
 export default async function chisel(req: Request) {
     const filtered = Person.cursor()
-        .__filterWithExpression((p) => {
+        .__filter((p) => {
             return p.age == 89;
         }, {
             exprType: "Binary",
@@ -405,7 +405,7 @@ import { Person } from "../models/types.ts";
 
 export default async function chisel(req: Request) {
     const filtered = Person.cursor()
-        .__filterWithExpression((p) => {
+        .__filter((p) => {
             return p.biography.title == "The importance of being erinaceous";
         }, {
             exprType: "Binary",
@@ -450,7 +450,7 @@ export default async function chisel(req: Request) {
     const all = url.searchParams.get("return_all") == "true";
     console.log(url.searchParams.get("return_all"), all);
     const filtered = Person.cursor()
-        .__filterWithExpression((p) => {
+        .__filter((p) => {
             return all;
         }, {
             exprType: "Literal",
