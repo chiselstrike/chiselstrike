@@ -1,6 +1,6 @@
 // SPDX-FileCopyrightText: © 2021 ChiselStrike <info@chiselstrike.com>
 
-use anyhow::{anyhow, Context, Result};
+use anyhow::{Context, Result};
 use handlebars::Handlebars;
 use serde_derive::Deserialize;
 use std::collections::BTreeMap;
@@ -8,6 +8,7 @@ use std::env;
 use std::fs;
 use std::io::{stdin, Read};
 use std::path::{Path, PathBuf};
+use utils::without_extension;
 
 const MANIFEST_FILE: &str = "Chisel.toml";
 const TYPES_DIR: &str = "./models";
@@ -59,7 +60,6 @@ impl Default for AutoIndex {
 
 #[derive(PartialOrd, PartialEq, Eq, Ord)]
 pub(crate) struct Endpoint {
-    pub(crate) name: String,
     pub(crate) file_path: PathBuf,
 }
 
@@ -99,28 +99,22 @@ impl Manifest {
             let mut paths = vec![];
             let dir = Path::new(dir);
             dir_to_paths(dir, &mut paths)?;
-            let mut routes = BTreeMap::new();
             for file_path in paths {
-                // file_stem returns None only if there is no file name.
-                let stem = file_path.file_stem().unwrap();
-                // parent returns None only for the root.
-                let mut parent = file_path.parent().unwrap().to_path_buf();
-                parent.push(stem);
-
-                let name = parent.strip_prefix(&dir)?;
-
-                if let Some(old) = routes.insert(name.to_owned(), file_path.to_owned()) {
-                    anyhow::bail!("Cannot add both {} {} as routes. ChiselStrike uses filesystem-based routing, so we don't know what to do. Sorry! 🥺", old.display(), file_path.display());
-                }
-
-                let name = name
-                    .to_str()
-                    .ok_or_else(|| anyhow!("filename is not utf8 {:?}", name))?
-                    .to_string();
-                ret.push(Endpoint { file_path, name });
+                ret.push(Endpoint { file_path });
             }
         }
         ret.sort_unstable();
+        // Check for duplicated endpoints now since otherwise TSC
+        // reports the issue and we can produce a better diagnostic
+        // than TSC.
+        let i = ret.iter();
+        for (a, b) in i.clone().zip(i.skip(1)) {
+            let a = &a.file_path.display().to_string();
+            let b = &b.file_path.display().to_string();
+            if without_extension(a) == without_extension(b) {
+                anyhow::bail!("Cannot add both {} {} as routes. ChiselStrike uses filesystem-based routing, so we don't know what to do. Sorry! 🥺", a, b);
+            }
+        }
         Ok(ret)
     }
 

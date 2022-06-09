@@ -122,7 +122,7 @@ pub(crate) async fn apply(
         let code = read_to_string(bundler_output_file)?;
 
         endpoints_req.push(EndPointCreationRequest {
-            path: endpoint.name.clone(),
+            path: endpoint.file_path.display().to_string(),
             code: code.clone(),
         });
         if auto_index {

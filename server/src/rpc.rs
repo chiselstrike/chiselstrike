@@ -31,6 +31,7 @@ use std::net::SocketAddr;
 use std::path::PathBuf;
 use std::sync::Arc;
 use tonic::{transport::Server, Request, Response, Status};
+use utils::without_extension;
 
 fn validate_api_version(version: &str) -> Result<()> {
     anyhow::ensure!(
@@ -221,9 +222,12 @@ impl RpcService {
 
         let mut endpoint_routes = vec![];
         for endpoint in apply_request.endpoints {
-            let path = format!("/{}/{}", api_version, endpoint.path);
+            let path = without_extension(&endpoint.path);
+            let name = path.strip_prefix("endpoints/").unwrap();
+            let path = format!("/{}/{}", api_version, name);
             endpoint_routes.push((path, endpoint.code));
         }
+        endpoint_routes.sort_unstable();
 
         // Do this before any permanent changes to any of the databases. Otherwise
         // we end up with bad code commited to the meta database and will fail to load

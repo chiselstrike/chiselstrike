@@ -33,7 +33,7 @@ async fn webapply(body: Body, rpc_addr: &SocketAddr) -> Result<Response<Body>> {
             types: vec![],
             index_candidates: vec![],
             endpoints: vec![EndPointCreationRequest {
-                path: "ep1".into(),
+                path: "endpoints/ep1.js".into(),
                 code: body.endpoint,
             }],
             policies: vec![],

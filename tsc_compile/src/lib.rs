@@ -32,6 +32,7 @@ use std::path::Component;
 use std::path::Path;
 use std::path::PathBuf;
 use std::sync::Arc;
+use utils::without_extension;
 
 #[derive(Debug)]
 struct DownloadMap {
@@ -186,15 +187,6 @@ fn join_path(mut base: PathBuf, rel: &Path) -> PathBuf {
 fn abs(path: &str) -> String {
     let p = join_path(env::current_dir().unwrap(), Path::new(path));
     p.into_os_string().into_string().unwrap()
-}
-
-fn without_extension(path: &str) -> &str {
-    for suffix in [".d.ts", ".ts", ".js"] {
-        if let Some(s) = path.strip_suffix(suffix) {
-            return s;
-        }
-    }
-    path
 }
 
 static SNAPSHOT: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/SNAPSHOT.bin"));
