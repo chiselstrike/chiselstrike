@@ -18,7 +18,7 @@ pub fn infer_filter(
         Ok(entity_type) => entity_type,
         _ => return (None, None),
     };
-    extract_filter(call_expr, entity_type, "__filterWithExpression".to_string())
+    extract_filter(call_expr, entity_type, "__filter".to_string())
 }
 
 fn is_rewritable_filter(callee: &Callee, symbols: &Symbols) -> bool {

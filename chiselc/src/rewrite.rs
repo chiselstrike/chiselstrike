@@ -307,7 +307,7 @@ impl Rewriter {
         }
     }
 
-    /// Rewrites the filter() call with __filterWithExpression().
+    /// Rewrites the filter() call with __filter().
     fn rewrite_filter_callee(&self, callee: &Callee, function: &str) -> Callee {
         match callee {
             Callee::Expr(expr) => match &**expr {

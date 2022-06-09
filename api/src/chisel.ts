@@ -356,7 +356,7 @@ export class ChiselCursor<T> {
     }
 
     // Filtering function used by Chisel Compiler. Not intended for direct usage.
-    __filterWithExpression(
+    __filter(
         predicate: (arg: T) => boolean,
         expression: Record<string, unknown>,
     ) {
@@ -697,7 +697,7 @@ export class ChiselEntity {
         expression: Record<string, unknown>,
         take?: number,
     ): Promise<T[]> {
-        let it = chiselIterator<T>(this).__filterWithExpression(
+        let it = chiselIterator<T>(this).__filter(
             predicate,
             expression,
         );
@@ -747,7 +747,7 @@ export class ChiselEntity {
         predicate: (arg: T) => boolean,
         expression: Record<string, unknown>,
     ): Promise<T | undefined> {
-        const it = chiselIterator<T>(this).__filterWithExpression(
+        const it = chiselIterator<T>(this).__filter(
             predicate,
             expression,
         );
