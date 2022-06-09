@@ -5,6 +5,7 @@
 //! intermediate representation.
 
 use indexmap::IndexSet;
+use swc_ecmascript::ast::CallExpr;
 
 /// An expression.
 #[derive(Debug)]
@@ -79,6 +80,8 @@ pub struct Scan {
 pub struct Filter {
     /// The ChiselStrike internal function to call.
     pub function: String,
+    /// The original call expression of the filter.
+    pub call_expr: CallExpr,
     /// The parameters to this filter.
     pub parameters: Vec<String>,
     /// The predicate expression to filter by.

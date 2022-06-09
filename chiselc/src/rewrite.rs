@@ -261,14 +261,14 @@ impl Rewriter {
             self.indexes.push(index);
         }
         if let Some(filter) = filter {
-            return self.to_ts_expr(call_expr, &filter);
+            return self.to_ts_expr(&filter);
         }
         let (filter, index) = infer_find(call_expr, &self.symbols);
         if let Some(index) = index {
             self.indexes.push(index);
         }
         if let Some(filter) = filter {
-            return self.to_ts_expr(call_expr, &filter);
+            return self.to_ts_expr(&filter);
         }
         let args = call_expr
             .args
@@ -283,22 +283,22 @@ impl Rewriter {
         }
     }
 
-    fn to_ts_expr(&self, call_expr: &CallExpr, filter: &Operator) -> CallExpr {
+    fn to_ts_expr(&self, filter: &Operator) -> CallExpr {
         match filter {
             Operator::Filter(filter) => {
-                let callee = self.rewrite_filter_callee(&call_expr.callee, &filter.function);
-                let expr = self.filter_to_ts(filter, call_expr.span);
+                let callee = self.rewrite_filter_callee(&filter.call_expr.callee, &filter.function);
+                let expr = self.filter_to_ts(filter, filter.call_expr.span);
                 let expr = ExprOrSpread {
                     spread: None,
                     expr: Box::new(expr),
                 };
-                let mut args = call_expr.args.clone();
+                let mut args = filter.call_expr.args.clone();
                 args.push(expr);
                 CallExpr {
-                    span: call_expr.span,
+                    span: filter.call_expr.span,
                     callee,
                     args,
-                    type_args: call_expr.type_args.clone(),
+                    type_args: filter.call_expr.type_args.clone(),
                 }
             }
             _ => {
