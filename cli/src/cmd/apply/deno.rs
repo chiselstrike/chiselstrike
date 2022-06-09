@@ -38,7 +38,7 @@ pub(crate) async fn apply(
             swc_compile(code)?
         };
         endpoints_req.push(EndPointCreationRequest {
-            path: f.name.clone(),
+            path: f.file_path.display().to_string(),
             code: code.clone(),
         });
         if auto_index {

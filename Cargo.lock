@@ -568,6 +568,7 @@ dependencies = [
  "toml",
  "tonic",
  "tonic-build",
+ "utils",
  "vergen",
  "whoami",
 ]
