@@ -86,6 +86,7 @@ pub fn extract_filter(
     };
     let filter = QFilter {
         function,
+        call_expr: call_expr.to_owned(),
         parameters: vec![param.clone()],
         input: Box::new(QOperator::Scan(QScan {
             entity_type: entity_type.clone(),
