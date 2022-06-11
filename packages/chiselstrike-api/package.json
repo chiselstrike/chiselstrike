@@ -1,6 +1,6 @@
 {
     "name": "@chiselstrike/api",
-    "version": "0.10.0-dev.0",
+    "version": "0.11.0-dev.0",
     "main": "lib/chisel.js",
     "types": "lib/chisel.d.ts",
     "author": "Pekka Enberg <penberg@chiselstrike.com>",

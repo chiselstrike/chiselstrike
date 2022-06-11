@@ -133,7 +133,7 @@ dependencies = [
 
 [[package]]
 name = "api"
-version = "0.10.0-dev.0"
+version = "0.11.0-dev.0"
 dependencies = [
  "anyhow",
  "tokio",
@@ -493,7 +493,7 @@ checksum = "fd16c4719339c4530435d38e511904438d07cce7950afa3718a84ac36c10e89e"
 
 [[package]]
 name = "chiselc"
-version = "0.10.0-dev.0"
+version = "0.11.0-dev.0"
 dependencies = [
  "anyhow",
  "indexmap",
@@ -545,7 +545,7 @@ dependencies = [
 
 [[package]]
 name = "cli"
-version = "0.10.0-dev.0"
+version = "0.11.0-dev.0"
 dependencies = [
  "anyhow",
  "compile",
@@ -584,7 +584,7 @@ dependencies = [
 
 [[package]]
 name = "compile"
-version = "0.10.0-dev.0"
+version = "0.11.0-dev.0"
 dependencies = [
  "anyhow",
  "swc_common",
@@ -870,7 +870,7 @@ dependencies = [
 
 [[package]]
 name = "dbgarc"
-version = "0.10.0-dev.0"
+version = "0.11.0-dev.0"
 dependencies = [
  "backtrace",
 ]
@@ -1380,7 +1380,7 @@ dependencies = [
 
 [[package]]
 name = "endpoint_tsc"
-version = "0.10.0-dev.0"
+version = "0.11.0-dev.0"
 dependencies = [
  "anyhow",
  "api",
@@ -2676,7 +2676,7 @@ checksum = "e5ce46fe64a9d73be07dcbe690a38ce1b293be448fd8ce1e6c1b8062c9f72c6a"
 
 [[package]]
 name = "my_tsc"
-version = "0.10.0-dev.0"
+version = "0.11.0-dev.0"
 dependencies = [
  "deno_runtime",
  "endpoint_tsc",
@@ -2940,7 +2940,7 @@ dependencies = [
 
 [[package]]
 name = "packages"
-version = "0.10.0-dev.0"
+version = "0.11.0-dev.0"
 dependencies = [
  "api",
 ]
@@ -3925,7 +3925,7 @@ dependencies = [
 
 [[package]]
 name = "server"
-version = "0.10.0-dev.0"
+version = "0.11.0-dev.0"
 dependencies = [
  "aes-gcm",
  "anyhow",
@@ -5112,7 +5112,7 @@ checksum = "59547bce71d9c38b83d9c0e92b6066c4253371f15005def0c30d9657f50c7642"
 
 [[package]]
 name = "tsc_compile"
-version = "0.10.0-dev.0"
+version = "0.11.0-dev.0"
 dependencies = [
  "console",
  "deno_core",
@@ -5125,7 +5125,7 @@ dependencies = [
 
 [[package]]
 name = "tsc_compile_build"
-version = "0.10.0-dev.0"
+version = "0.11.0-dev.0"
 
 [[package]]
 name = "tungstenite"
@@ -5317,7 +5317,7 @@ checksum = "09cc8ee72d2a9becf2f2febe0205bbed8fc6615b7cb429ad062dc7b7ddd036a9"
 
 [[package]]
 name = "utils"
-version = "0.10.0-dev.0"
+version = "0.11.0-dev.0"
 dependencies = [
  "anyhow",
  "reqwest",
