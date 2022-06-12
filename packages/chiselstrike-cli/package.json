@@ -1,8 +1,22 @@
 {
     "name": "@chiselstrike/cli",
     "version": "0.11.0-dev.0",
-    "description": "ChiselStrike CLI",
-    "author": "Pekka Enberg <penberg@chiselstrike.com>",
+    "keywords": [
+        "api",
+        "chiselstrike",
+        "database",
+        "orm",
+        "typescript"
+    ],
+    "description": "The prototype-to-production backend framework for TypeScript",
+    "homepage": "https://www.chiselstrike.com",
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/chiselstrike/chiselstrike.git",
+        "directory": "chiselstrike-cli"
+    },
+    "author": "ChiselStrike <info@chiselstrike.com>",
+    "license": "Apache-2.0",
     "main": "binary.js",
     "bin": {
         "chisel": "./run.js"
@@ -10,7 +24,6 @@
     "scripts": {
         "postinstall": "node ./install.js"
     },
-    "license": "Apache-2.0",
     "dependencies": {
         "binary-install": "^0.1.0",
         "esbuild": "^0.14.14",
