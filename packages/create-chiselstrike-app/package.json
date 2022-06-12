@@ -1,8 +1,21 @@
 {
     "name": "create-chiselstrike-app",
     "version": "0.11.0-dev.0",
-    "description": "Create ChiselStrike-powered backends with one command",
-    "author": "ChiselStrike Inc.",
+    "keywords": [
+        "api",
+        "chiselstrike",
+        "database",
+        "orm",
+        "typescript"
+    ],
+    "description": "Create full TypeScript backends with one command",
+    "homepage": "https://www.chiselstrike.com",
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/chiselstrike/chiselstrike.git",
+        "directory": "chiselstrike-cli"
+    },
+    "author": "ChiselStrike <info@chiselstrike.com>",
     "license": "Apache-2.0",
     "main": "./dist/index.js",
     "bin": {
