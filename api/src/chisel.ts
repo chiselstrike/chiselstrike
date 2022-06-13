@@ -273,15 +273,15 @@ class SortBy<T> extends Operator<T> {
 }
 
 /** ChiselCursor is a lazy iterator that will be used by ChiselStrike to construct an optimized query. */
-export class ChiselCursor<T> {
+export class ChiselCursor<ValueType> {
     constructor(
-        private baseConstructor: { new (): T },
-        private inner: Operator<T>,
+        private baseConstructor: { new (): ValueType },
+        private inner: Operator<ValueType>,
     ) {}
     /** Force ChiselStrike to fetch just the `...columns` that are part of the colums list. */
-    select<C extends (keyof T)[]>(
+    select<C extends (keyof ValueType)[]>(
         ...columns: C
-    ): ChiselCursor<Pick<T, C[number]>> {
+    ): ChiselCursor<Pick<ValueType, C[number]>> {
         return new ChiselCursor(
             this.baseConstructor,
             new ColumnsSelect(columns, this.inner),
@@ -289,7 +289,7 @@ export class ChiselCursor<T> {
     }
 
     /** Restricts this cursor to contain only at most `count` elements */
-    take(count: number): ChiselCursor<T> {
+    take(count: number): ChiselCursor<ValueType> {
         return new ChiselCursor(
             this.baseConstructor,
             new Take(count, this.inner),
@@ -297,7 +297,7 @@ export class ChiselCursor<T> {
     }
 
     /** Skips the first `count` elements of this cursor. */
-    skip(count: number): ChiselCursor<T> {
+    skip(count: number): ChiselCursor<ValueType> {
         return new ChiselCursor(
             this.baseConstructor,
             new Skip(count, this.inner),
@@ -308,16 +308,18 @@ export class ChiselCursor<T> {
      * Restricts this cursor to contain only elements that match the given @predicate.
      */
     filter(
-        predicate: (arg: T) => boolean,
-    ): ChiselCursor<T>;
+        predicate: (arg: ValueType) => boolean,
+    ): ChiselCursor<ValueType>;
     /**
      * Restricts this cursor to contain just the objects that match the `Partial`
      * object `restrictions`.
      */
-    filter(restrictions: Partial<T>): ChiselCursor<T>;
+    filter(restrictions: Partial<ValueType>): ChiselCursor<ValueType>;
 
     // Common implementation for filter overloads.
-    filter(arg1: ((arg: T) => boolean) | Partial<T>): ChiselCursor<T> {
+    filter(
+        arg1: ((arg: ValueType) => boolean) | Partial<ValueType>,
+    ): ChiselCursor<ValueType> {
         if (typeof arg1 == "function") {
             return new ChiselCursor(
                 this.baseConstructor,
@@ -333,7 +335,7 @@ export class ChiselCursor<T> {
                 // If it's an empty restriction, no need to create an empty filter.
                 return this;
             }
-            const predicate = (arg: T) => {
+            const predicate = (arg: ValueType) => {
                 for (const key in restrictions) {
                     if (restrictions[key] === undefined) {
                         continue;
@@ -357,11 +359,11 @@ export class ChiselCursor<T> {
 
     // Filtering function used by Chisel Compiler. Not intended for direct usage.
     __filter(
-        exprPredicate: (arg: T) => boolean,
+        exprPredicate: (arg: ValueType) => boolean,
         expression: Record<string, unknown>,
-        postPredicate?: (arg: T) => boolean,
+        postPredicate?: (arg: ValueType) => boolean,
     ) {
-        let op: Operator<T> = new ExpressionFilter(
+        let op: Operator<ValueType> = new ExpressionFilter(
             exprPredicate,
             expression,
             this.inner,
@@ -380,11 +382,11 @@ export class ChiselCursor<T> {
      *
      * Note: the sort is not guaranteed to be stable.
      */
-    sortBy(key: keyof T, ascending = true): ChiselCursor<T> {
+    sortBy(key: keyof ValueType, ascending = true): ChiselCursor<ValueType> {
         return new ChiselCursor(
             this.baseConstructor,
             new SortBy(
-                [new SortKey<T>(key, ascending)],
+                [new SortKey<ValueType>(key, ascending)],
                 this.inner,
             ),
         );
@@ -398,7 +400,9 @@ export class ChiselCursor<T> {
      * values are ignored. If there are no elements or non-undefined values,
      * the function returns undefined.
      */
-    async minBy<K extends keyof T>(key: K): Promise<T[K] | undefined> {
+    async minBy<K extends keyof ValueType>(
+        key: K,
+    ): Promise<ValueType[K] | undefined> {
         let min = undefined;
         for await (const e of this) {
             const val = e[key];
@@ -419,7 +423,9 @@ export class ChiselCursor<T> {
      * values are ignored. If there are no elements or non-undefined values,
      * the function returns undefined.
      */
-    async maxBy<K extends keyof T>(key: K): Promise<T[K] | undefined> {
+    async maxBy<K extends keyof ValueType>(
+        key: K,
+    ): Promise<ValueType[K] | undefined> {
         let max = undefined;
         for await (const e of this) {
             const val = e[key];
@@ -433,7 +439,7 @@ export class ChiselCursor<T> {
     }
 
     /** Executes the function `func` for each element of this cursor. */
-    async forEach(func: (arg: T) => void): Promise<void> {
+    async forEach(func: (arg: ValueType) => void): Promise<void> {
         for await (const t of this) {
             func(t);
         }
@@ -443,7 +449,7 @@ export class ChiselCursor<T> {
      *
      * Use this with caution as the result set can be very big.
      * It is recommended that you take() first to cap the maximum number of elements. */
-    async toArray(): Promise<T[]> {
+    async toArray(): Promise<ValueType[]> {
         const arr = [];
         for await (const t of this) {
             arr.push(t);
@@ -452,7 +458,7 @@ export class ChiselCursor<T> {
     }
 
     /** ChiselCursor implements asyncIterator, meaning you can use it in any asynchronous context. */
-    [Symbol.asyncIterator](): AsyncIterator<T> {
+    [Symbol.asyncIterator](): AsyncIterator<ValueType> {
         let iter = this.evalOpsRecursive(this.inner);
         if (iter === undefined) {
             iter = this.runChiselQuery(this.inner);
@@ -467,8 +473,8 @@ export class ChiselCursor<T> {
      * If no PredicateFilter is found, undefined is returned.
      */
     private evalOpsRecursive(
-        op: Operator<T>,
-    ): AsyncIterable<T> | undefined {
+        op: Operator<ValueType>,
+    ): AsyncIterable<ValueType> | undefined {
         if (op.inner === undefined) {
             return undefined;
         }
@@ -484,8 +490,8 @@ export class ChiselCursor<T> {
     }
 
     private runChiselQuery(
-        op: Operator<T>,
-    ): AsyncIterable<T> {
+        op: Operator<ValueType>,
+    ): AsyncIterable<ValueType> {
         const ctor = op.containsType(ColumnsSelect)
             ? undefined
             : this.baseConstructor;
@@ -501,7 +507,7 @@ export class ChiselCursor<T> {
                         const properties = await opAsync(
                             "op_chisel_query_next",
                             rid,
-                        ) as T | null; // FIXME: This is wrong, we can get less than T with ColumnsSelect.
+                        ) as ValueType | null; // FIXME: This is wrong, we can get less than ValueType with ColumnsSelect.
 
                         if (properties === null) {
                             break;
