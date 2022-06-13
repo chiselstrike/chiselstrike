@@ -272,16 +272,21 @@ class SortBy<T> extends Operator<T> {
     }
 }
 
-/** ChiselCursor is a lazy iterator that will be used by ChiselStrike to construct an optimized query. */
-export class ChiselCursor<ValueType> {
+/**
+ * ChiselCursor is a lazy iterator that will be used by ChiselStrike to construct an optimized query.
+ * `Entity` type parameter is a type constructed by `baseConstructor`. It is also the type that of
+ * the Output of the inner-most operator.
+ * `ValueType` is the type of elements returned by e.g. `toArray` or by iteration invocation.
+ */
+export class ChiselCursor<Entity extends ChiselEntity, ValueType> {
     constructor(
-        private baseConstructor: { new (): ValueType },
-        private inner: Operator<ValueType>,
+        private baseConstructor: { new (): Entity },
+        private inner: Operator<unknown, ValueType>,
     ) {}
     /** Force ChiselStrike to fetch just the `...columns` that are part of the colums list. */
     select<C extends (keyof ValueType)[]>(
         ...columns: C
-    ): ChiselCursor<Pick<ValueType, C[number]>> {
+    ): ChiselCursor<Entity, Pick<ValueType, C[number]>> {
         return new ChiselCursor(
             this.baseConstructor,
             new ColumnsSelect(columns, this.inner),
@@ -289,7 +294,7 @@ export class ChiselCursor<ValueType> {
     }
 
     /** Restricts this cursor to contain only at most `count` elements */
-    take(count: number): ChiselCursor<ValueType> {
+    take(count: number): ChiselCursor<Entity, ValueType> {
         return new ChiselCursor(
             this.baseConstructor,
             new Take(count, this.inner),
@@ -297,7 +302,7 @@ export class ChiselCursor<ValueType> {
     }
 
     /** Skips the first `count` elements of this cursor. */
-    skip(count: number): ChiselCursor<ValueType> {
+    skip(count: number): ChiselCursor<Entity, ValueType> {
         return new ChiselCursor(
             this.baseConstructor,
             new Skip(count, this.inner),
@@ -309,17 +314,19 @@ export class ChiselCursor<ValueType> {
      */
     filter(
         predicate: (arg: ValueType) => boolean,
-    ): ChiselCursor<ValueType>;
+    ): ChiselCursor<Entity, ValueType>;
     /**
      * Restricts this cursor to contain just the objects that match the `Partial`
      * object `restrictions`.
      */
-    filter(restrictions: Partial<ValueType>): ChiselCursor<ValueType>;
+    filter(
+        restrictions: Partial<ValueType>,
+    ): ChiselCursor<Entity, ValueType>;
 
     // Common implementation for filter overloads.
     filter(
         arg1: ((arg: ValueType) => boolean) | Partial<ValueType>,
-    ): ChiselCursor<ValueType> {
+    ): ChiselCursor<Entity, ValueType> {
         if (typeof arg1 == "function") {
             return new ChiselCursor(
                 this.baseConstructor,
@@ -382,7 +389,10 @@ export class ChiselCursor<ValueType> {
      *
      * Note: the sort is not guaranteed to be stable.
      */
-    sortBy(key: keyof ValueType, ascending = true): ChiselCursor<ValueType> {
+    sortBy(
+        key: keyof ValueType,
+        ascending = true,
+    ): ChiselCursor<Entity, ValueType> {
         return new ChiselCursor(
             this.baseConstructor,
             new SortBy(
@@ -463,7 +473,7 @@ export class ChiselCursor<ValueType> {
         if (iter === undefined) {
             iter = this.runChiselQuery(this.inner);
         }
-        return iter[Symbol.asyncIterator]();
+        return (iter as AsyncIterable<ValueType>)[Symbol.asyncIterator]();
     }
 
     /** Performs recursive descent via Operator.inner examining the whole operator
@@ -473,8 +483,8 @@ export class ChiselCursor<ValueType> {
      * If no PredicateFilter is found, undefined is returned.
      */
     private evalOpsRecursive(
-        op: Operator<ValueType>,
-    ): AsyncIterable<ValueType> | undefined {
+        op: Operator<unknown>,
+    ): AsyncIterable<unknown> | undefined {
         if (op.inner === undefined) {
             return undefined;
         }
@@ -490,8 +500,8 @@ export class ChiselCursor<ValueType> {
     }
 
     private runChiselQuery(
-        op: Operator<ValueType>,
-    ): AsyncIterable<ValueType> {
+        op: Operator<unknown>,
+    ): AsyncIterable<unknown> {
         const ctor = op.containsType(ColumnsSelect)
             ? undefined
             : this.baseConstructor;
@@ -507,7 +517,7 @@ export class ChiselCursor<ValueType> {
                         const properties = await opAsync(
                             "op_chisel_query_next",
                             rid,
-                        ) as ValueType | null; // FIXME: This is wrong, we can get less than ValueType with ColumnsSelect.
+                        );
 
                         if (properties === null) {
                             break;
@@ -566,7 +576,7 @@ export function chiselIterator<T extends ChiselEntity>(
     type: { new (): T },
 ) {
     const b = new BaseEntity<T>(type.name);
-    return new ChiselCursor<T>(type, b);
+    return new ChiselCursor<T, T>(type, b);
 }
 
 /** ChiselEntity is a class that ChiselStrike user-defined entities are expected to extend.
@@ -641,7 +651,7 @@ export class ChiselEntity {
      * Note that `ChiselCursor` is a lazy iterator, so this doesn't mean a query will be generating fetching all elements at this point. */
     static cursor<T extends ChiselEntity>(
         this: { new (): T },
-    ): ChiselCursor<T> {
+    ): ChiselCursor<T, T> {
         return chiselIterator<T>(this);
     }
 
@@ -1037,7 +1047,7 @@ type ChiselEntityClass<T extends ChiselEntity> = {
     findMany: (_: Partial<T>) => Promise<T[]>;
     build: (...properties: Record<string, unknown>[]) => T;
     delete: (restrictions: Partial<T>) => Promise<void>;
-    cursor: () => ChiselCursor<T>;
+    cursor: () => ChiselCursor<T, T>;
 };
 
 type GenericChiselEntityClass = ChiselEntityClass<ChiselEntity>;
