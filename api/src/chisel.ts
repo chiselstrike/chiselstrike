@@ -69,7 +69,7 @@ class BaseEntity<T> extends Operator<T> {
 class Take<T> extends Operator<T> {
     constructor(
         public readonly count: number,
-        inner: Operator<T>,
+        inner: Operator<unknown, T>,
     ) {
         super(inner);
     }
@@ -101,7 +101,7 @@ class Take<T> extends Operator<T> {
 class Skip<T> extends Operator<T> {
     constructor(
         public readonly count: number,
-        inner: Operator<T>,
+        inner: Operator<unknown, T>,
     ) {
         super(inner);
     }
@@ -130,7 +130,7 @@ class ColumnsSelect<T, C extends (keyof T)[]>
     extends Operator<T, Pick<T, C[number]>> {
     constructor(
         public columns: C,
-        inner: Operator<T>,
+        inner: Operator<unknown, T>,
     ) {
         super(inner);
     }
@@ -162,7 +162,7 @@ class ColumnsSelect<T, C extends (keyof T)[]>
 class PredicateFilter<T> extends Operator<T> {
     constructor(
         public predicate: (arg: T) => boolean,
-        inner: Operator<T>,
+        inner: Operator<unknown, T>,
     ) {
         super(inner);
     }
@@ -194,7 +194,7 @@ class ExpressionFilter<T> extends Operator<T> {
     constructor(
         public predicate: (arg: T) => boolean,
         public expression: Record<string, unknown>,
-        inner: Operator<T>,
+        inner: Operator<unknown, T>,
     ) {
         super(inner);
     }
@@ -232,7 +232,7 @@ class SortKey<T> {
 class SortBy<T> extends Operator<T> {
     constructor(
         private keys: SortKey<T>[],
-        inner: Operator<T>,
+        inner: Operator<unknown, T>,
     ) {
         super(inner);
     }
