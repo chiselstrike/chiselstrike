@@ -10,6 +10,7 @@ use crate::deno::set_query_engine;
 use crate::deno::set_type_system;
 use crate::deno::update_secrets;
 use crate::deno::{activate_endpoint, compile_endpoints};
+use crate::rpc::InitState;
 use crate::rpc::{GlobalRpcState, RpcService};
 use crate::runtime;
 use crate::runtime::Runtime;
@@ -159,7 +160,12 @@ async fn read_secrets() -> Result<JsonObject> {
     }
 }
 
-async fn run(state: SharedState, mut cmd: ExecutorChannel) -> Result<()> {
+async fn run(state: SharedState, init: InitState, mut cmd: ExecutorChannel) -> Result<()> {
+    let InitState {
+        routes,
+        policies,
+        type_system: ts,
+    } = init;
     init_deno(state.inspect_brk).await?;
 
     // Ensure we read the secrets before spawning an ApiService; secrets may dictate API authorization.
@@ -170,10 +176,7 @@ async fn run(state: SharedState, mut cmd: ExecutorChannel) -> Result<()> {
     update_secrets(secret).await;
 
     let meta = MetaService::local_connection(&state.db, state.nr_connections).await?;
-    let ts = meta.load_type_system().await?;
 
-    let routes = meta.load_endpoints().await?;
-    let policies = meta.load_policies().await?;
     let api_info = meta.load_api_info().await?;
 
     let mut api_service = ApiService::new(api_info);
@@ -270,7 +273,9 @@ fn find_legacy_sqlite_dbs(opt: &Opt) -> Vec<PathBuf> {
     sources
 }
 
-async fn run_shared_state(opt: Opt) -> Result<(SharedTasks, SharedState, Vec<ExecutorChannel>)> {
+async fn run_shared_state(
+    opt: Opt,
+) -> Result<(SharedTasks, SharedState, Vec<ExecutorChannel>, InitState)> {
     let db_conn = DbConnection::connect(&opt.db_uri, opt.nr_connections).await?;
     let meta = MetaService::local_connection(&db_conn, opt.nr_connections).await?;
 
@@ -295,8 +300,16 @@ async fn run_shared_state(opt: Opt) -> Result<(SharedTasks, SharedState, Vec<Exe
     }
 
     let rpc_commands = commands2.clone();
+    let routes = meta.load_endpoints().await?;
+    let policies = meta.load_policies().await?;
+    let type_system = meta.load_type_system().await?;
+    let init = InitState {
+        routes,
+        policies,
+        type_system,
+    };
     let state = Arc::new(Mutex::new(
-        GlobalRpcState::new(meta, query_engine, rpc_commands).await?,
+        GlobalRpcState::new(meta, init.clone(), query_engine, rpc_commands).await?,
     ));
 
     let rpc = RpcService::new(state);
@@ -389,27 +402,32 @@ async fn run_shared_state(opt: Opt) -> Result<(SharedTasks, SharedState, Vec<Exe
     };
 
     let tasks = SharedTasks { rpc_task, sig_task };
-    Ok((tasks, state, commands))
+    Ok((tasks, state, commands, init))
 }
 
-async fn run_on_new_localset(state: SharedState, command: ExecutorChannel) -> Result<()> {
+async fn run_on_new_localset(
+    state: SharedState,
+    init: InitState,
+    command: ExecutorChannel,
+) -> Result<()> {
     let local = tokio::task::LocalSet::new();
-    local.run_until(run(state, command)).await
+    local.run_until(run(state, init, command)).await
 }
 
 pub async fn run_all(opt: Opt) -> Result<DoRepeat> {
-    let (tasks, shared, mut commands) = run_shared_state(opt).await?;
+    let (tasks, shared, mut commands, init) = run_shared_state(opt).await?;
+
     let mut executors = vec![];
     for id in 0..shared.executor_threads() {
         debug!("Starting executor {}", id);
         let cmd = commands.pop().unwrap();
-        executors.push(std::thread::spawn(enclose! { (shared) move || {
+        executors.push(std::thread::spawn(enclose! { (shared, init) move || {
             tokio::runtime::Builder::new_current_thread()
                 .enable_all()
                 .build()
                 .unwrap()
                 .block_on(async {
-                    run_on_new_localset(shared, cmd).await
+                    run_on_new_localset(shared, init, cmd).await
                 }).unwrap();
         }}));
     }
