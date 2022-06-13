@@ -13,13 +13,17 @@ function opAsync(opName: string, a?: unknown, b?: unknown): Promise<unknown> {
 }
 
 /**
- * Base class for various Operators applicable on `ChiselCursor`.
+ * Base class for various Operators applicable on `ChiselCursor`. An
+ * implementation of Operator<T> processes an AsyncIterable<T> and
+ * produces an AsyncIterable<U> for some, implementation defined, U.
+ * The base class is generic so that the apply function type is
+ * sound. Note that TypeScript *doesn't* check this.
  */
 abstract class Operator<T> {
     // Read by rust
     readonly type;
     constructor(
-        public readonly inner: Operator<T> | undefined,
+        public readonly inner: Operator<unknown> | undefined,
     ) {
         this.type = this.constructor.name;
     }
@@ -29,7 +33,7 @@ abstract class Operator<T> {
      */
     public abstract apply(
         iter: AsyncIterable<T>,
-    ): AsyncIterable<T>;
+    ): AsyncIterable<unknown>;
 
     /** Recursively examines operator chain searching for `ctor` operator.
      * Returns true if found, false otherwise.
@@ -48,7 +52,7 @@ abstract class Operator<T> {
 /**
  * Specifies Entity whose elements are to be fetched.
  */
-class BaseEntity<T> extends Operator<T> {
+class BaseEntity<T> extends Operator<never> {
     constructor(
         public name: string,
     ) {
@@ -56,7 +60,7 @@ class BaseEntity<T> extends Operator<T> {
     }
 
     apply(
-        _iter: AsyncIterable<T>,
+        _iter: AsyncIterable<never>,
     ): AsyncIterable<T> {
         throw new Error("can't apply BaseEntity operator on an iterable");
     }
@@ -69,7 +73,7 @@ class BaseEntity<T> extends Operator<T> {
 class Take<T> extends Operator<T> {
     constructor(
         public readonly count: number,
-        inner: Operator<T>,
+        inner: Operator<unknown>,
     ) {
         super(inner);
     }
@@ -101,7 +105,7 @@ class Take<T> extends Operator<T> {
 class Skip<T> extends Operator<T> {
     constructor(
         public readonly count: number,
-        inner: Operator<T>,
+        inner: Operator<unknown>,
     ) {
         super(inner);
     }
@@ -126,11 +130,10 @@ class Skip<T> extends Operator<T> {
 /**
  * Forces fetch of just the `columns` (fields) of a given entity.
  */
-class ColumnsSelect<T, C extends (keyof T)[]>
-    extends Operator<Pick<T, C[number]>> {
+class ColumnsSelect<T, C extends (keyof T)[]> extends Operator<T> {
     constructor(
         public columns: C,
-        inner: Operator<T>,
+        inner: Operator<unknown>,
     ) {
         super(inner);
     }
@@ -162,7 +165,7 @@ class ColumnsSelect<T, C extends (keyof T)[]>
 class PredicateFilter<T> extends Operator<T> {
     constructor(
         public predicate: (arg: T) => boolean,
-        inner: Operator<T>,
+        inner: Operator<unknown>,
     ) {
         super(inner);
     }
@@ -194,7 +197,7 @@ class ExpressionFilter<T> extends Operator<T> {
     constructor(
         public predicate: (arg: T) => boolean,
         public expression: Record<string, unknown>,
-        inner: Operator<T>,
+        inner: Operator<unknown>,
     ) {
         super(inner);
     }
@@ -232,7 +235,7 @@ class SortKey<T> {
 class SortBy<T> extends Operator<T> {
     constructor(
         private keys: SortKey<T>[],
-        inner: Operator<T>,
+        inner: Operator<unknown>,
     ) {
         super(inner);
     }
@@ -274,9 +277,13 @@ class SortBy<T> extends Operator<T> {
 
 /** ChiselCursor is a lazy iterator that will be used by ChiselStrike to construct an optimized query. */
 export class ChiselCursor<T> {
+    // FIXME: The types of the various Operators we create is
+    // wrong. In here T is a ChiselEntity, but, for example, Sort<T>
+    // will never see a ChiselEntity, it will see the plain Records
+    // extracted from the DB.
     constructor(
         private baseConstructor: { new (): T },
-        private inner: Operator<T>,
+        private inner: Operator<unknown>,
     ) {}
     /** Force ChiselStrike to fetch just the `...columns` that are part of the colums list. */
     select<C extends (keyof T)[]>(
@@ -284,7 +291,7 @@ export class ChiselCursor<T> {
     ): ChiselCursor<Pick<T, C[number]>> {
         return new ChiselCursor(
             this.baseConstructor,
-            new ColumnsSelect(columns, this.inner),
+            new ColumnsSelect<T, (keyof T)[]>(columns, this.inner),
         );
     }
 
@@ -457,7 +464,9 @@ export class ChiselCursor<T> {
         if (iter === undefined) {
             iter = this.runChiselQuery(this.inner);
         }
-        return iter[Symbol.asyncIterator]();
+        // By construction we know that the iterators will produce Ts,
+        // but we use unknown in the implementation.
+        return (iter as AsyncIterable<T>)[Symbol.asyncIterator]();
     }
 
     /** Performs recursive descent via Operator.inner examining the whole operator
@@ -466,9 +475,10 @@ export class ChiselCursor<T> {
      * TypeScript. In such a case, the function returns the resulting AsyncIterable.
      * If no PredicateFilter is found, undefined is returned.
      */
+    // FIXME: We use unknown since we don't know all intermediate types needed to make this more strict.
     private evalOpsRecursive(
-        op: Operator<T>,
-    ): AsyncIterable<T> | undefined {
+        op: Operator<unknown>,
+    ): AsyncIterable<unknown> | undefined {
         if (op.inner === undefined) {
             return undefined;
         }
@@ -483,9 +493,10 @@ export class ChiselCursor<T> {
         }
     }
 
+    // This can be called by evalOpsRecursive in the middle of the chain, hence the unknowns.
     private runChiselQuery(
-        op: Operator<T>,
-    ): AsyncIterable<T> {
+        op: Operator<unknown>,
+    ): AsyncIterable<unknown> {
         const ctor = op.containsType(ColumnsSelect)
             ? undefined
             : this.baseConstructor;
@@ -501,7 +512,7 @@ export class ChiselCursor<T> {
                         const properties = await opAsync(
                             "op_chisel_query_next",
                             rid,
-                        ) as T | null; // FIXME: This is wrong, we can get less than T with ColumnsSelect.
+                        );
 
                         if (properties === null) {
                             break;
