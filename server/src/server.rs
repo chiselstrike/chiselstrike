@@ -18,6 +18,7 @@ use crate::JsonObject;
 use anyhow::Result;
 use async_lock::Mutex;
 use deno_core::futures;
+use enclose::enclose;
 use futures::future::LocalBoxFuture;
 use futures::FutureExt;
 use futures::StreamExt;
@@ -73,18 +74,21 @@ pub enum DoRepeat {
     No,
 }
 
-pub trait CommandTrait: (FnOnce() -> LocalBoxFuture<'static, Result<()>>) + Send + 'static {}
+pub(crate) trait CommandTrait:
+    (FnOnce() -> LocalBoxFuture<'static, Result<()>>) + Send + 'static
+{
+}
 
 impl<T> CommandTrait for T where
     T: (FnOnce() -> LocalBoxFuture<'static, Result<()>>) + Send + 'static
 {
 }
 
-pub type Command = Box<dyn CommandTrait>;
-pub type CommandResult = Result<()>;
+type Command = Box<dyn CommandTrait>;
+type CommandResult = Result<()>;
 
 #[derive(Clone)]
-pub struct SharedState {
+struct SharedState {
     signal_rx: async_channel::Receiver<()>,
     /// ChiselRpc waits on all API threads to send here before it starts serving RPC.
     readiness_tx: async_channel::Sender<()>,
@@ -101,7 +105,7 @@ impl SharedState {
     }
 }
 
-pub struct SharedTasks {
+struct SharedTasks {
     rpc_task: JoinHandle<Result<()>>,
     sig_task: JoinHandle<Result<DoRepeat>>,
 }
@@ -228,14 +232,14 @@ async fn run(state: SharedState, mut cmd: ExecutorChannel) -> Result<()> {
 }
 
 // Receives commands, returns results
-pub struct ExecutorChannel {
+struct ExecutorChannel {
     pub rx: async_channel::Receiver<Command>,
     pub tx: async_channel::Sender<CommandResult>,
 }
 
 // Sends commands, receives results.
 #[derive(Clone)]
-pub struct CoordinatorChannel {
+pub(crate) struct CoordinatorChannel {
     pub tx: async_channel::Sender<Command>,
     pub rx: async_channel::Receiver<CommandResult>,
 }
@@ -266,9 +270,7 @@ fn find_legacy_sqlite_dbs(opt: &Opt) -> Vec<PathBuf> {
     sources
 }
 
-pub async fn run_shared_state(
-    opt: Opt,
-) -> Result<(SharedTasks, SharedState, Vec<ExecutorChannel>)> {
+async fn run_shared_state(opt: Opt) -> Result<(SharedTasks, SharedState, Vec<ExecutorChannel>)> {
     let db_conn = DbConnection::connect(&opt.db_uri, opt.nr_connections).await?;
     let meta = MetaService::local_connection(&db_conn, opt.nr_connections).await?;
 
@@ -390,7 +392,31 @@ pub async fn run_shared_state(
     Ok((tasks, state, commands))
 }
 
-pub async fn run_on_new_localset(state: SharedState, command: ExecutorChannel) -> Result<()> {
+async fn run_on_new_localset(state: SharedState, command: ExecutorChannel) -> Result<()> {
     let local = tokio::task::LocalSet::new();
     local.run_until(run(state, command)).await
+}
+
+pub async fn run_all(opt: Opt) -> Result<DoRepeat> {
+    let (tasks, shared, mut commands) = run_shared_state(opt).await?;
+    let mut executors = vec![];
+    for id in 0..shared.executor_threads() {
+        debug!("Starting executor {}", id);
+        let cmd = commands.pop().unwrap();
+        executors.push(std::thread::spawn(enclose! { (shared) move || {
+            tokio::runtime::Builder::new_current_thread()
+                .enable_all()
+                .build()
+                .unwrap()
+                .block_on(async {
+                    run_on_new_localset(shared, cmd).await
+                }).unwrap();
+        }}));
+    }
+
+    for ex in executors.drain(..) {
+        ex.join().unwrap();
+    }
+
+    tasks.join().await
 }
