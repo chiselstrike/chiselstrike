@@ -58,11 +58,6 @@ impl Default for AutoIndex {
     }
 }
 
-#[derive(PartialOrd, PartialEq, Eq, Ord)]
-pub(crate) struct Endpoint {
-    pub(crate) file_path: PathBuf,
-}
-
 /// Manifest defines the files that describe types, endpoints, and policies.
 ///
 /// The manifest is a high-level declaration of application behavior.
@@ -93,19 +88,15 @@ impl Manifest {
         Self::dirs_to_paths(&self.models)
     }
 
-    pub fn endpoints(&self) -> anyhow::Result<Vec<Endpoint>> {
-        let paths = Self::dirs_to_paths(&self.endpoints)?;
-        let ret: Vec<_> = paths
-            .into_iter()
-            .map(|file_path| Endpoint { file_path })
-            .collect();
+    pub fn endpoints(&self) -> anyhow::Result<Vec<PathBuf>> {
+        let ret = Self::dirs_to_paths(&self.endpoints)?;
         // Check for duplicated endpoints now since otherwise TSC
         // reports the issue and we can produce a better diagnostic
         // than TSC.
         let i = ret.iter();
         for (a, b) in i.clone().zip(i.skip(1)) {
-            let a = &a.file_path.display().to_string();
-            let b = &b.file_path.display().to_string();
+            let a = &a.display().to_string();
+            let b = &b.display().to_string();
             if without_extension(a) == without_extension(b) {
                 anyhow::bail!("Cannot add both {} {} as routes. ChiselStrike uses filesystem-based routing, so we don't know what to do. Sorry! 🥺", a, b);
             }

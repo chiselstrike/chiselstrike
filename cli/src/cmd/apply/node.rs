@@ -5,16 +5,16 @@ use crate::cmd::apply::chiselc_spawn;
 use crate::cmd::apply::parse_indexes;
 use crate::cmd::apply::TypeChecking;
 use crate::project::read_to_string;
-use crate::project::Endpoint;
 use anyhow::{anyhow, Context, Result};
 use std::env;
 use std::fs::{self};
 use std::io::Write;
+use std::path::PathBuf;
 use tempfile::Builder;
 use tokio::task::{spawn_blocking, JoinHandle};
 
 pub(crate) async fn apply(
-    endpoints: &[Endpoint],
+    endpoints: &[PathBuf],
     entities: &[String],
     optimize: bool,
     auto_index: bool,
@@ -42,10 +42,10 @@ pub(crate) async fn apply(
         .iter()
         .map(|endpoint| {
             if optimize {
-                let endpoint_file_path = endpoint.file_path.clone();
+                let endpoint_file_path = endpoint.clone();
                 let gen_file_path = gen_dir.join(endpoint_file_path.file_name().unwrap());
                 let chiselc = chiselc_spawn(
-                    endpoint.file_path.to_str().unwrap(),
+                    endpoint.to_str().unwrap(),
                     gen_file_path.to_str().unwrap(),
                     entities,
                 )
@@ -57,7 +57,7 @@ pub(crate) async fn apply(
                     .to_path_buf();
                 (Some(Box::new(future)), endpoint_file_path, import_path)
             } else {
-                let path = endpoint.file_path.to_owned();
+                let path = endpoint.to_owned();
                 (None, path.clone(), path)
             }
         })
@@ -113,16 +113,13 @@ pub(crate) async fn apply(
             let out = String::from_utf8(res.stdout).expect("command output not utf-8");
             let err = String::from_utf8(res.stderr).expect("command output not utf-8");
 
-            return Err(anyhow!(
-                "compiling endpoint {}",
-                endpoint.file_path.display()
-            ))
-            .with_context(|| format!("{}\n{}", out, err));
+            return Err(anyhow!("compiling endpoint {}", endpoint.display()))
+                .with_context(|| format!("{}\n{}", out, err));
         }
         let code = read_to_string(bundler_output_file)?;
 
         endpoints_req.push(EndPointCreationRequest {
-            path: endpoint.file_path.display().to_string(),
+            path: endpoint.display().to_string(),
             code: code.clone(),
         });
         if auto_index {
