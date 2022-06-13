@@ -127,7 +127,7 @@ class Skip<T> extends Operator<T> {
  * Forces fetch of just the `columns` (fields) of a given entity.
  */
 class ColumnsSelect<T, C extends (keyof T)[]>
-    extends Operator<Pick<T, C[number]>> {
+    extends Operator<T, Pick<T, C[number]>> {
     constructor(
         public columns: C,
         inner: Operator<T>,
