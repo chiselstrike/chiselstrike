@@ -64,15 +64,25 @@ pub(crate) struct GlobalRpcState {
     versions: BTreeSet<String>,
 }
 
+#[derive(Clone)]
+pub(crate) struct InitState {
+    pub routes: PrefixMap<String>,
+    pub policies: Policies,
+    pub type_system: TypeSystem,
+}
+
 impl GlobalRpcState {
     pub(crate) async fn new(
         meta: MetaService,
+        init: InitState,
         query_engine: QueryEngine,
         commands: Vec<CoordinatorChannel>,
     ) -> Result<Self> {
-        let type_system = meta.load_type_system().await?;
-        let routes = meta.load_endpoints().await?;
-        let policies = meta.load_policies().await?;
+        let InitState {
+            routes,
+            policies,
+            type_system,
+        } = init;
 
         let mut versions = BTreeSet::new();
         for v in type_system.versions.keys() {
