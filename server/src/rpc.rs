@@ -441,13 +441,14 @@ or
 
         state.meta.persist_endpoints(&state.routes).await?;
 
-        let endpoints = endpoint_routes.clone();
+        let endpoint_paths: Vec<_> = endpoint_routes.into_iter().map(|x| x.0).collect();
         let types_global = state.type_system.clone();
 
-        if !endpoints.is_empty() || types_global.get_version(&api_version).is_ok() {
+        if !endpoint_paths.is_empty() || types_global.get_version(&api_version).is_ok() {
             state.versions.insert(api_version.clone());
         }
 
+        let endpoints_for_cmd = endpoint_paths.clone();
         let cmd = send_command!({
             {
                 set_type_system(types_global.clone()).await;
@@ -460,7 +461,7 @@ or
                 let runtime = runtime::get();
                 runtime.api.remove_routes(&prefix);
 
-                for (path, _) in &endpoints {
+                for path in &endpoints_for_cmd {
                     let func = Arc::new({
                         let path = path.clone();
                         move |req| deno::run_js(path.clone(), req).boxed_local()
@@ -469,7 +470,7 @@ or
                 }
                 runtime.api.update_api_info(&api_version, api_info);
             }
-            for (path, _) in endpoints {
+            for path in endpoints_for_cmd {
                 deno::activate_endpoint(&path).await?;
             }
             Ok(())
@@ -480,7 +481,7 @@ or
         // terraform-like workflow (x added, y removed, z modified)
         Ok(Response::new(ChiselApplyResponse {
             types: type_names_user_order,
-            endpoints: endpoint_routes.iter().map(|x| x.0.clone()).collect(),
+            endpoints: endpoint_paths,
             labels,
         }))
     }
