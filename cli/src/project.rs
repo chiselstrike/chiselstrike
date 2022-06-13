@@ -94,16 +94,11 @@ impl Manifest {
     }
 
     pub fn endpoints(&self) -> anyhow::Result<Vec<Endpoint>> {
-        let mut ret = vec![];
-        for dir in &self.endpoints {
-            let mut paths = vec![];
-            let dir = Path::new(dir);
-            dir_to_paths(dir, &mut paths)?;
-            for file_path in paths {
-                ret.push(Endpoint { file_path });
-            }
-        }
-        ret.sort_unstable();
+        let paths = Self::dirs_to_paths(&self.endpoints)?;
+        let ret: Vec<_> = paths
+            .into_iter()
+            .map(|file_path| Endpoint { file_path })
+            .collect();
         // Check for duplicated endpoints now since otherwise TSC
         // reports the issue and we can produce a better diagnostic
         // than TSC.
