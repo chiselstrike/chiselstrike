@@ -15,11 +15,11 @@ function opAsync(opName: string, a?: unknown, b?: unknown): Promise<unknown> {
 /**
  * Base class for various Operators applicable on `ChiselCursor`.
  */
-abstract class Operator<T> {
+abstract class Operator<Input, Output = Input> {
     // Read by rust
     readonly type;
     constructor(
-        public readonly inner: Operator<T> | undefined,
+        public readonly inner: Operator<unknown, Input> | undefined,
     ) {
         this.type = this.constructor.name;
     }
@@ -28,8 +28,8 @@ abstract class Operator<T> {
      * `iter` creating a new iterable.
      */
     public abstract apply(
-        iter: AsyncIterable<T>,
-    ): AsyncIterable<T>;
+        iter: AsyncIterable<Input>,
+    ): AsyncIterable<Output>;
 
     /** Recursively examines operator chain searching for `ctor` operator.
      * Returns true if found, false otherwise.
