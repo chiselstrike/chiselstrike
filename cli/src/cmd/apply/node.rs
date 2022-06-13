@@ -120,7 +120,7 @@ pub(crate) async fn apply(
 
         endpoints_req.push(EndPointCreationRequest {
             path: endpoint.display().to_string(),
-            code: code.clone(),
+            code,
         });
         if auto_index {
             let code = read_to_string(endpoint_file_path.clone())?;
