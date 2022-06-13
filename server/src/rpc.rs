@@ -59,7 +59,7 @@ pub(crate) struct GlobalRpcState {
     type_system: TypeSystem,
     meta: MetaService,
     query_engine: Arc<QueryEngine>,
-    routes: PrefixMap<String>, // For globally keeping track of routes
+    sources: PrefixMap<String>, // For globally keeping track of routes
     commands: Vec<CoordinatorChannel>,
     policies: Policies,
     versions: BTreeSet<String>,
@@ -67,7 +67,7 @@ pub(crate) struct GlobalRpcState {
 
 #[derive(Clone)]
 pub(crate) struct InitState {
-    pub routes: PrefixMap<String>,
+    pub sources: PrefixMap<String>,
     pub policies: Policies,
     pub type_system: TypeSystem,
 }
@@ -80,7 +80,7 @@ impl GlobalRpcState {
         commands: Vec<CoordinatorChannel>,
     ) -> Result<Self> {
         let InitState {
-            routes,
+            sources,
             policies,
             type_system,
         } = init;
@@ -89,7 +89,7 @@ impl GlobalRpcState {
         for v in type_system.versions.keys() {
             versions.insert(v.to_owned());
         }
-        for (p, _) in routes.iter() {
+        for (p, _) in sources.iter() {
             let rp = RequestPath::try_from(p.to_str().unwrap()).unwrap();
             versions.insert(rp.api_version().to_owned());
         }
@@ -99,7 +99,7 @@ impl GlobalRpcState {
             meta,
             query_engine: Arc::new(query_engine),
             commands,
-            routes,
+            sources,
             policies,
             versions,
         })
@@ -169,7 +169,7 @@ impl RpcService {
         QueryEngine::commit_transaction(transaction).await?;
 
         let prefix: PathBuf = format!("/{}/", api_version).into();
-        state.routes.remove_prefix(&prefix);
+        state.sources.remove_prefix(&prefix);
         state.type_system.versions.remove(&api_version);
         state.policies.versions.remove(&api_version);
 
@@ -452,13 +452,13 @@ or
         QueryEngine::commit_transaction(transaction).await?;
 
         let prefix: PathBuf = format!("/{}/", api_version).into();
-        state.routes.remove_prefix(&prefix);
+        state.sources.remove_prefix(&prefix);
 
         for (path, code) in &endpoint_routes {
-            state.routes.insert(path.into(), code.clone());
+            state.sources.insert(path.into(), code.clone());
         }
 
-        state.meta.persist_endpoints(&state.routes).await?;
+        state.meta.persist_sources(&state.sources).await?;
 
         let endpoint_paths: Vec<_> = endpoint_routes.into_iter().map(|x| x.0).collect();
         let types_global = state.type_system.clone();
@@ -597,7 +597,8 @@ impl ChiselRpc for RpcService {
             }
             let mut endpoint_defs = vec![];
             let version_path_str = format!("/{}/", api_version);
-            for (path, _) in state.routes.iter() {
+            for (path, _) in state.sources.iter() {
+                // FIXME: filter out non endpoint sources
                 if path.starts_with(&version_path_str) {
                     endpoint_defs.push(chisel::EndpointDefinition {
                         path: path.display().to_string(),

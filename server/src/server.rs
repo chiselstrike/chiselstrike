@@ -164,7 +164,7 @@ async fn read_secrets() -> Result<JsonObject> {
 
 async fn run(state: SharedState, init: InitState, mut cmd: ExecutorChannel) -> Result<()> {
     let InitState {
-        routes,
+        sources,
         policies,
         type_system: ts,
     } = init;
@@ -203,7 +203,8 @@ async fn run(state: SharedState, init: InitState, mut cmd: ExecutorChannel) -> R
     set_policies(policies).await;
     set_meta(meta).await;
 
-    let sources = routes
+    // add_endpoints expects a HashMap, not a PrefixMap
+    let hashmap = sources
         .iter()
         .map(|(k, v)| {
             let path = k.to_str().unwrap().to_string();
@@ -214,7 +215,7 @@ async fn run(state: SharedState, init: InitState, mut cmd: ExecutorChannel) -> R
             (path, v.clone())
         })
         .collect();
-    add_endpoints(sources, &api_service).await?;
+    add_endpoints(hashmap, &api_service).await?;
 
     let command_task = tokio::task::spawn_local(async move {
         while let Some(item) = cmd.rx.next().await {
@@ -309,11 +310,11 @@ async fn run_shared_state(
     }
 
     let rpc_commands = commands2.clone();
-    let routes = meta.load_endpoints().await?;
+    let sources = meta.load_sources().await?;
     let policies = meta.load_policies().await?;
     let type_system = meta.load_type_system().await?;
     let init = InitState {
-        routes,
+        sources,
         policies,
         type_system,
     };
