@@ -8,6 +8,7 @@ edition = "2021"
 deno_core = { path = "../third_party/deno/core" }
 deno_graph = "0.26.0"
 tsc_compile_build = { path = "../tsc_compile_build" }
+url = { git = "https://github.com/servo/rust-url.git", rev = "e12d76a61add5bc09980599c738099feaacd1d0d" }
 utils = { path = "../utils" }
 
 [dev-dependencies]
