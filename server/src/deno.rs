@@ -1485,6 +1485,18 @@ pub(crate) async fn compile_endpoints(sources: HashMap<String, String>) -> Resul
         let mut endpoints: Vec<v8::Local<'_, v8::Value>> = vec![];
 
         for (path, code) in sources {
+            if let Ok(url) = Url::parse(&path) {
+                // External module like https://deno.land/x/...
+                // Insert as is.
+                code_map.insert(url, code);
+                continue;
+            }
+            if path.split('/').nth(2) != Some("endpoints") {
+                // Non endpoint files like models/...
+                // Ignore for now.
+                continue;
+            }
+
             let version = handle.versions.entry(path.clone());
             let version = *version.and_modify(|v| *v += 1).or_insert(0);
             let path = without_extension(&path);

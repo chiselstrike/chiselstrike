@@ -25,6 +25,7 @@ use chisel::{
     RestartRequest, RestartResponse, StatusRequest, StatusResponse,
 };
 use deno_core::futures;
+use deno_core::url::Url;
 use futures::FutureExt;
 use std::collections::{BTreeSet, HashMap};
 use std::net::SocketAddr;
@@ -233,9 +234,12 @@ impl RpcService {
         let mut endpoint_routes = vec![];
         let mut sources = HashMap::new();
         for (path, code) in apply_request.sources {
-            if path.starts_with("endpoints/") {
-                sources.insert(format!("/{}/{}", api_version, path), code.clone());
+            if Url::parse(&path).is_ok() {
+                sources.insert(path, code.clone());
+                continue;
             }
+
+            sources.insert(format!("/{}/{}", api_version, path), code.clone());
             let path = without_extension(&path);
             if let Some(path) = path.strip_prefix("endpoints/") {
                 let path = format!("/{}/{}", api_version, path);
