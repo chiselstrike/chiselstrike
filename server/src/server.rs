@@ -322,6 +322,8 @@ async fn run_shared_state(
     let mut sigterm = tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())?;
     let mut sigint = tokio::signal::unix::signal(tokio::signal::unix::SignalKind::interrupt())?;
     let mut sighup = tokio::signal::unix::signal(tokio::signal::unix::SignalKind::hangup())?;
+    let mut sigusr1 =
+        tokio::signal::unix::signal(tokio::signal::unix::SignalKind::user_defined1())?;
     let default_hook = panic::take_hook();
     panic::set_hook(Box::new(move |info| {
         default_hook(info);
@@ -333,7 +335,8 @@ async fn run_shared_state(
         let res = futures::select! {
             _ = sigterm.recv().fuse() => { debug!("Got SIGTERM"); DoRepeat::No },
             _ = sigint.recv().fuse() => { debug!("Got SIGINT"); DoRepeat::No },
-            _ = sighup.recv().fuse() => { debug!("Got SIGHUP"); DoRepeat::Yes },
+            _ = sighup.recv().fuse() => { debug!("Got SIGHUP"); DoRepeat::No },
+            _ = sigusr1.recv().fuse() => { debug!("Got SIGUSR1"); DoRepeat::Yes },
         };
         debug!("Got signal");
         signal_tx.send(()).await?;
