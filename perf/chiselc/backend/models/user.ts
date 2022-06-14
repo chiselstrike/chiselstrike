@@ -1,4 +1,4 @@
-import { ChiselEntity } from "@chiselstrike/api"
+import { ChiselEntity } from "@chiselstrike/api";
 
 export class User extends ChiselEntity {
     name: string;
