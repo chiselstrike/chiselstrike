@@ -21,3 +21,44 @@ Person.cursor().filter(person => person.age > 40 && fetch("foobar"))
 // CHECK:     }
 // CHECK: }).filter((person)=>fetch("foobar")
 // CHECK: );
+
+Person.cursor().filter(person => person.name == "Glauber Costa" && person.age > 40 && validate(person));
+
+// CHECK: Person.cursor().__filter((person)=>person.name == "Glauber Costa" && person.age > 40
+// CHECK: , {
+// CHECK:     exprType: "Binary",
+// CHECK:     left: {
+// CHECK:         exprType: "Binary",
+// CHECK:         left: {
+// CHECK:             exprType: "Property",
+// CHECK:             object: {
+// CHECK:                 exprType: "Parameter",
+// CHECK:                 position: 0
+// CHECK:             },
+// CHECK:             property: "name"
+// CHECK:         },
+// CHECK:         op: "Eq",
+// CHECK:         right: {
+// CHECK:             exprType: "Literal",
+// CHECK:             value: "Glauber Costa"
+// CHECK:         }
+// CHECK:     },
+// CHECK:     op: "And",
+// CHECK:     right: {
+// CHECK:         exprType: "Binary",
+// CHECK:         left: {
+// CHECK:             exprType: "Property",
+// CHECK:             object: {
+// CHECK:                 exprType: "Parameter",
+// CHECK:                 position: 0
+// CHECK:             },
+// CHECK:             property: "age"
+// CHECK:         },
+// CHECK:         op: "Gt",
+// CHECK:         right: {
+// CHECK:             exprType: "Literal",
+// CHECK:             value: 40
+// CHECK:         }
+// CHECK:     }
+// CHECK: }).filter((person)=>validate(person)
+// CHECK: );
