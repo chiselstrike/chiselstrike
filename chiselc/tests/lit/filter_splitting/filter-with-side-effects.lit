@@ -19,7 +19,7 @@ Person.cursor().filter(person => person.age > 40 && fetch("foobar"))
 // CHECK:         exprType: "Literal",
 // CHECK:         value: 40
 // CHECK:     }
-// CHECK: }).filter((person)=>fetch("foobar")
+// CHECK: }, (person)=>fetch("foobar")
 // CHECK: );
 
 Person.cursor().filter(person => person.name == "Glauber Costa" && person.age > 40 && validate(person));
@@ -60,5 +60,5 @@ Person.cursor().filter(person => person.name == "Glauber Costa" && person.age > 
 // CHECK:             value: 40
 // CHECK:         }
 // CHECK:     }
-// CHECK: }).filter((person)=>validate(person)
+// CHECK: }, (person)=>validate(person)
 // CHECK: );

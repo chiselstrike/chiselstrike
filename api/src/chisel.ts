@@ -357,17 +357,19 @@ export class ChiselCursor<T> {
 
     // Filtering function used by Chisel Compiler. Not intended for direct usage.
     __filter(
-        predicate: (arg: T) => boolean,
+        exprPredicate: (arg: T) => boolean,
         expression: Record<string, unknown>,
+        postPredicate?: (arg: T) => boolean,
     ) {
-        return new ChiselCursor(
-            this.baseConstructor,
-            new ExpressionFilter(
-                predicate,
-                expression,
-                this.inner,
-            ),
+        let op: Operator<T> = new ExpressionFilter(
+            exprPredicate,
+            expression,
+            this.inner,
         );
+        if (postPredicate !== undefined) {
+            op = new PredicateFilter(postPredicate, op);
+        }
+        return new ChiselCursor(this.baseConstructor, op);
     }
 
     /**
@@ -693,13 +695,15 @@ export class ChiselEntity {
     // FindMany function used by Chisel Compiler. Not intended for direct usage.
     static async __findMany<T extends ChiselEntity>(
         this: { new (): T },
-        predicate: (arg: T) => boolean,
+        exprPredicate: (arg: T) => boolean,
         expression: Record<string, unknown>,
+        postPredicate?: (arg: T) => boolean,
         take?: number,
     ): Promise<T[]> {
         let it = chiselIterator<T>(this).__filter(
-            predicate,
+            exprPredicate,
             expression,
+            postPredicate,
         );
         if (take !== undefined) {
             it = it.take(take);
@@ -744,12 +748,14 @@ export class ChiselEntity {
     // findOne function used by Chisel Compiler. Not intended for direct usage.
     static async __findOne<T extends ChiselEntity>(
         this: { new (): T },
-        predicate: (arg: T) => boolean,
+        exprPredicate: (arg: T) => boolean,
         expression: Record<string, unknown>,
+        postPredicate?: (arg: T) => boolean,
     ): Promise<T | undefined> {
         const it = chiselIterator<T>(this).__filter(
-            predicate,
+            exprPredicate,
             expression,
+            postPredicate,
         );
         for await (const value of it) {
             return value;

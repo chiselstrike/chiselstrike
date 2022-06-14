@@ -1,0 +1,33 @@
+# SPDX-FileCopyrightText: © 2022 ChiselStrike <info@chiselstrike.com>
+
+# RUN: sh -e @file
+
+cd "$TEMPDIR"
+
+cat << EOF > "$TEMPDIR/models/user.ts"
+import { ChiselEntity } from "@chiselstrike/api";
+
+export class User extends ChiselEntity {
+    username: string = "";
+}
+EOF
+
+cat << EOF > "$TEMPDIR/endpoints/entity-methods.ts"
+import { User } from "../models/user.ts";
+
+function validate(user: User): boolean {
+    return true;
+}
+
+export default async function (req: Request): Promise<Response> {
+    await User.findOne(user => user.username == 'penberg' && validate(user));
+    return new Response("Ok");
+}
+EOF
+
+$CHISEL apply
+# CHECK: Model defined: User
+# CHECK: End point defined: /dev/entity-methods
+
+$CURL -X POST $CHISELD_HOST/dev/entity-methods
+# CHECK: Ok

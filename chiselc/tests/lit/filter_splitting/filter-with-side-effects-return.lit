@@ -20,6 +20,6 @@ Person.cursor().filter(person => { return person.age > 40 && fetch("foobar"); })
 // CHECK:         exprType: "Literal",
 // CHECK:         value: 40
 // CHECK:     }
-// CHECK: }).filter((person)=>{
+// CHECK: }, (person)=>{
 // CHECK:     return fetch("foobar");
 // CHECK: });
