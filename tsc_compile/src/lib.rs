@@ -32,6 +32,7 @@ use std::path::Component;
 use std::path::Path;
 use std::path::PathBuf;
 use std::sync::Arc;
+use url::Url as FixedUrl;
 use utils::without_extension;
 
 #[derive(Debug)]
@@ -254,7 +255,10 @@ impl Resolver for ModuleResolver {
 
 // If the given source can be made relative to one of the urls, return
 // the relative path to, and the original file name of, that url.
-fn find_relative<'a>(urls: &HashMap<Url, &'a str>, source: &Url) -> Option<(String, &'a str)> {
+fn find_relative<'a>(
+    urls: &HashMap<FixedUrl, &'a str>,
+    source: &FixedUrl,
+) -> Option<(String, &'a str)> {
     for (url, name) in urls {
         if let Some(rel) = url.make_relative(source) {
             return Some((rel, name));
@@ -306,12 +310,12 @@ impl Compiler {
         file_names: &[&str],
         opts: CompileOptions<'_>,
     ) -> Result<HashMap<String, String>> {
-        let mut url_to_name: HashMap<Url, &str> = HashMap::new();
+        let mut url_to_name: HashMap<FixedUrl, &str> = HashMap::new();
         let mut urls = Vec::new();
         for name in file_names {
             let url = Url::parse(&format!("file://{}", abs(name)))?;
             urls.push((url.clone(), ModuleKind::Esm));
-            url_to_name.insert(url, name);
+            url_to_name.insert(FixedUrl::parse(url.as_str()).unwrap(), name);
         }
 
         let mut extra_libs = HashMap::new();
@@ -394,12 +398,12 @@ impl Compiler {
             for (k, v) in map.written {
                 let prefix = without_extension(&k);
                 let is_dts = k.ends_with(".d.ts");
-                let source = prefix_map[prefix];
-                let source = if let Some(n) = url_to_name.get(source) {
+                let source = FixedUrl::parse(prefix_map[prefix].as_str()).unwrap();
+                let source = if let Some(n) = url_to_name.get(&source) {
                     n.to_string()
                 } else if is_dts || source.scheme() == "chisel" {
                     continue;
-                } else if let Some((rel, source)) = find_relative(&url_to_name, source) {
+                } else if let Some((rel, source)) = find_relative(&url_to_name, &source) {
                     let dir_path = Path::new(source).parent().unwrap().to_path_buf();
                     join_path(dir_path.clone(), Path::new(&rel))
                         .display()
@@ -778,5 +782,14 @@ export default foo;
     #[tokio::test]
     async fn relative() {
         test_with_path_variants(check_relative, "tests/relative_a/foo.ts").await;
+    }
+
+    async fn check_relative_same_name(path: String) {
+        check_import(path, "_a/bar.ts", "_b/bar.ts").await;
+    }
+
+    #[tokio::test]
+    async fn relative_same_name() {
+        test_with_path_variants(check_relative_same_name, "tests/relative_a/bar.ts").await;
     }
 }
