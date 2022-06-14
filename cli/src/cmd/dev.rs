@@ -11,7 +11,6 @@ use futures::channel::mpsc::channel;
 use futures::{SinkExt, StreamExt};
 use notify::{event::ModifyKind, Event, EventKind, RecommendedWatcher, RecursiveMode, Watcher};
 use std::collections::HashSet;
-use std::path::Path;
 use std::path::PathBuf;
 use std::time::Duration;
 use tsc_compile::deno_core;
@@ -29,19 +28,28 @@ pub(crate) async fn cmd_dev(server_url: String, type_check: bool) -> Result<()> 
         });
     })?;
     let watcher_config = notify::Config::OngoingEvents(Some(Duration::from_millis(100)));
-    apply_watcher.configure(watcher_config)?;
-    for models_dir in &manifest.models {
-        let models_dir = Path::new(models_dir);
-        apply_watcher.watch(models_dir, RecursiveMode::Recursive)?;
+    apply_watcher.configure(watcher_config.clone())?;
+
+    let mut tracked = HashSet::new();
+    let cwd = std::env::current_dir()?;
+
+    for dir in &manifest.models {
+        let dir = cwd.join(dir);
+        tracked.insert(dir);
     }
-    for endpoints_dir in &manifest.endpoints {
-        let endpoints_dir = Path::new(endpoints_dir);
-        apply_watcher.watch(endpoints_dir, RecursiveMode::Recursive)?;
+
+    for dir in &manifest.policies {
+        let dir = cwd.join(dir);
+        tracked.insert(dir);
     }
-    for policies_dir in &manifest.policies {
-        let policies_dir = Path::new(policies_dir);
-        apply_watcher.watch(policies_dir, RecursiveMode::Recursive)?;
+
+    for dir in &manifest.endpoints {
+        let dir = cwd.join(dir);
+        tracked.insert(dir);
     }
+
+    apply_watcher.watch(&cwd, RecursiveMode::Recursive)?;
+
     while let Some(res) = rx.next().await {
         match res {
             Ok(Event {
@@ -49,18 +57,24 @@ pub(crate) async fn cmd_dev(server_url: String, type_check: bool) -> Result<()> 
                 paths,
                 ..
             }) => {
-                let paths: HashSet<PathBuf> = HashSet::from_iter(
-                    paths
-                        .into_iter()
-                        .filter(|path| !crate::project::ignore_path(path.to_str().unwrap())),
-                );
-                let paths: HashSet<PathBuf> = HashSet::from_iter(paths.into_iter());
+                let is_tracked = |x: &PathBuf| {
+                    for p in tracked.iter() {
+                        if x.starts_with(p) {
+                            return !crate::project::ignore_path(x.to_str().unwrap());
+                        }
+                    }
+                    false
+                };
+
+                let paths: HashSet<PathBuf> =
+                    HashSet::from_iter(paths.into_iter().filter(is_tracked));
+
                 if !paths.is_empty() {
                     apply_from_dev(server_url.clone(), type_check).await;
                 }
             }
             Ok(_) => { /* ignore */ }
-            Err(e) => println!("watch error: {:?}", e),
+            Err(e) => eprintln!("watch error: {:?}", e),
         }
     }
     server.wait()?;
