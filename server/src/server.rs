@@ -1,6 +1,7 @@
 // SPDX-FileCopyrightText: © 2021 ChiselStrike <info@chiselstrike.com>
 
 use crate::api::ApiService;
+use crate::api::RequestPath;
 use crate::datastore::{DbConnection, MetaService, QueryEngine};
 use crate::deno;
 use crate::deno::init_deno;
@@ -125,7 +126,8 @@ pub(crate) async fn add_endpoints(
     compile_endpoints(sources.clone()).await?;
 
     for path in sources.keys() {
-        activate_endpoint(path).await?;
+        let path = deno::endpoint_path_from_source_path(path);
+        activate_endpoint(&path).await?;
 
         let func = Arc::new({
             let path = path.to_string();
@@ -203,7 +205,14 @@ async fn run(state: SharedState, init: InitState, mut cmd: ExecutorChannel) -> R
 
     let sources = routes
         .iter()
-        .map(|(k, v)| (k.to_str().unwrap().to_string(), v.clone()))
+        .map(|(k, v)| {
+            let path = k.to_str().unwrap().to_string();
+            // Map endpoint paths to source paths.
+            // FIXME: We should store source paths
+            let path = RequestPath::try_from(path.as_ref()).unwrap();
+            let path = format!("/{}/endpoints{}.js", path.api_version(), path.path());
+            (path, v.clone())
+        })
         .collect();
     add_endpoints(sources, &api_service).await?;
 

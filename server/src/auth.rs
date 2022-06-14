@@ -33,7 +33,7 @@ async fn add_crud_endpoint_for_type(
 ) -> Result<()> {
     let mut sources = HashMap::new();
     sources.insert(
-        format!("/__chiselstrike/auth/{}", endpoint_name),
+        format!("/__chiselstrike/endpoints/auth/{}", endpoint_name),
         format!(
             r#"
 import {{ ChiselEntity }} from "@chiselstrike/api"

@@ -80,6 +80,7 @@ use std::sync::Arc;
 use std::sync::Mutex;
 use std::task::{Context, Poll};
 use tempfile::Builder;
+use utils::without_extension;
 
 // FIXME: This should not be here. The client should download and
 // compile modules, the server should not get code out of the
@@ -1462,6 +1463,14 @@ fn get() -> RcMut<DenoService> {
     })
 }
 
+pub(crate) fn endpoint_path_from_source_path(path: &str) -> String {
+    // The source path format is /api_version/endpoints/rest.js. The endpoint is /api_version/rest.
+    let mut iter = path.splitn(4, '/');
+    let api_version = iter.nth(1).unwrap();
+    let rest = iter.nth(1).unwrap();
+    format!("/{}/{}", api_version, without_extension(rest))
+}
+
 pub(crate) async fn compile_endpoints(sources: HashMap<String, String>) -> Result<()> {
     let promise = {
         let mut service = get();
@@ -1479,9 +1488,11 @@ pub(crate) async fn compile_endpoints(sources: HashMap<String, String>) -> Resul
         for (path, code) in sources {
             let version = handle.versions.entry(path.clone());
             let version = *version.and_modify(|v| *v += 1).or_insert(0);
+            let path = without_extension(&path);
             let url = Url::parse(&format!("file://{}.js?ver={}", path, version)).unwrap();
             code_map.insert(url, code);
 
+            let path = endpoint_path_from_source_path(path);
             let path = RequestPath::try_from(path.as_ref()).unwrap();
             let api_version = v8::String::new(scope, path.api_version()).unwrap().into();
             let path = v8::String::new(scope, path.path()).unwrap().into();

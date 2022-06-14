@@ -231,7 +231,11 @@ impl RpcService {
         let api_info = ApiInfo::new(app_name, api_version_tag);
 
         let mut endpoint_routes = vec![];
+        let mut sources = HashMap::new();
         for (path, code) in apply_request.sources {
+            if path.starts_with("endpoints/") {
+                sources.insert(format!("/{}/{}", api_version, path), code.clone());
+            }
             let path = without_extension(&path);
             if let Some(path) = path.strip_prefix("endpoints/") {
                 let path = format!("/{}/{}", api_version, path);
@@ -243,7 +247,7 @@ impl RpcService {
         // Do this before any permanent changes to any of the databases. Otherwise
         // we end up with bad code commited to the meta database and will fail to load
         // chiseld next time, as it tries to replenish the endpoints
-        let endpoints = endpoint_routes.clone().into_iter().collect();
+        let endpoints = sources.clone();
         let cmd = send_command!({
             deno::compile_endpoints(endpoints).await?;
             Ok(())
