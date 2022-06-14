@@ -2,3 +2,5 @@ models = ["models"]
 endpoints = ["endpoints"]
 policies = ["policies"]
 modules = "node"
+auto_index = "yes"
+optimize = "yes"
