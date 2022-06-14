@@ -6,6 +6,8 @@ use crate::utils::{is_call_to_entity_method, is_ident_member_prop};
 
 use swc_ecmascript::ast::{CallExpr, Callee, Expr};
 
+pub mod splitting;
+
 /// Infer filter operator from the lambda predicate of to filter()
 pub fn infer_filter(
     call_expr: &CallExpr,

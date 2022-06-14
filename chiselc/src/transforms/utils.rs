@@ -7,7 +7,7 @@ use crate::query::Literal as QLiteral;
 use crate::query::Operator as QOperator;
 use crate::query::PropertyAccessExpr as QPropertyAccessExpr;
 use crate::query::Scan as QScan;
-use crate::transforms::filter_splitting::{rewrite_filter_arrow, split_expr};
+use crate::transforms::filter::splitting::{rewrite_filter_arrow, split_expr};
 use crate::utils::pat_to_string;
 use anyhow::{anyhow, Result};
 
