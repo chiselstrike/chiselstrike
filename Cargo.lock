@@ -3994,7 +3994,6 @@ dependencies = [
  "tonic-build",
  "tracing",
  "tsc_compile",
- "url 2.2.2 (registry+https://github.com/rust-lang/crates.io-index)",
  "utils",
  "uuid 0.8.2",
  "vergen",

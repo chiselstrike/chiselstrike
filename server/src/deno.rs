@@ -28,6 +28,7 @@ use async_channel::Sender;
 use deno_core::error::AnyError;
 use deno_core::futures;
 use deno_core::op;
+use deno_core::url::Url;
 use deno_core::v8;
 use deno_core::CancelFuture;
 use deno_core::CancelHandle;
@@ -87,8 +88,6 @@ use utils::without_extension;
 // internet.
 use tsc_compile::compile_ts_code;
 use tsc_compile::CompileOptions;
-
-use url::Url;
 
 enum WorkerMsg {
     SetMeta(MetaService),

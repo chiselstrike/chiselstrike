@@ -54,7 +54,6 @@ thiserror = "1.0"
 tokio = { version = "1.11.0", features = ["rt", "time"] }
 tonic = "0.5.2"
 tsc_compile = { path = "../tsc_compile" }
-url = "2.2.2"
 utils = { path = "../utils" }
 uuid = { version = "0.8.2", features = ["v4"] }
 yaml-rust = "0.4"
