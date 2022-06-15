@@ -28,6 +28,7 @@ use async_channel::Sender;
 use deno_core::error::AnyError;
 use deno_core::futures;
 use deno_core::op;
+use deno_core::serde_v8;
 use deno_core::url::Url;
 use deno_core::v8;
 use deno_core::CancelFuture;
@@ -644,18 +645,22 @@ impl Resource for QueryStreamResource {
     }
 }
 
-#[derive(Serialize)]
-enum Secret {
-    None,
-    Some(serde_json::Value),
-}
-
-#[op]
-fn op_chisel_get_secret(op_state: &mut OpState, key: String) -> Secret {
+#[op(v8)]
+fn op_chisel_get_secret<'a>(
+    scope: &mut v8::HandleScope<'a>,
+    op_state: &mut OpState,
+    key: String,
+) -> serde_v8::Value<'a> {
     let secrets = current_secrets(op_state);
     match secrets.get(&key).cloned() {
-        None => Secret::None,
-        Some(v) => Secret::Some(v),
+        None => {
+            let u = v8::undefined(scope);
+            serde_v8::from_v8(scope, u.into()).unwrap()
+        }
+        Some(v) => {
+            let v = serde_v8::to_v8(scope, v).unwrap();
+            serde_v8::from_v8(scope, v).unwrap()
+        }
     }
 }
 

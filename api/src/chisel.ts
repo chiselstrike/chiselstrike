@@ -909,10 +909,7 @@ type JSONValue =
     | Array<JSONValue>;
 
 export function getSecret(key: string): JSONValue | undefined {
-    const { Some } = opSync("op_chisel_get_secret", key) as {
-        Some?: JSONValue;
-    };
-    return Some;
+    return opSync("op_chisel_get_secret", key) as JSONValue | undefined;
 }
 
 export function responseFromJson(body: unknown, status = 200) {
