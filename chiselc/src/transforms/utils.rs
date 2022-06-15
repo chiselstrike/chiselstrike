@@ -9,7 +9,7 @@ use crate::query::PropertyAccessExpr as QPropertyAccessExpr;
 use crate::query::Scan as QScan;
 use crate::transforms::filter::splitting::{rewrite_filter_arrow, split_expr};
 use crate::utils::pat_to_string;
-use anyhow::{anyhow, Result};
+use anyhow::Result;
 
 use swc_ecmascript::ast::{
     BinExpr, BinaryOp, BlockStmtOrExpr, CallExpr, Callee, Expr, Ident, Lit, MemberExpr, MemberProp,
@@ -82,8 +82,8 @@ pub fn extract_filter(
         BlockStmtOrExpr::Expr(expr) => split_expr(expr),
     };
     let expr = match convert_filter_expr(&pure) {
-        Ok(expr) => expr,
-        Err(_) => return (None, None),
+        Some(expr) => expr,
+        None => return (None, None),
     };
     let pure = Box::new(rewrite_filter_arrow(arrow, pure));
     let impure = impure.map(|impure| Box::new(rewrite_filter_arrow(arrow, impure)));
@@ -103,27 +103,35 @@ pub fn extract_filter(
     (Some(Box::new(QOperator::Filter(filter))), props)
 }
 
-fn convert_filter_expr(expr: &Expr) -> Result<QExpr> {
+fn convert_filter_expr(expr: &Expr) -> Option<QExpr> {
     match expr {
         Expr::Bin(bin_expr) => convert_bin_expr(bin_expr),
-        Expr::Lit(Lit::Bool(value)) => Ok(QExpr::Literal(QLiteral::Bool(value.value))),
-        _ => todo!("Unsupported filter predicate expression: {:?}", expr),
+        Expr::Lit(Lit::Bool(value)) => Some(QExpr::Literal(QLiteral::Bool(value.value))),
+        _ => None,
     }
 }
 
-pub fn convert_bin_expr(expr: &BinExpr) -> Result<QExpr> {
-    let left = Box::new(convert_expr(&expr.left)?);
-    let op = convert_binary_op(&expr.op)?;
-    let right = Box::new(convert_expr(&expr.right)?);
-    Ok(QExpr::BinaryExpr(QBinaryExpr { left, op, right }))
+pub fn convert_bin_expr(expr: &BinExpr) -> Option<QExpr> {
+    let left = convert_expr(&expr.left);
+    let op = convert_binary_op(&expr.op);
+    let right = convert_expr(&expr.right);
+    if let (Some(left), Some(op), Some(right)) = (left, op, right) {
+        Some(QExpr::BinaryExpr(QBinaryExpr {
+            left: Box::new(left),
+            op,
+            right: Box::new(right),
+        }))
+    } else {
+        None
+    }
 }
 
-fn convert_expr(expr: &Expr) -> Result<QExpr> {
+fn convert_expr(expr: &Expr) -> Option<QExpr> {
     match expr {
         Expr::Bin(bin_expr) => convert_bin_expr(bin_expr),
-        Expr::Paren(paren_expr) => Ok(convert_expr(&*paren_expr.expr)?),
-        Expr::Lit(Lit::Num(number)) => Ok(QExpr::Literal(QLiteral::Num(number.value))),
-        Expr::Lit(Lit::Str(s)) => Ok(QExpr::Literal(QLiteral::Str(format!("{}", s.value)))),
+        Expr::Paren(paren_expr) => convert_expr(&*paren_expr.expr),
+        Expr::Lit(Lit::Num(number)) => Some(QExpr::Literal(QLiteral::Num(number.value))),
+        Expr::Lit(Lit::Str(s)) => Some(QExpr::Literal(QLiteral::Str(format!("{}", s.value)))),
         Expr::Member(member_expr) => {
             let obj = convert_expr(&member_expr.obj)?;
             let prop = match &member_expr.prop {
@@ -132,28 +140,26 @@ fn convert_expr(expr: &Expr) -> Result<QExpr> {
                     todo!();
                 }
             };
-            Ok(QExpr::PropertyAccess(QPropertyAccessExpr {
+            Some(QExpr::PropertyAccess(QPropertyAccessExpr {
                 object: Box::new(obj),
                 property: prop,
             }))
         }
-        Expr::Ident(ident) => Ok(QExpr::Identifier(ident.sym.to_string())),
-        _ => Err(anyhow!("Unsupported expression: {:#?}", expr)),
+        Expr::Ident(ident) => Some(QExpr::Identifier(ident.sym.to_string())),
+        _ => None,
     }
 }
 
-pub fn convert_binary_op(op: &BinaryOp) -> Result<QBinaryOp> {
-    Ok(match op {
-        BinaryOp::EqEq => QBinaryOp::Eq,
-        BinaryOp::Gt => QBinaryOp::Gt,
-        BinaryOp::GtEq => QBinaryOp::GtEq,
-        BinaryOp::Lt => QBinaryOp::Lt,
-        BinaryOp::LtEq => QBinaryOp::LtEq,
-        BinaryOp::NotEq => QBinaryOp::NotEq,
-        BinaryOp::LogicalAnd => QBinaryOp::And,
-        BinaryOp::LogicalOr => QBinaryOp::Or,
-        _ => {
-            anyhow::bail!("Cannot convert binary operator {}", op);
-        }
-    })
+pub fn convert_binary_op(op: &BinaryOp) -> Option<QBinaryOp> {
+    match op {
+        BinaryOp::EqEq => Some(QBinaryOp::Eq),
+        BinaryOp::Gt => Some(QBinaryOp::Gt),
+        BinaryOp::GtEq => Some(QBinaryOp::GtEq),
+        BinaryOp::Lt => Some(QBinaryOp::Lt),
+        BinaryOp::LtEq => Some(QBinaryOp::LtEq),
+        BinaryOp::NotEq => Some(QBinaryOp::NotEq),
+        BinaryOp::LogicalAnd => Some(QBinaryOp::And),
+        BinaryOp::LogicalOr => Some(QBinaryOp::Or),
+        _ => None,
+    }
 }
