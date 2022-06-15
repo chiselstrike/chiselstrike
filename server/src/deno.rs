@@ -281,7 +281,7 @@ fn create_web_worker(
             broadcast_channel: Default::default(),
             shared_array_buffer_store: None,
             compiled_wasm_module_store: None,
-            maybe_exit_code: args.maybe_exit_code,
+            exit_code: args.exit_code,
         };
         WebWorker::bootstrap_from_options(
             args.name,
