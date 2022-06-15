@@ -4,6 +4,7 @@ use crate::api::{ApiInfo, RequestPath};
 use crate::chisel;
 use crate::datastore::{MetaService, QueryEngine};
 use crate::deno;
+use crate::deno::endpoint_path_from_source_path;
 use crate::deno::mutate_policies;
 use crate::deno::remove_type_version;
 use crate::deno::set_type_system;
@@ -231,7 +232,7 @@ impl RpcService {
         let mut state = self.state.lock().await;
         let api_info = ApiInfo::new(app_name, api_version_tag);
 
-        let mut endpoint_routes = vec![];
+        let mut endpoint_paths = vec![];
         let mut sources = HashMap::new();
         for (path, code) in apply_request.sources {
             if Url::parse(&path).is_ok() {
@@ -243,10 +244,10 @@ impl RpcService {
             let path = without_extension(&path);
             if let Some(path) = path.strip_prefix("endpoints/") {
                 let path = format!("/{}/{}", api_version, path);
-                endpoint_routes.push((path, code));
+                endpoint_paths.push(path);
             }
         }
-        endpoint_routes.sort_unstable();
+        endpoint_paths.sort_unstable();
 
         // Do this before any permanent changes to any of the databases. Otherwise
         // we end up with bad code commited to the meta database and will fail to load
@@ -454,13 +455,12 @@ or
         let prefix: PathBuf = format!("/{}/", api_version).into();
         state.sources.remove_prefix(&prefix);
 
-        for (path, code) in &endpoint_routes {
+        for (path, code) in &sources {
             state.sources.insert(path.into(), code.clone());
         }
 
         state.meta.persist_sources(&state.sources).await?;
 
-        let endpoint_paths: Vec<_> = endpoint_routes.into_iter().map(|x| x.0).collect();
         let types_global = state.type_system.clone();
 
         if !endpoint_paths.is_empty() || types_global.get_version(&api_version).is_ok() {
@@ -598,10 +598,14 @@ impl ChiselRpc for RpcService {
             let mut endpoint_defs = vec![];
             let version_path_str = format!("/{}/", api_version);
             for (path, _) in state.sources.iter() {
-                // FIXME: filter out non endpoint sources
+                let path = path.to_str().unwrap();
+                if path.split('/').nth(2) != Some("endpoints") {
+                    continue;
+                }
+                let path = endpoint_path_from_source_path(path);
                 if path.starts_with(&version_path_str) {
                     endpoint_defs.push(chisel::EndpointDefinition {
-                        path: path.display().to_string(),
+                        path: path.to_string(),
                     });
                 }
             }
