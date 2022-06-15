@@ -5,11 +5,12 @@ use aes_gcm::aead::{Aead, NewAead};
 use aes_gcm::{Aes256Gcm, Nonce};
 use anyhow::Context;
 use anyhow::{anyhow, Result};
+use deno_core::url;
+use deno_core::url::Url;
 use rsa::{PaddingScheme, RsaPrivateKey};
 use serde::{Deserialize, Serialize};
 use sha2::Sha256;
 use std::str;
-use url::Url;
 
 type RsaPayload = Vec<u8>;
 

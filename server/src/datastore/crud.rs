@@ -5,11 +5,11 @@ use crate::types::{ObjectType, Type};
 use crate::JsonObject;
 use anyhow::{Context, Result};
 use deno_core::futures;
+use deno_core::url::Url;
 use futures::{Future, StreamExt};
 use serde_derive::{Deserialize, Serialize};
 use serde_json::json;
 use std::sync::Arc;
-use url::Url;
 
 #[derive(Clone, Serialize, Deserialize)]
 pub(crate) struct QueryParams {
