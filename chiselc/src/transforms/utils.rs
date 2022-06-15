@@ -7,7 +7,7 @@ use crate::query::Literal as QLiteral;
 use crate::query::Operator as QOperator;
 use crate::query::PropertyAccessExpr as QPropertyAccessExpr;
 use crate::query::Scan as QScan;
-use crate::transforms::filter::splitting::{rewrite_filter_arrow, split_expr};
+use crate::transforms::filter::splitting::{rewrite_filter_arrow, split_and_convert_expr};
 use crate::utils::pat_to_string;
 use anyhow::Result;
 
@@ -63,7 +63,7 @@ pub fn extract_filter(
     assert_eq!(params.len(), 1);
     let param = &params[0];
     let param = pat_to_string(param).unwrap();
-    let (pure, impure) = match &arrow.body {
+    let (query, post_expr) = match &arrow.body {
         BlockStmtOrExpr::BlockStmt(block_stmt) => {
             assert_eq!(block_stmt.stmts.len(), 1);
             let return_stmt = match &block_stmt.stmts[0] {
@@ -73,37 +73,37 @@ pub fn extract_filter(
                 }
             };
             match &return_stmt.arg {
-                Some(expr) => split_expr(expr),
+                Some(expr) => split_and_convert_expr(expr),
                 None => {
                     todo!();
                 }
             }
         }
-        BlockStmtOrExpr::Expr(expr) => split_expr(expr),
+        BlockStmtOrExpr::Expr(expr) => split_and_convert_expr(expr),
     };
-    let expr = match convert_filter_expr(&pure) {
-        Some(expr) => expr,
+    let (query_expr, predicate) = match query {
+        Some(query) => query,
         None => return (None, None),
     };
-    let pure = Box::new(rewrite_filter_arrow(arrow, pure));
-    let impure = impure.map(|impure| Box::new(rewrite_filter_arrow(arrow, impure)));
+    let query_expr = Box::new(rewrite_filter_arrow(arrow, query_expr));
+    let post_expr = post_expr.map(|post_expr| Box::new(rewrite_filter_arrow(arrow, post_expr)));
     let filter = QFilter {
         function,
         call_expr: call_expr.to_owned(),
-        pure,
-        impure,
+        query_expr,
+        post_expr,
         parameters: vec![param.clone()],
         input: Box::new(QOperator::Scan(QScan {
             entity_type: entity_type.clone(),
             alias: param,
         })),
-        predicate: expr,
+        predicate,
     };
     let props = FilterProperties::from_filter(entity_type, &filter);
     (Some(Box::new(QOperator::Filter(filter))), props)
 }
 
-fn convert_filter_expr(expr: &Expr) -> Option<QExpr> {
+pub fn convert_filter_expr(expr: &Expr) -> Option<QExpr> {
     match expr {
         Expr::Bin(bin_expr) => convert_bin_expr(bin_expr),
         Expr::Lit(Lit::Bool(value)) => Some(QExpr::Literal(QLiteral::Bool(value.value))),
