@@ -1471,7 +1471,7 @@ pub(crate) async fn compile_endpoints(sources: HashMap<String, String>) -> Resul
             let version = handle.versions.entry(path.clone());
             let version = *version.and_modify(|v| *v += 1).or_insert(0);
             let path = without_extension(&path);
-            let url = Url::parse(&format!("file://{}.js?ver={}", path, version)).unwrap();
+            let url = Url::parse(&format!("file://{}?ver={}", path, version)).unwrap();
             code_map.insert(url, code);
 
             let path = endpoint_path_from_source_path(path);
