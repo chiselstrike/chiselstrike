@@ -136,6 +136,14 @@ async fn populate(server_url: String, to_version: String, from_version: String) 
     Ok(())
 }
 
+async fn restart(server_url: String) -> Result<()> {
+    let mut client = ChiselRpcClient::connect(server_url.clone()).await?;
+    let response = execute!(client.restart(tonic::Request::new(RestartRequest {})).await);
+    anyhow::ensure!(response.ok);
+    wait(server_url.clone()).await?;
+    Ok(())
+}
+
 #[tokio::main]
 async fn main() -> Result<()> {
     let opt = Opt::from_args();
@@ -253,17 +261,11 @@ async fn main() -> Result<()> {
             println!("Server status is {}", response.message);
         }
         Command::Restart => {
-            let mut client = ChiselRpcClient::connect(server_url.clone()).await?;
-            let response = execute!(client.restart(tonic::Request::new(RestartRequest {})).await);
-            println!(
-                "{}",
-                if response.ok {
-                    "Server restarted successfully."
-                } else {
-                    "Server failed to restart."
-                }
-            );
-            wait(server_url.clone()).await?;
+            let msg = match restart(server_url).await {
+                Ok(_) => "Server restarted successfully.".to_string(),
+                Err(e) => format!("Server failed to restart. {}", e),
+            };
+            println!("{}", msg);
         }
         Command::Wait => {
             wait(server_url).await?;
