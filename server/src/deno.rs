@@ -130,7 +130,6 @@ enum Error {
 }
 
 struct ModuleLoaderInner {
-    versions: HashMap<String, u64>,
     code_map: HashMap<Url, String>,
 }
 
@@ -138,7 +137,6 @@ impl ModuleLoaderInner {
     fn insert_path(&mut self, path: &str, code: &str) {
         let url = Url::parse(&format!("file://{}", path)).unwrap();
         self.code_map.insert(url, code.to_string());
-        self.versions.insert(path.to_string(), 0);
     }
 }
 
@@ -277,7 +275,6 @@ impl DenoService {
             Arc::new(|worker| LocalFutureObj::new(Box::new(future::ready(Ok(worker)))));
         let inner = Arc::new(std::sync::Mutex::new(ModuleLoaderInner {
             code_map: HashMap::new(),
-            versions: HashMap::new(),
         }));
         let module_loader = Rc::new(ModuleLoader {
             inner: inner.clone(),
@@ -1468,24 +1465,19 @@ pub(crate) async fn compile_endpoints(sources: HashMap<String, String>) -> Resul
                 continue;
             }
 
-            let version = handle.versions.entry(path.clone());
-            let version = *version.and_modify(|v| *v += 1).or_insert(0);
             let path = without_extension(&path);
-            let url = Url::parse(&format!("file://{}?ver={}", path, version)).unwrap();
+            let url = Url::parse(&format!("file://{}", path)).unwrap();
             code_map.insert(url, code);
 
             let path = endpoint_path_from_source_path(path);
             let path = RequestPath::try_from(path.as_ref()).unwrap();
             let api_version = v8::String::new(scope, path.api_version()).unwrap().into();
             let path = v8::String::new(scope, path.path()).unwrap().into();
-            let version = v8::Number::new(scope, version as f64).into();
             let endpoint = v8::Object::new(scope);
             let path_key = v8::String::new(scope, "path").unwrap();
             endpoint.set(scope, path_key.into(), path);
             let api_version_key = v8::String::new(scope, "apiVersion").unwrap();
             endpoint.set(scope, api_version_key.into(), api_version);
-            let version_key = v8::String::new(scope, "version").unwrap();
-            endpoint.set(scope, version_key.into(), version);
             endpoints.push(endpoint.into());
         }
         let endpoints = v8::Array::new_with_elements(scope, &endpoints).into();
