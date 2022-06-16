@@ -62,3 +62,26 @@ Person.cursor().filter(person => person.name == "Glauber Costa" && person.age > 
 // CHECK:     }
 // CHECK: }, (person)=>validate(person)
 // CHECK: );
+
+const age = 40;
+Person.cursor().filter(person => person.age > age && fetch("foobar"))
+
+// CHECK: const age = 40;
+// CHECK: Person.cursor().__filter((person)=>person.age > age
+// CHECK: , {
+// CHECK:     exprType: "Binary",
+// CHECK:     left: {
+// CHECK:         exprType: "Property",
+// CHECK:         object: {
+// CHECK:             exprType: "Parameter",
+// CHECK:             position: 0
+// CHECK:         },
+// CHECK:         property: "age"
+// CHECK:     },
+// CHECK:     op: "Gt",
+// CHECK:     right: {
+// CHECK:         exprType: "Identifier",
+// CHECK:         ident: "age"
+// CHECK:     }
+// CHECK: }, (person)=>fetch("foobar")
+// CHECK: );
