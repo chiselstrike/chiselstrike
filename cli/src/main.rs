@@ -136,7 +136,7 @@ async fn populate(server_url: String, to_version: String, from_version: String) 
     Ok(())
 }
 
-async fn restart(server_url: String) -> Result<()> {
+pub(crate) async fn restart(server_url: String) -> Result<()> {
     let mut client = ChiselRpcClient::connect(server_url.clone()).await?;
     let response = execute!(client.restart(tonic::Request::new(RestartRequest {})).await);
     anyhow::ensure!(response.ok);
