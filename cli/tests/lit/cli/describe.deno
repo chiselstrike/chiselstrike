@@ -10,6 +10,8 @@ export class Bar extends Chisel.ChiselEntity { b: string; }
 EOF
 
 cat << EOF > "$TEMPDIR/endpoints/hello.ts"
+import { Foo } from "../models/types.ts";
+
 export default async function chisel(req: Request) {
     return new Response('ok');
 }
@@ -38,9 +40,17 @@ $CHISEL describe
 # CHECK: Endpoint: /dev/hello
 # CHECK: Label policy: pii
 
+echo "found $($CHISEL describe | grep Endpoint | wc -l) endpoints"
+# CHECK: found 1 endpoints
+
 ## check that an endpoint-only scenario works
 rm -rf "$TEMPDIR/models"
 rm -rf "$TEMPDIR/policies"
+cat << EOF > "$TEMPDIR/endpoints/hello.ts"
+export default async function chisel(req: Request) {
+    return new Response('ok');
+}
+EOF
 $CHISEL apply --allow-type-deletion
 
 $CHISEL describe
