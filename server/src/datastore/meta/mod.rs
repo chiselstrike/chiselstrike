@@ -464,28 +464,28 @@ impl MetaService {
     }
 
     /// Load the existing endpoints from from metadata store.
-    pub(crate) async fn load_endpoints<'r>(&self) -> anyhow::Result<PrefixMap<String>> {
-        let query = sqlx::query("SELECT path, code FROM endpoints");
+    pub(crate) async fn load_sources<'r>(&self) -> anyhow::Result<PrefixMap<String>> {
+        let query = sqlx::query("SELECT path, code FROM sources");
         let rows = fetch_all(&self.pool, query).await?;
 
-        let mut routes = PrefixMap::default();
+        let mut sources = PrefixMap::default();
         for row in rows {
             let path: &str = row.get("path");
             let code: &str = row.get("code");
-            debug!("Loading endpoint {}", path);
-            routes.insert(path.into(), code.to_string());
+            debug!("Loading source {}", path);
+            sources.insert(path.into(), code.to_string());
         }
-        Ok(routes)
+        Ok(sources)
     }
 
-    pub(crate) async fn persist_endpoints(&self, routes: &PrefixMap<String>) -> anyhow::Result<()> {
+    pub(crate) async fn persist_sources(&self, sources: &PrefixMap<String>) -> anyhow::Result<()> {
         let mut transaction = self.pool.begin().await?;
 
-        let drop = sqlx::query("DELETE FROM endpoints");
+        let drop = sqlx::query("DELETE FROM sources");
         execute(&mut transaction, drop).await?;
 
-        for (path, code) in routes.iter() {
-            let new_route = sqlx::query("INSERT INTO endpoints (path, code) VALUES ($1, $2)")
+        for (path, code) in sources.iter() {
+            let new_route = sqlx::query("INSERT INTO sources (path, code) VALUES ($1, $2)")
                 .bind(path.to_str())
                 .bind(code);
 

@@ -70,7 +70,7 @@ enum Indexes {
 }
 
 #[derive(Iden)]
-enum Endpoints {
+enum Sources {
     Table,
     Path,
     Code,
@@ -208,11 +208,11 @@ pub(crate) fn tables() -> Vec<TableCreateStatement> {
                 .on_delete(ForeignKeyAction::Cascade),
         )
         .to_owned();
-    let endpoints = Table::create()
-        .table(Endpoints::Table)
+    let sources = Table::create()
+        .table(Sources::Table)
         .if_not_exists()
-        .col(ColumnDef::new(Endpoints::Path).text().unique_key())
-        .col(ColumnDef::new(Endpoints::Code).text())
+        .col(ColumnDef::new(Sources::Path).text().unique_key())
+        .col(ColumnDef::new(Sources::Code).text())
         .to_owned();
 
     let policies = Table::create()
@@ -231,7 +231,7 @@ pub(crate) fn tables() -> Vec<TableCreateStatement> {
         type_fields,
         field_labels,
         indexes,
-        endpoints,
+        sources,
         policies,
     ]
 }

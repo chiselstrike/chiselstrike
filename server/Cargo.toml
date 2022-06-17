@@ -49,17 +49,16 @@ sqlx = { version = "0.5.12", features = [
     "runtime-tokio-rustls",
 ] }
 structopt = "0.3.23"
-tempfile = "3.2.0"
 thiserror = "1.0"
 tokio = { version = "1.11.0", features = ["rt", "time"] }
 tonic = "0.5.2"
-tsc_compile = { path = "../tsc_compile" }
 utils = { path = "../utils" }
 uuid = { version = "0.8.2", features = ["v4"] }
 yaml-rust = "0.4"
 
 [dev-dependencies]
 tempdir = "0.3.7"
+tempfile = "3.2.0"
 
 [build-dependencies]
 # FIXME: We have additional dependencies here to work around

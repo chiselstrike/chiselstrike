@@ -3993,7 +3993,6 @@ dependencies = [
  "tonic",
  "tonic-build",
  "tracing",
- "tsc_compile",
  "utils",
  "uuid 0.8.2",
  "vergen",
