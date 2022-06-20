@@ -503,6 +503,7 @@ dependencies = [
  "structopt",
  "swc_atoms",
  "swc_common",
+ "swc_ecma_codegen_macros",
  "swc_ecmascript",
 ]
 

@@ -12,6 +12,9 @@ serde_json = "1.0.81"
 structopt = "0.3.26"
 swc_atoms = "0.2.11"
 swc_common = "0.17.4"
+# We don't rely on this dependency directly, but since swc released a semver breaking version of this
+# dependency we need to pin its version to be able to generate a cargo.lock that makes the project compile.
+swc_ecma_codegen_macros = "=0.7.0"
 swc_ecmascript = { version = "0.143.0", features = ["codegen", "parser", "visit", "transforms", "typescript"] }
 
 [dev-dependencies]
