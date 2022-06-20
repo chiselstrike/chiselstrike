@@ -75,7 +75,7 @@ function importEndpoints(endpoints: [Endpoint]) {
 
 async function importEndpointsImpl(endpoints: [Endpoint]) {
     for (const endpoint of endpoints) {
-        const { path, apiVersion, version } = endpoint;
+        const { path, apiVersion } = endpoint;
 
         requestContext.path = path;
         const fullPath = "/" + apiVersion + path;
@@ -83,7 +83,7 @@ async function importEndpointsImpl(endpoints: [Endpoint]) {
         // Modules are never unloaded, so we need to create an unique
         // path. This will not be a problem once we publish the entire app
         // at once, since then we can create a new isolate for it.
-        const url = `file:///${apiVersion}/endpoints${path}?ver=${version}`;
+        const url = `file:///${apiVersion}/endpoints${path}`;
         const mod = await import(url);
         const handler = mod.default;
         if (typeof handler !== "function") {

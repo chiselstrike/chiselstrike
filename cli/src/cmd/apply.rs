@@ -135,21 +135,35 @@ pub(crate) async fn apply<S: ToString>(
         None => version_tag,
     };
 
-    let mut client = ChiselRpcClient::connect(server_url).await?;
-    let msg = execute!(
-        client
-            .apply(tonic::Request::new(ChiselApplyRequest {
-                types: types_req,
-                sources: endpoints_req,
-                index_candidates: index_candidates_req,
-                policies: policy_req,
-                allow_type_deletion: allow_type_deletion.into(),
-                version,
-                version_tag,
-                app_name,
-            }))
-            .await
-    );
+    let mut client = ChiselRpcClient::connect(server_url.clone()).await?;
+    let mut req = ChiselApplyRequest {
+        types: types_req,
+        sources: Default::default(),
+        index_candidates: index_candidates_req,
+        policies: policy_req,
+        allow_type_deletion: allow_type_deletion.into(),
+        version,
+        version_tag,
+        app_name,
+    };
+
+    // According to the spec
+    // (https://html.spec.whatwg.org/multipage/webappapis.html#module-map),
+    // "Module maps are used to ensure that imported module scripts
+    // are only fetched, parsed, and evaluated once per Document or
+    // worker."
+    //
+    // Since we want to change the modules, we need the server to have
+    // a Worker that has never imported them. Do this by first
+    // clearing the sources from the server and then restarting it.
+    //
+    // FIXME: We should have a more fine gained way to recreate just
+    // the worker without loading the sources from the DB.
+    execute!(client.apply(tonic::Request::new(req.clone())).await);
+    req.sources = endpoints_req;
+    crate::restart(server_url).await?;
+
+    let msg = execute!(client.apply(tonic::Request::new(req)).await);
 
     for ty in msg.types {
         println!("Model defined: {}", ty);
