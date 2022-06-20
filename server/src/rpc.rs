@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: © 2021 ChiselStrike <info@chiselstrike.com>
 
 use crate::api::{ApiInfo, RequestPath};
-use crate::chisel;
+use crate::chisel::{self, AddTypeRequest};
 use crate::datastore::{MetaService, QueryEngine};
 use crate::deno;
 use crate::deno::endpoint_path_from_source_path;
@@ -28,6 +28,8 @@ use chisel::{
 use deno_core::futures;
 use deno_core::url::Url;
 use futures::FutureExt;
+use petgraph::graphmap::GraphMap;
+use petgraph::Directed;
 use std::collections::{BTreeSet, HashMap};
 use std::net::SocketAddr;
 use std::path::PathBuf;
@@ -322,7 +324,7 @@ or
         // No changes are made to the type system in this loop. We re-read the database after we
         // apply the changes, and this way we don't have to deal with the case of succeding to
         // apply a type, but failing the next
-        for type_def in apply_request.types {
+        for type_def in sort_custom_types(&state.type_system, apply_request.types)? {
             let name = type_def.name;
             if state.type_system.lookup_builtin_type(&name).is_ok() {
                 anyhow::bail!("custom type expected, got `{}` instead", name);
@@ -517,6 +519,43 @@ or
         }
         index_map
     }
+}
+
+fn sort_custom_types(
+    ts: &TypeSystem,
+    mut types: Vec<AddTypeRequest>,
+) -> anyhow::Result<Vec<AddTypeRequest>> {
+    let mut graph: GraphMap<&str, (), Directed> = GraphMap::new();
+    // map the type name to its position in the types array
+    let mut ty_pos = HashMap::new();
+    for (pos, ty) in types.iter().enumerate() {
+        graph.add_node(ty.name.as_str());
+        ty_pos.insert(ty.name.as_str(), pos);
+        for field in &ty.field_defs {
+            if ts.lookup_builtin_type(&field.field_type).is_err() {
+                graph.add_node(field.field_type.as_str());
+                graph.add_edge(field.field_type.as_str(), ty.name.as_str(), ());
+            }
+        }
+    }
+
+    let order = petgraph::algo::toposort(&graph, None)
+        .map_err(|_| anyhow::anyhow!("cycle detected in models"))?
+        .iter()
+        .map(|ty| {
+            ty_pos
+                .get(ty)
+                .copied()
+                // this error should be caught earlier, the check is just an extra safety
+                .ok_or_else(|| anyhow::anyhow!("unknown type {ty}"))
+        })
+        .collect::<anyhow::Result<Vec<_>>>()?;
+
+    let mut permutation = permutation::Permutation::oneline(order);
+
+    permutation.apply_inv_slice_in_place(&mut types);
+
+    Ok(types)
 }
 
 #[tonic::async_trait]

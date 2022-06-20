@@ -1,0 +1,29 @@
+# SPDX-FileCopyrightText: © 2021 ChiselStrike <info@chiselstrike.com>
+
+# RUN: sh -e @file
+
+cat << EOF > "$TEMPDIR/models/A.ts"
+import { ChiselEntity } from "@chiselstrike/api"
+import { B } from "../models/B.ts";
+
+export class A extends ChiselEntity {
+    b: B;
+}
+
+EOF
+
+cat << EOF > "$TEMPDIR/models/B.ts"
+import { ChiselEntity } from "@chiselstrike/api"
+import { A } from "../models/A.ts";
+
+export class B extends ChiselEntity {
+    a: A;
+}
+
+EOF
+
+cd "$TEMPDIR"
+
+$CHISEL apply 2>&1 || true
+
+# CHECK: Error: cycle detected in models

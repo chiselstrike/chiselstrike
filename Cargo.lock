@@ -1539,6 +1539,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "37ab347416e802de484e4d03c7316c48f1ecb56574dfd4a46a80f173ce1de04d"
 
 [[package]]
+name = "fixedbitset"
+version = "0.4.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "279fb028e20b3c4c320317955b77c5e0c9701f05a1d309905d6fc702cdc5053e"
+
+[[package]]
 name = "flate2"
 version = "1.0.24"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3033,9 +3039,10 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d4fd5641d01c8f18a23da7b6fe29298ff4b55afcccdf78973b24cf3175fee32e"
 
 [[package]]
-name = "percent-encoding"
-version = "2.1.0"
-source = "git+https://github.com/servo/rust-url.git?rev=e12d76a61add5bc09980599c738099feaacd1d0d#e12d76a61add5bc09980599c738099feaacd1d0d"
+name = "permutation"
+version = "0.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f3f4a387a9ad6165bb590820827ef047d8e2921dfb9821891ed0ef2b7cf82774"
 
 [[package]]
 name = "pest"
@@ -3086,7 +3093,17 @@ version = "0.5.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "467d164a6de56270bd7c4d070df81d07beace25012d5103ced4e9ff08d6afdb7"
 dependencies = [
- "fixedbitset",
+ "fixedbitset 0.2.0",
+ "indexmap",
+]
+
+[[package]]
+name = "petgraph"
+version = "0.6.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e6d5014253a1331579ce62aa67443b4a658c5e7dd03d4bc6d302b94474888143"
+dependencies = [
+ "fixedbitset 0.4.1",
  "indexmap",
 ]
 
@@ -3316,7 +3333,7 @@ dependencies = [
  "itertools 0.10.3",
  "log",
  "multimap",
- "petgraph",
+ "petgraph 0.5.1",
  "prost",
  "prost-types",
  "tempfile",
@@ -3972,6 +3989,8 @@ dependencies = [
  "nix 0.22.3",
  "once_cell",
  "openapi",
+ "permutation",
+ "petgraph 0.6.2",
  "pin-project",
  "prost",
  "rand 0.8.5",
