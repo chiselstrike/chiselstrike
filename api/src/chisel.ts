@@ -501,7 +501,7 @@ export class ChiselCursor<T> {
                         const properties = await opAsync(
                             "op_chisel_query_next",
                             rid,
-                        ) as T | null; // FIXME: This is wrong, we can get less than T with ColumnsSelect.
+                        );
 
                         if (properties === null) {
                             break;
@@ -511,7 +511,11 @@ export class ChiselCursor<T> {
                             Object.assign(result, properties);
                             yield result;
                         } else {
-                            yield properties;
+                            // This is the case where we have a
+                            // select, so T is a plain object, not a
+                            // ChiselEntity and op_chisel_query_next
+                            // set all the fields.
+                            yield properties as T;
                         }
                     }
                 } finally {
