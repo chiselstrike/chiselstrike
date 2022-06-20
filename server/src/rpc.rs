@@ -324,7 +324,7 @@ or
         // No changes are made to the type system in this loop. We re-read the database after we
         // apply the changes, and this way we don't have to deal with the case of succeding to
         // apply a type, but failing the next
-        for type_def in sort_custom_types(&state.type_system, apply_request.types)? {
+        for type_def in sort_custom_types(&state.type_system, apply_request.types.clone())? {
             let name = type_def.name;
             if state.type_system.lookup_builtin_type(&name).is_ok() {
                 anyhow::bail!("custom type expected, got `{}` instead", name);
