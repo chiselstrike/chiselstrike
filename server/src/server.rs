@@ -25,7 +25,6 @@ use futures::FutureExt;
 use futures::StreamExt;
 use std::collections::HashMap;
 use std::net::SocketAddr;
-use std::panic;
 use std::path::PathBuf;
 use std::rc::Rc;
 use std::sync::Arc;
@@ -319,18 +318,13 @@ async fn run_shared_state(
 
     let rpc = RpcService::new(state);
 
+    let (signal_tx, signal_rx) = utils::make_signal_channel();
+
     let mut sigterm = tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())?;
     let mut sigint = tokio::signal::unix::signal(tokio::signal::unix::SignalKind::interrupt())?;
     let mut sighup = tokio::signal::unix::signal(tokio::signal::unix::SignalKind::hangup())?;
     let mut sigusr1 =
         tokio::signal::unix::signal(tokio::signal::unix::SignalKind::user_defined1())?;
-    let default_hook = panic::take_hook();
-    panic::set_hook(Box::new(move |info| {
-        default_hook(info);
-        nix::sys::signal::raise(nix::sys::signal::Signal::SIGINT).unwrap();
-    }));
-
-    let (signal_tx, signal_rx) = async_channel::bounded(1);
     let sig_task = tokio::task::spawn(async move {
         let res = futures::select! {
             _ = sigterm.recv().fuse() => { debug!("Got SIGTERM"); DoRepeat::No },

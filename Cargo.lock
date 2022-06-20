@@ -5376,6 +5376,8 @@ name = "utils"
 version = "0.11.0-dev.0"
 dependencies = [
  "anyhow",
+ "async-channel",
+ "nix 0.22.3",
  "reqwest",
 ]
 
