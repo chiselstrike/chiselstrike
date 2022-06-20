@@ -5,7 +5,6 @@ members = [
     "api",
     "chiselc",
     "cli",
-    "compile",
     "dbgarc",
     "my_tsc",
     "packages",
