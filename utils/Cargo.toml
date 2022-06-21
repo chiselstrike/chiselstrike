@@ -6,6 +6,8 @@ edition = "2021"
 
 [dependencies]
 anyhow = "1.0.56"
+async-channel = "1.6.1"
+nix = "0.22.2"
 reqwest = { version = "=0.11.10", features = ["rustls-tls"], default-features = false } # strict = because of https://github.com/seanmonstar/reqwest/issues/1403
 
 [lib]

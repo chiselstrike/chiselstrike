@@ -554,6 +554,7 @@ dependencies = [
  "handlebars",
  "itertools 0.10.3",
  "lit 1.0.4 (git+https://github.com/chiselstrike/lit?rev=607b0b9)",
+ "nix 0.22.3",
  "notify",
  "prost",
  "rayon",
@@ -5376,6 +5377,8 @@ name = "utils"
 version = "0.11.0-dev.0"
 dependencies = [
  "anyhow",
+ "async-channel",
+ "nix 0.22.3",
  "reqwest",
 ]
 

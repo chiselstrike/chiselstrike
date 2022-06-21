@@ -672,7 +672,7 @@ impl ChiselRpc for RpcService {
         &self,
         _request: tonic::Request<RestartRequest>,
     ) -> Result<tonic::Response<RestartResponse>, tonic::Status> {
-        let ok = nix::sys::signal::raise(nix::sys::signal::Signal::SIGHUP).is_ok();
+        let ok = nix::sys::signal::raise(nix::sys::signal::Signal::SIGUSR1).is_ok();
         Ok(Response::new(RestartResponse { ok }))
     }
 }
