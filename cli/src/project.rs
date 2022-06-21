@@ -13,6 +13,7 @@ use utils::without_extension;
 const MANIFEST_FILE: &str = "Chisel.toml";
 const TYPES_DIR: &str = "./models";
 const ENDPOINTS_DIR: &str = "./endpoints";
+const LIB_DIR: &str = "./lib";
 const POLICIES_DIR: &str = "./policies";
 const VSCODE_DIR: &str = "./.vscode/";
 
@@ -230,6 +231,7 @@ pub(crate) fn create_project(path: &Path, opts: CreateProjectOptions) -> Result<
     }
     fs::create_dir_all(path.join(TYPES_DIR))?;
     fs::create_dir_all(path.join(ENDPOINTS_DIR))?;
+    fs::create_dir_all(path.join(LIB_DIR))?;
     fs::create_dir_all(path.join(POLICIES_DIR))?;
     fs::create_dir_all(path.join(VSCODE_DIR))?;
 
