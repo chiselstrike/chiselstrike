@@ -19,7 +19,7 @@ function opAsync(opName: string, a?: unknown, b?: unknown): Promise<unknown> {
  * The base class is generic so that the apply function type is
  * sound. Note that TypeScript *doesn't* check this.
  */
-abstract class Operator<T> {
+abstract class Operator<Input> {
     // Read by rust
     readonly type;
     constructor(
@@ -32,7 +32,7 @@ abstract class Operator<T> {
      * `iter` creating a new iterable.
      */
     public abstract apply(
-        iter: AsyncIterable<T>,
+        iter: AsyncIterable<Input>,
     ): AsyncIterable<unknown>;
 
     /** Recursively examines operator chain searching for `ctor` operator.
