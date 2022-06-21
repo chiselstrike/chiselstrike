@@ -19,11 +19,11 @@ function opAsync(opName: string, a?: unknown, b?: unknown): Promise<unknown> {
  * The base class is generic so that the apply function type is
  * sound. Note that TypeScript *doesn't* check this.
  */
-abstract class Operator<Input> {
+abstract class Operator<Input, Output> {
     // Read by rust
     readonly type;
     constructor(
-        public readonly inner: Operator<unknown> | undefined,
+        public readonly inner: Operator<unknown, Input> | undefined,
     ) {
         this.type = this.constructor.name;
     }
@@ -52,7 +52,7 @@ abstract class Operator<Input> {
 /**
  * Specifies Entity whose elements are to be fetched.
  */
-class BaseEntity<T> extends Operator<never> {
+class BaseEntity<T> extends Operator<never, T> {
     constructor(
         public name: string,
     ) {
@@ -70,10 +70,10 @@ class BaseEntity<T> extends Operator<never> {
  * Take operator takes first `count` elements from a collection.
  * The rest is ignored.
  */
-class Take<T> extends Operator<T> {
+class Take<T> extends Operator<T, T> {
     constructor(
         public readonly count: number,
-        inner: Operator<unknown>,
+        inner: Operator<unknown, T>,
     ) {
         super(inner);
     }
@@ -102,10 +102,10 @@ class Take<T> extends Operator<T> {
 /**
  * Skip operator skips first `count` elements from a collection.
  */
-class Skip<T> extends Operator<T> {
+class Skip<T> extends Operator<T, T> {
     constructor(
         public readonly count: number,
-        inner: Operator<unknown>,
+        inner: Operator<unknown, T>,
     ) {
         super(inner);
     }
@@ -130,10 +130,11 @@ class Skip<T> extends Operator<T> {
 /**
  * Forces fetch of just the `columns` (fields) of a given entity.
  */
-class ColumnsSelect<T, C extends (keyof T)[]> extends Operator<T> {
+class ColumnsSelect<T, C extends (keyof T)[]>
+    extends Operator<T, Pick<T, C[number]>> {
     constructor(
         public columns: C,
-        inner: Operator<unknown>,
+        inner: Operator<unknown, T>,
     ) {
         super(inner);
     }
@@ -162,10 +163,10 @@ class ColumnsSelect<T, C extends (keyof T)[]> extends Operator<T> {
  * PredicateFilter operator applies `predicate` on each element and keeps
  * only those for which the `predicate` returns true.
  */
-class PredicateFilter<T> extends Operator<T> {
+class PredicateFilter<T> extends Operator<T, T> {
     constructor(
         public predicate: (arg: T) => boolean,
-        inner: Operator<unknown>,
+        inner: Operator<unknown, T>,
     ) {
         super(inner);
     }
@@ -193,11 +194,11 @@ class PredicateFilter<T> extends Operator<T> {
  * as well which is to be equivalent to the predicate and which is sent to
  * the Rust backend for direct Database evaluation if possible.
  */
-class ExpressionFilter<T> extends Operator<T> {
+class ExpressionFilter<T> extends Operator<T, T> {
     constructor(
         public predicate: (arg: T) => boolean,
         public expression: Record<string, unknown>,
-        inner: Operator<unknown>,
+        inner: Operator<unknown, T>,
     ) {
         super(inner);
     }
@@ -232,10 +233,10 @@ class SortKey<T> {
 /**
  * SortBy operator sorts elements by sorting `keys`in lexicographicall manner.
  */
-class SortBy<T> extends Operator<T> {
+class SortBy<T> extends Operator<T, T> {
     constructor(
         private keys: SortKey<T>[],
-        inner: Operator<unknown>,
+        inner: Operator<unknown, T>,
     ) {
         super(inner);
     }
@@ -283,7 +284,7 @@ export class ChiselCursor<T> {
     // extracted from the DB.
     constructor(
         private baseConstructor: { new (): T },
-        private inner: Operator<unknown>,
+        private inner: Operator<unknown, T>,
     ) {}
     /** Force ChiselStrike to fetch just the `...columns` that are part of the colums list. */
     select<C extends (keyof T)[]>(
@@ -368,7 +369,7 @@ export class ChiselCursor<T> {
         expression: Record<string, unknown>,
         postPredicate?: (arg: T) => boolean,
     ) {
-        let op: Operator<T> = new ExpressionFilter(
+        let op: Operator<T, T> = new ExpressionFilter(
             exprPredicate,
             expression,
             this.inner,
@@ -477,7 +478,7 @@ export class ChiselCursor<T> {
      */
     // FIXME: We use unknown since we don't know all intermediate types needed to make this more strict.
     private evalOpsRecursive(
-        op: Operator<unknown>,
+        op: Operator<unknown, unknown>,
     ): AsyncIterable<unknown> | undefined {
         if (op.inner === undefined) {
             return undefined;
@@ -495,7 +496,7 @@ export class ChiselCursor<T> {
 
     // This can be called by evalOpsRecursive in the middle of the chain, hence the unknowns.
     private runChiselQuery(
-        op: Operator<unknown>,
+        op: Operator<unknown, unknown>,
     ): AsyncIterable<unknown> {
         const ctor = op.containsType(ColumnsSelect)
             ? undefined
