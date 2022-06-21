@@ -19,6 +19,25 @@ export default async function chisel(req: Request) {
 }
 EOF
 
+cat << EOF > "$TEMPDIR/endpoints/bug.ts"
+import { Person } from "../models/person.ts";
+
+export default async function chisel(req: Request) {
+    let ret = "[";
+
+    // This should not compile, but does because we confuse
+    // ChiselEntities with the corresponding plain records we should be
+    // using here.
+    const q1 = Person.cursor().select("save");
+
+    for await (let row of q1) {
+        ret += JSON.stringify(row) + ",";
+    }
+    ret += "]";
+    return new Response(ret);
+}
+EOF
+
 cd "$TEMPDIR"
 $CHISEL apply
 
@@ -50,3 +69,6 @@ $CURL -o - $CHISELD_HOST/dev/query
 
 # CHECK: HTTP/1.1 200 OK
 # CHECK: Glauber Costa 666 true 10.01
+
+$CURL -o - $CHISELD_HOST/dev/bug
+# CHECK: [{},{},]
