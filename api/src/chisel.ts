@@ -24,6 +24,7 @@ abstract class Operator<Input, Output> {
     readonly type;
     constructor(
         public readonly inner: Operator<unknown, Input> | undefined,
+        private baseConstructor: { new (): Output },
     ) {
         this.type = this.constructor.name;
     }
@@ -55,8 +56,9 @@ abstract class Operator<Input, Output> {
 class BaseEntity<T> extends Operator<never, T> {
     constructor(
         public name: string,
+        baseConstructor: { new (): T },
     ) {
-        super(undefined);
+        super(undefined, baseConstructor);
     }
 
     apply(
@@ -74,8 +76,9 @@ class Take<T> extends Operator<T, T> {
     constructor(
         public readonly count: number,
         inner: Operator<unknown, T>,
+        baseConstructor: { new (): T },
     ) {
-        super(inner);
+        super(inner, baseConstructor);
     }
 
     apply(
@@ -106,8 +109,9 @@ class Skip<T> extends Operator<T, T> {
     constructor(
         public readonly count: number,
         inner: Operator<unknown, T>,
+        baseConstructor: { new (): T },
     ) {
-        super(inner);
+        super(inner, baseConstructor);
     }
 
     apply(
@@ -135,8 +139,9 @@ class ColumnsSelect<T, C extends (keyof T)[]>
     constructor(
         public columns: C,
         inner: Operator<unknown, T>,
+        baseConstructor: { new (): T },
     ) {
-        super(inner);
+        super(inner, baseConstructor);
     }
 
     apply(
@@ -167,8 +172,9 @@ class PredicateFilter<T> extends Operator<T, T> {
     constructor(
         public predicate: (arg: T) => boolean,
         inner: Operator<unknown, T>,
+        baseConstructor: { new (): T },
     ) {
-        super(inner);
+        super(inner, baseConstructor);
     }
 
     apply(
@@ -199,8 +205,9 @@ class ExpressionFilter<T> extends Operator<T, T> {
         public predicate: (arg: T) => boolean,
         public expression: Record<string, unknown>,
         inner: Operator<unknown, T>,
+        baseConstructor: { new (): T },
     ) {
-        super(inner);
+        super(inner, baseConstructor);
     }
 
     apply(
@@ -237,8 +244,9 @@ class SortBy<T> extends Operator<T, T> {
     constructor(
         private keys: SortKey<T>[],
         inner: Operator<unknown, T>,
+        baseConstructor: { new (): T },
     ) {
-        super(inner);
+        super(inner, baseConstructor);
     }
 
     apply(
@@ -292,7 +300,11 @@ export class ChiselCursor<T> {
     ): ChiselCursor<Pick<T, C[number]>> {
         return new ChiselCursor(
             this.baseConstructor,
-            new ColumnsSelect<T, (keyof T)[]>(columns, this.inner),
+            new ColumnsSelect<T, (keyof T)[]>(
+                columns,
+                this.inner,
+                this.baseConstructor,
+            ),
         );
     }
 
@@ -300,7 +312,7 @@ export class ChiselCursor<T> {
     take(count: number): ChiselCursor<T> {
         return new ChiselCursor(
             this.baseConstructor,
-            new Take(count, this.inner),
+            new Take(count, this.inner, this.baseConstructor),
         );
     }
 
@@ -308,7 +320,7 @@ export class ChiselCursor<T> {
     skip(count: number): ChiselCursor<T> {
         return new ChiselCursor(
             this.baseConstructor,
-            new Skip(count, this.inner),
+            new Skip(count, this.inner, this.baseConstructor),
         );
     }
 
@@ -332,6 +344,7 @@ export class ChiselCursor<T> {
                 new PredicateFilter(
                     arg1,
                     this.inner,
+                    this.baseConstructor,
                 ),
             );
         } else {
@@ -358,6 +371,7 @@ export class ChiselCursor<T> {
                     predicate,
                     expr,
                     this.inner,
+                    this.baseConstructor,
                 ),
             );
         }
@@ -373,9 +387,10 @@ export class ChiselCursor<T> {
             exprPredicate,
             expression,
             this.inner,
+            this.baseConstructor,
         );
         if (postPredicate !== undefined) {
-            op = new PredicateFilter(postPredicate, op);
+            op = new PredicateFilter(postPredicate, op, this.baseConstructor);
         }
         return new ChiselCursor(this.baseConstructor, op);
     }
@@ -394,6 +409,7 @@ export class ChiselCursor<T> {
             new SortBy(
                 [new SortKey<T>(key, ascending)],
                 this.inner,
+                this.baseConstructor,
             ),
         );
     }
@@ -571,7 +587,7 @@ export class ChiselRequest extends Request {
 export function chiselIterator<T extends ChiselEntity>(
     type: { new (): T },
 ) {
-    const b = new BaseEntity<T>(type.name);
+    const b = new BaseEntity<T>(type.name, type);
     return new ChiselCursor<T>(type, b);
 }
 
