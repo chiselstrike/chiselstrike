@@ -113,7 +113,7 @@ async function rollback_on_failure<T>(func: () => Promise<T>): Promise<T> {
 }
 
 function buildReadableStreamForBody(rid: number) {
-    return new ReadableStream<string>({
+    return new ReadableStream<Uint8Array>({
         async pull(controller: ReadableStreamDefaultController) {
             const chunk = await Deno.core.opAsync("op_chisel_read_body", rid);
             if (chunk) {
