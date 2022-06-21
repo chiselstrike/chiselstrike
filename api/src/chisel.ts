@@ -36,6 +36,56 @@ abstract class Operator<Input, Output> {
         iter: AsyncIterable<Input>,
     ): AsyncIterable<Output>;
 
+    public eval(): AsyncIterable<Output> | undefined {
+        const iter = this.inner!.eval();
+        if (iter !== undefined) {
+            return this.apply(iter);
+        }
+        return undefined;
+    }
+
+    public runChiselQuery(): AsyncIterable<Output> {
+        const ctor = this.containsType(ColumnsSelect)
+            ? undefined
+            : this.baseConstructor;
+        const getRid = () =>
+            opSync(
+                "op_chisel_relational_query_create",
+                this,
+                requestContext,
+            ) as number;
+        return {
+            [Symbol.asyncIterator]: async function* () {
+                const rid = getRid();
+                try {
+                    while (true) {
+                        const properties = await opAsync(
+                            "op_chisel_query_next",
+                            rid,
+                        );
+
+                        if (properties === null) {
+                            break;
+                        }
+                        if (ctor !== undefined) {
+                            const result = new ctor();
+                            Object.assign(result, properties);
+                            yield result;
+                        } else {
+                            // This is the case where we have a
+                            // select, so we are producing a plain
+                            // record and rust set all the properties,
+                            // so the type is correct.
+                            yield properties as Output;
+                        }
+                    }
+                } finally {
+                    Deno.core.tryClose(rid);
+                }
+            },
+        };
+    }
+
     /** Recursively examines operator chain searching for `ctor` operator.
      * Returns true if found, false otherwise.
      */
@@ -65,6 +115,10 @@ class BaseEntity<T> extends Operator<never, T> {
         _iter: AsyncIterable<never>,
     ): AsyncIterable<T> {
         throw new Error("can't apply BaseEntity operator on an iterable");
+    }
+
+    public eval(): undefined {
+        return undefined;
     }
 }
 
@@ -190,6 +244,14 @@ class PredicateFilter<T> extends Operator<T, T> {
                 }
             },
         };
+    }
+
+    public eval(): AsyncIterable<T> {
+        let iter = this.inner!.eval();
+        if (iter === undefined) {
+            iter = this.inner!.runChiselQuery();
+        }
+        return this.apply(iter);
     }
 }
 
@@ -477,76 +539,11 @@ export class ChiselCursor<T> {
 
     /** ChiselCursor implements asyncIterator, meaning you can use it in any asynchronous context. */
     [Symbol.asyncIterator](): AsyncIterator<T> {
-        let iter = this.evalOpsRecursive(this.inner);
+        let iter = this.inner.eval();
         if (iter === undefined) {
-            iter = this.runChiselQuery(this.inner);
+            iter = this.inner.runChiselQuery();
         }
-        // By construction we know that the iterators will produce Ts,
-        // but we use unknown in the implementation.
-        return (iter as AsyncIterable<T>)[Symbol.asyncIterator]();
-    }
-
-    /** Performs recursive descent via Operator.inner examining the whole operator
-     * chain. If PredicateFilter is encountered, a backend query is generated and
-     * all subsequent operations are applied on the resulting async iterable in
-     * TypeScript. In such a case, the function returns the resulting AsyncIterable.
-     * If no PredicateFilter is found, undefined is returned.
-     */
-    // FIXME: We use unknown since we don't know all intermediate types needed to make this more strict.
-    private evalOpsRecursive(
-        op: Operator<unknown, unknown>,
-    ): AsyncIterable<unknown> | undefined {
-        if (op.inner === undefined) {
-            return undefined;
-        }
-        let iter = this.evalOpsRecursive(op.inner);
-        if (iter === undefined && op instanceof PredicateFilter) {
-            iter = this.runChiselQuery(op.inner);
-        }
-        if (iter !== undefined) {
-            return op.apply(iter);
-        } else {
-            return undefined;
-        }
-    }
-
-    // This can be called by evalOpsRecursive in the middle of the chain, hence the unknowns.
-    private runChiselQuery(
-        op: Operator<unknown, unknown>,
-    ): AsyncIterable<unknown> {
-        const ctor = op.containsType(ColumnsSelect)
-            ? undefined
-            : this.baseConstructor;
-        return {
-            [Symbol.asyncIterator]: async function* () {
-                const rid = opSync(
-                    "op_chisel_relational_query_create",
-                    op,
-                    requestContext,
-                ) as number;
-                try {
-                    while (true) {
-                        const properties = await opAsync(
-                            "op_chisel_query_next",
-                            rid,
-                        );
-
-                        if (properties === null) {
-                            break;
-                        }
-                        if (ctor !== undefined) {
-                            const result = new ctor();
-                            Object.assign(result, properties);
-                            yield result;
-                        } else {
-                            yield properties;
-                        }
-                    }
-                } finally {
-                    Deno.core.tryClose(rid);
-                }
-            },
-        };
+        return iter[Symbol.asyncIterator]();
     }
 }
 
