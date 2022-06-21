@@ -19,11 +19,12 @@ function opAsync(opName: string, a?: unknown, b?: unknown): Promise<unknown> {
  * The base class is generic so that the apply function type is
  * sound. Note that TypeScript *doesn't* check this.
  */
-abstract class Operator<T> {
+abstract class Operator<Input, Output> {
     // Read by rust
     readonly type;
     constructor(
-        public readonly inner: Operator<unknown> | undefined,
+        public readonly inner: Operator<unknown, Input> | undefined,
+        private baseConstructor: { new (): Output },
     ) {
         this.type = this.constructor.name;
     }
@@ -32,8 +33,58 @@ abstract class Operator<T> {
      * `iter` creating a new iterable.
      */
     public abstract apply(
-        iter: AsyncIterable<T>,
-    ): AsyncIterable<unknown>;
+        iter: AsyncIterable<Input>,
+    ): AsyncIterable<Output>;
+
+    public eval(): AsyncIterable<Output> | undefined {
+        const iter = this.inner!.eval();
+        if (iter !== undefined) {
+            return this.apply(iter);
+        }
+        return undefined;
+    }
+
+    public runChiselQuery(): AsyncIterable<Output> {
+        const ctor = this.containsType(ColumnsSelect)
+            ? undefined
+            : this.baseConstructor;
+        const getRid = () =>
+            opSync(
+                "op_chisel_relational_query_create",
+                this,
+                requestContext,
+            ) as number;
+        return {
+            [Symbol.asyncIterator]: async function* () {
+                const rid = getRid();
+                try {
+                    while (true) {
+                        const properties = await opAsync(
+                            "op_chisel_query_next",
+                            rid,
+                        );
+
+                        if (properties === null) {
+                            break;
+                        }
+                        if (ctor !== undefined) {
+                            const result = new ctor();
+                            Object.assign(result, properties);
+                            yield result;
+                        } else {
+                            // This is the case where we have a
+                            // select, so we are producing a plain
+                            // record and rust set all the properties,
+                            // so the type is correct.
+                            yield properties as Output;
+                        }
+                    }
+                } finally {
+                    Deno.core.tryClose(rid);
+                }
+            },
+        };
+    }
 
     /** Recursively examines operator chain searching for `ctor` operator.
      * Returns true if found, false otherwise.
@@ -52,11 +103,12 @@ abstract class Operator<T> {
 /**
  * Specifies Entity whose elements are to be fetched.
  */
-class BaseEntity<T> extends Operator<never> {
+class BaseEntity<T> extends Operator<never, T> {
     constructor(
         public name: string,
+        baseConstructor: { new (): T },
     ) {
-        super(undefined);
+        super(undefined, baseConstructor);
     }
 
     apply(
@@ -64,18 +116,23 @@ class BaseEntity<T> extends Operator<never> {
     ): AsyncIterable<T> {
         throw new Error("can't apply BaseEntity operator on an iterable");
     }
+
+    public eval(): undefined {
+        return undefined;
+    }
 }
 
 /**
  * Take operator takes first `count` elements from a collection.
  * The rest is ignored.
  */
-class Take<T> extends Operator<T> {
+class Take<T> extends Operator<T, T> {
     constructor(
         public readonly count: number,
-        inner: Operator<unknown>,
+        inner: Operator<unknown, T>,
+        baseConstructor: { new (): T },
     ) {
-        super(inner);
+        super(inner, baseConstructor);
     }
 
     apply(
@@ -102,12 +159,13 @@ class Take<T> extends Operator<T> {
 /**
  * Skip operator skips first `count` elements from a collection.
  */
-class Skip<T> extends Operator<T> {
+class Skip<T> extends Operator<T, T> {
     constructor(
         public readonly count: number,
-        inner: Operator<unknown>,
+        inner: Operator<unknown, T>,
+        baseConstructor: { new (): T },
     ) {
-        super(inner);
+        super(inner, baseConstructor);
     }
 
     apply(
@@ -130,12 +188,14 @@ class Skip<T> extends Operator<T> {
 /**
  * Forces fetch of just the `columns` (fields) of a given entity.
  */
-class ColumnsSelect<T, C extends (keyof T)[]> extends Operator<T> {
+class ColumnsSelect<T, C extends (keyof T)[]>
+    extends Operator<T, Pick<T, C[number]>> {
     constructor(
         public columns: C,
-        inner: Operator<unknown>,
+        inner: Operator<unknown, T>,
+        baseConstructor: { new (): T },
     ) {
-        super(inner);
+        super(inner, baseConstructor);
     }
 
     apply(
@@ -162,12 +222,13 @@ class ColumnsSelect<T, C extends (keyof T)[]> extends Operator<T> {
  * PredicateFilter operator applies `predicate` on each element and keeps
  * only those for which the `predicate` returns true.
  */
-class PredicateFilter<T> extends Operator<T> {
+class PredicateFilter<T> extends Operator<T, T> {
     constructor(
         public predicate: (arg: T) => boolean,
-        inner: Operator<unknown>,
+        inner: Operator<unknown, T>,
+        baseConstructor: { new (): T },
     ) {
-        super(inner);
+        super(inner, baseConstructor);
     }
 
     apply(
@@ -184,6 +245,14 @@ class PredicateFilter<T> extends Operator<T> {
             },
         };
     }
+
+    public eval(): AsyncIterable<T> {
+        let iter = this.inner!.eval();
+        if (iter === undefined) {
+            iter = this.inner!.runChiselQuery();
+        }
+        return this.apply(iter);
+    }
 }
 
 /**
@@ -193,13 +262,14 @@ class PredicateFilter<T> extends Operator<T> {
  * as well which is to be equivalent to the predicate and which is sent to
  * the Rust backend for direct Database evaluation if possible.
  */
-class ExpressionFilter<T> extends Operator<T> {
+class ExpressionFilter<T> extends Operator<T, T> {
     constructor(
         public predicate: (arg: T) => boolean,
         public expression: Record<string, unknown>,
-        inner: Operator<unknown>,
+        inner: Operator<unknown, T>,
+        baseConstructor: { new (): T },
     ) {
-        super(inner);
+        super(inner, baseConstructor);
     }
 
     apply(
@@ -232,12 +302,13 @@ class SortKey<T> {
 /**
  * SortBy operator sorts elements by sorting `keys`in lexicographicall manner.
  */
-class SortBy<T> extends Operator<T> {
+class SortBy<T> extends Operator<T, T> {
     constructor(
         private keys: SortKey<T>[],
-        inner: Operator<unknown>,
+        inner: Operator<unknown, T>,
+        baseConstructor: { new (): T },
     ) {
-        super(inner);
+        super(inner, baseConstructor);
     }
 
     apply(
@@ -283,7 +354,7 @@ export class ChiselCursor<T> {
     // extracted from the DB.
     constructor(
         private baseConstructor: { new (): T },
-        private inner: Operator<unknown>,
+        private inner: Operator<unknown, T>,
     ) {}
     /** Force ChiselStrike to fetch just the `...columns` that are part of the colums list. */
     select<C extends (keyof T)[]>(
@@ -291,7 +362,11 @@ export class ChiselCursor<T> {
     ): ChiselCursor<Pick<T, C[number]>> {
         return new ChiselCursor(
             this.baseConstructor,
-            new ColumnsSelect<T, (keyof T)[]>(columns, this.inner),
+            new ColumnsSelect<T, (keyof T)[]>(
+                columns,
+                this.inner,
+                this.baseConstructor,
+            ),
         );
     }
 
@@ -299,7 +374,7 @@ export class ChiselCursor<T> {
     take(count: number): ChiselCursor<T> {
         return new ChiselCursor(
             this.baseConstructor,
-            new Take(count, this.inner),
+            new Take(count, this.inner, this.baseConstructor),
         );
     }
 
@@ -307,7 +382,7 @@ export class ChiselCursor<T> {
     skip(count: number): ChiselCursor<T> {
         return new ChiselCursor(
             this.baseConstructor,
-            new Skip(count, this.inner),
+            new Skip(count, this.inner, this.baseConstructor),
         );
     }
 
@@ -331,6 +406,7 @@ export class ChiselCursor<T> {
                 new PredicateFilter(
                     arg1,
                     this.inner,
+                    this.baseConstructor,
                 ),
             );
         } else {
@@ -357,6 +433,7 @@ export class ChiselCursor<T> {
                     predicate,
                     expr,
                     this.inner,
+                    this.baseConstructor,
                 ),
             );
         }
@@ -368,13 +445,14 @@ export class ChiselCursor<T> {
         expression: Record<string, unknown>,
         postPredicate?: (arg: T) => boolean,
     ) {
-        let op: Operator<T> = new ExpressionFilter(
+        let op: Operator<T, T> = new ExpressionFilter(
             exprPredicate,
             expression,
             this.inner,
+            this.baseConstructor,
         );
         if (postPredicate !== undefined) {
-            op = new PredicateFilter(postPredicate, op);
+            op = new PredicateFilter(postPredicate, op, this.baseConstructor);
         }
         return new ChiselCursor(this.baseConstructor, op);
     }
@@ -393,6 +471,7 @@ export class ChiselCursor<T> {
             new SortBy(
                 [new SortKey<T>(key, ascending)],
                 this.inner,
+                this.baseConstructor,
             ),
         );
     }
@@ -460,76 +539,11 @@ export class ChiselCursor<T> {
 
     /** ChiselCursor implements asyncIterator, meaning you can use it in any asynchronous context. */
     [Symbol.asyncIterator](): AsyncIterator<T> {
-        let iter = this.evalOpsRecursive(this.inner);
+        let iter = this.inner.eval();
         if (iter === undefined) {
-            iter = this.runChiselQuery(this.inner);
+            iter = this.inner.runChiselQuery();
         }
-        // By construction we know that the iterators will produce Ts,
-        // but we use unknown in the implementation.
-        return (iter as AsyncIterable<T>)[Symbol.asyncIterator]();
-    }
-
-    /** Performs recursive descent via Operator.inner examining the whole operator
-     * chain. If PredicateFilter is encountered, a backend query is generated and
-     * all subsequent operations are applied on the resulting async iterable in
-     * TypeScript. In such a case, the function returns the resulting AsyncIterable.
-     * If no PredicateFilter is found, undefined is returned.
-     */
-    // FIXME: We use unknown since we don't know all intermediate types needed to make this more strict.
-    private evalOpsRecursive(
-        op: Operator<unknown>,
-    ): AsyncIterable<unknown> | undefined {
-        if (op.inner === undefined) {
-            return undefined;
-        }
-        let iter = this.evalOpsRecursive(op.inner);
-        if (iter === undefined && op instanceof PredicateFilter) {
-            iter = this.runChiselQuery(op.inner);
-        }
-        if (iter !== undefined) {
-            return op.apply(iter);
-        } else {
-            return undefined;
-        }
-    }
-
-    // This can be called by evalOpsRecursive in the middle of the chain, hence the unknowns.
-    private runChiselQuery(
-        op: Operator<unknown>,
-    ): AsyncIterable<unknown> {
-        const ctor = op.containsType(ColumnsSelect)
-            ? undefined
-            : this.baseConstructor;
-        return {
-            [Symbol.asyncIterator]: async function* () {
-                const rid = opSync(
-                    "op_chisel_relational_query_create",
-                    op,
-                    requestContext,
-                ) as number;
-                try {
-                    while (true) {
-                        const properties = await opAsync(
-                            "op_chisel_query_next",
-                            rid,
-                        );
-
-                        if (properties === null) {
-                            break;
-                        }
-                        if (ctor !== undefined) {
-                            const result = new ctor();
-                            Object.assign(result, properties);
-                            yield result;
-                        } else {
-                            yield properties;
-                        }
-                    }
-                } finally {
-                    Deno.core.tryClose(rid);
-                }
-            },
-        };
+        return iter[Symbol.asyncIterator]();
     }
 }
 
@@ -570,7 +584,7 @@ export class ChiselRequest extends Request {
 export function chiselIterator<T extends ChiselEntity>(
     type: { new (): T },
 ) {
-    const b = new BaseEntity<T>(type.name);
+    const b = new BaseEntity<T>(type.name, type);
     return new ChiselCursor<T>(type, b);
 }
 
