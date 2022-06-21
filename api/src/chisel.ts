@@ -33,7 +33,7 @@ abstract class Operator<Input, Output> {
      */
     public abstract apply(
         iter: AsyncIterable<Input>,
-    ): AsyncIterable<unknown>;
+    ): AsyncIterable<Output>;
 
     /** Recursively examines operator chain searching for `ctor` operator.
      * Returns true if found, false otherwise.
