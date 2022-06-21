@@ -2,7 +2,6 @@
 
 /// <reference lib="deno.core" />
 /// <reference lib="dom" />
-/// <reference lib="deno.unstable" />
 
 const endpointWorker = new Worker("file:///worker.js", {
     type: "module",
