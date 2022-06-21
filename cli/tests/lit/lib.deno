@@ -1,0 +1,24 @@
+# SPDX-FileCopyrightText: © 2022 ChiselStrike <info@chiselstrike.com>
+
+# RUN: sh -e @file
+
+cd "$TEMPDIR"
+
+cat << EOF > "$TEMPDIR/endpoints/hello.ts"
+import { hello } from "../lib/hello.ts";
+
+export default async function (req: Request) {
+    return new Response(hello());
+}
+EOF
+
+cat << EOF > "$TEMPDIR/lib/hello.ts"
+export function hello() {
+    return "Hello World";
+}
+EOF
+
+$CHISEL apply
+$CURL "$CHISELD_HOST/dev/hello"
+
+# CHECK: Hello World
