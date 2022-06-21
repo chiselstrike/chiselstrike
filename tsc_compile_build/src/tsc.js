@@ -100,11 +100,11 @@
         // be the subset of deno that we want + our own chisel namespace.
         const defaultLibs = [
             "lib.deno.ns.d.ts",
-            "lib.dom.asynciterable.d.ts",
-            "lib.dom.iterable.d.ts",
-            "lib.dom.d.ts",
-            "lib.deno_console.d.ts",
             "lib.deno_broadcast_channel.d.ts",
+            "lib.deno_console.d.ts",
+            "lib.dom.asynciterable.d.ts",
+            "lib.dom.d.ts",
+            "lib.dom.iterable.d.ts",
             "lib.esnext.d.ts",
         ];
         if (lib !== undefined) {
