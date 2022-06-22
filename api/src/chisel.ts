@@ -354,6 +354,11 @@ class SortBy<T> extends Operator<T, T> {
 /** ChiselCursor is a lazy iterator that will be used by ChiselStrike to construct an optimized query. */
 export class ChiselCursor<T> {
     constructor(private inner: Operator<unknown, T>) {}
+
+    // FIXME: The typing of Select operator is wrong because Pick allows to select
+    // not only properties, but methods as well. Which means `Person.cursor().select("save");`
+    // will pass the compiler, but it's obviously not what we want to allow.
+
     /** Force ChiselStrike to fetch just the `...columns` that are part of the colums list. */
     select<C extends (keyof T)[]>(
         ...columns: C
