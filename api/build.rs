@@ -7,12 +7,13 @@ use std::path::PathBuf;
 use tsc_compile::compile_ts_code;
 use tsc_compile::CompileOptions;
 
-async fn compile(stem: &str) -> Result<()> {
+async fn compile(stem: &str, is_worker: bool) -> Result<()> {
     let src = &format!("src/{}.ts", stem);
     println!("cargo:rerun-if-changed={}", src);
 
     let opts = CompileOptions {
         emit_declarations: true,
+        is_worker,
         ..Default::default()
     };
     let mut map = compile_ts_code(&[src], opts).await?;
@@ -33,8 +34,8 @@ async fn main() -> Result<()> {
     // should be the only rerun-if-changed that we need.
     println!("cargo:rerun-if-changed=../third_party/deno/core/lib.deno_core.d.ts");
 
-    compile("chisel").await?;
-    compile("endpoint").await?;
-    compile("worker").await?;
+    compile("chisel", false).await?;
+    compile("endpoint", false).await?;
+    compile("worker", true).await?;
     Ok(())
 }

@@ -1,7 +1,5 @@
 // SPDX-FileCopyrightText: © 2022 ChiselStrike <info@chiselstrike.com>
 
-/// <reference lib="deno.worker" />
-
 import * as Chisel from "./chisel.ts";
 (globalThis as unknown as { Chisel: unknown }).Chisel = Chisel;
 
