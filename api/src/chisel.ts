@@ -1,8 +1,6 @@
 // SPDX-FileCopyrightText: © 2021 ChiselStrike <info@chiselstrike.com>
 
 /// <reference lib="deno.core" />
-/// <reference lib="dom" />
-/// <reference lib="dom.iterable" />
 
 function opSync(opName: string, a?: unknown, b?: unknown): unknown {
     return Deno.core.opSync(opName, a, b);

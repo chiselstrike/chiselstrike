@@ -9,6 +9,7 @@ pub const JS_FILES: [(&str, &str); 2] = [
 pub fn read(path: &str) -> &'static str {
     if path == "bootstrap.ts" {
         return "/// <reference lib=\"deno.core\" />
+                /// <reference lib=\"deno.worker\" />
                   export {};";
     }
     if let Some(suffix) = path.strip_prefix("/default/lib/location/") {
@@ -67,10 +68,9 @@ pub fn read(path: &str) -> &'static str {
                 "lib.deno.shared_globals.d.ts",
                 "lib.deno.unstable.d.ts",
                 "lib.deno.window.d.ts",
+                "lib.deno.worker.d.ts",
                 "lib.dom.asynciterable.d.ts",
-                "lib.dom.d.ts",
                 "lib.dom.extras.d.ts",
-                "lib.dom.iterable.d.ts",
                 "lib.es2015.collection.d.ts",
                 "lib.es2015.core.d.ts",
                 "lib.es2015.d.ts",

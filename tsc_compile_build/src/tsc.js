@@ -95,17 +95,14 @@
     const readCache = {};
     function compileAux(files, lib, emitDeclarations) {
         // FIXME: This is probably not exactly what we want. Deno uses
-        // deno.window. This is the subset of deno.window that is
-        // compatible with lib.dom.d.ts + lib.dom.d.ts. It should probably
-        // be the subset of deno that we want + our own chisel namespace.
+        // deno.window. We might have to do the same.
         const defaultLibs = [
             "lib.deno.ns.d.ts",
+            "lib.deno.shared_globals.d.ts",
             "lib.deno.unstable.d.ts",
             "lib.deno_broadcast_channel.d.ts",
             "lib.deno_console.d.ts",
             "lib.dom.asynciterable.d.ts",
-            "lib.dom.d.ts",
-            "lib.dom.iterable.d.ts",
             "lib.esnext.d.ts",
         ];
         if (lib !== undefined) {
@@ -179,6 +176,7 @@
         "deno.webgpu": "deno_webgpu",
         "deno.websocket": "deno_websocket",
         "deno.webstorage": "deno_webstorage",
+        "deno.worker": "deno.worker",
     };
 
     for (const k in libs) {
