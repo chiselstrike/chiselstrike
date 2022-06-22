@@ -24,7 +24,6 @@ abstract class Operator<Input, Output> {
     readonly type;
     constructor(
         public readonly inner: Operator<unknown, Input> | undefined,
-        private baseConstructor: { new (): Output },
     ) {
         this.type = this.constructor.name;
     }
@@ -36,6 +35,8 @@ abstract class Operator<Input, Output> {
         iter: AsyncIterable<Input>,
     ): AsyncIterable<Output>;
 
+    public abstract recordToOutput(rawRecord: unknown): Output;
+
     public eval(): AsyncIterable<Output> | undefined {
         const iter = this.inner!.eval();
         if (iter !== undefined) {
@@ -45,15 +46,15 @@ abstract class Operator<Input, Output> {
     }
 
     public runChiselQuery(): AsyncIterable<Output> {
-        const ctor = this.containsType(ColumnsSelect)
-            ? undefined
-            : this.baseConstructor;
         const getRid = () =>
             opSync(
                 "op_chisel_relational_query_create",
                 this,
                 requestContext,
             ) as number;
+        const recordToOutput = (rawRecord: unknown) => {
+            return this.recordToOutput(rawRecord);
+        };
         return {
             [Symbol.asyncIterator]: async function* () {
                 const rid = getRid();
@@ -67,36 +68,13 @@ abstract class Operator<Input, Output> {
                         if (properties === null) {
                             break;
                         }
-                        if (ctor !== undefined) {
-                            const result = new ctor();
-                            Object.assign(result, properties);
-                            yield result;
-                        } else {
-                            // This is the case where we have a
-                            // select, so we are producing a plain
-                            // record and rust set all the properties,
-                            // so the type is correct.
-                            yield properties as Output;
-                        }
+                        yield recordToOutput(properties);
                     }
                 } finally {
                     Deno.core.tryClose(rid);
                 }
             },
         };
-    }
-
-    /** Recursively examines operator chain searching for `ctor` operator.
-     * Returns true if found, false otherwise.
-     */
-    public containsType(ctor: new (...args: never[]) => unknown): boolean {
-        if (this instanceof ctor) {
-            return true;
-        } else if (this.inner === undefined) {
-            return false;
-        } else {
-            return this.inner.containsType(ctor);
-        }
     }
 }
 
@@ -106,15 +84,21 @@ abstract class Operator<Input, Output> {
 class BaseEntity<T> extends Operator<never, T> {
     constructor(
         public name: string,
-        baseConstructor: { new (): T },
+        private baseConstructor: { new (): T },
     ) {
-        super(undefined, baseConstructor);
+        super(undefined);
     }
 
     apply(
         _iter: AsyncIterable<never>,
     ): AsyncIterable<T> {
         throw new Error("can't apply BaseEntity operator on an iterable");
+    }
+
+    recordToOutput(rawRecord: unknown): T {
+        const result = new this.baseConstructor();
+        Object.assign(result, rawRecord);
+        return result;
     }
 
     public eval(): undefined {
@@ -130,9 +114,8 @@ class Take<T> extends Operator<T, T> {
     constructor(
         public readonly count: number,
         inner: Operator<unknown, T>,
-        baseConstructor: { new (): T },
     ) {
-        super(inner, baseConstructor);
+        super(inner);
     }
 
     apply(
@@ -154,6 +137,10 @@ class Take<T> extends Operator<T, T> {
             },
         };
     }
+
+    recordToOutput(rawRecord: unknown): T {
+        return this.inner!.recordToOutput(rawRecord);
+    }
 }
 
 /**
@@ -163,9 +150,8 @@ class Skip<T> extends Operator<T, T> {
     constructor(
         public readonly count: number,
         inner: Operator<unknown, T>,
-        baseConstructor: { new (): T },
     ) {
-        super(inner, baseConstructor);
+        super(inner);
     }
 
     apply(
@@ -183,6 +169,10 @@ class Skip<T> extends Operator<T, T> {
             },
         };
     }
+
+    recordToOutput(rawRecord: unknown): T {
+        return this.inner!.recordToOutput(rawRecord);
+    }
 }
 
 /**
@@ -193,9 +183,8 @@ class ColumnsSelect<T, C extends (keyof T)[]>
     constructor(
         public columns: C,
         inner: Operator<unknown, T>,
-        baseConstructor: { new (): T },
     ) {
-        super(inner, baseConstructor);
+        super(inner);
     }
 
     apply(
@@ -216,6 +205,13 @@ class ColumnsSelect<T, C extends (keyof T)[]>
             },
         };
     }
+
+    recordToOutput(rawRecord: unknown): T {
+        // In this case, we have run a Select operator (which converts T to Pick<T,..>),
+        // therefore we are producing a plain Record with selected properties which
+        // means we can simply cast and return.
+        return rawRecord as T;
+    }
 }
 
 /**
@@ -226,9 +222,8 @@ class PredicateFilter<T> extends Operator<T, T> {
     constructor(
         public predicate: (arg: T) => boolean,
         inner: Operator<unknown, T>,
-        baseConstructor: { new (): T },
     ) {
-        super(inner, baseConstructor);
+        super(inner);
     }
 
     apply(
@@ -253,6 +248,10 @@ class PredicateFilter<T> extends Operator<T, T> {
         }
         return this.apply(iter);
     }
+
+    recordToOutput(rawRecord: unknown): T {
+        return this.inner!.recordToOutput(rawRecord);
+    }
 }
 
 /**
@@ -267,9 +266,8 @@ class ExpressionFilter<T> extends Operator<T, T> {
         public predicate: (arg: T) => boolean,
         public expression: Record<string, unknown>,
         inner: Operator<unknown, T>,
-        baseConstructor: { new (): T },
     ) {
-        super(inner, baseConstructor);
+        super(inner);
     }
 
     apply(
@@ -285,6 +283,10 @@ class ExpressionFilter<T> extends Operator<T, T> {
                 }
             },
         };
+    }
+
+    recordToOutput(rawRecord: unknown): T {
+        return this.inner!.recordToOutput(rawRecord);
     }
 }
 
@@ -306,9 +308,8 @@ class SortBy<T> extends Operator<T, T> {
     constructor(
         private keys: SortKey<T>[],
         inner: Operator<unknown, T>,
-        baseConstructor: { new (): T },
     ) {
-        super(inner, baseConstructor);
+        super(inner);
     }
 
     apply(
@@ -344,28 +345,28 @@ class SortBy<T> extends Operator<T, T> {
             },
         };
     }
+
+    recordToOutput(rawRecord: unknown): T {
+        return this.inner!.recordToOutput(rawRecord);
+    }
 }
 
 /** ChiselCursor is a lazy iterator that will be used by ChiselStrike to construct an optimized query. */
 export class ChiselCursor<T> {
-    // FIXME: The types of the various Operators we create is
-    // wrong. In here T is a ChiselEntity, but, for example, Sort<T>
-    // will never see a ChiselEntity, it will see the plain Records
-    // extracted from the DB.
-    constructor(
-        private baseConstructor: { new (): T },
-        private inner: Operator<unknown, T>,
-    ) {}
+    constructor(private inner: Operator<unknown, T>) {}
+
+    // FIXME: The typing of Select operator is wrong because Pick allows to select
+    // not only properties, but methods as well. Which means `Person.cursor().select("save");`
+    // will pass the compiler, but it's obviously not what we want to allow.
+
     /** Force ChiselStrike to fetch just the `...columns` that are part of the colums list. */
     select<C extends (keyof T)[]>(
         ...columns: C
     ): ChiselCursor<Pick<T, C[number]>> {
         return new ChiselCursor(
-            this.baseConstructor,
             new ColumnsSelect<T, (keyof T)[]>(
                 columns,
                 this.inner,
-                this.baseConstructor,
             ),
         );
     }
@@ -373,16 +374,14 @@ export class ChiselCursor<T> {
     /** Restricts this cursor to contain only at most `count` elements */
     take(count: number): ChiselCursor<T> {
         return new ChiselCursor(
-            this.baseConstructor,
-            new Take(count, this.inner, this.baseConstructor),
+            new Take(count, this.inner),
         );
     }
 
     /** Skips the first `count` elements of this cursor. */
     skip(count: number): ChiselCursor<T> {
         return new ChiselCursor(
-            this.baseConstructor,
-            new Skip(count, this.inner, this.baseConstructor),
+            new Skip(count, this.inner),
         );
     }
 
@@ -402,11 +401,9 @@ export class ChiselCursor<T> {
     filter(arg1: ((arg: T) => boolean) | Partial<T>): ChiselCursor<T> {
         if (typeof arg1 == "function") {
             return new ChiselCursor(
-                this.baseConstructor,
                 new PredicateFilter(
                     arg1,
                     this.inner,
-                    this.baseConstructor,
                 ),
             );
         } else {
@@ -428,12 +425,10 @@ export class ChiselCursor<T> {
                 return true;
             };
             return new ChiselCursor(
-                this.baseConstructor,
                 new ExpressionFilter(
                     predicate,
                     expr,
                     this.inner,
-                    this.baseConstructor,
                 ),
             );
         }
@@ -449,12 +444,11 @@ export class ChiselCursor<T> {
             exprPredicate,
             expression,
             this.inner,
-            this.baseConstructor,
         );
         if (postPredicate !== undefined) {
-            op = new PredicateFilter(postPredicate, op, this.baseConstructor);
+            op = new PredicateFilter(postPredicate, op);
         }
-        return new ChiselCursor(this.baseConstructor, op);
+        return new ChiselCursor(op);
     }
 
     /**
@@ -467,11 +461,9 @@ export class ChiselCursor<T> {
      */
     sortBy(key: keyof T, ascending = true): ChiselCursor<T> {
         return new ChiselCursor(
-            this.baseConstructor,
             new SortBy(
                 [new SortKey<T>(key, ascending)],
                 this.inner,
-                this.baseConstructor,
             ),
         );
     }
@@ -585,7 +577,7 @@ export function chiselIterator<T extends ChiselEntity>(
     type: { new (): T },
 ) {
     const b = new BaseEntity<T>(type.name, type);
-    return new ChiselCursor<T>(type, b);
+    return new ChiselCursor(b);
 }
 
 /** ChiselEntity is a class that ChiselStrike user-defined entities are expected to extend.
