@@ -197,6 +197,7 @@ pub struct CompileOptions<'a> {
     pub extra_default_lib: Option<&'a str>,
     pub extra_libs: HashMap<String, String>,
     pub emit_declarations: bool,
+    pub is_worker: bool,
 }
 
 struct ModuleLoader {
@@ -370,6 +371,7 @@ impl Compiler {
             let compile: v8::Local<v8::Function> =
                 get_member(global_proxy, scope, "compile").unwrap();
             let emit_declarations = v8::Boolean::new(scope, opts.emit_declarations).into();
+            let is_worker = v8::Boolean::new(scope, opts.is_worker).into();
 
             let urls: Vec<_> = urls
                 .iter()
@@ -377,7 +379,11 @@ impl Compiler {
                 .collect();
             let urls = v8::Array::new_with_elements(scope, &urls).into();
             compile
-                .call(scope, global_proxy.into(), &[urls, lib, emit_declarations])
+                .call(
+                    scope,
+                    global_proxy.into(),
+                    &[urls, is_worker, lib, emit_declarations],
+                )
                 .unwrap();
         }
 

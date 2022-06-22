@@ -93,18 +93,15 @@
     };
 
     const readCache = {};
-    function compileAux(files, lib, emitDeclarations) {
-        // FIXME: This is probably not exactly what we want. Deno uses
-        // deno.window. We might have to do the same.
+    function compileAux(files, isWorker, lib, emitDeclarations) {
         const defaultLibs = [
-            "lib.deno.ns.d.ts",
-            "lib.deno.shared_globals.d.ts",
             "lib.deno.unstable.d.ts",
-            "lib.deno_broadcast_channel.d.ts",
-            "lib.deno_console.d.ts",
-            "lib.dom.asynciterable.d.ts",
-            "lib.esnext.d.ts",
         ];
+        if (isWorker) {
+            defaultLibs.push("lib.deno.worker.d.ts");
+        } else {
+            defaultLibs.push("lib.deno.window.d.ts");
+        }
         if (lib !== undefined) {
             defaultLibs.push(lib);
         }
@@ -150,9 +147,9 @@
         }
     }
 
-    function compile(files, lib, emitDeclarations) {
+    function compile(files, isWorker, lib, emitDeclarations) {
         try {
-            return compileAux(files, lib, emitDeclarations);
+            return compileAux(files, isWorker, lib, emitDeclarations);
         } catch (e) {
             Deno.core.opSync("diagnostic", e.stack + "\n");
             return false;
@@ -187,7 +184,8 @@
         }
     }
 
-    compile(["bootstrap.ts"], undefined, false);
+    compile(["bootstrap.ts"], false, undefined, false);
+    compile(["bootstrap.ts"], true, undefined, false);
 
     globalThis.compile = compile;
 })();
