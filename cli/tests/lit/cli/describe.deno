@@ -40,7 +40,7 @@ $CHISEL describe
 # CHECK: Endpoint: /dev/hello
 # CHECK: Label policy: pii
 
-echo "found $($CHISEL describe | grep Endpoint | wc -l) endpoints"
+echo "found $($CHISEL describe | grep Endpoint | wc -l | awk '{print $1}') endpoints"
 # CHECK: found 1 endpoints
 
 ## check that an endpoint-only scenario works
