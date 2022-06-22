@@ -109,6 +109,12 @@ abstract class Operator<Input, Output> {
     }
 }
 
+type JunctionFilter = {
+    parentEntity: string;
+    fieldName: string;
+    parentId: string;
+};
+
 /**
  * Specifies Entity whose elements are to be fetched.
  */
@@ -116,6 +122,7 @@ class BaseEntity<T> extends Operator<never, T> {
     constructor(
         public name: string,
         private baseConstructor: { new (): T },
+        public junctionFilter?: JunctionFilter,
     ) {
         super(undefined);
     }
@@ -789,8 +796,9 @@ export class Query {
 
 export function chiselIterator<T extends ChiselEntity>(
     type: { new (): T },
+    junctionFilter?: JunctionFilter,
 ) {
-    const b = new BaseEntity<T>(type.name, type);
+    const b = new BaseEntity<T>(type.name, type, junctionFilter);
     return new ChiselCursor(b);
 }
 
@@ -838,6 +846,15 @@ export class ChiselEntity {
     ): T {
         const result = new this();
         mergeDeep(result as Record<string, unknown>, ...properties);
+
+        for (const propertyName in result) {
+            const value = result[propertyName];
+            if (value instanceof List) {
+                value.setEntityName(this.name);
+                value.setFieldName(propertyName);
+            }
+        }
+
         return result;
     }
 
@@ -859,6 +876,14 @@ export class ChiselEntity {
             }
         }
         backfillIds(this, jsonIds);
+
+        for (const propertyName in this) {
+            const value = this[propertyName];
+            if (value instanceof List) {
+                value.setAssociatedEntityId(this.id!);
+                await value.save();
+            }
+        }
     }
 
     /** Returns a `ChiselCursor` containing all elements of type T known to ChiselStrike.
@@ -1115,6 +1140,82 @@ function restrictionsToFilterExpr<T extends ChiselEntity>(
         }
     }
     return expr;
+}
+
+export class List<T extends ChiselEntity> {
+    entityName?: string;
+    fieldName?: string;
+    associatedId?: string;
+
+    buffer: Array<T>;
+
+    constructor(
+        private elementConstructor: { new (): T },
+    ) {
+        this.buffer = [];
+    }
+
+    public setEntityName(entityName: string) {
+        this.entityName = entityName;
+    }
+
+    public setFieldName(fieldName: string) {
+        this.fieldName = fieldName;
+    }
+
+    public setAssociatedEntityId(id: string) {
+        this.associatedId = id;
+    }
+
+    public push(e: T) {
+        this.buffer.push(e);
+    }
+
+    public async save() {
+        for (const e of this.buffer) {
+            await e.save();
+            await opAsync("op_chisel_insert_junction", {
+                parentEntity: this.entityName!,
+                parentField: this.fieldName!,
+                parentId: this.associatedId!,
+                elementId: e.id!,
+            }, requestContext);
+        }
+        this.buffer.length = 0;
+    }
+
+    public cursor(): ChiselCursor<T> | undefined {
+        if (
+            this.entityName === undefined ||
+            this.fieldName == undefined ||
+            this.associatedId == undefined
+        ) {
+            return undefined;
+        }
+        return chiselIterator(this.elementConstructor, {
+            parentEntity: this.entityName,
+            fieldName: this.fieldName,
+            parentId: this.associatedId,
+        });
+    }
+
+    [Symbol.asyncIterator](): AsyncIterator<T> {
+        const iter = this.cursor();
+        const buffer = this.buffer;
+        const outputIter = {
+            [Symbol.asyncIterator]: async function* () {
+                if (iter !== undefined) {
+                    for await (const e of iter) {
+                        yield e;
+                    }
+                }
+                for (const e of buffer) {
+                    yield e;
+                }
+            },
+        } as AsyncIterable<T>;
+        return outputIter[Symbol.asyncIterator]();
+    }
 }
 
 export class AuthUser extends ChiselEntity {

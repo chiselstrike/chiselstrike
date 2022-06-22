@@ -4,7 +4,7 @@ use crate::datastore::query::{
     KeepOrOmitField, Mutation, QueriedEntity, QueryField, QueryPlan, SqlValue, TargetDatabase,
 };
 use crate::datastore::{DbConnection, Kind};
-use crate::types::{DbIndex, Field, ObjectDelta, ObjectType, Type, TypeId, TypeSystem};
+use crate::types::{DbIndex, Entity, Field, ObjectDelta, ObjectType, Type, TypeId, TypeSystem};
 use crate::JsonObject;
 use anyhow::{anyhow, Context as AnyhowContext, Result};
 use async_lock::Mutex;
@@ -100,6 +100,7 @@ impl TryFrom<&Field> for ColumnDef {
             TypeId::Float => column_def.double(),
             TypeId::Boolean => column_def.boolean(),
             TypeId::Entity { .. } => column_def.text(), // Foreign key, must the be same type as Type::Id
+            TypeId::List { .. } => anyhow::bail!("can't create database field for list"),
         };
 
         Ok(column_def)
@@ -252,6 +253,9 @@ impl QueryEngine {
             .to_owned();
 
         for field in ty.all_fields() {
+            if matches!(field.type_id, TypeId::List { .. }) {
+                continue;
+            }
             let mut column_def = ColumnDef::try_from(field)?;
             create_table.col(&mut column_def);
         }
@@ -260,6 +264,7 @@ impl QueryEngine {
         let create_table = sqlx::query(&create_table);
         transaction.execute(create_table).await?;
 
+        self.create_junction_tables(transaction, ty).await?;
         Self::create_indexes(transaction, ty, ty.indexes()).await?;
         Ok(())
     }
@@ -377,7 +382,53 @@ impl QueryEngine {
         Ok(())
     }
 
+    pub(crate) async fn create_junction_tables(
+        &self,
+        transaction: &mut Transaction<'_, Any>,
+        ty: &ObjectType,
+    ) -> Result<()> {
+        for field in ty.all_fields() {
+            if let Some(junction_table) = &field.junction_table {
+                let mut create_table = Table::create()
+                    .table(Alias::new(junction_table))
+                    .if_not_exists()
+                    .to_owned();
+
+                let mut parent_id = ColumnDef::new(Alias::new("parent_id"));
+                parent_id.text();
+                create_table.col(&mut parent_id);
+
+                let mut element_id = ColumnDef::new(Alias::new("element_id"));
+                element_id.text();
+                create_table.col(&mut element_id);
+
+                let create_table =
+                    create_table.build_any(DbConnection::get_query_builder(&self.kind));
+                let create_table = sqlx::query(&create_table);
+                transaction.execute(create_table).await?;
+            }
+        }
+        Ok(())
+    }
+
     fn row_to_json(db_kind: Kind, entity: &QueriedEntity, row: &AnyRow) -> Result<ResultRow> {
+        let id_column_idx = entity
+            .fields
+            .iter()
+            .find_map(|f| {
+                if let QueryField::Scalar {
+                    type_id: TypeId::Id,
+                    column_idx,
+                    ..
+                } = f
+                {
+                    Some(column_idx)
+                } else {
+                    None
+                }
+            })
+            .context("queried entity doesn't contain id column")?;
+
         let mut ret = JsonObject::default();
         for s_field in &entity.fields {
             match s_field {
@@ -420,7 +471,9 @@ impl QueryEngine {
                                 _ => to_json!(bool),
                             }
                         }
-                        TypeId::Entity { .. } => anyhow::bail!("object is not a scalar"),
+                        TypeId::Entity { .. } | TypeId::List { .. } => {
+                            anyhow::bail!("object is not a scalar")
+                        }
                     };
                     if let Some(tr) = transform {
                         // Apply policy transformation
@@ -444,6 +497,14 @@ impl QueryEngine {
                         // Apply policy transformation
                         val = tr(val);
                     }
+                    ret.insert(name.clone(), val);
+                }
+                QueryField::List { name } => {
+                    let val = json!({
+                        "entityName": entity.ty.name(),
+                        "fieldName": name,
+                        "associatedId": row.get::<&str, _>(id_column_idx),
+                    });
                     ret.insert(name.clone(), val);
                 }
             }
@@ -480,6 +541,7 @@ impl QueryEngine {
         let db_kind = self.kind;
 
         let stream = new_query_results(query.raw_sql, tr);
+
         let stream = stream.map(move |row| Self::row_to_json(db_kind, &query.entity, &row?));
         let stream = Box::pin(stream.map(move |o| Self::project(o, &allowed_fields)));
         Ok(stream)
@@ -506,6 +568,41 @@ impl QueryEngine {
         let query = sqlx::query(&raw_sql);
         transaction.execute(query).await?;
 
+        Ok(())
+    }
+
+    pub(crate) async fn add_junction_element(
+        &self,
+        entity: &Entity,
+        entity_field: &str,
+        entity_id: &str,
+        element_id: &str,
+        transaction: &mut Transaction<'_, Any>,
+    ) -> Result<()> {
+        let junction_table = entity
+            .get_field(entity_field)
+            .with_context(|| {
+                format!(
+                    "there is no field `{entity_field}` on entity `{}`",
+                    entity.name()
+                )
+            })?
+            .junction_table
+            .as_ref()
+            .with_context(|| {
+                format!(
+                    "no junction table for field `{entity_field}` found on entity `{}`",
+                    entity.name()
+                )
+            })?;
+
+        let raw_sql = std::format!(
+            "INSERT INTO \"{}\" (parent_id, element_id) VALUES ($1, $2)",
+            junction_table,
+        );
+
+        let query = sqlx::query(&raw_sql).bind(entity_id).bind(element_id);
+        transaction.execute(query).await?;
         Ok(())
     }
 
@@ -624,6 +721,7 @@ impl QueryEngine {
                     };
                     SqlValue::String(nested_id)
                 }
+                Type::List(_) => continue,
                 _ => self
                     .convert_to_argument(field, ty_value)
                     .with_context(incompatible_data)?,
@@ -690,6 +788,7 @@ impl QueryEngine {
             }
             TypeId::Float => SqlValue::F64(convert_json_value!(as_f64, f64)),
             TypeId::Boolean => SqlValue::Bool(convert_json_value!(as_bool, bool)),
+            TypeId::List { .. } => anyhow::bail!("can't convert field of type List to Sql value"),
         };
 
         Ok(arg)
@@ -707,7 +806,7 @@ impl QueryEngine {
         let mut i = 0;
         for f in ty.all_fields() {
             let val = ty_value.get(&f.name);
-            if val.is_none() && f.is_optional {
+            if (val.is_none() && f.is_optional) || matches!(f.type_id, TypeId::List { .. }) {
                 continue;
             }
             let bind = if f.is_optional && val.unwrap().is_null() {
@@ -735,11 +834,16 @@ impl QueryEngine {
         field_binds.pop();
         update_binds.pop();
 
-        for v in ty_value.keys() {
+        for value_key in ty_value.keys() {
+            if let Some(field) = ty.get_field(value_key) {
+                if matches!(field.type_id, TypeId::List { .. }) {
+                    continue;
+                }
+            }
             anyhow::ensure!(
-                field_names.contains(v),
+                field_names.contains(value_key),
                 "field {} not present in {}",
-                v,
+                value_key,
                 ty.name()
             );
         }
@@ -765,6 +869,9 @@ impl QueryEngine {
         let mut query_args = Vec::<SqlValue>::new();
         for field in ty.all_fields() {
             if ty_value.get(&field.name).is_none() && field.is_optional {
+                continue;
+            }
+            if matches!(field.type_id, TypeId::List { .. }) {
                 continue;
             }
             let arg = self

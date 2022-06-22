@@ -403,9 +403,9 @@ fn json_to_value(field_type: &Type, value: &serde_json::Value) -> Result<Expr> {
         }};
     }
     let expr_val = match field_type {
-        Type::Entity(ty) => anyhow::bail!(
+        Type::Entity(_) | Type::List(_) => anyhow::bail!(
             "trying to filter by property of type '{}' which is not supported",
-            ty.name()
+            field_type.name()
         ),
         Type::String => ExprValue::String(convert!(as_str, "string")),
         Type::Float => ExprValue::F64(convert!(as_f64, "float")),
@@ -485,6 +485,10 @@ fn filter_from_param(
         Type::String => ExprValue::String(value.to_owned()),
         Type::Float => ExprValue::F64(value.parse::<f64>().with_context(|| err_msg("f64"))?),
         Type::Boolean => ExprValue::Bool(value.parse::<bool>().with_context(|| err_msg("bool"))?),
+        Type::List(_) => anyhow::bail!(
+            "trying to filter by a property '{}' which is of type List",
+            fields.last().unwrap()
+        ),
     };
 
     Ok(BinaryExpr::new(operator, property_chain, expr_value.into()).into())
@@ -600,6 +604,9 @@ mod tests {
         }
         fn api_version(&self) -> String {
             "whatever".to_string()
+        }
+        fn junction_table(&self) -> Option<String> {
+            None
         }
     }
 

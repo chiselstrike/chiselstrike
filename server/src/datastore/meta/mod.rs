@@ -8,7 +8,7 @@ use crate::policies::Policies;
 use crate::prefix_map::PrefixMap;
 use crate::types::{
     DbIndex, Entity, ExistingField, ExistingObject, Field, FieldDelta, ObjectDelta, ObjectType,
-    TypeSystem,
+    Type, TypeSystem,
 };
 use anyhow::Context;
 use sqlx::any::{Any, AnyPool};
@@ -161,8 +161,8 @@ async fn insert_field_query(
         None => {
             let query = sqlx::query(
                 r#"
-                INSERT INTO fields (field_type, type_id, is_optional, is_unique)
-                VALUES ($1, $2, $3, $4)
+                INSERT INTO fields (field_type, type_id, is_optional, is_unique, junction_table)
+                VALUES ($1, $2, $3, $4, $5)
                 RETURNING *"#,
             );
             query
@@ -170,6 +170,7 @@ async fn insert_field_query(
                 .bind(type_id)
                 .bind(field.is_optional)
                 .bind(field.is_unique)
+                .bind(field.junction_table.to_owned())
         }
         Some(value) => {
             let query = sqlx::query(
@@ -179,8 +180,9 @@ async fn insert_field_query(
                     type_id,
                     default_value,
                     is_optional,
-                    is_unique)
-                VALUES ($1, $2, $3, $4, $5)
+                    is_unique,
+                    junction_table)
+                VALUES ($1, $2, $3, $4, $5, $6)
                 RETURNING *"#,
             );
             query
@@ -189,6 +191,7 @@ async fn insert_field_query(
                 .bind(value.to_owned())
                 .bind(field.is_optional)
                 .bind(field.is_unique)
+                .bind(field.junction_table.to_owned())
         }
     };
     let add_field_name = sqlx::query(
@@ -533,7 +536,8 @@ impl MetaService {
                 fields.field_type AS field_type,
                 fields.default_value AS default_value,
                 fields.is_optional AS is_optional,
-                fields.is_unique AS is_unique
+                fields.is_unique AS is_unique,
+                fields.junction_table AS junction_table
             FROM field_names
             INNER JOIN fields
                 ON fields.type_id = $1 AND field_names.field_id = fields.field_id;"#,
@@ -546,18 +550,26 @@ impl MetaService {
             let db_field_name: &str = row.get("field_name");
             let field_id: i32 = row.get("field_id");
             let field_type: &str = row.get("field_type");
+            let junction_table: Option<&str> = row.get("junction_table");
 
             let split: Vec<&str> = db_field_name.split('.').collect();
             anyhow::ensure!(split.len() == 3, "Expected version and type information as part of the field name. Got {}. Database corrupted?", db_field_name);
             let field_name = split[2].to_owned();
             let version = split[0].to_owned();
-            let desc = ExistingField::new(
-                &field_name,
-                ts.lookup_type(field_type, &version)?,
-                field_id,
-                &version,
-            );
 
+            let field_type = {
+                // FIXME: The type should be stored as a JSON or some structured data.
+                let re = regex::Regex::new("^List<(.*)>$").unwrap();
+                if let Some(caps) = re.captures(field_type) {
+                    let entity_name = caps.get(1).unwrap().as_str();
+                    Type::List(ts.lookup_entity(entity_name, &version)?)
+                } else {
+                    ts.lookup_type(field_type, &version)?
+                }
+            };
+
+            let desc =
+                ExistingField::new(&field_name, field_type, field_id, &version, junction_table);
             let field_def: Option<String> = row.get("default_value");
             let is_optional: bool = row.get("is_optional");
             let is_unique: bool = row.get("is_unique");

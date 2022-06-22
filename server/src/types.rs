@@ -76,6 +76,7 @@ fn string_field(name: &str) -> Field {
         is_optional: false,
         api_version,
         is_unique: false,
+        junction_table: None,
     }
 }
 
@@ -96,6 +97,7 @@ fn optional_number_field(name: &str) -> Field {
         is_optional: true,
         api_version: "__chiselstrike".into(),
         is_unique: false,
+        junction_table: None,
     }
 }
 
@@ -486,10 +488,13 @@ impl TypeSystem {
     pub(crate) fn get(&self, ty: &TypeId) -> Result<Type, TypeSystemError> {
         match ty {
             TypeId::String | TypeId::Float | TypeId::Boolean | TypeId::Id => {
-                self.lookup_builtin_type(ty.name())
+                self.lookup_builtin_type(&ty.name())
             }
             TypeId::Entity { name, api_version } => {
                 self.lookup_entity(name, api_version).map(Type::Entity)
+            }
+            TypeId::List { name, api_version } => {
+                self.lookup_entity(name, api_version).map(Type::List)
             }
         }
     }
@@ -501,15 +506,17 @@ pub(crate) enum Type {
     Float,
     Boolean,
     Entity(Entity),
+    List(Entity),
 }
 
 impl Type {
-    pub(crate) fn name(&self) -> &str {
+    pub(crate) fn name(&self) -> String {
         match self {
-            Type::Float => "number",
-            Type::String => "string",
-            Type::Boolean => "boolean",
-            Type::Entity(ty) => &ty.name,
+            Type::Float => "number".to_string(),
+            Type::String => "string".to_string(),
+            Type::Boolean => "boolean".to_string(),
+            Type::Entity(ty) => ty.name.to_string(),
+            Type::List(inner) => format!("List<{}>", inner.name()),
         }
     }
 }
@@ -692,15 +699,17 @@ pub(crate) enum TypeId {
     Boolean,
     Id,
     Entity { name: String, api_version: String },
+    List { name: String, api_version: String },
 }
 
 impl TypeId {
-    pub(crate) fn name(&self) -> &str {
+    pub(crate) fn name(&self) -> String {
         match self {
-            TypeId::Id | TypeId::String => "string",
-            TypeId::Float => "number",
-            TypeId::Boolean => "boolean",
-            TypeId::Entity { ref name, .. } => name,
+            TypeId::Id | TypeId::String => "string".to_string(),
+            TypeId::Float => "number".to_string(),
+            TypeId::Boolean => "boolean".to_string(),
+            TypeId::Entity { ref name, .. } => name.to_string(),
+            TypeId::List { ref name, .. } => format!("List<{name}>"),
         }
     }
 }
@@ -712,6 +721,10 @@ impl From<Type> for TypeId {
             Type::Float => Self::Float,
             Type::Boolean => Self::Boolean,
             Type::Entity(e) => Self::Entity {
+                name: e.name().to_string(),
+                api_version: e.api_version.clone(),
+            },
+            Type::List(e) => Self::List {
                 name: e.name().to_string(),
                 api_version: e.api_version.clone(),
             },
@@ -786,6 +799,7 @@ impl ObjectType {
             is_optional: false,
             api_version: "__chiselstrike".into(),
             is_unique: true,
+            junction_table: None,
         };
 
         Ok(Self {
@@ -934,6 +948,7 @@ pub(crate) trait FieldDescriptor {
     fn id(&self) -> Option<i32>;
     fn ty(&self) -> Type;
     fn api_version(&self) -> String;
+    fn junction_table(&self) -> Option<String>;
 }
 
 pub(crate) struct ExistingField {
@@ -941,15 +956,24 @@ pub(crate) struct ExistingField {
     ty_: Type,
     id: i32,
     version: String,
+    junction_table: Option<String>,
 }
 
 impl ExistingField {
-    pub(crate) fn new(name: &str, ty_: Type, id: i32, version: &str) -> Self {
+    pub(crate) fn new(
+        name: &str,
+        ty_: Type,
+        id: i32,
+        version: &str,
+        junction_table: Option<&str>,
+    ) -> Self {
+        assert!(matches!(ty_, Type::List(_)) == junction_table.is_some());
         Self {
             name: name.to_owned(),
             ty_,
             id,
             version: version.to_owned(),
+            junction_table: junction_table.map(|s| s.to_string()),
         }
     }
 }
@@ -970,17 +994,36 @@ impl FieldDescriptor for ExistingField {
     fn api_version(&self) -> String {
         self.version.to_owned()
     }
+
+    fn junction_table(&self) -> Option<String> {
+        self.junction_table.clone()
+    }
 }
 
 pub(crate) struct NewField<'a> {
     name: &'a str,
     ty_: Type,
     version: &'a str,
+    junction_table: Option<String>,
 }
 
 impl<'a> NewField<'a> {
     pub(crate) fn new(name: &'a str, ty_: Type, version: &'a str) -> anyhow::Result<Self> {
-        Ok(Self { name, ty_, version })
+        let junction_table = {
+            match ty_ {
+                Type::List(_) => Some(format!(
+                    "list_junction_{}",
+                    Uuid::new_v4().to_simple().to_string().to_uppercase()
+                )),
+                _ => None,
+            }
+        };
+        Ok(Self {
+            name,
+            ty_,
+            version,
+            junction_table,
+        })
     }
 }
 
@@ -1000,6 +1043,10 @@ impl<'a> FieldDescriptor for NewField<'a> {
     fn api_version(&self) -> String {
         self.version.to_owned()
     }
+
+    fn junction_table(&self) -> Option<String> {
+        self.junction_table.clone()
+    }
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -1010,6 +1057,7 @@ pub(crate) struct Field {
     pub(crate) labels: Vec<String>,
     pub(crate) is_optional: bool,
     pub(crate) is_unique: bool,
+    pub(crate) junction_table: Option<String>,
     // We want to keep the default the user gave us so we can
     // return it in `chisel describe`. That's the default that is
     // valid in typescriptland.
@@ -1040,6 +1088,9 @@ impl Field {
             default.clone()
         };
 
+        let junction_table = desc.junction_table();
+        // Only List fields should have associated junction table
+        assert!(matches!(desc.ty(), Type::List(_)) == junction_table.is_some());
         Self {
             id: desc.id(),
             name: desc.name(),
@@ -1050,6 +1101,7 @@ impl Field {
             effective_default,
             is_optional,
             is_unique,
+            junction_table,
         }
     }
 

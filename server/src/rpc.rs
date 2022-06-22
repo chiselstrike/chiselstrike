@@ -21,8 +21,9 @@ use async_lock::Mutex;
 use chisel::chisel_rpc_server::{ChiselRpc, ChiselRpcServer};
 use chisel::{
     type_msg::TypeEnum, ChiselApplyRequest, ChiselApplyResponse, ChiselDeleteRequest,
-    ChiselDeleteResponse, DescribeRequest, DescribeResponse, IndexCandidate, PopulateRequest,
-    PopulateResponse, RestartRequest, RestartResponse, StatusRequest, StatusResponse, TypeMsg,
+    ChiselDeleteResponse, ContainerType, DescribeRequest, DescribeResponse, IndexCandidate,
+    PopulateRequest, PopulateResponse, RestartRequest, RestartResponse, StatusRequest,
+    StatusResponse, TypeMsg,
 };
 use deno_core::futures;
 use deno_core::url::Url;
@@ -342,17 +343,29 @@ or
                 }
 
                 let field_ty = field.field_type()?;
-                let field_ty = if field_ty.is_builtin(&state.type_system) {
+                let field_ty = if field_ty.is_builtin(&state.type_system)? {
                     field_ty.get_builtin(&state.type_system)?
-                } else if let TypeEnum::Entity(entity_name) = field_ty {
-                    match new_types.get(entity_name) {
-                        Some(ty) => Type::Entity(ty.clone()),
+                } else {
+                    let get_entity = |entity_name| match new_types.get(entity_name) {
+                        Some(ty) => Ok(ty.clone()),
                         None => anyhow::bail!(
                             "field type `{entity_name}` is neither a built-in nor a custom type",
                         ),
+                    };
+
+                    match field_ty {
+                        TypeEnum::Entity(entity_name) => Type::Entity(get_entity(entity_name)?),
+                        TypeEnum::List(inner) => {
+                            if let TypeEnum::Entity(entity_name) = inner.value_type()? {
+                                Type::List(get_entity(entity_name)?)
+                            } else {
+                                anyhow::bail!("List can contain only Entity type for now")
+                            }
+                        }
+                        _ => anyhow::bail!(
+                            "field type must either contain an entity or be a builtin"
+                        ),
                     }
-                } else {
-                    anyhow::bail!("field type must either contain an entity or be a builtin");
                 };
 
                 fields.push(Field::new(
@@ -540,8 +553,8 @@ fn sort_custom_types(
         ty_pos.insert(ty.name.as_str(), pos);
         for field in &ty.field_defs {
             let field_type = field.field_type()?;
-            match field_type {
-                TypeEnum::Entity(name) if !field_type.is_builtin(ts) => {
+            match field_type.get_entity_recursive()? {
+                Some(TypeEnum::Entity(name)) if !field_type.is_builtin(ts)? => {
                     graph.add_node(name);
                     graph.add_edge(name, ty.name.as_str(), ());
                 }
@@ -580,12 +593,25 @@ impl FieldDefinition {
     }
 }
 
+impl ContainerType {
+    fn value_type(&self) -> Result<&TypeEnum> {
+        self.value_type
+            .as_ref()
+            .context("value_type of ContainerType is None")?
+            .type_enum
+            .as_ref()
+            .context("type_enum of value_type of ContainerType is None")
+    }
+}
+
 impl TypeEnum {
-    fn is_builtin(&self, ts: &TypeSystem) -> bool {
-        match self {
+    fn is_builtin(&self, ts: &TypeSystem) -> Result<bool> {
+        let is_builtin = match self {
             TypeEnum::String(_) | TypeEnum::Number(_) | TypeEnum::Bool(_) => true,
             TypeEnum::Entity(name) => ts.lookup_builtin_type(name).is_ok(),
-        }
+            TypeEnum::List(inner) => inner.value_type()?.is_builtin(ts)?,
+        };
+        Ok(is_builtin)
     }
 
     fn get_builtin(&self, ts: &TypeSystem) -> Result<Type> {
@@ -594,8 +620,28 @@ impl TypeEnum {
             TypeEnum::Number(_) => Type::Float,
             TypeEnum::Bool(_) => Type::Boolean,
             TypeEnum::Entity(name) => ts.lookup_builtin_type(name)?,
+            TypeEnum::List(inner) => {
+                if let TypeEnum::Entity(name) = inner.value_type()? {
+                    if let Type::Entity(entity) = ts.lookup_builtin_type(name)? {
+                        Type::List(entity)
+                    } else {
+                        anyhow::bail!("List can contain only Entity for now");
+                    }
+                } else {
+                    anyhow::bail!("List can contain only Entity for now");
+                }
+            }
         };
         Ok(ty)
+    }
+
+    fn get_entity_recursive(&self) -> Result<Option<&Self>> {
+        let entity = match self {
+            TypeEnum::Entity(_) => Some(self),
+            TypeEnum::List(inner) => inner.value_type()?.get_entity_recursive()?,
+            _ => None,
+        };
+        Ok(entity)
     }
 }
 
@@ -606,6 +652,12 @@ impl From<Type> for TypeMsg {
             Type::String => TypeEnum::String(true),
             Type::Boolean => TypeEnum::Bool(true),
             Type::Entity(entity) => TypeEnum::Entity(entity.name().to_owned()),
+            Type::List(inner) => {
+                let inner_msg = Type::Entity(inner).into();
+                TypeEnum::List(Box::new(ContainerType {
+                    value_type: Some(Box::new(inner_msg)),
+                }))
+            }
         };
         TypeMsg {
             type_enum: Some(ty),

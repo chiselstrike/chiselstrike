@@ -45,6 +45,7 @@ enum Fields {
     DefaultValue,
     IsOptional,
     IsUnique,
+    JunctionTable,
 }
 
 #[derive(Iden)]
@@ -158,6 +159,7 @@ pub(crate) fn tables() -> Vec<TableCreateStatement> {
         .col(ColumnDef::new(Fields::DefaultValue).text())
         .col(ColumnDef::new(Fields::IsOptional).boolean())
         .col(ColumnDef::new(Fields::IsUnique).boolean())
+        .col(ColumnDef::new(Fields::JunctionTable).text())
         .col(ColumnDef::new(TypeNames::TypeId).integer())
         .foreign_key(
             ForeignKey::create()

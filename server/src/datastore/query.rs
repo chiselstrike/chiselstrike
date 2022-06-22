@@ -84,6 +84,10 @@ pub(crate) enum QueryField {
         /// Do not include field in return json
         keep_or_omit: KeepOrOmitField,
     },
+    List {
+        /// Name of the original Type field
+        name: String,
+    },
 }
 
 /// `Query` is a structure that represents an executable query.
@@ -112,7 +116,7 @@ pub(crate) struct QueriedEntity {
     /// Entity fields to be returned in JSON response
     pub(crate) fields: Vec<QueryField>,
     /// Type of the entity.
-    ty: Entity,
+    pub(crate) ty: Entity,
     /// Alias name of this entity to be used in SQL query.
     table_alias: String,
     /// Map from Entity field name to joined Entities which correspond to the entities
@@ -215,6 +219,11 @@ pub(crate) enum TargetDatabase {
     Sqlite,
 }
 
+struct JunctionFilter {
+    junction_table: String,
+    parent_id: String,
+}
+
 /// Class used to build `Query` from either QueryOpChain or `Entity`.
 /// For the op chain, it recursively descends through selected fields and captures all
 /// joins necessary for nested types retrieval.
@@ -234,6 +243,7 @@ pub(crate) struct QueryPlan {
     join_counter: usize,
     /// Operators used to mutate the result set.
     operators: Vec<QueryOp>,
+    junction_filter: Option<JunctionFilter>,
 }
 
 impl QueryPlan {
@@ -249,6 +259,7 @@ impl QueryPlan {
             allowed_fields: None,
             join_counter: 0,
             operators: vec![],
+            junction_filter: None,
         }
     }
 
@@ -304,11 +315,52 @@ impl QueryPlan {
     /// additional helper data like `policies`, `api_version`,
     /// `userid` and `path` (url path used for policy evaluation).
     pub(crate) fn from_op_chain(context: &RequestContext, op_chain: QueryOpChain) -> Result<Self> {
-        let (entity_name, operators) = convert_ops(op_chain)?;
+        let (entity_name, junction_filter, operators) = convert_ops(op_chain)?;
         let mut builder = Self::from_entity_name(context, &entity_name)?;
+
+        if let Some(j_filter) = junction_filter {
+            builder.set_junction_filter(context, j_filter)?;
+        }
 
         builder.extend_operators(operators);
         Ok(builder)
+    }
+
+    fn set_junction_filter(
+        &mut self,
+        c: &RequestContext,
+        j_filter: RawJunctionFilter,
+    ) -> Result<()> {
+        let parent_entity =
+            c.ts.lookup_entity(&j_filter.parent_entity, &c.api_version)
+                .with_context(|| {
+                    format!(
+                        "unable to junction filter using parent entity: `{}`",
+                        j_filter.parent_entity
+                    )
+                })?;
+        let junction_table = parent_entity
+            .get_field(&j_filter.field_name)
+            .with_context(|| {
+                format!(
+                    "there is no field `{}` on entity `{}`",
+                    j_filter.field_name,
+                    parent_entity.name()
+                )
+            })?
+            .junction_table
+            .as_ref()
+            .with_context(|| {
+                format!(
+                    "there is no junction table for field `{}` on entity `{}`",
+                    j_filter.field_name, j_filter.parent_entity
+                )
+            })?;
+        self.junction_filter = Some(JunctionFilter {
+            junction_table: junction_table.to_string(),
+            parent_id: j_filter.parent_id,
+        });
+        Ok(())
     }
 
     fn extend_operators(&mut self, ops: Vec<QueryOp>) {
@@ -385,34 +437,42 @@ impl QueryPlan {
 
             let ty = context.ts.get(&field.type_id)?;
 
-            let query_field = if let Type::Entity(nested_ty) = &ty {
-                let nested_table = format!(
-                    "JOIN{}_{}_TO_{}",
-                    self.join_counter,
-                    ty.name(),
-                    nested_ty.name()
-                );
-                // PostgreSQL has a limit on identifiers to be at most 63 bytes long.
-                let nested_table = truncate_identifier(nested_table.as_str()).to_owned();
-                self.join_counter += 1;
+            let query_field = match &ty {
+                Type::Entity(nested_ty) => {
+                    let nested_table = format!(
+                        "JOIN{}_{}_TO_{}",
+                        self.join_counter,
+                        ty.name(),
+                        nested_ty.name()
+                    );
+                    // PostgreSQL has a limit on identifiers to be at most 63 bytes long.
+                    let nested_table = truncate_identifier(nested_table.as_str()).to_owned();
+                    self.join_counter += 1;
 
-                self.make_scalar_field(field, current_table, field_policy, &keep_or_omit);
-                joins.insert(
-                    field.name.to_owned(),
-                    Join {
-                        entity: self.load_entity_recursive(context, nested_ty, &nested_table)?,
-                        lkey: field.name.to_owned(),
-                        rkey: "id".to_owned(),
-                    },
-                );
-                QueryField::Entity {
-                    name: field.name.clone(),
-                    is_optional: field.is_optional,
-                    transform: field_policy,
-                    keep_or_omit,
+                    self.make_scalar_field(field, current_table, field_policy, &keep_or_omit);
+                    joins.insert(
+                        field.name.to_owned(),
+                        Join {
+                            entity: self.load_entity_recursive(
+                                context,
+                                nested_ty,
+                                &nested_table,
+                            )?,
+                            lkey: field.name.to_owned(),
+                            rkey: "id".to_owned(),
+                        },
+                    );
+                    QueryField::Entity {
+                        name: field.name.clone(),
+                        is_optional: field.is_optional,
+                        transform: field_policy,
+                        keep_or_omit,
+                    }
                 }
-            } else {
-                self.make_scalar_field(field, current_table, field_policy, &keep_or_omit)
+                Type::List(_) => QueryField::List {
+                    name: field.name.clone(),
+                },
+                _ => self.make_scalar_field(field, current_table, field_policy, &keep_or_omit),
             };
             fields.push(query_field);
         }
@@ -628,15 +688,35 @@ impl QueryPlan {
         }
     }
 
-    fn make_core_select(&self) -> String {
+    fn make_junction_tokens(&self) -> Option<(String, String)> {
+        self.junction_filter.as_ref().map(|filter| {
+            (
+                format!(
+                    "INNER JOIN \"{j_table}\" ON \"{j_table}\".\"element_id\"=\"{id}\".\"id\"",
+                    j_table = filter.junction_table,
+                    id = self.entity.table_alias
+                ),
+                format!(
+                    "WHERE \"{}\".\"parent_id\"='{}'",
+                    filter.junction_table, filter.parent_id,
+                ),
+            )
+        })
+    }
+
+    fn make_core_select(&self) -> Result<String> {
         let column_string = self.make_column_string();
         let join_string = self.make_join_string();
-        format!(
+        let mut core_select = format!(
             "SELECT {} FROM \"{}\" {}",
             column_string,
             self.base_type().backing_table(),
             join_string,
-        )
+        );
+        if let Some((junction_join, junction_where)) = self.make_junction_tokens() {
+            write!(&mut core_select, "{} {}", junction_join, junction_where)?;
+        }
+        Ok(core_select)
     }
 
     /// Splits the operators' slice at a first occurrence of Take or Skip (break) operator into two slices
@@ -690,7 +770,7 @@ impl QueryPlan {
     }
 
     fn make_raw_query(&self, target: &TargetDatabase) -> Result<String> {
-        let mut sql_query = self.make_core_select();
+        let mut sql_query = self.make_core_select()?;
         let mut remaining_ops: &[QueryOp] = &self.operators[..];
         while !remaining_ops.is_empty() {
             let (ops, remainder) = self.split_on_first_take(remaining_ops);
@@ -750,10 +830,22 @@ pub(crate) fn truncate_identifier(s: &str) -> &str {
 }
 
 #[derive(Debug, Clone, Deserialize)]
+pub(crate) struct RawJunctionFilter {
+    #[serde(rename = "parentEntity")]
+    parent_entity: String,
+    #[serde(rename = "fieldName")]
+    field_name: String,
+    #[serde(rename = "parentId")]
+    parent_id: String,
+}
+
+#[derive(Debug, Clone, Deserialize)]
 #[serde(tag = "type")]
 pub(crate) enum QueryOpChain {
     BaseEntity {
         name: String,
+        #[serde(rename = "junctionFilter")]
+        junction_filter: Option<RawJunctionFilter>,
     },
     #[serde(rename = "ExpressionFilter")]
     Filter {
@@ -785,11 +877,14 @@ pub(crate) enum QueryOpChain {
 /// Entity which is to be queried. `ops` are a Vector of Operators that
 /// are to be applied on the resulting entity elements in order that
 /// is defined by the vector.
-fn convert_ops(op: QueryOpChain) -> Result<(String, Vec<QueryOp>)> {
+fn convert_ops(op: QueryOpChain) -> Result<(String, Option<RawJunctionFilter>, Vec<QueryOp>)> {
     use QueryOpChain as Op;
     let (query_op, inner): (QueryOp, _) = match op {
-        Op::BaseEntity { name } => {
-            return Ok((name, vec![]));
+        Op::BaseEntity {
+            name,
+            junction_filter,
+        } => {
+            return Ok((name, junction_filter, vec![]));
         }
         Op::Filter { expression, inner } => (QueryOp::Filter { expression }, inner),
         Op::Projection { fields, inner } => (QueryOp::Projection { fields }, inner),
@@ -797,9 +892,9 @@ fn convert_ops(op: QueryOpChain) -> Result<(String, Vec<QueryOp>)> {
         Op::Skip { count, inner } => (QueryOp::Skip { count }, inner),
         Op::SortBy { keys, inner } => (QueryOp::SortBy(SortBy { keys }), inner),
     };
-    let (entity_name, mut ops) = convert_ops(*inner)?;
+    let (entity_name, j_filter, mut ops) = convert_ops(*inner)?;
     ops.push(query_op);
-    Ok((entity_name, ops))
+    Ok((entity_name, j_filter, ops))
 }
 
 /// `Mutation` represents a statement that mutates the database state.
@@ -1028,6 +1123,7 @@ pub(crate) mod tests {
                     keys,
                     inner: QueryOpChain::BaseEntity {
                         name: "Person".to_owned(),
+                        junction_filter: None,
                     }
                     .into(),
                 }

@@ -201,6 +201,7 @@ fn build_extensions() -> Vec<Extension> {
             op_format_file_name::decl(),
             op_chisel_read_body::decl(),
             op_chisel_store::decl(),
+            op_chisel_insert_junction::decl(),
             op_chisel_entity_delete::decl(),
             op_chisel_crud_delete::decl(),
             op_chisel_get_secret::decl(),
@@ -538,6 +539,50 @@ async fn op_chisel_store(
         query_engine.add_row(&ty, value, Some(transaction.deref_mut()), ts)
     }
     .await
+}
+
+#[derive(Deserialize)]
+struct JunctionElement {
+    #[serde(rename = "parentEntity")]
+    parent_entity: String,
+    #[serde(rename = "parentField")]
+    parent_field: String,
+    #[serde(rename = "parentId")]
+    parent_id: String,
+    #[serde(rename = "elementId")]
+    element_id: String,
+}
+
+#[op]
+async fn op_chisel_insert_junction(
+    state: Rc<RefCell<OpState>>,
+    je: JunctionElement,
+    c: ChiselRequestContext,
+) -> Result<()> {
+    let entity_name = &je.parent_entity;
+
+    let (query_engine, entity) = {
+        let state = state.borrow();
+        let entity = current_type_system(&state).lookup_entity(entity_name, &c.api_version)?;
+
+        let query_engine = query_engine_arc(&state);
+        (query_engine, entity)
+    };
+    let transaction = {
+        let state = state.borrow();
+        current_transaction(&state)
+    };
+    let mut transaction = transaction.lock().await;
+    query_engine
+        .add_junction_element(
+            &entity,
+            &je.parent_field,
+            &je.parent_id,
+            &je.element_id,
+            transaction.deref_mut(),
+        )
+        .await
+    // .context("failed to insert junction element")
 }
 
 #[derive(Deserialize)]

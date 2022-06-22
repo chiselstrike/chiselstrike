@@ -448,7 +448,6 @@ import { Person } from "../models/types.ts";
 export default async function chisel(req: Request) {
     const url = new URL(req.url);
     const all = url.searchParams.get("return_all") == "true";
-    console.log(url.searchParams.get("return_all"), all);
     const filtered = Person.cursor()
         .__filter((p) => {
             return all;

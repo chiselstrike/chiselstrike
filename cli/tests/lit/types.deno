@@ -46,7 +46,8 @@ set +e
 $CHISEL apply --allow-type-deletion 2>&1
 set -e
 
-# CHECK: Error: field 'a' in class 'Bad' is of unknown entity type 'SomeType'
+# CHECK: Error: field 'a' in class 'Bad' contains invalid type
+# CHECK: entity of name 'SomeType' is undefined
 
 cat << EOF > "$TEMPDIR/models/types.ts"
 export class Malformed extends ChiselEntity { name: string(); }

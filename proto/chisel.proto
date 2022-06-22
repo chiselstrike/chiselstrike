@@ -47,7 +47,12 @@ message TypeMsg {
     bool number = 2;
     bool bool = 3;
     string entity = 4;
+    ContainerType list = 5;
   };
+}
+
+message ContainerType {
+  TypeMsg value_type = 1;
 }
 
 message EndpointDefinition {
