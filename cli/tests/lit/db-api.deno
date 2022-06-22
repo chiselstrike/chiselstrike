@@ -29,10 +29,18 @@ export default async function chisel(req: Request) {
     // ChiselEntities with the corresponding plain records we should be
     // using here.
     const q1 = Person.cursor().select("save");
-
     for await (let row of q1) {
         ret += JSON.stringify(row) + ",";
     }
+
+    // This variation should also not compile. It is interesting
+    // because the call to filter causes us to drop from SQL to JS, so it
+    // is another place we have to make sure we build the right types.
+    const q2 = Person.cursor().filter((_x) => true).select("save");
+    for await (let row of q2) {
+        ret += JSON.stringify(row) + ",";
+    }
+
     ret += "]";
     return new Response(ret);
 }
@@ -71,4 +79,4 @@ $CURL -o - $CHISELD_HOST/dev/query
 # CHECK: Glauber Costa 666 true 10.01
 
 $CURL -o - $CHISELD_HOST/dev/bug
-# CHECK: [{},{},]
+# CHECK: [{},{},{},{},]
