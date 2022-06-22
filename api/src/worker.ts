@@ -6,7 +6,7 @@ import * as Chisel from "./chisel.ts";
 // Hack to pretend we are not in a web worker. On workers 'window'
 // doesn't exist, but globalThis does. They are not exactly the same,
 // so we need to force typescript to accept this.
-globalThis.window = globalThis as unknown as (Window & typeof globalThis);
+(globalThis as unknown as { window: unknown }).window = globalThis;
 
 Deno.core.opSync(
     "op_set_promise_reject_callback",
