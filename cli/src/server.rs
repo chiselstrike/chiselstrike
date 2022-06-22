@@ -75,7 +75,7 @@ async fn connect_with_retry(server_url: String) -> Result<ChiselRpcClient<Channe
 }
 
 // Timeout when waiting for connection or server status.
-const TIMEOUT: Duration = Duration::from_secs(10);
+const TIMEOUT: Duration = Duration::from_secs(120);
 
 pub(crate) async fn wait(server_url: String) -> Result<tonic::Response<StatusResponse>> {
     let client = connect_with_retry(server_url).await?;
