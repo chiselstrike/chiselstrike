@@ -5,7 +5,6 @@
 //! intermediate representation.
 
 use indexmap::IndexSet;
-use swc_ecmascript::ast::CallExpr;
 
 /// An expression.
 #[derive(Debug)]
@@ -82,7 +81,7 @@ pub struct Filter {
     pub function: String,
     /// The original call expression of the filter. Note that `query_expr`
     /// logically ANDed with `post_expr` is always equivalent with `call_expr`.
-    pub call_expr: CallExpr,
+    pub call_expr: swc_ecmascript::ast::CallExpr,
     /// The query expression part of the filter expression AST. Note that
     /// this is the same as `predicate`, but in AST format. We need this
     /// because the internal filtering API needs a fallback predicate if
