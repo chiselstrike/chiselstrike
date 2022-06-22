@@ -96,6 +96,7 @@
     function compileAux(files, isWorker, lib, emitDeclarations) {
         const defaultLibs = [
             "lib.deno.unstable.d.ts",
+            "lib.deno_core.d.ts",
         ];
         if (isWorker) {
             defaultLibs.push("lib.deno.worker.d.ts");
