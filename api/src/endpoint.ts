@@ -1,7 +1,6 @@
 // SPDX-FileCopyrightText: © 2021 ChiselStrike <info@chiselstrike.com>
 
 /// <reference lib="deno.core" />
-/// <reference lib="dom" />
 
 const endpointWorker = new Worker("file:///worker.js", {
     type: "module",
