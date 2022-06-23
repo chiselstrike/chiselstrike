@@ -8,3 +8,12 @@ Person.cursor().filter(() => true);
 Person.cursor().filter((person) => true, foo);
 // CHECK: Person.cursor().filter((person)=>true
 // CHECK: , foo);
+
+Person.cursor().filter((person) => {
+    console.log("hello!");
+    return true;
+});
+// CHECK: Person.cursor().filter((person)=>{
+// CHECK:     console.log("hello!");
+// CHECK:     return true;
+// CHECK: });

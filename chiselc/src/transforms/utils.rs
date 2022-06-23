@@ -69,7 +69,9 @@ pub fn extract_filter(
     let param = pat_to_string(param).unwrap();
     let (pure, impure) = match &arrow.body {
         BlockStmtOrExpr::BlockStmt(block_stmt) => {
-            assert_eq!(block_stmt.stmts.len(), 1);
+            if block_stmt.stmts.len() != 1 {
+                return (None, None);
+            }
             let return_stmt = match &block_stmt.stmts[0] {
                 Stmt::Return(return_stmt) => return_stmt,
                 _ => {
