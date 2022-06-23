@@ -556,6 +556,7 @@ dependencies = [
  "lit 1.0.4 (git+https://github.com/chiselstrike/lit?rev=607b0b9)",
  "nix 0.22.3",
  "notify",
+ "once_cell",
  "prost",
  "rayon",
  "regex",
