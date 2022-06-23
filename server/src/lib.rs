@@ -13,8 +13,6 @@ macro_rules! send_command {
 
 #[macro_use]
 extern crate log;
-#[macro_use]
-extern crate lazy_static;
 
 pub(crate) mod api;
 pub(crate) mod auth;

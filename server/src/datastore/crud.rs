@@ -570,6 +570,7 @@ mod tests {
     use crate::JsonObject;
 
     use itertools::Itertools;
+    use once_cell::sync::Lazy;
     use serde_json::json;
     use std::collections::HashMap;
 
@@ -616,23 +617,26 @@ mod tests {
         Url::parse(&format!("http://xxx?{}", query_string)).unwrap()
     }
 
-    lazy_static! {
-        static ref PERSON_TY: Arc<ObjectType> = make_object(
+    static PERSON_TY: Lazy<Arc<ObjectType>> = Lazy::new(|| {
+        make_object(
             "Person",
             vec![
                 make_field("name", Type::String),
                 make_field("age", Type::Float),
             ],
-        );
-        static ref COMPANY_TY: Arc<ObjectType> = make_object(
+        )
+    });
+    static COMPANY_TY: Lazy<Arc<ObjectType>> = Lazy::new(|| {
+        make_object(
             "Company",
             vec![
                 make_field("name", Type::String),
                 make_field("ceo", Type::Object(PERSON_TY.clone())),
             ],
-        );
-        static ref ENTITIES: [&'static Arc<ObjectType>; 2] = [&*PERSON_TY, &*COMPANY_TY];
-    }
+        )
+    });
+    static ENTITIES: Lazy<[Arc<ObjectType>; 2]> =
+        Lazy::new(|| [PERSON_TY.clone(), COMPANY_TY.clone()]);
 
     #[test]
     fn test_replace_host_address() {
