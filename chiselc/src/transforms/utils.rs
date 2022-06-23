@@ -42,7 +42,9 @@ pub fn extract_filter(
     function: String,
 ) -> (Option<Box<QOperator>>, Option<FilterProperties>) {
     let args = &call_expr.args;
-    assert_eq!(args.len(), 1);
+    if args.len() != 1 {
+        return (None, None);
+    }
     let arg = &args[0];
     let arrow = match &*arg.expr {
         Expr::Arrow(arrow_expr) => arrow_expr,
@@ -60,12 +62,16 @@ pub fn extract_filter(
         }
     };
     let params = &arrow.params;
-    assert_eq!(params.len(), 1);
+    if params.len() != 1 {
+        return (None, None);
+    }
     let param = &params[0];
     let param = pat_to_string(param).unwrap();
     let (pure, impure) = match &arrow.body {
         BlockStmtOrExpr::BlockStmt(block_stmt) => {
-            assert_eq!(block_stmt.stmts.len(), 1);
+            if block_stmt.stmts.len() != 1 {
+                return (None, None);
+            }
             let return_stmt = match &block_stmt.stmts[0] {
                 Stmt::Return(return_stmt) => return_stmt,
                 _ => {
