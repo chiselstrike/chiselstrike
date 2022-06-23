@@ -157,6 +157,40 @@ and we should see something like the following:
 It's time to explore our API in greater depth, then you can set out and explore other documentation sections according
 to your interests!
 
+## Code sharing between endpoints
+
+It is common for endpoints to share more code than just the models. If
+the common code is already published as module, the module can be
+imported directly:
+
+```typescript title="my-backend/endpoints/indented.ts"
+import indent from 'https://deno.land/x/text_indent@v0.1.0/mod.ts';
+
+export default async function chisel(req: Request) {
+    return new Response("the following is indented" + indent("foo", 16));
+}
+```
+
+But for code that is specific to a project and not publicly available,
+the module can be placed in a directory next to the endpoints. By
+convention that directory is named lib, but any other name would
+work. For example:
+
+```typescript title="my-backend/lib/hello.ts"
+export function hello() {
+    return "Welcome to ChiselStrike";
+}
+```
+
+```typescript title="my-backend/endpoints/day.ts"
+import { hello } from "../lib/hello.ts";
+
+export default async function (req: Request) {
+    const msg = hello();
+    return new Response(`${msg}\n Have a nice day.`);
+}
+```
+
 ## CRUD paging
 
 Most of the examples we have used so far used rather small datasets. In the real world, datasets tend
