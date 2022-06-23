@@ -566,7 +566,7 @@ mod tests {
         VERSION,
     };
     use crate::policies::Policies;
-    use crate::types::{FieldDescriptor, ObjectDescriptor, TypeSystem};
+    use crate::types::{FieldDescriptor, ObjectDescriptor};
     use crate::JsonObject;
 
     use itertools::Itertools;
@@ -632,7 +632,6 @@ mod tests {
             ],
         );
         static ref ENTITIES: [&'static Arc<ObjectType>; 2] = [&*PERSON_TY, &*COMPANY_TY];
-        static ref TS: TypeSystem = make_type_system(&*ENTITIES);
     }
 
     #[test]

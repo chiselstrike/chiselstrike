@@ -938,7 +938,6 @@ pub(crate) mod tests {
             ],
         );
         static ref ENTITIES: [&'static Arc<ObjectType>; 2] = [&*PERSON_TY, &*COMPANY_TY];
-        static ref TS: TypeSystem = make_type_system(&*ENTITIES);
     }
 
     #[tokio::test]
