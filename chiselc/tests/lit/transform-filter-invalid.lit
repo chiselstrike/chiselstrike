@@ -1,0 +1,6 @@
+// Test transforming invalid <type>.cursor().filter() calls
+// RUN: @chiselc @file -e Person
+
+Person.cursor().filter(() => true);
+// CHECK: Person.cursor().filter(()=>true
+// CHECK: );

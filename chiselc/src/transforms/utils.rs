@@ -60,7 +60,9 @@ pub fn extract_filter(
         }
     };
     let params = &arrow.params;
-    assert_eq!(params.len(), 1);
+    if params.len() != 1 {
+        return (None, None);
+    }
     let param = &params[0];
     let param = pat_to_string(param).unwrap();
     let (pure, impure) = match &arrow.body {
