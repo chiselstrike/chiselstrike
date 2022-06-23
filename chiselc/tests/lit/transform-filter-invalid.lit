@@ -4,3 +4,7 @@
 Person.cursor().filter(() => true);
 // CHECK: Person.cursor().filter(()=>true
 // CHECK: );
+
+Person.cursor().filter((person) => true, foo);
+// CHECK: Person.cursor().filter((person)=>true
+// CHECK: , foo);
