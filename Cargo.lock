@@ -3953,7 +3953,6 @@ dependencies = [
  "http",
  "hyper",
  "itertools 0.10.3",
- "lazy_static",
  "libc",
  "log",
  "nix 0.22.3",

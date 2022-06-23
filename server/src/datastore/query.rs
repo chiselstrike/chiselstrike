@@ -822,6 +822,7 @@ pub(crate) mod tests {
     use super::*;
     use deno_core::futures;
     use futures::StreamExt;
+    use once_cell::sync::Lazy;
     use serde_json::json;
     use tempfile::NamedTempFile;
 
@@ -845,9 +846,9 @@ pub(crate) mod tests {
         BinaryExpr::new(op, field_chain, literal.into()).into()
     }
 
-    pub(crate) fn make_type_system(entities: &[&Arc<ObjectType>]) -> TypeSystem {
+    pub(crate) fn make_type_system(entities: &[Arc<ObjectType>]) -> TypeSystem {
         let mut ts = TypeSystem::default();
-        for &ty in entities {
+        for ty in entities {
             ts.add_type(ty.clone()).unwrap();
         }
         ts
@@ -870,7 +871,7 @@ pub(crate) mod tests {
         query_engine
     }
 
-    async fn init_database(query_engine: &QueryEngine, entities: &[&Arc<ObjectType>]) {
+    async fn init_database(query_engine: &QueryEngine, entities: &[Arc<ObjectType>]) {
         let mut tr = query_engine.start_transaction().await.unwrap();
         for entity in entities {
             query_engine.create_table(&mut tr, entity).await.unwrap();
@@ -879,7 +880,7 @@ pub(crate) mod tests {
     }
 
     pub(crate) async fn setup_clear_db(
-        entities: &[&Arc<ObjectType>],
+        entities: &[Arc<ObjectType>],
     ) -> (QueryEngine, NamedTempFile) {
         let db_file = NamedTempFile::new().unwrap();
         let qe = init_query_engine(&db_file).await;
@@ -922,24 +923,27 @@ pub(crate) mod tests {
             .await
     }
 
-    lazy_static! {
-        static ref PERSON_TY: Arc<ObjectType> = make_object(
+    static PERSON_TY: Lazy<Arc<ObjectType>> = Lazy::new(|| {
+        make_object(
             "Person",
             vec![
                 make_field("name", Type::String),
                 make_field("age", Type::Float),
             ],
-        );
-        static ref COMPANY_TY: Arc<ObjectType> = make_object(
+        )
+    });
+
+    static COMPANY_TY: Lazy<Arc<ObjectType>> = Lazy::new(|| {
+        make_object(
             "Company",
             vec![
                 make_field("name", Type::String),
                 make_field("ceo", Type::Object(PERSON_TY.clone())),
             ],
-        );
-        static ref ENTITIES: [&'static Arc<ObjectType>; 2] = [&*PERSON_TY, &*COMPANY_TY];
-        static ref TS: TypeSystem = make_type_system(&*ENTITIES);
-    }
+        )
+    });
+    static ENTITIES: Lazy<[Arc<ObjectType>; 2]> =
+        Lazy::new(|| [PERSON_TY.clone(), COMPANY_TY.clone()]);
 
     #[tokio::test]
     async fn test_query_plan() {

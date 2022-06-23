@@ -60,6 +60,7 @@ use hyper::Method;
 use hyper::Uri;
 use hyper::{Request, Response, StatusCode};
 use log::debug;
+use once_cell::sync::Lazy;
 use once_cell::unsync::OnceCell;
 use pin_project::pin_project;
 use serde_derive::Deserialize;
@@ -261,9 +262,8 @@ fn create_web_worker(
 type Channel = Receiver<WorkerMsg>;
 type GlobalChannels = VecMap<Channel>;
 
-lazy_static! {
-    static ref GLOBAL_WORKER_CHANNELS: Mutex<GlobalChannels> = Mutex::new(GlobalChannels::new());
-}
+static GLOBAL_WORKER_CHANNELS: Lazy<Mutex<GlobalChannels>> =
+    Lazy::new(|| Mutex::new(GlobalChannels::new()));
 
 thread_local! {
      static WORKER_CHANNEL: OnceCell<Channel> = OnceCell::new();
