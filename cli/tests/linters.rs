@@ -10,7 +10,7 @@ mod tests {
     use toml::Value;
 
     fn cargo<'a, T: IntoIterator<Item = &'a str>>(args: T) -> Command {
-        run("cargo", args)
+        run("cargo", args, None)
     }
 
     fn nightly<'a, T: IntoIterator<Item = &'a str>>(args: T) -> Command {
@@ -33,8 +33,8 @@ mod tests {
 
     #[test]
     fn eslint() {
-        run("npm", ["install"]);
-        run("npx", ["eslint", ".", "--ext", ".ts"]);
+        run("npm", ["install"], None);
+        run("npx", ["eslint", ".", "--ext", ".ts"], None);
     }
 
     fn get_deno_version() -> String {
@@ -54,8 +54,8 @@ mod tests {
         // because that always reinstall the binary.
         let version = get_deno_version();
         cargo_install(&version, "deno", "deno");
-        run("deno", ["lint", "--config", "deno.json"]);
-        run("deno", ["fmt", "--config", "deno.json", "--check"]);
+        run("deno", ["lint", "--config", "deno.json"], None);
+        run("deno", ["fmt", "--config", "deno.json", "--check"], None);
     }
 
     #[test]
