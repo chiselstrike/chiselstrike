@@ -6,7 +6,8 @@
                 "server",
                 "packages",
                 "deno.json",
-                "tsc_compile"
+                "tsc_compile",
+                "tsc_compile_build"
             ],
             "exclude": [
                 "tsc_compile/tests/",
@@ -28,7 +29,13 @@
     },
     "lint": {
         "files": {
-            "include": ["api", "server", "packages", "tsc_compile"],
+            "include": [
+                "api",
+                "server",
+                "packages",
+                "tsc_compile",
+                "tsc_compile_build"
+            ],
             "exclude": [
                 "tsc_compile/tests/",
                 "third_party",

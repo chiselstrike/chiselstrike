@@ -132,7 +132,7 @@
             .concat(emitResult.diagnostics);
 
         allDiagnostics = ts.sortAndDeduplicateDiagnostics(allDiagnostics);
-        allDiagnostics = allDiagnostics.filter(({code}) => {
+        allDiagnostics = allDiagnostics.filter(({ code }) => {
             // Ignore the error
             //   Cannot write file '...' because it would overwrite input file.
             // It happens when trying to compile an URL that doesn't end in .ts
