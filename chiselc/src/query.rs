@@ -5,7 +5,6 @@
 //! intermediate representation.
 
 use indexmap::IndexSet;
-use swc_ecmascript::ast::CallExpr;
 
 /// An expression.
 #[derive(Debug)]
@@ -80,12 +79,17 @@ pub struct Scan {
 pub struct Filter {
     /// The ChiselStrike internal function to call.
     pub function: String,
-    /// The original call expression of the filter.
-    pub call_expr: CallExpr,
-    /// The pure (no side-effects) part of the filter expression AST.
-    pub pure: Box<swc_ecmascript::ast::Expr>,
-    /// The impure (possible side-effects) part of the filter expression AST.
-    pub impure: Option<Box<swc_ecmascript::ast::Expr>>,
+    /// The original call expression of the filter. Note that `query_expr`
+    /// logically ANDed with `post_expr` is always equivalent with `call_expr`.
+    pub call_expr: swc_ecmascript::ast::CallExpr,
+    /// The query expression part of the filter expression AST. Note that
+    /// this is the same as `predicate`, but in AST format. We need this
+    /// because the internal filtering API needs a fallback predicate if
+    /// runtime query transformation fails.
+    pub query_expr: Box<swc_ecmascript::ast::Expr>,
+    /// The post filter predicate expression AST that is always evaluateed at
+    /// runtime, which allows expression with side-effects, for example.
+    pub post_expr: Option<Box<swc_ecmascript::ast::Expr>>,
     /// The parameters to this filter.
     pub parameters: Vec<String>,
     /// The predicate expression to filter by.

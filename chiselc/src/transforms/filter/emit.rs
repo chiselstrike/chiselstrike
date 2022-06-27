@@ -31,13 +31,13 @@ pub fn to_ts_expr(filter: &Operator) -> CallExpr {
     match filter {
         Operator::Filter(filter) => {
             /*
-             * A filter consists of a pure expression (no side-effects) and an
-             * optional impure expression (with possible side-effects). As we
-             * transform a `filter()` method call, for example, to an internal
-             * `__filter()` method call, we pass the pure expression as the
-             * `exprPredicate` parameter and the impure expression as
+             * A filter consists of a query expression and an optional post
+             * expression (with possible side-effects). As we transform a
+             * `filter()` method call, for example, to an internal
+             * `__filter()` method call, we pass the query expression as the
+             * `exprPredicate` parameter and the post expression as
              * `postPredicate`, which is guaranteed to be always evaluated at
-             * runtime -- and therefore causing any potentialq side-effects.
+             * runtime -- and therefore causing any potential side-effects.
              */
             let callee = rewrite_filter_callee(&filter.call_expr.callee, &filter.function);
             let expr = filter_to_ts(filter, filter.call_expr.span);
@@ -48,14 +48,14 @@ pub fn to_ts_expr(filter: &Operator) -> CallExpr {
             let mut args = vec![
                 ExprOrSpread {
                     spread: None,
-                    expr: filter.pure.clone(),
+                    expr: filter.query_expr.clone(),
                 },
                 expr,
             ];
-            if let Some(impure) = &filter.impure {
+            if let Some(post) = &filter.post_expr {
                 args.push(ExprOrSpread {
                     spread: None,
-                    expr: impure.clone(),
+                    expr: post.clone(),
                 })
             }
             CallExpr {
