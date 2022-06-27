@@ -178,7 +178,7 @@
     };
 
     for (const k in libs) {
-        v = libs[k];
+        const v = libs[k];
         if (!ts.libs.includes(k)) {
             ts.libs.push(k);
             ts.libMap.set(k, `lib.${v}.d.ts`);
