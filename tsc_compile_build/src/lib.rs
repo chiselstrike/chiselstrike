@@ -1,8 +1,10 @@
-pub const JS_FILES: [(&str, &str); 2] = [
+pub const JS_FILES: [(&str, &str); 4] = [
+    ("prefix.js", include_str!("prefix.js")),
     (
         "00_typescript.js",
         include_str!("../../third_party/deno/cli/tsc/00_typescript.js"),
     ),
+    ("bundle.js", bundle_deepkit_type_compile::BUNDLE),
     ("tsc.js", include_str!("tsc.js")),
 ];
 

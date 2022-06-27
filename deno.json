@@ -10,6 +10,7 @@
                 "tsc_compile_build"
             ],
             "exclude": [
+                "tsc_compile_build/src/prefix.js",
                 "tsc_compile/tests/",
                 "server/docs",
                 "third_party",
@@ -37,6 +38,7 @@
                 "tsc_compile_build"
             ],
             "exclude": [
+                "tsc_compile_build/src/prefix.js",
                 "tsc_compile/tests/",
                 "third_party",
                 "packages/create-chiselstrike-app/node_modules/",

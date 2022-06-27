@@ -336,6 +336,8 @@ impl DenoService {
             // now. Which network access is allowed should be a
             // configured with the endpoint.
             net: Permissions::new_net(&Some(vec![]), false),
+            // FIXME: In here because https://esm.sh/@deepkit/type uses NODE_DEBUG
+            env: Permissions::new_env(&Some(vec![]), false),
             ..Permissions::default()
         };
 

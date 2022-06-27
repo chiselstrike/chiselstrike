@@ -6,3 +6,6 @@ edition = "2021"
 
 [lib]
 name = "tsc_compile_build"
+
+[dependencies]
+bundle-deepkit-type-compile = { path = "../bundle-deepkit-type-compile" }

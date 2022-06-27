@@ -1,3 +1,7 @@
 [submodule "third_party/deno"]
 	path = third_party/deno
 	url = https://github.com/denoland/deno.git
+[submodule "third_party/deepkit-framework"]
+	path = third_party/deepkit-framework
+	url = https://github.com/chiselstrike/deepkit-framework.git
+	branch = chisel

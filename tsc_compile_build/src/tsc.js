@@ -1,6 +1,10 @@
 // SPDX-FileCopyrightText: © 2022 ChiselStrike <info@chiselstrike.com>
 
 (function () {
+    ts.sys = {
+        useCaseSensitiveFileNames: true,
+    };
+
     const host = {
         useCaseSensitiveFileNames() {
             return true;
@@ -126,7 +130,27 @@
         };
 
         const program = ts.createProgram([root], options, host);
-        const emitResult = program.emit();
+        const transformers = {
+            before: [
+                (context) =>
+                    new ReflectionTransformer(context).withReflectionMode(
+                        "always",
+                    ).forHost(host),
+            ],
+            afterDeclarations: [
+                (context) =>
+                    new DeclarationTransformer(context).withReflectionMode(
+                        "always",
+                    ).forHost(host),
+            ],
+        };
+        const emitResult = program.emit(
+            undefined, /*sourceFile*/
+            undefined, /*writeFileCallback*/
+            undefined, /*cancellationToken*/
+            undefined, /*emitOnlyDtsFiles*/
+            transformers,
+        );
 
         let allDiagnostics = ts
             .getPreEmitDiagnostics(program)

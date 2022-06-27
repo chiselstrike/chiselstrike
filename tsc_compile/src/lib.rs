@@ -70,6 +70,9 @@ fn fetch_impl(map: &mut DownloadMap, path: String, base: String) -> Result<Strin
     if base == ROOT_URL {
         return Ok(path);
     }
+    if path.starts_with("typescript/lib/") {
+        return Ok("DUMMY".to_string());
+    }
     let url = Url::parse(&base).unwrap();
     let resolved = map
         .graph
@@ -98,6 +101,9 @@ fn fetch(s: &mut OpState, path: String, base: String) -> Result<String> {
 fn read_impl(map: &mut DownloadMap, path: String) -> Result<String> {
     if path == ROOT_URL {
         return Ok(map.root_code.clone());
+    }
+    if path == "DUMMY" {
+        return Ok("".to_string());
     }
     let url = Url::parse(&path)?;
     let module = match map.graph.try_get(&url) {
@@ -635,6 +641,17 @@ mod tests {
     async fn property_constructor_not_strict() -> Result<()> {
         let f = write_temp(b"export class Foo { a: number };")?;
         compile_ts_code(&[f.path()], Default::default()).await?;
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn reflection() -> Result<()> {
+        let p = "tests/goldilocks.ts";
+        let written = compile_ts_code(&[p], Default::default()).await.unwrap();
+        let js = &written[p];
+        assert!(js.contains("__ΩGoldilocks"));
+        assert!(js.contains("__ΩMinLength"));
+        assert!(js.contains("__ΩMaxLength"));
         Ok(())
     }
 

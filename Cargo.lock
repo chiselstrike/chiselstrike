@@ -464,6 +464,10 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "37ccbd214614c6783386c1af30caf03192f17891059cecc394b4fb119e363de3"
 
 [[package]]
+name = "bundle-deepkit-type-compile"
+version = "0.1.0"
+
+[[package]]
 name = "byte-tools"
 version = "0.3.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5260,6 +5264,9 @@ dependencies = [
 [[package]]
 name = "tsc_compile_build"
 version = "0.12.0-dev.0"
+dependencies = [
+ "bundle-deepkit-type-compile",
+]
 
 [[package]]
 name = "tungstenite"
