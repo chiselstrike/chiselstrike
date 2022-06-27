@@ -8,13 +8,14 @@ use anyhow::{anyhow, Result};
 use deno_core::url;
 use deno_core::url::Url;
 use rsa::{PaddingScheme, RsaPrivateKey};
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 use sha2::Sha256;
+use std::collections::HashMap;
 use std::str;
 
-type RsaPayload = Vec<u8>;
+type RsaPayload = String;
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Deserialize, Debug)]
 struct AesPayload {
     #[serde(with = "serde_base64")]
     secret: Vec<u8>,
@@ -24,21 +25,23 @@ struct AesPayload {
     key: Vec<u8>,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
-#[serde(untagged)]
+#[derive(Deserialize, Debug)]
+#[serde(tag = "version")]
 enum Payload {
-    V0(RsaPayload),
-    V1(AesPayload),
+    V0 {
+        secret: RsaPayload,
+    },
+    V1 {
+        #[serde(flatten)]
+        inner: AesPayload,
+    },
+    V2 {
+        secret: HashMap<String, AesPayload>,
+    },
 }
 
 mod serde_base64 {
-    use serde::{Deserialize, Serialize};
-    use serde::{Deserializer, Serializer};
-
-    pub fn serialize<S: Serializer>(v: &[u8], s: S) -> Result<S::Ok, S::Error> {
-        let base64 = base64::encode(v);
-        String::serialize(&base64, s)
-    }
+    use serde::{Deserialize, Deserializer};
 
     pub fn deserialize<'de, D: Deserializer<'de>>(d: D) -> Result<Vec<u8>, D::Error> {
         let base64 = String::deserialize(d)?;
@@ -101,12 +104,17 @@ pub(crate) async fn get_private_key() -> Result<Option<RsaPrivateKey>> {
     }?;
 
     let pem = read_url(&url).await?;
-    let pkcs1 = get_pkcs1_private_key(&pem);
+
+    parse_rsa_key(&pem).with_context(|| format!("Could not read private key at {}", url))
+}
+
+fn parse_rsa_key(pem: &str) -> Result<Option<RsaPrivateKey>> {
+    let pkcs1 = get_pkcs1_private_key(pem);
     if pkcs1.is_ok() {
         return pkcs1;
     }
 
-    get_pkcs8_private_key(&pem).with_context(|| format!("Could not read private key at {}", url))
+    get_pkcs8_private_key(pem)
 }
 
 pub(crate) async fn get_secrets() -> Result<JsonObject> {
@@ -119,33 +127,48 @@ pub(crate) async fn get_secrets() -> Result<JsonObject> {
     };
     let private_key = get_private_key().await?;
     let data = read_url(&secret_location).await?;
-    let data = match private_key {
-        None => data,
-        Some(private_key) => decrypt(&private_key, &data)?,
+    let secrets = match private_key {
+        None => serde_json::from_str(&data)?,
+        Some(private_key) => extract_secrets(&private_key, &data)?,
     };
-    Ok(serde_json::from_str(&data)?)
-}
 
-fn decrypt(private_key: &RsaPrivateKey, payload: &str) -> Result<String> {
-    let payload = parse(payload)?;
-    let secrets = match payload {
-        Payload::V0(rsa) => decrypt_v0(private_key, &rsa),
-        Payload::V1(aes) => decrypt_v1(private_key, &aes),
-    }?;
     Ok(secrets)
 }
 
-fn parse(data: &str) -> Result<Payload> {
-    let data = decode_base64(data)?;
-    if let Ok(encoded) = str::from_utf8(&data) {
-        if let Ok(payload) = serde_json::from_str::<Payload>(encoded) {
-            return Ok(payload);
-        }
-    }
-    Ok(Payload::V0(data))
+fn extract_secrets(private_key: &RsaPrivateKey, payload: &str) -> Result<JsonObject> {
+    let decoded = decode_base64(payload)?;
+    let payload: Payload = serde_json::from_slice(&decoded)?;
+    let secrets = match payload {
+        Payload::V0 { secret } => extract_v0(private_key, &secret)?,
+        Payload::V1 { inner } => extract_v1(private_key, &inner)?,
+        Payload::V2 { secret } => extract_v2(private_key, &secret)?,
+    };
+
+    Ok(secrets)
 }
 
-fn decrypt_v1(private_key: &RsaPrivateKey, payload: &AesPayload) -> Result<String> {
+fn extract_v2(
+    private_key: &RsaPrivateKey,
+    secrets: &HashMap<String, AesPayload>,
+) -> Result<JsonObject> {
+    let mut out = JsonObject::with_capacity(secrets.len());
+
+    for (name, secret) in secrets {
+        let decrypted = decrypt_aes(private_key, secret)?;
+        out.insert(name.to_string(), decrypted.into());
+    }
+
+    Ok(out)
+}
+
+fn extract_v1(private_key: &RsaPrivateKey, payload: &AesPayload) -> Result<JsonObject> {
+    let s = decrypt_aes(private_key, payload)?;
+    let secrets = serde_json::from_str(&s)?;
+
+    Ok(secrets)
+}
+
+fn decrypt_aes(private_key: &RsaPrivateKey, payload: &AesPayload) -> Result<String> {
     let key = rsa_oaep_decrypt(private_key, &payload.key)
         .map_err(|x| anyhow!("Failed to decrypt AES key: {:?}", x))?;
     let nonce = rsa_oaep_decrypt(private_key, &payload.nonce)
@@ -172,12 +195,15 @@ fn rsa_oaep_decrypt(private_key: &RsaPrivateKey, data: &[u8]) -> Result<Vec<u8>>
     Ok(dec_data)
 }
 
-fn decrypt_v0(private_key: &RsaPrivateKey, ciphertext: &[u8]) -> Result<String> {
+fn extract_v0(private_key: &RsaPrivateKey, ciphertext: &str) -> Result<JsonObject> {
+    let bytes = base64::decode(ciphertext)?;
     let padding = PaddingScheme::new_pkcs1v15_encrypt();
     let dec_data = private_key
-        .decrypt_blinded(&mut rand::rngs::OsRng, padding, ciphertext)
+        .decrypt_blinded(&mut rand::rngs::OsRng, padding, &bytes)
         .map_err(|x| anyhow!("Failed to decrypt RSA payload: {:?}", x))?;
-    Ok(String::from_utf8_lossy(&dec_data).to_string())
+    let secrets = serde_json::from_slice(&dec_data)?;
+
+    Ok(secrets)
 }
 
 fn decode_base64(data: &str) -> Result<Vec<u8>> {
