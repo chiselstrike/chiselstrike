@@ -368,8 +368,8 @@ impl Compiler {
         graph.valid()?;
 
         let mut root_code = "".to_string();
-        for u in &urls {
-            write!(root_code, "import \"{}\";", u.0).unwrap();
+        for u in graph.modules() {
+            write!(root_code, "import \"{}\";", u.specifier).unwrap();
         }
         root_code += "export {};";
 
@@ -741,6 +741,21 @@ export default foo;
     #[tokio::test]
     async fn deno_types() -> Result<()> {
         compile_ts_code(&["tests/deno_types.ts"], Default::default()).await?;
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn deno_types_import() -> Result<()> {
+        let written =
+            compile_ts_code(&["tests/deno_types_import/a.ts"], Default::default()).await?;
+        let mut keys: Vec<_> = written.keys().collect();
+        keys.sort();
+        let expected = vec![
+            "tests/deno_types_import/a.ts",
+            "tests/deno_types_import/b.js",
+            "tests/deno_types_import/c.ts",
+        ];
+        assert_eq!(keys, expected);
         Ok(())
     }
 
