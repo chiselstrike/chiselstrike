@@ -15,6 +15,8 @@ pub(crate) enum Kind {
     Transform(fn(Value) -> Value),
     /// Field is of AuthUser type and must match the user currently logged in.
     MatchLogin,
+    /// Field will not be in a query's resulting json object.
+    Hide,
 }
 
 #[derive(Clone)]
@@ -36,6 +38,8 @@ pub(crate) struct FieldPolicies {
     pub(crate) match_login: HashSet<String>,
     /// ID of the currently logged-in user.
     pub(crate) current_userid: Option<String>,
+    /// Names of fields which will be excluded from query's resulting json object.
+    pub(crate) hide: HashSet<String>,
 }
 
 #[derive(Clone, Default, Debug)]
@@ -113,6 +117,9 @@ impl Policies {
                                 Kind::MatchLogin => {
                                     field_policies.match_login.insert(fld.name.clone());
                                 }
+                                Kind::Hide => {
+                                    field_policies.hide.insert(fld.name.clone());
+                                }
                             }
                         }
                     }
@@ -145,6 +152,15 @@ impl VersionPolicy {
                             name.to_owned(),
                             Policy {
                                 kind: Kind::Transform(crate::policies::anonymize),
+                                except_uri: regex::Regex::new(pattern)?,
+                            },
+                        );
+                    }
+                    Some("hide") => {
+                        policies.labels.insert(
+                            name.to_owned(),
+                            Policy {
+                                kind: Kind::Hide,
                                 except_uri: regex::Regex::new(pattern)?,
                             },
                         );

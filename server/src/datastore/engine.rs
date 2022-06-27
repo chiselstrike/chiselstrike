@@ -385,9 +385,10 @@ impl QueryEngine {
                     column_idx,
                     is_optional,
                     transform,
+                    hide,
                     ..
                 } => {
-                    if *is_optional && column_is_null(row, *column_idx) {
+                    if *hide || (*is_optional && column_is_null(row, *column_idx)) {
                         continue;
                     }
                     macro_rules! to_json {
@@ -428,9 +429,10 @@ impl QueryEngine {
                     name,
                     is_optional,
                     transform,
+                    hide,
                 } => {
                     let child_entity = entity.get_child_entity(name).unwrap();
-                    if *is_optional && column_is_null(row, id_idx(child_entity)) {
+                    if *hide || (*is_optional && column_is_null(row, id_idx(child_entity))) {
                         continue;
                     }
                     let mut val = json!(Self::row_to_json(db_kind, child_entity, row)?);
