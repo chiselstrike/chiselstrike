@@ -396,9 +396,12 @@ impl Compiler {
             for m in map.graph.modules() {
                 let url = &m.specifier;
                 prefix_map.insert(without_extension(url.as_str()), url);
-                if m.media_type == MediaType::JavaScript {
-                    let source = m.maybe_source.as_ref().unwrap().to_string();
-                    map.written.insert(url.to_string(), source);
+                match m.media_type {
+                    MediaType::JavaScript | MediaType::Mjs => {
+                        let source = m.maybe_source.as_ref().unwrap().to_string();
+                        map.written.insert(url.to_string(), source);
+                    }
+                    _ => {}
                 }
             }
             for (k, v) in map.written {
@@ -797,5 +800,10 @@ export default foo;
     #[tokio::test]
     async fn relative_same_name() {
         test_with_path_variants(check_relative_same_name, "tests/relative_a/bar.ts").await;
+    }
+
+    #[tokio::test]
+    async fn import_mjs() {
+        check_import("tests/import-mjs.ts".to_string(), ".ts", ".mjs").await;
     }
 }
