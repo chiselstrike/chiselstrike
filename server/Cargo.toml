@@ -35,13 +35,13 @@ pin-project = "1"
 prost = "0.8.0"
 rand = "0.8.4"
 regex = "1"
-rsa = "0.5.0"
+rsa = "0.7.0-pre"
 rustls = "0.20.6"
 sea-query = { version = "0.17.1", features = ["thread-safe"] }
 serde = "1.0.137"
 serde_derive = "1.0.137"
 serde_json = "1.0.81"
-sha2 = "0.9.9"
+sha2 = "0.10.2"
 socket2 = { version = "0.3.18", features = ["unix", "reuseport"] }
 sqlx = { version = "0.5.12", features = [
     "any",

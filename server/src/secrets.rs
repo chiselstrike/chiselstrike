@@ -71,14 +71,14 @@ async fn read_url(url: &Url) -> Result<String> {
 }
 
 fn get_pkcs1_private_key(pem: &str) -> Result<Option<RsaPrivateKey>> {
-    use rsa::pkcs1::FromRsaPrivateKey;
+    use rsa::pkcs1::DecodeRsaPrivateKey;
     let mut key = RsaPrivateKey::from_pkcs1_pem(pem)?;
     key.precompute()?;
     Ok(Some(key))
 }
 
 fn get_pkcs8_private_key(pem: &str) -> Result<Option<RsaPrivateKey>> {
-    use rsa::pkcs8::FromPrivateKey;
+    use rsa::pkcs8::DecodePrivateKey;
     let mut key = RsaPrivateKey::from_pkcs8_pem(pem)?;
     key.precompute()?;
     Ok(Some(key))
