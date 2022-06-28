@@ -263,9 +263,12 @@ impl QueryPlan {
     }
 
     fn from_entity_name(c: &RequestContext, entity_name: &str) -> Result<Self> {
-        let ty =
-            c.ts.lookup_object_type(entity_name, &c.api_version)
-                .context("unable to construct QueryPlan from unknown entity name")?;
+        let ty = c
+            .ts
+            .lookup_object_type(entity_name, &c.api_version)
+            .with_context(|| {
+                format!("unable to construct QueryPlan from an unknown entity name `{entity_name}`")
+            })?;
 
         let mut builder = Self::new(ty.clone());
         builder.entity = builder.load_entity(c, &ty);
