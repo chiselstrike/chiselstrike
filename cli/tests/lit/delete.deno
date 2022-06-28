@@ -26,6 +26,15 @@ export default async function chisel(req: Request) {
 }
 EOF
 
+cat << EOF > "$TEMPDIR/endpoints/update-delete.ts"
+import { User } from "../models/user.ts";
+export default async function chisel(req: Request) {
+    await User.delete({ email: "test@example.com"});
+    await User.build({ email: "test@example.com", username: "test"}).save();
+    return new Response("OK");
+}
+EOF
+
 $CHISEL apply
 # CHECK: Model defined: User
 # CHECK: End point defined: /dev/user
@@ -51,3 +60,9 @@ $CURL $CHISELD_HOST/dev/delete
 
 $CURL -X POST $CHISELD_HOST/dev/delete
 # CHECK: OK
+
+$CURL -X POST -d '{"username": "test", "email": "test@example.com"}' $CHISELD_HOST/dev/user
+# CHECK: 200 OK
+
+$CURL -X POST $CHISELD_HOST/dev/update-delete
+# CHECK: 200 OK

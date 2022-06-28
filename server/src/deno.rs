@@ -557,7 +557,16 @@ async fn op_chisel_entity_delete(
         )?
     };
     let query_engine = query_engine_arc(&state.borrow());
-    query_engine.mutate(mutation).await
+    let transaction = {
+        let state = state.borrow();
+        current_transaction(&state)
+    };
+    let mut transaction = transaction.lock().await;
+    query_engine
+        .mutate_with_transaction(mutation, &mut transaction)
+        .await?;
+
+    Ok(())
 }
 
 #[derive(Deserialize)]
