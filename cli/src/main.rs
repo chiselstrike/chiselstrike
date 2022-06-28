@@ -3,7 +3,7 @@
 use crate::cmd::apply::apply;
 use crate::cmd::dev::cmd_dev;
 use crate::project::{create_project, CreateProjectOptions};
-use crate::server::{start_server, wait};
+use crate::server::{start_server, wait, wait_with_cond};
 use anyhow::{anyhow, Result};
 use chisel::chisel_rpc_client::ChiselRpcClient;
 use chisel::{
@@ -140,7 +140,10 @@ pub(crate) async fn restart(server_url: String) -> Result<()> {
     let mut client = ChiselRpcClient::connect(server_url.clone()).await?;
     let response = execute!(client.restart(tonic::Request::new(RestartRequest {})).await);
     anyhow::ensure!(response.ok);
-    wait(server_url.clone()).await?;
+    wait_with_cond(server_url.clone(), |status| {
+        status.server_id != response.server_id
+    })
+    .await?;
     Ok(())
 }
 
