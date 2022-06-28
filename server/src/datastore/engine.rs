@@ -482,10 +482,21 @@ impl QueryEngine {
     /// Execute the given `mutation`.
     pub(crate) async fn mutate(&self, mutation: Mutation) -> Result<()> {
         let mut transaction = self.start_transaction().await?;
+        self.mutate_with_transaction(mutation, &mut transaction)
+            .await?;
+        QueryEngine::commit_transaction(transaction).await?;
+        Ok(())
+    }
+
+    pub(crate) async fn mutate_with_transaction(
+        &self,
+        mutation: Mutation,
+        transaction: &mut Transaction<'_, Any>,
+    ) -> Result<()> {
         let raw_sql = mutation.build_sql(self.target_db())?;
         let query = sqlx::query(&raw_sql);
         transaction.execute(query).await?;
-        QueryEngine::commit_transaction(transaction).await?;
+
         Ok(())
     }
 
