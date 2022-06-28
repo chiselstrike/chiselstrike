@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: © 2021 ChiselStrike <info@chiselstrike.com>
 
 use crate::datastore::query::{
-    Mutation, QueriedEntity, QueryField, QueryPlan, SqlValue, TargetDatabase,
+    Mutation, QueriedEntity, QueryField, QueryPlan, SqlValue, TargetDatabase, KeepOrOmitField,
 };
 use crate::datastore::{DbConnection, Kind};
 use crate::types::{DbIndex, Field, ObjectDelta, ObjectType, Type};
@@ -385,10 +385,14 @@ impl QueryEngine {
                     column_idx,
                     is_optional,
                     transform,
-                    hide,
+                    keep_or_omit,
                     ..
                 } => {
-                    if *hide || (*is_optional && column_is_null(row, *column_idx)) {
+                    let omit_field = match keep_or_omit {
+                        KeepOrOmitField::Omit => true,
+                        _ => false,
+                    };
+                    if omit_field || (*is_optional && column_is_null(row, *column_idx)) {
                         continue;
                     }
                     macro_rules! to_json {
@@ -429,10 +433,14 @@ impl QueryEngine {
                     name,
                     is_optional,
                     transform,
-                    hide,
+                    keep_or_omit,
                 } => {
+                    let omit_field = match keep_or_omit {
+                        KeepOrOmitField::Omit => true,
+                        _ => false,
+                    };
                     let child_entity = entity.get_child_entity(name).unwrap();
-                    if *hide || (*is_optional && column_is_null(row, id_idx(child_entity))) {
+                    if omit_field || (*is_optional && column_is_null(row, id_idx(child_entity))) {
                         continue;
                     }
                     let mut val = json!(Self::row_to_json(db_kind, child_entity, row)?);
