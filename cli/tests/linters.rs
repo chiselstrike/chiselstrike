@@ -72,7 +72,7 @@ mod tests {
 
     #[test]
     fn check_formating() {
-        cargo(["fmt", "--all", "--", "--check"]);
+        cargo(["fmt", "--", "--check"]);
     }
 
     #[test]

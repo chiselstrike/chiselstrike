@@ -1057,7 +1057,7 @@ type GenericChiselEntityClass = ChiselEntityClass<ChiselEntity>;
 export function createPathParser<T extends Record<string, unknown>>(
     pathTemplate: string,
     loose = false,
-): ((path: string) => T) {
+): (path: string) => T {
     const { pattern, keys: keysOrFalse } = regExParamParse(pathTemplate, loose);
     if (typeof keysOrFalse === "boolean") {
         throw new Error(
@@ -1088,7 +1088,7 @@ export function createPathParser<T extends Record<string, unknown>>(
 export function createURLPathParser<T extends Record<string, unknown>>(
     pathTemplate: string,
     loose = false,
-): ((url: URL) => T) {
+): (url: URL) => T {
     const pathParser = createPathParser<T>(pathTemplate, loose);
     return (url: URL): T => pathParser(url.pathname);
 }
@@ -1097,7 +1097,7 @@ export function createURLPathParser<T extends Record<string, unknown>>(
 export type CRUDCreateResponse = (
     body: unknown,
     status: number,
-) => (Promise<Response> | Response);
+) => Promise<Response> | Response;
 
 export type CRUDBaseParams = {
     /** identifier of the object being manipulated, if any */

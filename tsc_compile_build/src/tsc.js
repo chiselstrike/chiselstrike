@@ -72,9 +72,10 @@
         ) {
             const ret = [];
             for (const name of typeReferenceDirectiveNames) {
+                const strName = typeof name == "string" ? name : name.fileName;
                 const fname = Deno.core.opSync(
                     "fetch",
-                    name,
+                    strName,
                     containingFile,
                 );
                 ret.push({ resolvedFileName: fname });
