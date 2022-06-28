@@ -480,6 +480,9 @@ impl QueryEngine {
     }
 
     /// Execute the given `mutation`.
+    ///
+    /// Only for testing purposes. For any other purpose, use `mutate_with_transaction`.
+    #[cfg(test)]
     pub(crate) async fn mutate(&self, mutation: Mutation) -> Result<()> {
         let mut transaction = self.start_transaction().await?;
         let raw_sql = mutation.build_sql(self.target_db())?;
