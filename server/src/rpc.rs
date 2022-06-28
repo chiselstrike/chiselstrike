@@ -36,6 +36,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use tonic::{transport::Server, Request, Response, Status};
 use utils::without_extension;
+use uuid::Uuid;
 
 fn validate_api_version(version: &str) -> Result<()> {
     anyhow::ensure!(
@@ -59,6 +60,8 @@ fn validate_api_version(version: &str) -> Result<()> {
 //
 // Policies and endpoints are stateless so we don't need a global copy.
 pub(crate) struct GlobalRpcState {
+    /// Unique UUID identifying this RPC runtime.
+    id: Uuid,
     type_system: TypeSystem,
     meta: MetaService,
     query_engine: Arc<QueryEngine>,
@@ -98,6 +101,7 @@ impl GlobalRpcState {
         }
 
         Ok(Self {
+            id: Uuid::new_v4(),
             type_system,
             meta,
             query_engine: Arc::new(query_engine),
@@ -565,7 +569,12 @@ impl ChiselRpc for RpcService {
         &self,
         _request: Request<StatusRequest>,
     ) -> Result<Response<StatusResponse>, Status> {
+        let server_id = {
+            let state = self.state.lock().await;
+            state.id.to_string()
+        };
         let response = chisel::StatusResponse {
+            server_id,
             message: "OK".to_string(),
         };
         Ok(Response::new(response))
@@ -672,8 +681,12 @@ impl ChiselRpc for RpcService {
         &self,
         _request: tonic::Request<RestartRequest>,
     ) -> Result<tonic::Response<RestartResponse>, tonic::Status> {
+        let server_id = {
+            let state = self.state.lock().await;
+            state.id.to_string()
+        };
         let ok = nix::sys::signal::raise(nix::sys::signal::Signal::SIGUSR1).is_ok();
-        Ok(Response::new(RestartResponse { ok }))
+        Ok(Response::new(RestartResponse { server_id, ok }))
     }
 }
 

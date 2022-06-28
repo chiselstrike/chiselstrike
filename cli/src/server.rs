@@ -77,12 +77,26 @@ async fn connect_with_retry(server_url: String) -> Result<ChiselRpcClient<Channe
 // Timeout when waiting for connection or server status.
 const TIMEOUT: Duration = Duration::from_secs(120);
 
-pub(crate) async fn wait(server_url: String) -> Result<tonic::Response<StatusResponse>> {
+pub(crate) async fn wait_with_cond<F>(
+    server_url: String,
+    condition: F,
+) -> Result<tonic::Response<StatusResponse>>
+where
+    F: Fn(&StatusResponse) -> bool,
+{
     let client = connect_with_retry(server_url).await?;
     with_retry(TIMEOUT, client, |mut client| async {
         let request = tonic::Request::new(StatusRequest {});
         let s = client.get_status(request).await;
-        s.map_err(|_| client)
+
+        match s {
+            Ok(res) if condition(res.get_ref()) => Ok(res),
+            _ => Err(client),
+        }
     })
     .await
+}
+
+pub(crate) async fn wait(server_url: String) -> Result<tonic::Response<StatusResponse>> {
+    wait_with_cond(server_url, |_| true).await
 }

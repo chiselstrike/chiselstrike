@@ -7,6 +7,7 @@ package chisel;
 message StatusRequest { }
 
 message StatusResponse {
+  string server_id = 2;
   string message = 1;
 }
 
@@ -58,6 +59,7 @@ message DescribeResponse {
 message RestartRequest { }
 
 message RestartResponse {
+  string server_id = 2;
   bool ok = 1;
 }
 
