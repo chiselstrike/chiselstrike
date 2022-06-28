@@ -601,7 +601,19 @@ async fn op_chisel_crud_delete(
         let state = state.borrow();
         query_engine_arc(&state).clone()
     };
-    query_engine.mutate(mutation).await
+
+    let transaction = query_engine.clone().start_transaction_static().await?;
+
+    let mut guard = transaction.lock().await;
+    query_engine
+        .mutate_with_transaction(mutation, &mut guard)
+        .await?;
+
+    drop(guard);
+
+    QueryEngine::commit_transaction_static(transaction).await?;
+
+    Ok(())
 }
 
 type DbStream = RefCell<QueryResults>;
