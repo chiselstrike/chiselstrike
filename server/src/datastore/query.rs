@@ -267,7 +267,8 @@ impl QueryPlan {
                 Type::Object(_) => Type::String, // This is actually a foreign key.
                 ty => ty,
             };
-            let field = builder.make_scalar_field(&field, ty.backing_table(), None, &KeepOrOmitField::Keep);
+            let field =
+                builder.make_scalar_field(&field, ty.backing_table(), None, &KeepOrOmitField::Keep);
             builder.entity.fields.push(field)
         }
         builder

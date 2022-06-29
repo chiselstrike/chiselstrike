@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: © 2021 ChiselStrike <info@chiselstrike.com>
 
 use crate::datastore::query::{
-    Mutation, QueriedEntity, QueryField, QueryPlan, SqlValue, TargetDatabase, KeepOrOmitField,
+    KeepOrOmitField, Mutation, QueriedEntity, QueryField, QueryPlan, SqlValue, TargetDatabase,
 };
 use crate::datastore::{DbConnection, Kind};
 use crate::types::{DbIndex, Field, ObjectDelta, ObjectType, Type};
