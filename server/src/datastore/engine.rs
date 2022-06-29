@@ -388,10 +388,7 @@ impl QueryEngine {
                     keep_or_omit,
                     ..
                 } => {
-                    let omit_field = match keep_or_omit {
-                        KeepOrOmitField::Omit => true,
-                        _ => false,
-                    };
+                    let omit_field = matches!(keep_or_omit, KeepOrOmitField::Omit);
                     if omit_field || (*is_optional && column_is_null(row, *column_idx)) {
                         continue;
                     }
@@ -435,10 +432,7 @@ impl QueryEngine {
                     transform,
                     keep_or_omit,
                 } => {
-                    let omit_field = match keep_or_omit {
-                        KeepOrOmitField::Omit => true,
-                        _ => false,
-                    };
+                    let omit_field = matches!(keep_or_omit, KeepOrOmitField::Omit);
                     let child_entity = entity.get_child_entity(name).unwrap();
                     if omit_field || (*is_optional && column_is_null(row, id_idx(child_entity))) {
                         continue;
