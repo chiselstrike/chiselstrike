@@ -253,7 +253,7 @@ impl QueryPlan {
         for field in ty.all_fields() {
             let mut field = field.clone();
             field.type_ = match field.type_ {
-                Type::Object(_) => Type::String, // This is actually a foreign key.
+                Type::Entity(_) => Type::String, // This is actually a foreign key.
                 ty => ty,
             };
             let field = builder.make_scalar_field(&field, ty.backing_table(), None);
@@ -361,7 +361,7 @@ impl QueryPlan {
         for field in ty.all_fields() {
             let field_policy = field_policies.transforms.get(&field.name).cloned();
 
-            let query_field = if let Type::Object(nested_ty) = &field.type_ {
+            let query_field = if let Type::Entity(nested_ty) = &field.type_ {
                 let nested_table = format!(
                     "JOIN{}_{}_TO_{}",
                     self.join_counter,
@@ -415,7 +415,7 @@ impl QueryPlan {
         .into();
 
         for field in ty.all_fields() {
-            if let Type::Object(nested_ty) = &field.type_ {
+            if let Type::Entity(nested_ty) = &field.type_ {
                 let property_access = PropertyAccess {
                     property: field.name.to_owned(),
                     object: property_chain.clone().into(),
@@ -786,7 +786,7 @@ impl Mutation {
         filter_expr: &Option<Expr>,
     ) -> Result<Self> {
         let base_entity = match c.ts.lookup_type(type_name, &c.api_version) {
-            Ok(Type::Object(ty)) => ty,
+            Ok(Type::Entity(ty)) => ty,
             Ok(ty) => anyhow::bail!("Cannot delete scalar type {type_name} ({})", ty.name()),
             Err(_) => anyhow::bail!("Cannot delete from type `{type_name}`, type not found"),
         };
@@ -901,7 +901,7 @@ pub(crate) mod tests {
         let rows = fetch_rows(query_engine, entity).await;
         assert!(rows.iter().any(|row| {
             ins_row.iter().all(|(key, value)| {
-                if let Type::Object(_) = entity.get_field(key).unwrap().type_ {
+                if let Type::Entity(_) = entity.get_field(key).unwrap().type_ {
                     true
                 } else {
                     row[key] == *value
@@ -941,7 +941,7 @@ pub(crate) mod tests {
             "Company",
             vec![
                 make_field("name", Type::String),
-                make_field("ceo", Type::Object(PERSON_TY.clone())),
+                make_field("ceo", Type::Entity(PERSON_TY.clone())),
             ],
         )
     });

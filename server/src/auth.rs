@@ -21,7 +21,7 @@ pub(crate) const AUTH_ACCOUNT_NAME: &str = "AuthAccount";
 
 fn get_auth_user_type(state: &OpState) -> Result<Arc<ObjectType>> {
     match lookup_builtin_type(state, AUTH_USER_NAME) {
-        Ok(Type::Object(t)) => Ok(t),
+        Ok(Type::Entity(t)) => Ok(t),
         _ => anyhow::bail!("Internal error: type AuthUser not found"),
     }
 }

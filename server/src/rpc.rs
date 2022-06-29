@@ -343,7 +343,7 @@ or
                 let field_ty = match state.type_system.lookup_builtin_type(&field.field_type) {
                     Ok(ty) => ty,
                     Err(_) => match new_types.get(&field.field_type) {
-                        Some(ty) => Type::Object(ty.clone()),
+                        Some(ty) => Type::Entity(ty.clone()),
                         None => anyhow::bail!(
                             "field type `{}` is neither a built-in nor a custom type",
                             &field.field_type

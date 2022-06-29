@@ -174,7 +174,7 @@ fn make_page_url(url: &Url, host: &Option<String>, cursor: &Cursor) -> Result<Ur
 /// Constructs Delete Mutation from CRUD url.
 pub(crate) fn delete_from_url(c: &RequestContext, type_name: &str, url: &str) -> Result<Mutation> {
     let base_entity = match c.ts.lookup_type(type_name, &c.api_version) {
-        Ok(Type::Object(ty)) => ty,
+        Ok(Type::Entity(ty)) => ty,
         Ok(ty) => anyhow::bail!("Cannot delete scalar type {type_name} ({})", ty.name()),
         Err(_) => anyhow::bail!("Cannot delete from type `{type_name}`, type not found"),
     };
@@ -403,7 +403,7 @@ fn json_to_literal(field_type: &Type, value: &serde_json::Value) -> Result<Expr>
         }};
     }
     let literal = match field_type {
-        Type::Object(ty) => anyhow::bail!(
+        Type::Entity(ty) => anyhow::bail!(
             "trying to filter by property of type '{}' which is not supported",
             ty.name()
         ),
@@ -472,7 +472,7 @@ fn filter_from_param(base_type: &Arc<ObjectType>, param_key: &str, value: &str) 
 
     let err_msg = |ty_name| format!("failed to convert filter value '{}' to {}", value, ty_name);
     let literal = match field_type {
-        Type::Object(ty) => anyhow::bail!(
+        Type::Entity(ty) => anyhow::bail!(
             "trying to filter by property '{}' of type '{}' which is not supported",
             fields.last().unwrap(),
             ty.name()
@@ -493,9 +493,9 @@ fn make_property_chain(base_type: &Arc<ObjectType>, fields: &[&str]) -> Result<(
         "cannot make property chain from no fields"
     );
     let mut property_chain = Expr::Parameter { position: 0 };
-    let mut last_type = Type::Object(base_type.clone());
+    let mut last_type = Type::Entity(base_type.clone());
     for &field_str in fields {
-        if let Type::Object(entity) = last_type {
+        if let Type::Entity(entity) = last_type {
             if let Some(field) = entity.get_field(field_str) {
                 last_type = field.type_.clone();
             } else {
@@ -631,7 +631,7 @@ mod tests {
             "Company",
             vec![
                 make_field("name", Type::String),
-                make_field("ceo", Type::Object(PERSON_TY.clone())),
+                make_field("ceo", Type::Entity(PERSON_TY.clone())),
             ],
         )
     });
@@ -698,7 +698,7 @@ mod tests {
                 make_field("name", Type::String),
                 make_field("traded", Type::Boolean),
                 make_field("employee_count", Type::Float),
-                make_field("ceo", Type::Object(person_type)),
+                make_field("ceo", Type::Entity(person_type)),
             ],
         );
         let filter_expr =

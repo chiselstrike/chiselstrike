@@ -168,7 +168,7 @@ impl TypeSystem {
     ) -> anyhow::Result<()> {
         let mut transaction = query_engine.start_transaction().await?;
         for ty in self.builtin_types.values() {
-            if let Type::Object(ty) = ty {
+            if let Type::Entity(ty) = ty {
                 query_engine.create_table(&mut transaction, ty).await?;
             }
         }
@@ -386,7 +386,7 @@ impl TypeSystem {
         } else {
             let version = self.get_version(api_version)?;
             if let Ok(ty) = version.lookup_custom_type(type_name) {
-                Ok(Type::Object(ty))
+                Ok(Type::Entity(ty))
             } else {
                 Err(TypeSystemError::NoSuchType(type_name.to_owned()))
             }
@@ -406,7 +406,7 @@ impl TypeSystem {
         api_version: &str,
     ) -> Result<Arc<ObjectType>, TypeSystemError> {
         match self.lookup_builtin_type(type_name) {
-            Ok(Type::Object(ty)) => Ok(ty),
+            Ok(Type::Entity(ty)) => Ok(ty),
             Err(TypeSystemError::NotABuiltinType(_)) => {
                 self.lookup_custom_type(type_name, api_version)
             }
@@ -477,7 +477,7 @@ impl TypeSystem {
                 name: type_name,
                 backing_table: backing_table_name,
             };
-            Type::Object(Arc::new(
+            Type::Entity(Arc::new(
                 ObjectType::new(desc, fields, vec![], is_auth).unwrap(),
             ))
         });
@@ -490,7 +490,7 @@ pub(crate) enum Type {
     Float,
     Boolean,
     Id,
-    Object(Arc<ObjectType>),
+    Entity(Arc<ObjectType>),
 }
 
 impl Type {
@@ -500,7 +500,7 @@ impl Type {
             Type::Id => "string",
             Type::String => "string",
             Type::Boolean => "boolean",
-            Type::Object(ty) => &ty.name,
+            Type::Entity(ty) => &ty.name,
         }
     }
 }
