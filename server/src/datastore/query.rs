@@ -52,6 +52,13 @@ impl RequestContext<'_> {
     }
 }
 
+/// Whether a field should be included in or omitted from query result.
+#[derive(Debug, Clone)]
+pub(crate) enum KeepOrOmitField {
+    Keep,
+    Omit,
+}
+
 #[derive(Debug, Clone)]
 pub(crate) enum QueryField {
     Scalar {
@@ -65,6 +72,8 @@ pub(crate) enum QueryField {
         column_idx: usize,
         /// Policy transformation to be applied on the resulting JSON value.
         transform: Option<fn(Value) -> Value>,
+        /// Do not include field in return json
+        keep_or_omit: KeepOrOmitField,
     },
     Entity {
         /// Name of the original Type field
@@ -72,6 +81,8 @@ pub(crate) enum QueryField {
         is_optional: bool,
         /// Policy transformation to be applied on the resulting JSON value.
         transform: Option<fn(Value) -> Value>,
+        /// Do not include field in return json
+        keep_or_omit: KeepOrOmitField,
     },
 }
 
@@ -256,7 +267,8 @@ impl QueryPlan {
                 Type::Object(_) => Type::String, // This is actually a foreign key.
                 ty => ty,
             };
-            let field = builder.make_scalar_field(&field, ty.backing_table(), None);
+            let field =
+                builder.make_scalar_field(&field, ty.backing_table(), None, &KeepOrOmitField::Keep);
             builder.entity.fields.push(field)
         }
         builder
@@ -321,6 +333,7 @@ impl QueryPlan {
         field: &Field,
         table_name: &str,
         transform: Option<fn(Value) -> Value>,
+        keep_or_omit: &KeepOrOmitField,
     ) -> QueryField {
         let column_idx = self.columns.len();
         let select_field = QueryField::Scalar {
@@ -329,6 +342,7 @@ impl QueryPlan {
             is_optional: field.is_optional,
             column_idx,
             transform,
+            keep_or_omit: keep_or_omit.clone(),
         };
         self.columns.push(Column {
             name: field.name.to_owned(),
@@ -360,6 +374,10 @@ impl QueryPlan {
         let mut joins = HashMap::default();
         for field in ty.all_fields() {
             let field_policy = field_policies.transforms.get(&field.name).cloned();
+            let keep_or_omit = match field_policies.omit.contains(&field.name) {
+                true => KeepOrOmitField::Omit,
+                _ => KeepOrOmitField::Keep,
+            };
 
             let query_field = if let Type::Object(nested_ty) = &field.type_ {
                 let nested_table = format!(
@@ -372,7 +390,7 @@ impl QueryPlan {
                 let nested_table = truncate_identifier(nested_table.as_str()).to_owned();
                 self.join_counter += 1;
 
-                self.make_scalar_field(field, current_table, field_policy);
+                self.make_scalar_field(field, current_table, field_policy, &keep_or_omit);
                 joins.insert(
                     field.name.to_owned(),
                     Join {
@@ -385,9 +403,10 @@ impl QueryPlan {
                     name: field.name.clone(),
                     is_optional: field.is_optional,
                     transform: field_policy,
+                    keep_or_omit,
                 }
             } else {
-                self.make_scalar_field(field, current_table, field_policy)
+                self.make_scalar_field(field, current_table, field_policy, &keep_or_omit)
             };
             fields.push(query_field);
         }
