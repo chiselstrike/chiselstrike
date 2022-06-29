@@ -27,6 +27,7 @@ use serde::Serialize;
 use std::collections::HashMap;
 use std::collections::HashSet;
 use std::env;
+use std::fmt::Write;
 use std::fs;
 use std::future::Future;
 use std::path::Component;
@@ -44,13 +45,21 @@ struct DownloadMap {
     // Precomputed module graph
     graph: ModuleGraph,
 
+    // Code for the dummy root. TSC doesn't support starting the
+    // compilation with a URL that doesn't end in .ts. It is perfectly
+    // happy importing an arbitrary URL, so we work around the TSC
+    // limitation by creating a dummy ROOT_URL which contains imports
+    // of the code we were asked to compile.
+    root_code: String,
+
     diagnostics: String,
 }
 
 impl DownloadMap {
-    fn new(graph: ModuleGraph) -> DownloadMap {
+    fn new(graph: ModuleGraph, root_code: String) -> DownloadMap {
         DownloadMap {
             graph,
+            root_code,
             written: Default::default(),
             diagnostics: Default::default(),
         }
@@ -58,6 +67,9 @@ impl DownloadMap {
 }
 
 fn fetch_impl(map: &mut DownloadMap, path: String, base: String) -> Result<String> {
+    if base == ROOT_URL {
+        return Ok(path);
+    }
     let url = Url::parse(&base).unwrap();
     let resolved = map
         .graph
@@ -84,6 +96,9 @@ fn fetch(s: &mut OpState, path: String, base: String) -> Result<String> {
 }
 
 fn read_impl(map: &mut DownloadMap, path: String) -> Result<String> {
+    if path == ROOT_URL {
+        return Ok(map.root_code.clone());
+    }
     let url = Url::parse(&path)?;
     let module = match map.graph.try_get(&url) {
         Ok(Some(m)) => m,
@@ -204,6 +219,8 @@ pub struct CompileOptions<'a> {
 struct ModuleLoader {
     extra_libs: HashMap<Url, String>,
 }
+
+static ROOT_URL: &str = "chisel://root_domain/root.ts";
 
 fn load_url(extra_libs: &HashMap<Url, String>, specifier: Url) -> impl Future<Output = LoadResult> {
     let sync_text = match specifier.scheme() {
@@ -350,10 +367,16 @@ impl Compiler {
 
         graph.valid()?;
 
+        let mut root_code = "".to_string();
+        for u in &urls {
+            write!(root_code, "import \"{}\";", u.0).unwrap();
+        }
+        root_code += "export {};";
+
         self.runtime
             .op_state()
             .borrow_mut()
-            .put(DownloadMap::new(graph));
+            .put(DownloadMap::new(graph, root_code));
 
         let global_context = self.runtime.global_context();
         {
@@ -368,10 +391,7 @@ impl Compiler {
             let emit_declarations = v8::Boolean::new(scope, opts.emit_declarations).into();
             let is_worker = v8::Boolean::new(scope, opts.is_worker).into();
 
-            let urls: Vec<_> = urls
-                .iter()
-                .map(|url| v8::String::new(scope, url.0.as_str()).unwrap().into())
-                .collect();
+            let urls = vec![v8::String::new(scope, ROOT_URL).unwrap().into()];
             let urls = v8::Array::new_with_elements(scope, &urls).into();
             compile
                 .call(
@@ -403,12 +423,12 @@ impl Compiler {
         }
         let mut ret = vec![];
         for (k, v) in map.written {
+            if k.starts_with("chisel://") {
+                continue;
+            }
             let prefix = without_extension(&k);
             let is_dts = k.ends_with(".d.ts");
             let source = prefix_map[prefix];
-            if source.scheme() == "chisel" {
-                continue;
-            }
             if is_dts && !url_set.contains(source.as_str()) {
                 continue;
             }
@@ -713,8 +733,7 @@ export default foo;
 
     #[tokio::test]
     async fn handlebars_direct() -> Result<()> {
-        let f = write_temp(b"import handlebars from \"https://cdn.skypack.dev/handlebars\";")?;
-        let u = Url::parse(&format!("file:///{}", f.path())).unwrap();
+        let u = Url::parse("https://cdn.skypack.dev/handlebars").unwrap();
         let mut compiler = Compiler::new(true);
         compiler.compile_urls(vec![u], Default::default()).await?;
         Ok(())
