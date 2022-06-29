@@ -3,3 +3,4 @@
 /node_modules
 .vscode
 *.code-workspace
+/.chisel_dev

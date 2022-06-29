@@ -5,12 +5,21 @@ mod common;
 #[cfg(test)]
 mod tests {
     use crate::common::{repo_dir, run, Command};
-    use std::fs::File;
+    use once_cell::sync::Lazy;
+    use std::ffi::OsString;
+    use std::fs::{create_dir_all, File};
     use std::io::Read;
+    use std::path::PathBuf;
     use toml::Value;
 
+    static CHISEL_BIN_CACHE: Lazy<PathBuf> = Lazy::new(|| repo_dir().join(".chisel_dev"));
+    static CHISEL_CARGO_PATH: Lazy<OsString> = Lazy::new(|| {
+        let new_path = format!("{}/bin:{}", CHISEL_BIN_CACHE.display(), env!("PATH"));
+        OsString::from(new_path)
+    });
+
     fn cargo<'a, T: IntoIterator<Item = &'a str>>(args: T) -> Command {
-        run("cargo", args)
+        run("cargo", args, Some(&CHISEL_CARGO_PATH))
     }
 
     fn nightly<'a, T: IntoIterator<Item = &'a str>>(args: T) -> Command {
@@ -20,6 +29,7 @@ mod tests {
     }
 
     fn cargo_install(version: &str, pkg: &str, bin: &str) {
+        create_dir_all(&*CHISEL_BIN_CACHE).unwrap();
         cargo([
             "install",
             "--version",
@@ -28,13 +38,15 @@ mod tests {
             "--bin",
             bin,
             "--locked",
+            "--root",
+            &CHISEL_BIN_CACHE.display().to_string(),
         ]);
     }
 
     #[test]
     fn eslint() {
-        run("npm", ["install"]);
-        run("npx", ["eslint", ".", "--ext", ".ts"]);
+        run("npm", ["install"], None);
+        run("npx", ["eslint", ".", "--ext", ".ts"], None);
     }
 
     fn get_deno_version() -> String {
@@ -54,8 +66,8 @@ mod tests {
         // because that always reinstall the binary.
         let version = get_deno_version();
         cargo_install(&version, "deno", "deno");
-        run("deno", ["lint", "--config", "deno.json"]);
-        run("deno", ["fmt", "--config", "deno.json", "--check"]);
+        run("deno", ["lint", "--config", "deno.json"], None);
+        run("deno", ["fmt", "--config", "deno.json", "--check"], None);
     }
 
     #[test]
