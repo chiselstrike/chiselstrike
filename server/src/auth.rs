@@ -5,21 +5,20 @@ use crate::datastore::engine::SqlWithArguments;
 use crate::datastore::query::SqlValue;
 use crate::deno::lookup_builtin_type;
 use crate::deno::query_engine_arc;
-use crate::types::{ObjectType, Type};
+use crate::types::{Entity, Type};
 use anyhow::Result;
 use deno_core::OpState;
 use sqlx::Row;
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::rc::Rc;
-use std::sync::Arc;
 
 pub(crate) const AUTH_USER_NAME: &str = "AuthUser";
 pub(crate) const AUTH_SESSION_NAME: &str = "AuthSession";
 pub(crate) const AUTH_TOKEN_NAME: &str = "AuthToken";
 pub(crate) const AUTH_ACCOUNT_NAME: &str = "AuthAccount";
 
-fn get_auth_user_type(state: &OpState) -> Result<Arc<ObjectType>> {
+fn get_auth_user_type(state: &OpState) -> Result<Entity> {
     match lookup_builtin_type(state, AUTH_USER_NAME) {
         Ok(Type::Entity(t)) => Ok(t),
         _ => anyhow::bail!("Internal error: type AuthUser not found"),

@@ -3,7 +3,7 @@
 use crate::auth::AUTH_USER_NAME;
 use crate::datastore::expr::{BinaryExpr, Expr, Literal, PropertyAccess};
 use crate::policies::{FieldPolicies, Policies};
-use crate::types::{Field, ObjectType, Type, TypeSystem};
+use crate::types::{Entity, Field, ObjectType, Type, TypeSystem};
 
 use anyhow::{anyhow, Context, Result};
 use enum_as_inner::EnumAsInner;
@@ -12,7 +12,6 @@ use serde_json::value::Value;
 use std::collections::HashMap;
 use std::collections::HashSet;
 use std::fmt;
-use std::sync::Arc;
 
 #[derive(Debug, Clone, EnumAsInner)]
 pub(crate) enum SqlValue {
@@ -101,7 +100,7 @@ pub(crate) struct QueriedEntity {
     /// Entity fields to be returned in JSON response
     pub(crate) fields: Vec<QueryField>,
     /// Type of the entity.
-    ty: Arc<ObjectType>,
+    ty: Entity,
     /// Alias name of this entity to be used in SQL query.
     table_alias: String,
     /// Map from Entity field name to joined Entities which correspond to the entities
@@ -204,7 +203,7 @@ pub(crate) enum TargetDatabase {
     Sqlite,
 }
 
-/// Class used to build `Query` from either QueryOpChain or `ObjectType`.
+/// Class used to build `Query` from either QueryOpChain or `Entity`.
 /// For the op chain, it recursively descends through selected fields and captures all
 /// joins necessary for nested types retrieval.
 /// When we are done with that, `build_query` can be called which creates a `Query`
@@ -226,7 +225,7 @@ pub(crate) struct QueryPlan {
 }
 
 impl QueryPlan {
-    fn new(base_type: Arc<ObjectType>) -> Self {
+    fn new(base_type: Entity) -> Self {
         Self {
             columns: vec![],
             entity: QueriedEntity {
@@ -241,14 +240,14 @@ impl QueryPlan {
         }
     }
 
-    fn base_type(&self) -> &Arc<ObjectType> {
+    fn base_type(&self) -> &Entity {
         &self.entity.ty
     }
 
     /// Constructs a query builder ready to build an expression querying all fields of a
     /// given type `ty`. This is done in a shallow manner. Columns representing foreign
     /// key are returned as string, not as the related Entity.
-    pub(crate) fn from_type(ty: &Arc<ObjectType>) -> Self {
+    pub(crate) fn from_type(ty: &Entity) -> Self {
         let mut builder = Self::new(ty.clone());
         for field in ty.all_fields() {
             let mut field = field.clone();
@@ -279,7 +278,7 @@ impl QueryPlan {
     /// `operators.
     pub(crate) fn from_ops(
         c: &RequestContext,
-        ty: &Arc<ObjectType>,
+        ty: &Entity,
         operators: Vec<QueryOp>,
     ) -> Result<Self> {
         let mut query_plan = Self::new(ty.clone());
@@ -340,7 +339,7 @@ impl QueryPlan {
 
     /// Prepares the retrieval of Entity of type `ty` from the database and
     /// ensures login restrictions are respected.
-    fn load_entity(&mut self, context: &RequestContext, ty: &Arc<ObjectType>) -> QueriedEntity {
+    fn load_entity(&mut self, context: &RequestContext, ty: &Entity) -> QueriedEntity {
         self.add_login_filters_recursive(context, ty, Expr::Parameter { position: 0 });
         self.load_entity_recursive(context, ty, ty.backing_table())
     }
@@ -351,7 +350,7 @@ impl QueryPlan {
     fn load_entity_recursive(
         &mut self,
         context: &RequestContext,
-        ty: &Arc<ObjectType>,
+        ty: &Entity,
         current_table: &str,
     ) -> QueriedEntity {
         let field_policies = context.make_field_policies(ty);
@@ -404,7 +403,7 @@ impl QueryPlan {
     fn add_login_filters_recursive(
         &mut self,
         context: &RequestContext,
-        ty: &Arc<ObjectType>,
+        ty: &Entity,
         property_chain: Expr,
     ) {
         let field_policies = context.make_field_policies(ty);
@@ -773,7 +772,7 @@ fn convert_ops(op: QueryOpChain) -> Result<(String, Vec<QueryOp>)> {
 
 /// `Mutation` represents a statement that mutates the database state.
 pub(crate) struct Mutation {
-    base_entity: Arc<ObjectType>,
+    base_entity: Entity,
     /// Query plan used to build mutation condition.
     filter_query_plan: QueryPlan,
 }
@@ -827,6 +826,7 @@ pub(crate) mod tests {
     use futures::StreamExt;
     use once_cell::sync::Lazy;
     use serde_json::json;
+    use std::sync::Arc;
     use tempfile::NamedTempFile;
 
     use crate::datastore::expr::BinaryOp;
@@ -849,7 +849,7 @@ pub(crate) mod tests {
         BinaryExpr::new(op, field_chain, literal.into()).into()
     }
 
-    pub(crate) fn make_type_system(entities: &[Arc<ObjectType>]) -> TypeSystem {
+    pub(crate) fn make_type_system(entities: &[Entity]) -> TypeSystem {
         let mut ts = TypeSystem::default();
         for ty in entities {
             ts.add_type(ty.clone()).unwrap();
@@ -857,9 +857,11 @@ pub(crate) mod tests {
         ts
     }
 
-    pub(crate) fn make_object(name: &str, fields: Vec<Field>) -> Arc<ObjectType> {
+    pub(crate) fn make_entity(name: &str, fields: Vec<Field>) -> Entity {
         let desc = types::NewObject::new(name, VERSION);
-        Arc::new(ObjectType::new(desc, fields, vec![], types::AuthOrNot::IsNotAuth).unwrap())
+        Entity::Custom(Arc::new(
+            ObjectType::new(desc, fields, vec![], types::AuthOrNot::IsNotAuth).unwrap(),
+        ))
     }
 
     pub(crate) fn make_field(name: &str, ty: Type) -> Field {
@@ -874,7 +876,7 @@ pub(crate) mod tests {
         query_engine
     }
 
-    async fn init_database(query_engine: &QueryEngine, entities: &[Arc<ObjectType>]) {
+    async fn init_database(query_engine: &QueryEngine, entities: &[Entity]) {
         let mut tr = query_engine.start_transaction().await.unwrap();
         for entity in entities {
             query_engine.create_table(&mut tr, entity).await.unwrap();
@@ -882,9 +884,7 @@ pub(crate) mod tests {
         QueryEngine::commit_transaction(tr).await.unwrap();
     }
 
-    pub(crate) async fn setup_clear_db(
-        entities: &[Arc<ObjectType>],
-    ) -> (QueryEngine, NamedTempFile) {
+    pub(crate) async fn setup_clear_db(entities: &[Entity]) -> (QueryEngine, NamedTempFile) {
         let db_file = NamedTempFile::new().unwrap();
         let qe = init_query_engine(&db_file).await;
         init_database(&qe, entities).await;
@@ -893,7 +893,7 @@ pub(crate) mod tests {
 
     pub(crate) async fn add_row(
         query_engine: &QueryEngine,
-        entity: &Arc<ObjectType>,
+        entity: &Entity,
         values: &serde_json::Value,
     ) {
         let ins_row = values.as_object().unwrap();
@@ -910,7 +910,7 @@ pub(crate) mod tests {
         }));
     }
 
-    pub(crate) async fn fetch_rows(qe: &QueryEngine, entity: &Arc<ObjectType>) -> Vec<JsonObject> {
+    pub(crate) async fn fetch_rows(qe: &QueryEngine, entity: &Entity) -> Vec<JsonObject> {
         let query_plan = QueryPlan::from_type(entity);
         fetch_rows_with_plan(qe, query_plan).await
     }
@@ -926,8 +926,8 @@ pub(crate) mod tests {
             .await
     }
 
-    static PERSON_TY: Lazy<Arc<ObjectType>> = Lazy::new(|| {
-        make_object(
+    static PERSON_TY: Lazy<Entity> = Lazy::new(|| {
+        make_entity(
             "Person",
             vec![
                 make_field("name", Type::String),
@@ -936,17 +936,16 @@ pub(crate) mod tests {
         )
     });
 
-    static COMPANY_TY: Lazy<Arc<ObjectType>> = Lazy::new(|| {
-        make_object(
+    static COMPANY_TY: Lazy<Entity> = Lazy::new(|| {
+        make_entity(
             "Company",
             vec![
                 make_field("name", Type::String),
-                make_field("ceo", Type::Entity(PERSON_TY.clone())),
+                make_field("ceo", PERSON_TY.clone().into()),
             ],
         )
     });
-    static ENTITIES: Lazy<[Arc<ObjectType>; 2]> =
-        Lazy::new(|| [PERSON_TY.clone(), COMPANY_TY.clone()]);
+    static ENTITIES: Lazy<[Entity; 2]> = Lazy::new(|| [PERSON_TY.clone(), COMPANY_TY.clone()]);
 
     #[tokio::test]
     async fn test_query_plan() {

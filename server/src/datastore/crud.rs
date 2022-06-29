@@ -1,7 +1,7 @@
 use crate::datastore::engine::{QueryEngine, TransactionStatic};
 use crate::datastore::expr::{BinaryExpr, BinaryOp, Expr, Literal, PropertyAccess};
 use crate::datastore::query::{Mutation, QueryOp, QueryPlan, RequestContext, SortBy, SortKey};
-use crate::types::{ObjectType, Type};
+use crate::types::{Entity, Type};
 use crate::JsonObject;
 use anyhow::{Context, Result};
 use deno_core::futures;
@@ -219,7 +219,7 @@ impl Query {
     }
 
     /// Parses provided `url` and builds a `Query` that can be used to build a `QueryPlan`.
-    fn from_url(base_type: &Arc<ObjectType>, url: &Url) -> Result<Self> {
+    fn from_url(base_type: &Entity, url: &Url) -> Result<Self> {
         let mut q = Query::new();
         for (param_key, value) in url.query_pairs().into_owned() {
             match param_key.as_str() {
@@ -353,7 +353,7 @@ impl Cursor {
     /// The crux of this function is using the sort axes (each axis represents one dimension
     /// in lexicographical sort) to create a filter that filters for entries that are after
     /// the last element in the given sort.
-    fn get_filter(&self, base_type: &Arc<ObjectType>) -> Result<Expr> {
+    fn get_filter(&self, base_type: &Entity) -> Result<Expr> {
         let mut cmp_pairs: Vec<(Expr, BinaryOp, Expr)> = vec![];
         for axis in &self.axes {
             let op = if axis.key.ascending == self.forward {
@@ -415,7 +415,7 @@ fn json_to_literal(field_type: &Type, value: &serde_json::Value) -> Result<Expr>
 }
 
 /// Parses all CRUD query-string filters over `base_type` from provided `url`.
-fn url_to_filter(base_type: &Arc<ObjectType>, url: &str) -> Result<Option<Expr>> {
+fn url_to_filter(base_type: &Entity, url: &str) -> Result<Option<Expr>> {
     let mut filter = None;
     let q = Url::parse(url).with_context(|| format!("failed to parse query string '{}'", url))?;
     for (param_key, value) in q.query_pairs().into_owned() {
@@ -432,7 +432,7 @@ fn url_to_filter(base_type: &Arc<ObjectType>, url: &str) -> Result<Option<Expr>>
     Ok(filter)
 }
 
-fn parse_sort(base_type: &Arc<ObjectType>, value: &str) -> Result<SortBy> {
+fn parse_sort(base_type: &Entity, value: &str) -> Result<SortBy> {
     let mut ascending = true;
     let field_name = if let Some(suffix) = value.strip_prefix(&['-', '+']) {
         if value.starts_with('-') {
@@ -457,7 +457,7 @@ fn parse_sort(base_type: &Arc<ObjectType>, value: &str) -> Result<SortBy> {
 }
 
 /// Constructs results filter by parsing query string's `param_key` and `value`.
-fn filter_from_param(base_type: &Arc<ObjectType>, param_key: &str, value: &str) -> Result<Expr> {
+fn filter_from_param(base_type: &Entity, param_key: &str, value: &str) -> Result<Expr> {
     let tokens: Vec<_> = param_key.split('~').collect();
     anyhow::ensure!(
         tokens.len() <= 2,
@@ -487,13 +487,13 @@ fn filter_from_param(base_type: &Arc<ObjectType>, param_key: &str, value: &str) 
 
 /// Converts `fields` of `base_type` into PropertyAccess expression while ensuring that
 /// provided fields are, in fact, applicable to `base_type`.
-fn make_property_chain(base_type: &Arc<ObjectType>, fields: &[&str]) -> Result<(Expr, Type)> {
+fn make_property_chain(base_type: &Entity, fields: &[&str]) -> Result<(Expr, Type)> {
     anyhow::ensure!(
         !fields.is_empty(),
         "cannot make property chain from no fields"
     );
     let mut property_chain = Expr::Parameter { position: 0 };
-    let mut last_type = Type::Entity(base_type.clone());
+    let mut last_type: Type = base_type.clone().into();
     for &field_str in fields {
         if let Type::Entity(entity) = last_type {
             if let Some(field) = entity.get_field(field_str) {
@@ -562,7 +562,7 @@ mod tests {
     use super::*;
     use crate::datastore::engine::QueryEngine;
     use crate::datastore::query::tests::{
-        add_row, binary, fetch_rows, make_field, make_object, make_type_system, setup_clear_db,
+        add_row, binary, fetch_rows, make_entity, make_field, make_type_system, setup_clear_db,
         VERSION,
     };
     use crate::policies::Policies;
@@ -617,8 +617,8 @@ mod tests {
         Url::parse(&format!("http://xxx?{}", query_string)).unwrap()
     }
 
-    static PERSON_TY: Lazy<Arc<ObjectType>> = Lazy::new(|| {
-        make_object(
+    static PERSON_TY: Lazy<Entity> = Lazy::new(|| {
+        make_entity(
             "Person",
             vec![
                 make_field("name", Type::String),
@@ -626,17 +626,16 @@ mod tests {
             ],
         )
     });
-    static COMPANY_TY: Lazy<Arc<ObjectType>> = Lazy::new(|| {
-        make_object(
+    static COMPANY_TY: Lazy<Entity> = Lazy::new(|| {
+        make_entity(
             "Company",
             vec![
                 make_field("name", Type::String),
-                make_field("ceo", Type::Entity(PERSON_TY.clone())),
+                make_field("ceo", PERSON_TY.clone().into()),
             ],
         )
     });
-    static ENTITIES: Lazy<[Arc<ObjectType>; 2]> =
-        Lazy::new(|| [PERSON_TY.clone(), COMPANY_TY.clone()]);
+    static ENTITIES: Lazy<[Entity; 2]> = Lazy::new(|| [PERSON_TY.clone(), COMPANY_TY.clone()]);
 
     #[test]
     fn test_replace_host_address() {
@@ -685,20 +684,20 @@ mod tests {
 
     #[test]
     fn test_parse_filter() {
-        let person_type = make_object(
+        let person_type = make_entity(
             "Person",
             vec![
                 make_field("name", Type::String),
                 make_field("age", Type::Float),
             ],
         );
-        let base_type = make_object(
+        let base_type = make_entity(
             "Company",
             vec![
                 make_field("name", Type::String),
                 make_field("traded", Type::Boolean),
                 make_field("employee_count", Type::Float),
-                make_field("ceo", Type::Entity(person_type)),
+                make_field("ceo", person_type.into()),
             ],
         );
         let filter_expr =

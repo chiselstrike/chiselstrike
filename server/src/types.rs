@@ -9,19 +9,22 @@ use deno_core::futures;
 use derive_new::new;
 use futures::StreamExt;
 use std::collections::{BTreeMap, HashMap};
+use std::ops::Deref;
 use std::sync::Arc;
 use uuid::Uuid;
 
 #[derive(thiserror::Error, Debug)]
 pub(crate) enum TypeSystemError {
     #[error["type already exists"]]
-    TypeAlreadyExists(Arc<ObjectType>),
+    CustomTypeExists(Entity),
     #[error["no such type: {0}"]]
     NoSuchType(String),
     #[error["no such API version: {0}"]]
     NoSuchVersion(String),
     #[error["builtin type expected, got `{0}` instead"]]
     NotABuiltinType(String),
+    #[error["user defined custom type expected, got `{0}` instead"]]
+    NotACustomType(String),
     #[error["unsafe to replace type: {0}. Reason: {1}"]]
     UnsafeReplacement(String, String),
     #[error["Error while trying to manipulate types: {0}"]]
@@ -31,7 +34,7 @@ pub(crate) enum TypeSystemError {
 #[derive(Debug, Default, Clone, new)]
 pub(crate) struct VersionTypes {
     #[new(default)]
-    pub(crate) custom_types: HashMap<String, Arc<ObjectType>>,
+    pub(crate) custom_types: HashMap<String, Entity>,
 }
 
 #[derive(Debug, Clone)]
@@ -41,19 +44,19 @@ pub(crate) struct TypeSystem {
 }
 
 impl VersionTypes {
-    pub(crate) fn lookup_custom_type(
-        &self,
-        type_name: &str,
-    ) -> Result<Arc<ObjectType>, TypeSystemError> {
+    pub(crate) fn lookup_custom_type(&self, type_name: &str) -> Result<Entity, TypeSystemError> {
         match self.custom_types.get(type_name) {
             Some(ty) => Ok(ty.to_owned()),
             None => Err(TypeSystemError::NoSuchType(type_name.to_owned())),
         }
     }
 
-    fn add_type(&mut self, ty: Arc<ObjectType>) -> Result<(), TypeSystemError> {
+    fn add_type(&mut self, ty: Entity) -> Result<(), TypeSystemError> {
+        if let Entity::Auth(_) = ty {
+            return Err(TypeSystemError::NotACustomType(ty.name().into()));
+        }
         match self.lookup_custom_type(&ty.name) {
-            Ok(old) => Err(TypeSystemError::TypeAlreadyExists(old)),
+            Ok(old) => Err(TypeSystemError::CustomTypeExists(old)),
             Err(TypeSystemError::NoSuchType(_)) => Ok(()),
             Err(x) => Err(x),
         }?;
@@ -202,8 +205,9 @@ impl TypeSystem {
     ///
     /// # Errors
     ///
-    /// If type `ty` already exists in the type system, the function returns `TypeSystemError`.
-    pub(crate) fn add_type(&mut self, ty: Arc<ObjectType>) -> Result<(), TypeSystemError> {
+    /// If type `ty` already exists in the type system isn't Entity::Custom type,
+    /// the function returns `TypeSystemError`.
+    pub(crate) fn add_type(&mut self, ty: Entity) -> Result<(), TypeSystemError> {
         let version = self.get_version_mut(&ty.api_version);
         version.add_type(ty)
     }
@@ -358,7 +362,7 @@ impl TypeSystem {
         &self,
         type_name: &str,
         api_version: &str,
-    ) -> Result<Arc<ObjectType>, TypeSystemError> {
+    ) -> Result<Entity, TypeSystemError> {
         let version = self.get_version(api_version)?;
         version.lookup_custom_type(type_name)
     }
@@ -386,7 +390,7 @@ impl TypeSystem {
         } else {
             let version = self.get_version(api_version)?;
             if let Ok(ty) = version.lookup_custom_type(type_name) {
-                Ok(Type::Entity(ty))
+                Ok(ty.into())
             } else {
                 Err(TypeSystemError::NoSuchType(type_name.to_owned()))
             }
@@ -394,8 +398,8 @@ impl TypeSystem {
     }
 
     /// Tries to lookup a type of name `type_name` of version `api_version` that
-    /// is an Entity. That means it's either a built-in object type like
-    /// `AuthUser` or a user-defined entity object.
+    /// is an Entity. That means it's either a built-in Entity::Auth type like
+    /// `AuthUser` or a Entity::Custom.
     ///
     /// # Errors
     ///
@@ -404,7 +408,7 @@ impl TypeSystem {
         &self,
         type_name: &str,
         api_version: &str,
-    ) -> Result<Arc<ObjectType>, TypeSystemError> {
+    ) -> Result<Entity, TypeSystemError> {
         match self.lookup_builtin_type(type_name) {
             Ok(Type::Entity(ty)) => Ok(ty),
             Err(TypeSystemError::NotABuiltinType(_)) => {
@@ -477,9 +481,10 @@ impl TypeSystem {
                 name: type_name,
                 backing_table: backing_table_name,
             };
-            Type::Entity(Arc::new(
+            Entity::Auth(Arc::new(
                 ObjectType::new(desc, fields, vec![], is_auth).unwrap(),
             ))
+            .into()
         });
     }
 }
@@ -490,17 +495,39 @@ pub(crate) enum Type {
     Float,
     Boolean,
     Id,
-    Entity(Arc<ObjectType>),
+    Entity(Entity),
 }
 
 impl Type {
     pub(crate) fn name(&self) -> &str {
         match self {
             Type::Float => "number",
-            Type::Id => "string",
-            Type::String => "string",
+            Type::String | Type::Id => "string",
             Type::Boolean => "boolean",
             Type::Entity(ty) => &ty.name,
+        }
+    }
+}
+
+impl From<Entity> for Type {
+    fn from(entity: Entity) -> Self {
+        Type::Entity(entity)
+    }
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) enum Entity {
+    /// User defined Custom entity.
+    Custom(Arc<ObjectType>),
+    /// Built-in Auth entity.
+    Auth(Arc<ObjectType>),
+}
+
+impl Deref for Entity {
+    type Target = ObjectType;
+    fn deref(&self) -> &Self::Target {
+        match self {
+            Self::Custom(obj) | Self::Auth(obj) => obj,
         }
     }
 }

@@ -15,7 +15,7 @@ use crate::server::CommandTrait;
 use crate::server::CoordinatorChannel;
 use crate::types::AuthOrNot::IsNotAuth;
 use crate::types::{
-    DbIndex, Field, NewField, NewObject, ObjectType, Type, TypeSystem, TypeSystemError,
+    DbIndex, Entity, Field, NewField, NewObject, ObjectType, Type, TypeSystem, TypeSystemError,
 };
 use anyhow::{Context, Result};
 use async_lock::Mutex;
@@ -153,8 +153,7 @@ impl RpcService {
         state.versions.remove(&api_version);
 
         let version_types = state.type_system.get_version(&api_version)?;
-        let to_remove: Vec<&Arc<ObjectType>> =
-            version_types.custom_types.iter().map(|x| x.1).collect();
+        let to_remove: Vec<&Entity> = version_types.custom_types.iter().map(|x| x.1).collect();
 
         let meta = &state.meta;
         let mut transaction = meta.start_transaction().await?;
@@ -322,7 +321,7 @@ or
         }
 
         let mut decorators = BTreeSet::default();
-        let mut new_types = HashMap::<String, Arc<ObjectType>>::default();
+        let mut new_types = HashMap::<String, Entity>::default();
         let indexes = Self::aggregate_indexes(&apply_request.index_candidates);
 
         // No changes are made to the type system in this loop. We re-read the database after we
@@ -367,7 +366,7 @@ or
                 ty_indexes,
                 IsNotAuth,
             )?);
-            new_types.insert(name.to_owned(), ty.clone());
+            new_types.insert(name.to_owned(), Entity::Custom(ty.clone()));
 
             match version_types.lookup_custom_type(&name) {
                 Ok(old_type) => {
