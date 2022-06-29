@@ -13,7 +13,6 @@ use crate::prefix_map::PrefixMap;
 use crate::runtime;
 use crate::server::CommandTrait;
 use crate::server::CoordinatorChannel;
-use crate::types::AuthOrNot::IsNotAuth;
 use crate::types::{
     DbIndex, Entity, Field, NewField, NewObject, ObjectType, Type, TypeSystem, TypeSystemError,
 };
@@ -364,7 +363,6 @@ or
                 NewObject::new(&name, &api_version),
                 fields,
                 ty_indexes,
-                IsNotAuth,
             )?);
             new_types.insert(name.to_owned(), Entity::Custom(ty.clone()));
 

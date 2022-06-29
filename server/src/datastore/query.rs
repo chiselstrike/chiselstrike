@@ -859,9 +859,7 @@ pub(crate) mod tests {
 
     pub(crate) fn make_entity(name: &str, fields: Vec<Field>) -> Entity {
         let desc = types::NewObject::new(name, VERSION);
-        Entity::Custom(Arc::new(
-            ObjectType::new(desc, fields, vec![], types::AuthOrNot::IsNotAuth).unwrap(),
-        ))
+        Entity::Custom(Arc::new(ObjectType::new(desc, fields, vec![]).unwrap()))
     }
 
     pub(crate) fn make_field(name: &str, ty: Type) -> Field {

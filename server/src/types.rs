@@ -475,10 +475,7 @@ impl TypeSystem {
                 name: type_name,
                 backing_table: backing_table_name,
             };
-            Entity::Auth(Arc::new(
-                ObjectType::new(desc, fields, vec![], AuthOrNot::IsAuth).unwrap(),
-            ))
-            .into()
+            Entity::Auth(Arc::new(ObjectType::new(desc, fields, vec![]).unwrap())).into()
         });
     }
 }
@@ -515,6 +512,13 @@ pub(crate) enum Entity {
     Custom(Arc<ObjectType>),
     /// Built-in Auth entity.
     Auth(Arc<ObjectType>),
+}
+
+impl Entity {
+    /// Checks whether `Entity` is Auth builtin type.
+    pub(crate) fn is_auth(&self) -> bool {
+        matches!(self, Entity::Auth(_))
+    }
 }
 
 impl Deref for Entity {
@@ -667,13 +671,6 @@ impl<'a> ObjectDescriptor for NewObject<'a> {
     }
 }
 
-/// Whether a type is used in authentication.
-#[derive(Debug)]
-pub(crate) enum AuthOrNot {
-    IsAuth,
-    IsNotAuth,
-}
-
 #[derive(Debug)]
 pub(crate) struct ObjectType {
     /// id of this object in the meta-database. Will be None for objects that are not persisted yet
@@ -688,7 +685,6 @@ pub(crate) struct ObjectType {
     chisel_id: Field,
     /// Name of the backing table for this type.
     backing_table: String,
-    is_auth: AuthOrNot,
 
     pub(crate) api_version: String,
 }
@@ -698,7 +694,6 @@ impl ObjectType {
         desc: D,
         fields: Vec<Field>,
         indexes: Vec<DbIndex>,
-        is_auth: AuthOrNot,
     ) -> anyhow::Result<Self> {
         let backing_table = desc.backing_table();
         let api_version = desc.api_version();
@@ -740,7 +735,6 @@ impl ObjectType {
             fields,
             indexes,
             chisel_id,
-            is_auth,
         })
     }
 
@@ -776,13 +770,6 @@ impl ObjectType {
         let source_map: FieldMap<'_> = source_type.into();
         let to_map: FieldMap<'_> = self.into();
         to_map.check_populate_from(&source_map)
-    }
-
-    pub(crate) fn is_auth(&self) -> bool {
-        match self.is_auth {
-            AuthOrNot::IsAuth => true,
-            AuthOrNot::IsNotAuth => false,
-        }
     }
 
     pub(crate) fn indexes(&self) -> &Vec<DbIndex> {
