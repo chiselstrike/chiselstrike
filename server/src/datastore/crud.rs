@@ -38,7 +38,7 @@ fn run_query_impl(
     let host = context.headers.get("host").cloned();
     let base_type = &context
         .ts
-        .lookup_object_type(&params.type_name, &context.api_version)
+        .lookup_entity(&params.type_name, &context.api_version)
         .context("unexpected type name as crud query base type")?;
 
     let query = Query::from_url(base_type, &params.url)?;

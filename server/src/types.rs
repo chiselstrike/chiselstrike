@@ -394,13 +394,13 @@ impl TypeSystem {
     }
 
     /// Tries to lookup a type of name `type_name` of version `api_version` that
-    /// is an object. That means it's either a built-in object type like
+    /// is an Entity. That means it's either a built-in object type like
     /// `AuthUser` or a user-defined entity object.
     ///
     /// # Errors
     ///
     /// If the looked up type does not exists, the function returns a `NoSuchType`.
-    pub(crate) fn lookup_object_type(
+    pub(crate) fn lookup_entity(
         &self,
         type_name: &str,
         api_version: &str,
