@@ -51,7 +51,7 @@ impl VersionTypes {
         }
     }
 
-    fn add_type(&mut self, ty: Entity) -> Result<(), TypeSystemError> {
+    fn add_custom_type(&mut self, ty: Entity) -> Result<(), TypeSystemError> {
         if let Entity::Auth(_) = ty {
             return Err(TypeSystemError::NotACustomType(ty.name().into()));
         }
@@ -207,9 +207,9 @@ impl TypeSystem {
     ///
     /// If type `ty` already exists in the type system isn't Entity::Custom type,
     /// the function returns `TypeSystemError`.
-    pub(crate) fn add_type(&mut self, ty: Entity) -> Result<(), TypeSystemError> {
+    pub(crate) fn add_custom_type(&mut self, ty: Entity) -> Result<(), TypeSystemError> {
         let version = self.get_version_mut(&ty.api_version);
-        version.add_type(ty)
+        version.add_custom_type(ty)
     }
 
     /// Generate an [`ObjectDelta`] with the necessary information to evolve a specific type.

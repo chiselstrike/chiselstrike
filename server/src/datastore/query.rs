@@ -852,7 +852,7 @@ pub(crate) mod tests {
     pub(crate) fn make_type_system(entities: &[Entity]) -> TypeSystem {
         let mut ts = TypeSystem::default();
         for ty in entities {
-            ts.add_type(ty.clone()).unwrap();
+            ts.add_custom_type(ty.clone()).unwrap();
         }
         ts
     }

@@ -519,7 +519,7 @@ impl MetaService {
             let indexes = self.load_type_indexes(type_id, backing_table).await?;
 
             let ty = ObjectType::new(desc, fields, indexes, IsNotAuth)?;
-            ts.add_type(Entity::Custom(Arc::new(ty)))?;
+            ts.add_custom_type(Entity::Custom(Arc::new(ty)))?;
         }
         Ok(ts)
     }
