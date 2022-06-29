@@ -3,7 +3,6 @@
 use crate::auth::{AUTH_ACCOUNT_NAME, AUTH_SESSION_NAME, AUTH_TOKEN_NAME, AUTH_USER_NAME};
 use crate::datastore::query::{truncate_identifier, QueryPlan};
 use crate::datastore::QueryEngine;
-use crate::types::AuthOrNot::IsAuth;
 use anyhow::Context;
 use deno_core::futures;
 use derive_new::new;
@@ -108,7 +107,7 @@ impl Default for TypeSystem {
         ts.builtin_types.insert("string".into(), Type::String);
         ts.builtin_types.insert("number".into(), Type::Float);
         ts.builtin_types.insert("boolean".into(), Type::Boolean);
-        ts.add_builtin_object_type(
+        ts.add_auth_entity(
             AUTH_USER_NAME,
             vec![
                 optional_string_field("emailVerified"),
@@ -117,9 +116,8 @@ impl Default for TypeSystem {
                 optional_string_field("image"),
             ],
             "auth_user",
-            IsAuth,
         );
-        ts.add_builtin_object_type(
+        ts.add_auth_entity(
             AUTH_SESSION_NAME,
             vec![
                 string_field("sessionToken"),
@@ -127,9 +125,8 @@ impl Default for TypeSystem {
                 string_field("expires"),
             ],
             "auth_session",
-            IsAuth,
         );
-        ts.add_builtin_object_type(
+        ts.add_auth_entity(
             AUTH_TOKEN_NAME,
             vec![
                 string_field("identifier"),
@@ -137,9 +134,8 @@ impl Default for TypeSystem {
                 string_field("token"),
             ],
             "auth_token",
-            IsAuth,
         );
-        ts.add_builtin_object_type(
+        ts.add_auth_entity(
             AUTH_ACCOUNT_NAME,
             vec![
                 string_field("providerAccountId"),
@@ -157,7 +153,6 @@ impl Default for TypeSystem {
                 optional_number_field("expires_at"),
             ],
             "auth_account",
-            IsAuth,
         );
 
         ts
@@ -469,12 +464,11 @@ impl TypeSystem {
         Ok(())
     }
 
-    fn add_builtin_object_type(
+    fn add_auth_entity(
         &mut self,
         type_name: &'static str,
         fields: Vec<Field>,
         backing_table_name: &'static str,
-        is_auth: AuthOrNot,
     ) {
         self.builtin_types.insert(type_name.into(), {
             let desc = InternalObject {
@@ -482,7 +476,7 @@ impl TypeSystem {
                 backing_table: backing_table_name,
             };
             Entity::Auth(Arc::new(
-                ObjectType::new(desc, fields, vec![], is_auth).unwrap(),
+                ObjectType::new(desc, fields, vec![], AuthOrNot::IsAuth).unwrap(),
             ))
             .into()
         });
