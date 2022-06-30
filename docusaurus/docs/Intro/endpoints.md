@@ -14,7 +14,7 @@ with either `{"data": VALUE}` or `{"error": "message"}` depending on the result.
 
 ```typescript title="my-backend/endpoints/comments-readonly.ts"
 import { crud, standardCRUDMethods, responseFromJson } from "@chiselstrike/api";
-import { BlogComment } from "../models/BlogComment.ts";
+import { BlogComment } from "../models/BlogComment";
 export default crud(
     BlogComment,
     ":id", /* :id can be explicitly provided */
@@ -57,8 +57,8 @@ they happen under `PUT`, `POST`, or `DELETE`!
 Now let's edit our endpoint's code to show off a "full customization" example.
 
 ```typescript title="my-backend/endpoints/comments.ts"
-import { responseFromJson } from "@chiselstrike/api"
-import { BlogComment } from "../models/BlogComment.ts"
+import { ChiselRequest, responseFromJson } from "@chiselstrike/api"
+import { BlogComment } from "../models/BlogComment"
 
 export default async function chisel(req: ChiselRequest) {
     if (req.method == 'POST') {
