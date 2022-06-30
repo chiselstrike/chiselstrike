@@ -164,14 +164,11 @@ fn validate_type_vec(type_vec: &[AddTypeRequest], valid_types: &BTreeSet<String>
 }
 
 fn parse_class_prop(x: &ClassProp, class_name: &str, handler: &Handler) -> Result<FieldDefinition> {
-    let (default_value, field_type) = match get_field_value(handler, &x.value)? {
-        None => (None, get_field_type(handler, &x.type_ann)?),
-        Some((val, t)) => (Some(val), t),
-    };
     let (field_name, is_optional) = get_field_info(handler, &x.key)?;
-
     anyhow::ensure!(field_name != "id", "Creating a field with the name `id` is not supported. 😟\nBut don't worry! ChiselStrike creates an id field automatically, and you can access it in your endpoints as {}.id 🤩", class_name);
 
+    let default_value = get_field_value(handler, &x.value)?.map(|(v, _)| v);
+    let field_type = get_field_type(handler, &x.type_ann)?;
     let (labels, is_unique) = get_type_decorators(handler, &x.decorators)?;
 
     Ok(FieldDefinition {
