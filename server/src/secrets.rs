@@ -15,6 +15,13 @@ use std::str;
 
 type RsaPayload = String;
 
+/// Represents an AES encrypted payload.
+///
+/// The secret is encrypted using a AES symmetric key K, and a nonce N. K and N and then encrypted
+/// using the instance public RSA key, and added to the payload (key, and nonce fields).
+///
+/// The secret can be decrypted by first decrypting the key and the nonce using the instance
+/// private RSA key, and then using the decrypted K and N to decrypt secret.
 #[derive(Deserialize, Debug)]
 struct AesPayload {
     #[serde(with = "serde_base64")]
@@ -28,16 +35,16 @@ struct AesPayload {
 #[derive(Deserialize, Debug)]
 #[serde(tag = "version")]
 enum Payload {
-    V0 {
-        secret: RsaPayload,
-    },
+    /// The V0 of the secrets is comprised of an RSA encrypted map of secrets.
+    V0 { secret: RsaPayload },
+    /// The V1 of the secrets is comprised of an AES encrypted map of secrets.
     V1 {
         #[serde(flatten)]
         inner: AesPayload,
     },
-    V2 {
-        secret: HashMap<String, AesPayload>,
-    },
+    /// The V2 of the secrets encrypts each secret independantly with AES. The map `secret` is an
+    /// association of the secret name and the encrypted AES payload.
+    V2 { secret: HashMap<String, AesPayload> },
 }
 
 mod serde_base64 {
@@ -105,7 +112,7 @@ pub(crate) async fn get_private_key() -> Result<Option<RsaPrivateKey>> {
 
     let pem = read_url(&url).await?;
 
-    parse_rsa_key(&pem).with_context(|| format!("Could not read private key at {}", url))
+    parse_rsa_key(&pem).with_context(|| format!("Could not read private key at {url}"))
 }
 
 fn parse_rsa_key(pem: &str) -> Result<Option<RsaPrivateKey>> {
