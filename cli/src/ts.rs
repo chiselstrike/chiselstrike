@@ -51,10 +51,6 @@ fn type_to_string(handler: &Handler, x: &TsType) -> Result<String> {
             TsEntityName::Ident(id) => Ok(ident_to_string(id)),
             TsEntityName::TsQualifiedName(_) => Err(anyhow!("qualified names not supported")),
         },
-        TsType::TsArrayType(arr) => {
-            Ok("Array[".to_string() + &type_to_string(handler, &arr.elem_type)? + "]")
-        }
-        TsType::TsOptionalType(opt) => Ok(type_to_string(handler, &opt.type_ann)? + "?"),
         t => Err(swc_err(handler, t, "type not supported")),
     }
 }
