@@ -391,13 +391,12 @@ impl Compiler {
             let emit_declarations = v8::Boolean::new(scope, opts.emit_declarations).into();
             let is_worker = v8::Boolean::new(scope, opts.is_worker).into();
 
-            let urls = vec![v8::String::new(scope, ROOT_URL).unwrap().into()];
-            let urls = v8::Array::new_with_elements(scope, &urls).into();
+            let root = v8::String::new(scope, ROOT_URL).unwrap().into();
             compile
                 .call(
                     scope,
                     global_proxy.into(),
-                    &[urls, is_worker, lib, emit_declarations],
+                    &[root, is_worker, lib, emit_declarations],
                 )
                 .unwrap();
         }
