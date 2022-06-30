@@ -13,7 +13,6 @@ use std::env;
 use std::fs;
 use std::io::ErrorKind;
 use std::path::Path;
-use std::net::SocketAddr;
 use structopt::StructOpt;
 
 mod chisel;
@@ -79,10 +78,8 @@ enum Command {
         auto_index: bool,
     },
     /// Start the ChiselStrike server.
-    Start {
-        #[structopt(short, long, default_value="127.0.0.1:9090")]
-        internal_routes_listen_addr: SocketAddr
-    },
+    #[structopt(external_subcommand)]
+    Start(Vec<String>),
     /// Show ChiselStrike server status.
     Status,
     /// Restart the running ChiselStrike server.
