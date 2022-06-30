@@ -7,7 +7,9 @@ mkdir -p "$TEMPDIR/endpoints/a/b/c"
 cp examples/find.ts "$TEMPDIR/endpoints"
 cp examples/find.ts "$TEMPDIR/endpoints/a/b/c/findc1.ts"
 cp examples/find.ts "$TEMPDIR/endpoints/a/b/c/findc2.ts"
-sed -i 's|../models/person.ts|../../../../models/person.ts|' "$TEMPDIR/endpoints/a/b/c/findc1.ts" "$TEMPDIR/endpoints/a/b/c/findc2.ts"
+
+echo "$(sed 's|../models/person.ts|../../../../models/person.ts|' "$TEMPDIR/endpoints/a/b/c/findc1.ts")" > "$TEMPDIR/endpoints/a/b/c/findc1.ts"
+echo "$(sed 's|../models/person.ts|../../../../models/person.ts|' "$TEMPDIR/endpoints/a/b/c/findc2.ts")" > "$TEMPDIR/endpoints/a/b/c/findc2.ts"
 
 cat << EOF > "$TEMPDIR/policies/pol.yaml"
 endpoints:
