@@ -78,7 +78,8 @@ enum Command {
         auto_index: bool,
     },
     /// Start the ChiselStrike server.
-    Start,
+    #[structopt(external_subcommand)]
+    Start(Vec<String>),
     /// Show ChiselStrike server status.
     Status,
     /// Restart the running ChiselStrike server.
@@ -252,7 +253,7 @@ async fn main() -> Result<()> {
             };
             create_project(path, opts)?;
         }
-        Command::Start => {
+        Command::Start { .. } => {
             let mut server = start_server()?;
             wait(server_url).await?;
             server.wait()?;
