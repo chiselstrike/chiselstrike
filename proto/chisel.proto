@@ -34,11 +34,20 @@ message TypeDefinition {
 
 message FieldDefinition {
   string name = 1;
-  string field_type = 2;
+  TypeMsg field_type = 2;
   repeated string labels = 3;
   bool is_optional = 4;
   optional string default_value = 5;
   bool is_unique = 6;
+}
+
+message TypeMsg {
+  oneof type_enum {
+    bool string = 1;
+    bool number = 2;
+    bool bool = 3;
+    string entity = 4;
+  };
 }
 
 message EndpointDefinition {

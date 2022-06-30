@@ -1,7 +1,8 @@
-use crate::chisel::{AddTypeRequest, FieldDefinition};
+use crate::chisel::{type_msg::TypeEnum, AddTypeRequest, FieldDefinition, TypeMsg};
 use anyhow::{anyhow, bail, ensure, Context, Result};
 use chisel_server::auth::is_auth_entity_name;
 use std::collections::BTreeSet;
+use std::fmt;
 use std::path::Path;
 use swc_common::sync::Lrc;
 use swc_common::{
@@ -16,6 +17,29 @@ use swc_ecma_ast::{
 use swc_ecma_parser::{lexer::Lexer, Parser, StringInput, Syntax, TsConfig};
 use swc_ecmascript::ast as swc_ecma_ast;
 use swc_ecmascript::parser as swc_ecma_parser;
+
+impl FieldDefinition {
+    pub(crate) fn field_type(&self) -> Result<&TypeEnum> {
+        self.field_type
+            .as_ref()
+            .with_context(|| format!("field_type of field '{}' is None", self.name))?
+            .type_enum
+            .as_ref()
+            .with_context(|| format!("type_enum of field '{}' is None", self.name))
+    }
+}
+
+impl fmt::Display for TypeEnum {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let s = match self {
+            TypeEnum::String(_) => "string".to_string(),
+            TypeEnum::Number(_) => "number".to_string(),
+            TypeEnum::Bool(_) => "bool".to_string(),
+            TypeEnum::Entity(name) => name.to_string(),
+        };
+        write!(f, "{s}")
+    }
+}
 
 fn swc_err<S: Spanned>(handler: &Handler, s: S, msg: &str) -> anyhow::Error {
     handler.span_err(s.span(), msg);
@@ -40,26 +64,28 @@ fn get_field_info(handler: &Handler, x: &PropName) -> Result<(String, bool)> {
     }
 }
 
-fn type_to_string(handler: &Handler, x: &TsType) -> Result<String> {
+fn map_type(handler: &Handler, x: &TsType) -> Result<TypeEnum> {
     match x {
         TsType::TsKeywordType(kw) => match kw.kind {
-            TsKeywordTypeKind::TsStringKeyword => Ok("string".into()),
-            TsKeywordTypeKind::TsNumberKeyword => Ok("number".into()),
-            TsKeywordTypeKind::TsBooleanKeyword => Ok("boolean".into()),
+            TsKeywordTypeKind::TsStringKeyword => Ok(TypeEnum::String(true)),
+            TsKeywordTypeKind::TsNumberKeyword => Ok(TypeEnum::Number(true)),
+            TsKeywordTypeKind::TsBooleanKeyword => Ok(TypeEnum::Bool(true)),
             _ => Err(swc_err(handler, x, "type keyword not supported")),
         },
         TsType::TsTypeRef(tr) => match &tr.type_name {
-            TsEntityName::Ident(id) => Ok(ident_to_string(id)),
+            TsEntityName::Ident(id) => {
+                let ident_name = ident_to_string(id);
+                Ok(TypeEnum::Entity(ident_name))
+            }
             TsEntityName::TsQualifiedName(_) => Err(anyhow!("qualified names not supported")),
         },
         t => Err(swc_err(handler, t, "type not supported")),
     }
 }
 
-fn get_field_type(handler: &Handler, x: &Option<TsTypeAnn>) -> Result<String> {
+fn get_field_type(handler: &Handler, x: &Option<TsTypeAnn>) -> Result<TypeEnum> {
     let t = x.clone().context("type ann temporarily mandatory")?;
-
-    type_to_string(handler, &t.type_ann)
+    map_type(handler, &t.type_ann)
 }
 
 fn lit_to_string(handler: &Handler, x: &Lit) -> Result<String> {
@@ -142,21 +168,17 @@ fn get_type_decorators(handler: &Handler, x: &[Decorator]) -> Result<(Vec<String
     Ok((output, is_unique))
 }
 
-fn validate_type_vec(type_vec: &[AddTypeRequest], valid_types: &BTreeSet<String>) -> Result<()> {
-    let mut scalar_types: BTreeSet<&str> = BTreeSet::new();
-    scalar_types.insert("string");
-    scalar_types.insert("number");
-    scalar_types.insert("boolean");
-
+fn validate_type_vec(type_vec: &[AddTypeRequest], valid_entities: &BTreeSet<String>) -> Result<()> {
     for t in type_vec {
         for field in t.field_defs.iter() {
-            if scalar_types.get(&field.field_type as &str).is_none()
-                && !is_auth_entity_name(&field.field_type)
-                && valid_types.get(&field.field_type).is_none()
-            {
-                bail!("field {} in class {} neither a basic type, nor refers to a type defined in this context",
-                                   field.name, t.name
-                                   );
+            if let TypeEnum::Entity(name) = field.field_type()? {
+                if valid_entities.get(name).is_none() && !is_auth_entity_name(name) {
+                    bail!(
+                        "field '{}' in class '{}' is of unknown entity type '{name}'",
+                        field.name,
+                        t.name
+                    );
+                }
             }
         }
     }
@@ -176,7 +198,9 @@ fn parse_class_prop(x: &ClassProp, class_name: &str, handler: &Handler) -> Resul
         is_optional,
         is_unique,
         default_value,
-        field_type,
+        field_type: Some(TypeMsg {
+            type_enum: field_type.into(),
+        }),
         labels,
     })
 }
