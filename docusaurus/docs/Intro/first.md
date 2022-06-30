@@ -35,6 +35,8 @@ You need Node 14.18.0 or later installed to successfully run the command.
 At the moment, ChiselStrike is supported on Windows through WSL.
 Aside from that, on WSL2 you should create your project in an ext4 filesystem (like the `$HOME` folder) to support hot reloading
 of endpoints. See details [here](https://stackoverflow.com/a/70275534)
+
+You may also need [to install node.js into WSL](https://docs.microsoft.com/en-us/windows/dev-environment/javascript/nodejs-on-wsl).
 :::
 
 Output will look something like this:
@@ -62,7 +64,7 @@ npm run dev
 
 You will see output like this:
 
-```
+```bash
 > hello@1.0.0 dev
 > chisel dev
 
