@@ -683,6 +683,12 @@ export default foo;
     }
 
     #[tokio::test]
+    async fn hello() -> Result<()> {
+        compile_ts_code(&["tests/hello.ts"], Default::default()).await?;
+        Ok(())
+    }
+
+    #[tokio::test]
     async fn deno_types() -> Result<()> {
         compile_ts_code(&["tests/deno_types.ts"], Default::default()).await?;
         Ok(())
