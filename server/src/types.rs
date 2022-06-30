@@ -3,25 +3,27 @@
 use crate::auth::{AUTH_ACCOUNT_NAME, AUTH_SESSION_NAME, AUTH_TOKEN_NAME, AUTH_USER_NAME};
 use crate::datastore::query::{truncate_identifier, QueryPlan};
 use crate::datastore::QueryEngine;
-use crate::types::AuthOrNot::IsAuth;
 use anyhow::Context;
 use deno_core::futures;
 use derive_new::new;
 use futures::StreamExt;
 use std::collections::{BTreeMap, HashMap};
+use std::ops::Deref;
 use std::sync::Arc;
 use uuid::Uuid;
 
 #[derive(thiserror::Error, Debug)]
 pub(crate) enum TypeSystemError {
     #[error["type already exists"]]
-    TypeAlreadyExists(Arc<ObjectType>),
+    CustomTypeExists(Entity),
     #[error["no such type: {0}"]]
     NoSuchType(String),
     #[error["no such API version: {0}"]]
     NoSuchVersion(String),
     #[error["builtin type expected, got `{0}` instead"]]
     NotABuiltinType(String),
+    #[error["user defined custom type expected, got `{0}` instead"]]
+    NotACustomType(String),
     #[error["unsafe to replace type: {0}. Reason: {1}"]]
     UnsafeReplacement(String, String),
     #[error["Error while trying to manipulate types: {0}"]]
@@ -31,7 +33,7 @@ pub(crate) enum TypeSystemError {
 #[derive(Debug, Default, Clone, new)]
 pub(crate) struct VersionTypes {
     #[new(default)]
-    pub(crate) custom_types: HashMap<String, Arc<ObjectType>>,
+    pub(crate) custom_types: HashMap<String, Entity>,
 }
 
 #[derive(Debug, Clone)]
@@ -41,19 +43,19 @@ pub(crate) struct TypeSystem {
 }
 
 impl VersionTypes {
-    pub(crate) fn lookup_custom_type(
-        &self,
-        type_name: &str,
-    ) -> Result<Arc<ObjectType>, TypeSystemError> {
+    pub(crate) fn lookup_custom_type(&self, type_name: &str) -> Result<Entity, TypeSystemError> {
         match self.custom_types.get(type_name) {
             Some(ty) => Ok(ty.to_owned()),
             None => Err(TypeSystemError::NoSuchType(type_name.to_owned())),
         }
     }
 
-    fn add_type(&mut self, ty: Arc<ObjectType>) -> Result<(), TypeSystemError> {
+    fn add_custom_type(&mut self, ty: Entity) -> Result<(), TypeSystemError> {
+        if let Entity::Auth(_) = ty {
+            return Err(TypeSystemError::NotACustomType(ty.name().into()));
+        }
         match self.lookup_custom_type(&ty.name) {
-            Ok(old) => Err(TypeSystemError::TypeAlreadyExists(old)),
+            Ok(old) => Err(TypeSystemError::CustomTypeExists(old)),
             Err(TypeSystemError::NoSuchType(_)) => Ok(()),
             Err(x) => Err(x),
         }?;
@@ -105,7 +107,7 @@ impl Default for TypeSystem {
         ts.builtin_types.insert("string".into(), Type::String);
         ts.builtin_types.insert("number".into(), Type::Float);
         ts.builtin_types.insert("boolean".into(), Type::Boolean);
-        ts.add_builtin_object_type(
+        ts.add_auth_entity(
             AUTH_USER_NAME,
             vec![
                 optional_string_field("emailVerified"),
@@ -114,9 +116,8 @@ impl Default for TypeSystem {
                 optional_string_field("image"),
             ],
             "auth_user",
-            IsAuth,
         );
-        ts.add_builtin_object_type(
+        ts.add_auth_entity(
             AUTH_SESSION_NAME,
             vec![
                 string_field("sessionToken"),
@@ -124,9 +125,8 @@ impl Default for TypeSystem {
                 string_field("expires"),
             ],
             "auth_session",
-            IsAuth,
         );
-        ts.add_builtin_object_type(
+        ts.add_auth_entity(
             AUTH_TOKEN_NAME,
             vec![
                 string_field("identifier"),
@@ -134,9 +134,8 @@ impl Default for TypeSystem {
                 string_field("token"),
             ],
             "auth_token",
-            IsAuth,
         );
-        ts.add_builtin_object_type(
+        ts.add_auth_entity(
             AUTH_ACCOUNT_NAME,
             vec![
                 string_field("providerAccountId"),
@@ -154,7 +153,6 @@ impl Default for TypeSystem {
                 optional_number_field("expires_at"),
             ],
             "auth_account",
-            IsAuth,
         );
 
         ts
@@ -168,7 +166,7 @@ impl TypeSystem {
     ) -> anyhow::Result<()> {
         let mut transaction = query_engine.start_transaction().await?;
         for ty in self.builtin_types.values() {
-            if let Type::Object(ty) = ty {
+            if let Type::Entity(ty) = ty {
                 query_engine.create_table(&mut transaction, ty).await?;
             }
         }
@@ -202,10 +200,11 @@ impl TypeSystem {
     ///
     /// # Errors
     ///
-    /// If type `ty` already exists in the type system, the function returns `TypeSystemError`.
-    pub(crate) fn add_type(&mut self, ty: Arc<ObjectType>) -> Result<(), TypeSystemError> {
+    /// If type `ty` already exists in the type system isn't Entity::Custom type,
+    /// the function returns `TypeSystemError`.
+    pub(crate) fn add_custom_type(&mut self, ty: Entity) -> Result<(), TypeSystemError> {
         let version = self.get_version_mut(&ty.api_version);
-        version.add_type(ty)
+        version.add_custom_type(ty)
     }
 
     /// Generate an [`ObjectDelta`] with the necessary information to evolve a specific type.
@@ -358,7 +357,7 @@ impl TypeSystem {
         &self,
         type_name: &str,
         api_version: &str,
-    ) -> Result<Arc<ObjectType>, TypeSystemError> {
+    ) -> Result<Entity, TypeSystemError> {
         let version = self.get_version(api_version)?;
         version.lookup_custom_type(type_name)
     }
@@ -386,7 +385,7 @@ impl TypeSystem {
         } else {
             let version = self.get_version(api_version)?;
             if let Ok(ty) = version.lookup_custom_type(type_name) {
-                Ok(Type::Object(ty))
+                Ok(ty.into())
             } else {
                 Err(TypeSystemError::NoSuchType(type_name.to_owned()))
             }
@@ -394,19 +393,19 @@ impl TypeSystem {
     }
 
     /// Tries to lookup a type of name `type_name` of version `api_version` that
-    /// is an object. That means it's either a built-in object type like
-    /// `AuthUser` or a user-defined entity object.
+    /// is an Entity. That means it's either a built-in Entity::Auth type like
+    /// `AuthUser` or a Entity::Custom.
     ///
     /// # Errors
     ///
     /// If the looked up type does not exists, the function returns a `NoSuchType`.
-    pub(crate) fn lookup_object_type(
+    pub(crate) fn lookup_entity(
         &self,
         type_name: &str,
         api_version: &str,
-    ) -> Result<Arc<ObjectType>, TypeSystemError> {
+    ) -> Result<Entity, TypeSystemError> {
         match self.lookup_builtin_type(type_name) {
-            Ok(Type::Object(ty)) => Ok(ty),
+            Ok(Type::Entity(ty)) => Ok(ty),
             Err(TypeSystemError::NotABuiltinType(_)) => {
                 self.lookup_custom_type(type_name, api_version)
             }
@@ -465,21 +464,18 @@ impl TypeSystem {
         Ok(())
     }
 
-    fn add_builtin_object_type(
+    fn add_auth_entity(
         &mut self,
         type_name: &'static str,
         fields: Vec<Field>,
         backing_table_name: &'static str,
-        is_auth: AuthOrNot,
     ) {
         self.builtin_types.insert(type_name.into(), {
             let desc = InternalObject {
                 name: type_name,
                 backing_table: backing_table_name,
             };
-            Type::Object(Arc::new(
-                ObjectType::new(desc, fields, vec![], is_auth).unwrap(),
-            ))
+            Entity::Auth(Arc::new(ObjectType::new(desc, fields, vec![]).unwrap())).into()
         });
     }
 }
@@ -490,17 +486,46 @@ pub(crate) enum Type {
     Float,
     Boolean,
     Id,
-    Object(Arc<ObjectType>),
+    Entity(Entity),
 }
 
 impl Type {
     pub(crate) fn name(&self) -> &str {
         match self {
             Type::Float => "number",
-            Type::Id => "string",
-            Type::String => "string",
+            Type::String | Type::Id => "string",
             Type::Boolean => "boolean",
-            Type::Object(ty) => &ty.name,
+            Type::Entity(ty) => &ty.name,
+        }
+    }
+}
+
+impl From<Entity> for Type {
+    fn from(entity: Entity) -> Self {
+        Type::Entity(entity)
+    }
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) enum Entity {
+    /// User defined Custom entity.
+    Custom(Arc<ObjectType>),
+    /// Built-in Auth entity.
+    Auth(Arc<ObjectType>),
+}
+
+impl Entity {
+    /// Checks whether `Entity` is Auth builtin type.
+    pub(crate) fn is_auth(&self) -> bool {
+        matches!(self, Entity::Auth(_))
+    }
+}
+
+impl Deref for Entity {
+    type Target = ObjectType;
+    fn deref(&self) -> &Self::Target {
+        match self {
+            Self::Custom(obj) | Self::Auth(obj) => obj,
         }
     }
 }
@@ -646,13 +671,6 @@ impl<'a> ObjectDescriptor for NewObject<'a> {
     }
 }
 
-/// Whether a type is used in authentication.
-#[derive(Debug)]
-pub(crate) enum AuthOrNot {
-    IsAuth,
-    IsNotAuth,
-}
-
 #[derive(Debug)]
 pub(crate) struct ObjectType {
     /// id of this object in the meta-database. Will be None for objects that are not persisted yet
@@ -667,7 +685,6 @@ pub(crate) struct ObjectType {
     chisel_id: Field,
     /// Name of the backing table for this type.
     backing_table: String,
-    is_auth: AuthOrNot,
 
     pub(crate) api_version: String,
 }
@@ -677,7 +694,6 @@ impl ObjectType {
         desc: D,
         fields: Vec<Field>,
         indexes: Vec<DbIndex>,
-        is_auth: AuthOrNot,
     ) -> anyhow::Result<Self> {
         let backing_table = desc.backing_table();
         let api_version = desc.api_version();
@@ -719,7 +735,6 @@ impl ObjectType {
             fields,
             indexes,
             chisel_id,
-            is_auth,
         })
     }
 
@@ -755,13 +770,6 @@ impl ObjectType {
         let source_map: FieldMap<'_> = source_type.into();
         let to_map: FieldMap<'_> = self.into();
         to_map.check_populate_from(&source_map)
-    }
-
-    pub(crate) fn is_auth(&self) -> bool {
-        match self.is_auth {
-            AuthOrNot::IsAuth => true,
-            AuthOrNot::IsNotAuth => false,
-        }
     }
 
     pub(crate) fn indexes(&self) -> &Vec<DbIndex> {

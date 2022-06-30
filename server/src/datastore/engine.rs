@@ -97,7 +97,7 @@ impl TryFrom<&Field> for ColumnDef {
             Type::Id => column_def.text().primary_key(),
             Type::Float => column_def.double(),
             Type::Boolean => column_def.boolean(),
-            Type::Object(_) => column_def.text(), // Foreign key, must the be same type as Type::Id
+            Type::Entity(_) => column_def.text(), // Foreign key, must the be same type as Type::Id
         };
 
         Ok(column_def)
@@ -418,7 +418,7 @@ impl QueryEngine {
                                 _ => to_json!(bool),
                             }
                         }
-                        Type::Object(_) => anyhow::bail!("object is not a scalar"),
+                        Type::Entity(_) => anyhow::bail!("object is not a scalar"),
                     };
                     if let Some(tr) = transform {
                         // Apply policy transformation
@@ -589,7 +589,7 @@ impl QueryEngine {
             }
             let incompatible_data = || QueryEngine::incompatible(field, ty);
             let arg = match &field.type_ {
-                Type::Object(nested_type) => {
+                Type::Entity(nested_type) => {
                     let nested_value = field_value
                         .context("json object doesn't have required field")
                         .with_context(incompatible_data)?
@@ -678,7 +678,7 @@ impl QueryEngine {
         }
 
         let arg = match &field.type_ {
-            Type::String | Type::Id | Type::Object(_) => {
+            Type::String | Type::Id | Type::Entity(_) => {
                 SqlValue::String(convert_json_value!(as_str, str))
             }
             Type::Float => SqlValue::F64(convert_json_value!(as_f64, f64)),

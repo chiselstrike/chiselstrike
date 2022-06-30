@@ -506,7 +506,7 @@ async fn op_chisel_store(
     let (query_engine, ty) = {
         let state = state.borrow();
         let ty = match current_type_system(&state).lookup_type(type_name, &c.api_version) {
-            Ok(Type::Object(ty)) => ty,
+            Ok(Type::Entity(ty)) => ty,
             _ => anyhow::bail!("Cannot save into type {}.", type_name),
         };
         if ty.is_auth() && !is_auth_path(&c.api_version, &c.path) {
