@@ -1,5 +1,6 @@
 use crate::chisel::{AddTypeRequest, FieldDefinition};
 use anyhow::{anyhow, bail, ensure, Context, Result};
+use chisel_server::auth::is_auth_entity_name;
 use std::collections::BTreeSet;
 use std::path::Path;
 use swc_common::sync::Lrc;
@@ -142,15 +143,15 @@ fn get_type_decorators(handler: &Handler, x: &[Decorator]) -> Result<(Vec<String
 }
 
 fn validate_type_vec(type_vec: &[AddTypeRequest], valid_types: &BTreeSet<String>) -> Result<()> {
-    let mut builtin_types: BTreeSet<&str> = BTreeSet::new();
-    builtin_types.insert("string");
-    builtin_types.insert("number");
-    builtin_types.insert("boolean");
-    builtin_types.insert("AuthUser");
+    let mut scalar_types: BTreeSet<&str> = BTreeSet::new();
+    scalar_types.insert("string");
+    scalar_types.insert("number");
+    scalar_types.insert("boolean");
 
     for t in type_vec {
         for field in t.field_defs.iter() {
-            if builtin_types.get(&field.field_type as &str).is_none()
+            if scalar_types.get(&field.field_type as &str).is_none()
+                && !is_auth_entity_name(&field.field_type)
                 && valid_types.get(&field.field_type).is_none()
             {
                 bail!("field {} in class {} neither a basic type, nor refers to a type defined in this context",

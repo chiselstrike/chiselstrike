@@ -18,6 +18,17 @@ pub(crate) const AUTH_SESSION_NAME: &str = "AuthSession";
 pub(crate) const AUTH_TOKEN_NAME: &str = "AuthToken";
 pub(crate) const AUTH_ACCOUNT_NAME: &str = "AuthAccount";
 
+const AUTH_ENTITY_NAMES: [&str; 4] = [
+    AUTH_USER_NAME,
+    AUTH_SESSION_NAME,
+    AUTH_TOKEN_NAME,
+    AUTH_ACCOUNT_NAME,
+];
+
+pub fn is_auth_entity_name(entity_name: &str) -> bool {
+    AUTH_ENTITY_NAMES.contains(&entity_name)
+}
+
 fn get_auth_user_type(state: &OpState) -> Result<Entity> {
     match lookup_builtin_type(state, AUTH_USER_NAME) {
         Ok(Type::Entity(t)) => Ok(t),
