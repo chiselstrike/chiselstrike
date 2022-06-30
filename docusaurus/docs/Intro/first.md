@@ -64,7 +64,7 @@ npm run dev
 
 You will see output like this:
 
-```bash
+```
 > hello@1.0.0 dev
 > chisel dev
 
