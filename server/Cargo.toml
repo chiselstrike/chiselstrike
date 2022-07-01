@@ -18,6 +18,7 @@ base64 = "0.13.0"
 deno_core = { path = "../third_party/deno/core" }
 deno_runtime = { path = "../third_party/deno/runtime" }
 derive-new = "0.5.9"
+dirs = "4.0.0"
 enclose = "1.1"
 enum-as-inner = "0.3.3"
 env_logger = "0.9.0"
@@ -50,6 +51,7 @@ sqlx = { version = "0.6.0", features = [
     "runtime-tokio-rustls",
 ] }
 structopt = "0.3.23"
+structopt-toml = "0.5.0"
 thiserror = "1.0"
 tokio = { version = "1.11.0", features = ["rt", "time"] }
 tonic = "0.5.2"

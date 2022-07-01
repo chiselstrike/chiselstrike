@@ -23,18 +23,21 @@ use enclose::enclose;
 use futures::future::LocalBoxFuture;
 use futures::FutureExt;
 use futures::StreamExt;
+use serde::Deserialize;
 use std::collections::HashMap;
 use std::net::SocketAddr;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::rc::Rc;
 use std::sync::Arc;
 use std::time::Duration;
 use structopt::StructOpt;
+use structopt_toml::StructOptToml;
 use tokio::task::JoinHandle;
 use tokio::time::sleep;
 
-#[derive(StructOpt, Debug, Clone)]
+#[derive(StructOpt, Debug, Clone, StructOptToml, Deserialize)]
 #[structopt(name = "chiseld", version = env!("VERGEN_GIT_SEMVER_LIGHTWEIGHT"))]
+#[serde(deny_unknown_fields, default)]
 pub struct Opt {
     /// user-visible API server listen address.
     #[structopt(short, long, default_value = "localhost:8080")]
@@ -66,6 +69,19 @@ pub struct Opt {
     /// If on, serve a web UI on an internal route.
     #[structopt(long)]
     webui: bool,
+    /// Read default configuration from this toml configuration file
+    #[structopt(long, short)]
+    #[serde(skip)]
+    pub config: Option<PathBuf>,
+}
+
+impl Opt {
+    pub async fn from_file(path: &Path) -> Result<Self> {
+        let content = tokio::fs::read(path).await?;
+        let content = std::str::from_utf8(&content)?;
+
+        Self::from_args_with_toml(content).map_err(|e| anyhow::anyhow!(e.to_string()))
+    }
 }
 
 /// Whether an action should be repeated.
