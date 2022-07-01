@@ -93,6 +93,11 @@ echo 'export class number extends ChiselEntity { a: number}' > "$TEMPDIR/models/
 $CHISEL apply --allow-type-deletion 2>&1 || echo # (swallow the apply abort)
 # CHECK: custom type expected, got `number` instead
 
+## Redefining AuthUser is not OK.
+echo 'export class AuthUser extends ChiselEntity { a: number}' > "$TEMPDIR/models/foo.ts"
+$CHISEL apply --allow-type-deletion 2>&1 ||:
+# CHECK: custom type expected, got `AuthUser` instead
+
 ### Removing fields is not OK if they didn't have a default
 cat << EOF > "$TEMPDIR/models/foo.ts"
 export class Bar extends ChiselEntity {
