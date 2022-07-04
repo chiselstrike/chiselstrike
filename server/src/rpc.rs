@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: © 2021 ChiselStrike <info@chiselstrike.com>
 
 use crate::api::{ApiInfo, RequestPath};
-use crate::chisel::{self, AddTypeRequest};
+use crate::chisel::{self, AddTypeRequest, FieldDefinition};
 use crate::datastore::{MetaService, QueryEngine};
 use crate::deno;
 use crate::deno::endpoint_path_from_source_path;
@@ -20,9 +20,9 @@ use anyhow::{Context, Result};
 use async_lock::Mutex;
 use chisel::chisel_rpc_server::{ChiselRpc, ChiselRpcServer};
 use chisel::{
-    ChiselApplyRequest, ChiselApplyResponse, ChiselDeleteRequest, ChiselDeleteResponse,
-    DescribeRequest, DescribeResponse, IndexCandidate, PopulateRequest, PopulateResponse,
-    RestartRequest, RestartResponse, StatusRequest, StatusResponse,
+    type_msg::TypeEnum, ChiselApplyRequest, ChiselApplyResponse, ChiselDeleteRequest,
+    ChiselDeleteResponse, DescribeRequest, DescribeResponse, IndexCandidate, PopulateRequest,
+    PopulateResponse, RestartRequest, RestartResponse, StatusRequest, StatusResponse, TypeMsg,
 };
 use deno_core::futures;
 use deno_core::url::Url;
@@ -338,15 +338,18 @@ or
                     decorators.insert(label.clone());
                 }
 
-                let field_ty = match state.type_system.lookup_builtin_type(&field.field_type) {
-                    Ok(ty) => ty,
-                    Err(_) => match new_types.get(&field.field_type) {
+                let field_ty = field.field_type()?;
+                let field_ty = if field_ty.is_builtin(&state.type_system) {
+                    field_ty.get_builtin(&state.type_system)?
+                } else if let TypeEnum::Entity(entity_name) = field_ty {
+                    match new_types.get(entity_name) {
                         Some(ty) => Type::Entity(ty.clone()),
                         None => anyhow::bail!(
-                            "field type `{}` is neither a built-in nor a custom type",
-                            &field.field_type
+                            "field type `{entity_name}` is neither a built-in nor a custom type",
                         ),
-                    },
+                    }
+                } else {
+                    anyhow::bail!("field type must either contain an entity or be a builtin");
                 };
 
                 fields.push(Field::new(
@@ -533,9 +536,13 @@ fn sort_custom_types(
         graph.add_node(ty.name.as_str());
         ty_pos.insert(ty.name.as_str(), pos);
         for field in &ty.field_defs {
-            if ts.lookup_builtin_type(&field.field_type).is_err() {
-                graph.add_node(field.field_type.as_str());
-                graph.add_edge(field.field_type.as_str(), ty.name.as_str(), ());
+            let field_type = field.field_type()?;
+            match field_type {
+                TypeEnum::Entity(name) if !field_type.is_builtin(ts) => {
+                    graph.add_node(name);
+                    graph.add_edge(name, ty.name.as_str(), ());
+                }
+                _ => (),
             }
         }
     }
@@ -557,6 +564,51 @@ fn sort_custom_types(
     permutation.apply_inv_slice_in_place(&mut types);
 
     Ok(types)
+}
+
+impl FieldDefinition {
+    fn field_type(&self) -> Result<&TypeEnum> {
+        self.field_type
+            .as_ref()
+            .with_context(|| format!("field_type of field '{}' is None", self.name))?
+            .type_enum
+            .as_ref()
+            .with_context(|| format!("type_enum of field '{}' is None", self.name))
+    }
+}
+
+impl TypeEnum {
+    fn is_builtin(&self, ts: &TypeSystem) -> bool {
+        match self {
+            TypeEnum::String(_) | TypeEnum::Number(_) | TypeEnum::Bool(_) => true,
+            TypeEnum::Entity(name) => ts.lookup_builtin_type(name).is_ok(),
+        }
+    }
+
+    fn get_builtin(&self, ts: &TypeSystem) -> Result<Type> {
+        let ty = match self {
+            TypeEnum::String(_) => Type::String,
+            TypeEnum::Number(_) => Type::Float,
+            TypeEnum::Bool(_) => Type::Boolean,
+            TypeEnum::Entity(name) => ts.lookup_builtin_type(name)?,
+        };
+        Ok(ty)
+    }
+}
+
+impl From<Type> for TypeMsg {
+    fn from(ty: Type) -> TypeMsg {
+        let ty = match ty {
+            Type::Float => TypeEnum::Number(true),
+            Type::Id => TypeEnum::String(true),
+            Type::String => TypeEnum::String(true),
+            Type::Boolean => TypeEnum::Bool(true),
+            Type::Entity(entity) => TypeEnum::Entity(entity.name().to_owned()),
+        };
+        TypeMsg {
+            type_enum: Some(ty),
+        }
+    }
 }
 
 #[tonic::async_trait]
@@ -626,7 +678,7 @@ impl ChiselRpc for RpcService {
                     for field in ty.user_fields() {
                         field_defs.push(chisel::FieldDefinition {
                             name: field.name.to_owned(),
-                            field_type: field.type_.name().to_string(),
+                            field_type: Some(field.type_.clone().into()),
                             labels: field.labels.clone(),
                             default_value: field.user_provided_default().clone(),
                             is_optional: field.is_optional,

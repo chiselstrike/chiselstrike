@@ -7,7 +7,8 @@ use crate::server::{start_server, wait, wait_with_cond};
 use anyhow::{anyhow, Result};
 use chisel::chisel_rpc_client::ChiselRpcClient;
 use chisel::{
-    ChiselDeleteRequest, DescribeRequest, PopulateRequest, RestartRequest, StatusRequest,
+    type_msg::TypeEnum, ChiselDeleteRequest, DescribeRequest, PopulateRequest, RestartRequest,
+    StatusRequest,
 };
 use std::env;
 use std::fs;
@@ -192,17 +193,18 @@ async fn main() -> Result<()> {
                             labels.pop();
                             format!("@labels({}) ", labels)
                         };
+                        let field_type = field.field_type()?;
                         println!(
                             "    {}{}{}{}: {}{};",
                             if field.is_unique { "@unique " } else { "" },
                             labels,
                             field.name,
                             if field.is_optional { "?" } else { "" },
-                            field.field_type,
+                            field_type,
                             field
                                 .default_value
                                 .as_ref()
-                                .map(|d| if field.field_type == "string" {
+                                .map(|d| if matches!(field_type, TypeEnum::String(_)) {
                                     format!(" = \"{}\"", d)
                                 } else {
                                     format!(" = {}", d)

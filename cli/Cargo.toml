@@ -6,6 +6,7 @@ edition = "2021"
 
 [dependencies]
 anyhow = "1.0"
+chisel_server = { package = "server", path = "../server" }
 endpoint_tsc = { path = "../endpoint_tsc" }
 handlebars = "4.2.2"
 nix = "0.22.2"
