@@ -24,8 +24,11 @@ EOF
 cd "$TEMPDIR"
 $CHISEL apply
 
-id_al=`$CURL -d '{"name":"Al", "email":"al"}' $CHISELD_HOST/__chiselstrike/auth/users|sed -ne 's/.*"id": "\(.*\)".$/\1/p'`
-id_als=`$CURL -d '{"name":"Als", "email":"als"}' $CHISELD_HOST/__chiselstrike/auth/users|sed -ne 's/.*"id": "\(.*\)".$/\1/p'`
+echo '{ "CHISELD_AUTH_SECRET" : "dud" }' > ${TEMPDIR}/.env
+$CHISEL restart
+# CHECK: Server restarted successfully.
+id_al=`$CURL -H ChiselAuth:dud -d '{"name":"Al", "email":"al"}' $CHISELD_HOST/__chiselstrike/auth/users|sed -ne 's/.*"id": "\(.*\)".$/\1/p'`
+id_als=`$CURL -H ChiselAuth:dud -d '{"name":"Als", "email":"als"}' $CHISELD_HOST/__chiselstrike/auth/users|sed -ne 's/.*"id": "\(.*\)".$/\1/p'`
 
 $CURL $CHISELD_HOST/find
 # CHECK: HTTP/1.1 404 Not Found

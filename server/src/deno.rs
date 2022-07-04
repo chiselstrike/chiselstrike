@@ -1192,11 +1192,13 @@ async fn special_response(
     }
     if req_path.starts_with("/__chiselstrike/auth/") {
         let auth_header = req.headers().get("ChiselAuth");
+        if auth_header.is_none() {
+            return Ok(Some(ApiService::forbidden("ChiselAuth")?));
+        }
         let expected_secret = current_secrets(&state.borrow())
             .get("CHISELD_AUTH_SECRET")
             .cloned();
         match (expected_secret, auth_header) {
-            (Some(_), None) => return Ok(Some(ApiService::forbidden("ChiselAuth")?)),
             (Some(serde_json::Value::String(s)), Some(h)) if s != *h => {
                 return Ok(Some(ApiService::forbidden("Fundamental auth")?))
             }

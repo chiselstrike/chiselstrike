@@ -3,31 +3,35 @@
 # RUN: sh -e @file
 
 cd "$TEMPDIR"
+echo '{ "CHISELD_AUTH_SECRET" : "abc" }' > ${TEMPDIR}/.env
+$CHISEL restart
+# CHECK: Server restarted successfully.
+
 $CHISEL apply
 
-$CURL -d '{"name":"Foo", "email":"foo@t.co"}' $CHISELD_HOST/__chiselstrike/auth/users
+$CURL -H ChiselAuth:abc -d '{"name":"Foo", "email":"foo@t.co"}' $CHISELD_HOST/__chiselstrike/auth/users
 # CHECK: HTTP/1.1 200 OK
 # CHECK: "email": "foo@t.co"
-$CURL -X DELETE "$CHISELD_HOST/__chiselstrike/auth/users?.name=Foo"
+$CURL -H ChiselAuth:abc -X DELETE "$CHISELD_HOST/__chiselstrike/auth/users?.name=Foo"
 # CHECK: HTTP/1.1 200 OK
 # CHECK: Deleted entities matching ?.name=Foo
-$CURL $CHISELD_HOST/__chiselstrike/auth/users
+$CURL -H ChiselAuth:abc $CHISELD_HOST/__chiselstrike/auth/users
 # CHECK: HTTP/1.1 200 OK
 # CHECK: []
 
-$CURL -d '{"sessionToken":"tok1", "userId":"id1", "expires":"2025-12-31"}' $CHISELD_HOST/__chiselstrike/auth/sessions
+$CURL -H ChiselAuth:abc -d '{"sessionToken":"tok1", "userId":"id1", "expires":"2025-12-31"}' $CHISELD_HOST/__chiselstrike/auth/sessions
 # CHECK: HTTP/1.1 200 OK
 # CHECK: "sessionToken": "tok1"
 # CHECK: "userId": "id1"
 # CHECK: "expires": "2025-12-31"
 
-$CURL -d '{"token":"tok1", "identifier":"id1", "expires":"2026-12-31"}' $CHISELD_HOST/__chiselstrike/auth/tokens
+$CURL -H ChiselAuth:abc -d '{"token":"tok1", "identifier":"id1", "expires":"2026-12-31"}' $CHISELD_HOST/__chiselstrike/auth/tokens
 # CHECK: HTTP/1.1 200 OK
 # CHECK: "token": "tok1"
 # CHECK: "identifier": "id1"
 # CHECK: "expires": "2026-12-31"
 
-$CURL -d '{"providerAccountId":"acct1", "userId":"usr1", "provider":"gh", "type":"oauth", "expires_at":42, "session_state":"good"}' \
+$CURL -H ChiselAuth:abc -d '{"providerAccountId":"acct1", "userId":"usr1", "provider":"gh", "type":"oauth", "expires_at":42, "session_state":"good"}' \
       $CHISELD_HOST/__chiselstrike/auth/accounts
 # CHECK: HTTP/1.1 200 OK
 # CHECK: "providerAccountId": "acct1"

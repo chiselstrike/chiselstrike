@@ -20,11 +20,14 @@ num=$($CURL -XOPTIONS $CHISELD_HOST/dev/foo | grep ChiselUID | wc -l)
 echo Found $num copies
 # CHECK: Found 1 copies
 
-num=$($CURL -H ChiselUID\:1234 $CHISELD_HOST/__chiselstrike/auth/users | grep ChiselUID | wc -l)
+echo '{ "CHISELD_AUTH_SECRET" : "u" }' > ${TEMPDIR}/.env
+$CHISEL restart
+# CHECK: Server restarted successfully.
+num=$($CURL -H ChiselAuth:u -H ChiselUID\:1234 $CHISELD_HOST/__chiselstrike/auth/users | grep ChiselUID | wc -l)
 echo Found $num copies
 # CHECK: Found 1 copies
 
-valid_id=`$CURL -d '{"name":"Al"}' $CHISELD_HOST/__chiselstrike/auth/users|sed -ne 's/.*"id": "\(.*\)".$/\1/p'`
-num=$($CURL -H ChiselUID\:$valid_id $CHISELD_HOST/__chiselstrike/auth/users | grep ChiselUID | wc -l)
+valid_id=`$CURL -H ChiselAuth:u -d '{"name":"Al"}' $CHISELD_HOST/__chiselstrike/auth/users|sed -ne 's/.*"id": "\(.*\)".$/\1/p'`
+num=$($CURL -H ChiselAuth:u -H ChiselUID\:$valid_id $CHISELD_HOST/__chiselstrike/auth/users | grep ChiselUID | wc -l)
 echo Found $num copies
 # CHECK: Found 1 copies
