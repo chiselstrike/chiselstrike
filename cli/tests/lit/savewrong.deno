@@ -83,5 +83,9 @@ $CURL -d '{"author":{"email": "foo@t.co"}}' $CHISELD_HOST/dev/store
 $CURL -d '{"author":{"id":"ID123", "email": "foo@t.co"}}' $CHISELD_HOST/dev/store
 # CHECK: HTTP/1.1 200 OK
 # CHECK: "email": "foo@t.co"
-echo There are currently `$CURL $CHISELD_HOST/__chiselstrike/auth/users | grep foo@t.co | wc -l` users.
+
+echo '{ "CHISELD_AUTH_SECRET" : "0" }' > ${TEMPDIR}/.env
+$CHISEL restart
+# CHECK: Server restarted successfully.
+echo There are currently `$CURL -H ChiselAuth:0 $CHISELD_HOST/__chiselstrike/auth/users | grep foo@t.co | wc -l` users.
 # CHECK: There are currently 0 users.
