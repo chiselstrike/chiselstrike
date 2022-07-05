@@ -1,8 +1,16 @@
 use std::env;
-use std::ffi::OsStr;
+use std::ffi::OsString;
 use std::ops::{Deref, DerefMut};
 use std::path::PathBuf;
 use std::process;
+
+use once_cell::sync::Lazy;
+
+pub static CHISEL_BIN_DIR: Lazy<PathBuf> = Lazy::new(|| repo_dir().join(".chisel_dev"));
+pub static CHISEL_LOCAL_PATH: Lazy<OsString> = Lazy::new(|| {
+    let new_path = format!("{}/bin:{}", CHISEL_BIN_DIR.display(), env!("PATH"));
+    OsString::from(new_path)
+});
 
 pub struct Command {
     inner: process::Command,
@@ -29,12 +37,7 @@ impl DerefMut for Command {
 }
 
 #[allow(dead_code)]
-pub fn run_in<'a, T: IntoIterator<Item = &'a str>>(
-    cmd: &str,
-    args: T,
-    dir: PathBuf,
-    path: Option<&OsStr>,
-) -> Command {
+pub fn run_in<'a, T: IntoIterator<Item = &'a str>>(cmd: &str, args: T, dir: PathBuf) -> Command {
     assert!(
         dir.exists(),
         "{:?} does not exist. Current directory is {:?}",
@@ -45,20 +48,14 @@ pub fn run_in<'a, T: IntoIterator<Item = &'a str>>(
     let mut inner = process::Command::new(cmd);
     inner.args(args).current_dir(dir);
 
-    if let Some(path) = path {
-        inner.env("PATH", path);
-    }
+    inner.env("PATH", &*CHISEL_LOCAL_PATH);
 
     Command { inner }
 }
 
 #[allow(dead_code)]
-pub fn run<'a, T: IntoIterator<Item = &'a str>>(
-    cmd: &str,
-    args: T,
-    path: Option<&OsStr>,
-) -> Command {
-    run_in(cmd, args, repo_dir(), path)
+pub fn run<'a, T: IntoIterator<Item = &'a str>>(cmd: &str, args: T) -> Command {
+    run_in(cmd, args, repo_dir())
 }
 
 #[allow(dead_code)]
