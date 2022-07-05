@@ -8,13 +8,19 @@ use anyhow::{anyhow, Result};
 use deno_core::url;
 use deno_core::url::Url;
 use rsa::{PaddingScheme, RsaPrivateKey};
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 use sha2::Sha256;
+use std::collections::HashMap;
 use std::str;
 
-type RsaPayload = Vec<u8>;
-
-#[derive(Serialize, Deserialize, Debug)]
+/// Represents an AES encrypted payload.
+///
+/// The secret is encrypted using a AES symmetric key K, and a nonce N. K and N and then encrypted
+/// using the instance public RSA key, and added to the payload (key, and nonce fields).
+///
+/// The secret can be decrypted by first decrypting the key and the nonce using the instance
+/// private RSA key, and then using the decrypted K and N to decrypt secret.
+#[derive(Deserialize, Debug)]
 struct AesPayload {
     #[serde(with = "serde_base64")]
     secret: Vec<u8>,
@@ -24,21 +30,16 @@ struct AesPayload {
     key: Vec<u8>,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
-#[serde(untagged)]
+#[derive(Deserialize, Debug)]
+#[serde(tag = "version")]
 enum Payload {
-    V0(RsaPayload),
-    V1(AesPayload),
+    /// The V0 of the secrets encrypts each secret independantly with AES. The map `secret` is an
+    /// association of the secret name and the encrypted AES payload.
+    V0 { secret: HashMap<String, AesPayload> },
 }
 
 mod serde_base64 {
-    use serde::{Deserialize, Serialize};
-    use serde::{Deserializer, Serializer};
-
-    pub fn serialize<S: Serializer>(v: &[u8], s: S) -> Result<S::Ok, S::Error> {
-        let base64 = base64::encode(v);
-        String::serialize(&base64, s)
-    }
+    use serde::{Deserialize, Deserializer};
 
     pub fn deserialize<'de, D: Deserializer<'de>>(d: D) -> Result<Vec<u8>, D::Error> {
         let base64 = String::deserialize(d)?;
@@ -101,12 +102,17 @@ pub(crate) async fn get_private_key() -> Result<Option<RsaPrivateKey>> {
     }?;
 
     let pem = read_url(&url).await?;
-    let pkcs1 = get_pkcs1_private_key(&pem);
+
+    parse_rsa_key(&pem).with_context(|| format!("Could not read private key at {url}"))
+}
+
+fn parse_rsa_key(pem: &str) -> Result<Option<RsaPrivateKey>> {
+    let pkcs1 = get_pkcs1_private_key(pem);
     if pkcs1.is_ok() {
         return pkcs1;
     }
 
-    get_pkcs8_private_key(&pem).with_context(|| format!("Could not read private key at {}", url))
+    get_pkcs8_private_key(pem)
 }
 
 pub(crate) async fn get_secrets() -> Result<JsonObject> {
@@ -119,33 +125,39 @@ pub(crate) async fn get_secrets() -> Result<JsonObject> {
     };
     let private_key = get_private_key().await?;
     let data = read_url(&secret_location).await?;
-    let data = match private_key {
-        None => data,
-        Some(private_key) => decrypt(&private_key, &data)?,
+    let secrets = match private_key {
+        None => serde_json::from_str(&data)?,
+        Some(private_key) => extract_secrets(&private_key, &data)?,
     };
-    Ok(serde_json::from_str(&data)?)
-}
 
-fn decrypt(private_key: &RsaPrivateKey, payload: &str) -> Result<String> {
-    let payload = parse(payload)?;
-    let secrets = match payload {
-        Payload::V0(rsa) => decrypt_v0(private_key, &rsa),
-        Payload::V1(aes) => decrypt_v1(private_key, &aes),
-    }?;
     Ok(secrets)
 }
 
-fn parse(data: &str) -> Result<Payload> {
-    let data = decode_base64(data)?;
-    if let Ok(encoded) = str::from_utf8(&data) {
-        if let Ok(payload) = serde_json::from_str::<Payload>(encoded) {
-            return Ok(payload);
-        }
-    }
-    Ok(Payload::V0(data))
+fn extract_secrets(private_key: &RsaPrivateKey, payload: &str) -> Result<JsonObject> {
+    let decoded = decode_base64(payload)?;
+    let payload: Payload = serde_json::from_slice(&decoded)?;
+    let secrets = match payload {
+        Payload::V0 { secret } => extract_v0(private_key, &secret)?,
+    };
+
+    Ok(secrets)
 }
 
-fn decrypt_v1(private_key: &RsaPrivateKey, payload: &AesPayload) -> Result<String> {
+fn extract_v0(
+    private_key: &RsaPrivateKey,
+    secrets: &HashMap<String, AesPayload>,
+) -> Result<JsonObject> {
+    let mut out = JsonObject::with_capacity(secrets.len());
+
+    for (name, secret) in secrets {
+        let decrypted = decrypt_aes(private_key, secret)?;
+        out.insert(name.to_string(), decrypted.into());
+    }
+
+    Ok(out)
+}
+
+fn decrypt_aes(private_key: &RsaPrivateKey, payload: &AesPayload) -> Result<String> {
     let key = rsa_oaep_decrypt(private_key, &payload.key)
         .map_err(|x| anyhow!("Failed to decrypt AES key: {:?}", x))?;
     let nonce = rsa_oaep_decrypt(private_key, &payload.nonce)
@@ -172,14 +184,6 @@ fn rsa_oaep_decrypt(private_key: &RsaPrivateKey, data: &[u8]) -> Result<Vec<u8>>
     Ok(dec_data)
 }
 
-fn decrypt_v0(private_key: &RsaPrivateKey, ciphertext: &[u8]) -> Result<String> {
-    let padding = PaddingScheme::new_pkcs1v15_encrypt();
-    let dec_data = private_key
-        .decrypt_blinded(&mut rand::rngs::OsRng, padding, ciphertext)
-        .map_err(|x| anyhow!("Failed to decrypt RSA payload: {:?}", x))?;
-    Ok(String::from_utf8_lossy(&dec_data).to_string())
-}
-
 fn decode_base64(data: &str) -> Result<Vec<u8>> {
     let mut data = data.trim_end().trim().as_bytes().to_vec();
     if data.last() == Some(&0) {
@@ -193,110 +197,63 @@ fn decode_base64(data: &str) -> Result<Vec<u8>> {
 mod tests {
 
     use super::*;
-    use rsa::{BigUint, PublicKey, RsaPublicKey};
+    use once_cell::sync::Lazy;
+    use serde_json::json;
 
-    fn get_private_key() -> RsaPrivateKey {
-        RsaPrivateKey::from_components(
-            rsa::BigUint::parse_bytes(b"00d397b84d98a4c26138ed1b695a8106ead91d553bf06041b62d3fdc50a041e222b8f4529689c1b82c5e71554f5dd69fa2f4b6158cf0dbeb57811a0fc327e1f28e74fe74d3bc166c1eabdc1b8b57b934ca8be5b00b4f29975bcc99acaf415b59bb28a6782bb41a2c3c2976b3c18dbadef62f00c6bb226640095096c0cc60d22fe7ef987d75c6a81b10d96bf292028af110dc7cc1bbc43d22adab379a0cd5d8078cc780ff5cd6209dea34c922cf784f7717e428d75b5aec8ff30e5f0141510766e2e0ab8d473c84e8710b2b98227c3db095337ad3452f19e2b9bfbccdd8148abf6776fa552775e6e75956e45229ae5a9c46949bab1e622f0e48f56524a84ed3483b", 16).unwrap(),
-            BigUint::parse_bytes(b"10001", 16).unwrap(),
-            BigUint::parse_bytes(b"00c4e70c689162c94c660828191b52b4d8392115df486a9adbe831e458d73958320dc1b755456e93701e9702d76fb0b92f90e01d1fe248153281fe79aa9763a92fae69d8d7ecd144de29fa135bd14f9573e349e45031e3b76982f583003826c552e89a397c1a06bd2163488630d92e8c2bb643d7abef700da95d685c941489a46f54b5316f62b5d2c3a7f1bbd134cb37353a44683fdc9d95d36458de22f6c44057fe74a0a436c4308f73f4da42f35c47ac16a7138d483afc91e41dc3a1127382e0c0f5119b0221b4fc639d6b9c38177a6de9b526ebd88c38d7982c07f98a0efd877d508aae275b946915c02e2e1106d175d74ec6777f5e80d12c053d9c7be1e341", 16).unwrap(),
-            vec![
-                BigUint::parse_bytes(b"00f827bbf3a41877c7cc59aebf42ed4b29c32defcb8ed96863d5b090a05a8930dd624a21c9dcf9838568fdfa0df65b8462a5f2ac913d6c56f975532bd8e78fb07bd405ca99a484bcf59f019bbddcb3933f2bce706300b4f7b110120c5df9018159067c35da3061a56c8635a52b54273b31271b4311f0795df6021e6355e1a42e61",16).unwrap(),
-                BigUint::parse_bytes(b"00da4817ce0089dd36f2ade6a3ff410c73ec34bf1b4f6bda38431bfede11cef1f7f6efa70e5f8063a3b1f6e17296ffb15feefa0912a0325b8d1fd65a559e717b5b961ec345072e0ec5203d03441d29af4d64054a04507410cf1da78e7b6119d909ec66e6ad625bf995b279a4b3c5be7d895cd7c5b9c4c497fde730916fcdb4e41b", 16).unwrap()
-            ],
-        )
-    }
+    const PRIVATE_KEY_PEM: &str = r#"-----BEGIN RSA PRIVATE KEY-----
+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
+-----END RSA PRIVATE KEY-----"#;
 
-    fn encrypt_v0(public_key: &RsaPublicKey, data: &[u8]) -> Result<Vec<u8>> {
-        let padding = PaddingScheme::new_pkcs1v15_encrypt();
-        let ciphertext = public_key
-            .encrypt(&mut rand::rngs::OsRng, padding, data)
-            .map_err(|x| anyhow!("Failed to encrypt: {:?}", x))?;
-        Ok(ciphertext)
-    }
+    static PRIVATE_KEY: Lazy<RsaPrivateKey> =
+        Lazy::new(|| parse_rsa_key(PRIVATE_KEY_PEM).unwrap().unwrap());
 
-    fn rsa_encrypt(public_key: &RsaPublicKey, data: &[u8]) -> Result<Vec<u8>> {
-        let padding = PaddingScheme::new_oaep::<Sha256>();
-        let ciphertext = public_key
-            .encrypt(&mut rand::rngs::OsRng, padding, data)
-            .map_err(|x| anyhow!("Failed to encrypt: {:?}", x))?;
-        Ok(ciphertext)
-    }
-
-    fn encrypt_v1(public_key: &RsaPublicKey, data: &[u8]) -> Result<AesPayload> {
-        let key = b"secret key that no one can know!";
-        let key = aes_gcm::Key::from_slice(key);
-        let cipher = Aes256Gcm::new(key);
-
-        let nonce = b"such random!";
-        let nonce = Nonce::from_slice(nonce);
-
-        let ciphertext = cipher
-            .encrypt(nonce, data.as_ref())
-            .expect("encryption failure!");
-
-        let key = rsa_encrypt(public_key, key.as_slice()).unwrap();
-        let nonce = rsa_encrypt(public_key, nonce.as_slice()).unwrap();
-
-        Ok(AesPayload {
-            key,
-            secret: ciphertext,
-            nonce,
-        })
-    }
-
-    fn serialize(payload: &Payload) -> String {
-        match payload {
-            Payload::V0(data) => base64::encode(data),
-            Payload::V1(data) => base64::encode(&serde_json::to_vec(data).unwrap()),
-        }
-    }
+    const PAYLOAD_V0: &str = "eyJ2ZXJzaW9uIjoiVjAiLCJzZWNyZXQiOnsibXlzZWNyZXQxIjp7InNlY3JldCI6Im1VRmsrM0F6N2tXYjhSaDBRRFlMTW9NRmVjRW5EMmxYZTBwYSIsImtleSI6InRabGtHOVdYcHEvZjJhM1BUMndjZHNubng0a1REbG43ODlLMFVDZlIzMis3YysxMFcyWTNIQ21OL3N5Z1hML0tZSEs1dlJxQjQ4d1dFSzhRcWdqQTE2SmRGZlcyVGhGa25GdjJpUzZKVHRxMU8wUTVocTNqc2lVR2ZabnJwWVBXOXF2QjZtVVpBWmMyRC8yRXNpMkhQaDBtUzh3UWpwYnZzcDVlbmJHZU5tbWZZTHhjSEF6cmVPUzV5UkcwYXFYYWI4RVo5N0RsaXRCemV4Sk5SQkZ5UGNYcWg1MWFMOEViemFWVGtuUDlDNHhWUThmamt2UER3SWNrQzRjVlBsdEdHMHZDRlFJTk5VQ29vUzE0d291Qm5ianBST21jSWs3cy90K3hWRnZvZ0pNYzRvaW1NbTFzOUpUcnFURjFVN3hWRmFBTEF6U2FyRG42M0JYb1hUeXBPdGlSd2lMYndSSXFMeG5VZXJvZWpQZVVCQkkyeEtKZERDYzdwN1gra3I2L3RlajlxeXBNWW9YWE91UU45czBKclJmQUY1Z05HQVoxOW1qY1B6aDZNbFd4ZG5Ya2c1bHZpK0xYamxhbU9wK0lQT3FzUmgvaFZQc0xUZFRrbnNxS3NRc0dneDQzL1k2YzlBa1ZGM3J5U3pUaGJrUHVtclJUbGhHejEvSG9ZM20rIiwibm9uY2UiOiJkNnJwUEtyNEJ6Q0NtVWJkMExROHljcjN2WjhmVjI4THVSeUM5a1VvOEtMWlNUU1NXYU82c014STZiSWFnd1VsQ0lyQ3p1b0xqTEZKSENQWDRiZ1dPaEczYlhnSDBKWW02aGZuU0owNHpFbUxUZDFabWxHR3dlZmdyd056TEhMbjMvNkFjUVdUY01RMmtUUFhXTW4xQmRDSkQrUDQwSE1NTlR5MklrSXNyMDcxSVRDR3ovVXQ5ZVlVQXZTNGY1N3VjQTU2VlZPMVhzcmM3RVV1UFVqYXcza0JwaXZBSzVlYVVNZXA0cWNBU25Uek5ZdjJyejl0aGhlSGcyWFRkYko4K3ZEVWptMnNrRkIvTVFUdXYwcENGdmJmb0p6TW9Qa3VXOG5pWktqNHZsZnl4R3Q3VHNuV3c5U2NpViswZ3NkbTB1MFd0b1ZVamQwcTZaMlVnczRhWThiT0h6TFZOVXhQT09ySURpUElreXo3ZDZpQ1JBSWNnME50R3hKVisxbDdrN0d4cTJiNUhUdUN5ZlY0ZGk5bGsrU250dzJtb2Nsb3dmZ0lJbjBxV1BjYW9UUlVBcm1DTld2QTJPU0JaL1Z2b2VhelhYV2xzeXlZSHpINk8rSU51MFZ0K2J2QUpab1FudnBwdTBVT0hFbTBmeFdNZXFhdy9nQXJEd09RVkk5ViIsImhhc2giOiJjelcxUTI0cUpOS3lJeFA2cG81YlBGMnpEV1lSUWZoUnJma041Wk9FbmRFPSIsInNhbHQiOiJLNHBCdG9BeDdQeTBXNXlxIn0sIm15c2VjcmV0MiI6eyJzZWNyZXQiOiIzVGF5REVRaW9PSVRYSnVkblFiTHJBcHlFZ2tPOW1VdEZ3cVEiLCJrZXkiOiJIeFZTamJRcldpQkpmRDBMdjBkWXdnZmREZWNTM3k4QythQlNTMkhESTJmaUVQem8zRzdENGp4cjNOTXlVdTVGeGhjKzZwbUozL1Y0bTVubUQwYi9PZHEraWtia0JsVmZ3TksvM0p3N0E4dHgxZCs4cXBiRWw5ZWRGUjU5REkxZU5La0J6cENKeG1lUHVwMEZTY0J5dUNvdWNWS0lpd1luMStydnF4bG5jNk1CNXZqQnlEV2svaVFDb3haWGgvNmV2VDJGN0laY2pKbFFtNmVGWHgreUZPVVVYWm1PcXF1TFZTMkthY1RUYm1ydEljUEJHZi9NQ29wTERvdEFQakM5bmg3ZXMwRzhQM3NxbVdFL1NnV2M5U2Z3OUovSDVSTVR2a05RWUQwU3Y5TDlvS3VNTmUrYTNlUkdXbkZXMmZQYk5BWFo4S0gyclN2V1RFRXdQME44TEVPeC9hd0xGNEJEbCt4cDZ2WjU2ekYwVDdnM0wwNWhsTjZvZUplWG5nOWgySjJqbUl0bHIrSEpINW9mOVJnSndhNFVTbEYzWk5rWlhzRTFDSUxIL0RYdDVmRVRpOE1ST3ZMb0hHbEJ3Z3hEcnZ4bDNuOHhZaUQyWGJXMlMzS08xLzIvdkVYY21rYnZWNzFOQ3BKdjlpTW5xeDVkUHByd2RDZWFqT1VXeC9wZyIsIm5vbmNlIjoiVE02WDJxUmlvU2VOTmlLQXRheTFoQmg2TU5jN1VaZGRHWGV4S2Q4UEduWmFqWWJ0V1VZVlBsZ2RqNlJGWnBBaVNNUFgxYWU0WllMa0xLdkF0eFVnRjlFNVZTa3JDWGhnWkRYeC9rZUFzY0E2Q3BIbkF3cDF5REd4M1d6M0dTSUl5MlRiTll6MTM1YWlQa1pDNzh3dW9QRkV0NUU4SGR6ZnFqZ3NKR3oxbFdxWithc3RqcWwvdFVWREZVcHZMV1R4b1g2N2NEVXUxdFJqTEJONXppL2lndGdCaTAwSzdHVWRXWjljdHBsZkJESDBOOWNmOXVWamJxbml2UThKUjFwUE5ua0RPNVhyUUxEckxPRVI4YkJhZzYzUWJ6Q3FiMjA5K3RMU2F0SC80dDJDR0NpZS8rektmRlNOVlhEYUdKcTVobEpYODROMExtaURhVEFiR2t3bHJNNVNQczd2TGt5S1U3VnQwMkZCdnZYclpRS1BkRnY0Zjd1YWNjMStCOTRIWEN3bmxWcVk3MkttQzhEMHVNV0RxbEx3K3IwWXJXc0JWYXlYUWFFK3dRcTFkZ3lSS0VQTkwyWEU0b3NPOFdXdkNheG9ndGZ3eG9ZT0Y0WDFNM1lMbE85bVhWUndWcnJ3WHNRd1owT1p5ZXZSemhId3ZEZkVVa2s1eVBMVHN3WGciLCJoYXNoIjoiL3orVXQ1dmtGbk9PeEFGMEhkdHhzczRFbkU4ZHVLdHZsb3dCQXl3bk11UT0iLCJzYWx0IjoieEtacGo2eUQ0RFBTbFFXcCJ9fX0=";
 
     #[test]
-    fn test_v0_decryption() {
-        let private_key = get_private_key();
-        let public_key = private_key.to_public_key();
-        let data = "a bunch of arbitrary data to be encrypted";
+    fn test_extract_secrets_v0() {
+        let actual = extract_secrets(&PRIVATE_KEY, PAYLOAD_V0).unwrap();
 
-        let ciphertext = encrypt_v0(&public_key, data.as_bytes()).unwrap();
-        let ciphertext = serialize(&Payload::V0(ciphertext));
+        let expected = json!({
+            "mysecret1": "testsecret1",
+            "mysecret2": "testsecret2",
+        });
 
-        let decrypted = decrypt(&private_key, &ciphertext).unwrap();
-        assert_eq!(decrypted, data)
-    }
-
-    #[test]
-    fn test_v1_decryption() {
-        let private_key = get_private_key();
-        let public_key = private_key.to_public_key();
-        let data = "a bunch of arbitrary data to be encrypted";
-
-        let ciphertext = encrypt_v1(&public_key, data.as_bytes()).unwrap();
-        let ciphertext = serialize(&Payload::V1(ciphertext));
-
-        let decrypted = decrypt(&private_key, &ciphertext).unwrap();
-        assert_eq!(decrypted, data)
-    }
-
-    #[test]
-    fn test_parse_v0() {
-        let payload = "anything that is not a valid AesPayload serialized as JSON";
-        let payload = base64::encode(payload);
-        let payload = parse(&payload).unwrap();
-        assert!(matches!(payload, Payload::V0(_)));
-    }
-
-    #[test]
-    fn test_parse_v1() {
-        let payload = r#"{"key": "Y2hpc2Vsc3RyaWtlIHJ1bGVz", "nonce": "c29tZSBrZXk=", "secret": "amFuIGlzIHNtYXJ0"}"#;
-        let payload = base64::encode(payload);
-        let payload = parse(&payload).unwrap();
-        assert!(matches!(payload, Payload::V1(_)));
-    }
-
-    #[test]
-    fn test_parse_error() {
-        let payload = "not a valid base64.";
-        assert!(parse(payload).is_err());
+        assert_eq!(expected.as_object().unwrap(), &actual);
     }
 }
