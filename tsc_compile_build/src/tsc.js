@@ -94,7 +94,7 @@
     };
 
     const readCache = {};
-    function compileAux(files, isWorker, lib, emitDeclarations) {
+    function compileAux(root, isWorker, lib, emitDeclarations) {
         const defaultLibs = [
             "lib.deno.unstable.d.ts",
             "lib.deno_core.d.ts",
@@ -125,7 +125,7 @@
             types: [],
         };
 
-        const program = ts.createProgram(files, options, host);
+        const program = ts.createProgram([root], options, host);
         const emitResult = program.emit();
 
         let allDiagnostics = ts
@@ -149,9 +149,9 @@
         }
     }
 
-    function compile(files, isWorker, lib, emitDeclarations) {
+    function compile(root, isWorker, lib, emitDeclarations) {
         try {
-            return compileAux(files, isWorker, lib, emitDeclarations);
+            return compileAux(root, isWorker, lib, emitDeclarations);
         } catch (e) {
             Deno.core.opSync("diagnostic", e.stack + "\n");
             return false;
@@ -186,8 +186,8 @@
         }
     }
 
-    compile(["bootstrap.ts"], false, undefined, false);
-    compile(["bootstrap.ts"], true, undefined, false);
+    compile("bootstrap.ts", false, undefined, false);
+    compile("bootstrap.ts", true, undefined, false);
 
     globalThis.compile = compile;
 })();

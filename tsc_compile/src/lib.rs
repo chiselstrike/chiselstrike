@@ -25,7 +25,9 @@ use deno_graph::ModuleKind;
 use serde::de::DeserializeOwned;
 use serde::Serialize;
 use std::collections::HashMap;
+use std::collections::HashSet;
 use std::env;
+use std::fmt::Write;
 use std::fs;
 use std::future::Future;
 use std::path::Component;
@@ -43,13 +45,21 @@ struct DownloadMap {
     // Precomputed module graph
     graph: ModuleGraph,
 
+    // Code for the dummy root. TSC doesn't support starting the
+    // compilation with a URL that doesn't end in .ts. It is perfectly
+    // happy importing an arbitrary URL, so we work around the TSC
+    // limitation by creating a dummy ROOT_URL which contains imports
+    // of the code we were asked to compile.
+    root_code: String,
+
     diagnostics: String,
 }
 
 impl DownloadMap {
-    fn new(graph: ModuleGraph) -> DownloadMap {
+    fn new(graph: ModuleGraph, root_code: String) -> DownloadMap {
         DownloadMap {
             graph,
+            root_code,
             written: Default::default(),
             diagnostics: Default::default(),
         }
@@ -57,6 +67,9 @@ impl DownloadMap {
 }
 
 fn fetch_impl(map: &mut DownloadMap, path: String, base: String) -> Result<String> {
+    if base == ROOT_URL {
+        return Ok(path);
+    }
     let url = Url::parse(&base).unwrap();
     let resolved = map
         .graph
@@ -83,6 +96,9 @@ fn fetch(s: &mut OpState, path: String, base: String) -> Result<String> {
 }
 
 fn read_impl(map: &mut DownloadMap, path: String) -> Result<String> {
+    if path == ROOT_URL {
+        return Ok(map.root_code.clone());
+    }
     let url = Url::parse(&path)?;
     let module = match map.graph.try_get(&url) {
         Ok(Some(m)) => m,
@@ -204,6 +220,8 @@ struct ModuleLoader {
     extra_libs: HashMap<Url, String>,
 }
 
+static ROOT_URL: &str = "chisel://root_domain/root.ts";
+
 fn load_url(extra_libs: &HashMap<Url, String>, specifier: Url) -> impl Future<Output = LoadResult> {
     let sync_text = match specifier.scheme() {
         "file" => fs::read_to_string(specifier.to_file_path().unwrap()),
@@ -306,19 +324,13 @@ impl Compiler {
         Compiler { runtime }
     }
 
-    pub async fn compile_ts_code(
+    async fn compile_urls(
         &mut self,
-        file_names: &[&str],
+        urls: Vec<Url>,
         opts: CompileOptions<'_>,
-    ) -> Result<HashMap<String, String>> {
-        let mut url_to_name: HashMap<FixedUrl, &str> = HashMap::new();
-        let mut urls = Vec::new();
-        for name in file_names {
-            let url = Url::parse(&format!("file://{}", abs(name)))?;
-            urls.push((url.clone(), ModuleKind::Esm));
-            url_to_name.insert(FixedUrl::parse(url.as_str()).unwrap(), name);
-        }
-
+    ) -> Result<Vec<(FixedUrl, String, bool)>> {
+        let urls: Vec<_> = urls.into_iter().map(|x| (x, ModuleKind::Esm)).collect();
+        let url_set: HashSet<_> = urls.iter().map(|x| x.0.as_str()).collect();
         let mut extra_libs = HashMap::new();
         let mut to_url = HashMap::new();
         for (k, v) in &opts.extra_libs {
@@ -355,10 +367,16 @@ impl Compiler {
 
         graph.valid()?;
 
+        let mut root_code = "".to_string();
+        for u in graph.modules() {
+            write!(root_code, "import \"{}\";", u.specifier).unwrap();
+        }
+        root_code += "export {};";
+
         self.runtime
             .op_state()
             .borrow_mut()
-            .put(DownloadMap::new(graph));
+            .put(DownloadMap::new(graph, root_code));
 
         let global_context = self.runtime.global_context();
         {
@@ -373,16 +391,12 @@ impl Compiler {
             let emit_declarations = v8::Boolean::new(scope, opts.emit_declarations).into();
             let is_worker = v8::Boolean::new(scope, opts.is_worker).into();
 
-            let urls: Vec<_> = urls
-                .iter()
-                .map(|url| v8::String::new(scope, url.0.as_str()).unwrap().into())
-                .collect();
-            let urls = v8::Array::new_with_elements(scope, &urls).into();
+            let root = v8::String::new(scope, ROOT_URL).unwrap().into();
             compile
                 .call(
                     scope,
                     global_proxy.into(),
-                    &[urls, is_worker, lib, emit_declarations],
+                    &[root, is_worker, lib, emit_declarations],
                 )
                 .unwrap();
         }
@@ -390,47 +404,73 @@ impl Compiler {
         let op_state = self.runtime.op_state();
         let mut op_state = op_state.borrow_mut();
         let mut map = op_state.take::<DownloadMap>();
-        if map.diagnostics.is_empty() {
-            let mut prefix_map: HashMap<&str, &Url> = HashMap::default();
-            let mut ret: HashMap<String, String> = HashMap::default();
-            for m in map.graph.modules() {
-                let url = &m.specifier;
-                prefix_map.insert(without_extension(url.as_str()), url);
-                match m.media_type {
-                    MediaType::JavaScript | MediaType::Mjs => {
-                        let source = m.maybe_source.as_ref().unwrap().to_string();
-                        map.written.insert(url.to_string(), source);
-                    }
-                    _ => {}
-                }
-            }
-            for (k, v) in map.written {
-                let prefix = without_extension(&k);
-                let is_dts = k.ends_with(".d.ts");
-                let source = FixedUrl::parse(prefix_map[prefix].as_str()).unwrap();
-                let source = if let Some(n) = url_to_name.get(&source) {
-                    n.to_string()
-                } else if is_dts || source.scheme() == "chisel" {
-                    continue;
-                } else if let Some((rel, source)) = find_relative(&url_to_name, &source) {
-                    let dir_path = Path::new(source).parent().unwrap().to_path_buf();
-                    join_path(dir_path.clone(), Path::new(&rel))
-                        .display()
-                        .to_string()
-                } else {
-                    source.to_string()
-                };
-                let key = if is_dts {
-                    without_extension(&source).to_string() + ".d.ts"
-                } else {
-                    source
-                };
-                ret.insert(key, v);
-            }
-            Ok(ret)
-        } else {
-            Err(anyhow!("Compilation failed:\n{}", map.diagnostics))
+        if !map.diagnostics.is_empty() {
+            anyhow::bail!("Compilation failed:\n{}", map.diagnostics);
         }
+
+        let mut prefix_map: HashMap<&str, &Url> = HashMap::default();
+        for m in map.graph.modules() {
+            let url = &m.specifier;
+            prefix_map.insert(without_extension(url.as_str()), url);
+            match m.media_type {
+                MediaType::JavaScript | MediaType::Mjs => {
+                    let source = m.maybe_source.as_ref().unwrap().to_string();
+                    map.written.insert(url.to_string(), source);
+                }
+                _ => {}
+            }
+        }
+        let mut ret = vec![];
+        for (k, v) in map.written {
+            if k.starts_with("chisel://") {
+                continue;
+            }
+            let prefix = without_extension(&k);
+            let is_dts = k.ends_with(".d.ts");
+            let source = prefix_map[prefix];
+            if is_dts && !url_set.contains(source.as_str()) {
+                continue;
+            }
+            let source = FixedUrl::parse(source.as_str()).unwrap();
+            ret.push((source, v, is_dts));
+        }
+        Ok(ret)
+    }
+
+    pub async fn compile_ts_code(
+        &mut self,
+        file_names: &[&str],
+        opts: CompileOptions<'_>,
+    ) -> Result<HashMap<String, String>> {
+        let mut url_to_name: HashMap<FixedUrl, &str> = HashMap::new();
+        let mut urls = Vec::new();
+        for name in file_names {
+            let url = Url::parse(&format!("file://{}", abs(name)))?;
+            url_to_name.insert(FixedUrl::parse(url.as_str()).unwrap(), name);
+            urls.push(url);
+        }
+
+        let compiled = self.compile_urls(urls, opts).await?;
+        let mut ret = HashMap::default();
+        for (source, v, is_dts) in compiled {
+            let source = if let Some(n) = url_to_name.get(&source) {
+                n.to_string()
+            } else if let Some((rel, source)) = find_relative(&url_to_name, &source) {
+                let dir_path = Path::new(source).parent().unwrap().to_path_buf();
+                join_path(dir_path.clone(), Path::new(&rel))
+                    .display()
+                    .to_string()
+            } else {
+                source.to_string()
+            };
+            let key = if is_dts {
+                without_extension(&source).to_string() + ".d.ts"
+            } else {
+                source
+            };
+            ret.insert(key, v);
+        }
+        Ok(ret)
     }
 }
 
@@ -447,8 +487,10 @@ mod tests {
     use super::abs;
     use super::compile_ts_code;
     use super::CompileOptions;
+    use super::Compiler;
     use anyhow::Result;
     use deno_core::anyhow;
+    use deno_core::url::Url;
     use std::future::Future;
     use std::io::Write;
     use tempfile::Builder;
@@ -689,8 +731,31 @@ export default foo;
     }
 
     #[tokio::test]
+    async fn handlebars_direct() -> Result<()> {
+        let u = Url::parse("https://cdn.skypack.dev/handlebars").unwrap();
+        let mut compiler = Compiler::new(true);
+        compiler.compile_urls(vec![u], Default::default()).await?;
+        Ok(())
+    }
+
+    #[tokio::test]
     async fn deno_types() -> Result<()> {
         compile_ts_code(&["tests/deno_types.ts"], Default::default()).await?;
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn deno_types_import() -> Result<()> {
+        let written =
+            compile_ts_code(&["tests/deno_types_import/a.ts"], Default::default()).await?;
+        let mut keys: Vec<_> = written.keys().collect();
+        keys.sort();
+        let expected = vec![
+            "tests/deno_types_import/a.ts",
+            "tests/deno_types_import/b.js",
+            "tests/deno_types_import/c.ts",
+        ];
+        assert_eq!(keys, expected);
         Ok(())
     }
 
