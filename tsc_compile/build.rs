@@ -34,6 +34,10 @@ fn diagnostic(msg: String) -> Result<()> {
     panic!("unexpected: {}", msg);
 }
 fn main() {
+    // The default is to scan the entire package. The following is the
+    // solution recommended in
+    // https://doc.rust-lang.org/cargo/reference/build-scripts.html#cargorerun-if-changedpath
+    println!("cargo:rerun-if-changed=build.rs");
     let out = PathBuf::from(env::var_os("OUT_DIR").unwrap());
     let snapshot_path = out.join("SNAPSHOT.bin");
 
