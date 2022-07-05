@@ -75,7 +75,7 @@ fn chisel() -> String {
 fn main() {
     // install the current packages in our package.json. This will make things like esbuild
     // generally available. Tests that want a specific extra package can then install on top
-    run("npm", ["install"], None);
+    run("npm", ["install"]);
 
     let opt = Opt::from_args();
 
@@ -84,7 +84,7 @@ fn main() {
     if bd.ends_with("release") {
         args.push("--release");
     }
-    run("cargo", args, None);
+    run("cargo", args);
 
     let ok_without_optimization = run_tests(opt.clone(), false);
     let ok_with_optimization = run_tests(opt, true);
