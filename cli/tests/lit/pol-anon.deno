@@ -104,6 +104,17 @@ $CURL -o - $CHISELD_HOST/dev/find
 # CHECK: HTTP/1.1 200 OK
 # CHECK: xxxxx xxxxx
 
+cat << EOF > "$TEMPDIR/policies/pol.yaml"
+labels:
+  - name: L2
+    transform: omit
+EOF
+$CHISEL apply
+
+$CURL -o - $CHISELD_HOST/dev/find
+# CHECK: HTTP/1.1 200 OK
+# CHECK: 2147483647 false 12742333
+
 
 
 ## Test anonymization of related entities.
