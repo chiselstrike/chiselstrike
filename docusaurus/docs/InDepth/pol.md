@@ -99,6 +99,46 @@ The `pii` fields were anonymized!  It is not possible for any
 endpoint code to accidentally read `pii` data, eliminating human
 errors from the process.
 
+Another transformation you can do is omitting a field altogether.  If you modify
+the file `my-backend/policies/pol.yml` this way:
+
+```yaml title="my-backend/policies/pol.yml"
+labels:
+  - name: pii
+    transform: omit
+```
+
+your endpoints will not see the existence of any `@pii` fields:
+
+```bash
+curl -s localhost:8080/dev/comments
+```
+
+will return
+
+```json
+{
+    "results": [
+        {
+            "id": "a4ca3ab3-2e26-4da6-a5de-418c1e6b9b83",
+            "content": "First comment",
+        },
+        {
+            "id": "fed312d7-b36b-4f34-bb04-fba327a3f440",
+            "content": "Second comment",
+        },
+        {
+            "id": "adc89862-dfaa-43ab-a639-477111afc55e",
+            "content": "Third comment",
+        },
+        {
+            "id": "5bfef47e-371b-44e8-a2dd-88260b5c3f2c",
+            "content": "Fourth comment",
+        }
+    ]
+}
+```
+
 ## Policy Exceptions
 
 Here is how you can except the `comments` endpoint from automatic
