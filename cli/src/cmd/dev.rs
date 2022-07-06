@@ -102,8 +102,8 @@ pub(crate) async fn cmd_dev(
             }
         }
     }
-    server.kill()?;
-    server.wait()?;
+    server.kill().await?;
+    server.wait().await?;
     sig_task.await??;
 
     Ok(())

@@ -263,7 +263,7 @@ async fn main() -> Result<()> {
         Command::Start => {
             let mut server = start_server(chiseld_args)?;
             wait(server_url).await?;
-            server.wait()?;
+            server.wait().await?;
         }
         Command::Status => {
             let mut client = ChiselRpcClient::connect(server_url).await?;
