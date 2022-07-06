@@ -65,15 +65,16 @@ impl VersionTypes {
 }
 
 fn string_field(name: &str) -> Field {
+    let api_version = "__chiselstrike".to_string();
     Field {
         id: None,
         name: name.into(),
-        type_: Type::String,
+        type_id: TypeId::String,
         labels: vec![],
         default: None,
         effective_default: None,
         is_optional: false,
-        api_version: "__chiselstrike".into(),
+        api_version,
         is_unique: false,
     }
 }
@@ -85,15 +86,16 @@ fn optional_string_field(name: &str) -> Field {
 }
 
 fn optional_number_field(name: &str) -> Field {
+    let api_version = "__chiselstrike".to_string();
     Field {
         id: None,
         name: name.into(),
-        type_: Type::Float,
+        type_id: TypeId::Float,
         labels: vec![],
         default: None,
         effective_default: None,
         is_optional: true,
-        api_version: "__chiselstrike".into(),
+        api_version,
         is_unique: false,
     }
 }
@@ -211,6 +213,7 @@ impl TypeSystem {
     pub(crate) fn generate_type_delta(
         old_type: &ObjectType,
         new_type: Arc<ObjectType>,
+        ts: &TypeSystem,
     ) -> Result<ObjectDelta, TypeSystemError> {
         if *old_type != *new_type {
             return Err(TypeSystemError::UnsafeReplacement(
@@ -230,6 +233,7 @@ impl TypeSystem {
         let mut updated_fields = Vec::new();
 
         for (name, field) in new_fields.map.iter() {
+            let field_ty = ts.get(&field.type_id)?;
             match old_fields.map.remove(name) {
                 None => {
                     if field.default.is_none() && !field.is_optional {
@@ -238,15 +242,16 @@ impl TypeSystem {
                     added_fields.push(field.to_owned().clone());
                 }
                 Some(old) => {
-                    if field.type_ != old.type_ {
+                    let old_ty = ts.get(&old.type_id)?;
+                    if field_ty != old_ty {
                         // FIXME: it should be almost always possible to evolve things into
                         // strings.
                         return Err(TypeSystemError::UnsafeReplacement(
                             new_type.name.clone(),
                             format!(
                                 "changing types from {} into {} for field {}. Incompatible change",
-                                old.type_.name(),
-                                field.type_.name(),
+                                old_ty.name(),
+                                field_ty.name(),
                                 field.name
                             ),
                         ));
@@ -267,12 +272,12 @@ impl TypeSystem {
                     }
 
                     let attrs = if field.default != old.default
-                        || field.type_ != old.type_
+                        || field_ty != old_ty
                         || field.is_optional != old.is_optional
                         || field.is_unique != old.is_unique
                     {
                         Some(FieldAttrDelta {
-                            type_: field.type_.clone(),
+                            type_id: field.type_id.clone(),
                             default: field.default.clone(),
                             is_optional: field.is_optional,
                             is_unique: field.is_unique,
@@ -478,8 +483,18 @@ impl TypeSystem {
             Entity::Auth(Arc::new(ObjectType::new(desc, fields, vec![]).unwrap())).into()
         });
     }
+
+    pub(crate) fn get(&self, ty: &TypeId) -> Result<Type, TypeSystemError> {
+        match ty {
+            TypeId::String | TypeId::Float | TypeId::Boolean | TypeId::Id => {
+                self.lookup_builtin_type(ty.name())
+            }
+            TypeId::Entity { name, api_version } => self.lookup_type(name, api_version),
+        }
+    }
 }
 
+#[allow(dead_code)]
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) enum Type {
     String,
@@ -671,6 +686,50 @@ impl<'a> ObjectDescriptor for NewObject<'a> {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum TypeId {
+    String,
+    Float,
+    Boolean,
+    Id,
+    Entity { name: String, api_version: String },
+}
+
+impl TypeId {
+    pub(crate) fn name(&self) -> &str {
+        match self {
+            TypeId::Id | TypeId::String => "string",
+            TypeId::Float => "number",
+            TypeId::Boolean => "boolean",
+            TypeId::Entity { ref name, .. } => name,
+        }
+    }
+}
+
+impl From<Type> for TypeId {
+    fn from(other: Type) -> Self {
+        match other {
+            Type::String => Self::String,
+            Type::Float => Self::Float,
+            Type::Id => Self::Id,
+            Type::Boolean => Self::Boolean,
+            Type::Entity(e) => Self::Entity {
+                name: e.name().to_string(),
+                api_version: e.api_version.clone(),
+            },
+        }
+    }
+}
+
+impl<T> From<T> for TypeId
+where
+    T: FieldDescriptor,
+{
+    fn from(other: T) -> Self {
+        other.ty().into()
+    }
+}
+
 #[derive(Debug)]
 pub(crate) struct ObjectType {
     /// id of this object in the meta-database. Will be None for objects that are not persisted yet
@@ -722,7 +781,7 @@ impl ObjectType {
         let chisel_id = Field {
             id: None,
             name: "id".to_string(),
-            type_: Type::Id,
+            type_id: TypeId::Id,
             labels: Vec::default(),
             default: None,
             effective_default: None,
@@ -730,6 +789,7 @@ impl ObjectType {
             api_version: "__chiselstrike".into(),
             is_unique: true,
         };
+
         Ok(Self {
             meta_id: desc.id(),
             name: desc.name(),
@@ -851,9 +911,9 @@ impl<'a> FieldMap<'a> {
         for (name, field) in self.map.iter() {
             if let Some(existing) = source_type.map.get(name) {
                 anyhow::ensure!(
-                    existing.type_.name() == field.type_.name(),
+                    existing.type_id.name() == field.type_id.name(),
                     "Type name mismatch on field {} ({} -> {}). We don't support that yet, but that's coming soon! 🙏",
-                    name, existing.type_.name(), field.type_.name()
+                    name, existing.type_id.name(), field.type_id.name()
                 );
             } else {
                 anyhow::ensure!(
@@ -948,7 +1008,7 @@ impl<'a> FieldDescriptor for NewField<'a> {
 pub(crate) struct Field {
     pub(crate) id: Option<i32>,
     pub(crate) name: String,
-    pub(crate) type_: Type,
+    pub(crate) type_id: TypeId,
     pub(crate) labels: Vec<String>,
     pub(crate) is_optional: bool,
     pub(crate) is_unique: bool,
@@ -985,8 +1045,8 @@ impl Field {
         Self {
             id: desc.id(),
             name: desc.name(),
-            type_: desc.ty(),
             api_version: desc.api_version(),
+            type_id: desc.into(),
             labels,
             default,
             effective_default,
@@ -1004,8 +1064,8 @@ impl Field {
     }
 
     pub(crate) fn generate_value(&self) -> Option<String> {
-        match self.type_ {
-            Type::Id => Some(Uuid::new_v4().to_string()),
+        match self.type_id {
+            TypeId::Id => Some(Uuid::new_v4().to_string()),
             _ => self.default.clone(),
         }
     }
@@ -1022,7 +1082,7 @@ impl Field {
 
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) struct FieldAttrDelta {
-    pub(crate) type_: Type,
+    pub(crate) type_id: TypeId,
     pub(crate) default: Option<String>,
     pub(crate) is_optional: bool,
     pub(crate) is_unique: bool,
