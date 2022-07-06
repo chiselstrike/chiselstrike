@@ -79,8 +79,7 @@ enum Command {
         auto_index: bool,
     },
     /// Start the ChiselStrike server.
-    #[structopt(external_subcommand)]
-    Start(Vec<String>),
+    Start,
     /// Show ChiselStrike server status.
     Status,
     /// Restart the running ChiselStrike server.
@@ -151,7 +150,13 @@ pub(crate) async fn restart(server_url: String) -> Result<()> {
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    let opt = Opt::from_args();
+    let chisel_args = std::env::args().take_while(|arg| arg != "--");
+    let chiseld_args = std::env::args()
+        .skip_while(|arg| arg != "--")
+        .skip(1)
+        .collect::<Vec<_>>();
+
+    let opt = Opt::from_iter(chisel_args);
     let server_url = opt.rpc_addr;
     match opt.cmd {
         Command::Init {
@@ -224,7 +229,7 @@ async fn main() -> Result<()> {
             }
         }
         Command::Dev { type_check } => {
-            cmd_dev(server_url.clone(), type_check).await?;
+            cmd_dev(server_url.clone(), type_check, chiseld_args).await?;
         }
         Command::New {
             path,
@@ -255,8 +260,8 @@ async fn main() -> Result<()> {
             };
             create_project(path, opts)?;
         }
-        Command::Start { .. } => {
-            let mut server = start_server()?;
+        Command::Start => {
+            let mut server = start_server(chiseld_args)?;
             wait(server_url).await?;
             server.wait()?;
         }

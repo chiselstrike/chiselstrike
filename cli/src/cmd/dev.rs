@@ -17,7 +17,11 @@ use std::time::Duration;
 use tokio::task::JoinHandle;
 use tsc_compile::deno_core;
 
-pub(crate) async fn cmd_dev(server_url: String, type_check: bool) -> Result<()> {
+pub(crate) async fn cmd_dev(
+    server_url: String,
+    type_check: bool,
+    chiseld_args: Vec<String>,
+) -> Result<()> {
     let type_check = type_check.into();
     let manifest = read_manifest()?;
     let (signal_tx, mut signal_rx) = utils::make_signal_channel();
@@ -33,7 +37,7 @@ pub(crate) async fn cmd_dev(server_url: String, type_check: bool) -> Result<()> 
         signal_tx.send(()).await?;
         Ok(())
     });
-    let mut server = start_server()?;
+    let mut server = start_server(chiseld_args)?;
     wait(server_url.clone()).await?;
     apply_from_dev(server_url.clone(), type_check).await;
     let (mut watcher_tx, mut watcher_rx) = channel(1);

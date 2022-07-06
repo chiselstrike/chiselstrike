@@ -9,7 +9,7 @@ use std::thread;
 use std::time::Duration;
 use tonic::transport::Channel;
 
-pub(crate) fn start_server() -> anyhow::Result<std::process::Child> {
+pub(crate) fn start_server(chiseld_args: Vec<String>) -> anyhow::Result<std::process::Child> {
     println!("🚀 Thank you for your interest in the ChiselStrike beta! 🚀");
     println!();
     println!("⚠️  This software is for evaluation purposes only. Do not use it in production. ⚠️ ");
@@ -27,7 +27,7 @@ pub(crate) fn start_server() -> anyhow::Result<std::process::Child> {
     cmd.pop();
     cmd.push("chiseld");
     let server = match std::process::Command::new(cmd.clone())
-        .args(std::env::args().skip(2))
+        .args(chiseld_args)
         .spawn() {
             Ok(server) => server,
             Err(e) => {
