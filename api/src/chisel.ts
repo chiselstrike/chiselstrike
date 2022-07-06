@@ -8,7 +8,6 @@ function opAsync(opName: string, a?: unknown, b?: unknown): Promise<unknown> {
     return Deno.core.opAsync(opName, a, b);
 }
 
-
 /**
  * Acts the same as Object.assign, but performs deep merge instead of a shallow one.
  */
@@ -17,7 +16,8 @@ function mergeDeep(
     ...sources: Record<string, unknown>[]
 ): Record<string, unknown> {
     function isObject(item: unknown): boolean {
-        return (item && typeof item === 'object' && !Array.isArray(item)) as boolean;
+        return (item && typeof item === "object" &&
+            !Array.isArray(item)) as boolean;
     }
 
     if (!sources.length) {
