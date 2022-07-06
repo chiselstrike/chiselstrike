@@ -383,7 +383,7 @@ impl QueryEngine {
             match s_field {
                 QueryField::Scalar {
                     name,
-                    type_kind,
+                    type_id,
                     column_idx,
                     is_optional,
                     transform,
@@ -400,7 +400,7 @@ impl QueryEngine {
                             json!(val)
                         }};
                     }
-                    let mut val = match type_kind {
+                    let mut val = match type_id {
                         TypeId::Float => {
                             // https://github.com/launchbadge/sqlx/issues/1596
                             // sqlx gets confused if the float doesn't have decimal points.

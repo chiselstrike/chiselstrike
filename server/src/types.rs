@@ -86,7 +86,6 @@ fn optional_string_field(name: &str) -> Field {
 }
 
 fn optional_number_field(name: &str) -> Field {
-    let api_version = "__chiselstrike".to_string();
     Field {
         id: None,
         name: name.into(),
@@ -95,7 +94,7 @@ fn optional_number_field(name: &str) -> Field {
         default: None,
         effective_default: None,
         is_optional: true,
-        api_version,
+        api_version: "__chiselstrike".into(),
         is_unique: false,
     }
 }
@@ -494,13 +493,11 @@ impl TypeSystem {
     }
 }
 
-#[allow(dead_code)]
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) enum Type {
     String,
     Float,
     Boolean,
-    Id,
     Entity(Entity),
 }
 
@@ -508,7 +505,7 @@ impl Type {
     pub(crate) fn name(&self) -> &str {
         match self {
             Type::Float => "number",
-            Type::String | Type::Id => "string",
+            Type::String => "string",
             Type::Boolean => "boolean",
             Type::Entity(ty) => &ty.name,
         }
@@ -711,7 +708,6 @@ impl From<Type> for TypeId {
         match other {
             Type::String => Self::String,
             Type::Float => Self::Float,
-            Type::Id => Self::Id,
             Type::Boolean => Self::Boolean,
             Type::Entity(e) => Self::Entity {
                 name: e.name().to_string(),

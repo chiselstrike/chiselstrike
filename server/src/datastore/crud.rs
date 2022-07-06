@@ -407,7 +407,7 @@ fn json_to_literal(field_type: &Type, value: &serde_json::Value) -> Result<Expr>
             "trying to filter by property of type '{}' which is not supported",
             ty.name()
         ),
-        Type::String | Type::Id => Literal::String(convert!(as_str, "string")),
+        Type::String => Literal::String(convert!(as_str, "string")),
         Type::Float => Literal::F64(convert!(as_f64, "float")),
         Type::Boolean => Literal::Bool(convert!(as_bool, "bool")),
     };
@@ -482,7 +482,7 @@ fn filter_from_param(
             fields.last().unwrap(),
             ty.name()
         ),
-        Type::String | Type::Id => Literal::String(value.to_owned()),
+        Type::String => Literal::String(value.to_owned()),
         Type::Float => Literal::F64(value.parse::<f64>().with_context(|| err_msg("f64"))?),
         Type::Boolean => Literal::Bool(value.parse::<bool>().with_context(|| err_msg("bool"))?),
     };

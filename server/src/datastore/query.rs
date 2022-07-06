@@ -65,7 +65,7 @@ pub(crate) enum QueryField {
         /// Name of the original Type field
         name: String,
         /// Type of the field
-        type_kind: TypeId,
+        type_id: TypeId,
         is_optional: bool,
         /// Index of a column containing this field in the resulting row we get from
         /// the database.
@@ -338,7 +338,7 @@ impl QueryPlan {
         let column_idx = self.columns.len();
         let select_field = QueryField::Scalar {
             name: field.name.clone(),
-            type_kind: field.type_id.clone(),
+            type_id: field.type_id.clone(),
             is_optional: field.is_optional,
             column_idx,
             transform,

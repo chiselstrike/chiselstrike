@@ -603,7 +603,6 @@ impl From<Type> for TypeMsg {
     fn from(ty: Type) -> TypeMsg {
         let ty = match ty {
             Type::Float => TypeEnum::Number(true),
-            Type::Id => TypeEnum::String(true),
             Type::String => TypeEnum::String(true),
             Type::Boolean => TypeEnum::Bool(true),
             Type::Entity(entity) => TypeEnum::Entity(entity.name().to_owned()),
