@@ -871,6 +871,17 @@ mod tests {
                 );
             }
         }
+
+        // Test multiple levels of indirection
+        let chiselstrike = json!({"name": "ChiselStrike", "ceo": john});
+        let thunderstrike = json!({"name": "ThunderStrike", "ceo": alan});
+        {
+            add_row(qe, &COMPANY_TY, &chiselstrike).await;
+            add_row(qe, &COMPANY_TY, &thunderstrike).await;
+
+            let r = run_query_vec("Company", url(".ceo.age~lte=20"), qe).await;
+            assert_eq!(r, vec!["ChiselStrike"]);
+        }
     }
 
     #[tokio::test]
