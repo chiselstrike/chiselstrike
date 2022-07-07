@@ -10,12 +10,13 @@ use chisel::{
     type_msg::TypeEnum, ChiselDeleteRequest, DescribeRequest, PopulateRequest, RestartRequest,
     StatusRequest,
 };
-use futures::{pin_mut, FutureExt};
+use futures::{pin_mut, Future, FutureExt};
 use std::env;
 use std::fs;
 use std::io::ErrorKind;
 use std::path::Path;
 use structopt::StructOpt;
+use tokio::process::Child;
 
 mod chisel;
 mod cmd;
@@ -149,6 +150,29 @@ pub(crate) async fn restart(server_url: String) -> Result<()> {
     Ok(())
 }
 
+async fn spawn_server<T, F, Fut, Fut2>(chiseld_args: Vec<String>, fut: Fut, cb: F) -> Result<()>
+where
+    Fut: Future<Output = T>,
+    Fut2: Future<Output = Result<()>>,
+    F: FnOnce(Child, T) -> Fut2,
+{
+    let mut server = start_server(chiseld_args)?;
+    let fut = fut.fuse();
+
+    pin_mut!(fut);
+
+    tokio::select! {
+        res = server.wait() => {
+            res?;
+        }
+        res = &mut fut => {
+            cb(server, res).await?;
+        }
+    }
+
+    Ok(())
+}
+
 #[tokio::main]
 async fn main() -> Result<()> {
     let chisel_args = std::env::args().take_while(|arg| arg != "--");
@@ -230,25 +254,17 @@ async fn main() -> Result<()> {
             }
         }
         Command::Dev { type_check } => {
-            let mut server = start_server(chiseld_args)?;
-            let cmd_dev_fut = cmd_dev(server_url.clone(), type_check).fuse();
+            let fut = cmd_dev(server_url.clone(), type_check);
+            let cb = |mut server: Child, res| async move {
+                let sig_task = res?;
+                server.kill().await?;
+                server.wait().await?;
+                sig_task.await??;
 
-            pin_mut!(cmd_dev_fut);
+                Ok(())
+            };
 
-            loop {
-                tokio::select! {
-                    res = server.wait() => {
-                        res?;
-                        break;
-                    }
-                    res = &mut cmd_dev_fut => {
-                        let sig_task = res?;
-                        server.kill().await?;
-                        server.wait().await?;
-                        sig_task.await??;
-                    }
-                }
-            }
+            spawn_server(chiseld_args, fut, cb).await?;
         }
         Command::New {
             path,
@@ -280,22 +296,15 @@ async fn main() -> Result<()> {
             create_project(path, opts)?;
         }
         Command::Start => {
-            let mut server = start_server(chiseld_args)?;
-            let url_fut = wait(server_url).fuse();
+            let fut = wait(server_url);
+            let cb = |mut server: Child, res: Result<_>| async move {
+                res?;
+                server.wait().await?;
 
-            pin_mut!(url_fut);
+                Ok(())
+            };
 
-            loop {
-                tokio::select! {
-                    res = server.wait() => {
-                        res?;
-                        break;
-                    }
-                    res = &mut url_fut => {
-                        res?;
-                    }
-                }
-            }
+            spawn_server(chiseld_args, fut, cb).await?;
         }
         Command::Status => {
             let mut client = ChiselRpcClient::connect(server_url).await?;
