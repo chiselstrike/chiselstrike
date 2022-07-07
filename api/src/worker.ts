@@ -218,8 +218,15 @@ async function callHandlerImpl(
         user,
     );
 
-    const res = await handlers[fullPath](req);
+    let res = await handlers[fullPath](req);
     const resHeaders = [];
+    // FIXME: we could try to building a ReadableStream from
+    // this instead of materializing a full response. Probably
+    // a bit faster but this is a lot simpler for now.
+    if (res?.constructor.name != "Response") {
+        res = Chisel.responseFromJson(res);
+    }
+
     for (const h of res.headers) {
         resHeaders.push(h);
     }
