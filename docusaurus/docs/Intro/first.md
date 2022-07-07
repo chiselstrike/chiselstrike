@@ -316,13 +316,10 @@ will return all comments where field `by` is equal to `Jack`. Our api supports o
 | ~like   | Like operator - supports the same syntax as SQL Like operator     |
 | ~unlike | Equivalent to SQL's NOT LIKE                                      |
 
-Relationships are supported as well. Imagine that Comments's field `by` would be of type `Person` which would have a field `age`. In such a scenario, to get all comments that were written byt authors under 40 and are named John, we would do:
 
-```bash
-curl -g localhost:8080/dev/comments?.by.age~lt=40&.by.name=John
-```
+### Sorting
 
-Similarly, you can order the results by specifying the `sort` parameter:
+You can order the results by specifying the `sort` parameter:
 ```bash
 curl -g localhost:8080/dev/comments?sort=-by
 ```
@@ -417,6 +414,29 @@ If both `limit` and `offset` are used, they are applied in traditional order - w
 ...note:
 The order in which you specify CRUD parameters *does not* matter. For example `?sort=by&limit=2&sort=content` will yield the same results as `?sort=content&limit=2`.
 ...
+
+### Relationships
+Relationships are supported as well. Let's modify our models and add an additional `Person` entity:
+
+```typescript title="my-backend/models/Person.ts"
+export class Person extends ChiselEntity {
+    name: string = "";
+    age: number = 0;
+}
+```
+
+```typescript title="my-backend/models/BlogComment.ts"
+export class BlogComment extends ChiselEntity {
+    content: string = "";
+    by: Person;
+}
+```
+
+In such a scenario, to get all comments that were written byt authors under 40 and are named John, we would do:
+
+```bash
+curl -g localhost:8080/dev/comments?.by.age~lt=40&.by.name=John&sort=by.name
+```
 
 ## PUT and DELETE
 
