@@ -8,10 +8,10 @@ use crate::project::read_to_string;
 use anyhow::{anyhow, Context, Result};
 use std::collections::HashMap;
 use std::env;
-use std::fs::{self};
+use std::ffi::OsStr;
+use std::fs::{self, File};
 use std::io::Write;
 use std::path::PathBuf;
-use tempfile::Builder;
 use tokio::task::{spawn_blocking, JoinHandle};
 
 pub(crate) async fn apply(
@@ -32,47 +32,55 @@ pub(crate) async fn apply(
         TypeChecking::No => None,
     };
 
-    let mut endpoint_futures = vec![];
-    let mut keep_tmp_alive = vec![];
-
     let cwd = env::current_dir()?;
     let gen_dir = cwd.join(".gen");
     fs::create_dir_all(&gen_dir)?;
 
-    let chiselc_futures: Vec<(_, _, _)> = endpoints
-        .iter()
-        .map(|endpoint| {
-            if optimize {
-                let endpoint_file_path = endpoint.clone();
-                let gen_file_path = gen_dir.join(endpoint_file_path.file_name().unwrap());
-                let chiselc = chiselc_spawn(
-                    endpoint.to_str().unwrap(),
-                    gen_file_path.to_str().unwrap(),
-                    entities,
-                )
-                .unwrap();
-                let future = chiselc;
-                let import_path = gen_file_path
-                    .strip_prefix(cwd.clone())
-                    .unwrap()
-                    .to_path_buf();
-                (Some(Box::new(future)), endpoint_file_path, import_path)
-            } else {
-                let path = endpoint.to_owned();
-                (None, path.clone(), path)
-            }
-        })
-        .collect();
+    let chiselc_futures = endpoints.iter().map(|endpoint| {
+        if optimize {
+            let endpoint_file_path = endpoint.clone();
+            let gen_file_path = gen_dir.join(endpoint_file_path.file_name().unwrap());
+            let chiselc = chiselc_spawn(
+                endpoint.to_str().unwrap(),
+                gen_file_path.to_str().unwrap(),
+                entities,
+            )
+            .unwrap();
+            let future = chiselc;
+            let import_path = gen_file_path
+                .strip_prefix(cwd.clone())
+                .unwrap()
+                .to_path_buf();
+            (Some(Box::new(future)), endpoint_file_path, import_path)
+        } else {
+            let path = endpoint.to_owned();
+            (None, path.clone(), path)
+        }
+    });
 
+    let mut bundler_file_mapping = vec![];
+
+    let mut bundler_cmd_args = vec![];
+
+    let bundler_input_dir = tempfile::tempdir()?;
+    let bundler_output_dir = tempfile::tempdir()?;
+
+    let bundler_input_dir_name = bundler_input_dir.path();
+    let bundler_output_dir_name = bundler_output_dir.path();
+
+    let mut idx = 0;
     for (mut chiselc_future, endpoint_file_path, import_path) in chiselc_futures {
+        idx += 1;
         if let Some(mut chiselc_future) = chiselc_future.take() {
             chiselc_future.wait().await?;
         }
-        let out = Builder::new().suffix(".ts").tempfile()?;
-        let bundler_output_file = out.path().to_str().unwrap().to_owned();
 
-        let mut f = Builder::new().suffix(".ts").tempfile()?;
-        let inner = f.as_file_mut();
+        let idx_file_name = format!("{}.ts", idx);
+        let file_path = bundler_input_dir_name.join(&idx_file_name);
+        bundler_file_mapping.push((endpoint_file_path, idx_file_name));
+
+        let mut file = File::create(&file_path)?;
+
         let mut import_path = import_path.clone();
         import_path.set_extension("");
 
@@ -81,45 +89,40 @@ pub(crate) async fn apply(
             cwd.display(),
             import_path.display()
         );
-        inner.write_all(code.as_bytes())?;
-        inner.flush()?;
-        let bundler_entry_fname = f.path().to_str().unwrap().to_owned();
-        keep_tmp_alive.push(f);
-        keep_tmp_alive.push(out);
-
-        let cmd = npx(
-            "esbuild",
-            &[
-                &bundler_entry_fname,
-                "--bundle",
-                "--color=true",
-                "--target=esnext",
-                "--external:@chiselstrike",
-                "--format=esm",
-                "--tree-shaking=true",
-                "--tsconfig=./tsconfig.json",
-                "--platform=node",
-                &format!("--outfile={}", bundler_output_file),
-            ],
-            None,
-        );
-        endpoint_futures.push((endpoint_file_path.clone(), bundler_output_file.clone(), cmd));
+        file.write_all(code.as_bytes())?;
+        file.flush()?;
+        let bundler_entry_fname = file_path.to_str().unwrap().to_owned();
+        bundler_cmd_args.push(bundler_entry_fname);
     }
 
-    for (endpoint, execution) in endpoints.iter().zip(endpoint_futures.into_iter()) {
-        let (endpoint_file_path, bundler_output_file, res) = execution;
-        let res = res.await.unwrap()?;
+    bundler_cmd_args.extend_from_slice(&[
+        "--bundle".to_string(),
+        "--color=true".to_string(),
+        "--target=esnext".to_string(),
+        "--external:@chiselstrike".to_string(),
+        "--format=esm".to_string(),
+        "--tree-shaking=true".to_string(),
+        "--tsconfig=./tsconfig.json".to_string(),
+        "--platform=node".to_string(),
+    ]);
 
-        if !res.status.success() {
-            let out = String::from_utf8(res.stdout).expect("command output not utf-8");
-            let err = String::from_utf8(res.stderr).expect("command output not utf-8");
+    bundler_cmd_args.push(format!("--outdir={}", bundler_output_dir_name.display()));
+    let cmd = npx("esbuild", &bundler_cmd_args, None);
+    let res = cmd.await.unwrap()?;
 
-            return Err(anyhow!("compiling endpoint {}", endpoint.display()))
-                .with_context(|| format!("{}\n{}", out, err));
-        }
+    if !res.status.success() {
+        let out = String::from_utf8(res.stdout).expect("command output not utf-8");
+        let err = String::from_utf8(res.stderr).expect("command output not utf-8");
+        return Err(anyhow!("compiling endpoints")).with_context(|| format!("{}\n{}", out, err));
+    }
+
+    for (endpoint_name, bundler_info) in endpoints.iter().zip(bundler_file_mapping.iter()) {
+        let (endpoint_file_path, idx_file_name) = bundler_info;
+        let mut bundler_output_file = bundler_output_dir_name.join(&idx_file_name);
+        bundler_output_file.set_extension("js");
         let code = read_to_string(bundler_output_file)?;
 
-        endpoints_req.insert(endpoint.display().to_string(), code);
+        endpoints_req.insert(endpoint_name.display().to_string(), code);
         if auto_index {
             let code = read_to_string(endpoint_file_path.clone())?;
             let mut indexes = parse_indexes(code, entities)?;
@@ -138,9 +141,9 @@ pub(crate) async fn apply(
     Ok((endpoints_req, index_candidates_req))
 }
 
-fn npx(
-    command: &str,
-    args: &[&str],
+fn npx<A: AsRef<OsStr>, C: AsRef<OsStr>>(
+    command: C,
+    args: &[A],
     stdin: Option<std::process::ChildStdout>,
 ) -> JoinHandle<Result<std::process::Output>> {
     let mut cmd = std::process::Command::new("npx");
