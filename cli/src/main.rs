@@ -10,6 +10,7 @@ use chisel::{
     type_msg::TypeEnum, ChiselDeleteRequest, DescribeRequest, PopulateRequest, RestartRequest,
     StatusRequest,
 };
+use futures::{pin_mut, FutureExt};
 use std::env;
 use std::fs;
 use std::io::ErrorKind;
@@ -229,7 +230,25 @@ async fn main() -> Result<()> {
             }
         }
         Command::Dev { type_check } => {
-            cmd_dev(server_url.clone(), type_check, chiseld_args).await?;
+            let mut server = start_server(chiseld_args)?;
+            let cmd_dev_fut = cmd_dev(server_url.clone(), type_check).fuse();
+
+            pin_mut!(cmd_dev_fut);
+
+            loop {
+                tokio::select! {
+                    res = server.wait() => {
+                        res?;
+                        break;
+                    }
+                    res = &mut cmd_dev_fut => {
+                        let sig_task = res?;
+                        server.kill().await?;
+                        server.wait().await?;
+                        sig_task.await??;
+                    }
+                }
+            }
         }
         Command::New {
             path,
@@ -262,8 +281,21 @@ async fn main() -> Result<()> {
         }
         Command::Start => {
             let mut server = start_server(chiseld_args)?;
-            wait(server_url).await?;
-            server.wait()?;
+            let url_fut = wait(server_url).fuse();
+
+            pin_mut!(url_fut);
+
+            loop {
+                tokio::select! {
+                    res = server.wait() => {
+                        res?;
+                        break;
+                    }
+                    res = &mut url_fut => {
+                        res?;
+                    }
+                }
+            }
         }
         Command::Status => {
             let mut client = ChiselRpcClient::connect(server_url).await?;

@@ -2,7 +2,7 @@
 
 use crate::cmd::apply::{apply, AllowTypeDeletion, TypeChecking};
 use crate::project::read_manifest;
-use crate::server::{start_server, wait};
+use crate::server::wait;
 use crate::DEFAULT_API_VERSION;
 use anyhow::Result;
 use deno_core::futures;
@@ -20,8 +20,7 @@ use tsc_compile::deno_core;
 pub(crate) async fn cmd_dev(
     server_url: String,
     type_check: bool,
-    chiseld_args: Vec<String>,
-) -> Result<()> {
+) -> Result<JoinHandle<Result<()>>> {
     let type_check = type_check.into();
     let manifest = read_manifest()?;
     let (signal_tx, mut signal_rx) = utils::make_signal_channel();
@@ -37,7 +36,6 @@ pub(crate) async fn cmd_dev(
         signal_tx.send(()).await?;
         Ok(())
     });
-    let mut server = start_server(chiseld_args)?;
     wait(server_url.clone()).await?;
     apply_from_dev(server_url.clone(), type_check).await;
     let (mut watcher_tx, mut watcher_rx) = channel(1);
@@ -102,11 +100,7 @@ pub(crate) async fn cmd_dev(
             }
         }
     }
-    server.kill()?;
-    server.wait()?;
-    sig_task.await??;
-
-    Ok(())
+    Ok(sig_task)
 }
 
 async fn apply_from_dev(server_url: String, type_check: TypeChecking) {

@@ -626,6 +626,7 @@ version = "0.11.0-dev.0"
 dependencies = [
  "anyhow",
  "endpoint_tsc",
+ "futures",
  "glob",
  "handlebars",
  "itertools 0.10.3",
