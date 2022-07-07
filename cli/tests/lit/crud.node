@@ -149,6 +149,11 @@ $CURL $CHISELD_HOST/dev/persons/$id # GET by id
 $CURL $CHISELD_HOST/dev/persons/i-will-never-exist-ya-know # GET by invalid id
 # CHECK: HTTP/1.1 404 Not Found
 
+## Test filtering errors:
+$CURL "$CHISELD_HOST/dev/persons?.agex=30"
+# CHECK: failed to parse filter agex=30
+# CHECK: entity 'Person' doesn't have field 'agex'
+
 ## Test paging
 
 resp=$($CURL --no-include "$CHISELD_HOST/dev/persons?sort=last_name&page_size=2&.last_name~ne=Brown")
