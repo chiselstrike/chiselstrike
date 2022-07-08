@@ -13,6 +13,7 @@ use crate::types::{
 use anyhow::Context;
 use sqlx::any::{Any, AnyPool};
 use sqlx::{Execute, Executor, Row, Transaction};
+use std::fmt::Write;
 use std::path::Path;
 use std::sync::Arc;
 use tokio::fs;
@@ -298,7 +299,7 @@ impl MetaService {
                 );
                 for src in sources {
                     let s = src.as_ref().display();
-                    full_str += &format!("\n\t{}\n\t{}-wal\n\t{}-shm", s, s, s);
+                    write!(full_str, "\n\t{}\n\t{}-wal\n\t{}-shm", s, s, s).unwrap();
                 }
 
                 info!("{}", &full_str);

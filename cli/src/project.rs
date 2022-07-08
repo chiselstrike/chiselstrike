@@ -5,6 +5,7 @@ use handlebars::Handlebars;
 use serde_derive::Deserialize;
 use std::collections::BTreeMap;
 use std::env;
+use std::fmt::Write;
 use std::fs;
 use std::io::{stdin, Read};
 use std::path::{Path, PathBuf};
@@ -246,14 +247,18 @@ pub(crate) fn create_project(path: &Path, opts: CreateProjectOptions) -> Result<
     // creating through chisel instead of npx: default to deno resolution
     let mut toml = String::from(include_str!("template/Chisel.toml"));
     toml.push_str("modules = \"deno\"\n");
-    toml.push_str(&format!(
-        "optimize = \"{}\"\n",
+    writeln!(
+        toml,
+        "optimize = \"{}\"",
         if opts.optimize { "yes" } else { "no" }
-    ));
-    toml.push_str(&format!(
-        "auto_index = \"{}\"\n",
+    )
+    .unwrap();
+    writeln!(
+        toml,
+        "auto_index = \"{}\"",
         if opts.auto_index { "yes" } else { "no" }
-    ));
+    )
+    .unwrap();
     write(&toml, path, "Chisel.toml")?;
 
     write_template!(

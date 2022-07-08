@@ -28,7 +28,7 @@ pub(crate) async fn cmd_dev(
     let mut sigint = tokio::signal::unix::signal(tokio::signal::unix::SignalKind::interrupt())?;
     let mut sighup = tokio::signal::unix::signal(tokio::signal::unix::SignalKind::hangup())?;
     let sig_task: JoinHandle<Result<()>> = tokio::task::spawn(async move {
-        let _ = futures::select! {
+        futures::select! {
             _ = sigterm.recv().fuse() => { },
             _ = sigint.recv().fuse() => { },
             _ = sighup.recv().fuse() => { },
