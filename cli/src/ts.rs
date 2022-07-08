@@ -88,34 +88,22 @@ fn get_field_type(handler: &Handler, x: &Option<TsTypeAnn>) -> Result<TypeEnum> 
     map_type(handler, &t.type_ann)
 }
 
-fn lit_to_string(handler: &Handler, x: &Lit) -> Result<String> {
-    match x {
-        Lit::Str(x) => Ok(x.value.to_string()),
-        Lit::Bool(x) => Ok(x.value.to_string()),
-        Lit::Num(x) => Ok(x.value.to_string()),
-        x => Err(swc_err(handler, x, "literal not supported")),
-    }
+fn parse_literal(handler: &Handler, x: &Lit) -> Result<(String, TypeEnum)> {
+    let r = match x {
+        Lit::Str(x) => (x.value.to_string(), TypeEnum::String(true)),
+        Lit::Bool(x) => (x.value.to_string(), TypeEnum::Bool(true)),
+        Lit::Num(x) => (x.value.to_string(), TypeEnum::Number(true)),
+        x => anyhow::bail!(swc_err(handler, x, "literal not supported")),
+    };
+    Ok(r)
 }
 
-fn lit_name(x: &Lit) -> &str {
-    match x {
-        Lit::Str(_) => "string",
-        Lit::Bool(_) => "boolean",
-        Lit::Num(_) => "number",
-        Lit::BigInt(_) => "bigint",
-        Lit::Null(_) => "null",
-        Lit::JSXText(_) => "JSXText",
-        Lit::Regex(_) => "regex",
-    }
-}
-
-fn get_field_value(handler: &Handler, x: &Option<Box<Expr>>) -> Result<Option<(String, String)>> {
+fn get_field_value(handler: &Handler, x: &Option<Box<Expr>>) -> Result<Option<(String, TypeEnum)>> {
     match x {
         None => Ok(None),
         Some(k) => match &**k {
             Expr::Lit(k) => {
-                let val = lit_to_string(handler, k)?;
-                let val_type = lit_name(k).into();
+                let (val, val_type) = parse_literal(handler, k)?;
                 Ok(Some((val, val_type)))
             }
             Expr::Unary(k) => {
@@ -145,7 +133,10 @@ fn get_type_decorators(handler: &Handler, x: &[Decorator]) -> Result<(Vec<String
                 );
                 for arg in &call.args {
                     if let Some((label, ty)) = get_field_value(handler, &Some(arg.expr.clone()))? {
-                        ensure!(ty == "string", "Only strings accepted as labels");
+                        ensure!(
+                            matches!(ty, TypeEnum::String(_)),
+                            "Only strings accepted as labels"
+                        );
                         output.push(label);
                     }
                 }
@@ -189,8 +180,10 @@ fn parse_class_prop(x: &ClassProp, class_name: &str, handler: &Handler) -> Resul
     let (field_name, is_optional) = get_field_info(handler, &x.key)?;
     anyhow::ensure!(field_name != "id", "Creating a field with the name `id` is not supported. 😟\nBut don't worry! ChiselStrike creates an id field automatically, and you can access it in your endpoints as {}.id 🤩", class_name);
 
-    let default_value = get_field_value(handler, &x.value)?.map(|(v, _)| v);
-    let field_type = get_field_type(handler, &x.type_ann)?;
+    let (default_value, field_type) = match get_field_value(handler, &x.value)? {
+        None => (None, get_field_type(handler, &x.type_ann)?),
+        Some((val, val_ty)) => (Some(val), val_ty),
+    };
     let (labels, is_unique) = get_type_decorators(handler, &x.decorators)?;
 
     Ok(FieldDefinition {
