@@ -74,6 +74,10 @@ export class Foo extends Chisel.ChiselEntity {
 	nfs: string = "oldval";
 	nfb: number = 2;
 	nfn: number = 2.2;
+    strNoTy = "strNoType";
+    boolNoTy = false;
+    numNoTyInt = 3;
+    numNoTyFloat = 3.3;
 }
 EOF
 
@@ -83,7 +87,10 @@ import { Foo } from "../models/types.ts";
 export default async function chisel(req: Request) {
     let response = "";
     for await (let f of Foo.cursor()) {
-        let fields = [f.a, f.b, f.c, f.d, f.e, f.nfs, f.nfb, f.nfn];
+        const fields = [
+            f.a, f.b, f.c, f.d, f.e, f.nfs, f.nfb, f.nfn,
+            f.strNoTy, f.boolNoTy, f.numNoTyInt, f.numNoTyFloat
+        ];
         response += fields.join(" ");
         response += " ";
     }
@@ -105,7 +112,7 @@ $CHISEL apply
 $CURL -o - $CHISELD_HOST/dev/readold
 $CURL -o - $CHISELD_HOST/dev/crud_foo
 # CHECK: HTTP/1.1 200 OK
-# CHECK: dfl1 0 false 2 value oldval 2 2.2
+# CHECK: dfl1 0 false 2 value oldval 2 2.2 strNoType false 3 3.3
 
 
 count_results () {
