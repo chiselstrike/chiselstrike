@@ -4475,9 +4475,9 @@ dependencies = [
 
 [[package]]
 name = "structopt-toml"
-version = "0.5.0"
+version = "0.5.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c27d68c57e6cc3fb03041c49534e50a6ccef677c511effc1c5bf12a4bc865a62"
+checksum = "4d887e6156acb1f4e2d2968d61d1d3b6c5e102af5f23c3ca606723b5ac2c45cb"
 dependencies = [
  "anyhow",
  "clap",
@@ -4491,10 +4491,11 @@ dependencies = [
 
 [[package]]
 name = "structopt-toml-derive"
-version = "0.5.0"
+version = "0.5.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "316302a563af68baf93e5e77b8355a8bfe168c67c4424623365ca5bf521d013e"
+checksum = "216c57b49178d22a3ec2f0ce5e961219d11772f7ca70b00c08879d15827d6daf"
 dependencies = [
+ "heck 0.4.0",
  "proc-macro2 1.0.40",
  "quote 1.0.20",
  "syn 1.0.98",

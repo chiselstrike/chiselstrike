@@ -51,7 +51,7 @@ sqlx = { version = "0.6.0", features = [
     "runtime-tokio-rustls",
 ] }
 structopt = "0.3.23"
-structopt-toml = "0.5.0"
+structopt-toml = "0.5.1"
 thiserror = "1.0"
 tokio = { version = "1.11.0", features = ["rt", "time"] }
 tonic = "0.5.2"
