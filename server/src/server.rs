@@ -23,7 +23,7 @@ use enclose::enclose;
 use futures::future::LocalBoxFuture;
 use futures::FutureExt;
 use futures::StreamExt;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::net::SocketAddr;
 use std::path::{Path, PathBuf};
@@ -35,7 +35,7 @@ use structopt_toml::StructOptToml;
 use tokio::task::JoinHandle;
 use tokio::time::sleep;
 
-#[derive(StructOpt, Debug, Clone, StructOptToml, Deserialize)]
+#[derive(StructOpt, Debug, Clone, StructOptToml, Deserialize, Serialize)]
 #[structopt(name = "chiseld", version = env!("VERGEN_GIT_SEMVER_LIGHTWEIGHT"))]
 #[serde(deny_unknown_fields, default)]
 pub struct Opt {
@@ -73,6 +73,13 @@ pub struct Opt {
     #[structopt(long, short)]
     #[serde(skip)]
     pub config: Option<PathBuf>,
+
+    /// Prints the configuration resulting from the merging of all the configuration sources,
+    /// including default values, in the JSON format.
+    /// This is the configuration that will be used when starting chiseld.
+    #[structopt(long)]
+    #[serde(skip)]
+    pub show_config: bool,
 }
 
 impl Opt {

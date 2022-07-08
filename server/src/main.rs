@@ -52,6 +52,12 @@ async fn main() -> Result<()> {
         }
     };
 
+    if opt.show_config {
+        let config = serde_json::to_string(&opt)?;
+        println!("{config}");
+        return Ok(());
+    }
+
     if let DoRepeat::Yes = server::run_all(opt).await? {
         info!("Restarting");
         execv(&CString::new(exe).unwrap(), &args).unwrap();
