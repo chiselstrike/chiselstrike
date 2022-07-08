@@ -1193,7 +1193,7 @@ async fn special_response(
     if req_path.starts_with("/__chiselstrike/auth/") {
         let auth_header = req.headers().get("ChiselAuth");
         if auth_header.is_none() {
-            return Ok(Some(ApiService::forbidden("ChiselAuth")?));
+            return Ok(Some(ApiService::forbidden("AuthSecret")?));
         }
         let expected_secret = current_secrets(&state.borrow())
             .get("CHISELD_AUTH_SECRET")
