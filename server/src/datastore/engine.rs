@@ -22,6 +22,7 @@ use serde_json::json;
 use sqlx::any::{Any, AnyArguments, AnyPool, AnyRow};
 use sqlx::{Executor, Row, Transaction, ValueRef};
 use std::collections::{HashMap, HashSet};
+use std::fmt::Write;
 use std::pin::Pin;
 use std::sync::Arc;
 use std::task::{Context, Poll};
@@ -722,7 +723,7 @@ impl QueryEngine {
                 id_name = f.name.to_string();
                 id_bind = bind.clone();
             }
-            update_binds.push_str(&std::format!("\"{}\" = {},", &f.name, &bind));
+            write!(update_binds, "\"{}\" = {},", &f.name, &bind).unwrap();
         }
         field_binds.pop();
         update_binds.pop();

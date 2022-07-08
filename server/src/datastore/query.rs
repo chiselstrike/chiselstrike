@@ -12,6 +12,7 @@ use serde_json::value::Value;
 use std::collections::HashMap;
 use std::collections::HashSet;
 use std::fmt;
+use std::fmt::Write;
 
 #[derive(Debug, Clone, EnumAsInner)]
 pub(crate) enum SqlValue {
@@ -473,15 +474,17 @@ impl QueryPlan {
         fn gather_joins(entity: &QueriedEntity) -> String {
             let mut join_string = String::new();
             for join in entity.joins.values() {
-                join_string += &format!(
-                    "LEFT JOIN \"{}\" AS \"{}\" ON \"{}\".\"{}\"=\"{}\".\"{}\"\n",
+                writeln!(
+                    join_string,
+                    "LEFT JOIN \"{}\" AS \"{}\" ON \"{}\".\"{}\"=\"{}\".\"{}\"",
                     join.entity.ty.backing_table(),
                     join.entity.table_alias,
                     entity.table_alias,
                     join.lkey,
                     join.entity.table_alias,
                     join.rkey
-                );
+                )
+                .unwrap();
                 join_string += gather_joins(&join.entity).as_str();
             }
             join_string

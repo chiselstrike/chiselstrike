@@ -50,9 +50,7 @@ fn main() {
     run_in("npm", ["install"], create_app.clone());
     run_in("npm", ["run", "build"], create_app);
 
-    for v in ["chiselstrike-api/package.json"] {
-        println!("cargo:rerun-if-changed=./{}", v);
-    }
+    println!("cargo:rerun-if-changed=./chiselstrike-api/package.json");
     run_in("npm", ["install"], api.clone());
     run_in("npm", ["run", "build"], api);
 }
