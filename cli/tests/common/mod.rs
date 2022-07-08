@@ -18,8 +18,10 @@ pub struct Command {
 
 impl Drop for Command {
     fn drop(&mut self) {
-        let status = self.inner.status().unwrap();
-        assert!(status.success());
+        let out = self.inner.output().unwrap();
+        let stderr = std::str::from_utf8(&out.stderr).unwrap();
+        eprintln!("{stderr}");
+        assert!(out.status.success());
     }
 }
 
