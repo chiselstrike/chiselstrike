@@ -69,6 +69,11 @@ pub fn bin_dir() -> PathBuf {
 }
 
 #[allow(dead_code)]
+pub fn chisel_exe() -> PathBuf {
+    bin_dir().join("chisel")
+}
+
+#[allow(dead_code)]
 pub fn repo_dir() -> PathBuf {
     let mut path = bin_dir();
     path.pop();
