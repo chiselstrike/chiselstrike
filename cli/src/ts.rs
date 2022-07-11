@@ -112,6 +112,8 @@ fn get_field_value(handler: &Handler, x: &Option<Box<Expr>>) -> Result<Option<(S
                     .ok_or_else(|| swc_err(handler, k, "unexpected empty expression"))?;
                 Ok(Some((format!("{}{}", op, value.0), value.1)))
             }
+            // Covers entity fields initialization.
+            Expr::New(_) => Ok(None),
             x => Err(swc_err(handler, x, "expression not supported")),
         },
     }
@@ -185,6 +187,29 @@ fn parse_class_prop(x: &ClassProp, class_name: &str, handler: &Handler) -> Resul
         Some((val, val_ty)) => (Some(val), val_ty),
     };
     let (labels, is_unique) = get_type_decorators(handler, &x.decorators)?;
+
+    match &field_type {
+        TypeEnum::Entity(name) if !is_optional => match &x.value {
+            None => {
+                eprintln!(
+                        "Warning: Entity `{class_name}` contains field `{field_name}` of entity type `{name}` which is not default-initialized.\n\
+                        \tWhen using this field, its methods might not be available. As a temporary workaround, please consider initializing the field `{field_name}: {name} = new {name}();`\n\
+                        \tFor further information, please see https://github.com/chiselstrike/chiselstrike/issues/1541"
+                    );
+            }
+            Some(k) => match &**k {
+                Expr::New(_) => {}
+                x => anyhow::bail!(swc_err(
+                    handler,
+                    x,
+                    &format!(
+                        "field `{field_name}` of entity type `{name}` has unexpected initializer"
+                    ),
+                )),
+            },
+        },
+        _ => {}
+    };
 
     Ok(FieldDefinition {
         name: field_name,

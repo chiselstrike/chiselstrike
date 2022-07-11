@@ -9,7 +9,7 @@ export class Person extends Chisel.ChiselEntity {
 }
 export class Company extends Chisel.ChiselEntity {
     name: string = "";
-    ceo?: Person;
+    ceo: Person = new Person();
 }
 EOF
 
@@ -42,7 +42,7 @@ cat << EOF > "$TEMPDIR/endpoints/query_people.ts"
 import { Person } from "../models/types.ts";
 
 export default async function chisel(req: Request) {
-    const results = (await Person.cursor().toArray())
+    const results = (await Person.cursor().sortBy("lastName").toArray())
         .map(p => {
             return "(" + p.firstName + ", " + p.lastName + ")";
         });
@@ -109,3 +109,90 @@ $CURL -X POST $CHISELD_HOST/dev/update
 $CURL -o - $CHISELD_HOST/dev/query_people
 # CHECK: HTTP/1.1 200 OK
 # CHECK: [(Adalbrecht, Someone completely different)]
+
+
+
+## Try saving the inner entity
+
+cat << EOF > "$TEMPDIR/endpoints/update.ts"
+import { Company, Person } from "../models/types.ts";
+
+export default async function chisel(req: Request) {
+    const company = await Company.findOne({"name": "Bananas inc."})
+    company!.ceo.lastName = "Bond";
+
+    await company!.ceo.save();
+
+    return new Response('Successfully updated');
+}
+EOF
+
+$CHISEL apply
+
+$CURL -X POST $CHISELD_HOST/dev/update
+# CHECK: Successfully updated
+
+$CURL -o - $CHISELD_HOST/dev/query_people
+# CHECK: HTTP/1.1 200 OK
+# CHECK: [(Adalbrecht, Bond)]
+
+
+## Try saving created entity
+
+cat << EOF > "$TEMPDIR/endpoints/update.ts"
+import { Company, Person } from "../models/types.ts";
+
+export default async function chisel(req: Request) {
+    const company = await Company.create({
+        name: "Black Books",
+        ceo: {
+            firstName: "Bernard",
+            lastName: "Black"
+        }
+    });
+    company.ceo.firstName = "Many";
+    company.ceo.lastName = "Bianco";
+    await company.ceo.save();
+
+    return new Response('Successfully updated');
+}
+EOF
+
+$CHISEL apply
+
+$CURL -X POST $CHISELD_HOST/dev/update
+# CHECK: Successfully updated
+
+$CURL -o - $CHISELD_HOST/dev/query_people
+# CHECK: HTTP/1.1 200 OK
+# CHECK: [(Many, Bianco), (Adalbrecht, Bond)]
+
+cat << EOF > "$TEMPDIR/endpoints/update.ts"
+import { Company, Person } from "../models/types.ts";
+
+export default async function chisel(req: Request) {
+    const company = Company.build({
+        name: "Crimson Permanent Assurance",
+        ceo: Person.build({
+            firstName: "Sydney",
+            lastName: "Arnold"
+        })
+    });
+    await company.save();
+
+    company.ceo.firstName = "Myrtle";
+    company.ceo.lastName = "Devenish";
+    await company.ceo.save();
+
+    return new Response('Successfully updated');
+}
+EOF
+
+$CHISEL apply
+
+$CURL -X POST $CHISELD_HOST/dev/update
+# CHECK: Successfully updated
+
+$CURL -o - $CHISELD_HOST/dev/query_people
+# CHECK: HTTP/1.1 200 OK
+# CHECK: [(Many, Bianco), (Adalbrecht, Bond), (Myrtle, Devenish)]
