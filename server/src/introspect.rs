@@ -14,7 +14,8 @@ use anyhow::Result;
 use deno_core::futures;
 use futures::FutureExt;
 use hyper::{Request, Response};
-use openapi::{Info, Operations, Spec};
+use openapi::v2::{Info, PathItem, Spec};
+use openapi::OpenApi;
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -32,13 +33,15 @@ async fn introspect(req: Request<hyper::Body>) -> Result<Response<Body>> {
         if route.starts_with(&prefix) {
             paths.insert(
                 route,
-                Operations {
+                PathItem {
                     get: None,
                     post: None,
                     put: None,
                     patch: None,
                     delete: None,
                     parameters: None,
+                    head: None,
+                    options: None,
                 },
             );
         }
@@ -54,12 +57,15 @@ async fn introspect(req: Request<hyper::Body>) -> Result<Response<Body>> {
     let spec = Spec {
         swagger: "2.0".to_string(),
         info: Info {
-            title: info.name,
-            version: info.tag,
+            title: Some(info.name),
+            version: Some(info.tag),
+            contact: None,
+            description: None,
+            license: None,
             terms_of_service: None,
         },
         paths,
-        definitions: BTreeMap::default(),
+        definitions: Some(BTreeMap::default()),
         schemes: None,
         host: None,
         base_path: None,
@@ -69,7 +75,10 @@ async fn introspect(req: Request<hyper::Body>) -> Result<Response<Body>> {
         responses: None,
         security_definitions: None,
         tags: None,
+        external_docs: None,
+        security: None,
     };
+    let spec = OpenApi::V2(spec);
     Ok(response_template()
         .body(openapi::to_json(&spec).unwrap().into())
         .unwrap())

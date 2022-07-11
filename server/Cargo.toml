@@ -29,7 +29,7 @@ itertools = "0.10.1"
 log = "0.4.14"
 nix = "0.22.2"
 once_cell = "1.12.0"
-openapi = "0.1.5"
+openapi = { git = "https://github.com/softprops/openapi.git", rev = "0a7c95e34e90541e572d762878d4fe762c8d4048" }
 permutation = "0.4.0"
 petgraph = "0.6.2"
 pin-project = "1"
