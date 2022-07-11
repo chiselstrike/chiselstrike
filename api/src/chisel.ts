@@ -108,8 +108,8 @@ class BaseEntity<T> extends Operator<never, T> {
  */
 class Take<T> extends Operator<T, T> {
     constructor(
-        public readonly count: number,
         inner: Operator<unknown, T>,
+        public readonly count: number,
     ) {
         super(inner);
     }
@@ -144,8 +144,8 @@ class Take<T> extends Operator<T, T> {
  */
 class Skip<T> extends Operator<T, T> {
     constructor(
-        public readonly count: number,
         inner: Operator<unknown, T>,
+        public readonly count: number,
     ) {
         super(inner);
     }
@@ -177,8 +177,8 @@ class Skip<T> extends Operator<T, T> {
 class ColumnsSelect<T, C extends (keyof T)[]>
     extends Operator<T, Pick<T, C[number]>> {
     constructor(
-        public columns: C,
         inner: Operator<unknown, T>,
+        public columns: C,
     ) {
         super(inner);
     }
@@ -216,8 +216,8 @@ class ColumnsSelect<T, C extends (keyof T)[]>
  */
 class PredicateFilter<T> extends Operator<T, T> {
     constructor(
-        public predicate: (arg: T) => boolean,
         inner: Operator<unknown, T>,
+        public predicate: (arg: T) => boolean,
     ) {
         super(inner);
     }
@@ -259,9 +259,9 @@ class PredicateFilter<T> extends Operator<T, T> {
  */
 class ExpressionFilter<T> extends Operator<T, T> {
     constructor(
+        inner: Operator<unknown, T>,
         public predicate: (arg: T) => boolean,
         public expression: Record<string, unknown>,
-        inner: Operator<unknown, T>,
     ) {
         super(inner);
     }
@@ -302,8 +302,8 @@ class SortKey<T> {
  */
 class SortBy<T> extends Operator<T, T> {
     constructor(
-        private keys: SortKey<T>[],
         inner: Operator<unknown, T>,
+        private keys: SortKey<T>[],
     ) {
         super(inner);
     }
@@ -361,8 +361,8 @@ export class ChiselCursor<T> {
     ): ChiselCursor<Pick<T, C[number]>> {
         return new ChiselCursor(
             new ColumnsSelect<T, (keyof T)[]>(
-                columns,
                 this.inner,
+                columns,
             ),
         );
     }
@@ -370,14 +370,14 @@ export class ChiselCursor<T> {
     /** Restricts this cursor to contain only at most `count` elements */
     take(count: number): ChiselCursor<T> {
         return new ChiselCursor(
-            new Take(count, this.inner),
+            new Take(this.inner, count),
         );
     }
 
     /** Skips the first `count` elements of this cursor. */
     skip(count: number): ChiselCursor<T> {
         return new ChiselCursor(
-            new Skip(count, this.inner),
+            new Skip(this.inner, count),
         );
     }
 
@@ -398,8 +398,8 @@ export class ChiselCursor<T> {
         if (typeof arg1 == "function") {
             return new ChiselCursor(
                 new PredicateFilter(
-                    arg1,
                     this.inner,
+                    arg1,
                 ),
             );
         } else {
@@ -422,9 +422,9 @@ export class ChiselCursor<T> {
             };
             return new ChiselCursor(
                 new ExpressionFilter(
+                    this.inner,
                     predicate,
                     expr,
-                    this.inner,
                 ),
             );
         }
@@ -437,12 +437,12 @@ export class ChiselCursor<T> {
         postPredicate?: (arg: T) => boolean,
     ) {
         let op: Operator<T, T> = new ExpressionFilter(
+            this.inner,
             exprPredicate,
             expression,
-            this.inner,
         );
         if (postPredicate !== undefined) {
-            op = new PredicateFilter(postPredicate, op);
+            op = new PredicateFilter(op, postPredicate);
         }
         return new ChiselCursor(op);
     }
@@ -458,8 +458,8 @@ export class ChiselCursor<T> {
     sortBy(key: keyof T, ascending = true): ChiselCursor<T> {
         return new ChiselCursor(
             new SortBy(
-                [new SortKey<T>(key, ascending)],
                 this.inner,
+                [new SortKey<T>(key, ascending)],
             ),
         );
     }
