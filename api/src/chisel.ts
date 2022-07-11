@@ -347,6 +347,87 @@ class SortBy<T> extends Operator<T, T> {
     }
 }
 
+/**
+ * AggregateBy operator is an intermediate Operator used to implement various aggregation
+ * operators like MinBy/MaxBy. It provides a general aggregate interface performing a fold
+ * along `Input[K]` field values using `init` initial value and aggerage (fold) operator
+ * `aggregateOp`.
+ *
+ * This Operator can't be used directly as our Rust backend uses the name of the operator
+ * for identification.
+ */
+abstract class AggregateBy<Input, K extends keyof Input, Output>
+    extends Operator<Input, Output> {
+    constructor(
+        inner: Operator<unknown, Input>,
+        private key: K,
+        private init: Output,
+        private aggregateOp: (lhs: Output, rhs: Input[K]) => Output,
+    ) {
+        super(inner);
+    }
+    apply(
+        iter: AsyncIterable<Input>,
+    ): AsyncIterable<Output> {
+        const key = this.key;
+        const init = this.init;
+        const aggregateOp = this.aggregateOp;
+        return {
+            [Symbol.asyncIterator]: async function* () {
+                let result = init;
+                for await (const e of iter) {
+                    result = aggregateOp(result, e[key]);
+                }
+                yield result;
+            },
+        };
+    }
+
+    public eval(): AsyncIterable<Output> {
+        let iter = this.inner!.eval();
+        if (iter === undefined) {
+            iter = this.inner!.runChiselQuery();
+        }
+        return this.apply(iter);
+    }
+
+    recordToOutput(rawRecord: unknown): Output {
+        return rawRecord as Output;
+    }
+}
+
+class MinBy<Input, K extends keyof Input>
+    extends AggregateBy<Input, K, Input[K] | undefined> {
+    constructor(inner: Operator<unknown, Input>, key: K) {
+        const min = (v1: Input[K] | undefined, v2: Input[K]) => {
+            if (v2 === undefined || v2 === null) {
+                return v1;
+            }
+            if (v1 === undefined) {
+                return v2;
+            }
+            return v1 < v2 ? v1 : v2;
+        };
+        super(inner, key, undefined, min);
+    }
+}
+
+class MaxBy<Input, K extends keyof Input>
+    extends AggregateBy<Input, K, Input[K] | undefined> {
+    constructor(inner: Operator<unknown, Input>, key: K) {
+        const max = (v1: Input[K] | undefined, v2: Input[K]) => {
+            if (v2 === undefined || v2 === null) {
+                return v1;
+            }
+            if (v1 === undefined) {
+                return v2;
+            }
+            return v1 > v2 ? v1 : v2;
+        };
+        super(inner, key, undefined, max);
+    }
+}
+
 /** ChiselCursor is a lazy iterator that will be used by ChiselStrike to construct an optimized query. */
 export class ChiselCursor<T> {
     constructor(private inner: Operator<unknown, T>) {}
@@ -473,16 +554,12 @@ export class ChiselCursor<T> {
      * the function returns undefined.
      */
     async minBy<K extends keyof T>(key: K): Promise<T[K] | undefined> {
-        let min = undefined;
-        for await (const e of this) {
-            const val = e[key];
-            if (min === undefined) {
-                min = val;
-            } else if (val !== undefined && val < min) {
-                min = val;
-            }
+        const c = new ChiselCursor(
+            new MinBy<T, K>(this.inner, key),
+        );
+        for await (const min of c) {
+            return min;
         }
-        return min;
     }
 
     /**
@@ -494,16 +571,12 @@ export class ChiselCursor<T> {
      * the function returns undefined.
      */
     async maxBy<K extends keyof T>(key: K): Promise<T[K] | undefined> {
-        let max = undefined;
-        for await (const e of this) {
-            const val = e[key];
-            if (max === undefined) {
-                max = val;
-            } else if (val !== undefined && val > max) {
-                max = val;
-            }
+        const c = new ChiselCursor(
+            new MaxBy<T, K>(this.inner, key),
+        );
+        for await (const max of c) {
+            return max;
         }
-        return max;
     }
 
     /** Executes the function `func` for each element of this cursor. */
