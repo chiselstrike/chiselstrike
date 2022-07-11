@@ -13,7 +13,7 @@ pub static CHISEL_LOCAL_PATH: Lazy<OsString> = Lazy::new(|| {
 });
 
 pub struct Command {
-    inner: process::Command,
+    pub inner: process::Command,
 }
 
 impl Drop for Command {

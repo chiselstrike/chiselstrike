@@ -5,6 +5,7 @@ mod common;
 #[cfg(test)]
 mod tests {
     use crate::common::{repo_dir, run, Command, CHISEL_BIN_DIR};
+    use regex::Regex;
     use std::fs::{create_dir_all, File};
     use std::io::Read;
     use toml::Value;
@@ -20,6 +21,7 @@ mod tests {
     }
 
     fn cargo_install(version: &str, pkg: &str, bin: &str) {
+        ensure_correct_version(pkg, version);
         create_dir_all(&*CHISEL_BIN_DIR).unwrap();
         cargo([
             "install",
@@ -32,6 +34,18 @@ mod tests {
             "--root",
             &CHISEL_BIN_DIR.display().to_string(),
         ]);
+    }
+
+    fn ensure_correct_version(pkg: &str, version: &str) {
+        let re = Regex::new(&format!(r"{pkg} v{version}:")).unwrap();
+        let mut cmd = cargo(["install", "--list"]);
+        let out = cmd.inner.output().unwrap();
+
+        let stdout = std::str::from_utf8(&out.stdout).unwrap();
+
+        // only accept global package if it's the correct version.
+        assert!(re.is_match(stdout) || !stdout.contains(pkg),
+            "An incorrect version of {pkg} is present in the global environment. Please uninstall it.");
     }
 
     #[test]
