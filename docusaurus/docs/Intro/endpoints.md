@@ -129,8 +129,8 @@ we were able to parse the request under `POST` with our own custom validation, a
 the `build` API to construct an object that is then persisted with `save`.  We'll explain the use of the
 data model more in [Data Access](Intro/data-access).
 
-Finally, notice how in the cases where we want to return a `Response`, we can either return a standard `Response` or the convenience method
-`responseFromJson` where we know the result is a JSON object.
+Finally, notice the `responseFromJson` convenience method, which takes a JavaScript object and serializes it into a
+`Response` ready to be returned.
 
 Let's now test our endpoint with a POST, and see it works similarly to the automatic "CRUD" example above.
 
