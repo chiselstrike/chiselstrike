@@ -31,6 +31,17 @@ export default async function chisel(req: Request) {
 }
 EOF
 
+cat << EOF > "$TEMPDIR/endpoints/find_by_id.ts"
+import { Person } from "../models/person.ts";
+
+export default async function chisel(req: Request) {
+    const glauber = await Person.findOne({
+        id: "6b9ebbff-46b4-4759-9dbd-850cdcb10c92"
+    });
+    return new Response("[" + glauber!.first_name + "]");
+}
+EOF
+
 cat << EOF > "$TEMPDIR/endpoints/store_no_id.ts"
 import { Person } from "../models/person.ts";
 
@@ -71,6 +82,7 @@ $CHISEL apply
 # CHECK: Model defined: Person
 # CHECK: End point defined: /dev/bad_id
 # CHECK: End point defined: /dev/count_glaubers
+# CHECK: End point defined: /dev/find_by_id
 # CHECK: End point defined: /dev/store_no_id
 # CHECK: End point defined: /dev/store_with_id
 # CHECK: End point defined: /dev/update_by_id
@@ -80,6 +92,9 @@ $CURL -X POST $CHISELD_HOST/dev/bad_id  2>&1 || echo
 
 $CURL -X POST $CHISELD_HOST/dev/store_with_id
 # CHECK: Ok
+
+$CURL -X POST $CHISELD_HOST/dev/find_by_id
+# CHECK: [Glauber]
 
 $CURL $CHISELD_HOST/dev/count_glaubers
 # CHECK: 1
