@@ -58,7 +58,7 @@ export default async function() : Promise<Array<BlogComment>> {
 }
 ```
 
-Optionally, your function can that take as a parameter a [Request](https://developer.mozilla.org/en-US/docs/Web/API/Request), or the specialized `ChiselRequest`, a subclass with a few convenience fields added. In the following example, we can use the `pathComponents()` method of `ChiselRequest` to implement path-based finding:
+Optionally, your function can take as a parameter a [Request](https://developer.mozilla.org/en-US/docs/Web/API/Request), or the specialized `ChiselRequest`, a subclass with a few convenience fields added. In the following example, we can use the `pathComponents()` method of `ChiselRequest` to implement path-based finding:
 
 ```typescript title="my-backend/endpoints/onecomment.ts"
 import { BlogComment } from "../models/BlogComment"
@@ -70,7 +70,7 @@ export default async function (req: ChiselRequest) : Promise<BlogComment> {
 }
 ```
 
-Ultimately, you can code endpoints of arbitrary complexity. For example having a single endpoint that handles multiple methods, returning either one of your types or an HTTP [Response](https://developer.mozilla.org/en-US/docs/Web/API/Response). You can then add whatever logic you want!
+Ultimately, you can code endpoints of arbitrary complexity. For example, having a single endpoint that handles multiple methods, returning either one of your types or an HTTP [Response](https://developer.mozilla.org/en-US/docs/Web/API/Response). You can then add whatever logic you want!
 
 This is a lower level mechanism and is pretty raw -- we are working on syntax features that will make this much more powerful.
 
