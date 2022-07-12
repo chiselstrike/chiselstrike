@@ -17,7 +17,7 @@ cd $TEMPDIR
 if [ "x$EXTENSION" == "xnode" ]; then
     node $CREATE_APP/dist/index.js --chisel-version latest ./
 else
-    $CHISEL init --no-examples --optimize=$OPTIMIZE
+    $CHISEL init --no-examples --optimize=$OPTIMIZE --auto-index=$OPTIMIZE
 fi
 cd $cwd
 
