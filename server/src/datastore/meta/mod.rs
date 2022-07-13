@@ -36,7 +36,7 @@ async fn execute<'a, 'b>(
     transaction
         .execute(query)
         .await
-        .with_context(|| format!("Executing query {}", qstr))
+        .with_context(|| format!("Failed to execute query {}", qstr))
 }
 
 async fn fetch_one<'a, 'b>(
@@ -47,7 +47,7 @@ async fn fetch_one<'a, 'b>(
     transaction
         .fetch_one(query)
         .await
-        .with_context(|| format!("Executing query {}", qstr))
+        .with_context(|| format!("Failed to execute query {}", qstr))
 }
 
 async fn fetch_all<'a, E>(
@@ -61,7 +61,7 @@ where
     query
         .fetch_all(executor)
         .await
-        .with_context(|| format!("Executing query {}", qstr))
+        .with_context(|| format!("Failed to execute query {}", qstr))
 }
 
 async fn file_exists(file: &Path) -> anyhow::Result<bool> {

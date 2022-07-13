@@ -21,6 +21,7 @@ use deno_graph::source::ResolveResponse;
 use deno_graph::source::Resolver;
 use deno_graph::MediaType;
 use deno_graph::ModuleGraph;
+use deno_graph::ModuleGraphError;
 use deno_graph::ModuleKind;
 use serde::de::DeserializeOwned;
 use serde::Serialize;
@@ -223,17 +224,24 @@ struct ModuleLoader {
 static ROOT_URL: &str = "chisel://root_domain/root.ts";
 
 fn load_url(extra_libs: &HashMap<Url, String>, specifier: Url) -> impl Future<Output = LoadResult> {
-    let sync_text = match specifier.scheme() {
-        "file" => fs::read_to_string(specifier.to_file_path().unwrap()),
-        "chisel" => Ok(extra_libs.get(&specifier).unwrap().clone()),
-        _ => Ok("".to_string()),
+    let sync_text: Option<Result<String>> = match specifier.scheme() {
+        "file" => {
+            Some(fs::read_to_string(specifier.to_file_path().unwrap()).map_err(|err| anyhow!(err)))
+        }
+        "chisel" => Some(
+            extra_libs
+                .get(&specifier)
+                .context("undefined chisel:// import")
+                .cloned(),
+        ),
+        _ => None,
     };
     let mut maybe_headers = None;
 
     async {
-        let text = match specifier.scheme() {
-            "file" | "chisel" => sync_text?,
-            _ => {
+        let text = match sync_text {
+            Some(sync_text) => sync_text?,
+            None => {
                 let res = utils::get_ok(specifier.clone()).await?;
                 let mut headers = HashMap::new();
                 for (key, value) in res.headers().iter() {
@@ -365,7 +373,16 @@ impl Compiler {
         )
         .await;
 
-        graph.valid()?;
+        graph.valid().map_err(|err| match err {
+            ModuleGraphError::LoadingErr(specifier, err) => {
+                anyhow!(err).context(format!("failed to load module {}", specifier))
+            }
+            ModuleGraphError::ResolutionError(err) => {
+                let range = err.range().clone();
+                anyhow!(err).context(format!("failed to resolve module (at {})", range))
+            }
+            err => anyhow!(err),
+        })?;
 
         let mut root_code = "".to_string();
         for u in graph.modules() {
@@ -644,7 +661,7 @@ mod tests {
             .await
             .unwrap_err()
             .to_string();
-        assert_eq!(err, "No such file or directory (os error 2)");
+        assert_eq!(err, "failed to load module file:///no/such/file.ts");
         Ok(())
     }
 
@@ -654,7 +671,7 @@ mod tests {
             .await
             .unwrap_err()
             .to_string();
-        assert_eq!(err, "No such file or directory (os error 2)");
+        assert_eq!(err, "failed to load module file:///no/such/file");
         Ok(())
     }
 
@@ -710,10 +727,7 @@ export default foo;
             .await
             .unwrap_err()
             .to_string();
-        assert_eq!(
-            err,
-            "Relative import path \"bar\" not prefixed with / or ./ or ../"
-        );
+        assert!(err.starts_with("failed to resolve module"));
         Ok(())
     }
 

@@ -106,7 +106,7 @@ pub(crate) async fn cmd_dev(
 async fn apply_from_dev(server_url: String, type_check: TypeChecking) {
     if let Err(e) = apply(
         server_url,
-        DEFAULT_API_VERSION,
+        DEFAULT_API_VERSION.to_string(),
         AllowTypeDeletion::No,
         type_check,
     )

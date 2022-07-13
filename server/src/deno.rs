@@ -175,13 +175,23 @@ impl deno_core::ModuleLoader for ModuleLoader {
     fn load(
         &self,
         specifier: &ModuleSpecifier,
-        _maybe_referrer: Option<ModuleSpecifier>,
+        maybe_referrer: Option<ModuleSpecifier>,
         _is_dyn_import: bool,
     ) -> Pin<Box<ModuleSourceFuture>> {
         let handle = self.inner.lock().unwrap();
-        let code = handle.code_map.get(specifier).unwrap().clone();
-        let specifier = specifier.clone();
-        async move { wrap(&specifier, code) }.boxed_local()
+        if let Some(code) = handle.code_map.get(specifier).cloned() {
+            let specifier = specifier.clone();
+            async move { wrap(&specifier, code) }.boxed_local()
+        } else {
+            let err = anyhow!(
+                "chiseld cannot load module {} at runtime{}",
+                specifier,
+                maybe_referrer
+                    .map(|url| format!(" (referrer: {})", url))
+                    .unwrap_or_default(),
+            );
+            async move { Err(err) }.boxed_local()
+        }
     }
 }
 

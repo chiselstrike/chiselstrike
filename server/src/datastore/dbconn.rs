@@ -47,7 +47,7 @@ impl DbConnection {
             .max_connections(nr_conn as _)
             .connect(uri)
             .await
-            .with_context(|| format!("connecting to {}", uri))?;
+            .with_context(|| format!("failed to connect to {}", uri))?;
 
         let conn_uri = uri.to_owned();
 

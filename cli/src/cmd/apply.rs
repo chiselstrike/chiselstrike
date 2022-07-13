@@ -61,15 +61,13 @@ impl From<bool> for TypeChecking {
     }
 }
 
-pub(crate) async fn apply<S: ToString>(
+pub(crate) async fn apply(
     server_url: String,
-    version: S,
+    version: String,
     allow_type_deletion: AllowTypeDeletion,
     type_check: TypeChecking,
 ) -> Result<()> {
-    let version = version.to_string();
-
-    let manifest = read_manifest().with_context(|| "Reading manifest file".to_string())?;
+    let manifest = read_manifest().context("Could not read manifest file")?;
     let models = manifest.models()?;
     let endpoints = manifest.endpoints()?;
     let policies = manifest.policies()?;

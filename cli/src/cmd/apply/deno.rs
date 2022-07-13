@@ -21,7 +21,7 @@ pub(crate) async fn apply(
         .collect();
     let mut output = compile_endpoints(&paths?)
         .await
-        .context("parsing endpoints")?;
+        .context("could not compile endpoints (using deno-style modules)")?;
     for f in endpoints.iter() {
         let path = f.to_str().unwrap();
         let orig = output.get_mut(path).unwrap();
