@@ -708,6 +708,9 @@ impl ObjectType {
         }
         for index in &indexes {
             for field_name in &index.fields {
+                if field_name == "id" {
+                    continue;
+                }
                 anyhow::ensure!(
                     fields.iter().any(|f| &f.name == field_name),
                     "trying to create an index over field '{}' which is not present on type '{}'",
