@@ -1,6 +1,6 @@
 [package]
 name = "endpoint_tsc"
-version = "0.11.0-dev.0"
+version = "0.11.0"
 authors = ["ChiselStrike"]
 edition = "2021"
 
