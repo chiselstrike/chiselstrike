@@ -42,10 +42,35 @@ You may also be interested in the [Authentication](InDepth/login.md) chapter.
 
 Being able to just get started very quickly and spawn a CRUD API is great, but as your
 project evolves in complexity you may find yourself needing custom business logic and endpoints
-that don't fit neatly into REST workflows.
+that don't fit neatly into REST workflows. This is a big advantage of ChiselStrike, since you will
+be able to express complex logic, sometimes dealing with multiple models and queries, with a single
+roundtrip.
 
-ChiselStrike allows each `endpoint` file to export a default method that takes a `ChiselRequest`, a subclass of [Request](https://developer.mozilla.org/en-US/docs/Web/API/Request) with a few convenience fields added, as a parameter,
-and returns a [Response](https://developer.mozilla.org/en-US/docs/Web/API/Response). You can then add whatever logic you want.
+ChiselStrike allows each `endpoint` file to export a default method implementing your custom logic. You can return any type you want, either an existing model or a user-defined type.
+
+For example, here's how you can have a specialized endpoint that returns all posts:
+
+```typescript title="my-backend/endpoints/allcomments.ts"
+import { BlogComment } from "../models/BlogComment"
+
+export default async function() : Promise<Array<BlogComment>> {
+    return BlogComment.findAll()
+}
+```
+
+Optionally, your function can take as a parameter a [Request](https://developer.mozilla.org/en-US/docs/Web/API/Request), or the specialized `ChiselRequest`, a subclass with a few convenience fields added. In the following example, we can use the `pathComponents()` method of `ChiselRequest` to implement path-based finding:
+
+```typescript title="my-backend/endpoints/onecomment.ts"
+import { BlogComment } from "../models/BlogComment"
+import { ChiselRequest } from "@chiselstrike/api"
+
+export default async function (req: ChiselRequest) : Promise<BlogComment> {
+    const id = req.pathComponents()[0]; // first parameter is id, others are ignored
+    return BlogComment.findOne({id})
+}
+```
+
+Ultimately, you can code endpoints of arbitrary complexity. For example, having a single endpoint that handles multiple methods, returning either one of your types or an HTTP [Response](https://developer.mozilla.org/en-US/docs/Web/API/Response). You can then add whatever logic you want!
 
 This is a lower level mechanism and is pretty raw -- we are working on syntax features that will make this much more powerful.
 
@@ -60,23 +85,26 @@ Now let's edit our endpoint's code to show off a "full customization" example.
 import { ChiselRequest, responseFromJson } from "@chiselstrike/api"
 import { BlogComment } from "../models/BlogComment"
 
-export default async function chisel(req: ChiselRequest) {
+type Return = Array<BlogComment> | BlogComment | Response;
+
+export default async function chisel(req: ChiselRequest) : Promise<Return> {
     if (req.method == 'POST') {
         const payload = await req.json();
         const by = payload["by"] || "anonymous";
         const content = payload["content"];
-        const created = await BlogComment.create({ content, by });
-        return responseFromJson(created);
+        // no await needed, this is Promise<BlogComment>
+        return BlogComment.create({ content, by });
     } else if (req.method == 'GET') {
         // if we have a parameter, treat it as an id, otherwise get all
         const id = req.pathComponents()[0]
         if (id) {
            const comment = await BlogComment.findOne({id})
            const status = comment ? 200 : 404;
+           // notice how now we had to await findOne, as we wanted to build a Response
            return responseFromJson(comment, status)
         } else {
-           const comments = await BlogComment.cursor().toArray();
-           return responseFromJson(comments);
+           // no await needed, this is Promise<Array<BlogComment>>
+           return BlogComment.findAll();
         }
     } else {
         return new Response("Wrong method", { status: 405});
@@ -101,8 +129,8 @@ we were able to parse the request under `POST` with our own custom validation, a
 the `build` API to construct an object that is then persisted with `save`.  We'll explain the use of the
 data model more in [Data Access](Intro/data-access).
 
-Finally, notice how we can return a standard `Response` in some cases, but also can also use the convenience method
-`responseFromJson` where we know the result is a JSON object.
+Finally, notice the `responseFromJson` convenience method, which takes a JavaScript object and serializes it into a
+`Response` ready to be returned.
 
 Let's now test our endpoint with a POST, and see it works similarly to the automatic "CRUD" example above.
 

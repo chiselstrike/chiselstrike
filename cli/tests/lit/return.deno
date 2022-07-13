@@ -1,0 +1,51 @@
+# SPDX-FileCopyrightText: © 2022 ChiselStrike <info@chiselstrike.com>
+
+# RUN: sh -e @file
+
+cd "$TEMPDIR"
+
+cat << EOF > "$TEMPDIR/endpoints/return.ts"
+type MyReturn = {
+    a: string;
+    b: number;
+}
+
+export default async function() : Promise<MyReturn> {
+    return { "a": "x", "b": 0 };
+}
+EOF
+
+cat << EOF > "$TEMPDIR/endpoints/undefined.ts"
+type MyReturn = {
+    a: string;
+    b: number;
+}
+
+export default async function(req: Request) : Promise<MyReturn | undefined> {
+    return undefined;
+}
+EOF
+
+$CHISEL apply
+
+$CURL $CHISELD_HOST/dev/return
+# CHECK: "a": "x"
+# CHECK: "b": 0
+
+$CURL $CHISELD_HOST/dev/undefined && echo "UniqueString"
+# CHECK: HTTP/1.1 200 OK
+# CHECK UniqueString
+
+cat << EOF > "$TEMPDIR/endpoints/return.ts"
+type MyReturn = {
+    a: string;
+    b: number;
+}
+
+export default async function(req: Request) : Promise<MyReturn> {
+    return { "a": "x", "b": "0" };
+}
+EOF
+
+$CHISEL apply 2>&1 | $RMCOLOR || true
+# CHECK: Type 'string' is not assignable to type 'number'
