@@ -7,13 +7,13 @@ cp examples/find.ts "$TEMPDIR/endpoints"
 cp examples/store.ts "$TEMPDIR/endpoints/ins.ts"
 
 cat << EOF > "$TEMPDIR/endpoints/find_many.ts"
+import { ChiselRequest } from "@chiselstrike/api"
 import { Person } from "../models/person.ts";
 
-export default async function chisel(req: Request) {
-    const url = new URL(req.url);
-    const use_predicate = (url.searchParams.get("use_predicate") ?? "false") == "true";
-    const use_expr = (url.searchParams.get("use_expr") ?? "false") == "true";
-    const first_name = url.searchParams.get("first_name");
+export default async function chisel(req: ChiselRequest) {
+    const use_predicate = req.query.getBool("use_predicate") ?? false;
+    const use_expr = req.query.getBool("use_expr") ?? false;
+    const first_name = req.query.get("first_name");
     if (first_name == undefined) {
         throw Error("first_name parameter must be specified.");
     }
@@ -52,13 +52,13 @@ export default async function chisel(req: Request) {
 EOF
 
 cat << EOF > "$TEMPDIR/endpoints/find_one.ts"
+import { ChiselRequest } from "@chiselstrike/api"
 import { Person } from "../models/person.ts";
 
-export default async function chisel(req: Request) {
-    const url = new URL(req.url);
-    const use_predicate = (url.searchParams.get("use_predicate") ?? "false") == "true";
-    const use_expr = (url.searchParams.get("use_expr") ?? "false") == "true";
-    const first_name = url.searchParams.get("first_name");
+export default async function chisel(req: ChiselRequest) {
+    const use_predicate = req.query.getBool("use_predicate") ?? false;
+    const use_expr = req.query.getBool("use_expr") ?? false;
+    const first_name = req.query.get("first_name");
     if (first_name == undefined) {
         throw Error("first_name parameter must be specified.");
     }
