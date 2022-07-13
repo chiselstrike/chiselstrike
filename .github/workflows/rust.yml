@@ -41,6 +41,10 @@ jobs:
       with:
           components: rustfmt, clippy
 
+    - uses: actions/setup-node@v3
+      with:
+          node-version: 16
+
     - name: Install nightly rust toolchain
       uses: actions-rs/toolchain@v1
       with:
