@@ -5,6 +5,20 @@
 cat << EOF > "$TEMPDIR/models/types.ts"
 export class Person extends Chisel.ChiselEntity {
     firstName: string = "";
+}
+export class Company extends Chisel.ChiselEntity {
+    ceo: Person;
+}
+EOF
+
+cd "$TEMPDIR"
+$CHISEL apply 2>&1
+# CHECK: Warning: Entity `Company` contains field `ceo` of entity type `Person` which is not default-initialized.
+
+
+cat << EOF > "$TEMPDIR/models/types.ts"
+export class Person extends Chisel.ChiselEntity {
+    firstName: string = "";
     lastName: string = "";
 }
 export class Company extends Chisel.ChiselEntity {
@@ -64,7 +78,6 @@ export default async function chisel(req: Request) {
 }
 EOF
 
-cd "$TEMPDIR"
 $CHISEL apply
 
 # CHECK: Model defined: Person
