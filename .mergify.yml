@@ -1,8 +1,6 @@
 queue_rules:
   - name: default
     conditions: []
-    speculative_checks: 2
-    batch_size: 5
 
 pull_request_rules:
   - name: Automatic merge of 2+ commits on approval
