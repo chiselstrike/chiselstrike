@@ -113,7 +113,8 @@ pub(crate) async fn apply(
     if !res.status.success() {
         let out = String::from_utf8(res.stdout).expect("command output not utf-8");
         let err = String::from_utf8(res.stderr).expect("command output not utf-8");
-        return Err(anyhow!("compiling endpoints")).with_context(|| format!("{}\n{}", out, err));
+        return Err(anyhow!("{}\n{}", out, err))
+            .context("could not bundle endpoints with esbuild (using node-style modules)");
     }
 
     for (endpoint_name, bundler_info) in endpoints.iter().zip(bundler_file_mapping.iter()) {
@@ -141,8 +142,8 @@ pub(crate) async fn apply(
     Ok((endpoints_req, index_candidates_req))
 }
 
-fn npx<A: AsRef<OsStr>, C: AsRef<OsStr>>(
-    command: C,
+fn npx<A: AsRef<OsStr>>(
+    command: &'static str,
     args: &[A],
     stdin: Option<std::process::ChildStdout>,
 ) -> JoinHandle<Result<std::process::Output>> {
@@ -155,6 +156,6 @@ fn npx<A: AsRef<OsStr>, C: AsRef<OsStr>>(
 
     spawn_blocking(move || {
         cmd.output()
-            .with_context(|| "trying to execute `npx esbuild`. Is npx on your PATH?".to_string())
+            .with_context(|| format!("could not execute `npx {}`. Is npx on your PATH?", command))
     })
 }

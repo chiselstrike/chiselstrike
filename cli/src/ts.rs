@@ -77,14 +77,16 @@ fn map_type(handler: &Handler, x: &TsType) -> Result<TypeEnum> {
                 let ident_name = ident_to_string(id);
                 Ok(TypeEnum::Entity(ident_name))
             }
-            TsEntityName::TsQualifiedName(_) => Err(anyhow!("qualified names not supported")),
+            TsEntityName::TsQualifiedName(_) => Err(anyhow!("qualified names are not supported")),
         },
-        t => Err(swc_err(handler, t, "type not supported")),
+        t => Err(swc_err(handler, t, "type is not supported")),
     }
 }
 
 fn get_field_type(handler: &Handler, x: &Option<TsTypeAnn>) -> Result<TypeEnum> {
-    let t = x.clone().context("type ann temporarily mandatory")?;
+    let t = x
+        .clone()
+        .context("type annotation is temporarily mandatory")?;
     map_type(handler, &t.type_ann)
 }
 

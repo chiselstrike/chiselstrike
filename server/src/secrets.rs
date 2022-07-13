@@ -59,14 +59,14 @@ async fn read_url(url: &Url) -> Result<String> {
                 }
             }
         }
-        .map_err(|x| anyhow!("reading file {}: {:?}", url.as_str(), x)),
+        .map_err(|x| anyhow!("failed to read file {}: {:?}", url.as_str(), x)),
         _ => {
             let req = utils::get_ok(url.clone())
                 .await
-                .map_err(|x| anyhow!("reading URL {}: {:?}", url.as_str(), x))?;
+                .map_err(|x| anyhow!("failed to read URL {}: {:?}", url.as_str(), x))?;
             req.text()
                 .await
-                .map_err(|x| anyhow!("reading URL {}: {:?}", url.as_str(), x))
+                .map_err(|x| anyhow!("failed to read URL {}: {:?}", url.as_str(), x))
         }
     }
 }

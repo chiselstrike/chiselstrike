@@ -261,7 +261,10 @@ impl RpcService {
             deno::compile_endpoints(endpoints).await?;
             Ok(())
         });
-        state.send_command(cmd).await.context("parsing endpoints")?;
+        state
+            .send_command(cmd)
+            .await
+            .context("could not import endpoint code into the runtime")?;
 
         anyhow::ensure!(
             "__chiselstrike" != &api_version,

@@ -1,6 +1,6 @@
 // SPDX-FileCopyrightText: © 2022 ChiselStrike <info@chiselstrike.com>
 
-use anyhow::Result;
+use anyhow::{Context, Result};
 use std::collections::HashMap;
 use std::io::Write;
 use tempfile::Builder;
@@ -36,7 +36,10 @@ impl Compiler {
             ..Default::default()
         };
 
-        self.tsc.compile_ts_code(file_names, opts).await
+        self.tsc
+            .compile_ts_code(file_names, opts)
+            .await
+            .context("could not compile TypeScript")
     }
 }
 

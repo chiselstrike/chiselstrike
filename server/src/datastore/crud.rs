@@ -318,7 +318,7 @@ impl Cursor {
             .context("Failed to decode cursor from base64 encoded string")?;
         let cursor: Cursor =
             serde_json::from_slice(&cursor_json).context("failed to deserialize cursor's axes")?;
-        anyhow::ensure!(!cursor.axes.is_empty(), "cursor mustn't have no sort axes");
+        anyhow::ensure!(!cursor.axes.is_empty(), "cursor must have some sort axes");
         Ok(cursor)
     }
 

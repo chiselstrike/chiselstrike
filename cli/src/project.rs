@@ -188,11 +188,11 @@ pub(crate) fn read_to_string<P: AsRef<Path>>(filename: P) -> anyhow::Result<Stri
         let mut s = "".to_string();
         stdin()
             .read_to_string(&mut s)
-            .with_context(|| "while reading stdin".to_string())?;
+            .context("could not read stdin")?;
         Ok(s)
     } else {
         fs::read_to_string(filename.as_ref())
-            .with_context(|| format!("while reading {}", filename.as_ref().display()))
+            .with_context(|| format!("could not read {}", filename.as_ref().display()))
     }
 }
 
