@@ -13,7 +13,7 @@ use std::env;
 use std::fmt::{Display, Formatter};
 use std::path::Path;
 use std::str::FromStr;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU16, Ordering};
 use std::sync::{Arc, Mutex};
 use structopt::StructOpt;
 
@@ -71,6 +71,8 @@ struct Opt {
 fn chisel() -> String {
     bin_dir().join("chisel").to_str().unwrap().to_string()
 }
+
+static PORT_OFFSET: AtomicU16 = AtomicU16::new(0);
 
 fn main() {
     // install the current packages in our package.json. This will make things like esbuild
@@ -156,7 +158,7 @@ fn run_tests(opt: Opt, optimize: bool) -> bool {
                 },
                 |config| {
                     // Add one to avoid conflict with local instances of chisel.
-                    let i = rayon::current_thread_index().unwrap_or(0) + 1;
+                    let i = PORT_OFFSET.fetch_add(1, Ordering::SeqCst);
                     config.test_paths = vec![test_path.clone()];
                     config.truncate_output_context_to_number_of_lines = Some(500);
                     config.always_show_stdout = false;
