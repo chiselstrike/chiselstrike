@@ -11,6 +11,7 @@ pull_request_rules:
     actions:
       queue:
         name: default
+        update_method: rebase
         method: merge
         commit_message_template: |
             Merge #{{number}} '{{title}}'
@@ -24,4 +25,5 @@ pull_request_rules:
     actions:
       queue:
         name: default
+        update_method: rebase
         method: rebase
