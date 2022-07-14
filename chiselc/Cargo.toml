@@ -18,4 +18,4 @@ swc_ecma_codegen_macros = "=0.7.0"
 swc_ecmascript = { version = "0.143.0", features = ["codegen", "parser", "visit", "transforms", "typescript"] }
 
 [dev-dependencies]
-lit = "1.0.4"
+lit = { git = "https://github.com/chiselstrike/lit", rev = "607b0b9" }
