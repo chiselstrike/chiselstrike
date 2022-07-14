@@ -25,6 +25,7 @@ mod tests {
             config.add_extension("lit");
             config.constants.insert("chiselc".to_owned(), chiselc());
             config.truncate_output_context_to_number_of_lines = Some(80);
+            config.always_show_stdout = false;
         })
         .expect("Lit tests failed");
     }
