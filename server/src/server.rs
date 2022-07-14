@@ -399,11 +399,8 @@ async fn run_shared_state(
     };
 
     let rpc_rx = signal_rx.clone();
-    let shutdown = async move {
-        rpc_rx.recv().await.ok();
-    };
 
-    let rpc_task = crate::rpc::spawn(rpc, opt.rpc_listen_addr, start_wait, shutdown);
+    let rpc_task = crate::rpc::spawn(rpc, opt.rpc_listen_addr, start_wait, rpc_rx);
     debug!("RPC is ready. URL: {}", opt.rpc_listen_addr);
 
     crate::internal::init(

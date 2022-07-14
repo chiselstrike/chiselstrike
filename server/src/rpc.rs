@@ -27,13 +27,18 @@ use chisel::{
 use deno_core::futures;
 use deno_core::url::Url;
 use futures::FutureExt;
+use hyper::service::Service;
+use hyper::service::{make_service_fn, service_fn};
+use hyper::Server;
 use petgraph::graphmap::GraphMap;
 use petgraph::Directed;
+use socket2::{Domain, Protocol, Socket};
 use std::collections::{BTreeSet, HashMap};
+use std::convert::Infallible;
 use std::net::SocketAddr;
 use std::path::PathBuf;
 use std::sync::Arc;
-use tonic::{transport::Server, Request, Response, Status};
+use tonic::{Request, Response, Status};
 use utils::without_extension;
 use uuid::Uuid;
 
@@ -743,14 +748,36 @@ pub(crate) fn spawn(
     rpc: RpcService,
     addr: SocketAddr,
     start_wait: impl core::future::Future<Output = ()> + Send + 'static,
-    shutdown: impl core::future::Future<Output = ()> + Send + 'static,
+    shutdown: async_channel::Receiver<()>,
 ) -> tokio::task::JoinHandle<Result<()>> {
     tokio::task::spawn(async move {
         start_wait.await;
 
-        let ret = Server::builder()
-            .add_service(ChiselRpcServer::new(rpc))
-            .serve_with_shutdown(addr, shutdown)
+        let domain = if addr.is_ipv6() {
+            Domain::ipv6()
+        } else {
+            Domain::ipv4()
+        };
+        let sk = Socket::new(domain, socket2::Type::stream(), Some(Protocol::tcp()))?;
+        let addr = socket2::SockAddr::from(addr);
+        sk.set_reuse_port(true)?;
+        sk.bind(&addr)?;
+        sk.listen(1024)?;
+        let rpc = ChiselRpcServer::new(rpc);
+        let make_svc = make_service_fn(move |_conn| {
+            let rpc = rpc.clone();
+            async move {
+                Ok::<_, Infallible>(service_fn(move |req| {
+                    let mut rpc = rpc.clone();
+                    async move { rpc.call(req).await }
+                }))
+            }
+        });
+        let server = Server::from_tcp(sk.into_tcp_listener())?.serve(make_svc);
+        let ret = server
+            .with_graceful_shutdown(async {
+                shutdown.recv().await.ok();
+            })
             .await;
         debug!("Tonic shutdown");
         ret?;
