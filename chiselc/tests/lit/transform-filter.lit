@@ -273,3 +273,24 @@ await Person.cursor().filter(p => true);
 
 await Person.cursor().filter({});
 // CHECK: await Person.cursor().filter({})
+
+const name = "Pekka";
+await Person.cursor().filter((p) => {  return p.name == name; }).toArray();
+// CHECK: await Person.cursor().__filter((p)=>{
+// CHECK:     return p.name == name;
+// CHECK: }, {
+// CHECK:     exprType: "Binary",
+// CHECK:     left: {
+// CHECK:         exprType: "Property",
+// CHECK:         object: {
+// CHECK:             exprType: "Parameter",
+// CHECK:             position: 0
+// CHECK:         },
+// CHECK:         property: "name"
+// CHECK:     },
+// CHECK:     op: "Eq",
+// CHECK:     right: {
+// CHECK:         exprType: "Value",
+// CHECK:         value: name
+// CHECK:     }
+// CHECK: }).toArray();
