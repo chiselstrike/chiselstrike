@@ -57,7 +57,7 @@ $CURL $CHISELD_HOST/dev
 # CHECK: "title": "glauber",
 # CHECK: "version": "1.0.0"
 
-git init ./ --initial-branch main
+git init ./
 git add endpoints/simple.ts
 git commit -m "test"
 $CHISEL apply
