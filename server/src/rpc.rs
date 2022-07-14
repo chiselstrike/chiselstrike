@@ -745,6 +745,7 @@ pub(crate) fn spawn(
     start_wait: impl core::future::Future<Output = ()> + Send + 'static,
     shutdown: impl core::future::Future<Output = ()> + Send + 'static,
 ) -> tokio::task::JoinHandle<Result<()>> {
+    info!("Starting tonic at {}", addr);
     tokio::task::spawn(async move {
         start_wait.await;
 
