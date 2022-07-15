@@ -374,7 +374,7 @@ or
 
             match version_types.lookup_custom_type(&name) {
                 Ok(old_type) => {
-                    let delta = TypeSystem::generate_type_delta(&old_type, ty)?;
+                    let delta = TypeSystem::generate_type_delta(&old_type, ty, &state.type_system)?;
                     to_update.push((old_type.clone(), delta));
                 }
                 Err(TypeSystemError::NoSuchType(_) | TypeSystemError::NoSuchVersion(_)) => {
@@ -603,7 +603,6 @@ impl From<Type> for TypeMsg {
     fn from(ty: Type) -> TypeMsg {
         let ty = match ty {
             Type::Float => TypeEnum::Number(true),
-            Type::Id => TypeEnum::String(true),
             Type::String => TypeEnum::String(true),
             Type::Boolean => TypeEnum::Bool(true),
             Type::Entity(entity) => TypeEnum::Entity(entity.name().to_owned()),
@@ -679,9 +678,10 @@ impl ChiselRpc for RpcService {
                 {
                     let mut field_defs = vec![];
                     for field in ty.user_fields() {
+                        let field_type = state.type_system.get(&field.type_id).unwrap();
                         field_defs.push(chisel::FieldDefinition {
                             name: field.name.to_owned(),
-                            field_type: Some(field.type_.clone().into()),
+                            field_type: Some(field_type.into()),
                             labels: field.labels.clone(),
                             default_value: field.user_provided_default().clone(),
                             is_optional: field.is_optional,
