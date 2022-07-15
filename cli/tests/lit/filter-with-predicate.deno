@@ -301,7 +301,7 @@ export default async function chisel(req: Request) {
             },
             op: "Eq",
             right: {
-              exprType: "Literal",
+              exprType: "Value",
               value: 89
             }
         });
@@ -343,7 +343,7 @@ export default async function chisel(req: Request) {
             },
             op: "Eq",
             right: {
-              exprType: "Literal",
+              exprType: "Value",
               value: "The importance of being erinaceous"
             }
         });
@@ -381,7 +381,7 @@ export default async function chisel(req: Request) {
             },
             op: "Eq",
             right: {
-              exprType: "Literal",
+              exprType: "Value",
               value: 89
             }
         });
@@ -423,7 +423,7 @@ export default async function chisel(req: Request) {
             },
             op: "Eq",
             right: {
-              exprType: "Literal",
+              exprType: "Value",
               value: "The importance of being erinaceous"
             }
         });
@@ -453,7 +453,7 @@ export default async function chisel(req: Request) {
         .__filter((p) => {
             return all;
         }, {
-            exprType: "Literal",
+            exprType: "Value",
             value: all
         });
 

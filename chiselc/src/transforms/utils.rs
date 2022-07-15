@@ -3,10 +3,10 @@ use crate::query::BinaryExpr as QBinaryExpr;
 use crate::query::BinaryOp as QBinaryOp;
 use crate::query::Expr as QExpr;
 use crate::query::Filter as QFilter;
-use crate::query::Literal as QLiteral;
 use crate::query::Operator as QOperator;
 use crate::query::PropertyAccessExpr as QPropertyAccessExpr;
 use crate::query::Scan as QScan;
+use crate::query::Value as QValue;
 use crate::transforms::filter::splitting::{rewrite_filter_arrow, split_and_convert_expr};
 use crate::utils::pat_to_string;
 use anyhow::Result;
@@ -112,7 +112,7 @@ pub fn extract_filter(
 pub fn convert_filter_expr(expr: &Expr) -> Option<QExpr> {
     match expr {
         Expr::Bin(bin_expr) => convert_bin_expr(bin_expr),
-        Expr::Lit(Lit::Bool(value)) => Some(QExpr::Literal(QLiteral::Bool(value.value))),
+        Expr::Lit(Lit::Bool(value)) => Some(QExpr::Value(QValue::Bool(value.value))),
         _ => None,
     }
 }
@@ -136,8 +136,8 @@ fn convert_expr(expr: &Expr) -> Option<QExpr> {
     match expr {
         Expr::Bin(bin_expr) => convert_bin_expr(bin_expr),
         Expr::Paren(paren_expr) => convert_expr(&*paren_expr.expr),
-        Expr::Lit(Lit::Num(number)) => Some(QExpr::Literal(QLiteral::Num(number.value))),
-        Expr::Lit(Lit::Str(s)) => Some(QExpr::Literal(QLiteral::Str(format!("{}", s.value)))),
+        Expr::Lit(Lit::Num(number)) => Some(QExpr::Value(QValue::Num(number.value))),
+        Expr::Lit(Lit::Str(s)) => Some(QExpr::Value(QValue::Str(format!("{}", s.value)))),
         Expr::Member(member_expr) => {
             let obj = convert_expr(&member_expr.obj)?;
             let prop = match &member_expr.prop {

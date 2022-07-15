@@ -1,14 +1,14 @@
 // SPDX-FileCopyrightText: © 2021 ChiselStrike <info@chiselstrike.com>
 
 use crate::auth::AUTH_USER_NAME;
-use crate::datastore::expr::{BinaryExpr, Expr, Literal, PropertyAccess};
+use crate::datastore::expr::{BinaryExpr, Expr, PropertyAccess, Value as ExprValue};
 use crate::policies::{FieldPolicies, Policies};
 use crate::types::{Entity, Field, ObjectType, Type, TypeId, TypeSystem};
 
 use anyhow::{anyhow, Context, Result};
 use enum_as_inner::EnumAsInner;
 use serde_derive::{Deserialize, Serialize};
-use serde_json::value::Value;
+use serde_json::value::Value as JsonValue;
 use std::collections::HashMap;
 use std::collections::HashSet;
 use std::fmt;
@@ -71,7 +71,7 @@ pub(crate) enum QueryField {
         /// the database.
         column_idx: usize,
         /// Policy transformation to be applied on the resulting JSON value.
-        transform: Option<fn(Value) -> Value>,
+        transform: Option<fn(JsonValue) -> JsonValue>,
         /// Do not include field in return json
         keep_or_omit: KeepOrOmitField,
     },
@@ -80,7 +80,7 @@ pub(crate) enum QueryField {
         name: String,
         is_optional: bool,
         /// Policy transformation to be applied on the resulting JSON value.
-        transform: Option<fn(Value) -> Value>,
+        transform: Option<fn(JsonValue) -> JsonValue>,
         /// Do not include field in return json
         keep_or_omit: KeepOrOmitField,
     },
@@ -332,7 +332,7 @@ impl QueryPlan {
         &mut self,
         field: &Field,
         table_name: &str,
-        transform: Option<fn(Value) -> Value>,
+        transform: Option<fn(JsonValue) -> JsonValue>,
         keep_or_omit: &KeepOrOmitField,
     ) -> QueryField {
         let column_idx = self.columns.len();
@@ -434,7 +434,7 @@ impl QueryPlan {
         property_chain: Expr,
     ) -> anyhow::Result<()> {
         let field_policies = context.make_field_policies(ty);
-        let user_id: Literal = match &field_policies.current_userid {
+        let user_id: ExprValue = match &field_policies.current_userid {
             None => "NULL",
             Some(id) => id.as_str(),
         }
@@ -514,13 +514,13 @@ impl QueryPlan {
 
     fn filter_expr_to_string(&self, expr: &Expr) -> Result<String> {
         let expr_str = match &expr {
-            Expr::Literal { value } => match &value {
-                Literal::Bool(lit) => (if *lit { "true" } else { "false" }).to_string(),
-                Literal::U64(lit) => lit.to_string(),
-                Literal::I64(lit) => lit.to_string(),
-                Literal::F64(lit) => lit.to_string(),
-                Literal::String(lit) => escape_string(lit),
-                Literal::Null => "NULL".to_string(),
+            Expr::Value { value } => match &value {
+                ExprValue::Bool(value) => (if *value { "true" } else { "false" }).to_string(),
+                ExprValue::U64(value) => value.to_string(),
+                ExprValue::I64(value) => value.to_string(),
+                ExprValue::F64(value) => value.to_string(),
+                ExprValue::String(value) => escape_string(value),
+                ExprValue::Null => "NULL".to_string(),
             },
             Expr::Binary(binary_exp) => {
                 format!(
@@ -868,7 +868,7 @@ pub(crate) mod tests {
 
     pub(crate) const VERSION: &str = "version_1";
 
-    pub(crate) fn binary(fields: &[&'static str], op: BinaryOp, literal: Literal) -> Expr {
+    pub(crate) fn binary(fields: &[&'static str], op: BinaryOp, value: ExprValue) -> Expr {
         assert!(!fields.len() > 0);
         let mut field_chain = Expr::Parameter { position: 0 };
         for field_name in fields {
@@ -878,7 +878,7 @@ pub(crate) mod tests {
             }
             .into();
         }
-        BinaryExpr::new(op, field_chain, literal.into()).into()
+        BinaryExpr::new(op, field_chain, value.into()).into()
     }
 
     pub(crate) fn make_type_system(entities: &[Entity]) -> TypeSystem {

@@ -21,7 +21,7 @@ BlogPost.cursor().filter({
     property: { exprType: "Identifier", value: "name" },
   },
   op: "=",
-  right: { exprType: "Literal", value: "Glauber" },
+  right: { exprType: "Value", value: "Glauber" },
 });
 ```
 
@@ -44,10 +44,10 @@ The `exprType` of an identifier expression is `Identifier`.
 
 An identifier expression has a property `ident`, which is a string representing the identifier symbol.
 
-### Literal
+### Value
 
-The `exprType` of a literal is `Literal`.
-A literal has a `value` property, which can be a `string` or a `number`.
+The `exprType` of a value is `Value`.
+A value has a `value` property, which can be a `string` or a `number`.
 
 ### Parameter
 

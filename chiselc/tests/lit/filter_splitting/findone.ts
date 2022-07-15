@@ -16,7 +16,7 @@ Person.findOne(person => person.name == "Glauber Costa" && validate(person));
 // CHECK:     },
 // CHECK:     op: "Eq",
 // CHECK:     right: {
-// CHECK:         exprType: "Literal",
+// CHECK:         exprType: "Value",
 // CHECK:         value: "Glauber Costa"
 // CHECK:     }
 // CHECK: }, (person)=>validate(person)

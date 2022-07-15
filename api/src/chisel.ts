@@ -1099,7 +1099,7 @@ function restrictionsToFilterExpr<T extends ChiselEntity>(
             },
             op: "Eq",
             right: {
-                exprType: "Literal",
+                exprType: "Value",
                 value: restrictions[key],
             },
         };

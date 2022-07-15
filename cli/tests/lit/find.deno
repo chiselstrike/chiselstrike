@@ -34,7 +34,7 @@ export default async function chisel(req: ChiselRequest) {
                 },
                 op: "Eq",
                 right: {
-                  exprType: "Literal",
+                  exprType: "Value",
                   value: first_name
                 }
             },
@@ -79,7 +79,7 @@ export default async function chisel(req: ChiselRequest) {
                 },
                 op: "Eq",
                 right: {
-                  exprType: "Literal",
+                  exprType: "Value",
                   value: first_name
                 }
             }

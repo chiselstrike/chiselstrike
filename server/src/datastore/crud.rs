@@ -1,5 +1,5 @@
 use crate::datastore::engine::{QueryEngine, TransactionStatic};
-use crate::datastore::expr::{BinaryExpr, BinaryOp, Expr, Literal, PropertyAccess};
+use crate::datastore::expr::{BinaryExpr, BinaryOp, Expr, PropertyAccess, Value as ExprValue};
 use crate::datastore::query::{Mutation, QueryOp, QueryPlan, RequestContext, SortBy, SortKey};
 use crate::types::{Entity, Type, TypeSystem};
 use crate::JsonObject;
@@ -369,10 +369,10 @@ impl Cursor {
             };
             let (property_chain, field_type) =
                 make_property_chain(base_type, &[&axis.key.field_name], ts)?;
-            let literal = json_to_literal(&field_type, &axis.value)
-                .context("Failed to convert axis value to literal")?;
+            let value = json_to_value(&field_type, &axis.value)
+                .context("Failed to convert axis JSON to expression value")?;
 
-            cmp_pairs.push((property_chain, op, literal));
+            cmp_pairs.push((property_chain, op, value));
         }
         let mut expr = None;
         for (i, (lhs, op, rhs)) in cmp_pairs.iter().enumerate() {
@@ -391,7 +391,7 @@ impl Cursor {
     }
 }
 
-fn json_to_literal(field_type: &Type, value: &serde_json::Value) -> Result<Expr> {
+fn json_to_value(field_type: &Type, value: &serde_json::Value) -> Result<Expr> {
     macro_rules! convert {
         ($as_type:ident, $ty_name:literal) => {{
             value
@@ -402,16 +402,16 @@ fn json_to_literal(field_type: &Type, value: &serde_json::Value) -> Result<Expr>
                 .to_owned()
         }};
     }
-    let literal = match field_type {
+    let expr_val = match field_type {
         Type::Entity(ty) => anyhow::bail!(
             "trying to filter by property of type '{}' which is not supported",
             ty.name()
         ),
-        Type::String => Literal::String(convert!(as_str, "string")),
-        Type::Float => Literal::F64(convert!(as_f64, "float")),
-        Type::Boolean => Literal::Bool(convert!(as_bool, "bool")),
+        Type::String => ExprValue::String(convert!(as_str, "string")),
+        Type::Float => ExprValue::F64(convert!(as_f64, "float")),
+        Type::Boolean => ExprValue::Bool(convert!(as_bool, "bool")),
     };
-    Ok(Expr::Literal { value: literal })
+    Ok(expr_val.into())
 }
 
 /// Parses all CRUD query-string filters over `base_type` from provided `url`.
@@ -476,18 +476,18 @@ fn filter_from_param(
     let (property_chain, field_type) = make_property_chain(base_type, &fields, ts)?;
 
     let err_msg = |ty_name| format!("failed to convert filter value '{}' to {}", value, ty_name);
-    let literal = match field_type {
+    let expr_value = match field_type {
         Type::Entity(ty) => anyhow::bail!(
             "trying to filter by property '{}' of type '{}' which is not supported",
             fields.last().unwrap(),
             ty.name()
         ),
-        Type::String => Literal::String(value.to_owned()),
-        Type::Float => Literal::F64(value.parse::<f64>().with_context(|| err_msg("f64"))?),
-        Type::Boolean => Literal::Bool(value.parse::<bool>().with_context(|| err_msg("bool"))?),
+        Type::String => ExprValue::String(value.to_owned()),
+        Type::Float => ExprValue::F64(value.parse::<f64>().with_context(|| err_msg("f64"))?),
+        Type::Boolean => ExprValue::Bool(value.parse::<bool>().with_context(|| err_msg("bool"))?),
     };
 
-    Ok(BinaryExpr::new(operator, property_chain, literal.into()).into())
+    Ok(BinaryExpr::new(operator, property_chain, expr_value.into()).into())
 }
 
 /// Converts `fields` of `base_type` into PropertyAccess expression while ensuring that

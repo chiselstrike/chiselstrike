@@ -17,7 +17,7 @@ Person.cursor().filter(person => { return person.age > 40 && fetch("foobar"); })
 // CHECK:     },
 // CHECK:     op: "Gt",
 // CHECK:     right: {
-// CHECK:         exprType: "Literal",
+// CHECK:         exprType: "Value",
 // CHECK:         value: 40
 // CHECK:     }
 // CHECK: }, (person)=>{
