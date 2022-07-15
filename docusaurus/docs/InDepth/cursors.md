@@ -46,6 +46,7 @@ The methods provided by `ChiselCursor` are:
 | `sortBy(key, ascending)`| Require the elements to be sorted by a given `key` (field) of the entity. |
 | `minBy(key)`            | Select minimal value over entities' `key` (field) |
 | `maxBy(key)`            | Select maximal value over entities' `key` (field) |
+| `map(function)`         | Returns another cursor with the result of applying `function` to each element of the original cursor |
 | `toArray()`             | Convert this cursor to an array.  |
 
 <!-- FIXME : without examples it's unclear what a restrictions object or a function predicate is, this needs a simpler explanation with examples. -->

@@ -1,0 +1,106 @@
+# SPDX-FileCopyrightText: © 2021 ChiselStrike <info@chiselstrike.com>
+
+# RUN: sh -e @file
+
+cd "$TEMPDIR"
+
+cat << EOF > "$TEMPDIR/models/types.ts"
+import { ChiselEntity } from "@chiselstrike/api";
+
+export class Person extends ChiselEntity {
+  name: string = "bob";
+  company: string = "ChiselStrike";
+}
+EOF
+
+cat << EOF > "$TEMPDIR/endpoints/store.ts"
+import { Person } from "../models/types.ts";
+
+export default async function chisel() {
+    const person = new Person();
+    await person.save();
+    return "Ok"
+}
+EOF
+
+cat << EOF > "$TEMPDIR/endpoints/maparray.ts"
+import { Person } from "../models/types.ts";
+
+export default async function chisel(): Promise<Array<number>> {
+    return Person.cursor().map(x => x.name.length).toArray()
+}
+EOF
+
+cat << EOF > "$TEMPDIR/endpoints/mapfor.ts"
+import { Person } from "../models/types.ts";
+
+export default async function chisel(): Promise<number> {
+  let count = 0;
+  for await (const e of Person.cursor().map(x => x.name.length)) {
+      count += e;
+  }
+  return count;
+}
+EOF
+
+cat << EOF > "$TEMPDIR/endpoints/doublemap.ts"
+import { Person } from "../models/types.ts";
+
+export default async function chisel(): Promise<Array<number>> {
+  return Person.cursor().map(x => x.name.length).map(x => x + 10).toArray()
+}
+EOF
+
+cat << EOF > "$TEMPDIR/endpoints/maptake.ts"
+import { Person } from "../models/types.ts";
+
+export default async function chisel(): Promise<number> {
+  const a = await Person.cursor().map(x => x.name.length).map(x => x + 10).take(0).toArray()
+  return a.length
+}
+EOF
+
+
+cat << EOF > "$TEMPDIR/endpoints/mapskip.ts"
+import { Person } from "../models/types.ts";
+
+export default async function chisel(): Promise<number> {
+  const a = await Person.cursor().map(x => x.name.length).map(x => x + 10).skip(1).toArray()
+  return a.length
+}
+EOF
+
+cat << EOF > "$TEMPDIR/endpoints/mapfilter.ts"
+import { Person } from "../models/types.ts";
+
+export default async function chisel(): Promise<number> {
+  const a = await Person.cursor().map(x => x.name.length).map(x => x + 10).filter(x => x > 0).toArray()
+  return a.length
+}
+EOF
+
+
+$CHISEL apply
+
+# CHECK: Model defined: Person
+
+$CURL -X POST $CHISELD_HOST/dev/store
+# CHECK: Ok
+
+$CURL $CHISELD_HOST/dev/maparray
+# CHECK: 3
+
+$CURL $CHISELD_HOST/dev/mapfor
+# CHECK: 3
+
+$CURL $CHISELD_HOST/dev/doublemap
+# CHECK: 13
+
+$CURL $CHISELD_HOST/dev/maptake
+# CHECK: 0
+
+$CURL $CHISELD_HOST/dev/mapskip
+# CHECK: 0
+
+$CURL $CHISELD_HOST/dev/mapfilter
+# CHECK: 1

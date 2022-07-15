@@ -208,6 +208,45 @@ class Skip<T> extends Operator<T, T> {
 }
 
 /**
+ * Map operator applies a function to each element of this collection
+ */
+class MapOperator<Input, Output> extends Operator<Input, Output> {
+    constructor(
+        inner: Operator<unknown, Input>,
+        public func: (arg: Input) => Output,
+    ) {
+        super(inner);
+    }
+
+    apply(
+        iter: AsyncIterable<Input>,
+    ): AsyncIterable<Output> {
+        const func = this.func;
+        return {
+            [Symbol.asyncIterator]: async function* () {
+                for await (const arg of iter) {
+                    yield func(arg);
+                }
+            },
+        };
+    }
+
+    public eval(): AsyncIterable<Output> {
+        let iter = this.inner!.eval();
+        if (iter === undefined) {
+            iter = this.inner!.runChiselQuery();
+        }
+        return this.apply(iter);
+    }
+
+    recordToOutput(_rawRecord: unknown): Output {
+        throw new Error(
+            "map operator doesn't get sent to the database, so this code should not have been called!",
+        );
+    }
+}
+
+/**
  * Forces fetch of just the `columns` (fields) of a given entity.
  */
 class ColumnsSelect<T, C extends (keyof T)[]>
@@ -632,6 +671,17 @@ export class ChiselCursor<T> {
             arr.push(t);
         }
         return arr;
+    }
+
+    /**
+     * The map() method creates a new cursor populated with the results of calling a provided function on every element in the calling cursor.
+     *
+     * @param `func` the function to apply. It has as its parameter the original element, and it returns the mapped element
+     */
+    map<V>(func: (arg: T) => V): ChiselCursor<V> {
+        return new ChiselCursor(
+            new MapOperator(this.inner, func),
+        );
     }
 
     /** ChiselCursor implements asyncIterator, meaning you can use it in any asynchronous context. */
