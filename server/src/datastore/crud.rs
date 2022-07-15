@@ -1,7 +1,7 @@
 use crate::datastore::engine::{QueryEngine, TransactionStatic};
 use crate::datastore::expr::{BinaryExpr, BinaryOp, Expr, Literal, PropertyAccess};
 use crate::datastore::query::{Mutation, QueryOp, QueryPlan, RequestContext, SortBy, SortKey};
-use crate::types::{Entity, Type};
+use crate::types::{Entity, Type, TypeSystem};
 use crate::JsonObject;
 use anyhow::{Context, Result};
 use deno_core::futures;
@@ -41,7 +41,7 @@ fn run_query_impl(
         .lookup_entity(&params.type_name, &context.api_version)
         .context("unexpected type name as crud query base type")?;
 
-    let query = Query::from_url(base_type, &params.url)?;
+    let query = Query::from_url(base_type, &params.url, context.ts)?;
     let ops = query.make_query_ops()?;
     let query_plan = QueryPlan::from_ops(context, base_type, ops)?;
     let stream = query_engine.query(tr.clone(), query_plan)?;
@@ -178,7 +178,7 @@ pub(crate) fn delete_from_url(c: &RequestContext, type_name: &str, url: &str) ->
         Ok(ty) => anyhow::bail!("Cannot delete scalar type {type_name} ({})", ty.name()),
         Err(_) => anyhow::bail!("Cannot delete from type `{type_name}`, type not found"),
     };
-    let filter_expr = url_to_filter(&base_entity, url)
+    let filter_expr = url_to_filter(&base_entity, url, c.ts)
         .context("failed to convert crud URL to filter expression")?;
     if filter_expr.is_none() {
         let q = Url::parse(url).with_context(|| format!("failed to parse query string '{url}'"))?;
@@ -219,7 +219,7 @@ impl Query {
     }
 
     /// Parses provided `url` and builds a `Query` that can be used to build a `QueryPlan`.
-    fn from_url(base_type: &Entity, url: &Url) -> Result<Self> {
+    fn from_url(base_type: &Entity, url: &Url, ts: &TypeSystem) -> Result<Self> {
         let mut q = Query::new();
         for (param_key, value) in url.query_pairs().into_owned() {
             match param_key.as_str() {
@@ -245,8 +245,8 @@ impl Query {
                 }
                 _ => {
                     if let Some(param_key) = param_key.strip_prefix('.') {
-                        let expr =
-                            filter_from_param(base_type, param_key, &value).with_context(|| {
+                        let expr = filter_from_param(base_type, param_key, &value, ts)
+                            .with_context(|| {
                                 format!("failed to parse filter {param_key}={value}")
                             })?;
                         q.filters.push(expr);
@@ -258,7 +258,7 @@ impl Query {
         ensure_sort_by_id(&mut q.sort);
         if let Some(cursor) = &q.cursor {
             q.sort = cursor.get_sort();
-            q.filters.push(cursor.get_filter(base_type)?);
+            q.filters.push(cursor.get_filter(base_type, ts)?);
         }
         Ok(q)
     }
@@ -353,7 +353,7 @@ impl Cursor {
     /// The crux of this function is using the sort axes (each axis represents one dimension
     /// in lexicographical sort) to create a filter that filters for entries that are after
     /// the last element in the given sort.
-    fn get_filter(&self, base_type: &Entity) -> Result<Expr> {
+    fn get_filter(&self, base_type: &Entity, ts: &TypeSystem) -> Result<Expr> {
         let mut cmp_pairs: Vec<(Expr, BinaryOp, Expr)> = vec![];
         for axis in &self.axes {
             let op = if axis.key.ascending == self.forward {
@@ -368,7 +368,7 @@ impl Cursor {
                 BinaryOp::Lt
             };
             let (property_chain, field_type) =
-                make_property_chain(base_type, &[&axis.key.field_name])?;
+                make_property_chain(base_type, &[&axis.key.field_name], ts)?;
             let literal = json_to_literal(&field_type, &axis.value)
                 .context("Failed to convert axis value to literal")?;
 
@@ -407,7 +407,7 @@ fn json_to_literal(field_type: &Type, value: &serde_json::Value) -> Result<Expr>
             "trying to filter by property of type '{}' which is not supported",
             ty.name()
         ),
-        Type::String | Type::Id => Literal::String(convert!(as_str, "string")),
+        Type::String => Literal::String(convert!(as_str, "string")),
         Type::Float => Literal::F64(convert!(as_f64, "float")),
         Type::Boolean => Literal::Bool(convert!(as_bool, "bool")),
     };
@@ -415,13 +415,13 @@ fn json_to_literal(field_type: &Type, value: &serde_json::Value) -> Result<Expr>
 }
 
 /// Parses all CRUD query-string filters over `base_type` from provided `url`.
-fn url_to_filter(base_type: &Entity, url: &str) -> Result<Option<Expr>> {
+fn url_to_filter(base_type: &Entity, url: &str, ts: &TypeSystem) -> Result<Option<Expr>> {
     let mut filter = None;
     let q = Url::parse(url).with_context(|| format!("failed to parse query string '{}'", url))?;
     for (param_key, value) in q.query_pairs().into_owned() {
         let param_key = param_key.to_string();
         if let Some(param_key) = param_key.strip_prefix('.') {
-            let expression = filter_from_param(base_type, param_key, &value)
+            let expression = filter_from_param(base_type, param_key, &value, ts)
                 .context("failed to parse filter")?;
 
             filter = filter
@@ -457,7 +457,12 @@ fn parse_sort(base_type: &Entity, value: &str) -> Result<SortBy> {
 }
 
 /// Constructs results filter by parsing query string's `param_key` and `value`.
-fn filter_from_param(base_type: &Entity, param_key: &str, value: &str) -> Result<Expr> {
+fn filter_from_param(
+    base_type: &Entity,
+    param_key: &str,
+    value: &str,
+    ts: &TypeSystem,
+) -> Result<Expr> {
     let tokens: Vec<_> = param_key.split('~').collect();
     anyhow::ensure!(
         tokens.len() <= 2,
@@ -468,7 +473,7 @@ fn filter_from_param(base_type: &Entity, param_key: &str, value: &str) -> Result
     let operator = tokens.get(1).copied();
     let operator = convert_operator(operator)?;
 
-    let (property_chain, field_type) = make_property_chain(base_type, &fields)?;
+    let (property_chain, field_type) = make_property_chain(base_type, &fields, ts)?;
 
     let err_msg = |ty_name| format!("failed to convert filter value '{}' to {}", value, ty_name);
     let literal = match field_type {
@@ -477,7 +482,7 @@ fn filter_from_param(base_type: &Entity, param_key: &str, value: &str) -> Result
             fields.last().unwrap(),
             ty.name()
         ),
-        Type::String | Type::Id => Literal::String(value.to_owned()),
+        Type::String => Literal::String(value.to_owned()),
         Type::Float => Literal::F64(value.parse::<f64>().with_context(|| err_msg("f64"))?),
         Type::Boolean => Literal::Bool(value.parse::<bool>().with_context(|| err_msg("bool"))?),
     };
@@ -487,7 +492,11 @@ fn filter_from_param(base_type: &Entity, param_key: &str, value: &str) -> Result
 
 /// Converts `fields` of `base_type` into PropertyAccess expression while ensuring that
 /// provided fields are, in fact, applicable to `base_type`.
-fn make_property_chain(base_type: &Entity, fields: &[&str]) -> Result<(Expr, Type)> {
+fn make_property_chain(
+    base_type: &Entity,
+    fields: &[&str],
+    ts: &TypeSystem,
+) -> Result<(Expr, Type)> {
     anyhow::ensure!(
         !fields.is_empty(),
         "cannot make property chain from no fields"
@@ -497,7 +506,7 @@ fn make_property_chain(base_type: &Entity, fields: &[&str]) -> Result<(Expr, Typ
     for &field_str in fields {
         if let Type::Entity(entity) = last_type {
             if let Some(field) = entity.get_field(field_str) {
-                last_type = field.type_.clone();
+                last_type = ts.get(&field.type_id)?;
             } else {
                 anyhow::bail!(
                     "entity '{}' doesn't have field '{}'",
@@ -636,6 +645,7 @@ mod tests {
         )
     });
     static ENTITIES: Lazy<[Entity; 2]> = Lazy::new(|| [PERSON_TY.clone(), COMPANY_TY.clone()]);
+    static TYPE_SYSTEM: Lazy<TypeSystem> = Lazy::new(|| make_type_system(&*ENTITIES));
 
     #[test]
     fn test_replace_host_address() {
@@ -700,8 +710,9 @@ mod tests {
                 make_field("ceo", person_type.into()),
             ],
         );
-        let filter_expr =
-            |key: &str, value: &str| filter_from_param(&base_type, key, value).unwrap();
+        let filter_expr = |key: &str, value: &str| {
+            filter_from_param(&base_type, key, value, &TYPE_SYSTEM).unwrap()
+        };
         let ops = [
             (BinaryOp::Eq, ""),
             (BinaryOp::NotEq, "~ne"),
@@ -803,9 +814,9 @@ mod tests {
 
         let (query_engine, _db_file) = setup_clear_db(&*ENTITIES).await;
         let qe = &query_engine;
-        add_row(qe, &PERSON_TY, &alan).await;
-        add_row(qe, &PERSON_TY, &john).await;
-        add_row(qe, &PERSON_TY, &steve).await;
+        add_row(qe, &PERSON_TY, &alan, &TYPE_SYSTEM).await;
+        add_row(qe, &PERSON_TY, &john, &TYPE_SYSTEM).await;
+        add_row(qe, &PERSON_TY, &steve, &TYPE_SYSTEM).await;
 
         let mut r = run_query_vec("Person", url(""), qe).await;
         r.sort();
@@ -846,7 +857,7 @@ mod tests {
         assert_eq!(r, vec!["John", "Steve"]);
 
         let alex = json!({"name": "Alex", "age": json!(40f32)});
-        add_row(qe, &PERSON_TY, &alex).await;
+        add_row(qe, &PERSON_TY, &alex, &TYPE_SYSTEM).await;
         // Test permutations of parameters
         {
             let raw_ops = vec!["page_size=2", "offset=1", "sort=age"];
@@ -876,8 +887,8 @@ mod tests {
         let chiselstrike = json!({"name": "ChiselStrike", "ceo": john});
         let thunderstrike = json!({"name": "ThunderStrike", "ceo": alan});
         {
-            add_row(qe, &COMPANY_TY, &chiselstrike).await;
-            add_row(qe, &COMPANY_TY, &thunderstrike).await;
+            add_row(qe, &COMPANY_TY, &chiselstrike, &TYPE_SYSTEM).await;
+            add_row(qe, &COMPANY_TY, &thunderstrike, &TYPE_SYSTEM).await;
 
             let r = run_query_vec("Company", url(".ceo.age~lte=20"), qe).await;
             assert_eq!(r, vec!["ChiselStrike"]);
@@ -893,10 +904,10 @@ mod tests {
 
         let (query_engine, _db_file) = setup_clear_db(&*ENTITIES).await;
         let qe = &query_engine;
-        add_row(qe, &PERSON_TY, &alan).await;
-        add_row(qe, &PERSON_TY, &john).await;
-        add_row(qe, &PERSON_TY, &steve).await;
-        add_row(qe, &PERSON_TY, &alex).await;
+        add_row(qe, &PERSON_TY, &alan, &TYPE_SYSTEM).await;
+        add_row(qe, &PERSON_TY, &john, &TYPE_SYSTEM).await;
+        add_row(qe, &PERSON_TY, &steve, &TYPE_SYSTEM).await;
+        add_row(qe, &PERSON_TY, &alex, &TYPE_SYSTEM).await;
 
         fn get_url(raw: &serde_json::Value) -> Url {
             Url::parse(raw.as_str().unwrap()).unwrap()
@@ -1099,7 +1110,7 @@ mod tests {
         let alan = json!({"name": "Alan", "age": json!(30f32)});
         {
             let (qe, _db_file) = setup_clear_db(&*ENTITIES).await;
-            add_row(&qe, &PERSON_TY, &john).await;
+            add_row(&qe, &PERSON_TY, &john, &TYPE_SYSTEM).await;
 
             let mutation = delete_from_url("Person", &url(".name=John"));
             qe.mutate(mutation).await.unwrap();
@@ -1108,8 +1119,8 @@ mod tests {
         }
         {
             let (qe, _db_file) = setup_clear_db(&*ENTITIES).await;
-            add_row(&qe, &PERSON_TY, &john).await;
-            add_row(&qe, &PERSON_TY, &alan).await;
+            add_row(&qe, &PERSON_TY, &john, &TYPE_SYSTEM).await;
+            add_row(&qe, &PERSON_TY, &alan, &TYPE_SYSTEM).await;
 
             let mutation = delete_from_url("Person", &url(".age=30"));
             qe.mutate(mutation).await.unwrap();
@@ -1122,7 +1133,7 @@ mod tests {
         let chiselstrike = json!({"name": "ChiselStrike", "ceo": john});
         {
             let (qe, _db_file) = setup_clear_db(&*ENTITIES).await;
-            add_row(&qe, &COMPANY_TY, &chiselstrike).await;
+            add_row(&qe, &COMPANY_TY, &chiselstrike, &TYPE_SYSTEM).await;
 
             let mutation = delete_from_url("Company", &url(".ceo.name=John"));
             qe.mutate(mutation).await.unwrap();

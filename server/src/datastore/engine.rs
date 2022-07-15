@@ -4,7 +4,7 @@ use crate::datastore::query::{
     KeepOrOmitField, Mutation, QueriedEntity, QueryField, QueryPlan, SqlValue, TargetDatabase,
 };
 use crate::datastore::{DbConnection, Kind};
-use crate::types::{DbIndex, Field, ObjectDelta, ObjectType, Type};
+use crate::types::{DbIndex, Field, ObjectDelta, ObjectType, Type, TypeId, TypeSystem};
 use crate::JsonObject;
 use anyhow::{anyhow, Context as AnyhowContext, Result};
 use async_lock::Mutex;
@@ -23,6 +23,7 @@ use sqlx::any::{Any, AnyArguments, AnyPool, AnyRow};
 use sqlx::{Executor, Row, Transaction, ValueRef};
 use std::collections::{HashMap, HashSet};
 use std::fmt::Write;
+use std::future::Future;
 use std::pin::Pin;
 use std::sync::Arc;
 use std::task::{Context, Poll};
@@ -93,12 +94,12 @@ impl TryFrom<&Field> for ColumnDef {
         if field.is_unique {
             column_def.unique_key();
         }
-        match field.type_ {
-            Type::String => column_def.text(),
-            Type::Id => column_def.text().primary_key(),
-            Type::Float => column_def.double(),
-            Type::Boolean => column_def.boolean(),
-            Type::Entity(_) => column_def.text(), // Foreign key, must the be same type as Type::Id
+        match field.type_id {
+            TypeId::String => column_def.text(),
+            TypeId::Id => column_def.text().primary_key(),
+            TypeId::Float => column_def.double(),
+            TypeId::Boolean => column_def.boolean(),
+            TypeId::Entity { .. } => column_def.text(), // Foreign key, must the be same type as Type::Id
         };
 
         Ok(column_def)
@@ -382,7 +383,7 @@ impl QueryEngine {
             match s_field {
                 QueryField::Scalar {
                     name,
-                    type_,
+                    type_id,
                     column_idx,
                     is_optional,
                     transform,
@@ -399,16 +400,16 @@ impl QueryEngine {
                             json!(val)
                         }};
                     }
-                    let mut val = match type_ {
-                        Type::Float => {
+                    let mut val = match type_id {
+                        TypeId::Float => {
                             // https://github.com/launchbadge/sqlx/issues/1596
                             // sqlx gets confused if the float doesn't have decimal points.
                             let val: f64 = row.get_unchecked(column_idx);
                             json!(val)
                         }
-                        Type::String => to_json!(&str),
-                        Type::Id => to_json!(&str),
-                        Type::Boolean => {
+                        TypeId::String => to_json!(&str),
+                        TypeId::Id => to_json!(&str),
+                        TypeId::Boolean => {
                             // Similarly to the float issue, type information is not filled in
                             // *if* this value was put in as a result of coalesce() (default).
                             match db_kind {
@@ -419,7 +420,7 @@ impl QueryEngine {
                                 _ => to_json!(bool),
                             }
                         }
-                        Type::Entity(_) => anyhow::bail!("object is not a scalar"),
+                        TypeId::Entity { .. } => anyhow::bail!("object is not a scalar"),
                     };
                     if let Some(tr) = transform {
                         // Apply policy transformation
@@ -517,15 +518,19 @@ impl QueryEngine {
     ///     ...
     /// }
     ///
-    pub(crate) async fn add_row(
-        &self,
+    pub(crate) fn add_row<'a>(
+        &'a self,
         ty: &ObjectType,
         ty_value: &JsonObject,
-        transaction: Option<&mut Transaction<'_, Any>>,
-    ) -> Result<IdTree> {
-        let (inserts, id_tree) = self.prepare_insertion(ty, ty_value)?;
-        self.run_sql_queries(&inserts, transaction).await?;
-        Ok(id_tree)
+        transaction: Option<&'a mut Transaction<'static, Any>>,
+        ts: &TypeSystem,
+    ) -> impl Future<Output = Result<IdTree>> + 'a {
+        let res = self.prepare_insertion(ty, ty_value, ts);
+        async {
+            let (inserts, id_tree) = res?;
+            self.run_sql_queries(&inserts, transaction).await?;
+            Ok(id_tree)
+        }
     }
 
     pub(crate) async fn add_row_shallow(
@@ -577,6 +582,7 @@ impl QueryEngine {
         &self,
         ty: &ObjectType,
         ty_value: &JsonObject,
+        ts: &TypeSystem,
     ) -> Result<(Vec<SqlWithArguments>, IdTree)> {
         let mut child_ids = HashMap::<String, IdTree>::new();
         let mut obj_id = Option::<String>::None;
@@ -589,7 +595,7 @@ impl QueryEngine {
                 continue;
             }
             let incompatible_data = || QueryEngine::incompatible(field, ty);
-            let arg = match &field.type_ {
+            let arg = match ts.get(&field.type_id)? {
                 Type::Entity(nested_type) => {
                     let nested_value = field_value
                         .context("json object doesn't have required field")
@@ -610,7 +616,7 @@ impl QueryEngine {
                         }
                     } else {
                         let (nested_inserts, nested_ids) =
-                            self.prepare_insertion(nested_type, nested_value)?;
+                            self.prepare_insertion(&nested_type, nested_value, ts)?;
                         inserts.extend(nested_inserts);
                         let nested_id = nested_ids.id.to_owned();
                         child_ids.insert(field.name.to_owned(), nested_ids);
@@ -678,13 +684,14 @@ impl QueryEngine {
             }};
         }
 
-        let arg = match &field.type_ {
-            Type::String | Type::Id | Type::Entity(_) => {
+        let arg = match field.type_id {
+            TypeId::String | TypeId::Id | TypeId::Entity { .. } => {
                 SqlValue::String(convert_json_value!(as_str, str))
             }
-            Type::Float => SqlValue::F64(convert_json_value!(as_f64, f64)),
-            Type::Boolean => SqlValue::Bool(convert_json_value!(as_bool, bool)),
+            TypeId::Float => SqlValue::F64(convert_json_value!(as_f64, f64)),
+            TypeId::Boolean => SqlValue::Bool(convert_json_value!(as_bool, bool)),
         };
+
         Ok(arg)
     }
 
@@ -714,7 +721,7 @@ impl QueryEngine {
             field_binds.push(',');
 
             field_names.push(f.name.clone());
-            if f.type_ == Type::Id {
+            if f.type_id == TypeId::Id {
                 if let Some(idstr) = val {
                     let idstr = idstr.as_str().context("invalid ID: It is not a string")?;
                     Uuid::parse_str(idstr).map_err(|_| anyhow!("invalid ID '{}'", idstr))?;

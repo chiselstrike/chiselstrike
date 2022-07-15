@@ -3,7 +3,7 @@
 use crate::auth::AUTH_USER_NAME;
 use crate::datastore::expr::{BinaryExpr, Expr, Literal, PropertyAccess};
 use crate::policies::{FieldPolicies, Policies};
-use crate::types::{Entity, Field, ObjectType, Type, TypeSystem};
+use crate::types::{Entity, Field, ObjectType, Type, TypeId, TypeSystem};
 
 use anyhow::{anyhow, Context, Result};
 use enum_as_inner::EnumAsInner;
@@ -65,7 +65,7 @@ pub(crate) enum QueryField {
         /// Name of the original Type field
         name: String,
         /// Type of the field
-        type_: Type,
+        type_id: TypeId,
         is_optional: bool,
         /// Index of a column containing this field in the resulting row we get from
         /// the database.
@@ -263,8 +263,8 @@ impl QueryPlan {
         let mut builder = Self::new(ty.clone());
         for field in ty.all_fields() {
             let mut field = field.clone();
-            field.type_ = match field.type_ {
-                Type::Entity(_) => Type::String, // This is actually a foreign key.
+            field.type_id = match field.type_id {
+                TypeId::Entity { .. } => TypeId::String, // This is actually a foreign key.
                 ty => ty,
             };
             let field =
@@ -283,7 +283,7 @@ impl QueryPlan {
             })?;
 
         let mut builder = Self::new(ty.clone());
-        builder.entity = builder.load_entity(c, &ty);
+        builder.entity = builder.load_entity(c, &ty)?;
         Ok(builder)
     }
 
@@ -295,7 +295,7 @@ impl QueryPlan {
         operators: Vec<QueryOp>,
     ) -> Result<Self> {
         let mut query_plan = Self::new(ty.clone());
-        query_plan.entity = query_plan.load_entity(c, ty);
+        query_plan.entity = query_plan.load_entity(c, ty)?;
         query_plan.extend_operators(operators);
         Ok(query_plan)
     }
@@ -338,7 +338,7 @@ impl QueryPlan {
         let column_idx = self.columns.len();
         let select_field = QueryField::Scalar {
             name: field.name.clone(),
-            type_: field.type_.clone(),
+            type_id: field.type_id.clone(),
             is_optional: field.is_optional,
             column_idx,
             transform,
@@ -354,8 +354,12 @@ impl QueryPlan {
 
     /// Prepares the retrieval of Entity of type `ty` from the database and
     /// ensures login restrictions are respected.
-    fn load_entity(&mut self, context: &RequestContext, ty: &Entity) -> QueriedEntity {
-        self.add_login_filters_recursive(context, ty, Expr::Parameter { position: 0 });
+    fn load_entity(
+        &mut self,
+        context: &RequestContext,
+        ty: &Entity,
+    ) -> anyhow::Result<QueriedEntity> {
+        self.add_login_filters_recursive(context, ty, Expr::Parameter { position: 0 })?;
         self.load_entity_recursive(context, ty, ty.backing_table())
     }
 
@@ -367,7 +371,7 @@ impl QueryPlan {
         context: &RequestContext,
         ty: &Entity,
         current_table: &str,
-    ) -> QueriedEntity {
+    ) -> anyhow::Result<QueriedEntity> {
         let field_policies = context.make_field_policies(ty);
 
         let mut fields = vec![];
@@ -379,7 +383,9 @@ impl QueryPlan {
                 _ => KeepOrOmitField::Keep,
             };
 
-            let query_field = if let Type::Entity(nested_ty) = &field.type_ {
+            let ty = context.ts.get(&field.type_id)?;
+
+            let query_field = if let Type::Entity(nested_ty) = &ty {
                 let nested_table = format!(
                     "JOIN{}_{}_TO_{}",
                     self.join_counter,
@@ -394,7 +400,7 @@ impl QueryPlan {
                 joins.insert(
                     field.name.to_owned(),
                     Join {
-                        entity: self.load_entity_recursive(context, nested_ty, &nested_table),
+                        entity: self.load_entity_recursive(context, nested_ty, &nested_table)?,
                         lkey: field.name.to_owned(),
                         rkey: "id".to_owned(),
                     },
@@ -410,12 +416,13 @@ impl QueryPlan {
             };
             fields.push(query_field);
         }
-        QueriedEntity {
+
+        Ok(QueriedEntity {
             ty: ty.clone(),
             fields,
             table_alias: current_table.to_owned(),
             joins,
-        }
+        })
     }
 
     /// Adds filters that ensure login constrains are satisfied for a type
@@ -425,7 +432,7 @@ impl QueryPlan {
         context: &RequestContext,
         ty: &Entity,
         property_chain: Expr,
-    ) {
+    ) -> anyhow::Result<()> {
         let field_policies = context.make_field_policies(ty);
         let user_id: Literal = match &field_policies.current_userid {
             None => "NULL",
@@ -434,7 +441,8 @@ impl QueryPlan {
         .into();
 
         for field in ty.all_fields() {
-            if let Type::Entity(nested_ty) = &field.type_ {
+            let ty = context.ts.get(&field.type_id)?;
+            if let Type::Entity(nested_ty) = &ty {
                 let property_access = PropertyAccess {
                     property: field.name.to_owned(),
                     object: property_chain.clone().into(),
@@ -445,10 +453,12 @@ impl QueryPlan {
                         self.operators.push(QueryOp::Filter { expression: expr });
                     }
                 } else {
-                    self.add_login_filters_recursive(context, nested_ty, property_access.into());
+                    self.add_login_filters_recursive(context, nested_ty, property_access.into())?;
                 }
             }
         }
+
+        Ok(())
     }
 
     fn make_column_string(&self) -> String {
@@ -915,13 +925,17 @@ pub(crate) mod tests {
         query_engine: &QueryEngine,
         entity: &Entity,
         values: &serde_json::Value,
+        ts: &TypeSystem,
     ) {
         let ins_row = values.as_object().unwrap();
-        query_engine.add_row(entity, ins_row, None).await.unwrap();
+        query_engine
+            .add_row(entity, ins_row, None, ts)
+            .await
+            .unwrap();
         let rows = fetch_rows(query_engine, entity).await;
         assert!(rows.iter().any(|row| {
             ins_row.iter().all(|(key, value)| {
-                if let Type::Entity(_) = entity.get_field(key).unwrap().type_ {
+                if let TypeId::Entity { .. } = entity.get_field(key).unwrap().type_id {
                     true
                 } else {
                     row[key] == *value
@@ -966,6 +980,7 @@ pub(crate) mod tests {
         )
     });
     static ENTITIES: Lazy<[Entity; 2]> = Lazy::new(|| [PERSON_TY.clone(), COMPANY_TY.clone()]);
+    static TYPE_SYSTEM: Lazy<TypeSystem> = Lazy::new(|| make_type_system(&*ENTITIES));
 
     #[tokio::test]
     async fn test_query_plan() {
@@ -999,7 +1014,7 @@ pub(crate) mod tests {
         {
             let (qe, _db_file) = setup_clear_db(&*ENTITIES).await;
             for person in ppl {
-                add_row(&qe, &PERSON_TY, &person).await;
+                add_row(&qe, &PERSON_TY, &person, &TYPE_SYSTEM).await;
             }
             let make_sort_op = |keys: &[(&str, bool)]| {
                 let keys = keys
@@ -1057,7 +1072,7 @@ pub(crate) mod tests {
         let alan = json!({"name": "Alan", "age": json!(30f32)});
         {
             let (qe, _db_file) = setup_clear_db(&*ENTITIES).await;
-            add_row(&qe, &PERSON_TY, &john).await;
+            add_row(&qe, &PERSON_TY, &john, &TYPE_SYSTEM).await;
 
             let expr = binary(&["name"], BinaryOp::Eq, "John".into());
             let mutation = delete_with_expr("Person", expr);
@@ -1067,8 +1082,8 @@ pub(crate) mod tests {
         }
         {
             let (qe, _db_file) = setup_clear_db(&*ENTITIES).await;
-            add_row(&qe, &PERSON_TY, &john).await;
-            add_row(&qe, &PERSON_TY, &alan).await;
+            add_row(&qe, &PERSON_TY, &john, &TYPE_SYSTEM).await;
+            add_row(&qe, &PERSON_TY, &alan, &TYPE_SYSTEM).await;
 
             let expr = binary(&["age"], BinaryOp::Eq, (30.).into());
             let mutation = delete_with_expr("Person", expr);
@@ -1082,7 +1097,7 @@ pub(crate) mod tests {
         let chiselstrike = json!({"name": "ChiselStrike", "ceo": john});
         {
             let (qe, _db_file) = setup_clear_db(&*ENTITIES).await;
-            add_row(&qe, &COMPANY_TY, &chiselstrike).await;
+            add_row(&qe, &COMPANY_TY, &chiselstrike, &TYPE_SYSTEM).await;
 
             let expr = binary(&["ceo", "name"], BinaryOp::Eq, "John".into());
             let mutation = delete_with_expr("Company", expr);

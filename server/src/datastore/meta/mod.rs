@@ -101,7 +101,7 @@ async fn update_field_query(
         let mut query = sqlx::query(&querystr);
 
         query = query
-            .bind(field.type_.name())
+            .bind(field.type_id.name())
             .bind(field.is_optional)
             .bind(field.is_unique)
             .bind(field_id);
@@ -166,7 +166,7 @@ async fn insert_field_query(
                 RETURNING *"#,
             );
             query
-                .bind(field.type_.name())
+                .bind(field.type_id.name())
                 .bind(type_id)
                 .bind(field.is_optional)
                 .bind(field.is_unique)
@@ -184,7 +184,7 @@ async fn insert_field_query(
                 RETURNING *"#,
             );
             query
-                .bind(field.type_.name())
+                .bind(field.type_id.name())
                 .bind(type_id)
                 .bind(value.to_owned())
                 .bind(field.is_optional)
