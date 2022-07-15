@@ -13,7 +13,7 @@ use std::env;
 use std::fmt::{Display, Formatter};
 use std::path::Path;
 use std::str::FromStr;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 use structopt::StructOpt;
 
@@ -146,6 +146,9 @@ fn run_tests(opt: Opt, optimize: bool) -> bool {
     let event_handler = Arc::new(Mutex::new(lit::event_handler::Default::default()));
     let passed = Arc::new(AtomicBool::new(true));
 
+    // ports to use for each service. Low ports will conflict with all
+    // kinds of services, so go high.
+    let ports = Arc::new(AtomicUsize::new(30000));
     lit_files
         .par_iter()
         .map(|test_path| -> Result<()> {
@@ -156,7 +159,10 @@ fn run_tests(opt: Opt, optimize: bool) -> bool {
                 },
                 |config| {
                     // Add one to avoid conflict with local instances of chisel.
-                    let i = rayon::current_thread_index().unwrap_or(0) + 1;
+                    let rpc = ports.fetch_add(1, Ordering::Relaxed);
+                    let internal = ports.fetch_add(1, Ordering::Relaxed);
+                    let api = ports.fetch_add(1, Ordering::Relaxed);
+
                     config.test_paths = vec![test_path.clone()];
                     config.truncate_output_context_to_number_of_lines = Some(500);
                     config.always_show_stdout = false;
@@ -167,14 +173,11 @@ fn run_tests(opt: Opt, optimize: bool) -> bool {
                     config.env_variables = HashMap::from([
                         (
                             "CHISEL".into(),
-                            format!("{} --rpc-addr http://127.0.0.1:{}", chisel(), 50051 + i),
+                            format!("{} --rpc-addr http://127.0.0.1:{}", chisel(), rpc),
                         ),
-                        ("CHISELD_HOST".into(), format!("127.0.0.1:{}", 8080 + i)),
-                        ("CHISELD_INTERNAL".into(), format!("127.0.0.1:{}", 9090 + i)),
-                        (
-                            "CHISELD_RPC_HOST".into(),
-                            format!("127.0.0.1:{}", 50051 + i),
-                        ),
+                        ("CHISELD_HOST".into(), format!("127.0.0.1:{}", api)),
+                        ("CHISELD_INTERNAL".into(), format!("127.0.0.1:{}", internal)),
+                        ("CHISELD_RPC_HOST".into(), format!("127.0.0.1:{}", rpc)),
                     ])
                 },
             )
