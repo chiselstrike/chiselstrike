@@ -16,7 +16,7 @@ Person.cursor().filter(person => person.age > 40 && fetch("foobar"))
 // CHECK:     },
 // CHECK:     op: "Gt",
 // CHECK:     right: {
-// CHECK:         exprType: "Literal",
+// CHECK:         exprType: "Value",
 // CHECK:         value: 40
 // CHECK:     }
 // CHECK: }, (person)=>fetch("foobar")
@@ -39,7 +39,7 @@ Person.cursor().filter(person => person.name == "Glauber Costa" && person.age > 
 // CHECK:         },
 // CHECK:         op: "Eq",
 // CHECK:         right: {
-// CHECK:             exprType: "Literal",
+// CHECK:             exprType: "Value",
 // CHECK:             value: "Glauber Costa"
 // CHECK:         }
 // CHECK:     },
@@ -56,7 +56,7 @@ Person.cursor().filter(person => person.name == "Glauber Costa" && person.age > 
 // CHECK:         },
 // CHECK:         op: "Gt",
 // CHECK:         right: {
-// CHECK:             exprType: "Literal",
+// CHECK:             exprType: "Value",
 // CHECK:             value: 40
 // CHECK:         }
 // CHECK:     }

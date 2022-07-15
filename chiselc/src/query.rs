@@ -16,8 +16,8 @@ pub enum Expr {
     PropertyAccess(PropertyAccessExpr),
     /// An identifier expression.
     Identifier(String),
-    /// A literal expression.
-    Literal(Literal),
+    /// A value expression.
+    Value(Value),
 }
 
 /// A binary expression.
@@ -48,9 +48,9 @@ pub enum BinaryOp {
     Or,
 }
 
-/// A literal expression
+/// A value expression
 #[derive(Debug)]
-pub enum Literal {
+pub enum Value {
     Bool(bool),
     Num(f64),
     Str(String),

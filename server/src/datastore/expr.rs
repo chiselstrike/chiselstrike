@@ -5,8 +5,8 @@ use serde_derive::{Deserialize, Serialize};
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "exprType")]
 pub(crate) enum Expr {
-    /// A literal expression.
-    Literal { value: Literal },
+    /// A value expression.
+    Value { value: Value },
     /// Expression for addressing function parameters of the current expression
     Parameter { position: usize },
     /// Expression for addressing entity property
@@ -15,9 +15,9 @@ pub(crate) enum Expr {
     Binary(BinaryExpr),
 }
 
-impl From<Literal> for Expr {
-    fn from(literal: Literal) -> Self {
-        Expr::Literal { value: literal }
+impl From<Value> for Expr {
+    fn from(value: Value) -> Self {
+        Expr::Value { value }
     }
 }
 
@@ -33,11 +33,11 @@ impl From<PropertyAccess> for Expr {
     }
 }
 
-/// Various literals.
+/// Various Values.
 #[cfg_attr(test, derive(PartialEq))]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(untagged)]
-pub(crate) enum Literal {
+pub(crate) enum Value {
     Bool(bool),
     U64(u64),
     I64(i64),
@@ -46,47 +46,47 @@ pub(crate) enum Literal {
     Null,
 }
 
-impl From<bool> for Literal {
+impl From<bool> for Value {
     fn from(val: bool) -> Self {
-        Literal::Bool(val)
+        Value::Bool(val)
     }
 }
 
-impl From<u64> for Literal {
+impl From<u64> for Value {
     fn from(val: u64) -> Self {
-        Literal::U64(val)
+        Value::U64(val)
     }
 }
 
-impl From<i64> for Literal {
+impl From<i64> for Value {
     fn from(val: i64) -> Self {
-        Literal::I64(val)
+        Value::I64(val)
     }
 }
 
-impl From<f64> for Literal {
+impl From<f64> for Value {
     fn from(val: f64) -> Self {
-        Literal::F64(val)
+        Value::F64(val)
     }
 }
 
-impl From<String> for Literal {
+impl From<String> for Value {
     fn from(val: String) -> Self {
-        Literal::String(val)
+        Value::String(val)
     }
 }
 
-impl From<&str> for Literal {
+impl From<&str> for Value {
     fn from(val: &str) -> Self {
-        Literal::String(val.to_owned())
+        Value::String(val.to_owned())
     }
 }
 
-impl From<Option<Literal>> for Literal {
-    fn from(opt: Option<Literal>) -> Literal {
+impl From<Option<Value>> for Value {
+    fn from(opt: Option<Value>) -> Value {
         match opt {
-            Some(literal) => literal,
-            None => Literal::Null,
+            Some(val) => val,
+            None => Value::Null,
         }
     }
 }
@@ -180,10 +180,10 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_literal_parsing_bool() {
+    fn test_value_parsing_bool() {
         let expr: Expr = serde_json::from_str(
             r#"{
-            "exprType": "Literal",
+            "exprType": "Value",
             "value": true
         }"#,
         )
@@ -191,17 +191,17 @@ mod tests {
 
         assert!(matches!(
             expr,
-            Expr::Literal {
-                value: Literal::Bool(true)
+            Expr::Value {
+                value: Value::Bool(true)
             }
         ));
     }
 
     #[test]
-    fn test_literal_parsing_u64() {
+    fn test_value_parsing_u64() {
         let expr = serde_json::from_str(
             r#"{
-            "exprType": "Literal",
+            "exprType": "Value",
             "value": 42
         }"#,
         )
@@ -209,17 +209,17 @@ mod tests {
 
         assert!(matches!(
             expr,
-            Expr::Literal {
-                value: Literal::U64(42)
+            Expr::Value {
+                value: Value::U64(42)
             }
         ));
     }
 
     #[test]
-    fn test_literal_parsing_i64() {
+    fn test_value_parsing_i64() {
         let expr = serde_json::from_str(
             r#"{
-            "exprType": "Literal",
+            "exprType": "Value",
             "value": -42
         }"#,
         )
@@ -227,17 +227,17 @@ mod tests {
 
         assert!(matches!(
             expr,
-            Expr::Literal {
-                value: Literal::I64(-42)
+            Expr::Value {
+                value: Value::I64(-42)
             }
         ));
     }
 
     #[test]
-    fn test_literal_parsing_f64() {
+    fn test_value_parsing_f64() {
         let expr = serde_json::from_str(
             r#"{
-            "exprType": "Literal",
+            "exprType": "Value",
             "value": 42.0
         }"#,
         )
@@ -245,70 +245,65 @@ mod tests {
 
         assert!(matches!(
             expr,
-            Expr::Literal {
-                value: Literal::F64(_)
+            Expr::Value {
+                value: Value::F64(_)
             }
         ));
-        if let Expr::Literal {
-            value: Literal::F64(v),
+        if let Expr::Value {
+            value: Value::F64(v),
         } = expr
         {
             assert_eq!(v, 42.0);
         } else {
-            panic!("failed to match the literal");
+            panic!("failed to match the value");
         }
     }
 
     #[test]
-    fn test_literal_parsing_string() {
+    fn test_value_parsing_string() {
         let expr: Expr = serde_json::from_str(
             r#"{
-            "exprType": "Literal",
-            "value": "I'm the best literal"
+            "exprType": "Value",
+            "value": "I'm the best value"
         }"#,
         )
         .unwrap();
 
         assert!(matches!(
             expr,
-            Expr::Literal {
-                value: Literal::String(_)
+            Expr::Value {
+                value: Value::String(_)
             }
         ));
-        if let Expr::Literal {
-            value: Literal::String(v),
+        if let Expr::Value {
+            value: Value::String(v),
         } = expr
         {
-            assert_eq!(v, "I'm the best literal");
+            assert_eq!(v, "I'm the best value");
         } else {
-            panic!("failed to match the literal");
+            panic!("failed to match the value");
         }
     }
 
     #[test]
-    fn test_literal_parsing_null() {
+    fn test_value_parsing_null() {
         let expr = serde_json::from_str(
             r#"{
-            "exprType": "Literal",
+            "exprType": "Value",
             "value": null
         }"#,
         )
         .unwrap();
 
-        assert!(matches!(
-            expr,
-            Expr::Literal {
-                value: Literal::Null
-            }
-        ));
+        assert!(matches!(expr, Expr::Value { value: Value::Null }));
     }
 
     #[test]
     #[should_panic(expected = "missing field `value`")]
-    fn test_literal_parsing_value_missing_panic() {
+    fn test_value_parsing_value_missing_panic() {
         let _expr: Expr = serde_json::from_str(
             r#"{
-            "exprType": "Literal"
+            "exprType": "Value"
         }"#,
         )
         .unwrap();

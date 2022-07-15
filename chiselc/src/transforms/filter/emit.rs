@@ -15,9 +15,9 @@ use crate::query::BinaryExpr as QBinaryExpr;
 use crate::query::BinaryOp as QBinaryOp;
 use crate::query::Expr as QExpr;
 use crate::query::Filter;
-use crate::query::Literal as QLiteral;
 use crate::query::Operator;
 use crate::query::PropertyAccessExpr;
+use crate::query::Value as QValue;
 use swc_atoms::JsWord;
 use swc_common::Span;
 use swc_ecmascript::ast::Number;
@@ -106,7 +106,7 @@ fn expr_to_ts(expr: &QExpr, params: &[String], span: Span) -> Expr {
             property_access_to_ts(property_access_expr, params, span)
         }
         QExpr::Identifier(ident) => identifier_to_ts(ident, params, span),
-        QExpr::Literal(lit) => literal_to_ts(lit, span),
+        QExpr::Value(val) => value_to_ts(val, span),
     }
 }
 
@@ -214,12 +214,12 @@ fn identifier_to_ts(ident: &str, params: &[String], span: Span) -> Expr {
     Expr::Object(ObjectLit { span, props })
 }
 
-fn literal_to_ts(lit: &QLiteral, span: Span) -> Expr {
-    let mut props = vec![make_expr_type("Literal", span)];
+fn value_to_ts(lit: &QValue, span: Span) -> Expr {
+    let mut props = vec![make_expr_type("Value", span)];
     let lit = match lit {
-        QLiteral::Bool(v) => make_bool_lit(*v, span),
-        QLiteral::Str(s) => make_str_lit(s, span),
-        QLiteral::Num(n) => make_num_lit(n, span),
+        QValue::Bool(v) => make_bool_lit(*v, span),
+        QValue::Str(s) => make_str_lit(s, span),
+        QValue::Num(n) => make_num_lit(n, span),
     };
     let lit = PropOrSpread::Prop(Box::new(Prop::KeyValue(KeyValueProp {
         key: PropName::Ident(Ident {

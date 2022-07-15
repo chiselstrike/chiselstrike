@@ -28,7 +28,7 @@ const main = async () => {
 // CHECK:         },
 // CHECK:         op: "Gt",
 // CHECK:         right: {
-// CHECK:             exprType: "Literal",
+// CHECK:             exprType: "Value",
 // CHECK:             value: 4
 // CHECK:         }
 // CHECK:     }).toArray();
@@ -52,7 +52,7 @@ const people = await Person.cursor()
 // CHECK:     },
 // CHECK:     op: "Gt",
 // CHECK:     right: {
-// CHECK:         exprType: "Literal",
+// CHECK:         exprType: "Value",
 // CHECK:         value: 4
 // CHECK:     }
 // CHECK: }).toArray();
@@ -81,7 +81,7 @@ await Person.cursor().filter((p) => { return p.age < 4 });
 // CHECK:    },
 // CHECK:    op: "Lt",
 // CHECK:    right: {
-// CHECK:        exprType: "Literal",
+// CHECK:        exprType: "Value",
 // CHECK:        value: 4
 // CHECK:    }
 // CHECK: });
@@ -101,7 +101,7 @@ await Person.cursor().filter((p) => { return p.age > 4 });
 // CHECK:     },
 // CHECK:     op: "Gt",
 // CHECK:     right: {
-// CHECK:         exprType: "Literal",
+// CHECK:         exprType: "Value",
 // CHECK:         value: 4
 // CHECK:     }
 // CHECK: });
@@ -121,7 +121,7 @@ await Person.cursor().filter((p) => { return p.age <= 4 });
 // CHECK:     },
 // CHECK:     op: "LtEq",
 // CHECK:     right: {
-// CHECK:         exprType: "Literal",
+// CHECK:         exprType: "Value",
 // CHECK:         value: 4
 // CHECK:     }
 // CHECK: });
@@ -141,7 +141,7 @@ await Person.cursor().filter((p) => { return p.age != 4 });
 // CHECK:     },
 // CHECK:     op: "NotEq",
 // CHECK:     right: {
-// CHECK:         exprType: "Literal",
+// CHECK:         exprType: "Value",
 // CHECK:         value: 4
 // CHECK:     }
 // CHECK: });
@@ -160,7 +160,7 @@ await Person.cursor().filter((p) => p.age < 4);
 // CHECK:     },
 // CHECK:     op: "Lt",
 // CHECK:     right: {
-// CHECK:         exprType: "Literal",
+// CHECK:         exprType: "Value",
 // CHECK:         value: 4
 // CHECK:     }
 // CHECK: });
@@ -182,7 +182,7 @@ await Person.cursor().filter((p) => { return p.age < 4 || (p.age > 10 && p.age !
 // CHECK:         },
 // CHECK:         op: "Lt",
 // CHECK:         right: {
-// CHECK:             exprType: "Literal",
+// CHECK:             exprType: "Value",
 // CHECK:             value: 4
 // CHECK:         }
 // CHECK:     },
@@ -201,7 +201,7 @@ await Person.cursor().filter((p) => { return p.age < 4 || (p.age > 10 && p.age !
 // CHECK:             },
 // CHECK:             op: "Gt",
 // CHECK:             right: {
-// CHECK:                 exprType: "Literal",
+// CHECK:                 exprType: "Value",
 // CHECK:                 value: 10
 // CHECK:             }
 // CHECK:         },
@@ -218,7 +218,7 @@ await Person.cursor().filter((p) => { return p.age < 4 || (p.age > 10 && p.age !
 // CHECK:             },
 // CHECK:             op: "NotEq",
 // CHECK:             right: {
-// CHECK:                 exprType: "Literal",
+// CHECK:                 exprType: "Value",
 // CHECK:                 value: 12
 // CHECK:             }
 // CHECK:         }
@@ -240,7 +240,7 @@ await Person.cursor().filter((p) => { return p.name == 'Alice' })
 // CHECK:     },
 // CHECK:     op: "Eq",
 // CHECK:     right: {
-// CHECK:         exprType: "Literal",
+// CHECK:         exprType: "Value",
 // CHECK:         value: "Alice"
 // CHECK:     }
 // CHECK: });
@@ -260,14 +260,14 @@ await Person.cursor().filter(p => { return true; });
 // CHECK: await Person.cursor().__filter((p)=>{
 // CHECK:     return true;
 // CHECK: }, {
-// CHECK:     exprType: "Literal",
+// CHECK:     exprType: "Value",
 // CHECK:     value: true
 // CHECK: });
 
 await Person.cursor().filter(p => true);
 // CHECK: await Person.cursor().__filter((p)=>true
 // CHECK: , {
-// CHECK:     exprType: "Literal",
+// CHECK:     exprType: "Value",
 // CHECK:     value: true
 // CHECK: });
 
