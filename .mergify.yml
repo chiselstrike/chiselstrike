@@ -1,16 +1,10 @@
-queue_rules:
-  - name: default
-    conditions: []
-
 pull_request_rules:
   - name: Automatic merge of 2+ commits on approval
     conditions:
-      - base=main
       - "#approved-reviews-by>=1"
       - "#commits>=2"
     actions:
-      queue:
-        name: default
+      merge:
         method: merge
         commit_message_template: |
             Merge #{{number}} '{{title}}'
@@ -18,10 +12,8 @@ pull_request_rules:
             {{body}}
   - name: Automatic rebase of a single commit on approval
     conditions:
-      - base=main
       - "#approved-reviews-by>=1"
       - "#commits=1"
     actions:
-      queue:
-        name: default
+      merge:
         method: rebase
