@@ -3,6 +3,7 @@ resolver = "2"
 
 members = [
     "api",
+    "bundle-deepkit-type-compile",
     "chiselc",
     "cli",
     "dbgarc",
