@@ -488,7 +488,9 @@ impl TypeSystem {
             TypeId::String | TypeId::Float | TypeId::Boolean | TypeId::Id => {
                 self.lookup_builtin_type(ty.name())
             }
-            TypeId::Entity { name, api_version } => self.lookup_type(name, api_version),
+            TypeId::Entity { name, api_version } => {
+                self.lookup_entity(name, api_version).map(Type::Entity)
+            }
         }
     }
 }
