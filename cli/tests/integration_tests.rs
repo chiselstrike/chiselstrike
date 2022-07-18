@@ -165,7 +165,8 @@ fn run_tests(opt: Opt, optimize: bool) -> bool {
 
                     config.test_paths = vec![test_path.clone()];
                     config.truncate_output_context_to_number_of_lines = Some(500);
-                    config.always_show_stdout = false;
+                    config.always_show_stdout = true;
+                    config.always_show_stderr = true;
 
                     let mut path = repo.clone();
                     path.push("cli/tests/test-wrapper.sh");
