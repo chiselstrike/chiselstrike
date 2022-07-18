@@ -26,6 +26,7 @@ use api::worker_js;
 use async_channel::Receiver;
 use async_channel::Sender;
 use deno_core::error::AnyError;
+use deno_core::error::JsError;
 use deno_core::futures;
 use deno_core::op;
 use deno_core::serde_v8;
@@ -433,16 +434,24 @@ impl DenoService {
 
 fn get_error_class_name(e: &AnyError) -> &'static str {
     // based on `get_error_class_name()` from deno/cli/error.rs
-    deno_runtime::errors::get_error_class_name(e).unwrap_or_else(|| {
-        eprintln!(
-            "Error '{}' contains boxed error of unknown type:{}",
-            e,
-            e.chain()
-                .map(|e| format!("\n  {:?}", e))
-                .collect::<String>()
-        );
-        "Error"
-    })
+    deno_runtime::errors::get_error_class_name(e)
+        .or_else(|| {
+            // plain string errors produced by anyhow!("something"), .context("something") and
+            // friends
+            e.downcast_ref::<String>().map(|_| "Error")
+        })
+        .unwrap_or_else(|| {
+            // when this is printed, please handle the unknown type by adding another
+            // `downcast_ref()` check above
+            eprintln!(
+                "Error '{}' contains boxed error of unknown type:{}",
+                e,
+                e.chain()
+                    .map(|e| format!("\n  {:?}", e))
+                    .collect::<String>()
+            );
+            "Error"
+        })
 }
 
 // A future that resolves the hyper::Body has data.
@@ -965,9 +974,12 @@ async fn resolve_promise(js_promise: v8::Global<v8::Value>) -> Result<v8::Global
         let v = obj.get(scope, key).unwrap();
         return Ok(v8::Global::new(scope, v));
     }
+
     let key = v8::String::new(scope, "error").unwrap().into();
     assert!(obj.has(scope, key).unwrap());
-    anyhow::bail!(obj.get(scope, key).unwrap().to_rust_string_lossy(scope));
+    let error = obj.get(scope, key).unwrap();
+    let js_error = JsError::from_v8_exception(scope, error);
+    anyhow::bail!(js_error)
 }
 
 type ReadFutureState = v8::Global<v8::Function>;
