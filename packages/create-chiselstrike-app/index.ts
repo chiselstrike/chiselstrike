@@ -34,10 +34,16 @@ function run(projectDirectory: string, chiselVersion: string) {
         } ...`,
     );
 
+    const endpointsPath = path.join(projectDirectory, "endpoints");
+    const modelsPath = path.join(projectDirectory, "models");
+    const policiesPath = path.join(projectDirectory, "policies");
+
     fs.mkdirSync(path.join(projectDirectory, ".vscode"));
-    fs.mkdirSync(path.join(projectDirectory, "endpoints"));
-    fs.mkdirSync(path.join(projectDirectory, "models"));
-    fs.mkdirSync(path.join(projectDirectory, "policies"));
+    fs.mkdirSync(endpointsPath);
+    fs.mkdirSync(modelsPath);
+    fs.closeSync(fs.openSync(path.join(modelsPath, ".gitkeep"), "w"));
+    fs.mkdirSync(policiesPath);
+    fs.closeSync(fs.openSync(path.join(policiesPath, ".gitkeep"), "w"));
     const rootFiles = [
         "Chisel.toml",
         "package.json",
