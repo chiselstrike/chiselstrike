@@ -200,14 +200,18 @@ fn identifier_to_ts(ident: &str, params: &[String], span: Span) -> Expr {
         })));
         props.push(lit);
     } else {
-        props.push(make_expr_type("Identifier", span));
+        props.push(make_expr_type("Value", span));
         let lit = PropOrSpread::Prop(Box::new(Prop::KeyValue(KeyValueProp {
             key: PropName::Ident(Ident {
                 span,
-                sym: JsWord::from("ident"),
+                sym: JsWord::from("value"),
                 optional: false,
             }),
-            value: Box::new(make_str_lit(ident, span)),
+            value: Box::new(Expr::Ident(Ident {
+                span,
+                sym: JsWord::from(ident),
+                optional: false,
+            })),
         })));
         props.push(lit);
     }

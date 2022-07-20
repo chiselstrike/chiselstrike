@@ -80,8 +80,8 @@ Person.cursor().filter(person => person.age > age && fetch("foobar"))
 // CHECK:     },
 // CHECK:     op: "Gt",
 // CHECK:     right: {
-// CHECK:         exprType: "Identifier",
-// CHECK:         ident: "age"
+// CHECK:         exprType: "Value",
+// CHECK:         value: age
 // CHECK:     }
 // CHECK: }, (person)=>fetch("foobar")
 // CHECK: );
