@@ -36,10 +36,28 @@ pub(crate) async fn apply(
     let gen_dir = cwd.join(".gen");
     fs::create_dir_all(&gen_dir)?;
 
-    let chiselc_futures = endpoints.iter().map(|endpoint| {
+    let mut chiselc_futures = vec![];
+    for endpoint in endpoints.iter() {
         if optimize {
             let endpoint_file_path = endpoint.clone();
-            let gen_file_path = gen_dir.join(endpoint_file_path.file_name().unwrap());
+            let mut components = endpoint_file_path.components();
+            components.next();
+            let endpoint_rel_path = components.as_path();
+            anyhow::ensure!(
+                endpoint_file_path.is_relative(),
+                "malformed endpoint name {}. Shouldn't have reached this far",
+                endpoint_file_path.display()
+            );
+
+            let gen_file_path = gen_dir.join(&endpoint_rel_path);
+            let base = gen_file_path.parent().ok_or_else(|| {
+                anyhow!(
+                    "{} doesn't have a parent. Shouldn't have reached this far!",
+                    gen_dir.display()
+                )
+            })?;
+            fs::create_dir_all(&base)?;
+
             let chiselc = chiselc_spawn(
                 endpoint.to_str().unwrap(),
                 gen_file_path.to_str().unwrap(),
@@ -51,12 +69,12 @@ pub(crate) async fn apply(
                 .strip_prefix(cwd.clone())
                 .unwrap()
                 .to_path_buf();
-            (Some(Box::new(future)), endpoint_file_path, import_path)
+            chiselc_futures.push((Some(Box::new(future)), endpoint_file_path, import_path))
         } else {
             let path = endpoint.to_owned();
-            (None, path.clone(), path)
-        }
-    });
+            chiselc_futures.push((None, path.clone(), path))
+        };
+    }
 
     let mut bundler_file_mapping = vec![];
 
@@ -69,7 +87,7 @@ pub(crate) async fn apply(
     let bundler_output_dir_name = bundler_output_dir.path();
 
     let mut idx = 0;
-    for (mut chiselc_future, endpoint_file_path, import_path) in chiselc_futures {
+    for (mut chiselc_future, endpoint_file_path, import_path) in chiselc_futures.into_iter() {
         idx += 1;
         if let Some(mut chiselc_future) = chiselc_future.take() {
             chiselc_future.wait().await?;

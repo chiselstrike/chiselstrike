@@ -7,7 +7,7 @@ use std::collections::BTreeMap;
 use std::env;
 use std::fmt::Write;
 use std::fs;
-use std::io::{stdin, Read};
+use std::io::{stdin, ErrorKind, Read};
 use std::path::{Path, PathBuf};
 use utils::without_extension;
 
@@ -111,8 +111,29 @@ impl Manifest {
     }
 
     fn dirs_to_paths(dirs: &[String]) -> anyhow::Result<Vec<PathBuf>> {
+        // sucks to do this for all invocations but keeps things simple
+        let me = Path::new("./").canonicalize()?;
         let mut paths = vec![];
         for dir in dirs {
+            let p = Path::new(dir);
+            anyhow::ensure!(
+                p.is_relative(),
+                "{} is not relative to the current tree",
+                dir
+            );
+            let p = p.canonicalize().or_else(|x| match x.kind() {
+                ErrorKind::NotFound => Ok(PathBuf::new()),
+                _ => Err(x),
+            })?;
+
+            if p.as_os_str().is_empty() {
+                continue;
+            }
+            anyhow::ensure!(
+                me != p && p.starts_with(&me),
+                "{} has to be a subdirectory of the current directory",
+                dir
+            );
             dir_to_paths(Path::new(dir), &mut paths)?
         }
         paths.sort_unstable();
