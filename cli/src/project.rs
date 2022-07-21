@@ -184,23 +184,29 @@ fn read_dir<P: AsRef<Path>>(dir: P) -> anyhow::Result<Vec<std::io::Result<fs::Di
     .with_context(|| format!("Could not open {}", dir.as_ref().display()))
 }
 
-pub(crate) fn read_manifest() -> Result<Manifest> {
-    let cwd = env::current_dir()?;
-    if !Path::new(MANIFEST_FILE).exists() {
-        anyhow::bail!("Could not find `{}` in `{}`. Did you forget to run `chisel init` to initialize the project?", MANIFEST_FILE, cwd.display());
+fn read_manifest_from(dir: &Path) -> Result<Manifest> {
+    let file = dir.join(MANIFEST_FILE);
+
+    if !file.exists() {
+        anyhow::bail!("Could not find `{}` in `{}`. Did you forget to run `chisel init` to initialize the project?", MANIFEST_FILE, dir.display());
     }
-    let manifest = read_to_string(MANIFEST_FILE)?;
+    let manifest = read_to_string(&file)?;
     let manifest: Manifest = match toml::from_str(&manifest) {
         Ok(manifest) => manifest,
         Err(error) => {
             anyhow::bail!(
                 "Failed to parse manifest at `{}`:\n\n{}",
-                cwd.join(MANIFEST_FILE).display(),
+                file.display(),
                 error
             );
         }
     };
     Ok(manifest)
+}
+
+pub(crate) fn read_manifest() -> Result<Manifest> {
+    let cwd = env::current_dir()?;
+    read_manifest_from(&cwd)
 }
 
 /// Opens and reads an entire file (or stdin, if filename is "-")
@@ -301,4 +307,84 @@ pub(crate) fn project_exists(path: &Path) -> bool {
         || path.join(Path::new(TYPES_DIR)).exists()
         || path.join(Path::new(ENDPOINTS_DIR)).exists()
         || path.join(Path::new(POLICIES_DIR)).exists()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tempfile::TempDir;
+
+    fn gen_manifest(toml: &str) -> TempDir {
+        let tmp_dir = TempDir::new().unwrap();
+        let dir = tmp_dir.path();
+        std::fs::write(dir.join(MANIFEST_FILE), toml.as_bytes()).unwrap();
+        std::fs::create_dir(dir.join("./policies")).unwrap();
+        std::fs::create_dir(dir.join("./endpoints")).unwrap();
+        std::fs::create_dir(dir.join("./models")).unwrap();
+        tmp_dir
+    }
+
+    #[test]
+    fn parse_works() {
+        let d = gen_manifest(
+            r#"
+models = ["models"]
+endpoints = ["endpoints"]
+policies = ["policies"]
+"#,
+        );
+        println!("reading {:?}", std::env::current_dir());
+        let m = read_manifest_from(d.path()).unwrap();
+        m.models().unwrap();
+        m.policies().unwrap();
+        m.endpoints().unwrap();
+    }
+
+    #[should_panic(expected = "is not relative")]
+    #[test]
+    fn parse_absolute_fails() {
+        let d = gen_manifest(
+            r#"
+models = ["/models/models"]
+endpoints = ["endpoints"]
+policies = ["policies"]
+"#,
+        );
+        let m = read_manifest_from(d.path()).unwrap();
+        m.models().unwrap();
+        m.policies().unwrap();
+        m.endpoints().unwrap();
+    }
+
+    #[should_panic(expected = "has to be a subdirectory")]
+    #[test]
+    fn parse_curr_dir_fails() {
+        let d = gen_manifest(
+            r#"
+models = ["./"]
+endpoints = ["endpoints"]
+policies = ["policies"]
+"#,
+        );
+        let m = read_manifest_from(d.path()).unwrap();
+        m.models().unwrap();
+        m.policies().unwrap();
+        m.endpoints().unwrap();
+    }
+
+    #[should_panic(expected = "has to be a subdirectory")]
+    #[test]
+    fn parse_non_subdir_dir_fails() {
+        let d = gen_manifest(
+            r#"
+models = ["../"]
+endpoints = ["endpoints"]
+policies = ["policies"]
+"#,
+        );
+        let m = read_manifest_from(d.path()).unwrap();
+        m.models().unwrap();
+        m.policies().unwrap();
+        m.endpoints().unwrap();
+    }
 }
