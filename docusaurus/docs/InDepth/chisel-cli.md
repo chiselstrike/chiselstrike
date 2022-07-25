@@ -155,10 +155,6 @@ The number of executor threads the ChiselStrike server uses.
 
 The internal routes listen address of the server. This is the address that serves healthcheck for things like k8s.
 
-#### `--metadata-db-uri [URI]`
-
-The metadata database URI to connect to.
-
 #### `--rpc-listen-addr [ADDR]`
 
 The RPC listen address of the server. This is the address that the ChiselStrike CLI connects to to interact with the server.
