@@ -74,6 +74,11 @@ pub struct Opt {
     #[serde(skip)]
     pub config: Option<PathBuf>,
 
+    #[structopt(long, env = "CHISEL_SECRET_KEY_LOCATION")]
+    pub chisel_secret_key_location: Option<String>,
+
+    #[structopt(long, env = "CHISEL_SECRET_LOCATION")]
+    pub chisel_secret_location: Option<String>,
     /// Prints the configuration resulting from the merging of all the configuration sources,
     /// including default values, in the JSON format.
     /// This is the configuration that will be used when starting chiseld.
@@ -115,16 +120,13 @@ struct SharedState {
     signal_rx: async_channel::Receiver<()>,
     /// ChiselRpc waits on all API threads to send here before it starts serving RPC.
     readiness_tx: async_channel::Sender<()>,
-    api_listen_addr: String,
-    inspect_brk: bool,
-    executor_threads: usize,
     db: DbConnection,
-    nr_connections: usize,
+    opt: Opt,
 }
 
 impl SharedState {
     pub fn executor_threads(&self) -> usize {
-        self.executor_threads
+        self.opt.executor_threads
     }
 }
 
@@ -159,9 +161,9 @@ pub(crate) async fn add_endpoints(
     Ok(())
 }
 
-async fn read_secrets() -> Result<JsonObject> {
+async fn read_secrets(opt: &Opt) -> Result<JsonObject> {
     static LAST_TRY_WAS_FAILURE: Mutex<bool> = Mutex::new(false);
-    let secrets = get_secrets().await;
+    let secrets = get_secrets(opt).await;
     let mut was_failure = LAST_TRY_WAS_FAILURE.lock().await;
     match secrets {
         Ok(secrets) => {
@@ -189,16 +191,16 @@ async fn run(state: SharedState, init: InitState, mut cmd: ExecutorChannel) -> R
         policies,
         type_system: ts,
     } = init;
-    init_deno(state.inspect_brk).await?;
+    init_deno(state.opt.inspect_brk).await?;
 
     // Ensure we read the secrets before spawning an ApiService; secrets may dictate API authorization.
-    let secret = match read_secrets().await {
+    let secret = match read_secrets(&state.opt).await {
         Ok(v) => v,
         Err(_) => Default::default(), // During startup, map io error to empty secrets.
     };
     update_secrets(secret).await;
 
-    let meta = MetaService::local_connection(&state.db, state.nr_connections).await?;
+    let meta = MetaService::local_connection(&state.db, state.opt.nr_connections).await?;
 
     let api_info = meta.load_api_info().await?;
 
@@ -207,7 +209,7 @@ async fn run(state: SharedState, init: InitState, mut cmd: ExecutorChannel) -> R
     crate::introspect::init(&api_service);
 
     let query_engine =
-        Arc::new(QueryEngine::local_connection(&state.db, state.nr_connections).await?);
+        Arc::new(QueryEngine::local_connection(&state.db, state.opt.nr_connections).await?);
     ts.create_builtin_backing_tables(query_engine.as_ref())
         .await?;
     let api_service = Rc::new(api_service);
@@ -243,14 +245,14 @@ async fn run(state: SharedState, init: InitState, mut cmd: ExecutorChannel) -> R
 
     let api_tasks = crate::api::spawn(
         api_service,
-        state.api_listen_addr.clone(),
+        state.opt.api_listen_addr.clone(),
         state.signal_rx.clone(),
     )?;
     state.readiness_tx.send(()).await?;
 
     info!(
         "ChiselStrike is ready 🚀 - URL: http://{} ",
-        state.api_listen_addr
+        state.opt.api_listen_addr
     );
 
     for api_task in api_tasks {
@@ -364,6 +366,7 @@ async fn run_shared_state(
 
     let secret_shutdown = signal_rx.clone();
     // Spawn periodic hot-reload of secrets.  This doesn't load secrets immediately, though.
+    let opt_clone = opt.clone();
     let _secret_reader = tokio::task::spawn(async move {
         loop {
             futures::select! {
@@ -373,7 +376,7 @@ async fn run_shared_state(
                 }
             };
 
-            let secrets = match read_secrets().await {
+            let secrets = match read_secrets(&opt_clone).await {
                 Ok(s) => s,
                 Err(_) => continue, // ignore IO errors
             };
@@ -419,11 +422,8 @@ async fn run_shared_state(
     let state = SharedState {
         signal_rx,
         readiness_tx,
-        api_listen_addr: opt.api_listen_addr,
-        inspect_brk: opt.inspect_brk,
-        executor_threads: opt.executor_threads,
         db: db_conn,
-        nr_connections: opt.nr_connections,
+        opt,
     };
 
     let tasks = SharedTasks { rpc_task, sig_task };
