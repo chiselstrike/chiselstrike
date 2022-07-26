@@ -117,8 +117,8 @@ $CHISEL apply
 $CURL -X POST -o - $CHISELD_HOST/dev/take_filter
 # CHECK: "simple_take": [
 # CHECK: "x",
-# CHECK  1
-# CHECK  ],
+# CHECK: 1
+# CHECK: ],
 # CHECK: "filter_take": [
 # CHECK: "z",
 # CHECK: 3

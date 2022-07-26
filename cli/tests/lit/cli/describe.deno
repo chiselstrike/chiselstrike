@@ -54,9 +54,9 @@ EOF
 $CHISEL apply --allow-type-deletion
 
 $CHISEL describe
-# CHECK Endpoint: /dev/hello
+# CHECK: Endpoint: /dev/hello
 
 $CHISEL restart
 
 $CHISEL describe
-# CHECK Endpoint: /dev/hello
+# CHECK: Endpoint: /dev/hello
