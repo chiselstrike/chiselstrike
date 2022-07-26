@@ -66,7 +66,7 @@ export class BlogPost extends ChiselEntity {
 EOF
 
 $CHISEL apply 2>&1 || echo
-# CHECK Error: unsafe to replace type: BlogPost. Reason: adding uniqueness to field content. Incompatible change
+# CHECK: Error: unsafe to replace type: BlogPost. Reason: adding uniqueness to field content. Incompatible change
 
 cat << EOF > "$TEMPDIR/models/post.ts"
 import { ChiselEntity } from "@chiselstrike/api"
@@ -78,4 +78,10 @@ export class BlogPost extends ChiselEntity {
 EOF
 
 $CHISEL apply
-# CHECK Model defined: BlogPost
+# CHECK: Model defined: BlogPost
+
+$CHISEL restart
+describe_output=$($CHISEL describe)
+## Removes newlines
+echo $describe_output
+# CHECK: { relUrl: string; content: string; }
