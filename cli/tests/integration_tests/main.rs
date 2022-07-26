@@ -7,7 +7,10 @@ use structopt::StructOpt;
 #[path = "../common/mod.rs"]
 pub mod common;
 
+mod framework;
 mod lit;
+mod rust;
+mod rust_tests;
 
 #[derive(Debug, Clone)]
 pub enum Database {
@@ -74,6 +77,6 @@ fn main() {
     }
     run("cargo", args);
 
-    let run_results = vec![lit::run_tests(opt)];
+    let run_results = vec![rust::run_tests(&opt), lit::run_tests(opt)];
     std::process::exit(if run_results.iter().all(|x| *x) { 0 } else { 1 });
 }
