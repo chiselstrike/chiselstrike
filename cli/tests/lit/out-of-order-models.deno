@@ -35,6 +35,6 @@ cd "$TEMPDIR"
 
 $CHISEL apply
 
-# CHECK Model defined: A
-# CHECK Model defined: B
-# CHECK Model defined: C
+# CHECK: Model defined: A
+# CHECK: Model defined: B
+# CHECK: Model defined: C
