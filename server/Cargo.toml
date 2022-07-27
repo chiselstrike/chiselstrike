@@ -70,7 +70,7 @@ tempfile = "3.2.0"
 anyhow = { version = "1.0", features = ["backtrace"] }
 libc = { version = "0.2.99", features = ["extra_traits", "align"] }
 log = { version = "0.4.14", features = ["std"] }
-tonic-build = "0.5.2"
+tonic-build = { version = "0.5.2", default-features = false, features = ["prost", "transport"] }
 tracing = { version = "0.1.30", features = ["log"] }
 vergen = { version = "6", default-features = false, features = ["git"] }
 
