@@ -29,7 +29,7 @@ utils = { path = "../utils" }
 
 [build-dependencies]
 anyhow = "1.0"
-tonic-build = "0.5.2"
+tonic-build = { version = "0.5.2", default-features = false, features = ["prost", "transport"] }
 vergen = { version = "6", default-features = false, features = ["git"] }
 
 [dev-dependencies]
