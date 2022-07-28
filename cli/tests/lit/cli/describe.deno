@@ -51,7 +51,7 @@ export default async function chisel(req: Request) {
     return new Response('ok');
 }
 EOF
-$CHISEL apply --allow-type-deletion
+$CHISEL apply
 
 $CHISEL describe
 # CHECK: Endpoint: /dev/hello

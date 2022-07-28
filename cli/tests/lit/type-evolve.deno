@@ -165,5 +165,5 @@ EOF
 
 rm $TEMPDIR/endpoints/test_indexes.ts
 
-$CHISEL apply --allow-type-deletion
+$CHISEL apply
 # CHECK: Model defined: Evolving
