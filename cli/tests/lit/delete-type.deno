@@ -1,0 +1,37 @@
+# SPDX-FileCopyrightText: © 2021 ChiselStrike <info@chiselstrike.com>
+
+# RUN: sh -e @file
+
+cd "$TEMPDIR"
+
+cat << EOF > "$TEMPDIR/models/user.ts"
+import { ChiselEntity } from "@chiselstrike/api";
+
+export class User extends ChiselEntity {
+    username: string;
+    email: string;
+}
+EOF
+
+cat << EOF > "$TEMPDIR/endpoints/user.ts"
+import { User } from "../models/user.ts";
+export default User.crud();
+EOF
+
+$CHISEL apply
+# CHECK: Model defined: User
+# CHECK: End point defined: /dev/user
+
+$CURL -X POST -d '{"username": "alice", "email": "alice@example.org"}' $CHISELD_HOST/dev/user
+# CHECK: "alice"
+
+rm models/user.ts
+rm endpoints/user.ts
+
+## can't remove the type because it has data
+$CHISEL apply 2>&1 || true
+# CHECK: Error
+
+# After deleting, apply will succeed
+$CURL -X DELETE $CHISELD_HOST/dev/user?all=true
+$CHISEL apply

@@ -721,6 +721,18 @@ impl MetaService {
         Ok(policies)
     }
 
+    pub(crate) async fn count_rows(
+        &self,
+        transaction: &mut Transaction<'_, Any>,
+        ty: &ObjectType,
+    ) -> anyhow::Result<i64> {
+        let query = format!("SELECT COUNT(*) as count from \"{}\"", ty.backing_table());
+        let count = sqlx::query(&query);
+        let row = fetch_one(transaction, count).await?;
+        let cnt: i64 = row.get("count");
+        Ok(cnt)
+    }
+
     pub(crate) async fn insert_type(
         &self,
         transaction: &mut Transaction<'_, Any>,

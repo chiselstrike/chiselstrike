@@ -284,15 +284,22 @@ impl RpcService {
         }
 
         let mut to_remove = vec![];
+        let mut to_remove_has_data = vec![];
         let mut to_insert = vec![];
         let mut to_update = vec![];
 
         state.type_system.get_version_mut(&api_version);
         let version_types = state.type_system.get_version(&api_version)?; // End mutable state borrow from above.
 
+        let meta = &state.meta;
+        let mut transaction = meta.start_transaction().await?;
+
         for (existing, removed) in version_types.custom_types.iter() {
             if type_names.get(existing).is_none() {
-                to_remove.push(removed.clone());
+                match meta.count_rows(&mut transaction, removed).await? {
+                    0 => to_remove.push(removed.clone()),
+                    cnt => to_remove_has_data.push((removed.clone(), cnt)),
+                }
             }
         }
 
@@ -309,18 +316,27 @@ impl RpcService {
 
         let policy = VersionPolicy::from_yaml(policy_str)?;
 
-        if !to_remove.is_empty() && !apply_request.allow_type_deletion {
+        if !to_remove_has_data.is_empty() && !apply_request.allow_type_deletion {
+            let s = to_remove_has_data
+                .iter()
+                .map(|x| format!("{} ({} elements)", x.0.name(), x.1))
+                .fold("\t".to_owned(), |acc, x| format!("{}\n\t{}", acc, x));
             anyhow::bail!(
-                r"Trying to remove types from type file. This will delete the underlying data associated with this type.
+                r"Trying to remove models from the models file, but the following models still have data:
+{}
+
 To proceed, try:
 
    'npx chisel apply --allow-type-deletion' (if installed from npm)
 
 or
 
-   'chisel apply --allow-type-deletion' (otherwise)"
+   'chisel apply --allow-type-deletion' (otherwise)",
+                s
             );
         }
+        // if we got here, either the slice is empty anyway, or the user is forcing the deletion.
+        to_remove.extend(to_remove_has_data.iter().map(|x| x.0.clone()));
 
         let mut decorators = BTreeSet::default();
         let mut new_types = HashMap::<String, Entity>::default();
@@ -384,9 +400,6 @@ or
             }
         }
 
-        let meta = &state.meta;
-        let mut transaction = meta.start_transaction().await?;
-
         meta.persist_policy_version(&mut transaction, &api_version, policy_str)
             .await?;
 
@@ -419,6 +432,12 @@ or
             .versions
             .insert(api_version.to_owned(), policy.clone());
 
+        // FIXME: Now that we have --db-uri, this is the reason we still have to drop
+        // the transaction on meta, and acquire on query_engine: we need to reload the
+        // type system to get db-side IDs, and if we do that before we get the transactions
+        // then we won't get them. Without ids, we can't build the to_insert and to_update
+        // arrays.
+        //
         // Refresh to_insert types so that they have fresh meta ids (e.g. new  DbIndexes
         // need their meta id to be created in the storage database).
         let to_insert = to_insert
@@ -440,10 +459,6 @@ or
             })
             .collect::<Result<Vec<_>, _>>()?;
 
-        // Update the data database after all the metdata is up2date.
-        // We will not get a single transaction because in the general case those things
-        // could be in totally different databases. However, some foreign relations would force
-        // us to update some subset of them together. FIXME: revisit this when we support relations
         let query_engine = &state.query_engine;
         let mut transaction = query_engine.start_transaction().await?;
         for ty in to_insert.into_iter() {
