@@ -37,6 +37,7 @@ prost = "0.8.0"
 rand = "0.8.4"
 regex = "1"
 rsa = "0.7.0-pre"
+rskafka = "0.3.0"
 rustls = "0.20.6"
 sea-query = { version = "0.17.1", features = ["thread-safe"] }
 serde = "1.0.137"
