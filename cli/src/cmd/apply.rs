@@ -87,7 +87,7 @@ pub(crate) async fn apply(
     }
     let optimize = chiselc_available && manifest.optimize == Optimize::Yes;
     let auto_index = chiselc_available && manifest.auto_index == AutoIndex::Yes;
-    let (endpoints_req, index_candidates_req) = if manifest.modules == Module::Node {
+    let (sources, index_candidates_req) = if manifest.modules == Module::Node {
         node::apply(&endpoints, &entities, optimize, auto_index, &type_check).await
     } else {
         deno::apply(&endpoints, &entities, optimize, auto_index).await
@@ -154,7 +154,7 @@ pub(crate) async fn apply(
     // FIXME: We should have a more fine gained way to recreate just
     // the worker without loading the sources from the DB.
     execute!(client.apply(tonic::Request::new(req.clone())).await);
-    req.sources = endpoints_req;
+    req.sources = sources;
     crate::restart(server_url).await?;
 
     let msg = execute!(client.apply(tonic::Request::new(req)).await);
