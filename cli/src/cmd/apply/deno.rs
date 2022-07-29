@@ -3,9 +3,9 @@
 use crate::chisel::IndexCandidate;
 use crate::cmd::apply::chiselc_output;
 use crate::cmd::apply::parse_indexes;
+use crate::cmd::apply::SourceMap;
 use anyhow::{anyhow, Context, Result};
 use endpoint_tsc::compile_endpoints;
-use std::collections::HashMap;
 use std::path::PathBuf;
 
 pub(crate) async fn apply(
@@ -13,8 +13,8 @@ pub(crate) async fn apply(
     entities: &[String],
     optimize: bool,
     auto_index: bool,
-) -> Result<(HashMap<String, String>, Vec<IndexCandidate>)> {
-    let mut index_candidates_req = vec![];
+) -> Result<(SourceMap, Vec<IndexCandidate>)> {
+    let mut index_candidates = vec![];
     let paths: Result<Vec<_>> = endpoints
         .iter()
         .map(|f| f.to_str().ok_or_else(|| anyhow!("Path is not UTF8")))
@@ -31,8 +31,8 @@ pub(crate) async fn apply(
 
         if auto_index {
             let mut indexes = parse_indexes(orig.clone(), entities)?;
-            index_candidates_req.append(&mut indexes);
+            index_candidates.append(&mut indexes);
         }
     }
-    Ok((output, index_candidates_req))
+    Ok((output, index_candidates))
 }

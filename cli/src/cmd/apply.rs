@@ -8,6 +8,7 @@ use crate::chisel::{ChiselApplyRequest, IndexCandidate, PolicyUpdateRequest};
 use crate::project::{read_manifest, read_to_string, AutoIndex, Module, Optimize};
 use anyhow::{anyhow, Context, Result};
 use serde_json::Value;
+use std::collections::HashMap;
 use std::io::Write;
 use std::path::PathBuf;
 use std::process::Stdio;
@@ -61,6 +62,15 @@ impl From<bool> for TypeChecking {
     }
 }
 
+/// A map of source file paths to the source code.
+///
+/// The apply phase performs bunch of processing on the source files. This
+/// map contains the final processed source files with the full path name
+/// to be shipped to the server. For example, endpoints have a `endpoints/`
+/// prefix in the path for the server in cases the server needs to do
+/// something special depending on the source file type.
+pub(crate) type SourceMap = HashMap<String, String>;
+
 pub(crate) async fn apply(
     server_url: String,
     version: String,
@@ -87,7 +97,7 @@ pub(crate) async fn apply(
     }
     let optimize = chiselc_available && manifest.optimize == Optimize::Yes;
     let auto_index = chiselc_available && manifest.auto_index == AutoIndex::Yes;
-    let (endpoints_req, index_candidates_req) = if manifest.modules == Module::Node {
+    let (sources, index_candidates) = if manifest.modules == Module::Node {
         node::apply(&endpoints, &entities, optimize, auto_index, &type_check).await
     } else {
         deno::apply(&endpoints, &entities, optimize, auto_index).await
@@ -133,7 +143,7 @@ pub(crate) async fn apply(
     let mut req = ChiselApplyRequest {
         types: types_req,
         sources: Default::default(),
-        index_candidates: index_candidates_req,
+        index_candidates,
         policies: policy_req,
         allow_type_deletion: allow_type_deletion.into(),
         version,
@@ -154,7 +164,7 @@ pub(crate) async fn apply(
     // FIXME: We should have a more fine gained way to recreate just
     // the worker without loading the sources from the DB.
     execute!(client.apply(tonic::Request::new(req.clone())).await);
-    req.sources = endpoints_req;
+    req.sources = sources;
     crate::restart(server_url).await?;
 
     let msg = execute!(client.apply(tonic::Request::new(req)).await);
@@ -175,7 +185,7 @@ pub(crate) async fn apply(
 }
 
 fn parse_indexes(code: String, entities: &[String]) -> Result<Vec<IndexCandidate>> {
-    let mut index_candidates_req = vec![];
+    let mut index_candidates = vec![];
     let indexes = chiselc_output(code, "filter-properties", entities)?;
     let indexes: Value = serde_json::from_str(&indexes)?;
     if let Some(indexes) = indexes.as_array() {
@@ -188,13 +198,13 @@ fn parse_indexes(code: String, entities: &[String]) -> Result<Vec<IndexCandidate
                     .collect(),
                 None => vec![],
             };
-            index_candidates_req.push(IndexCandidate {
+            index_candidates.push(IndexCandidate {
                 entity_name,
                 properties,
             });
         }
     }
-    Ok(index_candidates_req)
+    Ok(index_candidates)
 }
 
 fn output_to_string(out: &std::process::Output) -> Option<String> {
