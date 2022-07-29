@@ -14,6 +14,7 @@ use utils::without_extension;
 const MANIFEST_FILE: &str = "Chisel.toml";
 const TYPES_DIR: &str = "./models";
 const ENDPOINTS_DIR: &str = "./endpoints";
+const EVENTS_DIR: &str = "./events";
 const LIB_DIR: &str = "./lib";
 const POLICIES_DIR: &str = "./policies";
 const VSCODE_DIR: &str = "./.vscode/";
@@ -72,6 +73,8 @@ pub(crate) struct Manifest {
     pub(crate) models: Vec<String>,
     /// Vector of directories to scan for endpoint definitions.
     pub(crate) endpoints: Vec<String>,
+    /// Vector of directories to scan for event handler definitions.
+    pub(crate) events: Option<Vec<String>>,
     /// Vector of directories to scan for policy definitions.
     pub(crate) policies: Vec<String>,
     /// Whether to use deno-style or node-style modules
@@ -94,6 +97,18 @@ impl Manifest {
         let ret = Self::dirs_to_paths(&self.endpoints)?;
         if let Some((a, b)) = check_duplicates(&ret) {
             anyhow::bail!("Cannot add both {} {} as routes. ChiselStrike uses filesystem-based routing, so we don't know what to do. Sorry! 🥺", a, b);
+        }
+        Ok(ret)
+    }
+
+    pub fn events(&self) -> anyhow::Result<Vec<PathBuf>> {
+        let events = match &self.events {
+            Some(events) => events.to_owned(),
+            None => vec![EVENTS_DIR.into()],
+        };
+        let ret = Self::dirs_to_paths(&events)?;
+        if let Some((a, b)) = check_duplicates(&ret) {
+            anyhow::bail!("Cannot add both {} {} as event handlers. ChiselStrike uses filesystem-based routing, so we don't know what to do. Sorry! 🥺", a, b);
         }
         Ok(ret)
     }
@@ -266,6 +281,7 @@ pub(crate) fn create_project(path: &Path, opts: CreateProjectOptions) -> Result<
     }
     fs::create_dir_all(path.join(TYPES_DIR))?;
     fs::create_dir_all(path.join(ENDPOINTS_DIR))?;
+    fs::create_dir_all(path.join(EVENTS_DIR))?;
     fs::create_dir_all(path.join(LIB_DIR))?;
     fs::create_dir_all(path.join(POLICIES_DIR))?;
     fs::create_dir_all(path.join(VSCODE_DIR))?;
@@ -313,6 +329,7 @@ pub(crate) fn project_exists(path: &Path) -> bool {
     path.join(Path::new(MANIFEST_FILE)).exists()
         || path.join(Path::new(TYPES_DIR)).exists()
         || path.join(Path::new(ENDPOINTS_DIR)).exists()
+        || path.join(Path::new(EVENTS_DIR)).exists()
         || path.join(Path::new(POLICIES_DIR)).exists()
 }
 
@@ -327,6 +344,7 @@ mod tests {
         std::fs::write(dir.join(MANIFEST_FILE), toml.as_bytes()).unwrap();
         std::fs::create_dir(dir.join("./policies")).unwrap();
         std::fs::create_dir(dir.join("./endpoints")).unwrap();
+        std::fs::create_dir(dir.join("./events")).unwrap();
         std::fs::create_dir(dir.join("./models")).unwrap();
         tmp_dir
     }
@@ -337,6 +355,7 @@ mod tests {
             r#"
 models = ["models"]
 endpoints = ["endpoints"]
+events = ["events"]
 policies = ["policies"]
 "#,
         );
@@ -345,6 +364,7 @@ policies = ["policies"]
         m.models().unwrap();
         m.policies().unwrap();
         m.endpoints().unwrap();
+        m.events().unwrap();
     }
 
     #[should_panic(expected = "is not relative")]
@@ -354,6 +374,7 @@ policies = ["policies"]
             r#"
 models = ["/models/models"]
 endpoints = ["endpoints"]
+events = ["events"]
 policies = ["policies"]
 "#,
         );
@@ -361,6 +382,7 @@ policies = ["policies"]
         m.models().unwrap();
         m.policies().unwrap();
         m.endpoints().unwrap();
+        m.events().unwrap();
     }
 
     #[should_panic(expected = "has to be a subdirectory")]
@@ -370,6 +392,7 @@ policies = ["policies"]
             r#"
 models = ["./"]
 endpoints = ["endpoints"]
+events = ["events"]
 policies = ["policies"]
 "#,
         );
@@ -377,6 +400,7 @@ policies = ["policies"]
         m.models().unwrap();
         m.policies().unwrap();
         m.endpoints().unwrap();
+        m.events().unwrap();
     }
 
     #[should_panic(expected = "has to be a subdirectory")]
@@ -386,6 +410,7 @@ policies = ["policies"]
             r#"
 models = ["../"]
 endpoints = ["endpoints"]
+events = ["events"]
 policies = ["policies"]
 "#,
         );
@@ -393,5 +418,6 @@ policies = ["policies"]
         m.models().unwrap();
         m.policies().unwrap();
         m.endpoints().unwrap();
+        m.events().unwrap();
     }
 }
