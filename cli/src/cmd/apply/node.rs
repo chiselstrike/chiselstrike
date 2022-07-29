@@ -135,13 +135,13 @@ pub(crate) async fn apply(
             .context("could not bundle endpoints with esbuild (using node-style modules)");
     }
 
-    for (endpoint_name, bundler_info) in endpoints.iter().zip(bundler_file_mapping.iter()) {
+    for bundler_info in bundler_file_mapping.iter() {
         let (endpoint_file_path, idx_file_name) = bundler_info;
         let mut bundler_output_file = bundler_output_dir_name.join(&idx_file_name);
         bundler_output_file.set_extension("js");
         let code = read_to_string(bundler_output_file)?;
 
-        sources.insert(endpoint_name.display().to_string(), code);
+        sources.insert(endpoint_file_path.display().to_string(), code);
         if auto_index {
             let code = read_to_string(endpoint_file_path.clone())?;
             let mut indexes = parse_indexes(code, entities)?;
