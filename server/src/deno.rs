@@ -1534,27 +1534,29 @@ pub(crate) async fn compile_endpoints(sources: HashMap<String, String>) -> Resul
                 code_map.insert(url, code);
                 continue;
             }
-            if path.split('/').nth(2) != Some("endpoints") {
-                // Non endpoint files like models/...
-                let url = Url::parse(&format!("file://{}", path)).unwrap();
-                code_map.insert(url, code);
-                continue;
+            match path.split('/').nth(2) {
+                Some("endpoints") => {
+                    let path = without_extension(&path);
+                    let url = Url::parse(&format!("file://{}", path)).unwrap();
+                    code_map.insert(url, code);
+
+                    let path = endpoint_path_from_source_path(path);
+                    let path = RequestPath::try_from(path.as_ref()).unwrap();
+                    let api_version = v8::String::new(scope, path.api_version()).unwrap().into();
+                    let path = v8::String::new(scope, path.path()).unwrap().into();
+                    let endpoint = v8::Object::new(scope);
+                    let path_key = v8::String::new(scope, "path").unwrap();
+                    endpoint.set(scope, path_key.into(), path);
+                    let api_version_key = v8::String::new(scope, "apiVersion").unwrap();
+                    endpoint.set(scope, api_version_key.into(), api_version);
+                    endpoints.push(endpoint.into());
+                }
+                _ => {
+                    // Non endpoint files like models/...
+                    let url = Url::parse(&format!("file://{}", path)).unwrap();
+                    code_map.insert(url, code);
+                }
             }
-
-            let path = without_extension(&path);
-            let url = Url::parse(&format!("file://{}", path)).unwrap();
-            code_map.insert(url, code);
-
-            let path = endpoint_path_from_source_path(path);
-            let path = RequestPath::try_from(path.as_ref()).unwrap();
-            let api_version = v8::String::new(scope, path.api_version()).unwrap().into();
-            let path = v8::String::new(scope, path.path()).unwrap().into();
-            let endpoint = v8::Object::new(scope);
-            let path_key = v8::String::new(scope, "path").unwrap();
-            endpoint.set(scope, path_key.into(), path);
-            let api_version_key = v8::String::new(scope, "apiVersion").unwrap();
-            endpoint.set(scope, api_version_key.into(), api_version);
-            endpoints.push(endpoint.into());
         }
         let endpoints = v8::Array::new_with_elements(scope, &endpoints).into();
         let undefined = v8::undefined(scope).into();
