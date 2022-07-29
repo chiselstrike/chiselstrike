@@ -3,10 +3,9 @@
 use crate::chisel::IndexCandidate;
 use crate::cmd::apply::chiselc_spawn;
 use crate::cmd::apply::parse_indexes;
-use crate::cmd::apply::TypeChecking;
+use crate::cmd::apply::{SourceMap, TypeChecking};
 use crate::project::read_to_string;
 use anyhow::{anyhow, Context, Result};
-use std::collections::HashMap;
 use std::env;
 use std::ffi::OsStr;
 use std::fs::{self, File};
@@ -20,8 +19,8 @@ pub(crate) async fn apply(
     optimize: bool,
     auto_index: bool,
     type_check: &TypeChecking,
-) -> Result<(HashMap<String, String>, Vec<IndexCandidate>)> {
-    let mut sources = HashMap::new();
+) -> Result<(SourceMap, Vec<IndexCandidate>)> {
+    let mut sources = SourceMap::new();
     let mut index_candidates_req = vec![];
     let tsc = match type_check {
         TypeChecking::Yes => Some(npx(

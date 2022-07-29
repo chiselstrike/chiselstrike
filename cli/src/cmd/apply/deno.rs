@@ -3,9 +3,9 @@
 use crate::chisel::IndexCandidate;
 use crate::cmd::apply::chiselc_output;
 use crate::cmd::apply::parse_indexes;
+use crate::cmd::apply::SourceMap;
 use anyhow::{anyhow, Context, Result};
 use endpoint_tsc::compile_endpoints;
-use std::collections::HashMap;
 use std::path::PathBuf;
 
 pub(crate) async fn apply(
@@ -13,7 +13,7 @@ pub(crate) async fn apply(
     entities: &[String],
     optimize: bool,
     auto_index: bool,
-) -> Result<(HashMap<String, String>, Vec<IndexCandidate>)> {
+) -> Result<(SourceMap, Vec<IndexCandidate>)> {
     let mut index_candidates_req = vec![];
     let paths: Result<Vec<_>> = endpoints
         .iter()

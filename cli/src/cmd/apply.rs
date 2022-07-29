@@ -8,6 +8,7 @@ use crate::chisel::{ChiselApplyRequest, IndexCandidate, PolicyUpdateRequest};
 use crate::project::{read_manifest, read_to_string, AutoIndex, Module, Optimize};
 use anyhow::{anyhow, Context, Result};
 use serde_json::Value;
+use std::collections::HashMap;
 use std::io::Write;
 use std::path::PathBuf;
 use std::process::Stdio;
@@ -60,6 +61,15 @@ impl From<bool> for TypeChecking {
         }
     }
 }
+
+/// A map of source file paths to the source code.
+///
+/// The apply phase performs bunch of processing on the source files. This
+/// map contains the final processed source files with the full path name
+/// to be shipped to the server. For example, endpoints have a `endpoints/`
+/// prefix in the path for the server in cases the server needs to do
+/// something special depending on the source file type.
+pub(crate) type SourceMap = HashMap<String, String>;
 
 pub(crate) async fn apply(
     server_url: String,
