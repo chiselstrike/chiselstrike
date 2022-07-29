@@ -21,7 +21,7 @@ pub(crate) async fn apply(
     type_check: &TypeChecking,
 ) -> Result<(SourceMap, Vec<IndexCandidate>)> {
     let mut sources = SourceMap::new();
-    let mut index_candidates_req = vec![];
+    let mut index_candidates = vec![];
     let tsc = match type_check {
         TypeChecking::Yes => Some(npx(
             "tsc",
@@ -144,7 +144,7 @@ pub(crate) async fn apply(
         if auto_index {
             let code = read_to_string(endpoint_file_path.clone())?;
             let mut indexes = parse_indexes(code, entities)?;
-            index_candidates_req.append(&mut indexes);
+            index_candidates.append(&mut indexes);
         }
     }
 
@@ -156,7 +156,7 @@ pub(crate) async fn apply(
             anyhow::bail!("{}\n{}", out, err);
         }
     }
-    Ok((sources, index_candidates_req))
+    Ok((sources, index_candidates))
 }
 
 fn npx<A: AsRef<OsStr>>(

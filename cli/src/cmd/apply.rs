@@ -97,7 +97,7 @@ pub(crate) async fn apply(
     }
     let optimize = chiselc_available && manifest.optimize == Optimize::Yes;
     let auto_index = chiselc_available && manifest.auto_index == AutoIndex::Yes;
-    let (sources, index_candidates_req) = if manifest.modules == Module::Node {
+    let (sources, index_candidates) = if manifest.modules == Module::Node {
         node::apply(&endpoints, &entities, optimize, auto_index, &type_check).await
     } else {
         deno::apply(&endpoints, &entities, optimize, auto_index).await
@@ -143,7 +143,7 @@ pub(crate) async fn apply(
     let mut req = ChiselApplyRequest {
         types: types_req,
         sources: Default::default(),
-        index_candidates: index_candidates_req,
+        index_candidates,
         policies: policy_req,
         allow_type_deletion: allow_type_deletion.into(),
         version,
@@ -185,7 +185,7 @@ pub(crate) async fn apply(
 }
 
 fn parse_indexes(code: String, entities: &[String]) -> Result<Vec<IndexCandidate>> {
-    let mut index_candidates_req = vec![];
+    let mut index_candidates = vec![];
     let indexes = chiselc_output(code, "filter-properties", entities)?;
     let indexes: Value = serde_json::from_str(&indexes)?;
     if let Some(indexes) = indexes.as_array() {
@@ -198,13 +198,13 @@ fn parse_indexes(code: String, entities: &[String]) -> Result<Vec<IndexCandidate
                     .collect(),
                 None => vec![],
             };
-            index_candidates_req.push(IndexCandidate {
+            index_candidates.push(IndexCandidate {
                 entity_name,
                 properties,
             });
         }
     }
-    Ok(index_candidates_req)
+    Ok(index_candidates)
 }
 
 fn output_to_string(out: &std::process::Output) -> Option<String> {

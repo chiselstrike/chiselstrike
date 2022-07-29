@@ -14,7 +14,7 @@ pub(crate) async fn apply(
     optimize: bool,
     auto_index: bool,
 ) -> Result<(SourceMap, Vec<IndexCandidate>)> {
-    let mut index_candidates_req = vec![];
+    let mut index_candidates = vec![];
     let paths: Result<Vec<_>> = endpoints
         .iter()
         .map(|f| f.to_str().ok_or_else(|| anyhow!("Path is not UTF8")))
@@ -31,8 +31,8 @@ pub(crate) async fn apply(
 
         if auto_index {
             let mut indexes = parse_indexes(orig.clone(), entities)?;
-            index_candidates_req.append(&mut indexes);
+            index_candidates.append(&mut indexes);
         }
     }
-    Ok((output, index_candidates_req))
+    Ok((output, index_candidates))
 }
