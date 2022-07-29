@@ -1,4 +1,4 @@
-use crate::chisel::{type_msg::TypeEnum, AddTypeRequest, FieldDefinition, TypeMsg};
+use crate::chisel::{type_msg::TypeEnum, AddTypeRequest, ContainerType, FieldDefinition, TypeMsg};
 use anyhow::{anyhow, bail, ensure, Context, Result};
 use chisel_server::auth::is_auth_entity_name;
 use std::collections::BTreeSet;
@@ -29,6 +29,28 @@ impl FieldDefinition {
     }
 }
 
+impl ContainerType {
+    fn value_type(&self) -> Result<&TypeEnum> {
+        self.value_type
+            .as_ref()
+            .context("value_type of ContainerType is None")?
+            .type_enum
+            .as_ref()
+            .context("type_enum of value_type of ContainerType is None")
+    }
+}
+
+impl TypeEnum {
+    fn list(inner: TypeEnum) -> Self {
+        let inner = TypeMsg {
+            type_enum: Some(inner),
+        };
+        TypeEnum::List(Box::new(ContainerType {
+            value_type: Some(Box::new(inner)),
+        }))
+    }
+}
+
 impl fmt::Display for TypeEnum {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let s = match self {
@@ -36,6 +58,10 @@ impl fmt::Display for TypeEnum {
             TypeEnum::Number(_) => "number".to_string(),
             TypeEnum::Bool(_) => "bool".to_string(),
             TypeEnum::Entity(name) => name.to_string(),
+            TypeEnum::List(inner) => {
+                let inner = inner.value_type();
+                format!("List<{:#?}>", inner)
+            }
         };
         write!(f, "{s}")
     }
@@ -75,7 +101,21 @@ fn map_type(handler: &Handler, x: &TsType) -> Result<TypeEnum> {
         TsType::TsTypeRef(tr) => match &tr.type_name {
             TsEntityName::Ident(id) => {
                 let ident_name = ident_to_string(id);
-                Ok(TypeEnum::Entity(ident_name))
+                if ident_name == "List" {
+                    let type_params = tr.type_params.as_ref().ok_or_else(|| {
+                        swc_err(handler, tr, "type params must be set for List type")
+                    })?;
+                    if type_params.params.len() != 1 {
+                        anyhow::bail!(
+                            "unexpected number of List type params. expected 1, got {}",
+                            type_params.params.len()
+                        );
+                    }
+                    let inner_type = map_type(handler, &type_params.params[0])?;
+                    Ok(TypeEnum::list(inner_type))
+                } else {
+                    Ok(TypeEnum::Entity(ident_name))
+                }
             }
             TsEntityName::TsQualifiedName(_) => Err(anyhow!("qualified names are not supported")),
         },
@@ -166,16 +206,27 @@ fn get_type_decorators(handler: &Handler, x: &[Decorator]) -> Result<(Vec<String
 fn validate_type_vec(type_vec: &[AddTypeRequest], valid_entities: &BTreeSet<String>) -> Result<()> {
     for t in type_vec {
         for field in t.field_defs.iter() {
-            if let TypeEnum::Entity(name) = field.field_type()? {
-                if valid_entities.get(name).is_none() && !is_auth_entity_name(name) {
-                    bail!(
-                        "field '{}' in class '{}' is of unknown entity type '{name}'",
-                        field.name,
-                        t.name
-                    );
-                }
+            let field_type = field.field_type.as_ref().unwrap();
+            validate_type(field_type, valid_entities).with_context(|| {
+                format!(
+                    "field '{}' in class '{}' contains invalid type",
+                    field.name, t.name
+                )
+            })?;
+        }
+    }
+    Ok(())
+}
+
+fn validate_type(ty: &TypeMsg, valid_entities: &BTreeSet<String>) -> Result<()> {
+    match ty.type_enum.as_ref().unwrap() {
+        TypeEnum::Entity(name) => {
+            if valid_entities.get(name).is_none() && !is_auth_entity_name(name) {
+                bail!("entity of name '{name}' is undefined");
             }
         }
+        TypeEnum::List(inner) => validate_type(inner.value_type.as_ref().unwrap(), valid_entities)?,
+        _ => (),
     }
     Ok(())
 }

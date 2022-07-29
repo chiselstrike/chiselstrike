@@ -1,0 +1,95 @@
+# SPDX-FileCopyrightText: © 2022 ChiselStrike <info@chiselstrike.com>
+
+# RUN: sh -e @file
+
+cd "$TEMPDIR"
+
+cat << EOF > "$TEMPDIR/models/types.ts"
+import { List } from "@chiselstrike/api";
+
+export class BlogPost extends Chisel.ChiselEntity {
+    name: string = "";
+}
+
+export class Author extends Chisel.ChiselEntity {
+    name: string = "bob";
+    posts: List<BlogPost> = new List<BlogPost>(BlogPost);
+}
+EOF
+
+cat << EOF > "$TEMPDIR/endpoints/store.ts"
+import { List } from "@chiselstrike/api";
+import { BlogPost, Author } from "../models/types.ts";
+
+function assert(pass: boolean, msg?: string) {
+    if (!pass) {
+        msg = msg ?? "assertion failed";
+        console.trace(msg);
+        throw Error(msg);
+    }
+}
+
+async function getPostsArray(author: Author): Promise<Array<BlogPost>> {
+    const arr = [];
+    for await (const t of author.posts) {
+        arr.push(t);
+    }
+    return arr;
+}
+
+export default async function chisel(req: Request) {
+    const post = BlogPost.build({
+        name: "Compilers are awesome",
+    });
+
+    const pekka = Author.build({
+        name: "Pekka",
+        posts: new List(BlogPost),
+    });
+
+    pekka.posts.push(BlogPost.build({
+        name: "Compilers are awesome",
+    }));
+    pekka.posts.push(BlogPost.build({
+        name: "The secret of Finnish Sauna",
+    }));
+
+    {
+        const posts = await getPostsArray(pekka);
+        assert(posts.length == 2);
+        assert(posts[0].name == "Compilers are awesome");
+        assert(posts[1].name == "The secret of Finnish Sauna");
+    }
+
+    await pekka.save();
+
+    {
+        // Check that even after save we are able to load the posts
+        const posts = await getPostsArray(pekka);
+        assert(posts.length == 2);
+        assert(posts[0].name == "Compilers are awesome");
+        assert(posts[1].name == "The secret of Finnish Sauna");
+    }
+
+    {
+        // Reload everything from database
+        const pekka = (await Author.cursor().toArray())[0];
+        const posts = await getPostsArray(pekka);
+        console.log(pekka, posts);
+        assert(posts.length == 2);
+        assert(posts[0].name == "Compilers are awesome");
+        assert(posts[1].name == "The secret of Finnish Sauna");
+    }
+
+    return "Ok";
+}
+EOF
+
+$CHISEL apply
+
+# CHECK: Model defined: BlogPost
+# CHECK: Model defined: Author
+# CHECK: End point defined: /dev/store
+
+$CURL -X POST -o - $CHISELD_HOST/dev/store
+# CHECK: Ok
