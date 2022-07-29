@@ -232,7 +232,6 @@ impl TypeSystem {
         let mut updated_fields = Vec::new();
 
         for (name, field) in new_fields.map.iter() {
-            let field_ty = ts.get(&field.type_id)?;
             match old_fields.map.remove(name) {
                 None => {
                     if field.default.is_none() && !field.is_optional {
@@ -241,6 +240,11 @@ impl TypeSystem {
                     added_fields.push(field.to_owned().clone());
                 }
                 Some(old) => {
+                    // Important: we can only issue this get() here, after we know this model is
+                    // pre-existing. Otherwise this breaks in the case where we're adding a
+                    // property that is itself a custom model.
+                    let field_ty = ts.get(&field.type_id)?;
+
                     let old_ty = ts.get(&old.type_id)?;
                     if field_ty != old_ty {
                         // FIXME: it should be almost always possible to evolve things into
