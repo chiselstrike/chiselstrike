@@ -92,16 +92,8 @@ impl Manifest {
 
     pub fn endpoints(&self) -> anyhow::Result<Vec<PathBuf>> {
         let ret = Self::dirs_to_paths(&self.endpoints)?;
-        // Check for duplicated endpoints now since otherwise TSC
-        // reports the issue and we can produce a better diagnostic
-        // than TSC.
-        let i = ret.iter();
-        for (a, b) in i.clone().zip(i.skip(1)) {
-            let a = &a.display().to_string();
-            let b = &b.display().to_string();
-            if without_extension(a) == without_extension(b) {
-                anyhow::bail!("Cannot add both {} {} as routes. ChiselStrike uses filesystem-based routing, so we don't know what to do. Sorry! 🥺", a, b);
-            }
+        if let Some((a, b)) = check_duplicates(&ret) {
+            anyhow::bail!("Cannot add both {} {} as routes. ChiselStrike uses filesystem-based routing, so we don't know what to do. Sorry! 🥺", a, b);
         }
         Ok(ret)
     }
@@ -139,6 +131,21 @@ impl Manifest {
         paths.sort_unstable();
         Ok(paths)
     }
+}
+
+fn check_duplicates(source_files: &[PathBuf]) -> Option<(String, String)> {
+    // Check for duplicated endpoints now since otherwise TSC
+    // reports the issue and we can produce a better diagnostic
+    // than TSC.
+    let i = source_files.iter();
+    for (a, b) in i.clone().zip(i.skip(1)) {
+        let a = &a.display().to_string();
+        let b = &b.display().to_string();
+        if without_extension(a) == without_extension(b) {
+            return Some((a.to_string(), b.to_string()));
+        }
+    }
+    None
 }
 
 fn dir_to_paths(dir: &Path, paths: &mut Vec<PathBuf>) -> anyhow::Result<()> {
