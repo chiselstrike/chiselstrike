@@ -1,0 +1,10 @@
+/target
+/cli/docs/_build
+/node_modules
+.vscode
+*.code-workspace
+/.chisel_dev
+/.git/modules
+/third_party/deno/test_util
+/docusaurus
+
