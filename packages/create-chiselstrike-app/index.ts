@@ -35,11 +35,14 @@ function run(projectDirectory: string, chiselVersion: string) {
     );
 
     const endpointsPath = path.join(projectDirectory, "endpoints");
+    const eventsPath = path.join(projectDirectory, "events");
     const modelsPath = path.join(projectDirectory, "models");
     const policiesPath = path.join(projectDirectory, "policies");
 
     fs.mkdirSync(path.join(projectDirectory, ".vscode"));
     fs.mkdirSync(endpointsPath);
+    fs.mkdirSync(eventsPath);
+    fs.closeSync(fs.openSync(path.join(eventsPath, ".gitkeep"), "w"));
     fs.mkdirSync(modelsPath);
     fs.closeSync(fs.openSync(path.join(modelsPath, ".gitkeep"), "w"));
     fs.mkdirSync(policiesPath);
