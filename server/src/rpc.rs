@@ -239,6 +239,7 @@ impl RpcService {
         let api_info = ApiInfo::new(app_name, api_version_tag);
 
         let mut endpoint_paths = vec![];
+        let mut event_handler_paths = vec![];
         let mut sources = HashMap::new();
         for (path, code) in apply_request.sources {
             if Url::parse(&path).is_ok() {
@@ -252,8 +253,13 @@ impl RpcService {
                 let path = format!("/{}/{}", api_version, path);
                 endpoint_paths.push(path);
             }
+            if let Some(path) = path.strip_prefix("events/") {
+                let path = format!("/{}/{}", api_version, path);
+                event_handler_paths.push(path);
+            }
         }
         endpoint_paths.sort_unstable();
+        event_handler_paths.sort_unstable();
 
         // Do this before any permanent changes to any of the databases. Otherwise
         // we end up with bad code commited to the meta database and will fail to load
@@ -500,6 +506,7 @@ or
         }
 
         let endpoints_for_cmd = endpoint_paths.clone();
+        let event_handlers_for_cmd = event_handler_paths.clone();
         let cmd = send_command!({
             {
                 set_type_system(types_global.clone()).await;
@@ -519,10 +526,22 @@ or
                     });
                     runtime.api.add_route(path.into(), func);
                 }
+                for path in &event_handlers_for_cmd {
+                    let func = Arc::new({
+                        let path = path.clone();
+                        move |key: Option<Vec<u8>>, value: Option<Vec<u8>>| {
+                            deno::run_js_event(path.clone(), key, value).boxed_local()
+                        }
+                    });
+                    runtime.api.add_event_handler(path.into(), func);
+                }
                 runtime.api.update_api_info(&api_version, api_info);
             }
             for path in endpoints_for_cmd {
                 deno::activate_endpoint(&path).await?;
+            }
+            for path in event_handlers_for_cmd {
+                deno::activate_event_handler(&path).await?;
             }
             Ok(())
         });
@@ -535,6 +554,7 @@ or
             types: type_names_user_order,
             endpoints: endpoint_paths,
             labels,
+            event_handlers: event_handler_paths,
         }))
     }
 

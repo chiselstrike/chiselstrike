@@ -101,6 +101,7 @@ message ChiselApplyResponse {
    repeated string types = 1;
    repeated string endpoints = 2;
    repeated string labels = 3;
+   repeated string event_handlers = 4;
 }
 
 message ChiselDeleteRequest {
