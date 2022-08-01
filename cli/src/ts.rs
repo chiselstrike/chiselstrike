@@ -114,9 +114,12 @@ fn get_field_value(handler: &Handler, x: &Option<Box<Expr>>) -> Result<Option<(S
                     .ok_or_else(|| swc_err(handler, k, "unexpected empty expression"))?;
                 Ok(Some((format!("{}{}", op, value.0), value.1)))
             }
-            // Covers entity fields initialization.
-            Expr::New(_) => Ok(None),
-            x => Err(swc_err(handler, x, "expression not supported")),
+            // If the code is invalid, then parsing will reject this anyway. If it is valid
+            // but not a literal or unary, so we just behave as if there is no default as far
+            // as the type system is concerned. That means we cannot add this field to an existing
+            // schema (unless as optional), but in a new schema is fine. The runtime will execute
+            // this expression and end up with the correct default.
+            _ => Ok(None),
         },
     }
 }
@@ -324,6 +327,7 @@ fn parse_one_file<P: AsRef<Path>>(
                 // Right now just accept imports, but don't try to parse them.
                 // The compiler will error out if the imports are invalid.
             }
+            ModuleItem::Stmt(_) => {}
             z => {
                 handler.span_err(
                     z.span(),

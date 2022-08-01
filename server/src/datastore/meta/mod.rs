@@ -510,7 +510,35 @@ impl MetaService {
         let rows = fetch_all(&self.pool, query).await?;
 
         let mut ts = TypeSystem::default();
+        let mut failures = vec![];
+
         for row in rows {
+            let type_id: i32 = row.get("type_id");
+            let backing_table: &str = row.get("backing_table");
+            let type_name: &str = row.get("type_name");
+            let desc = ExistingObject::new(type_name, backing_table, type_id)?;
+            match self.load_type_fields(&ts, type_id).await {
+                Ok(fields) => {
+                    let indexes = self.load_type_indexes(type_id, backing_table).await?;
+
+                    let ty = ObjectType::new(desc, fields, indexes)?;
+                    ts.add_custom_type(Entity::Custom(Arc::new(ty)))?;
+                }
+                Err(_) => {
+                    failures.push(row);
+                }
+            }
+        }
+
+        // Retry once for failures. The reason we may want to retry is that if you have a model (A)
+        // that has another model (B) as a property, load_type_fields may fail, because B is not
+        // yet loaded.
+        //
+        // In rpc.rs, we have a topology sort to handle that so that models are created in the order
+        // they are needed, but that only works if all models are inserted together. If you have a
+        // pre-existing model (that already has an id), and then you add the new property, then
+        // there isn't much we can do.
+        for row in failures {
             let type_id: i32 = row.get("type_id");
             let backing_table: &str = row.get("backing_table");
             let type_name: &str = row.get("type_name");
@@ -521,6 +549,7 @@ impl MetaService {
             let ty = ObjectType::new(desc, fields, indexes)?;
             ts.add_custom_type(Entity::Custom(Arc::new(ty)))?;
         }
+
         Ok(ts)
     }
 
