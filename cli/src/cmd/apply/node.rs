@@ -15,6 +15,7 @@ use tokio::task::{spawn_blocking, JoinHandle};
 
 pub(crate) async fn apply(
     endpoints: &[PathBuf],
+    events: &[PathBuf],
     entities: &[String],
     optimize: bool,
     auto_index: bool,
@@ -46,7 +47,7 @@ pub(crate) async fn apply(
     fs::create_dir_all(&gen_dir)?;
 
     let mut chiselc_futures = vec![];
-    for endpoint in endpoints.iter() {
+    for endpoint in endpoints.iter().chain(events.iter()) {
         if optimize {
             let endpoint_file_path = endpoint.clone();
             let mut components = endpoint_file_path.components();

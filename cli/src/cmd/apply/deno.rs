@@ -10,19 +10,21 @@ use std::path::PathBuf;
 
 pub(crate) async fn apply(
     endpoints: &[PathBuf],
+    events: &[PathBuf],
     entities: &[String],
     optimize: bool,
     auto_index: bool,
 ) -> Result<(SourceMap, Vec<IndexCandidate>)> {
     let mut index_candidates = vec![];
-    let paths: Result<Vec<_>> = endpoints
-        .iter()
+    let modules = endpoints.iter().chain(events.iter());
+    let paths: Result<Vec<_>> = modules
+        .clone()
         .map(|f| f.to_str().ok_or_else(|| anyhow!("Path is not UTF8")))
         .collect();
     let mut output = compile_endpoints(&paths?)
         .await
         .context("could not compile endpoints (using deno-style modules)")?;
-    for f in endpoints.iter() {
+    for f in modules {
         let path = f.to_str().unwrap();
         let orig = output.get_mut(path).unwrap();
         if optimize {
