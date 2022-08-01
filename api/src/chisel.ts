@@ -1673,3 +1673,8 @@ export function crud<
     };
 }
 // TODO: END: this should be in another file: crud.ts
+
+export type ChiselEvent = {
+    key: ArrayBuffer;
+    value: ArrayBuffer;
+};

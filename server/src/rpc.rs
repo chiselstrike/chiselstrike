@@ -526,6 +526,7 @@ or
             }
             Ok(())
         });
+        // FIXME: activate_event_handlers()
         state.send_command(cmd).await?;
 
         // FIXME: return number of effective changes? Probably depends on how we implement

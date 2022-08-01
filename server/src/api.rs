@@ -76,6 +76,10 @@ type RouteFn = Arc<
     dyn Fn(Request<hyper::Body>) -> LocalBoxFuture<'static, Result<Response<Body>>> + Send + Sync,
 >;
 
+type EventFn = Arc<
+    dyn Fn(Option<Vec<u8>>, Option<Vec<u8>>) -> LocalBoxFuture<'static, Result<()>> + Send + Sync,
+>;
+
 #[derive(Default, Clone, Debug)]
 pub(crate) struct RequestPath {
     api_version: String,
@@ -155,6 +159,7 @@ pub(crate) struct ApiService {
     // with runtime checking, which is likely cheaper, but still this is safer and we don't
     // have to manually implement Send (which is unsafe).
     paths: Mutex<PrefixMap<RouteFn>>,
+    event_handlers: Mutex<HashMap<PathBuf, EventFn>>,
     info: Mutex<ApiInfoMap>,
 }
 
@@ -164,6 +169,7 @@ impl ApiService {
         info.insert("".into(), ApiInfo::all_routes());
         Self {
             paths: Default::default(),
+            event_handlers: Default::default(),
             info: Mutex::new(info),
         }
     }
@@ -190,6 +196,18 @@ impl ApiService {
     /// Remove all routes that have this prefix.
     pub(crate) fn remove_routes(&self, prefix: &Path) {
         self.paths.lock().unwrap().remove_prefix(prefix)
+    }
+
+    /// Finds the right EventFn for this topic.
+    fn find_event_fn<S: AsRef<Path>>(&self, topic: S) -> Option<EventFn> {
+        match self.event_handlers.lock().unwrap().get(topic.as_ref()) {
+            None => None,
+            Some(f) => Some(f.clone()),
+        }
+    }
+
+    pub(crate) fn add_event_handler(&self, path: PathBuf, event_fn: EventFn) {
+        self.event_handlers.lock().unwrap().insert(path, event_fn);
     }
 
     pub(crate) fn update_api_info<P: AsRef<Path>>(&self, api_version: P, info: ApiInfo) {
@@ -224,6 +242,37 @@ impl ApiService {
             Ok(val) => Ok(val),
             Err(err) => Self::internal_error(err),
         }
+    }
+
+    pub async fn handle_event(
+        &self,
+        topic: String,
+        key: Option<Vec<u8>>,
+        value: Option<Vec<u8>>,
+    ) -> Result<()> {
+        let versions: Vec<PathBuf> = {
+            let info = self.info.lock().unwrap();
+            info.keys().cloned().collect()
+        };
+        for version in versions {
+            // skip internal versions
+            if version == PathBuf::from("__chiselstrike") || version == PathBuf::from("") {
+                continue;
+            }
+            let path = PathBuf::from("/").join(version).join(topic.clone());
+            if let Some(event_fn) = self.find_event_fn(path.clone()) {
+                if let Err(err) = event_fn(key.clone(), value.clone()).await {
+                    println!(
+                        "Warning: event handler for {} failed: {}",
+                        path.display(),
+                        err
+                    );
+                }
+            } else {
+                println!("Warning: event handler for {} not found.", path.display());
+            }
+        }
+        Ok(())
     }
 
     pub(crate) fn not_found() -> Result<Response<Body>> {

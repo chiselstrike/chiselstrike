@@ -98,16 +98,30 @@ export async function readWorkerChannel() {
 
 type Endpoint = { path: string; apiVersion: string; version: number };
 
-export async function importEndpoints(endpoints: [Endpoint]) {
+type EventHandler = { path: string; apiVersion: string; version: number };
+
+// FIXME: rename to importModules()
+export async function importEndpoints(
+    endpoints: [Endpoint],
+    eventHandlers: [EventHandler],
+) {
     await toWorker({
         cmd: "importEndpoints",
         endpoints,
+        eventHandlers,
     });
 }
 
 export async function activateEndpoint(path: string) {
     await toWorker({
         cmd: "activateEndpoint",
+        path,
+    });
+}
+
+export async function activateEventHandler(path: string) {
+    await toWorker({
+        cmd: "activateEventHandler",
         path,
     });
 }
@@ -178,4 +192,25 @@ export async function callHandler(
         "headers": res.headers,
         "read": read,
     };
+}
+
+export async function callEventHandler(
+    path: string,
+    apiVersion: string,
+    key: ArrayBuffer,
+    value: ArrayBuffer,
+) {
+    try {
+        await sendMsg({
+            cmd: "callEventHandler",
+            path,
+            apiVersion,
+            key,
+            value,
+        });
+    } catch (e) {
+        clear();
+        throw e;
+    }
+    clear();
 }

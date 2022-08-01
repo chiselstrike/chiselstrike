@@ -88,6 +88,7 @@ use utils::without_extension;
 enum WorkerMsg {
     SetMeta(MetaService),
     HandleRequest(Request<hyper::Body>),
+    HandleEvent(),
     SetTypeSystem(TypeSystem),
     RemoveTypeVersion(String),
     SetQueryEngine(Arc<QueryEngine>),
@@ -118,7 +119,9 @@ struct DenoService {
 
     import_endpoints: v8::Global<v8::Function>,
     activate_endpoint: v8::Global<v8::Function>,
+    activate_event_handler: v8::Global<v8::Function>,
     call_handler: v8::Global<v8::Function>,
+    call_event_handler: v8::Global<v8::Function>,
     read_worker_channel: v8::Global<v8::Function>,
     end_of_request: v8::Global<v8::Function>,
 
@@ -215,6 +218,7 @@ fn build_extensions() -> Vec<Extension> {
             op_chisel_init_worker::decl(),
             op_chisel_read_worker_channel::decl(),
             op_chisel_start_request::decl(),
+            op_chisel_start_event_handler::decl(),
         ])
         .build()]
 }
@@ -370,7 +374,9 @@ impl DenoService {
         let (
             import_endpoints,
             activate_endpoint,
+            activate_event_handler,
             call_handler,
+            call_event_handler,
             init_worker,
             read_worker_channel,
             end_of_request,
@@ -388,9 +394,15 @@ impl DenoService {
             let activate_endpoint: v8::Local<v8::Function> =
                 get_member(module, scope, "activateEndpoint").unwrap();
             let activate_endpoint = v8::Global::new(scope, activate_endpoint);
+            let activate_event_handler: v8::Local<v8::Function> =
+                get_member(module, scope, "activateEventHandler").unwrap();
+            let activate_event_handler = v8::Global::new(scope, activate_event_handler);
             let call_handler: v8::Local<v8::Function> =
                 get_member(module, scope, "callHandler").unwrap();
             let call_handler = v8::Global::new(scope, call_handler);
+            let call_event_handler: v8::Local<v8::Function> =
+                get_member(module, scope, "callEventHandler").unwrap();
+            let call_event_handler = v8::Global::new(scope, call_event_handler);
             let init_worker: v8::Local<v8::Function> =
                 get_member(module, scope, "initWorker").unwrap();
             let init_worker = v8::Global::new(scope, init_worker);
@@ -404,7 +416,9 @@ impl DenoService {
             (
                 import_endpoints,
                 activate_endpoint,
+                activate_event_handler,
                 call_handler,
+                call_event_handler,
                 init_worker,
                 read_worker_channel,
                 end_of_request,
@@ -422,7 +436,9 @@ impl DenoService {
                 module_loader: inner,
                 import_endpoints,
                 activate_endpoint,
+                activate_event_handler,
                 call_handler,
+                call_event_handler,
                 to_worker: to_worker_sender,
                 worker_channel_id,
                 read_worker_channel,
@@ -808,6 +824,7 @@ async fn op_chisel_read_worker_channel(state: Rc<RefCell<OpState>>) -> Result<()
     match msg {
         WorkerMsg::SetMeta(meta) => state.put::<Rc<MetaService>>(Rc::new(meta)),
         WorkerMsg::HandleRequest(_req) => unreachable!("Wrong message"),
+        WorkerMsg::HandleEvent() => unreachable!("Wrong message"),
         WorkerMsg::SetTypeSystem(type_system) => state.put(type_system),
         WorkerMsg::RemoveTypeVersion(version) => {
             state.borrow_mut::<TypeSystem>().versions.remove(&version);
@@ -1406,6 +1423,47 @@ pub(crate) async fn run_js(path: String, req: Request<hyper::Body>) -> Result<Re
     Ok(body)
 }
 
+pub(crate) async fn run_js_event(
+    path: String,
+    key: Option<Vec<u8>>,
+    value: Option<Vec<u8>>,
+) -> Result<()> {
+    let sender = get().to_worker.clone();
+    sender.send(WorkerMsg::HandleEvent()).await.unwrap();
+    let result = {
+        let mut service = get();
+        let service: &mut DenoService = &mut service;
+        let runtime = &mut service.worker.js_runtime;
+        let scope = &mut runtime.handle_scope();
+
+        let path = RequestPath::try_from(path.as_ref()).unwrap();
+        let call_handler = service.call_event_handler.open(scope);
+        let undefined = v8::undefined(scope).into();
+        let api_version = v8::String::new(scope, path.api_version()).unwrap().into();
+        let path = v8::String::new(scope, path.path()).unwrap().into();
+        let key = match key {
+            Some(key) => {
+                let key = v8::ArrayBuffer::new_backing_store_from_vec(key);
+                v8::ArrayBuffer::with_backing_store(scope, &key.make_shared()).into()
+            }
+            None => v8::null(scope).into(),
+        };
+        let value = match value {
+            Some(value) => {
+                let value = v8::ArrayBuffer::new_backing_store_from_vec(value);
+                v8::ArrayBuffer::with_backing_store(scope, &value.make_shared()).into()
+            }
+            None => v8::null(scope).into(),
+        };
+        let result = call_handler
+            .call(scope, undefined, &[path, api_version, key, value])
+            .unwrap();
+        v8::Global::new(scope, result)
+    };
+    resolve_promise(result).await?;
+    Ok(())
+}
+
 #[derive(Serialize)]
 struct StartRequest {
     body_rid: Option<u32>,
@@ -1498,6 +1556,16 @@ async fn op_chisel_start_request(state: Rc<RefCell<OpState>>) -> Result<StartReq
     ))
 }
 
+#[op]
+async fn op_chisel_start_event_handler(_state: Rc<RefCell<OpState>>) -> Result<()> {
+    let receiver = WORKER_CHANNEL.with(|d| d.get().unwrap().clone());
+    match receiver.recv().await {
+        Ok(WorkerMsg::HandleEvent()) => (),
+        _ => unreachable!("Wrong message"),
+    };
+    Ok(())
+}
+
 fn get() -> RcMut<DenoService> {
     DENO.with(|x| {
         let rc = x.get().expect("Runtime is not yet initialized.").clone();
@@ -1526,6 +1594,7 @@ pub(crate) async fn compile_endpoints(sources: HashMap<String, String>) -> Resul
         let scope = &mut runtime.handle_scope();
         let import_endpoints = service.import_endpoints.open(scope);
         let mut endpoints: Vec<v8::Local<'_, v8::Value>> = vec![];
+        let mut event_handlers: Vec<v8::Local<'_, v8::Value>> = vec![];
 
         for (path, code) in sources {
             if let Ok(url) = Url::parse(&path) {
@@ -1551,6 +1620,22 @@ pub(crate) async fn compile_endpoints(sources: HashMap<String, String>) -> Resul
                     endpoint.set(scope, api_version_key.into(), api_version);
                     endpoints.push(endpoint.into());
                 }
+                Some("events") => {
+                    let path = without_extension(&path);
+                    let url = Url::parse(&format!("file://{}", path)).unwrap();
+                    code_map.insert(url, code);
+
+                    let path = endpoint_path_from_source_path(path);
+                    let path = RequestPath::try_from(path.as_ref()).unwrap();
+                    let api_version = v8::String::new(scope, path.api_version()).unwrap().into();
+                    let path = v8::String::new(scope, path.path()).unwrap().into();
+                    let event_handler = v8::Object::new(scope);
+                    let path_key = v8::String::new(scope, "path").unwrap();
+                    event_handler.set(scope, path_key.into(), path);
+                    let api_version_key = v8::String::new(scope, "apiVersion").unwrap();
+                    event_handler.set(scope, api_version_key.into(), api_version);
+                    event_handlers.push(event_handler.into());
+                }
                 _ => {
                     // Non endpoint files like models/...
                     let url = Url::parse(&format!("file://{}", path)).unwrap();
@@ -1559,9 +1644,10 @@ pub(crate) async fn compile_endpoints(sources: HashMap<String, String>) -> Resul
             }
         }
         let endpoints = v8::Array::new_with_elements(scope, &endpoints).into();
+        let event_handlers = v8::Array::new_with_elements(scope, &event_handlers).into();
         let undefined = v8::undefined(scope).into();
         let promise = import_endpoints
-            .call(scope, undefined, &[endpoints])
+            .call(scope, undefined, &[endpoints, event_handlers])
             .unwrap();
         v8::Global::new(scope, promise)
     };
@@ -1579,6 +1665,24 @@ pub(crate) async fn activate_endpoint(path: &str) -> Result<()> {
         let undefined = v8::undefined(scope).into();
         let path = v8::String::new(scope, path).unwrap().into();
         let promise = activate_endpoint.call(scope, undefined, &[path]).unwrap();
+        v8::Global::new(scope, promise)
+    };
+    resolve_promise(promise).await?;
+    Ok(())
+}
+
+pub(crate) async fn activate_event_handler(path: &str) -> Result<()> {
+    let promise = {
+        let mut service = get();
+        let service: &mut DenoService = &mut service;
+        let runtime = &mut service.worker.js_runtime;
+        let scope = &mut runtime.handle_scope();
+        let activate_event_handler = service.activate_event_handler.open(scope);
+        let undefined = v8::undefined(scope).into();
+        let path = v8::String::new(scope, path).unwrap().into();
+        let promise = activate_event_handler
+            .call(scope, undefined, &[path])
+            .unwrap();
         v8::Global::new(scope, promise)
     };
     resolve_promise(promise).await?;
