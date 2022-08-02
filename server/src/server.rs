@@ -407,7 +407,7 @@ async fn run_shared_state(
     };
 
     let rpc_task = crate::rpc::spawn(rpc, opt.rpc_listen_addr, start_wait, shutdown);
-    debug!("RPC is ready. URL: {}", opt.rpc_listen_addr);
+    info!("RPC is ready. URL: {}", opt.rpc_listen_addr);
 
     crate::internal::init(
         opt.internal_routes_listen_addr,
