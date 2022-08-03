@@ -74,6 +74,7 @@ use std::convert::TryInto;
 use std::fmt::Debug;
 use std::future::Future;
 use std::io::Read;
+use std::iter::once;
 use std::net::SocketAddr;
 use std::ops::DerefMut;
 use std::pin::Pin;
@@ -847,7 +848,20 @@ extern "C" fn promise_reject_callback(message: v8::PromiseRejectMessage) {
     }
 }
 
-pub(crate) async fn init_deno(inspect_brk: bool) -> Result<()> {
+pub(crate) async fn init_deno(v8_flags: Vec<String>, inspect_brk: bool) -> Result<()> {
+    let v8_flags = once("unused_arg0".to_owned())
+        .chain(v8_flags.iter().cloned())
+        .collect();
+    let unrecognized_v8_flags = deno_core::v8_set_flags(v8_flags)
+        .into_iter()
+        .skip(1)
+        .collect::<Vec<_>>();
+    if !unrecognized_v8_flags.is_empty() {
+        anyhow::bail!(
+            "V8 did not recognize flags: {}",
+            unrecognized_v8_flags.join(",")
+        );
+    }
     let (service, init_worker) = DenoService::new(inspect_brk).await;
     DENO.with(|d| {
         d.set(Rc::new(RefCell::new(service)))
