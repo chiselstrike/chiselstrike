@@ -112,7 +112,7 @@ struct DenoService {
     worker: MainWorker,
 
     // We need a copy to keep it alive
-    inspector: Option<Arc<InspectorServer>>,
+    _inspector: Option<Arc<InspectorServer>>,
 
     module_loader: Arc<std::sync::Mutex<ModuleLoaderInner>>,
 
@@ -329,7 +329,7 @@ impl DenoService {
             seed: None,
             create_web_worker_cb,
             maybe_inspector_server: inspector.clone(),
-            should_break_on_first_statement: false,
+            should_break_on_first_statement: inspect_brk,
             module_loader,
             get_error_class_fn: Some(&get_error_class_name),
             origin_storage_dir: None,
@@ -418,7 +418,7 @@ impl DenoService {
         (
             Self {
                 worker,
-                inspector,
+                _inspector: inspector,
                 module_loader: inner,
                 import_endpoints,
                 activate_endpoint,
@@ -1310,16 +1310,6 @@ pub(crate) async fn run_js(path: String, req: Request<hyper::Body>) -> Result<Re
         v
     });
     let request_handler = RequestHandler { id };
-
-    {
-        let mut service = get();
-        if service.inspector.is_some() {
-            let runtime = &mut service.worker.js_runtime;
-            runtime
-                .inspector()
-                .wait_for_session_and_break_on_next_statement();
-        }
-    }
 
     let sender = get().to_worker.clone();
     sender.send(WorkerMsg::HandleRequest(req)).await.unwrap();
