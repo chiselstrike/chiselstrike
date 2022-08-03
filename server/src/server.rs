@@ -69,6 +69,9 @@ pub struct Opt {
     /// If on, serve a web UI on an internal route.
     #[structopt(long)]
     webui: bool,
+    /// V8 flags.
+    #[structopt(long)]
+    v8_flags: Vec<String>,
     /// Read default configuration from this toml configuration file
     #[structopt(long, short)]
     #[serde(skip)]
@@ -191,7 +194,7 @@ async fn run(state: SharedState, init: InitState, mut cmd: ExecutorChannel) -> R
         policies,
         type_system: ts,
     } = init;
-    init_deno(state.opt.inspect_brk).await?;
+    init_deno(state.opt.v8_flags.clone(), state.opt.inspect_brk).await?;
 
     // Ensure we read the secrets before spawning an ApiService; secrets may dictate API authorization.
     let secret = match read_secrets(&state.opt).await {
