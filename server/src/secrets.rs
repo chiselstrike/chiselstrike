@@ -85,7 +85,7 @@ fn get_pkcs8_private_key(pem: &str) -> Result<Option<RsaPrivateKey>> {
     Ok(Some(key))
 }
 
-pub(crate) async fn get_private_key() -> Result<Option<RsaPrivateKey>> {
+pub async fn get_private_key() -> Result<Option<RsaPrivateKey>> {
     let url = match std::env::var("CHISEL_SECRET_KEY_LOCATION") {
         Err(_) => return Ok(None),
         Ok(x) => match Url::parse(&x) {
@@ -115,7 +115,7 @@ fn parse_rsa_key(pem: &str) -> Result<Option<RsaPrivateKey>> {
     get_pkcs8_private_key(pem)
 }
 
-pub(crate) async fn get_secrets() -> Result<JsonObject> {
+pub async fn get_secrets() -> Result<JsonObject> {
     let secret_location = match std::env::var("CHISEL_SECRET_LOCATION") {
         Ok(s) => Url::parse(&s)?,
         Err(_) => {

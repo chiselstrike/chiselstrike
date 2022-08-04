@@ -7,7 +7,7 @@ use crate::server::{start_server, wait, wait_with_cond};
 use anyhow::{anyhow, Result};
 use chisel::chisel_rpc_client::ChiselRpcClient;
 use chisel::{
-    type_msg::TypeEnum, ChiselDeleteRequest, DescribeRequest, PopulateRequest, RestartRequest,
+    type_msg::TypeEnum, DeleteRequest, DescribeRequest, PopulateRequest, RestartRequest,
     StatusRequest,
 };
 use futures::{pin_mut, Future, FutureExt};
@@ -117,10 +117,10 @@ async fn delete<S: ToString>(server_url: String, version: S) -> Result<()> {
 
     let msg = execute!(
         client
-            .delete(tonic::Request::new(ChiselDeleteRequest { version }))
+            .delete(tonic::Request::new(DeleteRequest { version }))
             .await
     );
-    println!("{}", msg.result);
+    println!("{}", msg.message);
     Ok(())
 }
 
@@ -135,7 +135,7 @@ async fn populate(server_url: String, to_version: String, from_version: String) 
             }))
             .await
     );
-    println!("{}", msg.msg);
+    println!("{}", msg.message);
     Ok(())
 }
 
@@ -243,9 +243,6 @@ async fn main() -> Result<()> {
                         );
                     }
                     println!("  }}");
-                }
-                for def in &version_def.endpoint_defs {
-                    println!("  Endpoint: {}", def.path);
                 }
                 for def in &version_def.label_policy_defs {
                     println!("  Label policy: {}", def.label);

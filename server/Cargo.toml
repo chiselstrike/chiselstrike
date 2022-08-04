@@ -23,13 +23,16 @@ enclose = "1.1"
 enum-as-inner = "0.3.3"
 env_logger = "0.9.0"
 format-sql-query = "0.4.0"
+futures = "0.3"
 http = "0.2.6"
 hyper = { version = "0.14.16", features = ["server", "tcp", "http1"] }
 itertools = "0.10.1"
+lazy_static = "1.4"
 log = "0.4.14"
 nix = "0.22.2"
 once_cell = "1.12.0"
 openapi = { git = "https://github.com/chiselstrike/openapi.git", rev = "fee4da81f6591e4e6e4a37d5b2b67840471566c0" }
+parking_lot = "0.12"
 permutation = "0.4.0"
 petgraph = "0.6.2"
 pin-project = "1"
@@ -53,7 +56,8 @@ sqlx = { version = "0.6.0", features = [
 structopt = "0.3.23"
 structopt-toml = "0.5.1"
 thiserror = "1.0"
-tokio = { version = "1.11.0", features = ["rt", "time"] }
+tokio = { version = "1.11.0", features = ["net", "rt", "time"] }
+tokio-stream = { version = "0.1", features = ["net"] }
 tonic = "0.5.2"
 utils = { path = "../utils" }
 uuid = { version = "0.8.2", features = ["v4"] }

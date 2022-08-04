@@ -1,13 +1,14 @@
-// SPDX-FileCopyrightText: © 2021 ChiselStrike <info@chiselstrike.com>
+// SPDX-FileCopyrightText: © 2022 ChiselStrike <info@chiselstrike.com>
 
-use crate::chisel::{chisel_rpc_client::ChiselRpcClient, ChiselApplyRequest};
-use anyhow::Result;
+use crate::proto::{chisel_rpc_client::ChiselRpcClient, ApplyRequest, Module};
+use anyhow::{Context, Result};
+use hyper::server::conn::AddrIncoming;
 use hyper::service::{make_service_fn, service_fn};
 use hyper::{Body, Request, Response, Server};
 use once_cell::sync::OnceCell;
 use serde_derive::{Deserialize, Serialize};
-use std::collections::HashMap;
 use std::net::SocketAddr;
+use utils::TaskHandle;
 
 /// If set, serve the web UI using this address for gRPC calls.
 static SERVE_WEBUI: OnceCell<SocketAddr> = OnceCell::new();
@@ -27,16 +28,20 @@ struct WebUIPostBody {
 async fn webapply(body: Body, rpc_addr: &SocketAddr) -> Result<Response<Body>> {
     let body: WebUIPostBody = serde_json::from_slice(&hyper::body::to_bytes(body).await?)?;
     let mut client = ChiselRpcClient::connect(format!("http://{}", rpc_addr)).await?;
-    let mut endpoints = HashMap::new();
-    endpoints.insert("endpoints/ep1.js".to_string(), body.endpoint);
+    let modules = vec![
+        Module {
+            uri: "file:///endpoints/_root.ts".into(),
+            code: body.endpoint,
+        },
+    ];
     client
-        .apply(tonic::Request::new(ChiselApplyRequest {
+        .apply(tonic::Request::new(ApplyRequest {
             types: vec![],
             index_candidates: vec![],
-            sources: endpoints,
+            modules,
             policies: vec![],
             allow_type_deletion: true,
-            version: "dev".into(),
+            version_id: "dev".into(),
             version_tag: "dev".into(),
             app_name: "ChiselStrike WebUI".into(),
         }))
@@ -63,12 +68,16 @@ async fn route(req: Request<Body>) -> Result<Response<Body>> {
     .or_else(|e| response(&format!("{:?}", e), 500))
 }
 
-/// Initialize ChiselStrike's internal routes.
+/// Spawn a server that handles ChiselStrike's internal routes.
 ///
 /// Unlike the API server, it is strictly bound to 127.0.0.1. This is enough
 /// for the Kubernetes checks to work, and it is one less thing for us to secure
 /// and prevent DDoS attacks again - which is why this is a different server
-pub(crate) fn init(addr: SocketAddr, serve_webui: bool, rpc_addr: SocketAddr) {
+pub async fn spawn(
+    listen_addr: SocketAddr,
+    serve_webui: bool,
+    rpc_addr: SocketAddr,
+) -> Result<(SocketAddr, TaskHandle<Result<()>>)> {
     if serve_webui {
         SERVE_WEBUI
             .set(rpc_addr)
@@ -79,8 +88,13 @@ pub(crate) fn init(addr: SocketAddr, serve_webui: bool, rpc_addr: SocketAddr) {
         Ok::<_, anyhow::Error>(service_fn(route))
     });
 
-    tokio::task::spawn(async move {
-        let server = Server::bind(&addr).serve(make_svc);
-        server.await
+    let incoming = AddrIncoming::bind(&listen_addr)?;
+    let listen_addr = incoming.local_addr();
+    let server = Server::builder(incoming).serve(make_svc);
+
+    let task = tokio::task::spawn(async move {
+        server.await.context("Internal server failed")
     });
+
+    Ok((listen_addr, TaskHandle(task)))
 }

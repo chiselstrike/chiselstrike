@@ -1,8 +1,8 @@
-// SPDX-FileCopyrightText: © 2021 ChiselStrike <info@chiselstrike.com>
+// SPDX-FileCopyrightText: © 2022 ChiselStrike <info@chiselstrike.com>
 
 use crate::auth::AUTH_USER_NAME;
 use crate::datastore::expr::{BinaryExpr, Expr, PropertyAccess, Value as ExprValue};
-use crate::policies::{FieldPolicies, Policies};
+use crate::policies::{FieldPolicies, PolicySystem};
 use crate::types::{Entity, Field, ObjectType, Type, TypeId, TypeSystem};
 
 use anyhow::{anyhow, Context, Result};
@@ -15,7 +15,7 @@ use std::fmt;
 use std::fmt::Write;
 
 #[derive(Debug, Clone, EnumAsInner)]
-pub(crate) enum SqlValue {
+pub enum SqlValue {
     Bool(bool),
     F64(f64),
     String(String),
@@ -29,13 +29,13 @@ impl From<&str> for SqlValue {
 
 /// RequestContext bears a mix of contextual variables used by QueryPlan
 /// and Mutations.
-pub(crate) struct RequestContext<'a> {
+pub struct RequestContext<'a> {
     /// Policies to be applied on the query.
-    pub policies: &'a Policies,
-    /// Type system to be used of version `api_version`
+    pub ps: &'a PolicySystem,
+    /// Type system to be used of version `version_id`
     pub ts: &'a TypeSystem,
-    /// Schema version to be used.
-    pub api_version: String,
+    /// Version to be used.
+    pub version_id: String,
     /// Id of user making the request.
     pub user_id: Option<String>,
     /// Current URL path from which this request originated.
@@ -47,20 +47,19 @@ pub(crate) struct RequestContext<'a> {
 impl RequestContext<'_> {
     /// Calculates field policies for the request being processed.
     fn make_field_policies(&self, ty: &ObjectType) -> FieldPolicies {
-        self.policies
-            .make_field_policies(&self.user_id, &self.path, ty)
+        self.ps.make_field_policies(&self.user_id, &self.path, ty)
     }
 }
 
 /// Whether a field should be included in or omitted from query result.
 #[derive(Debug, Clone)]
-pub(crate) enum KeepOrOmitField {
+pub enum KeepOrOmitField {
     Keep,
     Omit,
 }
 
 #[derive(Debug, Clone)]
-pub(crate) enum QueryField {
+pub enum QueryField {
     Scalar {
         /// Name of the original Type field
         name: String,
@@ -92,25 +91,25 @@ pub(crate) enum QueryField {
 /// and so on. The `execute` method of `QueryEngine` executes these queries
 /// using SQL and the policy engine.
 #[derive(Debug, Clone)]
-pub(crate) struct Query {
+pub struct Query {
     /// SQL query text
-    pub(crate) raw_sql: String,
+    pub raw_sql: String,
     /// Entity that is being queried. Contains information necessary to reconstruct
     /// the JSON response.
-    pub(crate) entity: QueriedEntity,
+    pub entity: QueriedEntity,
     /// Entity fields selected by the user. This field is used to post-filter fields that
     /// shall be returned to the user in JSON.
     /// FIXME: The post-filtering is suboptimal solution and selection should happen when
     /// we build the raw_sql query.
-    pub(crate) allowed_fields: Option<HashSet<String>>,
+    pub allowed_fields: Option<HashSet<String>>,
 }
 
 /// QueriedEntity represents queried Entity of type `ty` which is to be aliased as
 /// `table_alias` in the SQL query and joined with nested Entities using `joins`.
 #[derive(Debug, Clone)]
-pub(crate) struct QueriedEntity {
+pub struct QueriedEntity {
     /// Entity fields to be returned in JSON response
-    pub(crate) fields: Vec<QueryField>,
+    pub fields: Vec<QueryField>,
     /// Type of the entity.
     ty: Entity,
     /// Alias name of this entity to be used in SQL query.
@@ -121,7 +120,7 @@ pub(crate) struct QueriedEntity {
 }
 
 impl QueriedEntity {
-    pub(crate) fn get_child_entity<'a>(&'a self, child_name: &str) -> Option<&'a QueriedEntity> {
+    pub fn get_child_entity<'a>(&'a self, child_name: &str) -> Option<&'a QueriedEntity> {
         self.joins.get(child_name).map(|c| &c.entity)
     }
 
@@ -143,7 +142,7 @@ struct Join {
 /// SortKey specifies a `field_name` and ordering in which sorting should be done.
 #[cfg_attr(test, derive(PartialEq))]
 #[derive(Debug, Serialize, Deserialize, Clone)]
-pub(crate) struct SortKey {
+pub struct SortKey {
     #[serde(rename = "fieldName")]
     pub field_name: String,
     pub ascending: bool,
@@ -151,14 +150,14 @@ pub(crate) struct SortKey {
 
 #[cfg_attr(test, derive(PartialEq))]
 #[derive(Debug, Serialize, Deserialize, Clone)]
-pub(crate) struct SortBy {
+pub struct SortBy {
     pub keys: Vec<SortKey>,
 }
 
 /// Operators used to mutate the result set.
 #[cfg_attr(test, derive(PartialEq))]
 #[derive(Debug, Clone, EnumAsInner)]
-pub(crate) enum QueryOp {
+pub enum QueryOp {
     /// Filters elements by `expression`.
     Filter { expression: Expr },
     /// Projects QueryEntity to a projected Entity containing only `fields`.
@@ -210,7 +209,7 @@ impl fmt::Display for ColumnAlias {
 }
 
 #[derive(Debug, Clone, EnumAsInner)]
-pub(crate) enum TargetDatabase {
+pub enum TargetDatabase {
     Postgres,
     Sqlite,
 }
@@ -221,7 +220,7 @@ pub(crate) enum TargetDatabase {
 /// When we are done with that, `build_query` can be called which creates a `Query`
 /// structure that contains raw SQL query string and additional data necessary for
 /// JSON response reconstruction and filtering.
-pub(crate) struct QueryPlan {
+pub struct QueryPlan {
     /// Columns that will be retrieved from the database in order defined by this vector.
     columns: Vec<Column>,
     /// Entity object representing entity that is being retrieved along with necessary joins
@@ -259,7 +258,7 @@ impl QueryPlan {
     /// Constructs a query builder ready to build an expression querying all fields of a
     /// given type `ty`. This is done in a shallow manner. Columns representing foreign
     /// key are returned as string, not as the related Entity.
-    pub(crate) fn from_type(ty: &Entity) -> Self {
+    pub fn from_type(ty: &Entity) -> Self {
         let mut builder = Self::new(ty.clone());
         for field in ty.all_fields() {
             let mut field = field.clone();
@@ -277,7 +276,7 @@ impl QueryPlan {
     fn from_entity_name(c: &RequestContext, entity_name: &str) -> Result<Self> {
         let ty = c
             .ts
-            .lookup_entity(entity_name, &c.api_version)
+            .lookup_entity(entity_name)
             .with_context(|| {
                 format!("unable to construct QueryPlan from an unknown entity name `{entity_name}`")
             })?;
@@ -289,7 +288,7 @@ impl QueryPlan {
 
     /// Constructs QueryPlan from type `ty` and application of given
     /// `operators.
-    pub(crate) fn from_ops(
+    pub fn from_ops(
         c: &RequestContext,
         ty: &Entity,
         operators: Vec<QueryOp>,
@@ -301,9 +300,9 @@ impl QueryPlan {
     }
 
     /// Constructs a query plan from a query `op_chain` and
-    /// additional helper data like `policies`, `api_version`,
+    /// additional helper data like `ps`, `version_id`,
     /// `userid` and `path` (url path used for policy evaluation).
-    pub(crate) fn from_op_chain(context: &RequestContext, op_chain: QueryOpChain) -> Result<Self> {
+    pub fn from_op_chain(context: &RequestContext, op_chain: QueryOpChain) -> Result<Self> {
         let (entity_name, operators) = convert_ops(op_chain)?;
         let mut builder = Self::from_entity_name(context, &entity_name)?;
 
@@ -715,7 +714,7 @@ impl QueryPlan {
         Ok(sql_query)
     }
 
-    pub(crate) fn build_query(&self, target: &TargetDatabase) -> Result<Query> {
+    pub fn build_query(&self, target: &TargetDatabase) -> Result<Query> {
         Ok(Query {
             raw_sql: self.make_raw_query(target)?,
             entity: self.entity.clone(),
@@ -745,13 +744,13 @@ fn max_prefix(s: &str, max_len: usize) -> &str {
 
 /// Truncates Database identifier (column/table name) to 63 bytes to make it
 /// Postgres-compatible.
-pub(crate) fn truncate_identifier(s: &str) -> &str {
+pub fn truncate_identifier(s: &str) -> &str {
     max_prefix(s, 63)
 }
 
 #[derive(Debug, Clone, Deserialize)]
 #[serde(tag = "type")]
-pub(crate) enum QueryOpChain {
+pub enum QueryOpChain {
     BaseEntity {
         name: String,
     },
@@ -803,7 +802,7 @@ fn convert_ops(op: QueryOpChain) -> Result<(String, Vec<QueryOp>)> {
 }
 
 /// `Mutation` represents a statement that mutates the database state.
-pub(crate) struct Mutation {
+pub struct Mutation {
     base_entity: Entity,
     /// Query plan used to build mutation condition.
     filter_query_plan: QueryPlan,
@@ -811,12 +810,12 @@ pub(crate) struct Mutation {
 
 impl Mutation {
     /// Constructs delete from filter expression.
-    pub(crate) fn delete_from_expr(
+    pub fn delete_from_expr(
         c: &RequestContext,
         type_name: &str,
         filter_expr: &Option<Expr>,
     ) -> Result<Self> {
-        let base_entity = match c.ts.lookup_type(type_name, &c.api_version) {
+        let base_entity = match c.ts.lookup_type(type_name) {
             Ok(Type::Entity(ty)) => ty,
             Ok(ty) => anyhow::bail!("Cannot delete scalar type {type_name} ({})", ty.name()),
             Err(_) => anyhow::bail!("Cannot delete from type `{type_name}`, type not found"),
@@ -834,7 +833,7 @@ impl Mutation {
         })
     }
 
-    pub(crate) fn build_sql(&self, target: TargetDatabase) -> Result<String> {
+    pub fn build_sql(&self, target: TargetDatabase) -> Result<String> {
         let select_sql = self.filter_query_plan.build_query(&target)?.raw_sql;
         let id_column = ColumnAlias {
             field_name: "id".to_owned(),
@@ -852,7 +851,7 @@ impl Mutation {
 }
 
 #[cfg(test)]
-pub(crate) mod tests {
+pub mod tests {
     use super::*;
     use deno_core::futures;
     use futures::StreamExt;
@@ -866,9 +865,9 @@ pub(crate) mod tests {
     use crate::types;
     use crate::JsonObject;
 
-    pub(crate) const VERSION: &str = "version_1";
+    pub const VERSION: &str = "version_1";
 
-    pub(crate) fn binary(fields: &[&'static str], op: BinaryOp, value: ExprValue) -> Expr {
+    pub fn binary(fields: &[&'static str], op: BinaryOp, value: ExprValue) -> Expr {
         assert!(!fields.len() > 0);
         let mut field_chain = Expr::Parameter { position: 0 };
         for field_name in fields {
@@ -881,7 +880,7 @@ pub(crate) mod tests {
         BinaryExpr::new(op, field_chain, value.into()).into()
     }
 
-    pub(crate) fn make_type_system(entities: &[Entity]) -> TypeSystem {
+    pub fn make_type_system(entities: &[Entity]) -> TypeSystem {
         let mut ts = TypeSystem::default();
         for ty in entities {
             ts.add_custom_type(ty.clone()).unwrap();
@@ -889,12 +888,12 @@ pub(crate) mod tests {
         ts
     }
 
-    pub(crate) fn make_entity(name: &str, fields: Vec<Field>) -> Entity {
+    pub fn make_entity(name: &str, fields: Vec<Field>) -> Entity {
         let desc = types::NewObject::new(name, VERSION);
         Entity::Custom(Arc::new(ObjectType::new(desc, fields, vec![]).unwrap()))
     }
 
-    pub(crate) fn make_field(name: &str, ty: Type) -> Field {
+    pub fn make_field(name: &str, ty: Type) -> Field {
         let desc = types::NewField::new(name, ty, VERSION).unwrap();
         Field::new(desc, vec![], None, false, false)
     }
@@ -914,14 +913,14 @@ pub(crate) mod tests {
         QueryEngine::commit_transaction(tr).await.unwrap();
     }
 
-    pub(crate) async fn setup_clear_db(entities: &[Entity]) -> (QueryEngine, NamedTempFile) {
+    pub async fn setup_clear_db(entities: &[Entity]) -> (QueryEngine, NamedTempFile) {
         let db_file = NamedTempFile::new().unwrap();
         let qe = init_query_engine(&db_file).await;
         init_database(&qe, entities).await;
         (qe, db_file)
     }
 
-    pub(crate) async fn add_row(
+    pub async fn add_row(
         query_engine: &QueryEngine,
         entity: &Entity,
         values: &serde_json::Value,
@@ -944,7 +943,7 @@ pub(crate) mod tests {
         }));
     }
 
-    pub(crate) async fn fetch_rows(qe: &QueryEngine, entity: &Entity) -> Vec<JsonObject> {
+    pub async fn fetch_rows(qe: &QueryEngine, entity: &Entity) -> Vec<JsonObject> {
         let query_plan = QueryPlan::from_type(entity);
         fetch_rows_with_plan(qe, query_plan).await
     }
@@ -987,9 +986,9 @@ pub(crate) mod tests {
         let fetch_names = |qe: QueryEngine, op_chain: QueryOpChain| async move {
             let query_plan = QueryPlan::from_op_chain(
                 &RequestContext {
-                    policies: &Policies::default(),
+                    ps: &PolicySystem::default(),
                     ts: &make_type_system(&*ENTITIES),
-                    api_version: VERSION.to_owned(),
+                    version_id: VERSION.to_owned(),
                     user_id: None,
                     path: "".to_string(),
                     headers: HashMap::default(),
@@ -1055,9 +1054,9 @@ pub(crate) mod tests {
         let delete_with_expr = |entity_name: &str, expr: Expr| {
             Mutation::delete_from_expr(
                 &RequestContext {
-                    policies: &Policies::default(),
+                    ps: &PolicySystem::default(),
                     ts: &make_type_system(&*ENTITIES),
-                    api_version: VERSION.to_owned(),
+                    version_id: VERSION.to_owned(),
                     user_id: None,
                     path: "".to_string(),
                     headers: HashMap::default(),

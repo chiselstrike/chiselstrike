@@ -1,9 +1,9 @@
-// SPDX-FileCopyrightText: © 2021 ChiselStrike <info@chiselstrike.com>
+// SPDX-FileCopyrightText: © 2022 ChiselStrike <info@chiselstrike.com>
 
 use crate::datastore::query::{
     KeepOrOmitField, Mutation, QueriedEntity, QueryField, QueryPlan, SqlValue, TargetDatabase,
 };
-use crate::datastore::{DbConnection, Kind};
+use crate::datastore::DbConnection;
 use crate::types::{DbIndex, Field, ObjectDelta, ObjectType, Type, TypeId, TypeSystem};
 use crate::JsonObject;
 use anyhow::{anyhow, Context as AnyhowContext, Result};
@@ -16,10 +16,10 @@ use futures::FutureExt;
 use futures::StreamExt;
 use itertools::Itertools;
 use pin_project::pin_project;
-use sea_query::{Alias, ColumnDef, Index, Table};
+use sea_query::{Alias, ColumnDef, Index, Table, PostgresQueryBuilder};
 use serde::Serialize;
 use serde_json::json;
-use sqlx::any::{Any, AnyArguments, AnyPool, AnyRow};
+use sqlx::any::{Any, AnyArguments, AnyKind, AnyRow};
 use sqlx::{Executor, Row, Transaction, ValueRef};
 use std::collections::{HashMap, HashSet};
 use std::fmt::Write;
@@ -30,14 +30,14 @@ use std::task::{Context, Poll};
 use uuid::Uuid;
 
 /// A query row is a JSON object that represent the queried entities.
-pub(crate) type ResultRow = JsonObject;
+pub type ResultRow = JsonObject;
 
 /// A query results is a stream of query rows after policies have been applied.
-pub(crate) type QueryResults = BoxStream<'static, Result<ResultRow>>;
+pub type QueryResults = BoxStream<'static, Result<ResultRow>>;
 
-pub(crate) type TransactionStatic = Arc<Mutex<Transaction<'static, Any>>>;
+pub type TransactionStatic = Arc<Mutex<Transaction<'static, Any>>>;
 
-pub(crate) fn extract_transaction(transaction: TransactionStatic) -> Transaction<'static, Any> {
+pub fn extract_transaction(transaction: TransactionStatic) -> Transaction<'static, Any> {
     let transaction = Arc::try_unwrap(transaction).expect("Transaction still has references held!");
     transaction.into_inner()
 }
@@ -72,7 +72,7 @@ async fn make_transactioned_stream(
     }
 }
 
-pub(crate) fn new_query_results(
+pub fn new_query_results(
     raw_query: String,
     tr: TransactionStatic,
 ) -> impl Stream<Item = anyhow::Result<AnyRow>> {
@@ -109,11 +109,11 @@ impl TryFrom<&Field> for ColumnDef {
 /// An SQL string with placeholders, plus its argument values.  Keeps them all alive so they can be fed to
 /// sqlx::Query by reference.
 #[derive(Debug)]
-pub(crate) struct SqlWithArguments {
+pub struct SqlWithArguments {
     /// SQL query text with placeholders $1, $2, ...
-    pub(crate) sql: String,
+    pub sql: String,
     /// Values for $n placeholders.
-    pub(crate) args: Vec<SqlValue>,
+    pub args: Vec<SqlValue>,
 }
 
 impl SqlWithArguments {
@@ -150,8 +150,8 @@ impl SqlWithArguments {
 ///     }
 /// }
 #[derive(Debug, Serialize)]
-pub(crate) struct IdTree {
-    pub(crate) id: String,
+pub struct IdTree {
+    pub id: String,
     children: HashMap<String, IdTree>,
 }
 
@@ -183,29 +183,23 @@ fn id_idx(entity: &QueriedEntity) -> usize {
 /// some parts of a mutation or query need to run through the policy engine,
 /// which is not always offloadable to a database.
 #[derive(Clone)]
-pub(crate) struct QueryEngine {
-    kind: Kind,
-    pool: AnyPool,
+pub struct QueryEngine {
+    db: Arc<DbConnection>,
 }
 
 impl QueryEngine {
-    fn new(kind: Kind, pool: AnyPool) -> Self {
-        Self { kind, pool }
-    }
-
-    pub(crate) async fn local_connection(conn: &DbConnection, nr_conn: usize) -> Result<Self> {
-        let local = conn.local_connection(nr_conn).await?;
-        Ok(Self::new(local.kind, local.pool))
+    pub fn new(db: Arc<DbConnection>) -> Self {
+        Self { db }
     }
 
     fn target_db(&self) -> TargetDatabase {
-        match self.kind {
-            Kind::Postgres => TargetDatabase::Postgres,
-            Kind::Sqlite => TargetDatabase::Sqlite,
+        match self.db.pool.any_kind() {
+            AnyKind::Postgres => TargetDatabase::Postgres,
+            AnyKind::Sqlite => TargetDatabase::Sqlite,
         }
     }
 
-    pub(crate) async fn drop_table(
+    pub async fn drop_table(
         &self,
         transaction: &mut Transaction<'_, Any>,
         ty: &ObjectType,
@@ -215,33 +209,33 @@ impl QueryEngine {
         let drop_table = Table::drop()
             .table(Alias::new(ty.backing_table()))
             .to_owned();
-        let drop_table = drop_table.build_any(DbConnection::get_query_builder(&self.kind));
+        let drop_table = drop_table.build_any(self.db.query_builder());
         let drop_table = sqlx::query(&drop_table);
         transaction.execute(drop_table).await?;
 
         Ok(())
     }
 
-    pub(crate) async fn start_transaction_static(self: Arc<Self>) -> Result<TransactionStatic> {
-        Ok(Arc::new(Mutex::new(self.pool.begin().await?)))
+    pub async fn begin_transaction_static(&self) -> Result<TransactionStatic> {
+        Ok(Arc::new(Mutex::new(self.db.pool.begin().await?)))
     }
 
-    pub(crate) async fn start_transaction(&self) -> Result<Transaction<'static, Any>> {
-        Ok(self.pool.begin().await?)
+    pub async fn begin_transaction(&self) -> Result<Transaction<'static, Any>> {
+        Ok(self.db.pool.begin().await?)
     }
 
-    pub(crate) async fn commit_transaction(transaction: Transaction<'static, Any>) -> Result<()> {
+    pub async fn commit_transaction(transaction: Transaction<'static, Any>) -> Result<()> {
         transaction.commit().await?;
         Ok(())
     }
 
-    pub(crate) async fn commit_transaction_static(transaction: TransactionStatic) -> Result<()> {
+    pub async fn commit_transaction_static(transaction: TransactionStatic) -> Result<()> {
         let transaction = extract_transaction(transaction);
         transaction.commit().await?;
         Ok(())
     }
 
-    pub(crate) async fn create_table(
+    pub async fn create_table(
         &self,
         transaction: &mut Transaction<'_, Any>,
         ty: &ObjectType,
@@ -255,7 +249,7 @@ impl QueryEngine {
             let mut column_def = ColumnDef::try_from(field)?;
             create_table.col(&mut column_def);
         }
-        let create_table = create_table.build_any(DbConnection::get_query_builder(&self.kind));
+        let create_table = create_table.build_any(self.db.query_builder());
 
         let create_table = sqlx::query(&create_table);
         transaction.execute(create_table).await?;
@@ -264,7 +258,7 @@ impl QueryEngine {
         Ok(())
     }
 
-    pub(crate) async fn alter_table(
+    pub async fn alter_table(
         &self,
         transaction: &mut Transaction<'_, Any>,
         ty: &ObjectType,
@@ -276,7 +270,7 @@ impl QueryEngine {
         // using a macro as async closures are unstable
         macro_rules! do_query {
             ( $table:expr ) => {{
-                let table = $table.build_any(DbConnection::get_query_builder(&Kind::Postgres));
+                let table = $table.build_any(&PostgresQueryBuilder);
                 let table = sqlx::query(&table);
 
                 transaction.execute(table).await
@@ -332,7 +326,7 @@ impl QueryEngine {
         Ok(())
     }
 
-    pub(crate) async fn create_indexes(
+    pub async fn create_indexes(
         transaction: &mut Transaction<'_, Any>,
         ty: &ObjectType,
         indexes: &[DbIndex],
@@ -354,7 +348,7 @@ impl QueryEngine {
         Ok(())
     }
 
-    pub(crate) async fn drop_indexes(
+    pub async fn drop_indexes(
         &self,
         transaction: &mut Transaction<'_, Any>,
         ty: &ObjectType,
@@ -370,14 +364,14 @@ impl QueryEngine {
                 .table(Alias::new(ty.backing_table()))
                 .to_owned();
 
-            let drop_idx = drop_idx.build_any(DbConnection::get_query_builder(&Kind::Postgres));
+            let drop_idx = drop_idx.build_any(&PostgresQueryBuilder);
             let drop_idx = sqlx::query(&drop_idx);
             transaction.execute(drop_idx).await?;
         }
         Ok(())
     }
 
-    fn row_to_json(db_kind: Kind, entity: &QueriedEntity, row: &AnyRow) -> Result<ResultRow> {
+    fn row_to_json(db_kind: AnyKind, entity: &QueriedEntity, row: &AnyRow) -> Result<ResultRow> {
         let mut ret = JsonObject::default();
         for s_field in &entity.fields {
             match s_field {
@@ -413,7 +407,7 @@ impl QueryEngine {
                             // Similarly to the float issue, type information is not filled in
                             // *if* this value was put in as a result of coalesce() (default).
                             match db_kind {
-                                Kind::Sqlite => {
+                                AnyKind::Sqlite => {
                                     let val: String = row.get_unchecked(column_idx);
                                     json!(val == "1" || val.to_lowercase() == "true")
                                 }
@@ -470,14 +464,14 @@ impl QueryEngine {
     }
 
     /// Execute the given `query` and return a stream to the results.
-    pub(crate) fn query(
+    pub fn query(
         &self,
         tr: TransactionStatic,
         query_plan: QueryPlan,
     ) -> anyhow::Result<QueryResults> {
         let query = query_plan.build_query(&self.target_db())?;
         let allowed_fields = query.allowed_fields;
-        let db_kind = self.kind;
+        let db_kind = self.db.pool.any_kind();
 
         let stream = new_query_results(query.raw_sql, tr);
         let stream = stream.map(move |row| Self::row_to_json(db_kind, &query.entity, &row?));
@@ -489,7 +483,7 @@ impl QueryEngine {
     ///
     /// Only for testing purposes. For any other purpose, use `mutate_with_transaction`.
     #[cfg(test)]
-    pub(crate) async fn mutate(&self, mutation: Mutation) -> Result<()> {
+    pub async fn mutate(&self, mutation: Mutation) -> Result<()> {
         let mut transaction = self.start_transaction().await?;
         self.mutate_with_transaction(mutation, &mut transaction)
             .await?;
@@ -497,7 +491,7 @@ impl QueryEngine {
         Ok(())
     }
 
-    pub(crate) async fn mutate_with_transaction(
+    pub async fn mutate_with_transaction(
         &self,
         mutation: Mutation,
         transaction: &mut Transaction<'_, Any>,
@@ -518,7 +512,7 @@ impl QueryEngine {
     ///     ...
     /// }
     ///
-    pub(crate) fn add_row<'a>(
+    pub fn add_row<'a>(
         &'a self,
         ty: &ObjectType,
         ty_value: &JsonObject,
@@ -533,7 +527,7 @@ impl QueryEngine {
         }
     }
 
-    pub(crate) async fn add_row_shallow(
+    pub async fn add_row_shallow(
         &self,
         ty: &ObjectType,
         ty_value: &JsonObject,
@@ -543,8 +537,8 @@ impl QueryEngine {
         Ok(())
     }
 
-    pub(crate) async fn fetch_one(&self, q: SqlWithArguments) -> Result<AnyRow> {
-        Ok(q.get_sqlx().fetch_one(&self.pool).await?)
+    pub async fn fetch_one(&self, q: SqlWithArguments) -> Result<AnyRow> {
+        Ok(q.get_sqlx().fetch_one(&self.db.pool).await?)
     }
 
     async fn run_sql_queries(
@@ -557,7 +551,7 @@ impl QueryEngine {
                 transaction.execute(q.get_sqlx()).await?;
             }
         } else {
-            let mut transaction = self.start_transaction().await?;
+            let mut transaction = self.begin_transaction().await?;
             for q in queries {
                 transaction.execute(q.get_sqlx()).await?;
             }

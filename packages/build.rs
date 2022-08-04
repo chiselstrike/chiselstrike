@@ -1,5 +1,3 @@
-use api::chisel_d_ts;
-use api::chisel_js;
 use std::env;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -31,8 +29,14 @@ fn main() {
     let create_app = Path::new("./create-chiselstrike-app").to_path_buf();
     let api = Path::new("./chiselstrike-api").to_path_buf();
 
-    fs::write("./chiselstrike-api/lib/chisel.js", chisel_js()).unwrap();
-    fs::write("./chiselstrike-api/lib/chisel.d.ts", chisel_d_ts()).unwrap();
+    fs::write(
+        "./chiselstrike-api/lib/chisel.js",
+        api::SOURCES.get("chisel.ts").unwrap(),
+    ).unwrap();
+    fs::write(
+        "./chiselstrike-api/lib/chisel.d.ts",
+        api::SOURCES.get("chisel.d.ts").unwrap(),
+    ).unwrap();
 
     // build create-chiselstrike-app so we can use it in tests
     for v in [

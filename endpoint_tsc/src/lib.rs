@@ -24,7 +24,7 @@ impl Compiler {
     ) -> Result<HashMap<String, String>> {
         let mods = HashMap::from([(
             "@chiselstrike/api".to_string(),
-            api::chisel_d_ts().to_string(),
+            api::SOURCES.get("chisel.d.ts").unwrap().to_string(),
         )]);
 
         let chisel_global = include_str!("chisel-global.d.ts");

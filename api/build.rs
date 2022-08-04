@@ -7,13 +7,14 @@ use std::path::PathBuf;
 use tsc_compile::compile_ts_code;
 use tsc_compile::CompileOptions;
 
-async fn compile(stem: &str, is_worker: bool) -> Result<()> {
+// TODO: maybe we can import all .ts files in just a single invocation of tsc?
+
+async fn compile(stem: &str) -> Result<()> {
     let src = &format!("src/{}.ts", stem);
     println!("cargo:rerun-if-changed={}", src);
 
     let opts = CompileOptions {
         emit_declarations: true,
-        is_worker,
         ..Default::default()
     };
     let mut map = compile_ts_code(&[src], opts).await?;
@@ -34,8 +35,12 @@ async fn main() -> Result<()> {
     // should be the only rerun-if-changed that we need.
     println!("cargo:rerun-if-changed=../third_party/deno/core/lib.deno_core.d.ts");
 
-    compile("chisel", false).await?;
-    compile("endpoint", false).await?;
-    compile("worker", true).await?;
+    compile("chisel").await?;
+    compile("routing").await?;
+    compile("run").await?;
+    compile("serve").await?;
+    compile("special").await?;
+    compile("__chiselstrike").await?;
+
     Ok(())
 }

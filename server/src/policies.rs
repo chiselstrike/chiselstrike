@@ -1,16 +1,15 @@
-// SPDX-FileCopyrightText: © 2021 ChiselStrike <info@chiselstrike.com>
+// SPDX-FileCopyrightText: © 2022 ChiselStrike <info@chiselstrike.com>
 
 use crate::prefix_map::PrefixMap;
 use crate::types::ObjectType;
 use anyhow::Result;
 use serde_json::{json, Value};
 use std::collections::{HashMap, HashSet};
-use std::path::Path;
 use yaml_rust::YamlLoader;
 
 /// Different kinds of policies.
 #[derive(Clone)]
-pub(crate) enum Kind {
+pub enum Kind {
     /// How this policy transforms values read from storage.
     Transform(fn(Value) -> Value),
     /// Field is of AuthUser type and must match the user currently logged in.
@@ -20,30 +19,27 @@ pub(crate) enum Kind {
 }
 
 #[derive(Clone)]
-pub(crate) struct Policy {
-    pub(crate) kind: Kind,
+pub struct Policy {
+    pub kind: Kind,
 
     /// This policy doesn't apply when the request URI matches.
-    pub(crate) except_uri: regex::Regex,
+    pub except_uri: regex::Regex,
 }
 
-/// Maps labels to their applicable policies.
-pub(crate) type LabelPolicies = HashMap<String, Policy>;
-
 #[derive(Clone, Default, Debug)]
-pub(crate) struct FieldPolicies {
+pub struct FieldPolicies {
     /// Maps a field name to the transformation we apply to that field's values.
-    pub(crate) transforms: HashMap<String, fn(Value) -> Value>,
+    pub transforms: HashMap<String, fn(Value) -> Value>,
     /// Names of fields that must equal the currently logged-in user.
-    pub(crate) match_login: HashSet<String>,
+    pub match_login: HashSet<String>,
     /// ID of the currently logged-in user.
-    pub(crate) current_userid: Option<String>,
+    pub current_userid: Option<String>,
     /// Names of fields which will be excluded from query's resulting json object.
-    pub(crate) omit: HashSet<String>,
+    pub omit: HashSet<String>,
 }
 
 #[derive(Clone, Default, Debug)]
-pub(crate) struct UserAuthorization {
+pub struct UserAuthorization {
     /// A user is authorized to access a path if the username matches the regex for the longest path prefix present
     /// here.
     paths: PrefixMap<regex::Regex>,
@@ -51,7 +47,7 @@ pub(crate) struct UserAuthorization {
 
 impl UserAuthorization {
     /// Is this username allowed to execute the endpoint at this path?
-    pub fn is_allowed(&self, username: Option<String>, path: &Path) -> bool {
+    pub fn is_allowed(&self, username: Option<&str>, path: &str) -> bool {
         match self.paths.longest_prefix(path) {
             None => true,
             Some((_, u)) => match username {
@@ -72,29 +68,15 @@ impl UserAuthorization {
 }
 
 #[derive(Clone, Default)]
-pub(crate) struct VersionPolicy {
-    pub(crate) labels: LabelPolicies,
-    pub(crate) user_authorization: UserAuthorization,
+pub struct PolicySystem {
+    /// Maps labels to their applicable policies.
+    pub labels: HashMap<String, Policy>,
+    pub user_authorization: UserAuthorization,
 }
 
-#[derive(Clone, Default)]
-pub(crate) struct Policies {
-    pub(crate) versions: HashMap<String, VersionPolicy>,
-}
-
-impl Policies {
-    pub(crate) fn add_from_yaml<K: ToString, Y: AsRef<str>>(
-        &mut self,
-        version: K,
-        yaml: Y,
-    ) -> Result<()> {
-        let v = VersionPolicy::from_yaml(yaml)?;
-        self.versions.insert(version.to_string(), v);
-        Ok(())
-    }
-
+impl PolicySystem {
     /// For field of type `ty` creates field policies.
-    pub(crate) fn make_field_policies(
+    pub fn make_field_policies(
         &self,
         user_id: &Option<String>,
         current_path: &str,
@@ -105,21 +87,19 @@ impl Policies {
             ..Default::default()
         };
 
-        if let Some(version) = self.versions.get(&ty.api_version) {
-            for fld in ty.user_fields() {
-                for lbl in &fld.labels {
-                    if let Some(p) = version.labels.get(lbl) {
-                        if !p.except_uri.is_match(current_path) {
-                            match p.kind {
-                                Kind::Transform(f) => {
-                                    field_policies.transforms.insert(fld.name.clone(), f);
-                                }
-                                Kind::MatchLogin => {
-                                    field_policies.match_login.insert(fld.name.clone());
-                                }
-                                Kind::Omit => {
-                                    field_policies.omit.insert(fld.name.clone());
-                                }
+        for fld in ty.user_fields() {
+            for lbl in &fld.labels {
+                if let Some(p) = self.labels.get(lbl) {
+                    if !p.except_uri.is_match(current_path) {
+                        match p.kind {
+                            Kind::Transform(f) => {
+                                field_policies.transforms.insert(fld.name.clone(), f);
+                            }
+                            Kind::MatchLogin => {
+                                field_policies.match_login.insert(fld.name.clone());
+                            }
+                            Kind::Omit => {
+                                field_policies.omit.insert(fld.name.clone());
                             }
                         }
                     }
@@ -128,14 +108,12 @@ impl Policies {
         }
         field_policies
     }
-}
 
-impl VersionPolicy {
-    pub(crate) fn from_yaml<S: AsRef<str>>(config: S) -> Result<Self> {
+    pub fn from_yaml(config: &str) -> Result<Self> {
         let mut policies = Self::default();
         let mut labels = vec![];
 
-        let docs = YamlLoader::load_from_str(config.as_ref())?;
+        let docs = YamlLoader::load_from_str(config)?;
         for config in docs.iter() {
             for label in config["labels"].as_vec().get_or_insert(&[].into()).iter() {
                 let name = label["name"].as_str().ok_or_else(|| {
@@ -198,7 +176,7 @@ impl VersionPolicy {
     }
 }
 
-pub(crate) fn anonymize(_: Value) -> Value {
+pub fn anonymize(_: Value) -> Value {
     // TODO: use type-specific anonymization.
     json!("xxxxx")
 }

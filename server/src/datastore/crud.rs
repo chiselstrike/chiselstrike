@@ -9,20 +9,19 @@ use deno_core::url::Url;
 use futures::{Future, StreamExt};
 use serde_derive::{Deserialize, Serialize};
 use serde_json::json;
-use std::sync::Arc;
 
 #[derive(Clone, Serialize, Deserialize)]
-pub(crate) struct QueryParams {
-    #[serde(rename = "typeName")]
+#[serde(rename_all = "camelCase")]
+pub struct QueryParams {
     type_name: String,
     url: Url,
 }
 
 /// Parses CRUD `params` and runs the query with provided `query_engine`.
-pub(crate) fn run_query(
+pub fn run_query(
     context: &RequestContext<'_>,
     params: QueryParams,
-    query_engine: Arc<QueryEngine>,
+    query_engine: QueryEngine,
     tr: TransactionStatic,
 ) -> impl Future<Output = Result<JsonObject>> {
     let fut = run_query_impl(context, params, query_engine, tr);
@@ -32,13 +31,13 @@ pub(crate) fn run_query(
 fn run_query_impl(
     context: &RequestContext<'_>,
     params: QueryParams,
-    query_engine: Arc<QueryEngine>,
+    query_engine: QueryEngine,
     tr: TransactionStatic,
 ) -> Result<impl Future<Output = Result<JsonObject>>> {
     let host = context.headers.get("host").cloned();
     let base_type = &context
         .ts
-        .lookup_entity(&params.type_name, &context.api_version)
+        .lookup_entity(&params.type_name)
         .context("unexpected type name as crud query base type")?;
 
     let query = Query::from_url(base_type, &params.url, context.ts)?;
@@ -172,8 +171,8 @@ fn make_page_url(url: &Url, host: &Option<String>, cursor: &Cursor) -> Result<Ur
 }
 
 /// Constructs Delete Mutation from CRUD url.
-pub(crate) fn delete_from_url(c: &RequestContext, type_name: &str, url: &str) -> Result<Mutation> {
-    let base_entity = match c.ts.lookup_type(type_name, &c.api_version) {
+pub fn delete_from_url(c: &RequestContext, type_name: &str, url: &str) -> Result<Mutation> {
+    let base_entity = match c.ts.lookup_type(type_name) {
         Ok(Type::Entity(ty)) => ty,
         Ok(ty) => anyhow::bail!("Cannot delete scalar type {type_name} ({})", ty.name()),
         Err(_) => anyhow::bail!("Cannot delete from type `{type_name}`, type not found"),
@@ -583,7 +582,7 @@ mod tests {
     use serde_json::json;
     use std::collections::HashMap;
 
-    pub(crate) struct FakeField {
+    pub struct FakeField {
         name: &'static str,
         ty: Type,
     }
@@ -598,12 +597,12 @@ mod tests {
         fn ty(&self) -> Type {
             self.ty.clone()
         }
-        fn api_version(&self) -> String {
+        fn version_id(&self) -> String {
             "whatever".to_string()
         }
     }
 
-    pub(crate) struct FakeObject {
+    pub struct FakeObject {
         name: &'static str,
     }
 
@@ -617,7 +616,7 @@ mod tests {
         fn backing_table(&self) -> String {
             "whatever".to_string()
         }
-        fn api_version(&self) -> String {
+        fn version_id(&self) -> String {
             "whatever".to_string()
         }
     }
@@ -777,7 +776,7 @@ mod tests {
             &RequestContext {
                 policies: &Policies::default(),
                 ts: &make_type_system(&*ENTITIES),
-                api_version: VERSION.to_owned(),
+                version_id: VERSION.to_owned(),
                 user_id: None,
                 path: "".to_string(),
                 headers,
@@ -1095,7 +1094,7 @@ mod tests {
                 &RequestContext {
                     policies: &Policies::default(),
                     ts: &make_type_system(&*ENTITIES),
-                    api_version: VERSION.to_owned(),
+                    version_id: VERSION.to_owned(),
                     user_id: None,
                     path: "".to_string(),
                     headers: HashMap::default(),

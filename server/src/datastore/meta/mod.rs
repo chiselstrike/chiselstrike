@@ -1,20 +1,20 @@
-pub(crate) mod schema;
+// SPDX-FileCopyrightText: © 2022 ChiselStrike <info@chiselstrike.com>
 
-// SPDX-FileCopyrightText: © 2021 ChiselStrike <info@chiselstrike.com>
+pub mod schema;
 
-use crate::api::{ApiInfo, ApiInfoMap};
-use crate::datastore::{DbConnection, Kind};
-use crate::policies::Policies;
-use crate::prefix_map::PrefixMap;
+use crate::datastore::DbConnection;
+use crate::policies::PolicySystem;
 use crate::types::{
-    DbIndex, Entity, ExistingField, ExistingObject, Field, FieldDelta, ObjectDelta, ObjectType,
-    TypeSystem,
+    BuiltinTypes, DbIndex, Entity, ExistingField, ExistingObject, Field, FieldDelta,
+    ObjectDelta, ObjectDescriptor, ObjectType, TypeSystem,
 };
-use anyhow::Context;
-use sqlx::any::{Any, AnyPool};
+use crate::version::VersionInfo;
+use anyhow::{Context, Result};
+use sqlx::any::{Any, AnyKind};
 use sqlx::{Execute, Executor, Row, Transaction};
+use std::collections::HashMap;
 use std::fmt::Write;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use tokio::fs;
 
@@ -22,16 +22,15 @@ use tokio::fs;
 ///
 /// The meta service is responsible for managing metadata such as object
 /// types and labels persistently.
-#[derive(Debug)]
-pub(crate) struct MetaService {
-    kind: Kind,
-    pool: AnyPool,
+#[derive(Debug, Clone)]
+pub struct MetaService {
+    db: Arc<DbConnection>,
 }
 
 async fn execute<'a, 'b>(
     transaction: &mut Transaction<'b, sqlx::Any>,
     query: sqlx::query::Query<'a, sqlx::Any, sqlx::any::AnyArguments<'a>>,
-) -> anyhow::Result<sqlx::any::AnyQueryResult> {
+) -> Result<sqlx::any::AnyQueryResult> {
     let qstr = query.sql();
     transaction
         .execute(query)
@@ -42,7 +41,7 @@ async fn execute<'a, 'b>(
 async fn fetch_one<'a, 'b>(
     transaction: &mut Transaction<'b, sqlx::Any>,
     query: sqlx::query::Query<'a, sqlx::Any, sqlx::any::AnyArguments<'a>>,
-) -> anyhow::Result<sqlx::any::AnyRow> {
+) -> Result<sqlx::any::AnyRow> {
     let qstr = query.sql();
     transaction
         .fetch_one(query)
@@ -53,7 +52,7 @@ async fn fetch_one<'a, 'b>(
 async fn fetch_all<'a, E>(
     executor: E,
     query: sqlx::query::Query<'a, sqlx::Any, sqlx::any::AnyArguments<'a>>,
-) -> anyhow::Result<Vec<sqlx::any::AnyRow>>
+) -> Result<Vec<sqlx::any::AnyRow>>
 where
     E: Executor<'a, Database = sqlx::Any>,
 {
@@ -64,7 +63,7 @@ where
         .with_context(|| format!("Failed to execute query {}", qstr))
 }
 
-async fn file_exists(file: &Path) -> anyhow::Result<bool> {
+async fn file_exists(file: &Path) -> Result<bool> {
     match fs::metadata(file).await {
         Ok(_) => Ok(true),
         Err(x) => match x.kind() {
@@ -79,7 +78,7 @@ async fn file_exists(file: &Path) -> anyhow::Result<bool> {
 async fn update_field_query(
     transaction: &mut Transaction<'_, Any>,
     delta: &FieldDelta,
-) -> anyhow::Result<()> {
+) -> Result<()> {
     let field_id = delta.id;
 
     if let Some(field) = &delta.attrs {
@@ -130,7 +129,7 @@ async fn update_field_query(
 async fn remove_field_query(
     transaction: &mut Transaction<'_, Any>,
     field: &Field,
-) -> anyhow::Result<()> {
+) -> Result<()> {
     let field_id = field
         .id
         .context("logical error. Trying to delete field without id")?;
@@ -152,7 +151,7 @@ async fn insert_field_query(
     ty: &ObjectType,
     recently_added_type_id: Option<i32>,
     field: &Field,
-) -> anyhow::Result<()> {
+) -> Result<()> {
     let type_id = ty.meta_id.xor(recently_added_type_id).context(
         "logical error. Seems like a type is at the same type pre-existing and recently added??",
     )?;
@@ -218,19 +217,11 @@ async fn insert_field_query(
 }
 
 impl MetaService {
-    pub(crate) fn new(kind: Kind, pool: AnyPool) -> Self {
-        Self { kind, pool }
+    pub fn new(db: Arc<DbConnection>) -> Self {
+        Self { db }
     }
 
-    pub(crate) async fn local_connection(
-        conn: &DbConnection,
-        nr_conn: usize,
-    ) -> anyhow::Result<Self> {
-        let local = conn.local_connection(nr_conn).await?;
-        Ok(Self::new(local.kind, local.pool))
-    }
-
-    async fn get_version(transaction: &mut Transaction<'_, Any>) -> anyhow::Result<String> {
+    async fn get_version(transaction: &mut Transaction<'_, Any>) -> Result<String> {
         let query = sqlx::query(
             "SELECT version FROM chisel_version WHERE version_id = 'chiselstrike' LIMIT 1",
         );
@@ -253,14 +244,13 @@ impl MetaService {
     /// For Postgres this is a lot more complex because it is not possible to
     /// do cross-database transactions. But this handles the local dev case,
     /// which is what is most relevant at the moment.
-    pub(crate) async fn maybe_migrate_sqlite_database<P: AsRef<Path>, T: AsRef<Path>>(
+    pub async fn maybe_migrate_sqlite_database(
         &self,
-        sources: &[P],
-        to: T,
-    ) -> anyhow::Result<()> {
-        let to = to.as_ref();
-        match self.kind {
-            Kind::Sqlite => {}
+        sources: &[PathBuf],
+        to: &str,
+    ) -> Result<()> {
+        match self.db.pool.any_kind() {
+            AnyKind::Sqlite => {}
             _ => anyhow::bail!("Can't migrate postgres tables yet"),
         }
 
@@ -269,7 +259,6 @@ impl MetaService {
         // exists we're better off not touching, and erroring out.
         let mut not_found = vec![];
         for src in sources {
-            let src = src.as_ref();
             if !file_exists(src).await? {
                 not_found.push(src);
             }
@@ -286,7 +275,7 @@ impl MetaService {
             );
         }
 
-        let mut transaction = self.start_transaction().await?;
+        let mut transaction = self.begin_transaction().await?;
         match self
             .maybe_migrate_sqlite_database_inner(&mut transaction, sources)
             .await
@@ -295,10 +284,10 @@ impl MetaService {
             Ok(true) => {
                 let mut full_str = format!(
                     "Migrated your data to {}. You can now delete the following files:",
-                    to.display()
+                    to,
                 );
                 for src in sources {
-                    let s = src.as_ref().display();
+                    let s = src.display();
                     write!(full_str, "\n\t{}\n\t{}-wal\n\t{}-shm", s, s, s).unwrap();
                 }
 
@@ -311,18 +300,18 @@ impl MetaService {
         Ok(())
     }
 
-    async fn maybe_migrate_sqlite_database_inner<P: AsRef<Path>>(
+    async fn maybe_migrate_sqlite_database_inner(
         &self,
         transaction: &mut Transaction<'_, Any>,
-        sources: &[P],
-    ) -> anyhow::Result<bool> {
+        sources: &[PathBuf],
+    ) -> Result<bool> {
         // this sqlite instance already has data, nothing to migrate.
         if self.count_tables(transaction).await? != 0 {
             return Ok(false);
         }
 
         for (idx, src) in sources.iter().enumerate() {
-            let src = src.as_ref().to_str().unwrap();
+            let src = src.to_str().unwrap();
             let db = format!("db{}", idx);
 
             let attach = format!("attach database '{}' as '{}'", src, db);
@@ -354,15 +343,15 @@ impl MetaService {
         Ok(true)
     }
 
-    async fn count_tables(&self, transaction: &mut Transaction<'_, Any>) -> anyhow::Result<usize> {
-        let query = match self.kind {
-            Kind::Sqlite => sqlx::query(
+    async fn count_tables(&self, transaction: &mut Transaction<'_, Any>) -> Result<usize> {
+        let query = match self.db.pool.any_kind() {
+            AnyKind::Sqlite => sqlx::query(
                 r#"
                 SELECT name
                 FROM sqlite_schema
                 WHERE type ='table' AND name NOT LIKE 'sqlite_%'"#,
             ),
-            Kind::Postgres => sqlx::query(
+            AnyKind::Postgres => sqlx::query(
                 r#"
                 SELECT tablename AS name
                 FROM pg_catalog.pg_tables
@@ -374,11 +363,11 @@ impl MetaService {
     }
 
     /// Create the schema of the underlying metadata store.
-    pub(crate) async fn create_schema(&self) -> anyhow::Result<()> {
-        let query_builder = DbConnection::get_query_builder(&self.kind);
+    pub async fn create_schema(&self) -> Result<()> {
+        let query_builder = self.db.query_builder();
         let tables = schema::tables();
 
-        let mut transaction = self.start_transaction().await?;
+        let mut transaction = self.begin_transaction().await?;
         // The chisel_version table is relatively new, so if it doesn't exist
         // it could be that this is either a new installation, or an upgrade. So
         // we query something that was with us from the beginning to tell those apart
@@ -428,28 +417,28 @@ impl MetaService {
     }
 
     /// Load information about the current API versions present in this system
-    pub(crate) async fn load_api_info(&self) -> anyhow::Result<ApiInfoMap> {
+    pub async fn load_version_infos(&self) -> Result<HashMap<String, VersionInfo>> {
         let query = sqlx::query("SELECT api_version, app_name, version_tag FROM api_info");
-        let rows = fetch_all(&self.pool, query).await?;
+        let rows = fetch_all(&self.db.pool, query).await?;
 
-        let mut info = ApiInfoMap::default();
+        let mut infos = HashMap::default();
         for row in rows {
-            let api_version: &str = row.get("api_version");
-            let app_name: &str = row.get("app_name");
-            let tag: &str = row.get("version_tag");
+            let version_id: String = row.get("api_version");
+            let name: String = row.get("app_name");
+            let tag: String = row.get("version_tag");
 
-            debug!("Loading api version info for {}", api_version);
-            info.insert(api_version.into(), ApiInfo::new(app_name, tag));
+            debug!("Loading api version info for {}", version_id);
+            infos.insert(version_id.into(), VersionInfo { name, tag });
         }
-        Ok(info)
+        Ok(infos)
     }
 
-    pub(crate) async fn persist_api_info(
+    pub async fn persist_version_info(
         &self,
         transaction: &mut Transaction<'_, Any>,
-        api_version: &str,
-        info: &ApiInfo,
-    ) -> anyhow::Result<()> {
+        version_id: &str,
+        info: &VersionInfo,
+    ) -> Result<()> {
         let add_api = sqlx::query(
             r#"
             INSERT INTO api_info (api_version, app_name, version_tag)
@@ -457,47 +446,50 @@ impl MetaService {
             ON CONFLICT(api_version) DO UPDATE SET app_name = $2, version_tag = $3
             WHERE api_info.api_version = $1"#,
         )
-        .bind(api_version.to_owned())
+        .bind(version_id.to_owned())
         .bind(info.name.clone())
         .bind(info.tag.clone());
         execute(transaction, add_api).await?;
         Ok(())
     }
 
-    /// Load the existing endpoints from from metadata store.
-    pub(crate) async fn load_sources<'r>(&self) -> anyhow::Result<PrefixMap<String>> {
-        let query = sqlx::query("SELECT path, code FROM sources");
-        let rows = fetch_all(&self.pool, query).await?;
-
-        let mut sources = PrefixMap::default();
-        for row in rows {
-            let path: &str = row.get("path");
-            let code: &str = row.get("code");
-            debug!("Loading source {}", path);
-            sources.insert(path.into(), code.to_string());
-        }
-        Ok(sources)
+    /// Load module source codes from metadata store.
+    pub async fn load_modules(&self, version_id: &str) -> Result<HashMap<String, String>> {
+        let query = sqlx::query("SELECT uri, code FROM modules WHERE version = $1").bind(version_id);
+        let rows = fetch_all(&self.db.pool, query).await?;
+        let modules = rows.into_iter().map(|row| {
+            let uri: String = row.get("uri");
+            let code: String = row.get("code");
+            (uri, code)
+        }).collect();
+        Ok(modules)
     }
 
-    pub(crate) async fn persist_sources(&self, sources: &PrefixMap<String>) -> anyhow::Result<()> {
-        let mut transaction = self.pool.begin().await?;
+    pub async fn persist_modules(
+        &self,
+        transaction: &mut Transaction<'_, Any>,
+        version_id: &str,
+        modules: &HashMap<String, String>,
+    ) -> Result<()> {
+        let drop = sqlx::query("DELETE FROM modules WHERE version = $1").bind(version_id);
+        execute(transaction, drop).await?;
 
-        let drop = sqlx::query("DELETE FROM sources");
-        execute(&mut transaction, drop).await?;
-
-        for (path, code) in sources.iter() {
-            let new_route = sqlx::query("INSERT INTO sources (path, code) VALUES ($1, $2)")
-                .bind(path.to_str())
+        for (uri, code) in modules.iter() {
+            let insert = sqlx::query("INSERT INTO modules (version, uri, code) VALUES ($1, $2, $3)")
+                .bind(version_id)
+                .bind(uri)
                 .bind(code);
 
-            execute(&mut transaction, new_route).await?;
+            execute(transaction, insert).await?;
         }
-        transaction.commit().await?;
         Ok(())
     }
 
-    /// Load the type system from metadata store.
-    pub(crate) async fn load_type_system<'r>(&self) -> anyhow::Result<TypeSystem> {
+    /// Load the type systems for all versions from metadata store.
+    pub async fn load_type_systems(
+        &self,
+        builtin: &Arc<BuiltinTypes>,
+    ) -> Result<HashMap<String, TypeSystem>> {
         let query = sqlx::query(
             r#"
             SELECT
@@ -507,24 +499,27 @@ impl MetaService {
             FROM types
             INNER JOIN type_names ON types.type_id = type_names.type_id"#,
         );
-        let rows = fetch_all(&self.pool, query).await?;
+        let rows = fetch_all(&self.db.pool, query).await?;
 
-        let mut ts = TypeSystem::default();
+        let mut type_systems = HashMap::new();
         for row in rows {
             let type_id: i32 = row.get("type_id");
             let backing_table: &str = row.get("backing_table");
             let type_name: &str = row.get("type_name");
             let desc = ExistingObject::new(type_name, backing_table, type_id)?;
-            let fields = self.load_type_fields(&ts, type_id).await?;
+
+            let ts = type_systems.entry(desc.version_id())
+                .or_insert_with(|| TypeSystem::new(builtin.clone(), desc.version_id()));
+            let fields = self.load_type_fields(ts, type_id).await?;
             let indexes = self.load_type_indexes(type_id, backing_table).await?;
 
-            let ty = ObjectType::new(desc, fields, indexes)?;
+            let ty = ObjectType::new(&desc, fields, indexes)?;
             ts.add_custom_type(Entity::Custom(Arc::new(ty)))?;
         }
-        Ok(ts)
+        Ok(type_systems)
     }
 
-    async fn load_type_fields(&self, ts: &TypeSystem, type_id: i32) -> anyhow::Result<Vec<Field>> {
+    async fn load_type_fields(&self, ts: &TypeSystem, type_id: i32) -> Result<Vec<Field>> {
         let query = sqlx::query(
             r#"
             SELECT
@@ -539,7 +534,7 @@ impl MetaService {
                 ON fields.type_id = $1 AND field_names.field_id = fields.field_id;"#,
         );
         let query = query.bind(type_id);
-        let rows = fetch_all(&self.pool, query).await?;
+        let rows = fetch_all(&self.db.pool, query).await?;
 
         let mut fields = Vec::new();
         for row in rows {
@@ -550,12 +545,12 @@ impl MetaService {
             let split: Vec<&str> = db_field_name.split('.').collect();
             anyhow::ensure!(split.len() == 3, "Expected version and type information as part of the field name. Got {}. Database corrupted?", db_field_name);
             let field_name = split[2].to_owned();
-            let version = split[0].to_owned();
+            let version_id = split[0].to_owned();
             let desc = ExistingField::new(
                 &field_name,
-                ts.lookup_type(field_type, &version)?,
+                ts.lookup_type(field_type)?,
                 field_id,
-                &version,
+                &version_id,
             );
 
             let field_def: Option<String> = row.get("default_value");
@@ -567,14 +562,14 @@ impl MetaService {
 
             let query = labels_query.bind(field_id);
 
-            let rows = fetch_all(&self.pool, query).await?;
+            let rows = fetch_all(&self.db.pool, query).await?;
 
             let labels = rows
                 .iter()
                 .map(|r| r.get("label_name"))
                 .collect::<Vec<String>>();
 
-            fields.push(Field::new(desc, labels, field_def, is_optional, is_unique));
+            fields.push(Field::new(&desc, labels, field_def, is_optional, is_unique));
         }
         Ok(fields)
     }
@@ -583,7 +578,7 @@ impl MetaService {
         &self,
         type_id: i32,
         backing_table: &str,
-    ) -> anyhow::Result<Vec<DbIndex>> {
+    ) -> Result<Vec<DbIndex>> {
         let query = sqlx::query(
             r#"
             SELECT
@@ -593,7 +588,7 @@ impl MetaService {
             WHERE type_id = $1"#,
         )
         .bind(type_id);
-        let rows = fetch_all(&self.pool, query).await?;
+        let rows = fetch_all(&self.db.pool, query).await?;
 
         let mut indexes = vec![];
         for row in rows {
@@ -606,11 +601,11 @@ impl MetaService {
         Ok(indexes)
     }
 
-    pub(crate) async fn remove_type(
+    pub async fn remove_type(
         &self,
         transaction: &mut Transaction<'_, Any>,
         ty: &ObjectType,
-    ) -> anyhow::Result<()> {
+    ) -> Result<()> {
         let type_id = ty
             .meta_id
             .context("logical error. Trying to delete type without id")?;
@@ -628,12 +623,12 @@ impl MetaService {
         Ok(())
     }
 
-    pub(crate) async fn update_type(
+    pub async fn update_type(
         &self,
         transaction: &mut Transaction<'_, Any>,
         ty: &ObjectType,
         delta: ObjectDelta,
-    ) -> anyhow::Result<()> {
+    ) -> Result<()> {
         for field in delta.added_fields.iter() {
             insert_field_query(transaction, ty, None, field).await?;
         }
@@ -658,13 +653,13 @@ impl MetaService {
         Ok(())
     }
 
-    pub(crate) async fn start_transaction(&self) -> anyhow::Result<Transaction<'_, Any>> {
-        Ok(self.pool.begin().await?)
+    pub async fn begin_transaction(&self) -> Result<Transaction<'_, Any>> {
+        Ok(self.db.pool.begin().await?)
     }
 
-    pub(crate) async fn commit_transaction(
+    pub async fn commit_transaction(
         transaction: Transaction<'_, Any>,
-    ) -> anyhow::Result<()> {
+    ) -> Result<()> {
         transaction.commit().await?;
         Ok(())
     }
@@ -673,12 +668,12 @@ impl MetaService {
     ///
     /// We don't have a method that persist all policies, for all versions, because
     /// versions are applied independently
-    pub(crate) async fn persist_policy_version(
+    pub async fn persist_policy_version(
         &self,
         transaction: &mut Transaction<'_, Any>,
-        version: &str,
+        version_id: &str,
         policy: &str,
-    ) -> anyhow::Result<()> {
+    ) -> Result<()> {
         let add_policy = sqlx::query(
             r#"
             INSERT INTO policies (policy_str, version)
@@ -687,45 +682,39 @@ impl MetaService {
             WHERE policies.version = $2"#,
         )
         .bind(policy.to_owned())
-        .bind(version.to_owned());
+        .bind(version_id.to_owned());
         execute(transaction, add_policy).await?;
         Ok(())
     }
 
-    pub(crate) async fn delete_policy_version(
+    pub async fn delete_policy_version(
         &self,
         transaction: &mut Transaction<'_, Any>,
-        version: &str,
-    ) -> anyhow::Result<()> {
+        version_id: &str,
+    ) -> Result<()> {
         let delete_policy =
-            sqlx::query("DELETE FROM policies WHERE version = $1").bind(version.to_owned());
+            sqlx::query("DELETE FROM policies WHERE version = $1").bind(version_id.to_owned());
         execute(transaction, delete_policy).await?;
         Ok(())
     }
 
-    /// Loads all policies, for all versions.
+    /// Loads policy system for a version.
     ///
     /// Useful on startup, when we have to populate our in-memory state from the meta database.
-    pub(crate) async fn load_policies(&self) -> anyhow::Result<Policies> {
-        let get_policy = sqlx::query("SELECT version, policy_str FROM policies");
-
-        let rows = fetch_all(&self.pool, get_policy).await?;
-
-        let mut policies = Policies::default();
-        for row in rows {
-            let version: &str = row.get("version");
-            let yaml: &str = row.get("policy_str");
-
-            policies.add_from_yaml(version, yaml)?;
-        }
-        Ok(policies)
+    pub async fn load_policy_system(&self, version_id: &str) -> Result<PolicySystem> {
+        let get_policy = sqlx::query("SELECT policy_str FROM policies WHERE version = $1")
+            .bind(version_id);
+        let mut transaction = self.begin_transaction().await?;
+        let row = fetch_one(&mut transaction, get_policy).await?;
+        let yaml: &str = row.get("policy_str");
+        PolicySystem::from_yaml(yaml)
     }
 
-    pub(crate) async fn insert_type(
+    pub async fn insert_type(
         &self,
         transaction: &mut Transaction<'_, Any>,
         ty: &ObjectType,
-    ) -> anyhow::Result<()> {
+    ) -> Result<()> {
         let add_type = sqlx::query("INSERT INTO types (backing_table) VALUES ($1) RETURNING *");
         let add_type_name = sqlx::query("INSERT INTO type_names (type_id, name) VALUES ($1, $2)");
 
@@ -747,7 +736,7 @@ impl MetaService {
         transaction: &mut Transaction<'_, Any>,
         type_id: i32,
         indexes: &[DbIndex],
-    ) -> anyhow::Result<()> {
+    ) -> Result<()> {
         for index in indexes {
             let fields = index.fields.join(";");
             let add_index = sqlx::query("INSERT INTO indexes (type_id, fields) VALUES ($1, $2)")
@@ -761,7 +750,7 @@ impl MetaService {
     async fn delete_indexes(
         transaction: &mut Transaction<'_, Any>,
         indexes: &[DbIndex],
-    ) -> anyhow::Result<()> {
+    ) -> Result<()> {
         for index in indexes {
             let index_id = index
                 .meta_id
@@ -777,7 +766,7 @@ impl MetaService {
 mod tests {
     use super::*;
     use crate::datastore::{query::tests::*, QueryEngine};
-    use anyhow::Result;
+    use Result;
     use tempdir::TempDir;
 
     // test that we can open and successfully evolve 0.6 to the current version
@@ -794,20 +783,20 @@ mod tests {
         let meta_conn = DbConnection::connect(&conn_str, 1).await?;
         let meta = MetaService::local_connection(&meta_conn, 1).await.unwrap();
 
-        let mut transaction = meta.start_transaction().await.unwrap();
+        let mut transaction = meta.begin_transaction().await.unwrap();
         let version = MetaService::get_version(&mut transaction).await.unwrap();
         MetaService::commit_transaction(transaction).await.unwrap();
         assert_eq!(version, "0");
 
         meta.create_schema().await.unwrap();
-        let mut transaction = meta.start_transaction().await.unwrap();
+        let mut transaction = meta.begin_transaction().await.unwrap();
         let version = MetaService::get_version(&mut transaction).await.unwrap();
         MetaService::commit_transaction(transaction).await.unwrap();
         assert_eq!(version, schema::CURRENT_VERSION);
 
         // evolving again works (idempotency, we don't fail)
         meta.create_schema().await.unwrap();
-        let mut transaction = meta.start_transaction().await.unwrap();
+        let mut transaction = meta.begin_transaction().await.unwrap();
         let version = MetaService::get_version(&mut transaction).await.unwrap();
         MetaService::commit_transaction(transaction).await.unwrap();
         assert_eq!(version, schema::CURRENT_VERSION);

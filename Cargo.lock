@@ -160,6 +160,7 @@ name = "api"
 version = "0.12.0-dev.0"
 dependencies = [
  "anyhow",
+ "lazy_static",
  "tokio",
  "tsc_compile",
 ]
@@ -4054,14 +4055,17 @@ dependencies = [
  "enum-as-inner 0.3.4",
  "env_logger",
  "format-sql-query",
+ "futures",
  "http",
  "hyper",
  "itertools 0.10.3",
+ "lazy_static",
  "libc",
  "log",
  "nix 0.22.3",
  "once_cell",
  "openapi",
+ "parking_lot 0.12.1",
  "permutation",
  "petgraph 0.6.2",
  "pin-project",
@@ -4083,6 +4087,7 @@ dependencies = [
  "tempfile",
  "thiserror",
  "tokio",
+ "tokio-stream",
  "tonic",
  "tonic-build",
  "tracing",
@@ -5474,8 +5479,10 @@ version = "0.12.0-dev.0"
 dependencies = [
  "anyhow",
  "async-channel",
+ "futures-core",
  "nix 0.22.3",
  "reqwest",
+ "tokio",
 ]
 
 [[package]]

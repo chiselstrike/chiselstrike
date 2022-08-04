@@ -1,0 +1,312 @@
+// SPDX-FileCopyrightText: © 2022 ChiselStrike <info@chiselstrike.com>
+
+use crate::datastore::{MetaService, QueryEngine};
+use crate::policies::PolicySystem;
+use crate::proto::{ApplyRequest, AddTypeRequest, FieldDefinition, IndexCandidate, TypeMsg};
+use crate::proto::type_msg::TypeEnum;
+use crate::server::Server;
+use crate::types::{DbIndex, Entity, Field, NewField, NewObject, ObjectType, Type, TypeSystem, TypeSystemError};
+use crate::version::VersionInfo;
+use anyhow::{Context, Result, anyhow, bail, ensure};
+use petgraph::Directed;
+use petgraph::graphmap::GraphMap;
+use std::collections::{BTreeSet, HashMap};
+use std::sync::Arc;
+
+pub struct ApplyResult {
+    pub type_system: TypeSystem,
+    pub policy_system: PolicySystem,
+    pub type_names_user_order: Vec<String>,
+    pub labels: Vec<String>,
+}
+
+pub async fn apply(
+    server: Arc<Server>,
+    apply_request: &ApplyRequest,
+    type_system: &mut TypeSystem,
+    version_id: String,
+    version_info: &VersionInfo,
+    modules: &HashMap<String, String>,
+) -> Result<ApplyResult> {
+    let mut type_names = BTreeSet::new();
+    let mut type_names_user_order = vec![];
+
+    for tdef in apply_request.types.iter() {
+        type_names.insert(tdef.name.clone());
+        type_names_user_order.push(tdef.name.clone());
+    }
+
+    let mut to_remove = vec![];
+    let mut to_insert = vec![];
+    let mut to_update = vec![];
+
+    for (existing, removed) in type_system.custom_types.iter() {
+        if !type_names.contains(existing) {
+            to_remove.push(removed.clone());
+        }
+    }
+
+    ensure!(
+        apply_request.policies.len() <= 1,
+        "Currently only one policy file is supported"
+    );
+
+    let policy_str = apply_request
+        .policies
+        .get(0)
+        .map(|x| x.policy_config.as_ref())
+        .unwrap_or("");
+
+    let policy_system = PolicySystem::from_yaml(policy_str)?;
+
+    if !to_remove.is_empty() && !apply_request.allow_type_deletion {
+        bail!(
+            r"Trying to remove types from type file. This will delete the underlying data associated with this type.
+To proceed, try:
+
+'npx chisel apply --allow-type-deletion' (if installed from npm)
+
+or
+
+'chisel apply --allow-type-deletion' (otherwise)"
+        );
+    }
+
+    let mut decorators = BTreeSet::default();
+    let mut new_types = HashMap::<String, Entity>::default();
+    let indexes = aggregate_indexes(&apply_request.index_candidates);
+
+    // No changes are made to the type system in this loop. We re-read the database after we
+    // apply the changes, and this way we don't have to deal with the case of succeding to
+    // apply a type, but failing the next
+    for type_def in sort_custom_types(type_system, apply_request.types.clone())? {
+        let name = type_def.name;
+        if type_system.lookup_builtin_type(&name).is_ok() {
+            bail!("custom type expected, got `{}` instead", name);
+        }
+
+        let mut fields = Vec::new();
+        for field in type_def.field_defs {
+            for label in &field.labels {
+                decorators.insert(label.clone());
+            }
+
+            let field_ty = field.field_type()?;
+            let field_ty = if field_ty.is_builtin(type_system) {
+                field_ty.get_builtin(type_system)?
+            } else if let TypeEnum::Entity(entity_name) = field_ty {
+                match new_types.get(entity_name) {
+                    Some(ty) => Type::Entity(ty.clone()),
+                    None => bail!(
+                        "field type `{entity_name}` is neither a built-in nor a custom type",
+                    ),
+                }
+            } else {
+                bail!("field type must either contain an entity or be a builtin");
+            };
+
+            fields.push(Field::new(
+                &NewField::new(&field.name, field_ty, &version_id)?,
+                field.labels,
+                field.default_value,
+                field.is_optional,
+                field.is_unique,
+            ));
+        }
+        let ty_indexes = indexes.get(&name).cloned().unwrap_or_default();
+
+        let ty = Arc::new(ObjectType::new(
+            &NewObject::new(&name, &version_id),
+            fields,
+            ty_indexes,
+        )?);
+        new_types.insert(name.to_owned(), Entity::Custom(ty.clone()));
+
+        match type_system.lookup_custom_type(&name) {
+            Ok(old_type) => {
+                let delta = type_system.generate_type_delta(&old_type, ty)?;
+                to_update.push((old_type.clone(), delta));
+            }
+            Err(TypeSystemError::NoSuchType(_)) => {
+                to_insert.push(ty.clone());
+            }
+            Err(e) => bail!(e),
+        }
+    }
+
+    let meta = &server.meta_service;
+    let mut transaction = meta.begin_transaction().await?;
+
+    meta.persist_policy_version(&mut transaction, &version_id, policy_str)
+        .await?;
+
+    meta.persist_version_info(&mut transaction, &version_id, version_info)
+        .await?;
+
+    meta.persist_modules(&mut transaction, &version_id, modules)
+        .await?;
+
+    for ty in to_insert.iter() {
+        // FIXME: Consistency between metadata and backing store updates.
+        meta.insert_type(&mut transaction, ty).await?;
+    }
+
+    for (old, delta) in to_update.iter() {
+        meta.update_type(&mut transaction, old, delta.clone())
+            .await?;
+    }
+
+    for ty in to_remove.iter() {
+        meta.remove_type(&mut transaction, ty).await?;
+    }
+
+    MetaService::commit_transaction(transaction).await?;
+
+    let labels: Vec<String> = policy_system.labels.keys().map(|x| x.to_owned()).collect();
+
+    // Reload the type system so that we have new ids
+    let type_system = meta.load_type_systems(&server.builtin_types).await?
+        .remove(&version_id)
+        .unwrap_or_else(|| TypeSystem::new(server.builtin_types.clone(), version_id.clone()));
+
+    // Refresh to_insert types so that they have fresh meta ids (e.g. new  DbIndexes
+    // need their meta id to be created in the storage database).
+    let to_insert = to_insert
+        .iter()
+        .map(|ty| type_system.lookup_custom_type(ty.name()))
+        .collect::<Result<Vec<_>, _>>()?;
+
+    let to_update = to_update
+        .into_iter()
+        .map(|(ty, delta)| {
+            let updated_ty = type_system.lookup_custom_type(ty.name());
+            updated_ty.map(|ty| (ty, delta))
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+
+    // Update the data database after all the metdata is up2date.
+    // We will not get a single transaction because in the general case those things
+    // could be in totally different databases. However, some foreign relations would force
+    // us to update some subset of them together. FIXME: revisit this when we support relations
+    let query_engine = &server.query_engine;
+    let mut transaction = query_engine.begin_transaction().await?;
+    for ty in to_insert.into_iter() {
+        query_engine.create_table(&mut transaction, &ty).await?;
+    }
+
+    for ty in to_remove.into_iter() {
+        query_engine.drop_table(&mut transaction, &ty).await?;
+    }
+
+    for (old, delta) in to_update.into_iter() {
+        query_engine
+            .alter_table(&mut transaction, &old, delta)
+            .await?;
+    }
+    QueryEngine::commit_transaction(transaction).await?;
+
+    Ok(ApplyResult {
+        type_system: type_system.clone(),
+        policy_system,
+        type_names_user_order,
+        labels,
+    })
+}
+
+fn aggregate_indexes(indexes: &Vec<IndexCandidate>) -> HashMap<String, Vec<DbIndex>> {
+    let mut index_map = HashMap::<String, Vec<DbIndex>>::new();
+    for candidate in indexes {
+        let idx = DbIndex::new_from_fields(candidate.properties.clone());
+        if let Some(type_indexes) = index_map.get_mut(&candidate.entity_name) {
+            type_indexes.push(idx);
+        } else {
+            index_map.insert(candidate.entity_name.clone(), vec![idx]);
+        }
+    }
+    index_map
+}
+
+fn sort_custom_types(
+    ts: &TypeSystem,
+    mut types: Vec<AddTypeRequest>,
+) -> Result<Vec<AddTypeRequest>> {
+    let mut graph: GraphMap<&str, (), Directed> = GraphMap::new();
+    // map the type name to its position in the types array
+    let mut ty_pos = HashMap::new();
+    for (pos, ty) in types.iter().enumerate() {
+        graph.add_node(ty.name.as_str());
+        ty_pos.insert(ty.name.as_str(), pos);
+        for field in &ty.field_defs {
+            let field_type = field.field_type()?;
+            match field_type {
+                TypeEnum::Entity(name) if !field_type.is_builtin(ts) => {
+                    graph.add_node(name);
+                    graph.add_edge(name, ty.name.as_str(), ());
+                }
+                _ => (),
+            }
+        }
+    }
+
+    let order = petgraph::algo::toposort(&graph, None)
+        .map_err(|_| anyhow!("cycle detected in models"))?
+        .iter()
+        .map(|ty| {
+            ty_pos
+                .get(ty)
+                .copied()
+                // this error should be caught earlier, the check is just an extra safety
+                .ok_or_else(|| anyhow!("unknown type {ty}"))
+        })
+        .collect::<Result<Vec<_>>>()?;
+
+    let mut permutation = permutation::Permutation::oneline(order);
+
+    permutation.apply_inv_slice_in_place(&mut types);
+
+    Ok(types)
+}
+
+impl FieldDefinition {
+    fn field_type(&self) -> Result<&TypeEnum> {
+        self.field_type
+            .as_ref()
+            .with_context(|| format!("field_type of field '{}' is None", self.name))?
+            .type_enum
+            .as_ref()
+            .with_context(|| format!("type_enum of field '{}' is None", self.name))
+    }
+}
+
+impl TypeEnum {
+    fn is_builtin(&self, ts: &TypeSystem) -> bool {
+        match self {
+            TypeEnum::String(_) | TypeEnum::Number(_) | TypeEnum::Bool(_) => true,
+            TypeEnum::Entity(name) => ts.lookup_builtin_type(name).is_ok(),
+        }
+    }
+
+    fn get_builtin(&self, ts: &TypeSystem) -> Result<Type> {
+        let ty = match self {
+            TypeEnum::String(_) => Type::String,
+            TypeEnum::Number(_) => Type::Float,
+            TypeEnum::Bool(_) => Type::Boolean,
+            TypeEnum::Entity(name) => ts.lookup_builtin_type(name)?,
+        };
+        Ok(ty)
+    }
+}
+
+impl From<Type> for TypeMsg {
+    fn from(ty: Type) -> TypeMsg {
+        let ty = match ty {
+            Type::Float => TypeEnum::Number(true),
+            Type::String => TypeEnum::String(true),
+            Type::Boolean => TypeEnum::Bool(true),
+            Type::Entity(entity) => TypeEnum::Entity(entity.name().to_owned()),
+        };
+        TypeMsg {
+            type_enum: Some(ty),
+        }
+    }
+}

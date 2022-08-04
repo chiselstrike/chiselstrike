@@ -1,4 +1,4 @@
-// SPDX-FileCopyrightText: © 2021 ChiselStrike <info@chiselstrike.com>
+// SPDX-FileCopyrightText: © 2022 ChiselStrike <info@chiselstrike.com>
 
 function opSync(opName: string, a?: unknown, b?: unknown): unknown {
     return Deno.core.opSync(opName, a, b);
@@ -78,17 +78,17 @@ abstract class Operator<Input, Output> {
 
     public runChiselQuery(): AsyncIterable<Output> {
         const getRid = () =>
-            opSync(
+            opAsync(
                 "op_chisel_relational_query_create",
                 this,
                 requestContext,
-            ) as number;
+            ) as Promise<number>;
         const recordToOutput = (rawRecord: unknown) => {
             return this.recordToOutput(rawRecord);
         };
         return {
             [Symbol.asyncIterator]: async function* () {
-                const rid = getRid();
+                const rid = await getRid();
                 try {
                     while (true) {
                         const properties = await opAsync(
@@ -696,25 +696,37 @@ export class ChiselCursor<T> {
 
 /** Extends the Request class adding ChiselStrike-specific helpers
  *
- * @property {string} version - The current API Version
- * @property {string} endpoint - The current endpoint being called.
- * @property {string} pathParams - This is essentially the URL's path, but with everything before the endpoint name removed.
+ * @property {string} versionId - The current API Version
  * @property {AuthUser} user - The currently logged in user. `undefined` if there isn't one.
- * @property {Query} query - Helper structure containing parsed query string from the URL.
+ * @property {Query} query - Helper class containing parsed query string from the URL.
+ * @property {Params} params - Helper class containing parameters from the URL path.
  */
 export class ChiselRequest extends Request {
+    public versionId: string;
+    public user: AuthUser | undefined;
     public query: Query;
+    public params: Params;
+
+    /** @deprecated This is no longer applicable */
+    public endpoint: string;
+    /** @deprecated Use RouteMap and params instead */
+    public pathParams: string;
 
     constructor(
         input: string,
         init: RequestInit,
-        public version: string,
-        public endpoint: string,
-        public pathParams: string,
-        public user?: AuthUser | undefined,
+        versionId: string,
+        user: AuthUser | undefined,
+        params: Record<string, string>,
+        routingPath: string,
     ) {
         super(input, init);
+        this.versionId = versionId;
         this.query = new Query(new URL(this.url).searchParams);
+        this.params = new Params(params);
+
+        this.endpoint = '';
+        this.pathParams = routingPath;
     }
 
     /**
@@ -752,16 +764,16 @@ export class Query {
      * @param paramName query parameter to be retrieved from the URL's query string.
      */
     getNumber(paramName: string): number | undefined {
-        const v = this.get(paramName);
-        if (v !== undefined) {
-            const f = Number.parseFloat(v);
-            if (Number.isNaN(f)) {
-                return undefined;
-            } else {
-                return f;
-            }
-        }
-        return undefined;
+        return getNumber(this.get(paramName));
+    }
+
+    /**
+     * Gets the first query parameter named `paramName` and tries to parse it as an integer. If no such a
+     * parameter exists or the parsing fails, returns `undefined`.
+     * @param paramName query parameter to be retrieved from the URL's query string.
+     */
+    getInt(paramName: string): number | undefined {
+        return getInt(this.get(paramName));
     }
 
     /**
@@ -772,18 +784,7 @@ export class Query {
      * @param paramName query parameter to be retrieved from the URL's query string.
      */
     getBool(paramName: string): boolean | undefined {
-        const v = this.get(paramName);
-        if (v !== undefined) {
-            switch (v.toLowerCase()) {
-                case "false":
-                case "0":
-                case "":
-                    return false;
-                default:
-                    return true;
-            }
-        }
-        return undefined;
+        return getBool(this.get(paramName));
     }
 
     /**
@@ -834,6 +835,55 @@ export class Query {
      */
     [Symbol.iterator](): IterableIterator<[string, string]> {
         return this.entries();
+    }
+}
+
+/** Params is a helper class used to access route parameters from the URL path. */
+export class Params {
+    constructor(private params: Record<string, string>) {}
+
+    get(paramName: string): string {
+        const value = this.params[paramName];
+        if (value === undefined) {
+            throw new Error(`undefined parameter ${paramName}`);
+        }
+        return value;
+    }
+
+    getNumber(paramName: string): number | undefined {
+        return getNumber(this.get(paramName));
+    }
+
+    getInt(paramName: string): number | undefined {
+        return getInt(this.get(paramName));
+    }
+
+    getBool(paramName: string): boolean | undefined {
+        return getBool(this.get(paramName));
+    }
+}
+
+function getNumber(value: string | undefined): number | undefined {
+    const f = Number.parseFloat(value ?? '');
+    return Number.isNaN(f) ? undefined : f;
+}
+
+function getInt(value: string | undefined): number | undefined {
+    const i = Number.parseInt(value ?? '', 10);
+    return Number.isNaN(i) ? undefined : i;
+}
+
+function getBool(value: string | undefined): boolean | undefined {
+    if (value === undefined) {
+        return undefined;
+    }
+    switch (value.toLowerCase()) {
+        case "false":
+        case "0":
+        case "":
+            return false;
+        default:
+            return true;
     }
 }
 
@@ -1064,7 +1114,7 @@ export class ChiselEntity {
         restrictions: Partial<T>,
     ): Promise<void> {
         ensureNotGet();
-        await opAsync("op_chisel_entity_delete", {
+        await opAsync("op_chisel_delete", {
             typeName: this.name,
             filterExpr: restrictionsToFilterExpr(restrictions),
         }, requestContext);
@@ -1234,16 +1284,19 @@ function ensureNotGet() {
 }
 
 export const requestContext: {
-    path: string;
+    versionId: string;
     method: string;
-    headers: Record<string, string>;
-    apiVersion: string;
-    userId?: string;
+    headers: [string, string][];
+    path: string;
+    routingPath: string;
+    userId: string | undefined;
 } = {
-    path: "",
-    method: "",
-    headers: {},
-    apiVersion: "",
+    versionId: '',
+    method: '',
+    headers: [],
+    path: '',
+    routingPath: '',
+    userId: undefined,
 };
 
 // TODO: BEGIN: this should be in another file: crud.ts

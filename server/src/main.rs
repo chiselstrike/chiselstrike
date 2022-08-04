@@ -4,11 +4,10 @@
 extern crate log;
 
 use anyhow::Result;
-use chisel_server::server;
+use chisel_server as server;
 use env_logger::Env;
 use log::LevelFilter;
 use nix::unistd::execv;
-use server::DoRepeat;
 use std::env;
 use std::ffi::CString;
 use std::io::Write;
@@ -58,7 +57,7 @@ async fn main() -> Result<()> {
         return Ok(());
     }
 
-    if let DoRepeat::Yes = server::run_all(opt).await? {
+    if let server::Restart::Yes = server::run(opt).await? {
         info!("Restarting");
         execv(&CString::new(exe).unwrap(), &args).unwrap();
     }

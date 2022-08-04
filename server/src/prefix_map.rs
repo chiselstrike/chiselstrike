@@ -2,11 +2,10 @@
 
 use std::collections::BTreeMap;
 use std::ops::Bound;
-use std::path::{Path, PathBuf};
 
 #[derive(Clone, Debug)]
-pub(crate) struct PrefixMap<T> {
-    map: BTreeMap<PathBuf, T>,
+pub struct PrefixMap<T> {
+    map: BTreeMap<String, T>,
 }
 
 impl<T> Default for PrefixMap<T> {
@@ -19,9 +18,9 @@ impl<T> Default for PrefixMap<T> {
 
 impl<T> PrefixMap<T> {
     /// Returns the longest map entry whose key is a prefix of path, if one exists.
-    pub(crate) fn longest_prefix(&self, path: &Path) -> Option<(&Path, &T)> {
+    pub fn longest_prefix(&self, path: &str) -> Option<(&str, &T)> {
         let path_range = (Bound::Unbounded, Bound::Included(path));
-        let tree_range = self.map.range::<Path, _>(path_range);
+        let tree_range = self.map.range::<str, _>(path_range);
         for (p, v) in tree_range.rev() {
             if path.starts_with(p) {
                 return Some((p, v));
@@ -30,16 +29,8 @@ impl<T> PrefixMap<T> {
         None
     }
 
-    pub(crate) fn iter(&self) -> impl Iterator<Item = (&Path, &T)> {
-        self.map.iter().map(|(k, v)| (k.as_path(), v))
-    }
-
-    pub(crate) fn insert(&mut self, k: PathBuf, v: T) -> Option<T> {
+    pub fn insert(&mut self, k: String, v: T) -> Option<T> {
         self.map.insert(k, v)
-    }
-
-    pub(crate) fn remove_prefix(&mut self, prefix: &Path) {
-        self.map.retain(|k, _| !k.starts_with(prefix))
     }
 }
 
@@ -49,8 +40,8 @@ mod tests {
     use std::collections::BTreeMap;
     use std::path::{Path, PathBuf};
 
-    fn entry(path: &str) -> (PathBuf, String) {
-        (PathBuf::from(path), path.to_string())
+    fn entry(path: &str) -> (String, String) {
+        (path.to_string(), path.to_string())
     }
 
     fn fixture() -> PrefixMap<String> {
@@ -58,14 +49,14 @@ mod tests {
         PrefixMap { map }
     }
 
-    fn lp<'t>(path: &str, tree: &'t PrefixMap<String>) -> Option<(&'t Path, &'t String)> {
+    fn lp<'t>(path: &str, tree: &'t PrefixMap<String>) -> Option<(&'t str, &'t String)> {
         tree.longest_prefix(path.as_ref())
     }
 
     macro_rules! assert_longest_prefix {
         ( $tree:expr, $path:expr, $expected:expr ) => {{
             let e = entry($expected);
-            let e: (&Path, &String) = (&e.0, &e.1);
+            let e: (&str, &String) = (&e.0, &e.1);
             assert_eq!(lp($path, &$tree), Some(e))
         }};
     }

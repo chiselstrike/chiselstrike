@@ -4,7 +4,7 @@ pub mod deno;
 pub mod node;
 
 use crate::chisel::chisel_rpc_client::ChiselRpcClient;
-use crate::chisel::{ChiselApplyRequest, IndexCandidate, PolicyUpdateRequest};
+use crate::chisel::{ApplyRequest, IndexCandidate, PolicyUpdateRequest};
 use crate::project::{read_manifest, read_to_string, AutoIndex, Module, Optimize};
 use anyhow::{anyhow, Context, Result};
 use serde_json::Value;
@@ -87,11 +87,12 @@ pub(crate) async fn apply(
     }
     let optimize = chiselc_available && manifest.optimize == Optimize::Yes;
     let auto_index = chiselc_available && manifest.auto_index == AutoIndex::Yes;
-    let (endpoints_req, index_candidates_req) = if manifest.modules == Module::Node {
-        node::apply(&endpoints, &entities, optimize, auto_index, &type_check).await
-    } else {
-        deno::apply(&endpoints, &entities, optimize, auto_index).await
-    }?;
+    let (modules, index_candidates_req) = match manifest.modules {
+        Module::Node =>
+            node::apply(&endpoints, &entities, optimize, auto_index, &type_check).await?,
+        Module::Deno =>
+            deno::apply(&endpoints, &entities, optimize, auto_index).await?,
+    };
 
     for p in policies {
         policy_req.push(PolicyUpdateRequest {
@@ -130,9 +131,9 @@ pub(crate) async fn apply(
     };
 
     let mut client = ChiselRpcClient::connect(server_url.clone()).await?;
-    let mut req = ChiselApplyRequest {
+    let mut req = ApplyRequest {
         types: types_req,
-        sources: Default::default(),
+        modules,
         index_candidates: index_candidates_req,
         policies: policy_req,
         allow_type_deletion: allow_type_deletion.into(),
@@ -141,30 +142,10 @@ pub(crate) async fn apply(
         app_name,
     };
 
-    // According to the spec
-    // (https://html.spec.whatwg.org/multipage/webappapis.html#module-map),
-    // "Module maps are used to ensure that imported module scripts
-    // are only fetched, parsed, and evaluated once per Document or
-    // worker."
-    //
-    // Since we want to change the modules, we need the server to have
-    // a Worker that has never imported them. Do this by first
-    // clearing the sources from the server and then restarting it.
-    //
-    // FIXME: We should have a more fine gained way to recreate just
-    // the worker without loading the sources from the DB.
-    execute!(client.apply(tonic::Request::new(req.clone())).await);
-    req.sources = endpoints_req;
-    crate::restart(server_url).await?;
-
     let msg = execute!(client.apply(tonic::Request::new(req)).await);
 
     for ty in msg.types {
         println!("Model defined: {}", ty);
-    }
-
-    for end in msg.endpoints {
-        println!("End point defined: {}", end);
     }
 
     for lbl in msg.labels {

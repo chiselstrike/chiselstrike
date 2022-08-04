@@ -1,323 +1,240 @@
-// SPDX-FileCopyrightText: © 2021 ChiselStrike <info@chiselstrike.com>
+// SPDX-FileCopyrightText: © 2022 ChiselStrike <info@chiselstrike.com>
 
-use crate::prefix_map::PrefixMap;
-use anyhow::{Error, Result};
-use deno_core::futures;
-use futures::future::LocalBoxFuture;
-use futures::ready;
-use futures::stream::Stream;
-use hyper::body::HttpBody;
-use hyper::header::HeaderValue;
-use hyper::service::{make_service_fn, service_fn};
-use hyper::{HeaderMap, Request, Response, Server, StatusCode};
-use socket2::{Domain, Protocol, Socket, Type};
-use std::collections::HashMap;
+use crate::auth;
+use crate::server::Server;
+use crate::version::Version;
+use anyhow::{Context, Error, Result};
+use deno_core::serde_v8;
+use enclose::enclose;
+use futures::FutureExt;
+use futures::stream::{FuturesUnordered, TryStreamExt};
+use lazy_static::lazy_static;
+use regex::Regex;
+use serde::{Serialize, Deserialize};
 use std::convert::Infallible;
-use std::convert::TryFrom;
-use std::io::Cursor;
-use std::net::ToSocketAddrs;
-use std::path::Path;
-use std::path::PathBuf;
-use std::pin::Pin;
-use std::rc::Rc;
-use std::sync::{Arc, Mutex};
-use std::task::{Context, Poll};
+use std::future::ready;
+use std::net::SocketAddr;
+use std::sync::Arc;
+use tokio::sync::oneshot;
+use utils::TaskHandle;
 
-type JsStream = Pin<Box<dyn Stream<Item = Result<Box<[u8]>>>>>;
-
-pub(crate) enum Body {
-    Const(Option<Box<[u8]>>),
-    Stream(JsStream),
-}
-
-impl From<String> for Body {
-    fn from(a: String) -> Self {
-        Body::Const(Some(a.into_boxed_str().into_boxed_bytes()))
-    }
-}
-
-impl Default for Body {
-    fn default() -> Self {
-        "".to_string().into()
-    }
-}
-
-impl HttpBody for Body {
-    type Data = Cursor<Box<[u8]>>;
-    type Error = Error;
-
-    fn poll_data(
-        self: Pin<&mut Self>,
-        cx: &mut Context<'_>,
-    ) -> Poll<Option<Result<Self::Data, Self::Error>>> {
-        let r = match self.get_mut() {
-            Body::Const(ref mut inner) => inner.take().map(|x| Ok(Cursor::new(x))),
-            Body::Stream(ref mut stream) => {
-                ready!(stream.as_mut().poll_next(cx)).map(|x| x.map(Cursor::new))
-            }
-        };
-        Poll::Ready(r)
-    }
-
-    fn poll_trailers(
-        self: Pin<&mut Self>,
-        _: &mut Context<'_>,
-    ) -> Poll<Result<Option<HeaderMap<HeaderValue>>, Self::Error>> {
-        Poll::Ready(Ok(None))
-    }
-}
-
-// RouteFns are passed between threads in rpc.rs, as they are built in the RPC threads and then
-// distributed to the executors.
-//
-// At the same time, we need to make this clonable to be able to sanely use interior mutability
-// inside the ApiService struct, so we need some reference counted type instead of a Box
-type RouteFn = Arc<
-    dyn Fn(Request<hyper::Body>) -> LocalBoxFuture<'static, Result<Response<Body>>> + Send + Sync,
->;
-
-#[derive(Default, Clone, Debug)]
-pub(crate) struct RequestPath {
-    api_version: String,
-    path: String,
-}
-
-impl RequestPath {
-    pub(crate) fn api_version(&self) -> &str {
-        &self.api_version
-    }
-
-    pub(crate) fn path(&self) -> &str {
-        &self.path
-    }
-}
-
-thread_local! {
-    static RP_REGEX: regex::Regex =
-        regex::Regex::new("/(?P<version>[^/]+)(?P<path>/.+)").unwrap();
-}
-
-impl TryFrom<&str> for RequestPath {
-    type Error = ();
-
-    fn try_from(value: &str) -> Result<Self, Self::Error> {
-        let (api_version, path) = RP_REGEX.with(|rp| {
-            let caps = rp.captures(value).ok_or(())?;
-            let api_version = caps.name("version").ok_or(())?.as_str().to_string();
-            let path = caps.name("path").ok_or(())?.as_str().to_string();
-            Ok((api_version, path))
-        })?;
-
-        Ok(RequestPath { api_version, path })
-    }
-}
-
-#[derive(Default, Debug, Clone)]
-pub(crate) struct ApiInfo {
-    pub(crate) name: String,
-    pub(crate) tag: String,
-}
-
-impl ApiInfo {
-    pub(crate) fn new<N, T>(name: N, tag: T) -> Self
-    where
-        N: ToString,
-        T: ToString,
-    {
-        Self {
-            name: name.to_string(),
-            tag: tag.to_string(),
-        }
-    }
-
-    pub(crate) fn all_routes() -> Self {
-        let tag = env!("VERGEN_GIT_SEMVER_LIGHTWEIGHT").to_string();
-        Self {
-            name: "ChiselStrike all routes".into(),
-            tag,
-        }
-    }
-
-    pub(crate) fn chiselstrike() -> Self {
-        let tag = env!("VERGEN_GIT_SEMVER_LIGHTWEIGHT").to_string();
-        Self {
-            name: "ChiselStrike Internal API".into(),
-            tag,
-        }
-    }
-}
-pub(crate) type ApiInfoMap = HashMap<PathBuf, ApiInfo>;
-
-/// API service for Chisel server.
-pub(crate) struct ApiService {
-    // Although we are on a TPC environment, this sync mutex should be fine. It will
-    // never contend because the ApiService is thread-local. The alternative is a RefCell
-    // with runtime checking, which is likely cheaper, but still this is safer and we don't
-    // have to manually implement Send (which is unsafe).
-    paths: Mutex<PrefixMap<RouteFn>>,
-    info: Mutex<ApiInfoMap>,
-}
-
-impl ApiService {
-    pub(crate) fn new(mut info: ApiInfoMap) -> Self {
-        info.insert("__chiselstrike".into(), ApiInfo::chiselstrike());
-        info.insert("".into(), ApiInfo::all_routes());
-        Self {
-            paths: Default::default(),
-            info: Mutex::new(info),
-        }
-    }
-
-    /// Finds the right RouteFn for this request.
-    fn find_route_fn<S: AsRef<Path>>(&self, request: S) -> Option<RouteFn> {
-        match self.paths.lock().unwrap().longest_prefix(request.as_ref()) {
-            None => None,
-            Some((_, f)) => Some(f.clone()),
-        }
-    }
-
-    /// Adds a route.
-    ///
-    /// Params:
-    ///
-    ///  * path: The path for the route, including any leading /
-    ///  * code: A String containing the raw code of the endpoint, before any compilation.
-    ///  * route_fn: the actual function to be executed, likely some call to deno.
-    pub(crate) fn add_route(&self, path: PathBuf, route_fn: RouteFn) {
-        self.paths.lock().unwrap().insert(path, route_fn);
-    }
-
-    /// Remove all routes that have this prefix.
-    pub(crate) fn remove_routes(&self, prefix: &Path) {
-        self.paths.lock().unwrap().remove_prefix(prefix)
-    }
-
-    pub(crate) fn update_api_info<P: AsRef<Path>>(&self, api_version: P, info: ApiInfo) {
-        crate::introspect::add_introspection(self, &api_version);
-        self.info
-            .lock()
-            .unwrap()
-            .insert(api_version.as_ref().into(), info);
-    }
-
-    pub(crate) fn get_api_info<P: AsRef<Path>>(&self, api_version: P) -> Option<ApiInfo> {
-        self.info.lock().unwrap().get(api_version.as_ref()).cloned()
-    }
-
-    pub(crate) fn routes(&self) -> Vec<String> {
-        let mut result = vec![];
-        for (path, _) in self.paths.lock().unwrap().iter() {
-            result.push(path.display().to_string());
-        }
-        result
-    }
-
-    async fn route_impl(&self, req: Request<hyper::Body>) -> Result<Response<Body>> {
-        if let Some(route_fn) = self.find_route_fn(req.uri().path()) {
-            return route_fn(req).await;
-        }
-        ApiService::not_found()
-    }
-
-    async fn route(&self, req: Request<hyper::Body>) -> hyper::http::Result<Response<Body>> {
-        match self.route_impl(req).await {
-            Ok(val) => Ok(val),
-            Err(err) => Self::internal_error(err),
-        }
-    }
-
-    pub(crate) fn not_found() -> Result<Response<Body>> {
-        Ok(Response::builder()
-            .status(StatusCode::NOT_FOUND)
-            .body(Body::default())?)
-    }
-
-    fn internal_error(err: anyhow::Error) -> hyper::http::Result<Response<Body>> {
-        Response::builder()
-            .status(StatusCode::INTERNAL_SERVER_ERROR)
-            .body(format!("{:?}\n", err).into())
-    }
-
-    pub(crate) fn forbidden(err: &str) -> Result<Response<Body>> {
-        Ok(Response::builder()
-            .status(StatusCode::FORBIDDEN)
-            .body(err.to_string().into())?)
-    }
-}
-
-#[derive(Clone)]
-struct LocalExec;
-
-impl<F> hyper::rt::Executor<F> for LocalExec
-where
-    F: std::future::Future + 'static,
+pub async fn spawn(server: Arc<Server>, listen_addr: String) 
+    -> Result<(Vec<SocketAddr>, TaskHandle<Result<()>>)>
 {
-    fn execute(&self, fut: F) {
-        tokio::task::spawn_local(fut);
+    let servers = FuturesUnordered::new();
+    let mut local_addrs = Vec::new();
+    for addr in tokio::net::lookup_host(listen_addr).await? {
+        let make_service = hyper::service::make_service_fn(enclose!{(server) move |_conn| {
+            let service = hyper::service::service_fn(enclose!{(server) move |request| {
+                handle_request(server.clone(), request).map(Ok::<_, Infallible>)
+            }});
+            ready(Ok::<_, Infallible>(service))
+        }});
+
+        // TODO: implement graceful shutdown?
+        let incoming = hyper::server::conn::AddrIncoming::bind(&addr)?;
+        local_addrs.push(incoming.local_addr());
+        let server = hyper::Server::builder(incoming)
+            .serve(make_service);
+
+        servers.push(server);
+    }
+
+    let task = tokio::task::spawn(async move {
+        servers.try_collect().await.context("Error while serving HTTP API")
+    });
+    Ok((local_addrs, TaskHandle(task)))
+}
+
+async fn handle_request(
+    server: Arc<Server>,
+    request: hyper::Request<hyper::Body>,
+) -> hyper::Response<hyper::Body> {
+    let method = request.method().clone();
+    let uri = request.uri().clone();
+    let mut response = try_handle_request(server, request).await
+        .unwrap_or_else(|err| handle_error(&method, &uri, err));
+    add_default_headers(&mut response);
+    debug!("{} {} -> {}", method, uri, response.status());
+    response
+}
+
+async fn try_handle_request(
+    server: Arc<Server>,
+    request: hyper::Request<hyper::Body>,
+) -> Result<hyper::Response<hyper::Body>> {
+    let path = request.uri().path();
+    if path == "/" {
+        return Ok(handle_index(server));
+    }
+
+    if let Some((version_id, routing_path)) = get_version_path(path) {
+        if let Some(version) = server.trunk.get_version(version_id) {
+            let routing_path = routing_path.into();
+            return handle_version_request(server, version, request, routing_path).await;
+        }
+    }
+
+    Ok(handle_not_found())
+}
+
+#[derive(Debug)]
+pub struct ApiRequestResponse {
+    pub request: ApiRequest,
+    pub response_tx: oneshot::Sender<ApiResponse>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ApiRequest {
+    pub method: String,
+    pub url: String,
+    pub headers: Vec<(String, String)>,
+    pub body: serde_v8::ZeroCopyBuf,
+    pub routing_path: String,
+    pub user_id: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ApiResponse {
+    pub status: u16,
+    pub headers: Vec<(String, String)>,
+    pub body: serde_v8::ZeroCopyBuf,
+}
+
+async fn handle_version_request(
+    server: Arc<Server>,
+    version: Arc<Version>,
+    request: hyper::Request<hyper::Body>,
+    routing_path: String,
+) -> Result<hyper::Response<hyper::Body>> {
+    let (req_parts, req_body) = request.into_parts();
+    let req_body = hyper::body::to_bytes(req_body).await?;
+
+    // TODO: we don't authenticate the user!!!
+    let user_id: Option<String> = req_parts.headers.get("ChiselUID")
+        .and_then(|value| value.to_str().ok())
+        .map(|value| value.into());
+
+    let username = auth::get_username_from_id(&server, &version, user_id.as_deref()).await;
+    if !version.policy_system.user_authorization.is_allowed(username.as_deref(), &routing_path) {
+        return Ok(handle_forbidden("Unauthorized user"));
+    }
+
+    let api_request = ApiRequest {
+        method: req_parts.method.as_str().into(),
+        url: req_parts.uri.to_string(),
+        headers: req_parts.headers.iter()
+            .map(|(name, value)| (name.to_string(), value.to_str().unwrap_or("").into()))
+            .collect(),
+        // TODO: unnecessary copy from `Bytes` to `Vec<u8>`
+        body: serde_v8::ZeroCopyBuf::from(req_body.to_vec()),
+        routing_path,
+        user_id,
+    };
+
+    let (response_tx, response_rx) = oneshot::channel();
+    let _: Result<_, _> = version.request_tx.send(ApiRequestResponse {
+        request: api_request,
+        response_tx,
+    }).await;
+    let api_response = response_rx.await
+        .context("Request was aborted")?;
+
+    // TODO: unnecessary copy from `ZeroCopyBuf` to `Vec<u8>`
+    let response_body = hyper::Body::from(api_response.body.to_vec());
+    let mut response = hyper::Response::new(response_body);
+
+    *response.status_mut() = hyper::StatusCode::from_u16(api_response.status)
+        .context("Response specified an invalid status code")?;
+    for (name, value) in api_response.headers.into_iter() {
+        let name = hyper::header::HeaderName::from_bytes(name.as_bytes())
+            .with_context(|| format!("Response header {:?} is not a valid header name", name))?;
+        let value = hyper::header::HeaderValue::from_str(&value)
+            .with_context(|| format!("Response header {:?} has invalid value", name))?;
+        response.headers_mut().append(name, value);
+    }
+
+    Ok(response)
+}
+
+fn get_version_path(path: &str) -> Option<(&str, &str)> {
+    lazy_static! {
+        static ref REGEX: Regex = Regex::new(r"(?x)
+            ^
+            / (?P<version_id> [^/]*)
+            (?P<routing_path> (/ .*)?)
+            $
+        ").unwrap();
+    }
+    let captures = REGEX.captures(path)?;
+    let version_id = captures.name("version_id").unwrap().as_str();
+    let routing_path = captures.name("routing_path").unwrap().as_str();
+    Some((version_id, routing_path))
+}
+
+fn handle_index(server: Arc<Server>) -> hyper::Response<hyper::Body> {
+    let mut versions = server.trunk.list_versions();
+    versions.sort_unstable_by(|x, y| x.version_id.cmp(&y.version_id));
+
+    let mut paths = serde_json::Map::new();
+    paths.insert("/".into(), serde_json::json!({}));
+    for version in versions.into_iter() {
+        paths.insert(format!("/{}", version.version_id), serde_json::json!({}));
+    }
+
+    let swagger = serde_json::json!({
+        "swagger": "2.0",
+        "info": {
+            "title": "ChiselStrike all routes",
+            "version": env!("VERGEN_GIT_SEMVER_LIGHTWEIGHT"),
+        },
+        "paths": paths,
+    });
+
+    let response = serde_json::to_string_pretty(&swagger).unwrap();
+    hyper::Response::builder()
+        .header("content-type", "application/json")
+        .body(hyper::Body::from(response))
+        .unwrap()
+}
+
+fn handle_not_found() -> hyper::Response<hyper::Body> {
+    hyper::Response::builder()
+        .status(hyper::StatusCode::NOT_FOUND)
+        .body(hyper::Body::empty())
+        .unwrap()
+}
+
+fn handle_forbidden(msg: &'static str) -> hyper::Response<hyper::Body> {
+    hyper::Response::builder()
+        .status(hyper::StatusCode::FORBIDDEN)
+        .body(hyper::Body::from(msg))
+        .unwrap()
+}
+
+fn handle_error(method: &hyper::Method, uri: &hyper::Uri, err: Error) -> hyper::Response<hyper::Body> {
+    log::error!("Error while handling {} {}: {:?}", method, uri, err);
+    hyper::Response::builder()
+        .status(hyper::StatusCode::INTERNAL_SERVER_ERROR)
+        .body(hyper::Body::empty())
+        .unwrap()
+}
+
+fn add_default_headers(response: &mut hyper::Response<hyper::Body>) {
+    let default_headers = &[
+        ("access-control-allow-origin", "*"),
+        ("access-control-allow-methods", "POST, PUT, GET, OPTIONS, DELETE"),
+        ("access-control-allow-headers", "Content-Type,ChiselUID"),
+    ];
+
+    let headers = response.headers_mut();
+    for (name, value) in default_headers.iter() {
+        let name = hyper::header::HeaderName::from_static(name);
+        if !headers.contains_key(&name) {
+            headers.insert(name, hyper::header::HeaderValue::from_static(value));
+        }
     }
 }
 
-/// Spawn an API server
-///
-/// # Arguments
-/// * `api` - the API service of the server
-/// * `listen_addr` - the listen address of the API server
-/// * `shutdown` - channel that notifies the server of shutdown
-pub(crate) fn spawn(
-    api: Rc<ApiService>,
-    listen_addr: String,
-    shutdown: async_channel::Receiver<()>,
-) -> Result<Vec<tokio::task::JoinHandle<Result<(), hyper::Error>>>> {
-    let mut tasks = Vec::new();
-    let sock_addrs = listen_addr.to_socket_addrs()?;
-    for addr in sock_addrs {
-        debug!("{} has address {:?}", listen_addr, addr);
-        let api = api.clone();
-        let shutdown = shutdown.clone();
-        let domain = if addr.is_ipv6() {
-            Domain::ipv6()
-        } else {
-            Domain::ipv4()
-        };
-        let sk = Socket::new(domain, Type::stream(), Some(Protocol::tcp()))?;
-        let addr = socket2::SockAddr::from(addr);
-        sk.set_reuse_port(true)?;
-        sk.bind(&addr)?;
-        sk.listen(1024)?;
-
-        let make_svc = make_service_fn(move |_conn| {
-            let api = api.clone();
-            async move {
-                Ok::<_, Infallible>(service_fn(move |req| {
-                    let api = api.clone();
-                    async move { api.route(req).await }
-                }))
-            }
-        });
-        let server = Server::from_tcp(sk.into_tcp_listener())?
-            .executor(LocalExec)
-            .serve(make_svc);
-        let task = tokio::task::spawn_local(async move {
-            let ret = server
-                .with_graceful_shutdown(async {
-                    shutdown.recv().await.ok();
-                })
-                .await;
-            debug!("hyper shutdown");
-            ret
-        });
-        tasks.push(task);
-    }
-    Ok(tasks)
-}
-
-pub(crate) fn response_template() -> http::response::Builder {
-    Response::builder()
-        // TODO: Let the user control this.
-        .header("Access-Control-Allow-Origin", "*")
-        .header(
-            "Access-Control-Allow-Methods",
-            "POST, PUT, GET, OPTIONS, DELETE",
-        )
-        .header("Access-Control-Allow-Headers", "Content-Type,ChiselUID")
-}

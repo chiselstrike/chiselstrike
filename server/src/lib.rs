@@ -1,35 +1,34 @@
-// SPDX-FileCopyrightText: © 2021 ChiselStrike <info@chiselstrike.com>
+// SPDX-FileCopyrightText: © 2022 ChiselStrike <info@chiselstrike.com>
 
 #![cfg_attr(feature = "must_not_suspend", feature(must_not_suspend))]
 #![cfg_attr(feature = "must_not_suspend", deny(must_not_suspend))]
 
-pub(crate) type JsonObject = serde_json::Map<String, serde_json::Value>;
+pub use crate::auth::is_auth_entity_name;
+pub use crate::server::{Restart, run};
+pub use crate::opt::Opt;
 
-macro_rules! send_command {
-    ( $code:block ) => {{
-        Box::new({ move || async move { $code }.boxed_local() })
-    }};
-}
+pub(crate) type JsonObject = serde_json::Map<String, serde_json::Value>;
 
 #[macro_use]
 extern crate log;
 
 pub(crate) mod api;
-pub mod auth;
+pub(crate) mod apply;
+pub(crate) mod auth;
 pub(crate) mod datastore;
-pub(crate) mod deno;
 pub(crate) mod internal;
-pub(crate) mod introspect;
+pub(crate) mod ops;
+pub(crate) mod opt;
 pub(crate) mod policies;
 pub(crate) mod prefix_map;
-pub(crate) mod rcmut;
 pub(crate) mod rpc;
-pub(crate) mod runtime;
 pub(crate) mod secrets;
-pub mod server;
+pub(crate) mod server;
+pub(crate) mod trunk;
 pub(crate) mod types;
-pub(crate) mod vecmap;
+pub(crate) mod version;
+pub(crate) mod worker;
 
-pub(crate) mod chisel {
+pub(crate) mod proto {
     tonic::include_proto!("chisel");
 }

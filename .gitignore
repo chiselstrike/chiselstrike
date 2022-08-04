@@ -4,3 +4,6 @@
 .vscode
 *.code-workspace
 /.chisel_dev
+/.chiseld.db*
+/.env
+Session.vim
