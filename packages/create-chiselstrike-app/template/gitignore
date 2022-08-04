@@ -1,1 +1,4 @@
+/.chiseld.db*
+/.gen
+/.vscode
 /node_modules
