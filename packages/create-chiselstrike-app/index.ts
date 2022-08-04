@@ -66,6 +66,10 @@ function run(projectDirectory: string, chiselVersion: string) {
     );
 
     fs.copyFileSync(
+        path.join(__dirname, "template", "README-template.md"),
+        path.join(projectDirectory, "README.md"),
+    );
+    fs.copyFileSync(
         path.join(__dirname, "template", "settings.json"),
         path.join(projectDirectory, ".vscode", "settings.json"),
     );
