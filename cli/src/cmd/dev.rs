@@ -11,6 +11,7 @@ use futures::channel::mpsc::channel;
 use futures::{FutureExt, SinkExt, StreamExt};
 use notify::{event::ModifyKind, Event, EventKind, RecommendedWatcher, RecursiveMode, Watcher};
 use std::collections::HashSet;
+use std::env;
 use std::panic;
 use std::path::PathBuf;
 use std::time::Duration;
@@ -22,7 +23,8 @@ pub(crate) async fn cmd_dev(
     type_check: bool,
 ) -> Result<JoinHandle<Result<()>>> {
     let type_check = type_check.into();
-    let manifest = read_manifest()?;
+    let cwd = env::current_dir()?;
+    let manifest = read_manifest(&cwd)?;
     let (signal_tx, mut signal_rx) = utils::make_signal_channel();
     let mut sigterm = tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())?;
     let mut sigint = tokio::signal::unix::signal(tokio::signal::unix::SignalKind::interrupt())?;

@@ -29,11 +29,14 @@ pub(crate) struct FileRoute {
     pub path_pattern: String,
 }
 
-pub(crate) fn build_file_route_map(route_dirs: &[PathBuf]) -> Result<FileRouteMap> {
+pub(crate) fn build_file_route_map(base_dir: &Path, route_dirs: &[PathBuf]) -> Result<FileRouteMap> {
     let mut route_map = FileRouteMap { routes: Vec::new() };
     for route_dir in route_dirs.iter() {
-        let route_dir = fs::canonicalize(route_dir)?;
-        walk_dir(&mut route_map, &route_dir, "")?;
+        let route_dir = base_dir.join(route_dir);
+        let route_dir = fs::canonicalize(&route_dir)
+            .with_context(|| format!("Could not canonicalize path {}", route_dir.display()))?;
+        walk_dir(&mut route_map, &route_dir, "")
+            .with_context(|| format!("Could not read routes from {}", route_dir.display()))?;
     }
     route_map.routes.sort_unstable_by_key(|route| route.file_path.clone());
     Ok(route_map)
@@ -41,7 +44,9 @@ pub(crate) fn build_file_route_map(route_dirs: &[PathBuf]) -> Result<FileRouteMa
 
 fn walk_dir(route_map: &mut FileRouteMap, dir_path: &Path, path_pattern: &str) -> Result<()> {
     let root_ts_path = dir_path.join("_root.ts");
-    if try_is_file(&root_ts_path)? {
+    let root_is_file = try_is_file(&root_ts_path)
+        .with_context(|| format!("Could not determine whether {} exists", root_ts_path.display()))?;
+    if root_is_file {
         route_map.routes.push(FileRoute {
             file_path: root_ts_path,
             path_pattern: path_pattern.into(),
@@ -50,12 +55,13 @@ fn walk_dir(route_map: &mut FileRouteMap, dir_path: &Path, path_pattern: &str) -
     }
 
     for entry in fs::read_dir(dir_path)? {
-        walk_dir_entry(route_map, entry?, path_pattern)?;
+        let entry = entry?;
+        walk_dir_entry(route_map, &entry, path_pattern)?;
     }
     Ok(())
 }
 
-fn walk_dir_entry(route_map: &mut FileRouteMap, entry: fs::DirEntry, path_pattern: &str) -> Result<()> {
+fn walk_dir_entry(route_map: &mut FileRouteMap, entry: &fs::DirEntry, path_pattern: &str) -> Result<()> {
     let entry_name = entry.file_name();
     let entry_name = entry_name.to_str()
         .with_context(|| format!("Cannot convert file name {:?} to UTF-8", entry.file_name()))?;
@@ -65,7 +71,8 @@ fn walk_dir_entry(route_map: &mut FileRouteMap, entry: fs::DirEntry, path_patter
 
     let entry_path = entry.path();
     // don't use `entry.file_type()`, because we want to follow symlinks
-    let metadata = fs::metadata(&entry_path)?;
+    let metadata = fs::metadata(&entry_path)
+        .with_context(|| format!("Could not read metadata of {}", entry_path.display()))?;
     if metadata.is_file() {
         if let Some(stem) = entry_name.strip_suffix(".ts") {
             route_map.routes.push(FileRoute {
@@ -78,7 +85,8 @@ fn walk_dir_entry(route_map: &mut FileRouteMap, entry: fs::DirEntry, path_patter
         }
     } else if metadata.is_dir() {
         let dir_path_pattern = format!("{}/{}", path_pattern, stem_to_pattern(&entry_name));
-        walk_dir(route_map, &entry_path, &dir_path_pattern)?;
+        walk_dir(route_map, &entry_path, &dir_path_pattern)
+            .with_context(|| format!("Could not read routes from {}", entry_path.display()))?;
     }
 
     Ok(())

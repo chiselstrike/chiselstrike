@@ -5,7 +5,6 @@ use anyhow::{Context, Result};
 use handlebars::Handlebars;
 use serde_derive::Deserialize;
 use std::collections::BTreeMap;
-use std::env;
 use std::fmt::Write;
 use std::fs;
 use std::io::{stdin, ErrorKind, Read};
@@ -88,22 +87,20 @@ pub(crate) struct Manifest {
 }
 
 impl Manifest {
-    pub fn models(&self) -> anyhow::Result<Vec<PathBuf>> {
-        Self::dirs_to_paths(&self.models)
+    pub fn models(&self, base_dir: &Path) -> anyhow::Result<Vec<PathBuf>> {
+        Self::dirs_to_paths(base_dir, &self.models)
     }
 
-    pub fn route_map(&self) -> anyhow::Result<FileRouteMap> {
-        build_file_route_map(&self.routes)
+    pub fn route_map(&self, base_dir: &Path) -> anyhow::Result<FileRouteMap> {
+        build_file_route_map(base_dir, &self.routes)
             .context("Could not read routes (endpoints) from filesystem")
     }
 
-    pub fn policies(&self) -> anyhow::Result<Vec<PathBuf>> {
-        Self::dirs_to_paths(&self.policies)
+    pub fn policies(&self, base_dir: &Path) -> anyhow::Result<Vec<PathBuf>> {
+        Self::dirs_to_paths(base_dir, &self.policies)
     }
 
-    fn dirs_to_paths(dirs: &[PathBuf]) -> anyhow::Result<Vec<PathBuf>> {
-        // sucks to do this for all invocations but keeps things simple
-        let me = Path::new("./").canonicalize()?;
+    fn dirs_to_paths(base_dir: &Path, dirs: &[PathBuf]) -> anyhow::Result<Vec<PathBuf>> {
         let mut paths = vec![];
         for dir in dirs {
             anyhow::ensure!(
@@ -120,7 +117,7 @@ impl Manifest {
                 continue;
             }
             anyhow::ensure!(
-                me != dir && dir.starts_with(&me),
+                base_dir != dir && dir.starts_with(&base_dir),
                 "{} has to be a subdirectory of the current directory",
                 dir.display()
             );
@@ -174,7 +171,7 @@ fn read_dir<P: AsRef<Path>>(dir: P) -> anyhow::Result<Vec<std::io::Result<fs::Di
     .with_context(|| format!("Could not open {}", dir.as_ref().display()))
 }
 
-fn read_manifest_from(dir: &Path) -> Result<Manifest> {
+pub(crate) fn read_manifest(dir: &Path) -> Result<Manifest> {
     let file = dir.join(MANIFEST_FILE);
 
     if !file.exists() {
@@ -192,11 +189,6 @@ fn read_manifest_from(dir: &Path) -> Result<Manifest> {
         }
     };
     Ok(manifest)
-}
-
-pub(crate) fn read_manifest() -> Result<Manifest> {
-    let cwd = env::current_dir()?;
-    read_manifest_from(&cwd)
 }
 
 /// Opens and reads an entire file (or stdin, if filename is "-")
@@ -309,9 +301,17 @@ mod tests {
         let dir = tmp_dir.path();
         std::fs::write(dir.join(MANIFEST_FILE), toml.as_bytes()).unwrap();
         std::fs::create_dir(dir.join("./policies")).unwrap();
-        std::fs::create_dir(dir.join("./endpoints")).unwrap();
+        std::fs::create_dir(dir.join("./routes")).unwrap();
         std::fs::create_dir(dir.join("./models")).unwrap();
         tmp_dir
+    }
+
+    fn check_manifest(d: &TempDir) -> Manifest {
+        let m = read_manifest(d.path()).unwrap();
+        m.models(&d.path()).unwrap();
+        m.policies(&d.path()).unwrap();
+        m.route_map(&d.path()).unwrap();
+        m
     }
 
     #[test]
@@ -319,15 +319,25 @@ mod tests {
         let d = gen_manifest(
             r#"
 models = ["models"]
+routes = ["routes"]
+policies = ["policies"]
+"#,
+        );
+        check_manifest(&d);
+    }
+
+    #[test]
+    fn parse_endpoints_as_routes() {
+        let d = gen_manifest(
+            r#"
+models = ["models"]
 endpoints = ["endpoints"]
 policies = ["policies"]
 "#,
         );
-        println!("reading {:?}", std::env::current_dir());
-        let m = read_manifest_from(d.path()).unwrap();
-        m.models().unwrap();
-        m.policies().unwrap();
-        m.endpoints().unwrap();
+        std::fs::create_dir(d.path().join("./endpoints")).unwrap();
+        let m = check_manifest(&d);
+        assert_eq!(m.routes, vec![PathBuf::from("endpoints")]);
     }
 
     #[should_panic(expected = "is not relative")]
@@ -336,14 +346,11 @@ policies = ["policies"]
         let d = gen_manifest(
             r#"
 models = ["/models/models"]
-endpoints = ["endpoints"]
+routes = ["routes"]
 policies = ["policies"]
 "#,
         );
-        let m = read_manifest_from(d.path()).unwrap();
-        m.models().unwrap();
-        m.policies().unwrap();
-        m.endpoints().unwrap();
+        check_manifest(&d);
     }
 
     #[should_panic(expected = "has to be a subdirectory")]
@@ -352,14 +359,11 @@ policies = ["policies"]
         let d = gen_manifest(
             r#"
 models = ["./"]
-endpoints = ["endpoints"]
+routes = ["routes"]
 policies = ["policies"]
 "#,
         );
-        let m = read_manifest_from(d.path()).unwrap();
-        m.models().unwrap();
-        m.policies().unwrap();
-        m.endpoints().unwrap();
+        check_manifest(&d);
     }
 
     #[should_panic(expected = "has to be a subdirectory")]
@@ -368,13 +372,10 @@ policies = ["policies"]
         let d = gen_manifest(
             r#"
 models = ["../"]
-endpoints = ["endpoints"]
+routes = ["routes"]
 policies = ["policies"]
 "#,
         );
-        let m = read_manifest_from(d.path()).unwrap();
-        m.models().unwrap();
-        m.policies().unwrap();
-        m.endpoints().unwrap();
+        check_manifest(&d);
     }
 }

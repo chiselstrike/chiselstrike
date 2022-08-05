@@ -9,6 +9,7 @@ use crate::project::{read_manifest, read_to_string, AutoIndex, Module, Optimize}
 use anyhow::{anyhow, Context, Result};
 use serde_json::Value;
 use std::io::Write;
+use std::env;
 use std::ffi::OsStr;
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
@@ -68,10 +69,11 @@ pub(crate) async fn apply(
     allow_type_deletion: AllowTypeDeletion,
     type_check: TypeChecking,
 ) -> Result<()> {
-    let manifest = read_manifest().context("Could not read manifest file")?;
-    let models = manifest.models()?;
-    let route_map = manifest.route_map()?;
-    let policies = manifest.policies()?;
+    let cwd = env::current_dir()?;
+    let manifest = read_manifest(&cwd).context("Could not read manifest file")?;
+    let models = manifest.models(&cwd)?;
+    let route_map = manifest.route_map(&cwd)?;
+    let policies = manifest.policies(&cwd)?;
 
     let types_req = crate::ts::parse_types(&models)?;
     let mut policy_req = vec![];
