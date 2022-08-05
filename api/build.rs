@@ -36,6 +36,7 @@ async fn main() -> Result<()> {
     println!("cargo:rerun-if-changed=../third_party/deno/core/lib.deno_core.d.ts");
 
     compile("chisel").await?;
+    compile("crud").await?;
     compile("routing").await?;
     compile("run").await?;
     compile("serve").await?;

@@ -11,6 +11,7 @@ macro_rules! out_file {
 
 lazy_static! {
     pub static ref SOURCES: HashMap<&'static str, &'static str> = vec![
+        ("crud.ts", out_file!("crud.js")),
         ("chisel.ts", out_file!("chisel.js")),
         ("chisel.d.ts", out_file!("chisel.d.ts")),
         ("run.ts", out_file!("run.js")),

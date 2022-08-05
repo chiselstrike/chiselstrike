@@ -126,7 +126,6 @@ pub(crate) async fn apply(
         .context("Could not bundle routes with esbuild (using node-style modules)")?;
 
     let bundled_code = fs::read_to_string(bundler_output_dir.path().join("__route_map.js"))?;
-    fs::write("/tmp/bundled.js", &bundled_code)?;
     let modules = vec![Module {
         url: "file:///__route_map.ts".into(),
         code: bundled_code,
