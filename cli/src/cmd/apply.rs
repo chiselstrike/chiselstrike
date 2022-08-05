@@ -1,15 +1,16 @@
-// SPDX-FileCopyrightText: © 2021 ChiselStrike <info@chiselstrike.com>
+// SPDX-FileCopyrightText: © 2022 ChiselStrike <info@chiselstrike.com>
 
 pub mod deno;
 pub mod node;
 
-use crate::chisel::chisel_rpc_client::ChiselRpcClient;
-use crate::chisel::{ApplyRequest, IndexCandidate, PolicyUpdateRequest};
+use crate::proto::chisel_rpc_client::ChiselRpcClient;
+use crate::proto::{ApplyRequest, IndexCandidate, PolicyUpdateRequest};
 use crate::project::{read_manifest, read_to_string, AutoIndex, Module, Optimize};
 use anyhow::{anyhow, Context, Result};
 use serde_json::Value;
 use std::io::Write;
-use std::path::PathBuf;
+use std::ffi::OsStr;
+use std::path::{Path, PathBuf};
 use std::process::Stdio;
 
 static DEFAULT_APP_NAME: &str = "ChiselStrike Application";
@@ -63,13 +64,13 @@ impl From<bool> for TypeChecking {
 
 pub(crate) async fn apply(
     server_url: String,
-    version: String,
+    version_id: String,
     allow_type_deletion: AllowTypeDeletion,
     type_check: TypeChecking,
 ) -> Result<()> {
     let manifest = read_manifest().context("Could not read manifest file")?;
     let models = manifest.models()?;
-    let endpoints = manifest.endpoints()?;
+    let route_map = manifest.route_map()?;
     let policies = manifest.policies()?;
 
     let types_req = crate::ts::parse_types(&models)?;
@@ -82,16 +83,16 @@ pub(crate) async fn apply(
     let chiselc_available = is_chiselc_available();
     if !chiselc_available {
         println!(
-            "Warning: no ChiselStrike compiler (`chiselc`) found. Some your queries might be slow."
+            "Warning: no ChiselStrike compiler (`chiselc`) found. Some of your queries might be slow."
         );
     }
     let optimize = chiselc_available && manifest.optimize == Optimize::Yes;
     let auto_index = chiselc_available && manifest.auto_index == AutoIndex::Yes;
     let (modules, index_candidates_req) = match manifest.modules {
         Module::Node =>
-            node::apply(&endpoints, &entities, optimize, auto_index, &type_check).await?,
+            node::apply(route_map, &entities, optimize, auto_index, &type_check).await?,
         Module::Deno =>
-            deno::apply(&endpoints, &entities, optimize, auto_index).await?,
+            deno::apply(route_map, &entities, optimize, auto_index).await?,
     };
 
     for p in policies {
@@ -131,13 +132,13 @@ pub(crate) async fn apply(
     };
 
     let mut client = ChiselRpcClient::connect(server_url.clone()).await?;
-    let mut req = ApplyRequest {
+    let req = ApplyRequest {
         types: types_req,
         modules,
         index_candidates: index_candidates_req,
         policies: policy_req,
         allow_type_deletion: allow_type_deletion.into(),
-        version,
+        version_id,
         version_tag,
         app_name,
     };
@@ -156,7 +157,7 @@ pub(crate) async fn apply(
 }
 
 fn parse_indexes(code: String, entities: &[String]) -> Result<Vec<IndexCandidate>> {
-    let mut index_candidates_req = vec![];
+    let mut index_candidates = vec![];
     let indexes = chiselc_output(code, "filter-properties", entities)?;
     let indexes: Value = serde_json::from_str(&indexes)?;
     if let Some(indexes) = indexes.as_array() {
@@ -169,13 +170,13 @@ fn parse_indexes(code: String, entities: &[String]) -> Result<Vec<IndexCandidate
                     .collect(),
                 None => vec![],
             };
-            index_candidates_req.push(IndexCandidate {
+            index_candidates.push(IndexCandidate {
                 entity_name,
                 properties,
             });
         }
     }
-    Ok(index_candidates_req)
+    Ok(index_candidates)
 }
 
 fn output_to_string(out: &std::process::Output) -> Option<String> {
@@ -208,12 +209,16 @@ fn is_chiselc_available() -> bool {
 }
 
 /// Spawn `chiselc` and return a reference to the child process.
-fn chiselc_spawn(input: &str, output: &str, entities: &[String]) -> Result<tokio::process::Child> {
-    let mut args: Vec<&str> = vec![input, "--output", output, "--target", "js"];
+fn chiselc_spawn(input: &Path, output: &Path, entities: &[String]) -> Result<tokio::process::Child> {
+    let mut args: Vec<&OsStr> = vec![
+        input.as_ref(),
+        "--output".as_ref(), output.as_ref(),
+        "--target".as_ref(), "js".as_ref(),
+    ];
     if !entities.is_empty() {
-        args.push("-e");
+        args.push("-e".as_ref());
         for entity in entities.iter() {
-            args.push(entity);
+            args.push(entity.as_ref());
         }
     }
     let cmd = tokio::process::Command::new(chiselc_cmd()?)

@@ -455,12 +455,12 @@ impl MetaService {
 
     /// Load module source codes from metadata store.
     pub async fn load_modules(&self, version_id: &str) -> Result<HashMap<String, String>> {
-        let query = sqlx::query("SELECT uri, code FROM modules WHERE version = $1").bind(version_id);
+        let query = sqlx::query("SELECT url, code FROM modules WHERE version = $1").bind(version_id);
         let rows = fetch_all(&self.db.pool, query).await?;
         let modules = rows.into_iter().map(|row| {
-            let uri: String = row.get("uri");
+            let url: String = row.get("url");
             let code: String = row.get("code");
-            (uri, code)
+            (url, code)
         }).collect();
         Ok(modules)
     }
@@ -474,10 +474,10 @@ impl MetaService {
         let drop = sqlx::query("DELETE FROM modules WHERE version = $1").bind(version_id);
         execute(transaction, drop).await?;
 
-        for (uri, code) in modules.iter() {
-            let insert = sqlx::query("INSERT INTO modules (version, uri, code) VALUES ($1, $2, $3)")
+        for (url, code) in modules.iter() {
+            let insert = sqlx::query("INSERT INTO modules (version, url, code) VALUES ($1, $2, $3)")
                 .bind(version_id)
-                .bind(uri)
+                .bind(url)
                 .bind(code);
 
             execute(transaction, insert).await?;

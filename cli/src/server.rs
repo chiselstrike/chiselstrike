@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: © 2021 ChiselStrike <info@chiselstrike.com>
 
-use crate::chisel::chisel_rpc_client::ChiselRpcClient;
-use crate::chisel::{StatusRequest, StatusResponse};
+use crate::proto::chisel_rpc_client::ChiselRpcClient;
+use crate::proto::{StatusRequest, StatusResponse};
 use anyhow::Result;
 use std::future::Future;
 use std::io::ErrorKind;

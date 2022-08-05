@@ -3,13 +3,13 @@
 use crate::cmd::apply::apply;
 use crate::cmd::dev::cmd_dev;
 use crate::project::{create_project, CreateProjectOptions};
-use crate::server::{start_server, wait, wait_with_cond};
-use anyhow::{anyhow, Result};
-use chisel::chisel_rpc_client::ChiselRpcClient;
-use chisel::{
+use crate::proto::chisel_rpc_client::ChiselRpcClient;
+use crate::proto::{
     type_msg::TypeEnum, DeleteRequest, DescribeRequest, PopulateRequest, RestartRequest,
     StatusRequest,
 };
+use crate::server::{start_server, wait, wait_with_cond};
+use anyhow::{anyhow, Result};
 use futures::{pin_mut, Future, FutureExt};
 use std::env;
 use std::fs;
@@ -18,11 +18,15 @@ use std::path::Path;
 use structopt::StructOpt;
 use tokio::process::Child;
 
-mod chisel;
 mod cmd;
 mod project;
+mod routes;
 mod server;
 mod ts;
+
+mod proto {
+    tonic::include_proto!("chisel");
+}
 
 fn parse_version(version: &str) -> anyhow::Result<String> {
     anyhow::ensure!(!version.is_empty(), "version name can't be empty");
@@ -111,27 +115,26 @@ enum Command {
     },
 }
 
-async fn delete<S: ToString>(server_url: String, version: S) -> Result<()> {
-    let version = version.to_string();
+async fn delete(server_url: String, version_id: String) -> Result<()> {
     let mut client = ChiselRpcClient::connect(server_url).await?;
 
     let msg = execute!(
         client
-            .delete(tonic::Request::new(DeleteRequest { version }))
+            .delete(tonic::Request::new(DeleteRequest { version_id }))
             .await
     );
     println!("{}", msg.message);
     Ok(())
 }
 
-async fn populate(server_url: String, to_version: String, from_version: String) -> Result<()> {
+async fn populate(server_url: String, to_version_id: String, from_version_id: String) -> Result<()> {
     let mut client = ChiselRpcClient::connect(server_url).await?;
 
     let msg = execute!(
         client
             .populate(tonic::Request::new(PopulateRequest {
-                to_version,
-                from_version,
+                to_version_id,
+                from_version_id,
             }))
             .await
     );
@@ -205,7 +208,7 @@ async fn main() -> Result<()> {
             let response = execute!(client.describe(request).await);
 
             for version_def in response.version_defs {
-                println!("Version: {} {{", version_def.version);
+                println!("Version: {} {{", version_def.version_id);
                 for def in &version_def.type_defs {
                     println!("  class {} {{", def.name);
                     for field in &def.field_defs {

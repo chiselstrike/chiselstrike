@@ -1,19 +1,24 @@
 // SPDX-FileCopyrightText: © 2022 ChiselStrike <info@chiselstrike.com>
 
-use crate::chisel::IndexCandidate;
+#![allow(unused_imports)]
+
+use crate::proto::{IndexCandidate, Module};
 use crate::cmd::apply::chiselc_output;
 use crate::cmd::apply::parse_indexes;
-use anyhow::{anyhow, Context, Result};
+use crate::routes::FileRouteMap;
+use anyhow::{bail, Context, Result};
 use endpoint_tsc::compile_endpoints;
 use std::collections::HashMap;
 use std::path::PathBuf;
 
 pub(crate) async fn apply(
-    endpoints: &[PathBuf],
-    entities: &[String],
-    optimize: bool,
-    auto_index: bool,
-) -> Result<(HashMap<String, String>, Vec<IndexCandidate>)> {
+    _route_map: FileRouteMap,
+    _entities: &[String],
+    _optimize: bool,
+    _auto_index: bool,
+) -> Result<(Vec<Module>, Vec<IndexCandidate>)> {
+    bail!("not implemented")
+    /*
     let mut index_candidates_req = vec![];
     let paths: Result<Vec<_>> = endpoints
         .iter()
@@ -35,4 +40,5 @@ pub(crate) async fn apply(
         }
     }
     Ok((output, index_candidates_req))
+    */
 }

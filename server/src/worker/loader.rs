@@ -46,11 +46,6 @@ impl deno_core::ModuleLoader for ModuleLoader {
             let source = source_from_code(module_specifier, code);
             async move { Ok(source) }.boxed_local()
         } else {
-            println!("could not load {}", module_specifier);
-            for url in self.modules.keys() {
-                println!("  {}", url);
-            }
-
             let err = anyhow!(
                 "chiseld cannot load module {} at runtime{}{}",
                 module_specifier,

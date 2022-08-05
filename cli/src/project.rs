@@ -1,5 +1,6 @@
-// SPDX-FileCopyrightText: © 2021 ChiselStrike <info@chiselstrike.com>
+// SPDX-FileCopyrightText: © 2022 ChiselStrike <info@chiselstrike.com>
 
+use crate::routes::{FileRouteMap, build_file_route_map};
 use anyhow::{Context, Result};
 use handlebars::Handlebars;
 use serde_derive::Deserialize;
@@ -9,11 +10,10 @@ use std::fmt::Write;
 use std::fs;
 use std::io::{stdin, ErrorKind, Read};
 use std::path::{Path, PathBuf};
-use utils::without_extension;
 
 const MANIFEST_FILE: &str = "Chisel.toml";
 const TYPES_DIR: &str = "./models";
-const ENDPOINTS_DIR: &str = "./endpoints";
+const ROUTES_DIR: &str = "./routes";
 const LIB_DIR: &str = "./lib";
 const POLICIES_DIR: &str = "./policies";
 const VSCODE_DIR: &str = "./.vscode/";
@@ -60,20 +60,22 @@ impl Default for AutoIndex {
     }
 }
 
-/// Manifest defines the files that describe types, endpoints, and policies.
+/// Manifest defines the files that describe types, routes, and policies.
 ///
 /// The manifest is a high-level declaration of application behavior.
 /// The individual definitions are passed to `chiseld`, which processes them
 /// accordingly. For example, type definitions are imported as types and
-/// endpoints are made executable via Deno.
+/// routes are made executable via Deno.
 #[derive(Deserialize)]
 pub(crate) struct Manifest {
     /// Vector of directories to scan for model definitions.
-    pub(crate) models: Vec<String>,
-    /// Vector of directories to scan for endpoint definitions.
-    pub(crate) endpoints: Vec<String>,
+    pub(crate) models: Vec<PathBuf>,
+    /// Vector of directories to scan for route definitions.
+    /// For backwards compatibility, we also support the old-style name `endpoints` here.
+    #[serde(alias = "endpoints")]
+    pub(crate) routes: Vec<PathBuf>,
     /// Vector of directories to scan for policy definitions.
-    pub(crate) policies: Vec<String>,
+    pub(crate) policies: Vec<PathBuf>,
     /// Whether to use deno-style or node-style modules
     #[serde(default)]
     pub(crate) modules: Module,
@@ -90,51 +92,39 @@ impl Manifest {
         Self::dirs_to_paths(&self.models)
     }
 
-    pub fn endpoints(&self) -> anyhow::Result<Vec<PathBuf>> {
-        let ret = Self::dirs_to_paths(&self.endpoints)?;
-        // Check for duplicated endpoints now since otherwise TSC
-        // reports the issue and we can produce a better diagnostic
-        // than TSC.
-        let i = ret.iter();
-        for (a, b) in i.clone().zip(i.skip(1)) {
-            let a = &a.display().to_string();
-            let b = &b.display().to_string();
-            if without_extension(a) == without_extension(b) {
-                anyhow::bail!("Cannot add both {} {} as routes. ChiselStrike uses filesystem-based routing, so we don't know what to do. Sorry! 🥺", a, b);
-            }
-        }
-        Ok(ret)
+    pub fn route_map(&self) -> anyhow::Result<FileRouteMap> {
+        build_file_route_map(&self.routes)
+            .context("Could not read routes (endpoints) from filesystem")
     }
 
     pub fn policies(&self) -> anyhow::Result<Vec<PathBuf>> {
         Self::dirs_to_paths(&self.policies)
     }
 
-    fn dirs_to_paths(dirs: &[String]) -> anyhow::Result<Vec<PathBuf>> {
+    fn dirs_to_paths(dirs: &[PathBuf]) -> anyhow::Result<Vec<PathBuf>> {
         // sucks to do this for all invocations but keeps things simple
         let me = Path::new("./").canonicalize()?;
         let mut paths = vec![];
         for dir in dirs {
-            let p = Path::new(dir);
             anyhow::ensure!(
-                p.is_relative(),
+                dir.is_relative(),
                 "{} is not relative to the current tree",
-                dir
+                dir.display()
             );
-            let p = p.canonicalize().or_else(|x| match x.kind() {
+            let dir = dir.canonicalize().or_else(|x| match x.kind() {
                 ErrorKind::NotFound => Ok(PathBuf::new()),
                 _ => Err(x),
             })?;
 
-            if p.as_os_str().is_empty() {
+            if dir.as_os_str().is_empty() {
                 continue;
             }
             anyhow::ensure!(
-                me != p && p.starts_with(&me),
+                me != dir && dir.starts_with(&me),
                 "{} has to be a subdirectory of the current directory",
-                dir
+                dir.display()
             );
-            dir_to_paths(Path::new(dir), &mut paths)?
+            dir_to_paths(&dir, &mut paths)?
         }
         paths.sort_unstable();
         Ok(paths)
@@ -258,7 +248,7 @@ pub(crate) fn create_project(path: &Path, opts: CreateProjectOptions) -> Result<
         anyhow::bail!("You cannot run `chisel init` on an existing ChiselStrike project");
     }
     fs::create_dir_all(path.join(TYPES_DIR))?;
-    fs::create_dir_all(path.join(ENDPOINTS_DIR))?;
+    fs::create_dir_all(path.join(ROUTES_DIR))?;
     fs::create_dir_all(path.join(LIB_DIR))?;
     fs::create_dir_all(path.join(POLICIES_DIR))?;
     fs::create_dir_all(path.join(VSCODE_DIR))?;
@@ -296,7 +286,7 @@ pub(crate) fn create_project(path: &Path, opts: CreateProjectOptions) -> Result<
     )?;
 
     if opts.examples {
-        write_template!("hello.ts", "hello.ts", data, &path.join(ENDPOINTS_DIR))?;
+        write_template!("hello.ts", "hello.ts", data, &path.join(ROUTES_DIR))?;
     }
     println!("Created ChiselStrike project in {}", path.display());
     Ok(())
@@ -305,7 +295,7 @@ pub(crate) fn create_project(path: &Path, opts: CreateProjectOptions) -> Result<
 pub(crate) fn project_exists(path: &Path) -> bool {
     path.join(Path::new(MANIFEST_FILE)).exists()
         || path.join(Path::new(TYPES_DIR)).exists()
-        || path.join(Path::new(ENDPOINTS_DIR)).exists()
+        || path.join(Path::new(ROUTES_DIR)).exists()
         || path.join(Path::new(POLICIES_DIR)).exists()
 }
 

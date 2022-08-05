@@ -1,4 +1,4 @@
-// Example ChiselStrike endpoint.
+// Example ChiselStrike route (endpoint).
 //
 // To access the endpoint, run:
 //

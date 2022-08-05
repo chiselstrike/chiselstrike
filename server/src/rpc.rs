@@ -164,7 +164,7 @@ async fn apply(server: Arc<Server>, request: ApplyRequest) -> Result<ApplyRespon
     };
 
     let modules = request.modules.iter()
-        .map(|m| (m.uri.clone(), m.code.clone()))
+        .map(|m| (m.url.clone(), m.code.clone()))
         .collect::<HashMap<_, _>>();
     let modules = Arc::new(modules);
     validate_modules(server.clone(), version_id.clone(), info.clone(), modules.clone()).await

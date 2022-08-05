@@ -73,7 +73,7 @@ enum Indexes {
 enum Modules {
     Table,
     Version,
-    Uri,
+    Url,
     Code,
 }
 
@@ -219,9 +219,9 @@ pub fn tables() -> Vec<TableCreateStatement> {
         .table(Modules::Table)
         .if_not_exists()
         .col(ColumnDef::new(Modules::Version).text())
-        .col(ColumnDef::new(Modules::Uri).text())
+        .col(ColumnDef::new(Modules::Url).text())
         .col(ColumnDef::new(Modules::Code).text())
-        .primary_key(Index::create().col(Modules::Version).col(Modules::Uri))
+        .primary_key(Index::create().col(Modules::Version).col(Modules::Url))
         .to_owned();
 
     let policies = Table::create()

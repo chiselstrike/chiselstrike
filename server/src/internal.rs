@@ -30,7 +30,7 @@ async fn webapply(body: Body, rpc_addr: &SocketAddr) -> Result<Response<Body>> {
     let mut client = ChiselRpcClient::connect(format!("http://{}", rpc_addr)).await?;
     let modules = vec![
         Module {
-            uri: "file:///endpoints/_root.ts".into(),
+            url: "file:///endpoints/_root.ts".into(),
             code: body.endpoint,
         },
     ];

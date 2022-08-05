@@ -1,3 +1,5 @@
+// SPDX-FileCopyrightText: © 2022 ChiselStrike <info@chiselstrike.com>
+
 import { ChiselEntity, ChiselRequest, getSecret } from './chisel.ts';
 import { RouteMap, MiddlewareNext } from './routing.ts';
 

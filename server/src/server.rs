@@ -152,7 +152,7 @@ async fn start_chiselstrike_version(server: Arc<Server>) -> Result<()> {
 
     let mut modules = HashMap::new();
     modules.insert(
-        "file:///endpoints/_root.ts".into(),
+        "file:///__route_map.ts".into(),
         "export { default } from 'chisel:///__chiselstrike.ts';".into(),
     );
 

@@ -77,7 +77,7 @@ message PolicyUpdateRequest {
 }
 
 message Module {
-  string uri = 1;
+  string url = 1;
   string code = 2;
 }
 
