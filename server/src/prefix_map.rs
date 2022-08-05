@@ -22,7 +22,7 @@ impl<T> PrefixMap<T> {
         let path_range = (Bound::Unbounded, Bound::Included(path));
         let tree_range = self.map.range::<str, _>(path_range);
         for (p, v) in tree_range.rev() {
-            if path.starts_with(p) {
+            if is_path_prefix(p, path) {
                 return Some((p, v));
             }
         }
@@ -34,11 +34,15 @@ impl<T> PrefixMap<T> {
     }
 }
 
+fn is_path_prefix(needle: &str, haystack: &str) -> bool {
+    haystack.starts_with(needle) && 
+        matches!(haystack[needle.len()..].chars().next(), Some('/') | None)
+}
+
 #[cfg(test)]
 mod tests {
     use super::PrefixMap;
     use std::collections::BTreeMap;
-    use std::path::{Path, PathBuf};
 
     fn entry(path: &str) -> (String, String) {
         (path.to_string(), path.to_string())

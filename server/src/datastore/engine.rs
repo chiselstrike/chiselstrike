@@ -484,7 +484,7 @@ impl QueryEngine {
     /// Only for testing purposes. For any other purpose, use `mutate_with_transaction`.
     #[cfg(test)]
     pub async fn mutate(&self, mutation: Mutation) -> Result<()> {
-        let mut transaction = self.start_transaction().await?;
+        let mut transaction = self.begin_transaction().await?;
         self.mutate_with_transaction(mutation, &mut transaction)
             .await?;
         QueryEngine::commit_transaction(transaction).await?;

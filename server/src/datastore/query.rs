@@ -881,7 +881,8 @@ pub mod tests {
     }
 
     pub fn make_type_system(entities: &[Entity]) -> TypeSystem {
-        let mut ts = TypeSystem::default();
+        let builtin = Arc::new(types::BuiltinTypes::new());
+        let mut ts = TypeSystem::new(builtin, VERSION.into());
         for ty in entities {
             ts.add_custom_type(ty.clone()).unwrap();
         }
@@ -890,23 +891,22 @@ pub mod tests {
 
     pub fn make_entity(name: &str, fields: Vec<Field>) -> Entity {
         let desc = types::NewObject::new(name, VERSION);
-        Entity::Custom(Arc::new(ObjectType::new(desc, fields, vec![]).unwrap()))
+        Entity::Custom(Arc::new(ObjectType::new(&desc, fields, vec![]).unwrap()))
     }
 
     pub fn make_field(name: &str, ty: Type) -> Field {
         let desc = types::NewField::new(name, ty, VERSION).unwrap();
-        Field::new(desc, vec![], None, false, false)
+        Field::new(&desc, vec![], None, false, false)
     }
 
     async fn init_query_engine(db_file: &NamedTempFile) -> QueryEngine {
         let db_uri = format!("sqlite://{}?mode=rwc", db_file.path().to_string_lossy());
         let data_db = DbConnection::connect(&db_uri, 1).await.unwrap();
-        let query_engine = QueryEngine::local_connection(&data_db, 1).await.unwrap();
-        query_engine
+        QueryEngine::new(Arc::new(data_db))
     }
 
     async fn init_database(query_engine: &QueryEngine, entities: &[Entity]) {
-        let mut tr = query_engine.start_transaction().await.unwrap();
+        let mut tr = query_engine.begin_transaction().await.unwrap();
         for entity in entities {
             query_engine.create_table(&mut tr, entity).await.unwrap();
         }
@@ -950,7 +950,7 @@ pub mod tests {
 
     async fn fetch_rows_with_plan(qe: &QueryEngine, query_plan: QueryPlan) -> Vec<JsonObject> {
         let qe = Arc::new(qe.clone());
-        let tr = qe.clone().start_transaction_static().await.unwrap();
+        let tr = qe.clone().begin_transaction_static().await.unwrap();
         let row_streams = qe.query(tr, query_plan).unwrap();
 
         row_streams

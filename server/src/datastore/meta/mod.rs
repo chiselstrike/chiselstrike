@@ -766,7 +766,6 @@ impl MetaService {
 mod tests {
     use super::*;
     use crate::datastore::{query::tests::*, QueryEngine};
-    use Result;
     use tempdir::TempDir;
 
     // test that we can open and successfully evolve 0.6 to the current version
@@ -781,7 +780,7 @@ mod tests {
         let conn_str = format!("sqlite://{}?mode=rwc", file_path.display());
 
         let meta_conn = DbConnection::connect(&conn_str, 1).await?;
-        let meta = MetaService::local_connection(&meta_conn, 1).await.unwrap();
+        let meta = MetaService::new(Arc::new(meta_conn));
 
         let mut transaction = meta.begin_transaction().await.unwrap();
         let version = MetaService::get_version(&mut transaction).await.unwrap();
@@ -822,16 +821,17 @@ mod tests {
         let new_path = tmp_dir.path().join("chisel.db");
         let conn_str = format!("sqlite://{}?mode=rwc", new_path.display());
 
-        let conn = DbConnection::connect(&conn_str, 1).await?;
-        let meta = MetaService::local_connection(&conn, 1).await.unwrap();
-        meta.maybe_migrate_sqlite_database(&[&meta_path, &data_path], &new_path)
+        let conn = Arc::new(DbConnection::connect(&conn_str, 1).await?);
+        let meta = MetaService::new(conn.clone());
+        meta.maybe_migrate_sqlite_database(&[meta_path, data_path], &new_path.display().to_string())
             .await
             .unwrap();
 
-        let query = QueryEngine::local_connection(&conn, 1).await.unwrap();
+        let query = QueryEngine::new(conn);
 
-        let ts = meta.load_type_system().await.unwrap();
-        let ty = ts.lookup_custom_type("BlogComment", "dev").unwrap();
+        let mut tss = meta.load_type_systems(&Arc::new(BuiltinTypes::new())).await.unwrap();
+        let ts = tss.remove("dev").unwrap();
+        let ty = ts.lookup_custom_type("BlogComment").unwrap();
         let rows = fetch_rows(&query, &ty).await;
         assert_eq!(rows.len(), 10);
         Ok(())
@@ -850,9 +850,9 @@ mod tests {
         let new_path = tmp_dir.path().join("chisel.db");
         let conn_str = format!("sqlite://{}?mode=rwc", new_path.display());
 
-        let conn = DbConnection::connect(&conn_str, 1).await?;
-        let meta = MetaService::local_connection(&conn, 1).await.unwrap();
-        meta.maybe_migrate_sqlite_database(&[&meta_path, &data_path], &new_path)
+        let conn = Arc::new(DbConnection::connect(&conn_str, 1).await?);
+        let meta = MetaService::new(conn.clone());
+        meta.maybe_migrate_sqlite_database(&[meta_path.clone(), data_path], &new_path.display().to_string())
             .await
             .unwrap_err();
 
@@ -876,11 +876,12 @@ mod tests {
         let new_path = tmp_dir.path().join("chisel.db");
         let conn_str = format!("sqlite://{}?mode=rwc", new_path.display());
 
-        let conn = DbConnection::connect(&conn_str, 1).await?;
-        let meta = MetaService::local_connection(&conn, 1).await.unwrap();
-        meta.maybe_migrate_sqlite_database(&[&meta_path, &data_path], &new_path)
-            .await
-            .unwrap_err();
+        let conn = Arc::new(DbConnection::connect(&conn_str, 1).await?);
+        let meta = MetaService::new(conn.clone());
+        meta.maybe_migrate_sqlite_database(
+            &[meta_path.clone(), data_path.clone()],
+            &new_path.display().to_string()
+        ).await.unwrap_err();
 
         // original still exists, werent't deleted
         fs::metadata(data_path).await.unwrap();
@@ -911,11 +912,12 @@ mod tests {
         // the path we take on most boots after migration
         let conn_str = format!("sqlite://{}?mode=rwc", meta_path.display());
 
-        let conn = DbConnection::connect(&conn_str, 1).await?;
-        let meta = MetaService::local_connection(&conn, 1).await.unwrap();
-        meta.maybe_migrate_sqlite_database(&[&meta_path, &data_path], &new_path)
-            .await
-            .unwrap();
+        let conn = Arc::new(DbConnection::connect(&conn_str, 1).await?);
+        let meta = MetaService::new(conn.clone());
+        meta.maybe_migrate_sqlite_database(
+            &[meta_path.clone(), data_path.clone()],
+            &new_path.display().to_string()
+        ).await.unwrap();
 
         // original still exists, werent't deleted
         fs::metadata(data_path).await.unwrap();

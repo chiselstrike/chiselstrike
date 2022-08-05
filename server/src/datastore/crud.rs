@@ -573,7 +573,7 @@ mod tests {
         add_row, binary, fetch_rows, make_entity, make_field, make_type_system, setup_clear_db,
         VERSION,
     };
-    use crate::policies::Policies;
+    use crate::policies::PolicySystem;
     use crate::types::{FieldDescriptor, ObjectDescriptor};
     use crate::JsonObject;
 
@@ -770,11 +770,10 @@ mod tests {
         qe: &QueryEngine,
         headers: HashMap<String, String>,
     ) -> Result<JsonObject> {
-        let qe = Arc::new(qe.clone());
-        let tr = qe.clone().start_transaction_static().await.unwrap();
+        let tr = qe.begin_transaction_static().await.unwrap();
         super::run_query(
             &RequestContext {
-                policies: &Policies::default(),
+                ps: &PolicySystem::default(),
                 ts: &make_type_system(&*ENTITIES),
                 version_id: VERSION.to_owned(),
                 user_id: None,
@@ -785,7 +784,7 @@ mod tests {
                 type_name: entity_name.to_owned(),
                 url,
             },
-            qe,
+            qe.clone(),
             tr,
         )
         .await
@@ -1092,7 +1091,7 @@ mod tests {
         let delete_from_url = |entity_name: &str, url: &str| {
             delete_from_url(
                 &RequestContext {
-                    policies: &Policies::default(),
+                    ps: &PolicySystem::default(),
                     ts: &make_type_system(&*ENTITIES),
                     version_id: VERSION.to_owned(),
                     user_id: None,
