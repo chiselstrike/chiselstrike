@@ -57,6 +57,9 @@ pub struct Opt {
     /// Database URI.
     #[structopt(long, default_value = "sqlite://.chiseld.db?mode=rwc")]
     db_uri: String,
+    /// Activate inspector and let a debugger attach at any time.
+    #[structopt(long)]
+    inspect: bool,
     /// Activate inspector, but pause the runtime at startup to wait for a debugger to attach.
     #[structopt(long)]
     inspect_brk: bool,
@@ -194,7 +197,12 @@ async fn run(state: SharedState, init: InitState, mut cmd: ExecutorChannel) -> R
         policies,
         type_system: ts,
     } = init;
-    init_deno(state.opt.v8_flags.clone(), state.opt.inspect_brk).await?;
+    init_deno(
+        state.opt.v8_flags.clone(),
+        state.opt.inspect,
+        state.opt.inspect_brk,
+    )
+    .await?;
 
     // Ensure we read the secrets before spawning an ApiService; secrets may dictate API authorization.
     let secret = match read_secrets(&state.opt).await {

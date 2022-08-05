@@ -281,7 +281,7 @@ thread_local! {
 }
 
 impl DenoService {
-    pub(crate) async fn new(inspect_brk: bool) -> (Self, v8::Global<v8::Function>) {
+    pub(crate) async fn new(inspect: bool, inspect_brk: bool) -> (Self, v8::Global<v8::Function>) {
         let web_worker_preload_module_cb =
             Arc::new(|worker| LocalFutureObj::new(Box::new(future::ready(Ok(worker)))));
         let inner = Arc::new(std::sync::Mutex::new(ModuleLoaderInner {
@@ -292,7 +292,7 @@ impl DenoService {
         });
 
         let mut inspector = None;
-        if inspect_brk {
+        if inspect || inspect_brk {
             let addr: SocketAddr = "127.0.0.1:9229".parse().unwrap();
             inspector = Some(Arc::new(InspectorServer::new(addr, "chisel".to_string())));
         }
@@ -848,7 +848,11 @@ extern "C" fn promise_reject_callback(message: v8::PromiseRejectMessage) {
     }
 }
 
-pub(crate) async fn init_deno(v8_flags: Vec<String>, inspect_brk: bool) -> Result<()> {
+pub(crate) async fn init_deno(
+    v8_flags: Vec<String>,
+    inspect: bool,
+    inspect_brk: bool,
+) -> Result<()> {
     let v8_flags = once("unused_arg0".to_owned())
         .chain(v8_flags.iter().cloned())
         .collect();
@@ -862,7 +866,7 @@ pub(crate) async fn init_deno(v8_flags: Vec<String>, inspect_brk: bool) -> Resul
             unrecognized_v8_flags.join(",")
         );
     }
-    let (service, init_worker) = DenoService::new(inspect_brk).await;
+    let (service, init_worker) = DenoService::new(inspect, inspect_brk).await;
     DENO.with(|d| {
         d.set(Rc::new(RefCell::new(service)))
             .map_err(|_| ())
