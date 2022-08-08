@@ -7,6 +7,8 @@ use tempfile::Builder;
 use tempfile::NamedTempFile;
 pub use tsc_compile;
 use tsc_compile::CompileOptions;
+use tsc_compile::FixedUrl;
+use url::Url;
 
 pub struct Compiler {
     pub tsc: tsc_compile::Compiler,
@@ -18,14 +20,19 @@ impl Compiler {
         Compiler { tsc }
     }
 
-    pub async fn compile_endpoints(
-        &mut self,
-        file_names: &[&str],
-    ) -> Result<HashMap<String, String>> {
-        let mods = HashMap::from([(
-            "@chiselstrike/api".to_string(),
-            api::SOURCES.get("chisel.d.ts").unwrap().to_string(),
-        )]);
+    pub async fn compile(&mut self, url: Url) -> Result<Vec<(FixedUrl, String, bool)>> {
+        let mods = HashMap::from([
+            (
+                "@chiselstrike/api".to_string(),
+                "export * from 'chisel:///chisel.ts';".to_string(),
+            ), (
+                "chisel".to_string(),
+                api::SOURCES.get("chisel.d.ts").unwrap().to_string(),
+            ), (
+                "routing".to_string(),
+                api::SOURCES.get("routing.d.ts").unwrap().to_string(),
+            ),
+        ]);
 
         let chisel_global = include_str!("chisel-global.d.ts");
         let temp = to_tempfile(chisel_global, ".d.ts")?;
@@ -37,9 +44,9 @@ impl Compiler {
         };
 
         self.tsc
-            .compile_ts_code(file_names, opts)
+            .compile_urls(vec![url], opts)
             .await
-            .context("could not compile TypeScript")
+            .context("Could not compile TypeScript")
     }
 }
 
@@ -49,9 +56,4 @@ fn to_tempfile(data: &str, suffix: &str) -> Result<NamedTempFile> {
     inner.write_all(data.as_bytes())?;
     inner.flush()?;
     Ok(f)
-}
-
-pub async fn compile_endpoints(file_names: &[&str]) -> Result<HashMap<String, String>> {
-    let mut compiler = Compiler::new(true);
-    compiler.compile_endpoints(file_names).await
 }

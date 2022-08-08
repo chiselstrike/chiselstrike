@@ -35,7 +35,7 @@ use std::path::Component;
 use std::path::Path;
 use std::path::PathBuf;
 use std::sync::Arc;
-use url::Url as FixedUrl;
+pub use url::Url as FixedUrl;
 use utils::without_extension;
 
 #[derive(Debug)]
@@ -77,6 +77,7 @@ fn fetch_impl(map: &mut DownloadMap, path: String, base: String) -> Result<Strin
         .resolve_dependency(&path, &url, true)
         .ok_or_else(|| anyhow!("Could not resolve '{}' in '{}'", path, url))?
         .clone();
+    println!("fetch: path {:?}, base {:?} -> {}", path, base, resolved);
     Ok(resolved.to_string())
 }
 
@@ -274,6 +275,7 @@ struct ModuleResolver {
 impl Resolver for ModuleResolver {
     fn resolve(&self, specifier: &str, referrer: &Url) -> ResolveResponse {
         if let Some(u) = self.extra_libs.get(specifier) {
+            println!("resolve {:?} (ref {}) -> {}", specifier, referrer, u);
             return ResolveResponse::Esm(u.clone());
         }
         resolve_import(specifier, referrer).into()
@@ -332,7 +334,7 @@ impl Compiler {
         Compiler { runtime }
     }
 
-    async fn compile_urls(
+    pub async fn compile_urls(
         &mut self,
         urls: Vec<Url>,
         opts: CompileOptions<'_>,

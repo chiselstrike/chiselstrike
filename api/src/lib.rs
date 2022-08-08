@@ -16,6 +16,7 @@ lazy_static! {
         ("chisel.d.ts", out_file!("chisel.d.ts")),
         ("run.ts", out_file!("run.js")),
         ("routing.ts", out_file!("routing.js")),
+        ("routing.d.ts", out_file!("routing.d.ts")),
         ("serve.ts", out_file!("serve.js")),
         ("special.ts", out_file!("special.js")),
         ("__chiselstrike.ts", out_file!("__chiselstrike.js")),

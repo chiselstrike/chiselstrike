@@ -92,10 +92,10 @@ pub(crate) async fn apply(
     let bundler_output_dir = tempfile::tempdir()
         .context("Could not create temporary directory for bundler output")?;
 
-    let import_fn = |path: &Path| -> Result<String> {
+    let route_import_fn = |path: &Path| -> Result<String> {
         path.to_str().map(String::from).context("Path is not valid UTF-8")
     };
-    let route_map_code = codegen_route_map(&route_map, &import_fn)
+    let route_map_code = codegen_route_map(&route_map, &route_import_fn)
         .context("Could not generate code for file-based routing")?;
 
     let route_map_path = bundler_input_dir.path().join("__route_map.ts");

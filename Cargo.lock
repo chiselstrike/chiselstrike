@@ -1476,6 +1476,7 @@ dependencies = [
  "api",
  "tempfile",
  "tsc_compile",
+ "url 2.2.2 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [[package]]
@@ -2767,6 +2768,7 @@ dependencies = [
  "endpoint_tsc",
  "structopt",
  "tokio",
+ "url 2.2.2 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [[package]]
