@@ -10,7 +10,7 @@ use std::time::Duration;
 use tonic::transport::Channel;
 
 pub(crate) fn start_server(chiseld_args: Vec<String>) -> anyhow::Result<tokio::process::Child> {
-    println!("🚀 Thank you for your interest in the ChiselStrike beta! 🚀");
+    println!("🚀 TEST fsdfThank you for your interest in the ChiselStrike beta! 🚀");
     println!();
     println!("⚠️  This software is for evaluation purposes only. Do not use it in production. ⚠️ ");
     println!();
