@@ -6,7 +6,7 @@ import { Router, RouterMatch, RouteMap, Middleware, Handler } from './routing.ts
 // HTTP API request that we receive from Rust
 type ApiRequest = {
     method: string,
-    url: string,
+    uri: string,
     headers: [string, string][],
     body: Uint8Array,
     routingPath: string,
@@ -42,7 +42,9 @@ async function handleRequest(router: Router, apiRequest: ApiRequest): Promise<Ap
         return emptyResponse(404);
     }
 
-    const url = new URL(apiRequest.url, location.href);
+    // the HTTP request usually specifies only path and query, but we need a full URL; so we resolve the URL
+    // from the request with respect to an arbitrary base
+    const url = new URL(apiRequest.uri, location.href);
 
     // initialize the legacy global request context
     // note that this means that we can only handle a single request at a time!
@@ -59,7 +61,7 @@ async function handleRequest(router: Router, apiRequest: ApiRequest): Promise<Ap
 
     // convert the internal `apiRequest` to the request that is visible to user code
     const chiselRequest = new ChiselRequest(
-        apiRequest.url,
+        url.toString(),
         {
             method: apiRequest.method,
             headers: apiRequest.headers,
@@ -67,10 +69,11 @@ async function handleRequest(router: Router, apiRequest: ApiRequest): Promise<Ap
             body: (apiRequest.method == 'GET' || apiRequest.method == 'HEAD') 
                 ? undefined : apiRequest.body,
         },
+        url.pathname,
         versionId,
         user,
+        url.searchParams,
         routerMatch.params,
-        apiRequest.routingPath,
     );
 
     let response: Response;

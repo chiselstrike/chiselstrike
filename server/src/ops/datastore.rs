@@ -156,10 +156,10 @@ pub async fn op_chisel_delete(
 }
 
 #[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct CrudDeleteParams {
-    #[serde(rename = "typeName")]
     type_name: String,
-    url: String,
+    url_query: Vec<(String, String)>,
 }
 
 #[deno_core::op]
@@ -169,14 +169,14 @@ pub async fn op_chisel_crud_delete(
     context: ChiselRequestContext,
 ) -> Result<()> {
     with_transaction(state, move |server, version, transaction| async move {
-        let mutation = crud::delete_from_url(
+        let mutation = crud::delete_from_url_query(
             &RequestContext::new(
                 &version.policy_system,
                 &version.type_system,
                 context,
             ),
             &params.type_name,
-            &params.url,
+            &params.url_query,
         )
         .context(
             "failed to construct delete expression from JSON passed to `op_chisel_crud_delete`",

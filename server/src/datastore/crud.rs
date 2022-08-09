@@ -5,7 +5,6 @@ use crate::types::{Entity, Type, TypeSystem};
 use crate::JsonObject;
 use anyhow::{Context, Result};
 use deno_core::futures;
-use deno_core::url::Url;
 use futures::{Future, StreamExt};
 use serde_derive::{Deserialize, Serialize};
 use serde_json::json;
@@ -14,7 +13,8 @@ use serde_json::json;
 #[serde(rename_all = "camelCase")]
 pub struct QueryParams {
     type_name: String,
-    url: Url,
+    url_path: String,
+    url_query: Vec<(String, String)>,
 }
 
 /// Parses CRUD `params` and runs the query with provided `query_engine`.
@@ -34,13 +34,12 @@ fn run_query_impl(
     query_engine: QueryEngine,
     tr: TransactionStatic,
 ) -> Result<impl Future<Output = Result<JsonObject>>> {
-    let host = context.headers.get("host").cloned();
     let base_type = &context
         .ts
         .lookup_entity(&params.type_name)
         .context("unexpected type name as crud query base type")?;
 
-    let query = Query::from_url(base_type, &params.url, context.ts)?;
+    let query = Query::from_url_query(base_type, &params.url_query, context.ts)?;
     let ops = query.make_query_ops()?;
     let query_plan = QueryPlan::from_ops(context, base_type, ops)?;
     let stream = query_engine.query(tr.clone(), query_plan)?;
@@ -63,11 +62,11 @@ fn run_query_impl(
 
         let mut ret = JsonObject::new();
 
-        let next_page = get_next_page(&params, &query, &host, &results)?;
+        let next_page = get_next_page(&params, &query, &results)?;
         if let Some(next_page) = next_page {
             ret.insert("next_page".into(), json!(next_page));
         }
-        let prev_page = get_prev_page(&params, &query, &host, &results)?;
+        let prev_page = get_prev_page(&params, &query, &results)?;
         if let Some(prev_page) = prev_page {
             ret.insert("prev_page".into(), json!(prev_page));
         }
@@ -83,10 +82,9 @@ fn run_query_impl(
 fn get_next_page(
     params: &QueryParams,
     query: &Query,
-    host: &Option<String>,
     results: &[JsonObject],
-) -> Result<Option<Url>> {
-    get_page(params, query, host, results, true)
+) -> Result<Option<String>> {
+    get_page(params, query, results, true)
 }
 
 /// Evaluates current query circumstances and potentially generates
@@ -95,19 +93,17 @@ fn get_next_page(
 fn get_prev_page(
     params: &QueryParams,
     query: &Query,
-    host: &Option<String>,
     results: &[JsonObject],
-) -> Result<Option<Url>> {
-    get_page(params, query, host, results, false)
+) -> Result<Option<String>> {
+    get_page(params, query, results, false)
 }
 
 fn get_page(
     params: &QueryParams,
     query: &Query,
-    host: &Option<String>,
     results: &[JsonObject],
     forward: bool,
-) -> Result<Option<Url>> {
+) -> Result<Option<String>> {
     if !results.is_empty() {
         let pivot = if forward {
             results.last().unwrap()
@@ -115,13 +111,13 @@ fn get_page(
             results.first().unwrap()
         };
         let cursor = cursor_from_pivot(query, pivot, forward)?;
-        let url = make_page_url(&params.url, host, &cursor)?;
-        return Ok(Some(url));
+        let rel_url = make_page_url(&params.url_path, &params.url_query, &cursor.to_string()?);
+        return Ok(Some(rel_url));
     } else if let Some(cursor) = &query.cursor {
         if cursor.forward != forward {
             let cursor = cursor.reversed();
-            let url = make_page_url(&params.url, host, &cursor)?;
-            return Ok(Some(url));
+            let rel_url = make_page_url(&params.url_path, &params.url_query, &cursor.to_string()?);
+            return Ok(Some(rel_url));
         }
     }
     Ok(None)
@@ -151,38 +147,37 @@ fn cursor_from_pivot(query: &Query, pivot_element: &JsonObject, forward: bool) -
     Ok(cursor)
 }
 
-/// Generates URL that can be used to retrieve previous/next page.
-/// It does this by modifying the current `url`, potentially replacing
-/// host address with `host` and generating url based on the current cursor.
-fn make_page_url(url: &Url, host: &Option<String>, cursor: &Cursor) -> Result<Url> {
-    let cursor = cursor.to_string()?;
-
-    let mut page_url = replace_host_address(url.clone(), host)?;
-    page_url.set_query(Some(""));
-    for (key, value) in url.query_pairs() {
+/// Generates relative URL that can be used to retrieve previous/next page.
+/// It does this by using the path from the current `url` and setting the `cursor` as a query
+/// parameter.
+fn make_page_url(url_path: &str, url_query: &[(String, String)], cursor: &str) -> String {
+    let mut page_query = form_urlencoded::Serializer::new(String::new());
+    for (key, value) in url_query.iter() {
         if key == "cursor" || key == "sort" {
             continue;
         }
-        page_url.query_pairs_mut().append_pair(&key, &value);
+        page_query.append_pair(&key, &value);
     }
-    page_url.query_pairs_mut().append_pair("cursor", &cursor);
+    page_query.append_pair("cursor", cursor);
 
-    Ok(page_url)
+    format!("{}?{}", url_path, page_query.finish())
 }
 
-/// Constructs Delete Mutation from CRUD url.
-pub fn delete_from_url(c: &RequestContext, type_name: &str, url: &str) -> Result<Mutation> {
+/// Constructs Delete Mutation from CRUD url query.
+pub fn delete_from_url_query(
+    c: &RequestContext,
+    type_name: &str,
+    url_query: &[(String, String)],
+) -> Result<Mutation> {
     let base_entity = match c.ts.lookup_type(type_name) {
         Ok(Type::Entity(ty)) => ty,
         Ok(ty) => anyhow::bail!("Cannot delete scalar type {type_name} ({})", ty.name()),
         Err(_) => anyhow::bail!("Cannot delete from type `{type_name}`, type not found"),
     };
-    let filter_expr = url_to_filter(&base_entity, url, c.ts)
+    let filter_expr = url_query_to_filter(&base_entity, url_query, c.ts)
         .context("failed to convert crud URL to filter expression")?;
     if filter_expr.is_none() {
-        let q = Url::parse(url).with_context(|| format!("failed to parse query string '{url}'"))?;
-        let delete_all = q
-            .query_pairs()
+        let delete_all = url_query.iter()
             .any(|(key, value)| key == "all" && value == "true");
         if !delete_all {
             anyhow::bail!("crud delete requires a filter to be set or `all=true` parameter.")
@@ -217,10 +212,10 @@ impl Query {
         }
     }
 
-    /// Parses provided `url` and builds a `Query` that can be used to build a `QueryPlan`.
-    fn from_url(base_type: &Entity, url: &Url, ts: &TypeSystem) -> Result<Self> {
+    /// Parses provided `url_query` and builds a `Query` that can be used to build a `QueryPlan`.
+    fn from_url_query(base_type: &Entity, url_query: &[(String, String)], ts: &TypeSystem) -> Result<Self> {
         let mut q = Query::new();
-        for (param_key, value) in url.query_pairs().into_owned() {
+        for (param_key, value) in url_query.iter() {
             match param_key.as_str() {
                 "sort" => q.sort = parse_sort(base_type, &value)?,
                 "limit" | "page_size" => {
@@ -262,7 +257,7 @@ impl Query {
         Ok(q)
     }
 
-    /// Makes query ops based on the CRUD parameters that were parsed by `from_url` method.
+    /// Makes query ops based on the CRUD parameters that were parsed by `from_url_query` method.
     /// The query ops can be used to retrieve desired results from the database.
     fn make_query_ops(&self) -> Result<Vec<QueryOp>> {
         let mut ops = vec![QueryOp::SortBy(self.sort.clone())];
@@ -413,11 +408,14 @@ fn json_to_value(field_type: &Type, value: &serde_json::Value) -> Result<Expr> {
     Ok(expr_val.into())
 }
 
-/// Parses all CRUD query-string filters over `base_type` from provided `url`.
-fn url_to_filter(base_type: &Entity, url: &str, ts: &TypeSystem) -> Result<Option<Expr>> {
+/// Parses all CRUD query-string filters over `base_type` from provided `url_query`.
+fn url_query_to_filter(
+    base_type: &Entity,
+    url_query: &[(String, String)],
+    ts: &TypeSystem,
+) -> Result<Option<Expr>> {
     let mut filter = None;
-    let q = Url::parse(url).with_context(|| format!("failed to parse query string '{}'", url))?;
-    for (param_key, value) in q.query_pairs().into_owned() {
+    for (param_key, value) in url_query.iter() {
         let param_key = param_key.to_string();
         if let Some(param_key) = param_key.strip_prefix('.') {
             let expression = filter_from_param(base_type, param_key, &value, ts)
@@ -545,26 +543,6 @@ fn convert_operator(op_str: Option<&str>) -> Result<BinaryOp> {
     Ok(op)
 }
 
-fn replace_host_address(mut url: Url, host_address: &Option<String>) -> Result<Url> {
-    if let Some(host_address) = host_address {
-        let address_tokens: Vec<_> = host_address.split(':').collect();
-        anyhow::ensure!(
-            address_tokens.len() <= 2,
-            "unexpected number of tokens in host address"
-        );
-        let host = address_tokens.get(0).copied();
-        let port: Option<u16> = address_tokens
-            .get(1)
-            .map(|p| p.parse())
-            .transpose()
-            .context("Failed to parse address port")?;
-        url.set_host(host)?;
-        url.set_port(port)
-            .map_err(|_| anyhow::anyhow!("Failed to set url port"))?;
-    }
-    Ok(url)
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -581,6 +559,7 @@ mod tests {
     use once_cell::sync::Lazy;
     use serde_json::json;
     use std::collections::HashMap;
+    use url::Url;
 
     pub struct FakeField {
         name: &'static str,
@@ -645,51 +624,6 @@ mod tests {
     });
     static ENTITIES: Lazy<[Entity; 2]> = Lazy::new(|| [PERSON_TY.clone(), COMPANY_TY.clone()]);
     static TYPE_SYSTEM: Lazy<TypeSystem> = Lazy::new(|| make_type_system(&*ENTITIES));
-
-    #[test]
-    fn test_replace_host_address() {
-        fn check_replace(url: &str, host_address: &str, expected_url: &str) {
-            let url = Url::parse(url).unwrap();
-            let new_url = replace_host_address(url, &Some(host_address.to_owned())).unwrap();
-            assert_eq!(new_url.as_str(), expected_url);
-        }
-
-        check_replace(
-            "http://example.com/foo",
-            "example.com:999",
-            "http://example.com:999/foo",
-        );
-        check_replace(
-            "http://example.com:777/foo",
-            "example.com:999",
-            "http://example.com:999/foo",
-        );
-        check_replace(
-            "http://example.com/foo",
-            "example.com:999",
-            "http://example.com:999/foo",
-        );
-        check_replace(
-            "http://192.168.1.1:777/foo",
-            "example.com:999",
-            "http://example.com:999/foo",
-        );
-        check_replace(
-            "http://192.168.1.1:777/foo",
-            "example.com",
-            "http://example.com/foo",
-        );
-        check_replace(
-            "http://example.com:777/foo",
-            "192.168.1.1:999",
-            "http://192.168.1.1:999/foo",
-        );
-        check_replace(
-            "http://example.com:777/foo",
-            "192.168.1.1",
-            "http://192.168.1.1/foo",
-        );
-    }
 
     #[test]
     fn test_parse_filter() {
@@ -761,15 +695,6 @@ mod tests {
     }
 
     async fn run_query(entity_name: &str, url: Url, qe: &QueryEngine) -> Result<JsonObject> {
-        run_query_with_headers(entity_name, url, qe, HashMap::default()).await
-    }
-
-    async fn run_query_with_headers(
-        entity_name: &str,
-        url: Url,
-        qe: &QueryEngine,
-        headers: HashMap<String, String>,
-    ) -> Result<JsonObject> {
         let tr = qe.begin_transaction_static().await.unwrap();
         super::run_query(
             &RequestContext {
@@ -778,11 +703,12 @@ mod tests {
                 version_id: VERSION.to_owned(),
                 user_id: None,
                 path: "".to_string(),
-                headers,
+                headers: HashMap::default(),
             },
             QueryParams {
                 type_name: entity_name.to_owned(),
-                url,
+                url_path: url.path().to_owned(),
+                url_query: url.query_pairs().into_owned().collect(),
             },
             qe.clone(),
             tr,
@@ -908,7 +834,9 @@ mod tests {
         add_row(qe, &PERSON_TY, &alex, &TYPE_SYSTEM).await;
 
         fn get_url(raw: &serde_json::Value) -> Url {
-            Url::parse(raw.as_str().unwrap()).unwrap()
+            Url::parse("http://localhost").unwrap()
+                .join(raw.as_str().unwrap())
+                .unwrap()
         }
 
         // Simple forward step.
@@ -1037,18 +965,6 @@ mod tests {
             let names = collect_names(&r);
             assert_eq!(names, vec!["Alan", "Alex", "John", "Steve"]);
         }
-        // Check HOST header handling.
-        {
-            let headers = HashMap::<String, String>::from_iter([(
-                "host".to_string(),
-                "myhost.com:666".to_string(),
-            )]);
-            let r = run_query_with_headers("Person", url("page_size=1"), qe, headers)
-                .await
-                .unwrap();
-            let next_page = r["next_page"].as_str().unwrap();
-            assert!(next_page.starts_with("http://myhost.com:666"));
-        }
     }
 
     #[tokio::test]
@@ -1084,12 +1000,9 @@ mod tests {
 
     #[tokio::test]
     async fn test_delete_from_crud_url() {
-        fn url(query_string: &str) -> String {
-            format!("http://wtf?{}", query_string)
-        }
-
-        let delete_from_url = |entity_name: &str, url: &str| {
-            delete_from_url(
+        let delete_from_url_query = |entity_name: &str, query: &str| {
+            let url_query: Vec<_> = form_urlencoded::parse(query.as_bytes()).into_owned().collect();
+            delete_from_url_query(
                 &RequestContext {
                     ps: &PolicySystem::default(),
                     ts: &make_type_system(&*ENTITIES),
@@ -1099,7 +1012,7 @@ mod tests {
                     headers: HashMap::default(),
                 },
                 entity_name,
-                url,
+                &url_query,
             )
             .unwrap()
         };
@@ -1110,7 +1023,7 @@ mod tests {
             let (qe, _db_file) = setup_clear_db(&*ENTITIES).await;
             add_row(&qe, &PERSON_TY, &john, &TYPE_SYSTEM).await;
 
-            let mutation = delete_from_url("Person", &url(".name=John"));
+            let mutation = delete_from_url_query("Person", ".name=John");
             qe.mutate(mutation).await.unwrap();
 
             assert_eq!(fetch_rows(&qe, &PERSON_TY).await.len(), 0);
@@ -1120,7 +1033,7 @@ mod tests {
             add_row(&qe, &PERSON_TY, &john, &TYPE_SYSTEM).await;
             add_row(&qe, &PERSON_TY, &alan, &TYPE_SYSTEM).await;
 
-            let mutation = delete_from_url("Person", &url(".age=30"));
+            let mutation = delete_from_url_query("Person", ".age=30");
             qe.mutate(mutation).await.unwrap();
 
             let rows = fetch_rows(&qe, &PERSON_TY).await;
@@ -1133,10 +1046,24 @@ mod tests {
             let (qe, _db_file) = setup_clear_db(&*ENTITIES).await;
             add_row(&qe, &COMPANY_TY, &chiselstrike, &TYPE_SYSTEM).await;
 
-            let mutation = delete_from_url("Company", &url(".ceo.name=John"));
+            let mutation = delete_from_url_query("Company", ".ceo.name=John");
             qe.mutate(mutation).await.unwrap();
 
             assert_eq!(fetch_rows(&qe, &COMPANY_TY).await.len(), 0);
         }
+    }
+
+    #[test]
+    fn test_make_page_url() {
+        fn check(url_path: &str, url_query: &str, cursor: &str, expected: &str) {
+            let url_query: Vec<_> = form_urlencoded::parse(url_query.as_bytes()).into_owned().collect();
+            let actual = make_page_url(url_path, &url_query, cursor);
+            assert_eq!(actual.as_str(), expected);
+        }
+
+        check("/path", "", "abcd", "/path?cursor=abcd");
+        check("/path", "really=no", "xyzw", "/path?really=no&cursor=xyzw");
+        check("/path", "really=no&foo=bar", "xyzw", "/path?really=no&foo=bar&cursor=xyzw");
+        check("/longer/url/path", "", "abcd", "/longer/url/path?cursor=abcd");
     }
 }

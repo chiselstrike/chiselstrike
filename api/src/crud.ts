@@ -61,7 +61,7 @@ export function crud<
 
     // Returns all entities matching the filter in the `filter` URL parameter.
     async function getAll(req: ChiselRequest): Promise<Response> {
-        return createResponse(await fetchEntitiesCrud(entity, req.url), 200);
+        return createResponse(await fetchEntitiesCrud(entity, req.path, Array.from(req.query)), 200);
     }
     if (config?.getAll ?? true)
         routeMap.get('/', getAll);
@@ -101,7 +101,7 @@ export function crud<
 
     // Deletes all entities matching the filter in the `filter` URL parameter.
     async function deleteAll(req: ChiselRequest): Promise<Response> {
-        await deleteEntitiesCrud(entity, req.url);
+        await deleteEntitiesCrud(entity, Array.from(req.query));
         return new Response(`Deleted entities matching ${new URL(req.url).search}`);
     }
     if (config?.deleteAll ?? true)
@@ -121,13 +121,15 @@ export function crud<
 
 async function fetchEntitiesCrud<T extends ChiselEntity>(
     type: { new (): T },
-    url: string,
+    urlPath: string,
+    urlQuery: [string, string][],
 ): Promise<T[]> {
     const results = await Deno.core.opAsync(
         "op_chisel_crud_query",
         {
             typeName: type.name,
-            url,
+            urlPath,
+            urlQuery,
         },
         requestContext,
     );
@@ -136,13 +138,13 @@ async function fetchEntitiesCrud<T extends ChiselEntity>(
 
 async function deleteEntitiesCrud<T extends ChiselEntity>(
     type: { new (): T },
-    url: string,
+    urlQuery: [string, string][],
 ): Promise<void> {
     await Deno.core.opAsync(
         "op_chisel_crud_delete",
         {
             typeName: type.name,
-            url,
+            urlQuery,
         },
         requestContext,
     );

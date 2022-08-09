@@ -699,51 +699,34 @@ export class ChiselCursor<T> {
 
 /** Extends the Request class adding ChiselStrike-specific helpers
  *
- * @property {string} versionId - The current API Version
+ * @property {string} path - The URL path of this request.
+ * @property {string} versionId - The current API Version.
  * @property {AuthUser} user - The currently logged in user. `undefined` if there isn't one.
  * @property {Query} query - Helper class containing parsed query string from the URL.
  * @property {Params} params - Helper class containing parameters from the URL path.
  */
 export class ChiselRequest extends Request {
+    public path: string;
     public versionId: string;
     public user: AuthUser | undefined;
     public query: Query;
     public params: Params;
 
-    /** @deprecated This is no longer applicable */
-    public endpoint: string;
-    /** @deprecated Use RouteMap and params instead */
-    public pathParams: string;
-
     constructor(
         input: string,
         init: RequestInit,
+        path: string,
         versionId: string,
         user: AuthUser | undefined,
+        query: URLSearchParams,
         params: Record<string, string>,
-        routingPath: string,
     ) {
         super(input, init);
+        this.path = path;
         this.versionId = versionId;
-        this.query = new Query(new URL(this.url).searchParams);
+        this.user = user;
+        this.query = new Query(query);
         this.params = new Params(params);
-
-        this.endpoint = '';
-        this.pathParams = routingPath;
-    }
-
-    /**
-     * Returns each component of the arguments part of the path
-     *
-     * While you could call split() on pathParams directly, this
-     * convenience function is useful as it handle empty strings better.
-     *
-     * For example, for the endpoint `/dev/name` this will return an empty
-     * array, while pathParams will be "", and splitting that by "/" returns an
-     * array with one element, the empty string
-     */
-    pathComponents(): string[] {
-        return this.pathParams.split("/").filter((n) => n.length != 0);
     }
 }
 

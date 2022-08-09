@@ -88,7 +88,7 @@ pub struct ApiRequestResponse {
 #[serde(rename_all = "camelCase")]
 pub struct ApiRequest {
     pub method: String,
-    pub url: String,
+    pub uri: String,
     pub headers: Vec<(String, String)>,
     pub body: serde_v8::ZeroCopyBuf,
     pub routing_path: String,
@@ -124,7 +124,7 @@ async fn handle_version_request(
 
     let api_request = ApiRequest {
         method: req_parts.method.as_str().into(),
-        url: req_parts.uri.to_string(),
+        uri: req_parts.uri.to_string(),
         headers: req_parts.headers.iter()
             .map(|(name, value)| (name.to_string(), value.to_str().unwrap_or("").into()))
             .collect(),
