@@ -22,7 +22,7 @@ fn response(body: &str, status: u16) -> Result<Response<Body>> {
 
 #[derive(Serialize, Deserialize)]
 struct WebUIPostBody {
-    endpoint: String,
+    route: String,
 }
 
 async fn webapply(body: Body, rpc_addr: &SocketAddr) -> Result<Response<Body>> {
@@ -30,8 +30,8 @@ async fn webapply(body: Body, rpc_addr: &SocketAddr) -> Result<Response<Body>> {
     let mut client = ChiselRpcClient::connect(format!("http://{}", rpc_addr)).await?;
     let modules = vec![
         Module {
-            url: "file:///endpoints/_root.ts".into(),
-            code: body.endpoint,
+            url: "file:///__route_map.ts".into(),
+            code: body.route,
         },
     ];
     client

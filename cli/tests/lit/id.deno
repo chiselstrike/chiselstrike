@@ -6,7 +6,7 @@ cp examples/person.ts "$TEMPDIR/models"
 
 cd "$TEMPDIR"
 
-cat << EOF > "$TEMPDIR/endpoints/bad_id.ts"
+cat << EOF > "$TEMPDIR/routes/bad_id.ts"
 import { Person } from "../models/person.ts";
 
 export default async function chisel(req: Request) {
@@ -14,12 +14,16 @@ export default async function chisel(req: Request) {
     filtered.id = "badid";
     filtered.first_name = "Glauber";
 
-    await filtered.save();
-    return new Response("Ok");
+    try {
+        await filtered.save();
+        return new Response("Ok");
+    } catch (e) {
+        return new Response("" + e, { status: 500 });
+    }
 }
 EOF
 
-cat << EOF > "$TEMPDIR/endpoints/store_with_id.ts"
+cat << EOF > "$TEMPDIR/routes/store_with_id.ts"
 import { Person } from "../models/person.ts";
 
 export default async function chisel(req: Request) {
@@ -31,7 +35,7 @@ export default async function chisel(req: Request) {
 }
 EOF
 
-cat << EOF > "$TEMPDIR/endpoints/find_by_id.ts"
+cat << EOF > "$TEMPDIR/routes/find_by_id.ts"
 import { Person } from "../models/person.ts";
 
 export default async function chisel(req: Request) {
@@ -42,7 +46,7 @@ export default async function chisel(req: Request) {
 }
 EOF
 
-cat << EOF > "$TEMPDIR/endpoints/store_no_id.ts"
+cat << EOF > "$TEMPDIR/routes/store_no_id.ts"
 import { Person } from "../models/person.ts";
 
 export default async function chisel(req: Request) {
@@ -53,7 +57,7 @@ export default async function chisel(req: Request) {
 }
 EOF
 
-cat << EOF > "$TEMPDIR/endpoints/update_by_id.ts"
+cat << EOF > "$TEMPDIR/routes/update_by_id.ts"
 import { Person } from "../models/person.ts";
 
 export default async function chisel(req: Request) {
@@ -64,7 +68,7 @@ export default async function chisel(req: Request) {
 }
 EOF
 
-cat << EOF > "$TEMPDIR/endpoints/count_glaubers.ts"
+cat << EOF > "$TEMPDIR/routes/count_glaubers.ts"
 import { Person } from "../models/person.ts";
 
 export default async function chisel(req: Request) {
@@ -80,12 +84,6 @@ EOF
 $CHISEL apply
 
 # CHECK: Model defined: Person
-# CHECK: End point defined: /dev/bad_id
-# CHECK: End point defined: /dev/count_glaubers
-# CHECK: End point defined: /dev/find_by_id
-# CHECK: End point defined: /dev/store_no_id
-# CHECK: End point defined: /dev/store_with_id
-# CHECK: End point defined: /dev/update_by_id
 
 $CURL -X POST $CHISELD_HOST/dev/bad_id  2>&1 || echo
 # CHECK: invalid ID 'badid'

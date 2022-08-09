@@ -3,9 +3,9 @@
 # RUN: sh -e @file
 
 cp examples/person.ts "$TEMPDIR/models"
-cp examples/store.ts "$TEMPDIR/endpoints/ins.ts"
+cp examples/store.ts "$TEMPDIR/routes/ins.ts"
 
-cat << EOF > "$TEMPDIR/endpoints/count.ts"
+cat << EOF > "$TEMPDIR/routes/count.ts"
 import { Person } from "../models/person.ts";
 
 export default async function chisel(req: Request) {
@@ -20,8 +20,6 @@ EOF
 cd "$TEMPDIR"
 $CHISEL apply
 # CHECK: Model defined: Person
-# CHECK: End point defined: /dev/count
-# CHECK: End point defined: /dev/ins
 
 $CURL --data '{
     "first_name":"Glauber",
@@ -39,8 +37,6 @@ $CURL $CHISELD_HOST/dev/count
 
 $CHISEL apply --version staging
 # CHECK: Model defined: Person
-# CHECK: End point defined: /staging/count
-# CHECK: End point defined: /staging/ins
 
 $CURL $CHISELD_HOST/staging/count
 # CHECK: HTTP/1.1 200 OK
@@ -57,17 +53,18 @@ $CURL $CHISELD_HOST/staging/count
 # ----- Check functionality with nested types -----
 
 cat << EOF > "$TEMPDIR/models/types.ts"
-export class Employee extends Chisel.ChiselEntity {
+import { ChiselEntity } from '@chiselstrike/api';
+export class Employee extends ChiselEntity {
    name: string = "";
 }
-export class Company extends Chisel.ChiselEntity {
+export class Company extends ChiselEntity {
    name: string = "";
    ceo?: Employee;
    cfo?: Employee;
 }
 EOF
 
-cat << EOF > "$TEMPDIR/endpoints/store_adalbrecht.ts"
+cat << EOF > "$TEMPDIR/routes/store_adalbrecht.ts"
 import { Company, Employee } from "../models/types.ts";
 
 export default async function chisel(req: Request) {
@@ -88,7 +85,7 @@ export default async function chisel(req: Request) {
 }
 EOF
 
-cat << EOF > "$TEMPDIR/endpoints/retrieve_nested.ts"
+cat << EOF > "$TEMPDIR/routes/retrieve_nested.ts"
 import { Company, Employee } from "../models/types.ts";
 
 export default async function chisel(req: Request) {

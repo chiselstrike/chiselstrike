@@ -3,6 +3,9 @@
 import { crud } from './crud.ts';
 import { RouteMap } from './routing.ts';
 
+export { crud };
+export { RouteMap };
+
 function opSync(opName: string, a?: unknown, b?: unknown): unknown {
     return Deno.core.opSync(opName, a, b);
 }
@@ -105,7 +108,7 @@ abstract class Operator<Input, Output> {
                         yield recordToOutput(properties);
                     }
                 } finally {
-                    Deno.core.tryClose(rid);
+                    Deno.core.close(rid);
                 }
             },
         };

@@ -158,13 +158,13 @@ impl PolicySystem {
                     None => {}
                 };
             }
-            for endpoint in config["endpoints"]
+            for route in config["routes"]
                 .as_vec()
                 .get_or_insert(&[].into())
                 .iter()
             {
-                if let Some(path) = endpoint["path"].as_str() {
-                    if let Some(users) = endpoint["users"].as_str() {
+                if let Some(path) = route["path"].as_str() {
+                    if let Some(users) = route["users"].as_str() {
                         policies
                             .user_authorization
                             .add(path, regex::Regex::new(users)?)?;

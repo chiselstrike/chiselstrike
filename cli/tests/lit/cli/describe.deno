@@ -5,11 +5,12 @@
 cd "$TEMPDIR"
 
 cat << EOF > "$TEMPDIR/models/types.ts"
-export class Foo extends Chisel.ChiselEntity { a: string; }
-export class Bar extends Chisel.ChiselEntity { b: string; }
+import { ChiselEntity } from '@chiselstrike/api';
+export class Foo extends ChiselEntity { a: string; }
+export class Bar extends ChiselEntity { b: string; }
 EOF
 
-cat << EOF > "$TEMPDIR/endpoints/hello.ts"
+cat << EOF > "$TEMPDIR/routes/hello.ts"
 import { Foo } from "../models/types.ts";
 
 export default async function chisel(req: Request) {
@@ -27,7 +28,6 @@ $CHISEL apply
 
 # CHECK: Model defined: Foo
 # CHECK: Model defined: Bar
-# CHECK: End point defined: /dev/hello
 
 $CHISEL describe
 
@@ -37,26 +37,4 @@ $CHISEL describe
 # CHECK: class Foo {
 # CHECK:   [[^ *a: string]]
 # CHECK: }
-# CHECK: Endpoint: /dev/hello
 # CHECK: Label policy: pii
-
-echo "found $($CHISEL describe | grep Endpoint | wc -l | awk '{print $1}') endpoints"
-# CHECK: found 1 endpoints
-
-## check that an endpoint-only scenario works
-rm -rf "$TEMPDIR/models"
-rm -rf "$TEMPDIR/policies"
-cat << EOF > "$TEMPDIR/endpoints/hello.ts"
-export default async function chisel(req: Request) {
-    return new Response('ok');
-}
-EOF
-$CHISEL apply --allow-type-deletion
-
-$CHISEL describe
-# CHECK Endpoint: /dev/hello
-
-$CHISEL restart
-
-$CHISEL describe
-# CHECK Endpoint: /dev/hello

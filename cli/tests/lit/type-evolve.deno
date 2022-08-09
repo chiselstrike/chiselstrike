@@ -24,10 +24,10 @@ EOF
 $CHISEL apply
 # CHECK: Model defined: Evolving
 
-cat << EOF > "$TEMPDIR/endpoints/store.js"
+cat << EOF > "$TEMPDIR/routes/store.ts"
 import { Evolving } from "../models/types.ts";
 
-export default async function chisel(req) {
+export default async function chisel(req: Request): Promise<Response> {
    const obj = Evolving.build({'a': "A"});
    obj.b = "B";
    await obj.save();
@@ -35,13 +35,14 @@ export default async function chisel(req) {
 }
 EOF
 
-cat << EOF > "$TEMPDIR/endpoints/find.js"
+cat << EOF > "$TEMPDIR/routes/find.ts"
 import { Evolving } from "../models/types.ts";
 
-export default async function chisel(req) {
+export default async function chisel(req: Request): Promise<Response> {
    let response = "tst ";
    for await (let ev of Evolving.cursor()) {
-        let fields = [ev.a, ev.b];
+        let evCast = ev as {a?: unknown, b?: unknown};
+        let fields = [evCast.a, evCast.b];
         response += fields.join(" ");
         response += " ";
    }
@@ -52,8 +53,6 @@ EOF
 
 $CHISEL apply
 # CHECK: Model defined: Evolving
-# CHECK: End point defined: /dev/find
-# CHECK: End point defined: /dev/store
 
 $CURL -X POST $CHISELD_HOST/dev/store
 # CHECK: HTTP/1.1 200 OK
@@ -71,6 +70,7 @@ export class Evolving extends ChiselEntity {
     a: string = "";
 }
 EOF
+rm "$TEMPDIR/routes/store.ts"
 $CHISEL apply
 # CHECK: Model defined: Evolving
 
@@ -138,7 +138,7 @@ $CURL $CHISELD_HOST/dev/find
 
 ## Test field deletion with index
 
-cat << EOF > "$TEMPDIR/endpoints/test_indexes.ts"
+cat << EOF > "$TEMPDIR/routes/test_indexes.ts"
 import { Evolving } from "../models/types.ts";
 
 export default async function chisel(req: Request) {
@@ -152,7 +152,6 @@ export default async function chisel(req: Request) {
 EOF
 
 $CHISEL apply
-# CHECK: End point defined: /dev/test_indexes
 
 
 cat << EOF > "$TEMPDIR/models/types.ts"
@@ -163,7 +162,7 @@ export class Evolving extends ChiselEntity {
 }
 EOF
 
-rm $TEMPDIR/endpoints/test_indexes.ts
+rm $TEMPDIR/routes/test_indexes.ts
 
 $CHISEL apply --allow-type-deletion
 # CHECK: Model defined: Evolving

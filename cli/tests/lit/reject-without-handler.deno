@@ -2,7 +2,7 @@
 
 # RUN: sh -e @file
 
-cat << EOF > "$TEMPDIR/endpoints/err.ts"
+cat << EOF > "$TEMPDIR/routes/err.ts"
 export default async function (req: Request): Promise<Response> {
    let reject: (reason?: unknown) => void;
    const p = new Promise((_, r) => {
@@ -15,8 +15,6 @@ EOF
 
 cd "$TEMPDIR"
 $CHISEL apply
-
-# CHECK: End point defined: /dev/err
 
 $CURL -o - $CHISELD_HOST/dev/err
 

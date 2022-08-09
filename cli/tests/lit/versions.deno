@@ -3,11 +3,11 @@
 # RUN: sh -e @file
 
 cp examples/person.ts "$TEMPDIR/models"
-cp examples/csv.ts examples/find.ts "$TEMPDIR/endpoints"
+cp examples/csv.ts examples/find.ts "$TEMPDIR/routes"
 
 cd "$TEMPDIR"
-cat << EOF > "endpoints/foo.js"
-export default async function my_req_func(req) {
+cat << EOF > "routes/foo.ts"
+export default function my_req_func(req: Request): Response {
     return new Response("v0");
 }
 EOF
@@ -30,20 +30,14 @@ $CHISEL apply --version string-# 2>&1 || echo
 $CHISEL apply --version v0
 # CHECK: Model defined: Person
 # CHECK: Model defined: Position
-# CHECK: End point defined: /v0/csv
-# CHECK: End point defined: /v0/find
-# CHECK: End point defined: /v0/foo
 
 $CHISEL apply --version v0-_
 # CHECK: Model defined: Person
 # CHECK: Model defined: Position
-# CHECK: End point defined: /v0-_/csv
-# CHECK: End point defined: /v0-_/find
-# CHECK: End point defined: /v0-_/foo
 
 
-cat << EOF > "endpoints/foo.js"
-export default async function my_req_func(req) {
+cat << EOF > "routes/foo.ts"
+export default function my_req_func(req: Request): Response {
     return new Response("v1");
 }
 EOF
@@ -51,9 +45,6 @@ EOF
 $CHISEL apply --version v1
 # CHECK: Model defined: Person
 # CHECK: Model defined: Position
-# CHECK: End point defined: /v1/csv
-# CHECK: End point defined: /v1/find
-# CHECK: End point defined: /v1/foo
 
 $CURL -o - $CHISELD_HOST/v0/foo
 # CHECK: HTTP/1.1 200 OK
@@ -82,7 +73,7 @@ $CURL -o - $CHISELD_HOST/v1/find
 # CHECK: terry stone 100 true 5 jill lasalle 100 true 5
 
 cat << EOF > "$TEMPDIR/policies/pol.yaml"
-endpoints:
+routes:
   - path: /find
     users: .*
 EOF

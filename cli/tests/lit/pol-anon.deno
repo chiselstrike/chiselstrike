@@ -3,15 +3,13 @@
 # RUN: sh -e @file
 
 cp examples/person.ts "$TEMPDIR/models"
-cp examples/store.ts "$TEMPDIR/endpoints/ins.ts"
-cp examples/find.ts "$TEMPDIR/endpoints/"
+cp examples/store.ts "$TEMPDIR/routes/ins.ts"
+cp examples/find.ts "$TEMPDIR/routes/"
 
 cd "$TEMPDIR"
 $CHISEL apply
 
 # CHECK: Model defined: Person
-# CHECK: End point defined: /dev/find
-# CHECK: End point defined: /dev/ins
 
 $CURL --data '{
     "first_name":"hello",
@@ -41,9 +39,9 @@ $CURL -o - $CHISELD_HOST/dev/find
 # CHECK: hello xxxxx
 
 cat << EOF > "$TEMPDIR/models/person.ts"
-import { labels } from "@chiselstrike/api";
+import { ChiselEntity, labels } from "@chiselstrike/api";
 
-export class Person extends Chisel.ChiselEntity {
+export class Person extends ChiselEntity {
   @labels("L1", "L2", "L3") first_name: string;
   @labels("pii", "L2") last_name: string;
   @labels("L1", "L3") human: boolean;
@@ -126,13 +124,13 @@ labels:
 EOF
 
 cat << EOF > "$TEMPDIR/models/company.ts"
-import { labels } from "@chiselstrike/api";
+import { ChiselEntity, labels } from "@chiselstrike/api";
 
-export class Human extends Chisel.ChiselEntity {
+export class Human extends ChiselEntity {
   @labels("pii") firstName: string = "";
   lastName: string = "";
 }
-export class Company extends Chisel.ChiselEntity {
+export class Company extends ChiselEntity {
   name: string = "";
   ceo: Human;
   @labels("pii") accountant: Human;
@@ -140,7 +138,7 @@ export class Company extends Chisel.ChiselEntity {
 }
 EOF
 
-cat << EOF > "$TEMPDIR/endpoints/companies.ts"
+cat << EOF > "$TEMPDIR/routes/companies.ts"
 import { crud } from "@chiselstrike/api";
 import { Company } from "../models/company.ts";
 

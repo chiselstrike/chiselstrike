@@ -2,7 +2,7 @@
 
 # RUN: sh -e @file
 
-$CURL -d '{"endpoint": "export default async function(r) { return new Response(\"success\\n\") }"}' $CHISELD_INTERNAL/apply
+$CURL -d '{"route": "export default async function(r) { return new Response(\"success\\n\") }"}' $CHISELD_INTERNAL/apply
 # CHECK: access-control-allow-origin: *
 # CHECK: access-control-allow-methods: POST, PUT, GET, OPTIONS
 

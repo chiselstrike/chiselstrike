@@ -3,10 +3,10 @@
 # RUN: sh -e @file
 
 cp examples/person.ts "$TEMPDIR/models"
-cp examples/find.ts "$TEMPDIR/endpoints"
-cp examples/store.ts "$TEMPDIR/endpoints/ins.ts"
+cp examples/find.ts "$TEMPDIR/routes"
+cp examples/store.ts "$TEMPDIR/routes/ins.ts"
 
-cat << EOF > "$TEMPDIR/endpoints/find_many.ts"
+cat << EOF > "$TEMPDIR/routes/find_many.ts"
 import { ChiselRequest } from "@chiselstrike/api"
 import { Person } from "../models/person.ts";
 
@@ -51,7 +51,7 @@ export default async function chisel(req: ChiselRequest) {
 }
 EOF
 
-cat << EOF > "$TEMPDIR/endpoints/find_one.ts"
+cat << EOF > "$TEMPDIR/routes/find_one.ts"
 import { ChiselRequest } from "@chiselstrike/api"
 import { Person } from "../models/person.ts";
 
@@ -101,10 +101,6 @@ cd "$TEMPDIR"
 $CHISEL apply
 
 # CHECK: Model defined: Person
-# CHECK: End point defined: /dev/find
-# CHECK: End point defined: /dev/find_many
-# CHECK: End point defined: /dev/find_one
-# CHECK: End point defined: /dev/ins
 
 
 $CURL --data '{

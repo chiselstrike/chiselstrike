@@ -3,10 +3,11 @@
 # RUN: sh -e @file
 
 cat << EOF > "$TEMPDIR/models/types.ts"
-export class Person extends Chisel.ChiselEntity {
+import { ChiselEntity } from '@chiselstrike/api';
+export class Person extends ChiselEntity {
     firstName: string = "";
 }
-export class Company extends Chisel.ChiselEntity {
+export class Company extends ChiselEntity {
     ceo: Person;
 }
 EOF
@@ -17,17 +18,18 @@ $CHISEL apply 2>&1
 
 
 cat << EOF > "$TEMPDIR/models/types.ts"
-export class Person extends Chisel.ChiselEntity {
+import { ChiselEntity } from '@chiselstrike/api';
+export class Person extends ChiselEntity {
     firstName: string = "";
     lastName: string = "";
 }
-export class Company extends Chisel.ChiselEntity {
+export class Company extends ChiselEntity {
     name: string = "";
     ceo: Person = new Person();
 }
 EOF
 
-cat << EOF > "$TEMPDIR/endpoints/store_adalbrecht.ts"
+cat << EOF > "$TEMPDIR/routes/store_adalbrecht.ts"
 import { Company, Person } from "../models/types.ts";
 
 export default async function chisel(req: Request) {
@@ -52,7 +54,7 @@ export default async function chisel(req: Request) {
 }
 EOF
 
-cat << EOF > "$TEMPDIR/endpoints/query_people.ts"
+cat << EOF > "$TEMPDIR/routes/query_people.ts"
 import { Person } from "../models/types.ts";
 
 export default async function chisel(req: Request) {
@@ -64,7 +66,7 @@ export default async function chisel(req: Request) {
 }
 EOF
 
-cat << EOF > "$TEMPDIR/endpoints/query_companies.ts"
+cat << EOF > "$TEMPDIR/routes/query_companies.ts"
 import { Company } from "../models/types.ts";
 
 export default async function chisel(req: Request) {
@@ -82,9 +84,6 @@ $CHISEL apply
 
 # CHECK: Model defined: Person
 # CHECK: Model defined: Company
-# CHECK: End point defined: /dev/query_companies
-# CHECK: End point defined: /dev/query_people
-# CHECK: End point defined: /dev/store_adalbrecht
 
 $CURL -X POST $CHISELD_HOST/dev/store_adalbrecht
 # CHECK: Successfully stored data
@@ -101,7 +100,7 @@ $CURL -o - $CHISELD_HOST/dev/query_companies
 
 ## Test find + update
 
-cat << EOF > "$TEMPDIR/endpoints/update.ts"
+cat << EOF > "$TEMPDIR/routes/update.ts"
 import { Company, Person } from "../models/types.ts";
 
 export default async function chisel(req: Request) {
@@ -127,7 +126,7 @@ $CURL -o - $CHISELD_HOST/dev/query_people
 
 ## Try saving the inner entity
 
-cat << EOF > "$TEMPDIR/endpoints/update.ts"
+cat << EOF > "$TEMPDIR/routes/update.ts"
 import { Company, Person } from "../models/types.ts";
 
 export default async function chisel(req: Request) {
@@ -152,7 +151,7 @@ $CURL -o - $CHISELD_HOST/dev/query_people
 
 ## Try saving created entity
 
-cat << EOF > "$TEMPDIR/endpoints/update.ts"
+cat << EOF > "$TEMPDIR/routes/update.ts"
 import { Company, Person } from "../models/types.ts";
 
 export default async function chisel(req: Request) {
@@ -180,7 +179,7 @@ $CURL -o - $CHISELD_HOST/dev/query_people
 # CHECK: HTTP/1.1 200 OK
 # CHECK: [(Many, Bianco), (Adalbrecht, Bond)]
 
-cat << EOF > "$TEMPDIR/endpoints/update.ts"
+cat << EOF > "$TEMPDIR/routes/update.ts"
 import { Company, Person } from "../models/types.ts";
 
 export default async function chisel(req: Request) {

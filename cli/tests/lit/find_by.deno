@@ -3,15 +3,13 @@
 # RUN: sh -e @file
 
 cp examples/person.ts "$TEMPDIR/models"
-cp examples/store.ts "$TEMPDIR/endpoints/ins.ts"
-cp examples/find_by.ts "$TEMPDIR/endpoints"
+cp examples/store.ts "$TEMPDIR/routes/ins.ts"
+cp examples/find_by.ts "$TEMPDIR/routes"
 
 cd "$TEMPDIR"
 $CHISEL apply
 
 # CHECK: Model defined: Person
-# CHECK: End point defined: /dev/find_by
-# CHECK: End point defined: /dev/ins
 
 $CURL --data '{
     "first_name":"Glauber", 

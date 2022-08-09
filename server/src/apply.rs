@@ -165,7 +165,7 @@ or
     let labels: Vec<String> = policy_system.labels.keys().map(|x| x.to_owned()).collect();
 
     // Reload the type system so that we have new ids
-    let type_system = meta.load_type_systems(&server.builtin_types).await?
+    *type_system = meta.load_type_systems(&server.builtin_types).await?
         .remove(&version_id)
         .unwrap_or_else(|| TypeSystem::new(server.builtin_types.clone(), version_id.clone()));
 

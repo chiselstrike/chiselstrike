@@ -16,7 +16,7 @@ export class Foo extends ChiselEntity {
 }
 EOF
 
-cat << EOF > "$TEMPDIR/endpoints/save.ts"
+cat << EOF > "$TEMPDIR/routes/save.ts"
 import { Foo } from "../models/t.ts";
 import { responseFromJson } from "@chiselstrike/api";
 export default async function (req: Request) {
@@ -26,7 +26,7 @@ export default async function (req: Request) {
 }
 EOF
 
-cat << EOF > "$TEMPDIR/endpoints/sum.ts"
+cat << EOF > "$TEMPDIR/routes/sum.ts"
 import { Foo } from "../models/t.ts";
 export default async function (_: Request) {
     let sum = 0;
@@ -41,7 +41,6 @@ EOF
 $CHISEL apply
 # CHECK: Model defined: Bar
 # CHECK: Model defined: Foo
-# CHECK: End point defined: /dev/save
 
 ## Accept payload without optional values:
 $CURL -d '{}' $CHISELD_HOST/dev/save
@@ -88,14 +87,11 @@ EOF
 $CHISEL apply
 # CHECK: Model defined: Bar
 # CHECK: Model defined: Foo
-# CHECK: End point defined: /dev/save
 
 ## Correctly populate from optional fields
 $CHISEL apply --version=v2
 # CHECK: Model defined: Bar
 # CHECK: Model defined: Foo
-# CHECK: End point defined: /v2/save
-# CHECK: End point defined: /v2/sum
 $CHISEL populate --version=v2 --from=dev
 $CURL $CHISELD_HOST/v2/sum
 # CHECK: HTTP/1.1 200 OK

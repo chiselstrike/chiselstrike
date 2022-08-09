@@ -267,8 +267,12 @@ impl TypeSystem {
                 self.lookup_builtin_type(ty.name())
             }
             TypeId::Entity { name, version_id } => {
-                assert_eq!(*version_id, self.version_id);
-                self.lookup_entity(name).map(Type::Entity)
+                if version_id == "__chiselstrike" {
+                    self.lookup_builtin_type(name)
+                } else {
+                    assert_eq!(*version_id, self.version_id);
+                    self.lookup_entity(name).map(Type::Entity)
+                }
             }
         }
     }

@@ -4,7 +4,7 @@
 
 # Test that we cleanup when a endpoint fails in the middle.
 
-cat << EOF > "$TEMPDIR/endpoints/error.ts"
+cat << EOF > "$TEMPDIR/routes/error.ts"
 export default async function chisel(req: Request) {
     let i = 0;
     let stream = new ReadableStream({
@@ -26,7 +26,7 @@ export default async function chisel(req: Request) {
 }
 EOF
 
-cat << EOF > "$TEMPDIR/endpoints/ok.ts"
+cat << EOF > "$TEMPDIR/routes/ok.ts"
 export default async function chisel(req: Request) {
     return new Response("EXPECTED\n");
 }
@@ -39,7 +39,7 @@ $CHISEL apply
 
 $CURL $CHISELD_HOST/dev/error 2>&1 || true
 
-# CHECK: [[(Empty reply from server)|(transfer closed with outstanding read data remaining)]]
+# CHECK: HTTP/1.1 500 Internal Server Error
 
 $CURL $CHISELD_HOST/dev/ok | tee output
 

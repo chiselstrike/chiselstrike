@@ -10,7 +10,7 @@ export class Data extends ChiselEntity {
 }
 EOF
 
-cat << EOF > "$TEMPDIR/endpoints/stream.ts"
+cat << EOF > "$TEMPDIR/routes/stream.ts"
 import { Data } from "../models/types.ts";
 
 export default async function chisel(req: Request) {
@@ -33,7 +33,7 @@ export default async function chisel(req: Request) {
 }
 EOF
 
-cat << EOF > "$TEMPDIR/endpoints/add.ts"
+cat << EOF > "$TEMPDIR/routes/add.ts"
 import { Data } from "../models/types.ts";
 
 export default async function chisel(req: Request) {
@@ -51,10 +51,7 @@ $CHISEL apply
 
 $CURL --data '' $CHISELD_HOST/dev/stream 2>&1 || true
 
-# If the first call to pull completes quickly enough hyper will send
-# an empty response. Otherwise we get the headers while hyper waits
-# for pull. Handle both error messages:
-# CHECK: [[(Empty reply from server)|(transfer closed with outstanding read data remaining)]]
+# CHECK: HTTP/1.1 500 Internal Server Error
 
 $CURL $CHISELD_HOST/dev/add
 

@@ -77,7 +77,6 @@ fn fetch_impl(map: &mut DownloadMap, path: String, base: String) -> Result<Strin
         .resolve_dependency(&path, &url, true)
         .ok_or_else(|| anyhow!("Could not resolve '{}' in '{}'", path, url))?
         .clone();
-    println!("fetch: path {:?}, base {:?} -> {}", path, base, resolved);
     Ok(resolved.to_string())
 }
 
@@ -275,7 +274,6 @@ struct ModuleResolver {
 impl Resolver for ModuleResolver {
     fn resolve(&self, specifier: &str, referrer: &Url) -> ResolveResponse {
         if let Some(u) = self.extra_libs.get(specifier) {
-            println!("resolve {:?} (ref {}) -> {}", specifier, referrer, u);
             return ResolveResponse::Esm(u.clone());
         }
         resolve_import(specifier, referrer).into()

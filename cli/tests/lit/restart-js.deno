@@ -2,7 +2,7 @@
 
 # RUN: sh -e @file
 
-cat << EOF > "$TEMPDIR/endpoints/test1.ts"
+cat << EOF > "$TEMPDIR/routes/test1.ts"
 import { getSecret } from "@chiselstrike/api"
 
 const issue728 = getSecret("somesecret");
@@ -19,8 +19,6 @@ EOF
 cd "$TEMPDIR"
 $CHISEL apply
 
-# CHECK: End point defined: /dev/test1
-
 $CURL -o - $CHISELD_HOST/dev/test1
 # CHECK: HTTP/1.1 200 OK
 # CHECK: test OK
@@ -31,14 +29,17 @@ $CHISEL restart
 
 # CHECK: Server restarted successfully.
 
-cat << EOF > "$TEMPDIR/endpoints/test2.js"
-export default async function chisel(req) {
-    return new Response(foo());
+cat << EOF > "$TEMPDIR/routes/test2.ts"
+export default function chisel(req: Request): Response {
+    try {
+        // @ts-expect-error
+        return new Response(foo());
+    } catch (e) {
+        return new Response("" + e, { status: 500 });
+    }
 }
 EOF
 $CHISEL apply
-
-# CHECK: End point defined: /dev/test2
 
 $CURL -o - $CHISELD_HOST/dev/test2
 

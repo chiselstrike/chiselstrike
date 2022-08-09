@@ -4,7 +4,7 @@
 
 cd "$TEMPDIR"
 
-cat << EOF > "$TEMPDIR/endpoints/hello.ts"
+cat << EOF > "$TEMPDIR/routes/hello.ts"
 import { hello } from "../lib/hello.ts";
 
 export default async function (req: Request) {

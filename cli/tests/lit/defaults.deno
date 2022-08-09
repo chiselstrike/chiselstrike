@@ -21,7 +21,8 @@ $CHISEL describe
 # CHECK: }
 
 cat << EOF > "$TEMPDIR/models/types.ts"
-export class Foo extends Chisel.ChiselEntity {
+import { ChiselEntity } from '@chiselstrike/api';
+export class Foo extends ChiselEntity {
 	a: string = "dfl1";
 	b: number = 0.0;
 	c: boolean = false;
@@ -30,7 +31,7 @@ export class Foo extends Chisel.ChiselEntity {
 }
 EOF
 
-cat << EOF > "$TEMPDIR/endpoints/default.ts"
+cat << EOF > "$TEMPDIR/routes/default.ts"
 import { Foo } from "../models/types.ts";
 
 export default async function chisel(req: Request) {
@@ -41,7 +42,7 @@ export default async function chisel(req: Request) {
 }
 EOF
 
-cat << EOF > "$TEMPDIR/endpoints/read.ts"
+cat << EOF > "$TEMPDIR/routes/read.ts"
 import { Foo } from "../models/types.ts";
 
 export default async function chisel(req: Request) {
@@ -65,7 +66,8 @@ $CURL -o - $CHISELD_HOST/dev/read
 # CHECK: dfl1 0 false 2 value
 
 cat << EOF > "$TEMPDIR/models/types.ts"
-export class Foo extends Chisel.ChiselEntity {
+import { ChiselEntity } from '@chiselstrike/api';
+export class Foo extends ChiselEntity {
 	a: string = "dfl1";
 	b: number = 0.0;
 	c: boolean = false;
@@ -81,7 +83,7 @@ export class Foo extends Chisel.ChiselEntity {
 }
 EOF
 
-cat << EOF > "$TEMPDIR/endpoints/readold.ts"
+cat << EOF > "$TEMPDIR/routes/readold.ts"
 import { Foo } from "../models/types.ts";
 
 export default async function chisel(req: Request) {
@@ -98,15 +100,13 @@ export default async function chisel(req: Request) {
 }
 EOF
 
-cat << EOF > "$TEMPDIR/endpoints/crud_foo.ts"
+cat << EOF > "$TEMPDIR/routes/crud_foo.ts"
 import { Foo } from "../models/types.ts";
 export default Foo.crud();
 EOF
 
 cd "$TEMPDIR"
 $CHISEL apply
-# CHECK: End point defined: /dev/crud_foo
-# CHECK: End point defined: /dev/readold
 
 
 $CURL -o - $CHISELD_HOST/dev/readold
@@ -153,7 +153,7 @@ $CURL "$CHISELD_HOST/dev/crud_foo?.d=2" | count_results
 # CHECK: "a": "dfl1"
 
 
-cat << EOF > "$TEMPDIR/endpoints/find_many.ts"
+cat << EOF > "$TEMPDIR/routes/find_many.ts"
 import { responseFromJson } from "@chiselstrike/api";
 import { Foo } from "../models/types.ts";
 
@@ -169,7 +169,6 @@ EOF
 
 cd "$TEMPDIR"
 $CHISEL apply
-# CHECK: End point defined: /dev/find_many
 
 $CURL -o - "$CHISELD_HOST/dev/find_many?key=a&value=xaxa" | count_results
 # CHECK: Number of results: 0

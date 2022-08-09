@@ -154,16 +154,13 @@ fn get_error_class_name(e: &anyhow::Error) -> &'static str {
             // friends
             e.downcast_ref::<String>().map(|_| "Error")
         })
+        .or_else(|| {
+            e.downcast_ref::<&'static str>().map(|_| "Error")
+        })
         .unwrap_or_else(|| {
             // when this is printed, please handle the unknown type by adding another
             // `downcast_ref()` check above
-            eprintln!(
-                "Error '{}' contains boxed error of unknown type:{}",
-                e,
-                e.chain()
-                    .map(|e| format!("\n  {:?}", e))
-                    .collect::<String>()
-            );
+            warn!("Unknown error type: {:#?}", e);
             "Error"
         })
 }

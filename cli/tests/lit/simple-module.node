@@ -2,7 +2,7 @@
 
 # RUN: sh -e @file
 
-cat << EOF > "$TEMPDIR/endpoints/pad.ts"
+cat << EOF > "$TEMPDIR/routes/pad.ts"
 import * as handlebars from 'handlebars';
 const template = handlebars.compile('foo: {{ FOO }}');
 
@@ -16,8 +16,6 @@ EOF
 cd "$TEMPDIR"
 npm i handlebars
 $CHISEL apply
-
-# CHECK: End point defined: /dev/pad
 
 $CURL -o - $CHISELD_HOST/dev/pad
 

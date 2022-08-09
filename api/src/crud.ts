@@ -73,7 +73,7 @@ export function crud<
         if (u !== undefined) {
             return createResponse(u, 200);
         } else {
-            return new Response("Not found", { status: 404 });
+            return createResponse("Not found", 404);
         }
     }
     if (config?.getOne ?? true)
@@ -102,7 +102,7 @@ export function crud<
     // Deletes all entities matching the filter in the `filter` URL parameter.
     async function deleteAll(req: ChiselRequest): Promise<Response> {
         await deleteEntitiesCrud(entity, Array.from(req.query));
-        return new Response(`Deleted entities matching ${new URL(req.url).search}`);
+        return createResponse(`Deleted entities matching ${new URL(req.url).search}`, 200);
     }
     if (config?.deleteAll ?? true)
         routeMap.delete('/', deleteAll);
@@ -111,7 +111,7 @@ export function crud<
     async function deleteOne(req: ChiselRequest): Promise<Response> {
         const id = req.params.get('id');
         await entity.delete({ id });
-        return new Response(`Deleted ID ${id}`);
+        return createResponse(`Deleted ID ${id}`, 200);
     }
     if (config?.deleteOne ?? true)
         routeMap.delete('/:id', deleteOne);

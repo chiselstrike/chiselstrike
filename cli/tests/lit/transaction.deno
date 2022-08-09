@@ -3,12 +3,13 @@
 # RUN: sh -e @file
 
 cat << EOF > "$TEMPDIR/models/types.ts"
-export class Person extends Chisel.ChiselEntity {
+import { ChiselEntity } from '@chiselstrike/api';
+export class Person extends ChiselEntity {
    name: string = "";
 }
 EOF
 
-cat << EOF > "$TEMPDIR/endpoints/store_person.ts"
+cat << EOF > "$TEMPDIR/routes/store_person.ts"
 import { Person } from "../models/types.ts";
 
 export default async function chisel(req: Request) {
@@ -26,7 +27,7 @@ export default async function chisel(req: Request) {
 }
 EOF
 
-cat << EOF > "$TEMPDIR/endpoints/retrieve_all.ts"
+cat << EOF > "$TEMPDIR/routes/retrieve_all.ts"
 import { Person } from "../models/types.ts";
 
 export default async function chisel(req: Request) {
@@ -38,7 +39,7 @@ export default async function chisel(req: Request) {
 }
 EOF
 
-cat << EOF > "$TEMPDIR/endpoints/write_and_read.ts"
+cat << EOF > "$TEMPDIR/routes/write_and_read.ts"
 import { Person } from "../models/types.ts";
 
 export default async function chisel(req: Request) {
@@ -82,7 +83,7 @@ $CURL -X POST $CHISELD_HOST/dev/write_and_read
 ## Test transaction completion on 501 returned by endpoint.
 ## -----------------------------------------------------------------------------
 
-cat << EOF > "$TEMPDIR/endpoints/write_and_501.ts"
+cat << EOF > "$TEMPDIR/routes/write_and_501.ts"
 import { Person } from "../models/types.ts";
 
 export default async function chisel(req: Request) {

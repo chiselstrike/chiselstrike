@@ -2,7 +2,7 @@
 
 # RUN: sh -e @file
 
-cat << EOF > "$TEMPDIR/endpoints/bad.ts"
+cat << EOF > "$TEMPDIR/routes/bad.ts"
 import indent from 'https://cdn.skypack.dev/pin/indent-string@v5.0.0-badhash/mode=imports,min/optimized/indent-string.js'
 
 export default function chisel(req: Request) {
@@ -13,6 +13,6 @@ EOF
 cd "$TEMPDIR"
 $CHISEL apply 2>&1 || true
 
-# CHECK: Error: could not compile endpoints
+# CHECK: Error: Could not compile routes
 # CHECK: Caused by:
 # CHECK: HTTP request failed

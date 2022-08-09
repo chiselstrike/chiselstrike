@@ -6,18 +6,20 @@ cd "$TEMPDIR"
 
 
 cat << EOF > "$TEMPDIR/models/types.ts"
-export class Biography extends Chisel.ChiselEntity {
+import { ChiselEntity } from '@chiselstrike/api';
+
+export class Biography extends ChiselEntity {
     title: string = "";
 }
 
-export class Person extends Chisel.ChiselEntity {
+export class Person extends ChiselEntity {
     name: string = "bob";
     age: number = 0;
     biography: Biography;
 }
 EOF
 
-cat << EOF > "$TEMPDIR/endpoints/store.ts"
+cat << EOF > "$TEMPDIR/routes/store.ts"
 import { Person, Biography } from "../models/types.ts";
 
 export default async function chisel(req: Request) {
@@ -52,7 +54,7 @@ export default async function chisel(req: Request) {
 }
 EOF
 
-cat << EOF > "$TEMPDIR/endpoints/findall.ts"
+cat << EOF > "$TEMPDIR/routes/findall.ts"
 import { Person } from "../models/types.ts";
 
 function reverse(s: string): string {
@@ -97,7 +99,6 @@ cd "$TEMPDIR"
 $CHISEL apply
 
 # CHECK: Model defined: Person
-# CHECK: End point defined: /dev/findall
 
 $CHISEL apply
 $CURL -X POST -o - $CHISELD_HOST/dev/store
@@ -133,7 +134,7 @@ $CURL -o - $CHISELD_HOST/dev/findall?fibonacciAge=12
 
 ## Check that take gets applied after filtering with predicate.
 
-cat << EOF > "$TEMPDIR/endpoints/filter_and_take.ts"
+cat << EOF > "$TEMPDIR/routes/filter_and_take.ts"
 import { Person } from "../models/types.ts";
 
 export default async function chisel(req: Request) {
@@ -159,7 +160,7 @@ $CURL -o - $CHISELD_HOST/dev/filter_and_take
 
 ## Filter after take
 
-cat << EOF > "$TEMPDIR/endpoints/filter_and_take.ts"
+cat << EOF > "$TEMPDIR/routes/filter_and_take.ts"
 import { Person } from "../models/types.ts";
 
 export default async function chisel(req: Request) {
@@ -184,7 +185,7 @@ $CURL -o - $CHISELD_HOST/dev/filter_and_take
 
 ## Check that restriction gets applied after filtering with predicate.
 
-cat << EOF > "$TEMPDIR/endpoints/filter_and_restrict.ts"
+cat << EOF > "$TEMPDIR/routes/filter_and_restrict.ts"
 import { Person } from "../models/types.ts";
 
 export default async function chisel(req: Request) {
@@ -209,7 +210,7 @@ $CURL -o - $CHISELD_HOST/dev/filter_and_restrict
 
 ## Filter after restriction
 
-cat << EOF > "$TEMPDIR/endpoints/filter_and_restrict.ts"
+cat << EOF > "$TEMPDIR/routes/filter_and_restrict.ts"
 import { Person } from "../models/types.ts";
 
 export default async function chisel(req: Request) {
@@ -234,7 +235,7 @@ $CURL -o - $CHISELD_HOST/dev/filter_and_restrict
 
 ## Check that column selection gets applied after filtering with predicate.
 
-cat << EOF > "$TEMPDIR/endpoints/filter_and_select.ts"
+cat << EOF > "$TEMPDIR/routes/filter_and_select.ts"
 import { Person } from "../models/types.ts";
 
 export default async function chisel(req: Request) {
@@ -257,7 +258,7 @@ $CURL -o - $CHISELD_HOST/dev/filter_and_select
 
 ## Filter after select
 
-cat << EOF > "$TEMPDIR/endpoints/filter_and_select.ts"
+cat << EOF > "$TEMPDIR/routes/filter_and_select.ts"
 import { Person } from "../models/types.ts";
 
 export default async function chisel(req: Request) {
@@ -282,7 +283,7 @@ $CURL -o - $CHISELD_HOST/dev/filter_and_select
 
 ## Filter with expression - simple
 
-cat << EOF > "$TEMPDIR/endpoints/filter_with_expression.ts"
+cat << EOF > "$TEMPDIR/routes/filter_with_expression.ts"
 import { Person } from "../models/types.ts";
 
 export default async function chisel(req: Request) {
@@ -320,7 +321,7 @@ $CURL -o - $CHISELD_HOST/dev/filter_with_expression
 
 ## Filter with expression - nested Entities
 
-cat << EOF > "$TEMPDIR/endpoints/filter_with_expression.ts"
+cat << EOF > "$TEMPDIR/routes/filter_with_expression.ts"
 import { Person } from "../models/types.ts";
 
 export default async function chisel(req: Request) {
@@ -362,7 +363,7 @@ $CURL -o - $CHISELD_HOST/dev/filter_with_expression
 
 ## Filter by nonexistent field - check for errors
 
-cat << EOF > "$TEMPDIR/endpoints/filter_with_expression.ts"
+cat << EOF > "$TEMPDIR/routes/filter_with_expression.ts"
 import { Person } from "../models/types.ts";
 
 export default async function chisel(req: Request) {
@@ -386,8 +387,12 @@ export default async function chisel(req: Request) {
             }
         });
 
-    const results = (await filtered.toArray()).map(p => p.name);
-    return new Response("[" + results.join(", ") + "]");
+    try {
+        const results = (await filtered.toArray()).map(p => p.name);
+        return new Response("[" + results.join(", ") + "]");
+    } catch (e) {
+        return new Response("" + e);
+    }
 }
 EOF
 
@@ -400,7 +405,7 @@ $CURL -o - $CHISELD_HOST/dev/filter_with_expression
 
 ## Filter by nonexistent joined field - check for errors
 
-cat << EOF > "$TEMPDIR/endpoints/filter_with_expression.ts"
+cat << EOF > "$TEMPDIR/routes/filter_with_expression.ts"
 import { Person } from "../models/types.ts";
 
 export default async function chisel(req: Request) {
@@ -428,8 +433,12 @@ export default async function chisel(req: Request) {
             }
         });
 
-    const results = (await filtered.toArray()).map(p => p.name);
-    return new Response("[" + results.join(", ") + "]");
+    try {
+        const results = (await filtered.toArray()).map(p => p.name);
+        return new Response("[" + results.join(", ") + "]");
+    } catch (e) {
+        return new Response("" + e);
+    }
 }
 EOF
 
@@ -442,7 +451,7 @@ $CURL -o - $CHISELD_HOST/dev/filter_with_expression
 
 ## Filter by unary boolean predicate.
 
-cat << EOF > "$TEMPDIR/endpoints/filter_with_expression.ts"
+cat << EOF > "$TEMPDIR/routes/filter_with_expression.ts"
 import { Person } from "../models/types.ts";
 
 export default async function chisel(req: Request) {

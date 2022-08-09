@@ -2,14 +2,14 @@
 
 # RUN: sh -e @file
 
-cat << EOF > "$TEMPDIR/endpoints/foo.ts"
+cat << EOF > "$TEMPDIR/routes/foo.ts"
 export default async function chisel(req: Request) {
     return new Response("foo with url " + req.url);
 }
 EOF
 
-mkdir "$TEMPDIR/endpoints/foo"
-cat << EOF > "$TEMPDIR/endpoints/foo/bar.ts"
+mkdir "$TEMPDIR/routes/foo"
+cat << EOF > "$TEMPDIR/routes/foo/bar.ts"
 export default async function chisel(req: Request) {
     return new Response("foo/bar with url " + req.url);
 }
@@ -18,20 +18,17 @@ EOF
 cd "$TEMPDIR"
 $CHISEL apply
 
-# CHECK: End point defined: /dev/foo
-# CHECK: End point defined: /dev/foo/bar
-
 $CURL -o - $CHISELD_HOST/dev/foo
 
 # CHECK: HTTP/1.1 200 OK
-# CHECK: foo with url http://chiselstrike.com/dev/foo
+# CHECK: foo with url https://chiselstrike.com/dev/foo
 
 $CURL -o - $CHISELD_HOST/dev/foo/bar
 
 # CHECK: HTTP/1.1 200 OK
-# CHECK: foo/bar with url http://chiselstrike.com/dev/foo/bar
+# CHECK: foo/bar with url https://chiselstrike.com/dev/foo/bar
 
 $CURL -o - $CHISELD_HOST/dev/foo/zed
 
 # CHECK: HTTP/1.1 200 OK
-# CHECK: foo with url http://chiselstrike.com/dev/foo/zed
+# CHECK: foo with url https://chiselstrike.com/dev/foo/zed

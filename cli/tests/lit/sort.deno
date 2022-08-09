@@ -6,13 +6,14 @@ cd "$TEMPDIR"
 
 
 cat << EOF > "$TEMPDIR/models/types.ts"
-export class Person extends Chisel.ChiselEntity {
+import { ChiselEntity } from '@chiselstrike/api';
+export class Person extends ChiselEntity {
   name: string = "";
   age: number = 0;
 }
 EOF
 
-cat << EOF > "$TEMPDIR/endpoints/store.ts"
+cat << EOF > "$TEMPDIR/routes/store.ts"
 import { Person } from "../models/types.ts";
 
 export default async function chisel(req: Request) {
@@ -35,7 +36,7 @@ export default async function chisel(req: Request) {
 }
 EOF
 
-cat << EOF > "$TEMPDIR/endpoints/get_sorted_by.ts"
+cat << EOF > "$TEMPDIR/routes/get_sorted_by.ts"
 import { Person } from "../models/types.ts";
 
 export default async function chisel(req: Request) {
@@ -56,8 +57,6 @@ EOF
 cd "$TEMPDIR"
 $CHISEL apply
 # CHECK: Model defined: Person
-# CHECK: End point defined: /dev/get_sorted_by
-# CHECK: End point defined: /dev/store
 
 $CURL -X POST -o - $CHISELD_HOST/dev/store
 # CHECK: Ok
@@ -77,7 +76,7 @@ $CURL -o - "$CHISELD_HOST/dev/get_sorted_by?key=age&order=descending"
 
 ## ________________ Double sortBy ________________
 
-cat << EOF > "$TEMPDIR/endpoints/get_sorted.ts"
+cat << EOF > "$TEMPDIR/routes/get_sorted.ts"
 import { Person } from "../models/types.ts";
 
 export default async function chisel(req: Request) {
@@ -91,7 +90,6 @@ export default async function chisel(req: Request) {
 EOF
 
 $CHISEL apply
-# CHECK: End point defined: /dev/get_sorted
 
 $CURL -o - $CHISELD_HOST/dev/get_sorted
 # CHECK: [Glauber, Jan, Pekka]
@@ -100,7 +98,7 @@ $CURL -o - $CHISELD_HOST/dev/get_sorted
 
 ## ________________ sortBy filter ________________
 
-cat << EOF > "$TEMPDIR/endpoints/get_sorted.ts"
+cat << EOF > "$TEMPDIR/routes/get_sorted.ts"
 import { Person } from "../models/types.ts";
 
 export default async function chisel(req: Request) {
@@ -116,7 +114,6 @@ export default async function chisel(req: Request) {
 EOF
 
 $CHISEL apply
-# CHECK: End point defined: /dev/get_sorted
 
 $CURL -o - $CHISELD_HOST/dev/get_sorted
 # CHECK: [Pekka]
@@ -124,7 +121,7 @@ $CURL -o - $CHISELD_HOST/dev/get_sorted
 
 ## ________________ sortBy take SortBy ________________
 
-cat << EOF > "$TEMPDIR/endpoints/get_sorted.ts"
+cat << EOF > "$TEMPDIR/routes/get_sorted.ts"
 import { Person } from "../models/types.ts";
 
 export default async function chisel(req: Request) {
@@ -139,7 +136,6 @@ export default async function chisel(req: Request) {
 EOF
 
 $CHISEL apply
-# CHECK: End point defined: /dev/get_sorted
 
 $CURL -o - $CHISELD_HOST/dev/get_sorted
 # CHECK: [Glauber, Pekka]
@@ -147,7 +143,7 @@ $CURL -o - $CHISELD_HOST/dev/get_sorted
 
 ## ________________ sortBy invalid key ________________
 
-cat << EOF > "$TEMPDIR/endpoints/get_sorted.ts"
+cat << EOF > "$TEMPDIR/routes/get_sorted.ts"
 import { Person } from "../models/types.ts";
 
 export default async function chisel(req: Request) {
@@ -160,15 +156,14 @@ export default async function chisel(req: Request) {
 EOF
 
 $CHISEL apply
-# CHECK: End point defined: /dev/get_sorted
 
 $CURL -o - $CHISELD_HOST/dev/get_sorted
-# CHECK: Error: entity 'Person' has no field named 'invalid_field'
+# CHECK: HTTP/1.1 500 Internal Server Error
 
 
 ## ________________ enforce sorting in Typescript ________________
 
-cat << EOF > "$TEMPDIR/endpoints/get_sorted.ts"
+cat << EOF > "$TEMPDIR/routes/get_sorted.ts"
 import { Person } from "../models/types.ts";
 
 export default async function chisel(req: Request) {
@@ -186,7 +181,6 @@ export default async function chisel(req: Request) {
 EOF
 
 $CHISEL apply
-# CHECK: End point defined: /dev/get_sorted
 
 $CURL -o - $CHISELD_HOST/dev/get_sorted
 # CHECK: [Glauber, Jan, Pekka]

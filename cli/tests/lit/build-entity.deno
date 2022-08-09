@@ -13,7 +13,7 @@ export class User extends ChiselEntity {
 }
 EOF
 
-cat << EOF > "$TEMPDIR/endpoints/user.ts"
+cat << EOF > "$TEMPDIR/routes/user.ts"
 import { User } from "../models/user.ts";
 
 export default async function (req: Request): Promise<Response> {
@@ -27,7 +27,6 @@ EOF
 
 $CHISEL apply
 # CHECK: Model defined: User
-# CHECK: End point defined: /dev/user
 
 $CURL -d '{"username": "penberg"}' $CHISELD_HOST/dev/user
 # CHECK: penbergPekka

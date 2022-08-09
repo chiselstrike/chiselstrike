@@ -12,7 +12,7 @@ export class BlogPost extends ChiselEntity {
     content: string;
 }
 EOF
-cat << EOF > "$TEMPDIR/endpoints/post.ts"
+cat << EOF > "$TEMPDIR/routes/post.ts"
 import { BlogPost } from "../models/post.ts";
 import { responseFromJson } from "@chiselstrike/api";
 
@@ -26,7 +26,11 @@ export default async function chisel(req: Request) {
             return new Response("Missing relUrl", { status: 400 });
         }
         const created = BlogPost.build({content, relUrl});
-        await created.save();
+        try {
+            await created.save();
+        } catch (e) {
+            return new Response("" + e, { status: 500 });
+        }
         return responseFromJson('inserted ' + created.id);
     } else if (req.method == 'GET') {
         const comments = await BlogPost.findMany({});

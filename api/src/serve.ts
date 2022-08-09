@@ -45,6 +45,8 @@ async function handleRequest(router: Router, apiRequest: ApiRequest): Promise<Ap
     // the HTTP request usually specifies only path and query, but we need a full URL; so we resolve the URL
     // from the request with respect to an arbitrary base
     const url = new URL(apiRequest.uri, location.href);
+    console.log(`apiRequest.uri = ${apiRequest.uri}`);
+    console.log(`url = ${url}`);
 
     // initialize the legacy global request context
     // note that this means that we can only handle a single request at a time!
@@ -81,19 +83,30 @@ async function handleRequest(router: Router, apiRequest: ApiRequest): Promise<Ap
     try {
         response = await handleRouterMatch(routerMatch, chiselRequest);
 
-        // read the response body before leaving the try-block and committing the transaction, because user
+        // read the response body before committing the transaction, because user
         // code might still be running while the response is streaming
         responseBody = await response.arrayBuffer();
+
+        await Deno.core.opAsync('op_chisel_commit_transaction');
     } catch (e) {
-        Deno.core.opSync('op_chisel_rollback_transaction');
-        console.error(`Exception from ${apiRequest.method} ${apiRequest.routingPath}\n${e}`);
+        let description = '';
+        if (e instanceof Error && e.stack !== undefined) {
+            description = e.stack;
+        } else {
+            description = '' + e;
+        }
+        console.error(`Error in ${apiRequest.method} ${apiRequest.uri}: ${description}`);
+
+        try {
+            Deno.core.opSync('op_chisel_rollback_transaction');
+        } catch (e) {
+            console.error(`Error when rolling back transaction: ${e}`);
+        }
 
         // return an empty response to avoid leaking details about the user error
         // TODO: perhaps we should introduce a "debug mode" that would display a nice error response?
         return emptyResponse(500);
     }
-
-    await Deno.core.opAsync('op_chisel_commit_transaction');
 
     return {
         status: response.status,

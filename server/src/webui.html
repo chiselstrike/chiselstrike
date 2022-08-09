@@ -3,13 +3,13 @@
   <meta charset="UTF-8" />
   <script>
     async function apply() {
-        const endpoint = document.querySelector('#endpoint').value
+        const route = document.querySelector('#route').value
         const types = document.querySelector('#types').value
         const policies = document.querySelector('#policies').value
         const res = await fetch(
             '/apply',
             {
-                body: JSON.stringify({endpoint, types, policies}),
+                body: JSON.stringify({route, types, policies}),
                 method: 'POST',
             }
         );
@@ -25,7 +25,7 @@
 <body>
   <h1>ChiselStrike in Your Browser</h1>
   <div>
-    <label for="endpoint">Endpoint:</label><textarea id="endpoint"></textarea>
+    <label for="route">Route:</label><textarea id="route"></textarea>
     <label for="types">Types:</label><textarea id="types"></textarea>
     <label for="policies">Policies:</label><textarea id="policies"></textarea>
     <button onclick="apply()">Apply</button>
@@ -33,6 +33,6 @@
   <div id="apply-output"></div>
   <div>
     <button onclick="invoke()">Invoke</button>
-    <textarea id="response" readonly="true" placeholder="Endpoint result will appear here."></textarea>
+    <textarea id="response" readonly="true" placeholder="Route result will appear here."></textarea>
   </div>
 </body>

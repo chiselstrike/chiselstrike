@@ -57,8 +57,8 @@ pub async fn get_username_from_id(
                 })
                 .await
             {
-                Err(e) => {
-                    warn!("Username query error: {:?}", e);
+                Err(_e) => {
+                    //warn!("Username query error: {:?}", e);
                     None
                 }
                 Ok(row) => row.get("email"),

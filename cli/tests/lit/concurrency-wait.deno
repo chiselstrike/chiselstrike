@@ -4,7 +4,7 @@
 
 cp examples/person.ts "$TEMPDIR/models"
 
-cat << EOF > "$TEMPDIR/endpoints/sleep.ts"
+cat << EOF > "$TEMPDIR/routes/sleep.ts"
 export default async function chisel(req: Request) {
     await new Promise(resolve => setTimeout(resolve, 2000));
     return new Response("sleeper");

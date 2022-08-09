@@ -11,12 +11,16 @@ export class Person extends ChiselEntity {
 EOF
 
 
-cat << EOF > "$TEMPDIR/endpoints/build.ts"
+cat << EOF > "$TEMPDIR/routes/build.ts"
 import { Person } from "../models/person.ts";
 
 export default async function chisel(req: Request) {
-    await Person.build({}).save();
-    return new Response("");
+    try {
+        await Person.build({}).save();
+        return new Response("");
+    } catch (e) {
+        return new Response("" + e);
+    }
 }
 EOF
 
@@ -24,8 +28,6 @@ cd "$TEMPDIR"
 
 # FIXME, We should detect this error at compile time.
 $CHISEL apply
-
-# CHECK: End point defined: /dev/build
 
 $CURL -X POST $CHISELD_HOST/dev/build
 

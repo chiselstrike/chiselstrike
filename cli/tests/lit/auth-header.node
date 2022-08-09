@@ -4,7 +4,6 @@
 
 cd "$TEMPDIR"
 $CHISEL apply
-# CHECK: End point defined: /dev/hello
 
 $CURL $CHISELD_HOST/__chiselstrike/auth/users
 # CHECK: HTTP/1.1 403 Forbidden

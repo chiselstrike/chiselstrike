@@ -3,13 +3,12 @@
 # RUN: sh -e @file
 
 cp examples/person.ts "$TEMPDIR/models"
-cp examples/store.ts "$TEMPDIR/endpoints"
+cp examples/store.ts "$TEMPDIR/routes"
 
 cd "$TEMPDIR"
 $CHISEL apply
 
 # CHECK: Model defined: Person
-# CHECK: End point defined: /dev/store
 
 $CURL --data '{
     "first_name":"Glauber",
@@ -29,7 +28,7 @@ $CURL --data '{
     "height": 10.01
 }' -o - $CHISELD_HOST/dev/store
 
-cat << EOF > "$TEMPDIR/endpoints/query.ts"
+cat << EOF > "$TEMPDIR/routes/query.ts"
 import { Person } from "../models/person.ts";
 
 export default async function chisel(req: Request) {
@@ -80,7 +79,7 @@ export class Post extends ChiselEntity {
 }
 EOF
 
-cat << EOF > "$TEMPDIR/endpoints/take_filter.ts"
+cat << EOF > "$TEMPDIR/routes/take_filter.ts"
 import { responseFromJson } from "@chiselstrike/api"
 import { Post } from '../models/post.ts';
 
@@ -112,7 +111,6 @@ export default async (req: Request) => {
 EOF
 $CHISEL apply
 # CHECK: Model defined: Post
-# CHECK: End point defined: /dev/take_filter
 
 $CURL -X POST -o - $CHISELD_HOST/dev/take_filter
 # CHECK: "simple_take": [
@@ -128,8 +126,9 @@ $CURL -X POST -o - $CHISELD_HOST/dev/take_filter
 # Test sql keywords
 
 cat << EOF > "$TEMPDIR/models/types.ts"
+import { ChiselEntity } from '@chiselstrike/api';
 
-export class TestingEntity extends Chisel.ChiselEntity {
+export class TestingEntity extends ChiselEntity {
     limit: string = "limit";
     group: string = "group";
     where: string = "where";
@@ -140,7 +139,7 @@ export class TestingEntity extends Chisel.ChiselEntity {
 }
 EOF
 
-cat << EOF > "$TEMPDIR/endpoints/store_testing_entity.ts"
+cat << EOF > "$TEMPDIR/routes/store_testing_entity.ts"
 import { TestingEntity } from "../models/types.ts";
 
 export default async function chisel(req: Request) {
@@ -149,7 +148,7 @@ export default async function chisel(req: Request) {
 }
 EOF
 
-cat << EOF > "$TEMPDIR/endpoints/findall.ts"
+cat << EOF > "$TEMPDIR/routes/findall.ts"
 import { TestingEntity } from "../models/types.ts";
 
 export default async function chisel(req: Request) {
@@ -172,7 +171,6 @@ cd "$TEMPDIR"
 $CHISEL apply
 
 # CHECK: Model defined: TestingEntity
-# CHECK: End point defined: /dev/findall
 
 $CURL -X POST -o - $CHISELD_HOST/dev/store_testing_entity
 # CHECK: Ok

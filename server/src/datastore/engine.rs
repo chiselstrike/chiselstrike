@@ -606,7 +606,7 @@ impl QueryEngine {
                             // this save completes.  Better to check at compilation time that the endpoint code
                             // doesn't attempt to modify auth types.
                             Some(serde_json::Value::String(id)) => id.clone(),
-                            _ => anyhow::bail!("Cannot save into type {}.", nested_type.name()),
+                            _ => anyhow::bail!("Cannot save into nested type {}.", nested_type.name()),
                         }
                     } else {
                         let (nested_inserts, nested_ids) =

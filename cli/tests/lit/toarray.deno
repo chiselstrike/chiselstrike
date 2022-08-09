@@ -6,7 +6,7 @@ cp examples/person.ts "$TEMPDIR/models"
 
 cd "$TEMPDIR"
 
-cat << EOF > "$TEMPDIR/endpoints/store.ts"
+cat << EOF > "$TEMPDIR/routes/store.ts"
 import { Person } from "../models/person.ts";
 
 export default async function chisel(req: Request) {
@@ -24,7 +24,7 @@ export default async function chisel(req: Request) {
 }
 EOF
 
-cat << EOF > "$TEMPDIR/endpoints/toarray.ts"
+cat << EOF > "$TEMPDIR/routes/toarray.ts"
 import { Person } from "../models/person.ts";
 
 export default async function chisel(req: Request) {
@@ -35,8 +35,6 @@ EOF
 
 $CHISEL apply
 # CHECK: Model defined: Person
-# CHECK: End point defined: /dev/store
-# CHECK: End point defined: /dev/toarray
 
 $CURL -X POST $CHISELD_HOST/dev/store
 # CHECK: Ok

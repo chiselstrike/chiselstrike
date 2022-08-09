@@ -29,6 +29,9 @@ impl Compiler {
                 "chisel".to_string(),
                 api::SOURCES.get("chisel.d.ts").unwrap().to_string(),
             ), (
+                "crud".to_string(),
+                api::SOURCES.get("crud.d.ts").unwrap().to_string(),
+            ), (
                 "routing".to_string(),
                 api::SOURCES.get("routing.d.ts").unwrap().to_string(),
             ),

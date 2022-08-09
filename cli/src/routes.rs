@@ -1,6 +1,6 @@
 // SPDX-FileCopyrightText: © 2022 ChiselStrike <info@chiselstrike.com>
 
-use anyhow::{anyhow, Context, Result};
+use anyhow::{anyhow, bail, Context, Result};
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -82,6 +82,8 @@ fn walk_dir_entry(route_map: &mut FileRouteMap, entry: &fs::DirEntry, path_patte
                     stem => format!("{}/{}", path_pattern, stem_to_pattern(stem)),
                 },
             });
+        } else if entry_name.ends_with(".js") {
+            bail!("Found file {}, but only TypeScript files (.ts) are supported", entry_path.display());
         }
     } else if metadata.is_dir() {
         let dir_path_pattern = format!("{}/{}", path_pattern, stem_to_pattern(&entry_name));

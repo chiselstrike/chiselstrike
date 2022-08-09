@@ -6,19 +6,21 @@ cd "$TEMPDIR"
 
 
 cat << EOF > "$TEMPDIR/models/types.ts"
-export class Biography extends Chisel.ChiselEntity {
+import { ChiselEntity } from '@chiselstrike/api';
+
+export class Biography extends ChiselEntity {
     title: string = "";
     page_count: number = 0;
 }
 
-export class Person extends Chisel.ChiselEntity {
+export class Person extends ChiselEntity {
     name: string = "bob";
     age: number = 0;
     biography: Biography;
 }
 EOF
 
-cat << EOF > "$TEMPDIR/endpoints/store.ts"
+cat << EOF > "$TEMPDIR/routes/store.ts"
 import { Person, Biography } from "../models/types.ts";
 
 export default async function chisel(req: Request) {
@@ -57,7 +59,7 @@ export default async function chisel(req: Request) {
 EOF
 
 
-cat << EOF > "$TEMPDIR/endpoints/compute_aggregations.ts"
+cat << EOF > "$TEMPDIR/routes/compute_aggregations.ts"
 import { Person } from "../models/types.ts";
 
 export default async function chisel(req: Request) {
@@ -85,7 +87,6 @@ EOF
 
 $CHISEL apply
 # CHECK: Model defined: Person
-# CHECK: End point defined: /dev/compute_aggregations
 
 $CURL -X POST -o - $CHISELD_HOST/dev/store
 # CHECK: Ok

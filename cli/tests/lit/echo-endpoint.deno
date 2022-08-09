@@ -2,7 +2,7 @@
 
 # RUN: sh -e @file
 
-cat << EOF > "$TEMPDIR/endpoints/echo.ts"
+cat << EOF > "$TEMPDIR/routes/echo.ts"
 // This function produces a response whose body is a json of the request
 export default async function chisel(req: Request) {
     // Stringfy needs some help to see some of the fields
@@ -30,18 +30,15 @@ EOF
 cd "$TEMPDIR"
 $CHISEL apply
 
-# CHECK: End point defined: /dev/echo
-
 $CURL --data foobar -o - $CHISELD_HOST/dev/echo
 
 # CHECK: HTTP/1.1 200 OK
 # CHECK: content-type: text/plain;charset=UTF-8
-# CHECK: transfer-encoding: chunked
 # CHECK: date:
 
 # CHECK: {
 # CHECK:     "method": "POST",
-# CHECK:     "url": "http://chiselstrike.com/dev/echo",
+# CHECK:     "url": "https://chiselstrike.com/dev/echo",
 # CHECK:     "headers": {
 # CHECK:         "accept": "*/*",
 # CHECK:         "content-length": "6",
@@ -61,12 +58,11 @@ $CURL -H 'Expect: 100-continue' --data foobar -o - $CHISELD_HOST/dev/echo
 
 # CHECK: HTTP/1.1 200 OK
 # CHECK: content-type: text/plain;charset=UTF-8
-# CHECK: transfer-encoding: chunked
 # CHECK: date:
 
 # CHECK: {
 # CHECK:     "method": "POST",
-# CHECK:     "url": "http://chiselstrike.com/dev/echo",
+# CHECK:     "url": "https://chiselstrike.com/dev/echo",
 # CHECK:     "headers": {
 # CHECK:         "accept": "*/*",
 # CHECK:         "content-length": "6",

@@ -13,7 +13,7 @@ export class Person extends ChiselEntity {
 }
 EOF
 
-cat << EOF > "$TEMPDIR/endpoints/store.ts"
+cat << EOF > "$TEMPDIR/routes/store.ts"
 import { Person } from "../models/types.ts";
 
 export default async function chisel(req: Request) {
@@ -32,7 +32,7 @@ export default async function chisel(req: Request) {
 }
 EOF
 
-cat << EOF > "$TEMPDIR/endpoints/findall.ts"
+cat << EOF > "$TEMPDIR/routes/findall.ts"
 import { Person } from "../models/types.ts";
 
 export default async function chisel(req: Request) {
@@ -43,7 +43,7 @@ export default async function chisel(req: Request) {
 }
 EOF
 
-cat << EOF > "$TEMPDIR/endpoints/findtake.ts"
+cat << EOF > "$TEMPDIR/routes/findtake.ts"
 import { Person } from "../models/types.ts";
 
 export default async function chisel(req: Request) {
@@ -55,7 +55,7 @@ export default async function chisel(req: Request) {
 }
 EOF
 
-cat << EOF > "$TEMPDIR/endpoints/taketwice.ts"
+cat << EOF > "$TEMPDIR/routes/taketwice.ts"
 import { Person } from "../models/types.ts";
 
 export default async function chisel(req: Request) {
@@ -68,7 +68,7 @@ export default async function chisel(req: Request) {
 }
 EOF
 
-cat << EOF > "$TEMPDIR/endpoints/taketwicereverse.ts"
+cat << EOF > "$TEMPDIR/routes/taketwicereverse.ts"
 import { Person } from "../models/types.ts";
 
 export default async function chisel(req: Request) {
@@ -81,7 +81,7 @@ export default async function chisel(req: Request) {
 }
 EOF
 
-cat << EOF > "$TEMPDIR/endpoints/takecopies.ts"
+cat << EOF > "$TEMPDIR/routes/takecopies.ts"
 import { Person } from "../models/types.ts";
 
 export default async function chisel(req: Request) {
@@ -98,7 +98,7 @@ export default async function chisel(req: Request) {
 EOF
 
 
-cat << EOF > "$TEMPDIR/endpoints/findfilter.ts"
+cat << EOF > "$TEMPDIR/routes/findfilter.ts"
 import { Person } from "../models/types.ts";
 
 export default async function chisel(req: Request) {
@@ -114,13 +114,6 @@ EOF
 $CHISEL apply
 
 # CHECK: Model defined: Person
-# CHECK: End point defined: /dev/findall
-# CHECK: End point defined: /dev/findfilter
-# CHECK: End point defined: /dev/findtake
-# CHECK: End point defined: /dev/store
-# CHECK: End point defined: /dev/takecopies
-# CHECK: End point defined: /dev/taketwice
-# CHECK: End point defined: /dev/taketwicereverse
 
 $CURL -X POST $CHISELD_HOST/dev/store
 # CHECK: Ok
@@ -144,7 +137,7 @@ $CURL $CHISELD_HOST/dev/takecopies
 # CHECK: [Glauber, Glauber, Jan]
 
 
-cat << EOF > "$TEMPDIR/endpoints/skip1.ts"
+cat << EOF > "$TEMPDIR/routes/skip1.ts"
 import { Person } from "../models/types.ts";
 
 export default async function chisel(req: Request) {
@@ -156,7 +149,7 @@ export default async function chisel(req: Request) {
 }
 EOF
 
-cat << EOF > "$TEMPDIR/endpoints/two_skips.ts"
+cat << EOF > "$TEMPDIR/routes/two_skips.ts"
 import { Person } from "../models/types.ts";
 
 export default async function chisel(req: Request) {
@@ -169,7 +162,7 @@ export default async function chisel(req: Request) {
 }
 EOF
 
-cat << EOF > "$TEMPDIR/endpoints/filter_skip.ts"
+cat << EOF > "$TEMPDIR/routes/filter_skip.ts"
 import { Person } from "../models/types.ts";
 
 export default async function chisel(req: Request) {
@@ -182,7 +175,7 @@ export default async function chisel(req: Request) {
 }
 EOF
 
-cat << EOF > "$TEMPDIR/endpoints/predicate_filter_skip.ts"
+cat << EOF > "$TEMPDIR/routes/predicate_filter_skip.ts"
 import { Person } from "../models/types.ts";
 
 export default async function chisel(req: Request) {
@@ -195,7 +188,7 @@ export default async function chisel(req: Request) {
 }
 EOF
 
-cat << EOF > "$TEMPDIR/endpoints/sort_skip_sort.ts"
+cat << EOF > "$TEMPDIR/routes/sort_skip_sort.ts"
 import { Person } from "../models/types.ts";
 
 export default async function chisel(req: Request) {
@@ -208,7 +201,7 @@ export default async function chisel(req: Request) {
 }
 EOF
 
-cat << EOF > "$TEMPDIR/endpoints/sort_take_skip.ts"
+cat << EOF > "$TEMPDIR/routes/sort_take_skip.ts"
 import { Person } from "../models/types.ts";
 
 export default async function chisel(req: Request) {
@@ -221,7 +214,7 @@ export default async function chisel(req: Request) {
 }
 EOF
 
-cat << EOF > "$TEMPDIR/endpoints/sort_skip_take.ts"
+cat << EOF > "$TEMPDIR/routes/sort_skip_take.ts"
 import { Person } from "../models/types.ts";
 
 export default async function chisel(req: Request) {
@@ -234,7 +227,7 @@ export default async function chisel(req: Request) {
 }
 EOF
 
-cat << EOF > "$TEMPDIR/endpoints/sort_skip_take_filter.ts"
+cat << EOF > "$TEMPDIR/routes/sort_skip_take_filter.ts"
 import { Person } from "../models/types.ts";
 
 export default async function chisel(req: Request) {
@@ -251,11 +244,6 @@ EOF
 $CHISEL apply
 
 # CHECK: Model defined: Person
-# CHECK: End point defined: /dev/filter_skip
-# CHECK: End point defined: /dev/predicate_filter_skip
-# CHECK: End point defined: /dev/skip1
-# CHECK: End point defined: /dev/sort_skip_sort
-# CHECK: End point defined: /dev/two_skips
 
 $CURL $CHISELD_HOST/dev/skip1
 # CHECK: [Jan, Pekka]

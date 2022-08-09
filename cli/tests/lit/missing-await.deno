@@ -10,7 +10,7 @@ export class User extends ChiselEntity {
 }
 EOF
 
-cat << EOF > "$TEMPDIR/endpoints/find.ts"
+cat << EOF > "$TEMPDIR/routes/find.ts"
 import { User } from "../models/user.ts";
 
 export default async function (req: Request): Promise<Response> {
@@ -23,9 +23,7 @@ cd "$TEMPDIR"
 $CHISEL apply
 
 # CHECK: Model defined: User
-# CHECK: End point defined: /dev/find
 
 $CURL -o - $CHISELD_HOST/dev/find
 
-# CHECK: HTTP/1.1 200 OK
-# CHECK: Hello
+# CHECK: HTTP/1.1 500 Internal Server Error

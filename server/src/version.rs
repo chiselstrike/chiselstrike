@@ -90,7 +90,7 @@ async fn run(
         // anyway, so it is better if we propagate _that_ error
         if ready_rxs.try_collect::<()>().await.is_ok() {
             let _ = ready_tx.send(());
-            info!("All workers for version {:?} are ready", version_id);
+            info!("Version {:?} is ready", version_id);
         }
         Ok(())
     }));

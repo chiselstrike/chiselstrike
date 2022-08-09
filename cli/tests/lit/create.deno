@@ -13,7 +13,7 @@ export class Person extends ChiselEntity {
 }
 EOF
 
-cat << EOF > "$TEMPDIR/endpoints/new.ts"
+cat << EOF > "$TEMPDIR/routes/new.ts"
 import { Person } from "../models/types.ts";
 import { responseFromJson } from "@chiselstrike/api"
 
@@ -25,7 +25,6 @@ EOF
 
 $CHISEL apply
 # CHECK: Model defined: Person
-# CHECK: End point defined: /dev/new
 
 $CURL -X POST $CHISELD_HOST/dev/new
 # CHECK: HTTP/1.1 200 OK

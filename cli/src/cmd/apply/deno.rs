@@ -59,7 +59,6 @@ pub(crate) async fn apply(
             index_candidates.append(&mut candidates);
         }
 
-        println!("module {}", url);
         modules.push(Module { url: url.to_string(), code });
     }
 
