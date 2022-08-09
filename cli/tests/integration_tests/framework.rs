@@ -182,7 +182,6 @@ impl ExecutableExt for checked_command::CheckedCommand {
     }
 }
 
-#[derive(Debug)]
 pub struct ProcessError {
     output: MixedTestableOutput,
 }
@@ -201,6 +200,17 @@ impl From<checked_command::Error> for ProcessError {
                 },
             }
         }
+    }
+}
+
+impl std::fmt::Debug for ProcessError {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(
+            f,
+            "ProcessError:\nSTDOUT:\n{}\nSTDERR:\n{}",
+            textwrap::indent(&self.stdout().output, "    "),
+            textwrap::indent(&self.stderr().output, "    ")
+        )
     }
 }
 
