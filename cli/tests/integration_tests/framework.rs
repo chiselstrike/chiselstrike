@@ -3,7 +3,7 @@ use bytes::BytesMut;
 use checked_command::CheckedCommand;
 use rand::{distributions::Alphanumeric, Rng};
 use std::pin::Pin;
-use std::process::Stdio;
+use std::process::{ExitStatus, Stdio};
 use std::sync::Arc;
 use std::time::Duration;
 use std::{fs, net::SocketAddr};
@@ -137,7 +137,7 @@ impl SqliteDb {
 }
 
 pub struct GuardedChild {
-    _child: tokio::process::Child,
+    child: tokio::process::Child,
     pub stdout: AsyncTestableOutput,
     pub stderr: AsyncTestableOutput,
 }
@@ -154,14 +154,17 @@ impl GuardedChild {
         let stdout = child.stdout.take().unwrap();
         let stderr = child.stderr.take().unwrap();
         Self {
-            _child: child,
+            child,
             stdout: AsyncTestableOutput::new(OutputType::Stdout, Box::pin(stdout)),
             stderr: AsyncTestableOutput::new(OutputType::Stderr, Box::pin(stderr)),
         }
     }
 
+    async fn wait(&mut self) -> Result<ExitStatus> {
+        Ok(self.child.wait().await?)
+    }
+
     /// Prints both stdout and stderr to standard output.
-    #[allow(dead_code)]
     pub async fn show_output(&mut self) {
         self.stdout.show().await.unwrap();
         self.stderr.show().await.unwrap();
@@ -254,6 +257,13 @@ impl MixedTestableOutput {
         })
     }
 
+    fn from_std_output(output: &std::process::Output) -> Result<Self> {
+        Ok(Self {
+            stdout: TestableOutput::new(OutputType::Stdout, &output.stdout)?,
+            stderr: TestableOutput::new(OutputType::Stderr, &output.stderr)?,
+        })
+    }
+
     /// Prints both stdout and stderr to standard output.
     #[allow(dead_code)]
     pub fn show_output(&self) {
@@ -270,7 +280,7 @@ pub struct TestableOutput {
 }
 
 impl TestableOutput {
-    fn new(output_type: OutputType, raw_output: &Vec<u8>) -> Result<Self> {
+    fn new(output_type: OutputType, raw_output: &[u8]) -> Result<Self> {
         let colorless_output = strip_ansi_escapes::strip(raw_output)?;
         let output = String::from_utf8(colorless_output)?;
         Ok(Self {
@@ -411,25 +421,34 @@ pub struct Chisel {
 }
 
 impl Chisel {
-    fn exec(&self, cmd: &str, args: &[&str]) -> Result<MixedTestableOutput, ProcessError> {
+    async fn exec(&self, cmd: &str, args: &[&str]) -> Result<MixedTestableOutput, ProcessError> {
         let rpc_url = format!("http://{}", self.config.rpc_address);
         let chisel_path = bin_dir().join("chisel").to_str().unwrap().to_string();
         let args = [&["--rpc-addr", &rpc_url, cmd], args].concat();
 
-        CheckedCommand::new(chisel_path)
+        let output = tokio::process::Command::new(chisel_path)
             .args(args)
             .current_dir(&*self.tmp_dir)
-            .execute()
+            .output()
+            .await
+            .expect(&format!("could not execute `chisel {}`", cmd));
+
+        let mto = MixedTestableOutput::from_std_output(&output).unwrap();
+        if output.status.success() {
+            Ok(mto)
+        } else {
+            Err(ProcessError { output: mto })
+        }
     }
 
     /// Runs chisel apply
-    pub fn apply(&self) -> Result<MixedTestableOutput, ProcessError> {
-        self.exec("apply", &[])
+    pub async fn apply(&self) -> Result<MixedTestableOutput, ProcessError> {
+        self.exec("apply", &[]).await
     }
 
     /// Runs chisel wait awaiting the readiness of chiseld service
-    pub fn wait(&self) -> Result<MixedTestableOutput, ProcessError> {
-        self.exec("wait", &[])
+    pub async fn wait(&self) -> Result<MixedTestableOutput, ProcessError> {
+        self.exec("wait", &[]).await
     }
 
     /// Writes given text (probably code) into a file on given relative `path`
@@ -505,7 +524,7 @@ fn chiseld() -> String {
     bin_dir().join("chiseld").to_str().unwrap().to_string()
 }
 
-fn setup_chiseld(config: &TestConfig) -> Result<(Database, GuardedChild, Chisel)> {
+async fn setup_chiseld(config: &TestConfig) -> Result<(Database, GuardedChild, Chisel)> {
     let tmp_dir = Arc::new(TempDir::new("chiseld_test")?);
 
     let chisel = Chisel {
@@ -529,6 +548,7 @@ fn setup_chiseld(config: &TestConfig) -> Result<(Database, GuardedChild, Chisel)
                         &optimize_str,
                     ],
                 )
+                .await
                 .expect("chisel init failed");
         }
         OpMode::Node => {
@@ -551,7 +571,7 @@ fn setup_chiseld(config: &TestConfig) -> Result<(Database, GuardedChild, Chisel)
         DatabaseConfig::Sqlite => Database::Sqlite(SqliteDb { tmp_dir }),
     };
 
-    let chiseld = GuardedChild::new(tokio::process::Command::new(chiseld()).args([
+    let mut chiseld = GuardedChild::new(tokio::process::Command::new(chiseld()).args([
         "--webui",
         "--db-uri",
         db.url()?.as_str(),
@@ -563,7 +583,16 @@ fn setup_chiseld(config: &TestConfig) -> Result<(Database, GuardedChild, Chisel)
         &config.chiseld_config.rpc_address.to_string(),
     ]));
 
-    chisel.wait().expect("failed to start-up chiseld");
+    tokio::select! {
+        res = chiseld.wait() => {
+            let exit_status = res.expect("could not wait() for chiseld");
+            chiseld.show_output().await;
+            panic!("chiseld prematurely exited with {}", exit_status);
+        },
+        res = chisel.wait() => {
+            res.expect("failed to start up chiseld");
+        },
+    }
 
     Ok((db, chiseld, chisel))
 }
@@ -578,7 +607,7 @@ pub struct TestConfig {
 
 impl TestConfig {
     pub async fn setup(self) -> TestContext {
-        let (db, chiseld, chisel) = setup_chiseld(&self).expect("failed to setup chiseld");
+        let (db, chiseld, chisel) = setup_chiseld(&self).await.expect("failed to setup chiseld");
         TestContext {
             mode: self.mode,
             chiseld,

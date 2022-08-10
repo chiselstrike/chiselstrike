@@ -21,7 +21,7 @@ pub async fn test_bad_filter(config: TestConfig) {
     "##,
     );
 
-    let err = chisel.apply().expect_err("chisel apply should have failed");
+    let err = chisel.apply().await.expect_err("chisel apply should have failed");
     err.stderr()
         .read("routes/query.ts:6:53 - error TS2769: No overload matches this call.")
         .read("Argument of type '{ foo: string; }' is not assignable to parameter of type 'Partial<Person>'");

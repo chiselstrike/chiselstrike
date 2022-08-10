@@ -15,7 +15,7 @@ pub async fn test_http_import(config: TestConfig) {
     "##,
     );
 
-    let err = chisel.apply().expect_err("chisel apply should have failed");
+    let err = chisel.apply().await.expect_err("chisel apply should have failed");
     err.stderr()
         .read("Could not apply the provided code")
         .read("chiseld cannot load module https://foo.bar/ at runtime");
