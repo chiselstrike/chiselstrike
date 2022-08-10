@@ -1,6 +1,7 @@
 // SPDX-FileCopyrightText: © 2022 ChiselStrike <info@chiselstrike.com>
 
 use crate::JsonObject;
+use crate::opt::Opt;
 use aes_gcm::aead::{Aead, NewAead};
 use aes_gcm::{Aes256Gcm, Nonce};
 use anyhow::Context;
@@ -85,10 +86,9 @@ fn get_pkcs8_private_key(pem: &str) -> Result<Option<RsaPrivateKey>> {
     Ok(Some(key))
 }
 
-pub async fn get_private_key() -> Result<Option<RsaPrivateKey>> {
-    let url = match std::env::var("CHISEL_SECRET_KEY_LOCATION") {
-        Err(_) => return Ok(None),
-        Ok(x) => match Url::parse(&x) {
+pub async fn get_private_key(opt: &Opt) -> Result<Option<RsaPrivateKey>> {
+    let url = match &opt.chisel_secret_key_location {
+        Some(x) => match Url::parse(x) {
             Ok(o) => Ok(o),
             Err(url::ParseError::RelativeUrlWithoutBase) => {
                 let cwd = std::env::current_dir()?;
@@ -99,6 +99,7 @@ pub async fn get_private_key() -> Result<Option<RsaPrivateKey>> {
                 anyhow::bail!("Invalid url: {:?}", err);
             }
         },
+        None => return Ok(None),
     }?;
 
     let pem = read_url(&url).await?;
@@ -115,15 +116,15 @@ fn parse_rsa_key(pem: &str) -> Result<Option<RsaPrivateKey>> {
     get_pkcs8_private_key(pem)
 }
 
-pub async fn get_secrets() -> Result<JsonObject> {
-    let secret_location = match std::env::var("CHISEL_SECRET_LOCATION") {
-        Ok(s) => Url::parse(&s)?,
-        Err(_) => {
+pub async fn get_secrets(opt: &Opt) -> Result<JsonObject> {
+    let secret_location = match &opt.chisel_secret_location {
+        Some(s) => Url::parse(s)?,
+        None => {
             let cwd = std::env::current_dir()?;
             Url::from_file_path(&cwd.join(".env")).unwrap()
         }
     };
-    let private_key = get_private_key().await?;
+    let private_key = get_private_key(opt).await?;
     let data = read_url(&secret_location).await?;
     let secrets = match private_key {
         None => serde_json::from_str(&data)?,

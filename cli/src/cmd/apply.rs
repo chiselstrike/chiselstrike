@@ -90,7 +90,7 @@ pub(crate) async fn apply(
     }
     let optimize = chiselc_available && manifest.optimize == Optimize::Yes;
     let auto_index = chiselc_available && manifest.auto_index == AutoIndex::Yes;
-    let (modules, index_candidates_req) = match manifest.modules {
+    let (modules, index_candidates) = match manifest.modules {
         Module::Node =>
             node::apply(route_map, &entities, optimize, auto_index, &type_check).await?,
         Module::Deno =>
@@ -137,7 +137,7 @@ pub(crate) async fn apply(
     let req = ApplyRequest {
         types: types_req,
         modules,
-        index_candidates: index_candidates_req,
+        index_candidates,
         policies: policy_req,
         allow_type_deletion: allow_type_deletion.into(),
         version_id,

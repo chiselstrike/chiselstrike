@@ -94,7 +94,7 @@ async fn update_field_query(
             SET
                 field_type = $1,
                 is_optional = $2::bool,
-                is_unique = $4::bool {default_stmt}
+                is_unique = $3::bool {default_stmt}
             WHERE field_id = $4"#
         );
         let mut query = sqlx::query(&querystr);
@@ -708,6 +708,18 @@ impl MetaService {
         let row = fetch_one(&mut transaction, get_policy).await?;
         let yaml: &str = row.get("policy_str");
         PolicySystem::from_yaml(yaml)
+    }
+
+    pub async fn count_rows(
+        &self,
+        transaction: &mut Transaction<'_, Any>,
+        ty: &ObjectType,
+    ) -> anyhow::Result<i64> {
+        let query = format!("SELECT COUNT(*) as count from \"{}\"", ty.backing_table());
+        let count = sqlx::query(&query);
+        let row = fetch_one(transaction, count).await?;
+        let cnt: i64 = row.get("count");
+        Ok(cnt)
     }
 
     pub async fn insert_type(

@@ -2,6 +2,7 @@ use std::fs::create_dir_all;
 use std::io::Write;
 use std::path::PathBuf;
 
+use serde_json::Value;
 use tempfile::{NamedTempFile, TempDir};
 
 fn chiseld() -> PathBuf {
@@ -60,15 +61,17 @@ executor_threads = 21
 
     let expected = serde_json::json!({
         "api_listen_addr": "localhost:12345",
-        "rpc_listen_addr":"127.0.0.1:50051",
-        "internal_routes_listen_addr":"127.0.0.1:9090",
-        "_metadata_db_uri":"sqlite://chiseld.db?mode=rwc",
-        "_data_db_uri":"sqlite://chiseld-data.db?mode=rwc",
-        "db_uri":"sqlite://.chiseld.db?mode=rwc",
-        "inspect_brk":false,
-        "nr_connections":10,
-        "executor_threads":21,
-        "webui":false
+        "rpc_listen_addr": "127.0.0.1:50051",
+        "internal_routes_listen_addr": "127.0.0.1:9090",
+        "_metadata_db_uri": "sqlite://chiseld.db?mode=rwc",
+        "_data_db_uri": "sqlite://chiseld-data.db?mode=rwc",
+        "db_uri": "sqlite://.chiseld.db?mode=rwc",
+        "inspect_brk": false,
+        "nr_connections": 10,
+        "executor_threads": 21,
+        "webui": false,
+        "chisel_secret_location": Value::Null,
+        "chisel_secret_key_location": Value::Null,
     });
 
     assert_eq!(out, expected);
@@ -94,15 +97,17 @@ executor_threads = 21
 
     let expected = serde_json::json!({
         "api_listen_addr": "localhost:123457",
-        "rpc_listen_addr":"127.0.0.1:50051",
-        "internal_routes_listen_addr":"127.0.0.1:9090",
-        "_metadata_db_uri":"sqlite://chiseld.db?mode=rwc",
-        "_data_db_uri":"sqlite://chiseld-data.db?mode=rwc",
-        "db_uri":"sqlite://.chiseld.db?mode=rwc",
-        "inspect_brk":false,
-        "nr_connections":10,
-        "executor_threads":21,
-        "webui":false
+        "rpc_listen_addr": "127.0.0.1:50051",
+        "internal_routes_listen_addr": "127.0.0.1:9090",
+        "_metadata_db_uri": "sqlite://chiseld.db?mode=rwc",
+        "_data_db_uri": "sqlite://chiseld-data.db?mode=rwc",
+        "db_uri": "sqlite://.chiseld.db?mode=rwc",
+        "inspect_brk": false,
+        "nr_connections": 10,
+        "executor_threads": 21,
+        "webui": false,
+        "chisel_secret_location": Value::Null,
+        "chisel_secret_key_location": Value::Null,
     });
 
     assert_eq!(out, expected);
@@ -126,15 +131,17 @@ executor_threads = 21
 
     let expected = serde_json::json!({
         "api_listen_addr": "localhost:12345",
-        "rpc_listen_addr":"127.0.0.1:50051",
-        "internal_routes_listen_addr":"127.0.0.1:9090",
-        "_metadata_db_uri":"sqlite://chiseld.db?mode=rwc",
-        "_data_db_uri":"sqlite://chiseld-data.db?mode=rwc",
-        "db_uri":"sqlite://.chiseld.db?mode=rwc",
-        "inspect_brk":false,
-        "nr_connections":10,
-        "executor_threads":21,
-        "webui":false
+        "rpc_listen_addr": "127.0.0.1:50051",
+        "internal_routes_listen_addr": "127.0.0.1:9090",
+        "_metadata_db_uri": "sqlite://chiseld.db?mode=rwc",
+        "_data_db_uri": "sqlite://chiseld-data.db?mode=rwc",
+        "db_uri": "sqlite://.chiseld.db?mode=rwc",
+        "inspect_brk": false,
+        "nr_connections": 10,
+        "executor_threads": 21,
+        "webui": false,
+        "chisel_secret_location": Value::Null,
+        "chisel_secret_key_location": Value::Null,
     });
 
     assert_eq!(out, expected);
@@ -176,7 +183,9 @@ executor_threads = 21
         "inspect_brk":false,
         "nr_connections":10,
         "executor_threads":21,
-        "webui":false
+        "webui":false,
+        "chisel_secret_location": Value::Null,
+        "chisel_secret_key_location": Value::Null,
     });
 
     assert_eq!(out, expected);

@@ -34,7 +34,7 @@ cat << EOF > "$TEMPDIR/models/types.ts"
 export class Zed extends ChiselEntity { a: string; a: string; }
 EOF
 set +e
-$CHISEL apply --allow-type-deletion 2>&1
+$CHISEL apply 2>&1
 set -e
 
 # CHECK: [[(UNIQUE constraint failed|unique constraint)]]
@@ -43,7 +43,7 @@ cat << EOF > "$TEMPDIR/models/types.ts"
 export class Bad extends ChiselEntity { a: SomeType; }
 EOF
 set +e
-$CHISEL apply --allow-type-deletion 2>&1
+$CHISEL apply 2>&1
 set -e
 
 # CHECK: Error: field 'a' in class 'Bad' is of unknown entity type 'SomeType'
@@ -51,11 +51,11 @@ set -e
 cat << EOF > "$TEMPDIR/models/types.ts"
 export class Malformed extends ChiselEntity { name: string(); }
 EOF
-$CHISEL apply --allow-type-deletion 2>&1 || echo
+$CHISEL apply 2>&1 || echo
 # CHECK: 1 | export class Malformed extends ChiselEntity { name: string(); }
 
 cat << EOF > "$TEMPDIR/models/types.ts"
 export class Malformed extends ChiselEntity { name; }
 EOF
-$CHISEL apply --allow-type-deletion 2>&1 || echo
+$CHISEL apply 2>&1 || echo
 # CHECK: 1 | export class Malformed extends ChiselEntity { name; }

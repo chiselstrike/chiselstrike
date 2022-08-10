@@ -19,6 +19,7 @@ use tokio::sync::oneshot;
 use utils::TaskHandle;
 
 pub struct Server {
+    pub opt: Opt,
     pub db: Arc<DbConnection>,
     pub query_engine: QueryEngine,
     pub meta_service: MetaService,
@@ -32,16 +33,26 @@ pub struct Server {
 pub enum Restart { Yes, No }
 
 pub async fn run(opt: Opt) -> Result<Restart> {
-    let (server, trunk_task) = make_server(&opt).await?;
+    let (server, trunk_task) = make_server(opt).await?;
     start_versions(server.clone()).await?;
     start_chiselstrike_version(server.clone()).await?;
-    let (rpc_addr, rpc_task) = rpc::spawn(server.clone(), opt.rpc_listen_addr).await?;
-    let (api_addrs, api_task) = api::spawn(server.clone(), opt.api_listen_addr).await?;
+
+    let (rpc_addr, rpc_task) = rpc::spawn(
+        server.clone(),
+        server.opt.rpc_listen_addr,
+    ).await?;
+
+    let (api_addrs, api_task) = api::spawn(
+        server.clone(),
+        server.opt.api_listen_addr.clone(),
+    ).await?;
+
     let (internal_addr, internal_task) = internal::spawn(
-        opt.internal_routes_listen_addr,
-        opt.webui,
+        server.opt.internal_routes_listen_addr,
+        server.opt.webui,
         rpc_addr,
     ).await?;
+
     let secrets_task = TaskHandle(tokio::task::spawn(refresh_secrets(server.clone())));
     let signal_task = TaskHandle(tokio::task::spawn(wait_for_signals()));
 
@@ -61,7 +72,7 @@ pub async fn run(opt: Opt) -> Result<Restart> {
     }
 }
 
-async fn make_server(opt: &Opt) -> Result<(Arc<Server>, TaskHandle<Result<()>>)> {
+async fn make_server(opt: Opt) -> Result<(Arc<Server>, TaskHandle<Result<()>>)> {
     let db = DbConnection::connect(&opt.db_uri, opt.nr_connections).await?;
     let db = Arc::new(db);
     let query_engine = QueryEngine::new(db.clone());
@@ -80,7 +91,7 @@ async fn make_server(opt: &Opt) -> Result<(Arc<Server>, TaskHandle<Result<()>>)>
     let type_systems = meta_service.load_type_systems(&builtin_types).await?;
     let type_systems = tokio::sync::Mutex::new(type_systems);
 
-    let secrets = match secrets::get_secrets().await {
+    let secrets = match secrets::get_secrets(&opt).await {
         Ok(secrets) => secrets,
         Err(err) => {
             log::error!("Could not read secrets: {:?}", err);
@@ -90,7 +101,7 @@ async fn make_server(opt: &Opt) -> Result<(Arc<Server>, TaskHandle<Result<()>>)>
     let secrets = RwLock::new(secrets);
 
     let (trunk, trunk_task) = trunk::spawn().await?;
-    let server = Server { db, query_engine, meta_service, builtin_types, type_systems, secrets, trunk };
+    let server = Server { opt, db, query_engine, meta_service, builtin_types, type_systems, secrets, trunk };
     Ok((Arc::new(server), trunk_task))
 }
 
@@ -177,7 +188,7 @@ async fn start_chiselstrike_version(server: Arc<Server>) -> Result<()> {
 async fn refresh_secrets(server: Arc<Server>) -> Result<()> {
     let mut last_try_was_failure = false;
     loop {
-        match secrets::get_secrets().await {
+        match secrets::get_secrets(&server.opt).await {
             Ok(secrets) => {
                 *server.secrets.write() = secrets;
             },

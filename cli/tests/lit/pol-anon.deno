@@ -49,7 +49,7 @@ export class Person extends ChiselEntity {
   height: number;
 }
 EOF
-$CHISEL apply --allow-type-deletion
+$CHISEL apply
 
 cat << EOF > "$TEMPDIR/policies/pol.yaml"
 labels:

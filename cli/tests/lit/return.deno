@@ -34,7 +34,7 @@ $CURL $CHISELD_HOST/dev/return
 
 $CURL $CHISELD_HOST/dev/undefined && echo "UniqueString"
 # CHECK: HTTP/1.1 200 OK
-# CHECK UniqueString
+# CHECK: UniqueString
 
 cat << EOF > "$TEMPDIR/routes/return.ts"
 type MyReturn = {

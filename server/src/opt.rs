@@ -46,6 +46,12 @@ pub struct Opt {
     #[serde(skip)]
     pub config: Option<PathBuf>,
 
+    #[structopt(long, env = "CHISEL_SECRET_KEY_LOCATION")]
+    pub chisel_secret_key_location: Option<String>,
+
+    #[structopt(long, env = "CHISEL_SECRET_LOCATION")]
+    pub chisel_secret_location: Option<String>,
+
     /// Prints the configuration resulting from the merging of all the configuration sources,
     /// including default values, in the JSON format.
     /// This is the configuration that will be used when starting chiseld.

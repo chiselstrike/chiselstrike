@@ -12,18 +12,18 @@ $CHISEL apply
 # CHECK: Model defined: Person
 
 $CURL --data '{
-    "first_name":"Glauber", 
-    "last_name":"Costa", 
-    "age": 666, 
-    "human": true, 
+    "first_name":"Glauber",
+    "last_name":"Costa",
+    "age": 666,
+    "human": true,
     "height": 10.01
 }' -o - $CHISELD_HOST/dev/ins
 
 $CURL --data '{
-    "first_name":"Jan", 
-    "last_name":"Plhak", 
-    "age": -666, 
-    "human": true, 
+    "first_name":"Jan",
+    "last_name":"Plhak",
+    "age": -666,
+    "human": true,
     "height": 10.02
 }' -o - $CHISELD_HOST/dev/ins
 
@@ -51,7 +51,7 @@ $CURL --data '{
 }' -o - $CHISELD_HOST/dev/find_by
 
 # CHECK: HTTP/1.1 200 OK
-# CHECK: 
+# CHECK:
 
 $CURL --data '{
     "field_name":"age",
@@ -90,4 +90,4 @@ $CURL --data '{
 }' -o - $CHISELD_HOST/dev/find_by
 
 # CHECK: HTTP/1.1 500 Internal Server Error
-# CHECK Uncaught Error: trying to filter by non-existent field `foo` misspelled_field_name
+# CHECK: Error: expression error: entity 'Person' doesn't have field 'misspelled_field_name'

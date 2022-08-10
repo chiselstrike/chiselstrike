@@ -164,4 +164,3 @@ fn get_error_class_name(e: &anyhow::Error) -> &'static str {
             "Error"
         })
 }
-
