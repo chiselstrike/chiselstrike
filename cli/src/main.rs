@@ -69,6 +69,9 @@ enum Command {
         /// calls tsc --noEmit to check types. Useful if your IDE isn't doing it.
         #[structopt(long)]
         type_check: bool,
+        /// Activate inspector and let a debugger attach at any time.
+        #[structopt(long)]
+        inspect: bool,
     },
     /// Create a new ChiselStrike project.
     New {
@@ -179,7 +182,7 @@ where
 #[tokio::main]
 async fn main() -> Result<()> {
     let chisel_args = std::env::args().take_while(|arg| arg != "--");
-    let chiseld_args = std::env::args()
+    let mut chiseld_args = std::env::args()
         .skip_while(|arg| arg != "--")
         .skip(1)
         .collect::<Vec<_>>();
@@ -253,7 +256,10 @@ async fn main() -> Result<()> {
                 println!("}}");
             }
         }
-        Command::Dev { type_check } => {
+        Command::Dev {
+            type_check,
+            inspect,
+        } => {
             let fut = cmd_dev(server_url.clone(), type_check);
             let cb = |mut server: Child, res| async move {
                 let sig_task = res?;
@@ -263,7 +269,9 @@ async fn main() -> Result<()> {
 
                 Ok(())
             };
-
+            if inspect {
+                chiseld_args.push("--inspect".to_string());
+            }
             spawn_server(chiseld_args, fut, cb).await?;
         }
         Command::New {
