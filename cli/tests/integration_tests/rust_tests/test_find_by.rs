@@ -1,7 +1,8 @@
 use serde_json::json;
 
-use crate::framework::TestConfig;
+use crate::framework::{IntegrationTest, OpMode, TestConfig};
 
+#[chisel_macros::test(mode = OpMode::Deno)]
 pub async fn test_find_by(config: TestConfig) {
     let mut ctx = config.setup().await;
     let (chisel, chiseld) = ctx.get_chisels();

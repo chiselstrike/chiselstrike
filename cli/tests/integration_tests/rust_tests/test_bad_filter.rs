@@ -1,5 +1,7 @@
 use crate::framework::TestConfig;
+use crate::framework::{IntegrationTest, OpMode};
 
+#[chisel_macros::test(mode = OpMode::Deno)]
 pub async fn test_bad_filter(config: TestConfig) {
     let mut ctx = config.setup().await;
     let (chisel, _chiseld) = ctx.get_chisels();
