@@ -168,7 +168,7 @@ $CHISEL apply
 # CHECK: Model defined: Evolving
 
 ### get / set helpers for the tests below
-cat << EOF > "$TEMPDIR/endpoints/get.ts"
+cat << EOF > "$TEMPDIR/routes/get.ts"
 import { Defaults } from "../models/defaults.ts";
 
 export default async function chisel(req: Request) {
@@ -176,7 +176,7 @@ export default async function chisel(req: Request) {
 }
 EOF
 
-cat << EOF > "$TEMPDIR/endpoints/set.ts"
+cat << EOF > "$TEMPDIR/routes/set.ts"
 import { Defaults } from "../models/defaults.ts";
 
 export default async function chisel(req: Request) {

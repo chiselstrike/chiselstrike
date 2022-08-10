@@ -34,11 +34,23 @@ tonic-build = { version = "0.5.2", default-features = false, features = ["prost"
 vergen = { version = "6", default-features = false, features = ["git"] }
 
 [dev-dependencies]
+bytes = "1.2.0"
+checked_command = "0.2.4"
+colored = "2.0.0"
+fs_extra = "1.2.0"
 glob = "0.3.0"
 itertools = "0.10.3"
 lit = { git = "https://github.com/chiselstrike/lit", rev = "607b0b9" }
+port_scanner = "0.1.5"
+rand = { version = "0.8.5", features = ["alloc"] }
 rayon = "1.5.1"
+regex = "1.6.0"
+reqwest = { version = "0.11.11", features = ["blocking", "json"] }
 server = { path = "../server" }
+strip-ansi-escapes = "0.1.1"
+tempdir = "0.3.7"
+textwrap = "0.15.0"
+url = "2.2.2"
 whoami = "1.2.1"
 
 [[bin]]

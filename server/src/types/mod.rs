@@ -439,7 +439,7 @@ impl<'a> FieldMap<'a> {
             } else {
                 anyhow::ensure!(
                     field.default.is_none(),
-                    "Adding field {} without a default, which is not supported yet",
+                    "Adding field {} without a trivial default, which is not supported yet",
                     name
                 );
             }
