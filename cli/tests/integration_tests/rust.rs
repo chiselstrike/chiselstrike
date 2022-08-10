@@ -73,7 +73,7 @@ async fn run_test(
 
 #[tokio::main]
 pub(crate) async fn run_tests(opt: &Opt) -> bool {
-    let ports_counter = Arc::new(AtomicU16::new(30000));
+    let ports_counter = Arc::new(AtomicU16::new(40000));
 
     for test in &rust_tests::all_tests() {
         if opt.test.is_some() && test.name != opt.test.as_ref().unwrap() {
