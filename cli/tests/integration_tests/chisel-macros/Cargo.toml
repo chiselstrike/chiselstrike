@@ -1,0 +1,15 @@
+[package]
+name = "chisel-macros"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+proc-macro2 = { version = "1.0.43", features = ["span-locations"] }
+quote = "1.0.21"
+syn = { version = "1.0.99", features = ["full"] }
+walkdir = "2.3.2"
+
+[lib]
+proc-macro = true

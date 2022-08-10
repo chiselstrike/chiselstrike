@@ -1,7 +1,6 @@
 use crate::framework::{
     ChiseldConfig, DatabaseConfig, IntegrationTest, OpMode, PostgresConfig, TestConfig,
 };
-use crate::rust_tests;
 use crate::{Database, Opt};
 use colored::Colorize;
 use std::sync::atomic::{AtomicU16, Ordering};
@@ -75,7 +74,7 @@ async fn run_test(
 pub(crate) async fn run_tests(opt: &Opt) -> bool {
     let ports_counter = Arc::new(AtomicU16::new(30000));
 
-    for test in &rust_tests::all_tests() {
+    for test in inventory::iter::<IntegrationTest> {
         if opt.test.is_some() && test.name != opt.test.as_ref().unwrap() {
             continue;
         }

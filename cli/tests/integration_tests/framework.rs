@@ -623,3 +623,5 @@ pub struct IntegrationTest {
     pub mode: OpMode,
     pub test_fn: &'static (dyn TestFn + Sync),
 }
+
+inventory::collect!(IntegrationTest);

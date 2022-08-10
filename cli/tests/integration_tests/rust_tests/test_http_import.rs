@@ -1,5 +1,6 @@
-use crate::framework::TestConfig;
+use crate::framework::{IntegrationTest, OpMode, TestConfig};
 
+#[chisel_macros::test(mode = OpMode::Node)]
 pub async fn test_http_import(config: TestConfig) {
     let mut ctx = config.setup().await;
     let (chisel, _chiseld) = ctx.get_chisels();
