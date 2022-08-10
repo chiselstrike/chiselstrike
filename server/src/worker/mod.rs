@@ -13,6 +13,7 @@ use std::future::Future;
 use std::panic;
 use std::iter::once;
 use std::marker::Unpin;
+use std::net::SocketAddr;
 use std::pin::Pin;
 use std::rc::Rc;
 use std::sync::Arc;
@@ -23,11 +24,14 @@ use utils::TaskHandle;
 mod loader;
 
 pub struct WorkerInit {
+    pub worker_idx: usize,
     pub server: Arc<Server>,
     pub version: Arc<Version>,
     pub modules: Arc<HashMap<String, String>>,
     pub ready_tx: oneshot::Sender<()>,
     pub request_rx: async_channel::Receiver<ApiRequestResponse>,
+    pub inspect: bool,
+    pub inspect_brk: bool,
 }
 
 #[derive(Debug)]
@@ -84,6 +88,16 @@ async fn run(init: WorkerInit) -> Result<()> {
         panic!("Web workers are not supported")
     });
 
+    let inspector = if init.inspect || init.inspect_brk {
+            let addr = alloc_inspector_addr().await
+                .context("Could not allocate an address for V8 inspector")?;
+            let name = format!("chiseld {:?} {}", init.version.version_id, init.worker_idx);
+            let inspector = deno_runtime::inspector_server::InspectorServer::new(addr, name);
+            Some(Arc::new(inspector))
+        } else {
+            None
+        };
+
     let options = deno_runtime::worker::WorkerOptions {
         format_js_error_fn: None,
         source_map_getter: None,
@@ -94,8 +108,8 @@ async fn run(init: WorkerInit) -> Result<()> {
         root_cert_store: None,
         seed: None,
         create_web_worker_cb,
-        maybe_inspector_server: None,
-        should_break_on_first_statement: false,
+        maybe_inspector_server: inspector.clone(),
+        should_break_on_first_statement: init.inspect_brk,
         module_loader,
         get_error_class_fn: Some(&get_error_class_name),
         origin_storage_dir: None,
@@ -128,7 +142,10 @@ async fn run(init: WorkerInit) -> Result<()> {
     worker.js_runtime.op_state().borrow_mut().put(worker_state);
 
     worker.execute_main_module(&main_url).await
-        .context(format!("Error when executing JavaScript for version {:?}", init.version.version_id))
+        .context(format!(
+            "Error when executing JavaScript for version {:?} in worker {}",
+            init.version.version_id, init.worker_idx
+        ))
 }
 
 impl Unpin for WorkerJoinHandle {}
@@ -164,6 +181,11 @@ fn get_error_class_name(e: &anyhow::Error) -> &'static str {
             warn!("Unknown error type: {:#?}", e);
             "Error"
         })
+}
+
+async fn alloc_inspector_addr() -> Result<SocketAddr> {
+    let listener = tokio::net::TcpListener::bind(("localhost", 0)).await?;
+    Ok(listener.local_addr()?)
 }
 
 pub fn set_v8_flags(flags: &[String]) -> Result<()> {

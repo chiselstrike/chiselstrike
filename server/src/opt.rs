@@ -29,7 +29,10 @@ pub struct Opt {
     /// Database URI.
     #[structopt(long, default_value = "sqlite://.chiseld.db?mode=rwc")]
     pub db_uri: String,
-    /// Should we wait for a debugger before executing any JS?
+    /// Activate inspector and let a debugger attach at any time.
+    #[structopt(long)]
+    pub inspect: bool,
+    /// Activate inspector, but pause the runtime at startup to wait for a debugger to attach.
     #[structopt(long)]
     pub inspect_brk: bool,
     /// size of database connection pool.

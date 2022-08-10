@@ -65,15 +65,18 @@ async fn run(
     let worker_handles = FuturesUnordered::new();
 
     // spawn all workers for this version
-    for _ in 0..init.worker_count {
+    for worker_idx in 0..init.worker_count {
         let (ready_tx, ready_rx) = oneshot::channel();
         let (request_tx, request_rx) = async_channel::bounded(1);
         let worker_handle = worker::spawn(WorkerInit {
+            worker_idx,
             server: init.server.clone(),
             version: version.clone(),
             modules: init.modules.clone(),
             ready_tx,
             request_rx,
+            inspect: init.server.opt.inspect,
+            inspect_brk: init.server.opt.inspect_brk,
         }).await?;
 
         ready_rxs.push(ready_rx);

@@ -45,8 +45,6 @@ async function handleRequest(router: Router, apiRequest: ApiRequest): Promise<Ap
     // the HTTP request usually specifies only path and query, but we need a full URL; so we resolve the URL
     // from the request with respect to an arbitrary base
     const url = new URL(apiRequest.uri, location.href);
-    console.log(`apiRequest.uri = ${apiRequest.uri}`);
-    console.log(`url = ${url}`);
 
     // initialize the legacy global request context
     // note that this means that we can only handle a single request at a time!
