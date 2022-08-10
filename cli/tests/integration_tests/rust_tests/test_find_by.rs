@@ -10,7 +10,7 @@ pub async fn test_find_by(config: TestConfig) {
     chisel.copy_to_dir("examples/find_by.ts", "endpoints");
     chisel.copy_and_rename("examples/store.ts", "endpoints/ins.ts");
 
-    let r = chisel.apply().expect("chisel apply failed");
+    let r = chisel.apply().await.expect("chisel apply failed");
     r.stdout
         .peek("Model defined: Person")
         .peek("End point defined: /dev/find_by")

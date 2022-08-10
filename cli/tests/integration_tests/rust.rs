@@ -4,6 +4,7 @@ use crate::framework::{
 use crate::rust_tests;
 use crate::{Database, Opt};
 use colored::Colorize;
+use std::io::{stdout, Write};
 use std::sync::atomic::{AtomicU16, Ordering};
 use std::sync::Arc;
 
@@ -61,14 +62,17 @@ async fn run_test(
     optimize: bool,
     test: &IntegrationTest,
 ) {
-    let config = generate_test_config(opt, ports_counter, &test.mode, optimize);
-    test.test_fn.call(config).await;
-    println!(
-        "{}(optimize={}) {}",
+    print!(
+        "{} (optimize={}) ... ",
         test.name.green(),
         format!("{optimize}").blue(),
-        "PASSED".green()
     );
+    stdout().flush().unwrap();
+
+    let config = generate_test_config(opt, ports_counter, &test.mode, optimize);
+    test.test_fn.call(config).await;
+
+    println!("{}", "PASSED".green());
 }
 
 #[tokio::main]
