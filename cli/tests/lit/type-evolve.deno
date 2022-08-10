@@ -166,3 +166,87 @@ rm $TEMPDIR/routes/test_indexes.ts
 
 $CHISEL apply
 # CHECK: Model defined: Evolving
+
+### get / set helpers for the tests below
+cat << EOF > "$TEMPDIR/endpoints/get.ts"
+import { Defaults } from "../models/defaults.ts";
+
+export default async function chisel(req: Request) {
+    return Defaults.findAll()
+}
+EOF
+
+cat << EOF > "$TEMPDIR/endpoints/set.ts"
+import { Defaults } from "../models/defaults.ts";
+
+export default async function chisel(req: Request) {
+    const x = Defaults.build();
+    await x.save();
+}
+EOF
+
+## Test able to use fields with complex defaults...
+cat << EOF > "$TEMPDIR/models/defaults.ts"
+import { ChiselEntity } from "@chiselstrike/api";
+
+export class Defaults extends ChiselEntity {
+    a: number  = "string".length
+}
+EOF
+
+$CHISEL apply
+# CHECK: Model defined: Defaults
+
+$CURL -d '{}' $CHISELD_HOST/dev/set
+# CHECK: HTTP/1.1 200 OK
+
+$CURL  $CHISELD_HOST/dev/get
+# CHECK: "a": 6
+
+## But not able to add other complex fields ...
+cat << EOF > "$TEMPDIR/models/defaults.ts"
+import { ChiselEntity } from "@chiselstrike/api";
+
+export class Defaults extends ChiselEntity {
+    a: number = "string".length
+    b: string = JSON.stringify({a: "test2"});
+}
+EOF
+
+$CHISEL apply 2>&1 || true
+# CHECK: Error: unsafe to replace type
+
+## ... unless they are optional!
+## Also check that defaults can be whatever, including other models
+cat << EOF > "$TEMPDIR/models/defaults.ts"
+import { ChiselEntity } from "@chiselstrike/api";
+
+export class Aux extends ChiselEntity {
+    aux: string = "aux"
+}
+
+function myFunction() : string {
+	return "funcreturn"
+}
+
+export class Defaults extends ChiselEntity {
+    a: number = "string".length
+    b?: string = JSON.stringify({a: "test2"});
+    c?: string = myFunction()
+    d?: Aux = new Aux()
+}
+EOF
+
+$CHISEL apply
+# CHECK: Model defined: Aux
+# CHECK: Model defined: Defaults
+
+$CURL -d '{}' $CHISELD_HOST/dev/set
+# CHECK: HTTP/1.1 200 OK
+
+$CURL  $CHISELD_HOST/dev/get
+# CHECK: "a": 6
+# CHECK: "b": "{\"a\":\"test2\"}"
+# CHECK: "c": "funcreturn"
+# CHECK: "d": {
+# CHECK: "aux": "aux"

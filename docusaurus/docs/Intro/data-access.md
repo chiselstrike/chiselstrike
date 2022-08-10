@@ -1,6 +1,6 @@
 # Data Access
 
-We're already previewed working with data in [Getting Started](Intro/first). Let's explain the data system a bit more.
+We're already previewed working with data in [Getting Started](first). Let's explain the data system a bit more.
 
 ## Defining Models
 

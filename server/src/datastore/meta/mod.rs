@@ -710,7 +710,7 @@ impl MetaService {
         PolicySystem::from_yaml(yaml)
     }
 
-    pub async fn count_rows(
+    pub(crate) async fn count_rows(
         &self,
         transaction: &mut Transaction<'_, Any>,
         ty: &ObjectType,

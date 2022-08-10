@@ -41,6 +41,9 @@ pub struct Opt {
     /// If on, serve a web UI on an internal route.
     #[structopt(long)]
     pub webui: bool,
+    /// V8 flags.
+    #[structopt(long)]
+    pub v8_flags: Vec<String>,
     /// Read default configuration from this toml configuration file
     #[structopt(long, short)]
     #[serde(skip)]

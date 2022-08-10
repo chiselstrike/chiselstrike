@@ -5,12 +5,13 @@ use crate::api::ApiRequestResponse;
 use crate::datastore::engine::TransactionStatic;
 use crate::server::Server;
 use crate::version::Version;
-use anyhow::{Context as _, Result};
+use anyhow::{Context as _, Result, bail};
 use deno_core::url::Url;
 use futures::ready;
 use std::collections::HashMap;
 use std::future::Future;
 use std::panic;
+use std::iter::once;
 use std::marker::Unpin;
 use std::pin::Pin;
 use std::rc::Rc;
@@ -163,4 +164,15 @@ fn get_error_class_name(e: &anyhow::Error) -> &'static str {
             warn!("Unknown error type: {:#?}", e);
             "Error"
         })
+}
+
+pub fn set_v8_flags(flags: &[String]) -> Result<()> {
+    let v8_flags = once("unused_arg0".to_owned())
+        .chain(flags.iter().cloned())
+        .collect();
+    let unrecognized_v8_flags = deno_core::v8_set_flags(v8_flags);
+    if unrecognized_v8_flags.len() > 1 {
+        bail!("V8 did not recognize flags: {:?}", &unrecognized_v8_flags[1..])
+    }
+    Ok(())
 }

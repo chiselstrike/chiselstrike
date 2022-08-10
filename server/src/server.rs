@@ -1,6 +1,6 @@
 // SPDX-FileCopyrightText: © 2022 ChiselStrike <info@chiselstrike.com>
 
-use crate::{api, internal, rpc, secrets, JsonObject};
+use crate::{api, internal, rpc, secrets, worker, JsonObject};
 use crate::datastore::{DbConnection, MetaService, QueryEngine};
 use crate::opt::Opt;
 use crate::policies::PolicySystem;
@@ -99,6 +99,8 @@ async fn make_server(opt: Opt) -> Result<(Arc<Server>, TaskHandle<Result<()>>)> 
         },
     };
     let secrets = RwLock::new(secrets);
+
+    worker::set_v8_flags(&opt.v8_flags)?;
 
     let (trunk, trunk_task) = trunk::spawn().await?;
     let server = Server { opt, db, query_engine, meta_service, builtin_types, type_systems, secrets, trunk };
