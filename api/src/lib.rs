@@ -3,23 +3,42 @@
 use lazy_static::lazy_static;
 use std::collections::HashMap;
 
-macro_rules! out_file {
-    ($file:literal) => {
-        include_str!(concat!(env!("OUT_DIR"), "/", $file))
+macro_rules! source_js {
+    ($stem:literal) => {
+        ($stem, include_str!(concat!(env!("OUT_DIR"), "/", $stem, ".js")))
+    }
+}
+
+macro_rules! source_d_ts {
+    ($stem:literal) => {
+        ($stem, include_str!(concat!(env!("OUT_DIR"), "/", $stem, ".d.ts")))
     }
 }
 
 lazy_static! {
-    pub static ref SOURCES: HashMap<&'static str, &'static str> = vec![
-        ("crud.ts", out_file!("crud.js")),
-        ("crud.d.ts", out_file!("crud.d.ts")),
-        ("chisel.ts", out_file!("chisel.js")),
-        ("chisel.d.ts", out_file!("chisel.d.ts")),
-        ("run.ts", out_file!("run.js")),
-        ("routing.ts", out_file!("routing.js")),
-        ("routing.d.ts", out_file!("routing.d.ts")),
-        ("serve.ts", out_file!("serve.js")),
-        ("special.ts", out_file!("special.js")),
-        ("__chiselstrike.ts", out_file!("__chiselstrike.js")),
+    pub static ref SOURCES_JS: HashMap<&'static str, &'static str> = vec![
+        source_js!("api"),
+        source_js!("chiselstrike_route_map"),
+        source_js!("crud"),
+        source_js!("datastore"),
+        source_js!("request"),
+        source_js!("routing"),
+        source_js!("run"),
+        source_js!("serve"),
+        source_js!("special"),
+        source_js!("utils"),
+    ].into_iter().collect();
+
+    pub static ref SOURCES_D_TS: HashMap<&'static str, &'static str> = vec![
+        source_d_ts!("api"),
+        source_d_ts!("chiselstrike_route_map"),
+        source_d_ts!("crud"),
+        source_d_ts!("datastore"),
+        source_d_ts!("request"),
+        source_d_ts!("routing"),
+        source_d_ts!("run"),
+        source_d_ts!("serve"),
+        source_d_ts!("special"),
+        source_d_ts!("utils"),
     ].into_iter().collect();
 }

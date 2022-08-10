@@ -1,6 +1,6 @@
 // SPDX-FileCopyrightText: © 2022 ChiselStrike <info@chiselstrike.com>
 
-import type { ChiselRequest } from './chisel.ts';
+import type { ChiselRequest } from './request.ts';
 
 export class RouteMap {
     routes: Route[]

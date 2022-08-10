@@ -1,6 +1,6 @@
 // SPDX-FileCopyrightText: © 2022 ChiselStrike <info@chiselstrike.com>
 
-use anyhow::Result;
+use anyhow::{Context, Result};
 use std::env;
 use std::fs;
 use std::path::PathBuf;
@@ -17,7 +17,8 @@ async fn compile(stem: &str) -> Result<()> {
         emit_declarations: true,
         ..Default::default()
     };
-    let mut map = compile_ts_code(&[src], opts).await?;
+    let mut map = compile_ts_code(&[src], opts).await
+        .context(format!("Could not compile {:?}", src))?;
     let code = map.remove(src).unwrap();
 
     let out = PathBuf::from(env::var_os("OUT_DIR").unwrap());
@@ -35,13 +36,16 @@ async fn main() -> Result<()> {
     // should be the only rerun-if-changed that we need.
     println!("cargo:rerun-if-changed=../third_party/deno/core/lib.deno_core.d.ts");
 
-    compile("chisel").await?;
+    compile("api").await?;
+    compile("chiselstrike_route_map").await?;
     compile("crud").await?;
+    compile("datastore").await?;
+    compile("request").await?;
     compile("routing").await?;
     compile("run").await?;
     compile("serve").await?;
     compile("special").await?;
-    compile("__chiselstrike").await?;
+    compile("utils").await?;
 
     Ok(())
 }

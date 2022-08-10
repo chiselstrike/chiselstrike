@@ -1,7 +1,9 @@
 // SPDX-FileCopyrightText: © 2022 ChiselStrike <info@chiselstrike.com>
 
-import { ChiselRequest, requestContext, loggedInUser, responseFromJson } from './chisel.ts';
+import { requestContext, loggedInUser } from './datastore.ts';
+import { ChiselRequest } from './request.ts';
 import { Router, RouterMatch, RouteMap, Middleware, Handler } from './routing.ts';
+import { responseFromJson } from './utils.ts';
 
 // HTTP API request that we receive from Rust
 type ApiRequest = {

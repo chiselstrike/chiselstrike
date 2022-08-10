@@ -24,9 +24,7 @@ impl deno_core::ModuleLoader for ModuleLoader {
         _is_main: bool
     ) -> Result<Url> {
         if specifier == "@chiselstrike/api" {
-            return Ok(Url::parse("chisel:///chisel.ts")?);
-        } else if specifier == "@chiselstrike/routing" {
-            return Ok(Url::parse("chisel:///routing.ts")?);
+            return Ok(Url::parse("chisel:///api.ts")?);
         }
         Ok(deno_core::resolve_import(specifier, referrer)?)
     }
@@ -60,11 +58,14 @@ impl deno_core::ModuleLoader for ModuleLoader {
 }
 
 fn load_chisel_module(url: Url) -> Result<deno_core::ModuleSource> {
-    let path = url.path().trim_start_matches('/');
-    if path == "main.js" {
+    let path = url.path();
+    // TODO: this is a hack, put main.js together with other .ts files
+    if path == "/main.js" {
         return Ok(source_from_code(&url, include_str!("main.js")));
     }
-    match api::SOURCES.get(path) {
+
+    let path = path.trim_start_matches('/').trim_end_matches(".ts");
+    match api::SOURCES_JS.get(path) {
         Some(code) => Ok(source_from_code(&url, code)),
         None => bail!("Undefined internal chisel module {}", url),
     }

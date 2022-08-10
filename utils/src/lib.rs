@@ -67,10 +67,7 @@ impl<T> Drop for TaskHandle<T> {
 
 /// Task that should not panic, but might be cancelled.
 ///
-/// Does three things differently to `tokio::task::JoinHandle`:
-/// 1. Aborts the task when dropped.
-/// 2. Panics if the task panicked.
-/// 3. Returns `None` if the task was cancelled.
+/// Same as `TaskHandle`, but returns `None` when the task was cancelled.
 #[derive(Debug)]
 pub struct CancellableTaskHandle<T>(pub tokio::task::JoinHandle<T>);
 

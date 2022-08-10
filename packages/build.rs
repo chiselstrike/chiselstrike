@@ -3,7 +3,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-fn run_in<T: IntoIterator<Item = &'static str>>(cmd: &str, args: T, dir: PathBuf) {
+fn run_in(cmd: &str, args: &[&str], dir: PathBuf) {
     assert!(
         dir.exists(),
         "{:?} does not exist. Current directory is {:?}",
@@ -29,14 +29,14 @@ fn main() {
     let create_app = Path::new("./create-chiselstrike-app").to_path_buf();
     let api = Path::new("./chiselstrike-api").to_path_buf();
 
-    fs::write(
-        "./chiselstrike-api/lib/chisel.js",
-        api::SOURCES.get("chisel.ts").unwrap(),
-    ).unwrap();
-    fs::write(
-        "./chiselstrike-api/lib/chisel.d.ts",
-        api::SOURCES.get("chisel.d.ts").unwrap(),
-    ).unwrap();
+    for name in api::SOURCES_JS.keys() {
+        let input_path = format!("../api/src/{}.ts", name);
+        let output_path = format!("./chiselstrike-api/lib/{}.ts", name);
+        let code = fs::read(&input_path)
+            .expect(&format!("Cannot read file {:?}", input_path));
+        fs::write(&output_path, code)
+            .expect(&format!("Cannot write to file {:?}", output_path));
+    }
 
     // build create-chiselstrike-app so we can use it in tests
     for v in [
@@ -51,10 +51,10 @@ fn main() {
     ] {
         println!("cargo:rerun-if-changed=./{}", v);
     }
-    run_in("npm", ["install"], create_app.clone());
-    run_in("npm", ["run", "build"], create_app);
+    run_in("npm", &["install"], create_app.clone());
+    run_in("npm", &["run", "build"], create_app);
 
     println!("cargo:rerun-if-changed=./chiselstrike-api/package.json");
-    run_in("npm", ["install"], api.clone());
-    run_in("npm", ["run", "build"], api);
+    run_in("npm", &["install"], api.clone());
+    run_in("npm", &["run", "build"], api);
 }

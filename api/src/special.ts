@@ -1,5 +1,6 @@
-import { ChiselRequest, responseFromJson } from './chisel.ts';
+import { ChiselRequest } from './request.ts';
 import { RouteMap } from './routing.ts';
+import { responseFromJson } from './utils.ts';
 
 // Corresponds to the `VersionInfo` struct in Rust
 type VersionInfo = {

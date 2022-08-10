@@ -1,4 +1,6 @@
-import { ChiselEntity, ChiselRequest, responseFromJson, requestContext } from './chisel.ts';
+import { opAsync, responseFromJson } from './utils.ts';
+import { ChiselEntity, requestContext } from './datastore.ts';
+import { ChiselRequest } from './request.ts';
 import { RouteMap } from './routing.ts';
 
 type ChiselEntityClass<T extends ChiselEntity> = {
@@ -124,7 +126,7 @@ async function fetchEntitiesCrud<T extends ChiselEntity>(
     urlPath: string,
     urlQuery: [string, string][],
 ): Promise<T[]> {
-    const results = await Deno.core.opAsync(
+    const results = await opAsync(
         "op_chisel_crud_query",
         {
             typeName: type.name,
@@ -140,7 +142,7 @@ async function deleteEntitiesCrud<T extends ChiselEntity>(
     type: { new (): T },
     urlQuery: [string, string][],
 ): Promise<void> {
-    await Deno.core.opAsync(
+    await opAsync(
         "op_chisel_crud_delete",
         {
             typeName: type.name,

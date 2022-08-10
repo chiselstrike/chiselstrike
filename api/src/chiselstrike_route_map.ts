@@ -1,7 +1,11 @@
 // SPDX-FileCopyrightText: © 2022 ChiselStrike <info@chiselstrike.com>
 
-import { ChiselEntity, ChiselRequest, getSecret } from './chisel.ts';
+// This is code for the special `__chiselstrike` version in chiseld
+
+import { ChiselEntity } from './datastore.ts';
+import { ChiselRequest } from './request.ts';
 import { RouteMap, MiddlewareNext } from './routing.ts';
+import { getSecret } from './utils.ts';
 
 class AuthUser extends ChiselEntity {}
 class AuthSession extends ChiselEntity {}

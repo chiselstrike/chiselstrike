@@ -19,6 +19,7 @@ use std::time::Duration;
 use tokio::sync::oneshot;
 use utils::TaskHandle;
 
+/// Global state of `chiseld`.
 pub struct Server {
     pub opt: Opt,
     pub db: Arc<DbConnection>,
@@ -172,7 +173,7 @@ async fn start_chiselstrike_version(server: Arc<Server>) -> Result<()> {
     let mut modules = HashMap::new();
     modules.insert(
         "file:///__route_map.ts".into(),
-        "export { default } from 'chisel:///__chiselstrike.ts';".into(),
+        "export { default } from 'chisel:///chiselstrike_route_map.ts';".into(),
     );
 
     let (ready_tx, _ready_rx) = oneshot::channel();

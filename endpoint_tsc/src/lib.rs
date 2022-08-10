@@ -2,9 +2,6 @@
 
 use anyhow::{Context, Result};
 use std::collections::HashMap;
-use std::io::Write;
-use tempfile::Builder;
-use tempfile::NamedTempFile;
 pub use tsc_compile;
 use tsc_compile::CompileOptions;
 use tsc_compile::FixedUrl;
@@ -21,27 +18,17 @@ impl Compiler {
     }
 
     pub async fn compile(&mut self, url: Url) -> Result<Vec<(FixedUrl, String, bool)>> {
-        let mods = HashMap::from([
-            (
-                "@chiselstrike/api".to_string(),
-                "export * from 'chisel:///chisel.ts';".to_string(),
-            ), (
-                "chisel".to_string(),
-                api::SOURCES.get("chisel.d.ts").unwrap().to_string(),
-            ), (
-                "crud".to_string(),
-                api::SOURCES.get("crud.d.ts").unwrap().to_string(),
-            ), (
-                "routing".to_string(),
-                api::SOURCES.get("routing.d.ts").unwrap().to_string(),
-            ),
-        ]);
+        let mut mods = HashMap::new();
+        mods.insert(
+            "@chiselstrike/api".to_string(),
+            "export * from 'chisel:///api.ts';".to_string(),
+        );
 
-        let chisel_global = include_str!("chisel-global.d.ts");
-        let temp = to_tempfile(chisel_global, ".d.ts")?;
+        for (name, code) in api::SOURCES_D_TS.iter() {
+            mods.insert(name.to_string(), code.to_string());
+        }
 
         let opts = CompileOptions {
-            extra_default_lib: Some(temp.path().to_str().unwrap()),
             extra_libs: mods,
             ..Default::default()
         };
@@ -51,12 +38,4 @@ impl Compiler {
             .await
             .context("Could not compile TypeScript")
     }
-}
-
-fn to_tempfile(data: &str, suffix: &str) -> Result<NamedTempFile> {
-    let mut f = Builder::new().suffix(suffix).tempfile()?;
-    let inner = f.as_file_mut();
-    inner.write_all(data.as_bytes())?;
-    inner.flush()?;
-    Ok(f)
 }
