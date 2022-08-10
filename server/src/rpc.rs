@@ -8,6 +8,7 @@ use crate::deno::endpoint_path_from_source_path;
 use crate::deno::mutate_policies;
 use crate::deno::remove_type_version;
 use crate::deno::set_type_system;
+use crate::internal::mark_ready;
 use crate::policies::{Policies, VersionPolicy};
 use crate::prefix_map::PrefixMap;
 use crate::runtime;
@@ -765,6 +766,7 @@ pub(crate) fn spawn(
 ) -> tokio::task::JoinHandle<Result<()>> {
     tokio::task::spawn(async move {
         start_wait.await;
+        mark_ready();
 
         let ret = Server::builder()
             .add_service(ChiselRpcServer::new(rpc))

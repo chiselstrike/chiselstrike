@@ -10,6 +10,7 @@ use crate::deno::set_query_engine;
 use crate::deno::set_type_system;
 use crate::deno::update_secrets;
 use crate::deno::{activate_endpoint, compile_endpoints};
+use crate::internal::mark_not_ready;
 use crate::rpc::InitState;
 use crate::rpc::{GlobalRpcState, RpcService};
 use crate::runtime;
@@ -368,6 +369,7 @@ async fn run_shared_state(
             _ = sighup.recv().fuse() => { debug!("Got SIGHUP"); DoRepeat::No },
             _ = sigusr1.recv().fuse() => { debug!("Got SIGUSR1"); DoRepeat::Yes },
         };
+        mark_not_ready();
         debug!("Got signal");
         signal_tx.send(()).await?;
         Ok(res)

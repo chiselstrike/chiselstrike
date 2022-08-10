@@ -8,9 +8,19 @@ use once_cell::sync::OnceCell;
 use serde_derive::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::net::SocketAddr;
+use std::sync::atomic::{AtomicU16, Ordering};
 
 /// If set, serve the web UI using this address for gRPC calls.
 static SERVE_WEBUI: OnceCell<SocketAddr> = OnceCell::new();
+static HEALTH_READY: AtomicU16 = AtomicU16::new(404);
+
+pub(crate) fn mark_ready() {
+    HEALTH_READY.store(200, Ordering::Relaxed);
+}
+
+pub(crate) fn mark_not_ready() {
+    HEALTH_READY.store(400, Ordering::Relaxed);
+}
 
 fn response(body: &str, status: u16) -> Result<Response<Body>> {
     Ok(Response::builder()
@@ -51,7 +61,7 @@ async fn route(req: Request<Body>) -> Result<Response<Body>> {
         // FWIW, K8s does not require us to return those specific strings.
         // Anything that returns a code 200 is enough.
         ("/status", _) => response("ok", 200),
-        ("/readiness", _) => response("ready", 200),
+        ("/readiness", _) => response("ready", HEALTH_READY.load(Ordering::Relaxed)),
         ("/liveness", _) => response("alive", 200),
         ("/apply", Some(rpc_addr)) => webapply(req.into_body(), rpc_addr).await,
         ("/webui", Some(_)) => {
