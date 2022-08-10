@@ -1,5 +1,6 @@
 use crate::framework::prelude::*;
 
+#[chisel_macros::test(modules = Node)]
 pub async fn test(c: TestContext) {
     c.chisel.write(
         "routes/error.ts",

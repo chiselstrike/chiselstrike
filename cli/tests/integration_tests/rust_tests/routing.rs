@@ -1,6 +1,7 @@
-use crate::framework::prelude::*;
+use crate::framework::prelude::{*, test};
 
-pub async fn basic(c: TestContext) {
+#[test(modules = Both)]
+async fn basic(c: TestContext) {
     c.chisel.write(
         "routes/index.ts",
         r#"
@@ -59,7 +60,8 @@ pub async fn basic(c: TestContext) {
     );
 }
 
-pub async fn params_in_code(c: TestContext) {
+#[test(modules = Deno)]
+async fn params_in_code(c: TestContext) {
     c.chisel.write(
         "routes/index.ts",
         r#"
@@ -97,7 +99,8 @@ pub async fn params_in_code(c: TestContext) {
     );
 }
 
-pub async fn params_in_files(c: TestContext) {
+#[test(modules = Both)]
+async fn params_in_files(c: TestContext) {
     c.chisel.write(
         "routes/route1/[x].ts",
         r#"
@@ -141,7 +144,8 @@ pub async fn params_in_files(c: TestContext) {
     );
 }
 
-pub async fn params_get_typed(c: TestContext) {
+#[test(modules = Deno)]
+async fn params_get_typed(c: TestContext) {
     c.chisel.write(
         "routes/index.ts",
         r#"
@@ -240,7 +244,8 @@ pub async fn params_get_typed(c: TestContext) {
     );
 }
 
-pub async fn params_get_wrong(c: TestContext) {
+#[test(modules = Deno)]
+async fn params_get_wrong(c: TestContext) {
     c.chisel.write(
         "routes/index.ts",
         r#"
@@ -280,7 +285,8 @@ pub async fn params_get_wrong(c: TestContext) {
     );
 }
 
-pub async fn slashes(c: TestContext) {
+#[test(modules = Deno)]
+async fn slashes(c: TestContext) {
     c.chisel.write(
         "routes/index.ts",
         r#"
@@ -325,7 +331,8 @@ pub async fn slashes(c: TestContext) {
     assert_eq!(c.chisel.get_json("/dev/route7/").await, json!([7, "/"]));
 }
 
-pub async fn method_shorthands(c: TestContext) {
+#[test(modules = Deno)]
+async fn method_shorthands(c: TestContext) {
     c.chisel.write(
         "routes/index.ts",
         r#"
@@ -365,7 +372,8 @@ pub async fn method_shorthands(c: TestContext) {
     );
 }
 
-pub async fn method_manual(c: TestContext) {
+#[test(modules = Deno)]
+async fn method_manual(c: TestContext) {
     c.chisel.write(
         "routes/index.ts",
         r#"
@@ -450,7 +458,8 @@ pub async fn method_manual(c: TestContext) {
     );
 }
 
-pub async fn method_object(c: TestContext) {
+#[test(modules = Deno)]
+async fn method_object(c: TestContext) {
     c.chisel.write(
         "routes/index.ts",
         r#"
@@ -540,7 +549,8 @@ pub async fn method_object(c: TestContext) {
     );
 }
 
-pub async fn errors(c: TestContext) {
+#[test(modules = Deno)]
+async fn errors(c: TestContext) {
     c.chisel.write(
         "routes/index.ts",
         r#"

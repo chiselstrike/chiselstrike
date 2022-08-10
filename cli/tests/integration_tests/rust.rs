@@ -2,8 +2,8 @@
 
 use crate::database::{generate_database_config, Database, DatabaseConfig, PostgresDb, SqliteDb};
 use crate::framework::{execute_async, Chisel, GuardedChild, TestContext};
-use crate::suite::{Modules, TestInstance};
-use crate::{rust_tests, Opt};
+use crate::suite::{Modules, TestSuite, TestInstance};
+use crate::Opt;
 use colored::Colorize;
 use enclose::enclose;
 use futures::ready;
@@ -182,7 +182,7 @@ fn format_test_instance(instance: &TestInstance) -> String {
 
 #[tokio::main]
 pub(crate) async fn run_tests(opt: Arc<Opt>) -> bool {
-    let suite = rust_tests::suite();
+    let suite = TestSuite::from_inventory();
     let ports_counter = Arc::new(AtomicU16::new(30000));
     let parallel = opt.parallel.unwrap_or(num_cpus::get());
 

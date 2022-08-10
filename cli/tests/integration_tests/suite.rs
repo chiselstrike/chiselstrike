@@ -4,29 +4,30 @@ use crate::framework::TestContext;
 use crate::Opt;
 use futures::future::BoxFuture;
 use itertools::iproduct;
-use std::sync::Arc;
 
 #[derive(Default)]
 pub struct TestSuite {
-    tests: Vec<Arc<TestSpec>>,
+    tests: Vec<&'static TestSpec>,
 }
 
 pub struct TestSpec {
-    pub name: String,
+    pub name: &'static str,
     pub modules: ModulesSpec,
     pub optimize: OptimizeSpec,
     pub test_fn: &'static (dyn TestFn + Sync),
 }
 
 pub struct TestInstance {
-    pub spec: Arc<TestSpec>,
+    pub spec: &'static TestSpec,
     pub modules: Modules,
     pub optimize: bool,
 }
 
+inventory::collect!(TestSpec);
+
 impl TestSuite {
-    pub fn add(&mut self, spec: TestSpec) {
-        self.tests.push(Arc::new(spec));
+    pub fn from_inventory() -> Self {
+        Self { tests: inventory::iter::<TestSpec>.into_iter().collect() }
     }
 
     pub fn instantiate(&self, opt: &Opt) -> Vec<TestInstance> {
@@ -63,30 +64,6 @@ impl TestSuite {
             })
         })
         .collect()
-    }
-}
-
-impl TestSpec {
-    pub fn new(name: &str, modules: ModulesSpec, test_fn: &'static (dyn TestFn + Sync)) -> Self {
-        Self {
-            name: name.into(),
-            modules,
-            optimize: OptimizeSpec::Yes,
-            test_fn,
-        }
-    }
-
-    pub fn deno(name: &str, test_fn: &'static (dyn TestFn + Sync)) -> Self {
-        Self::new(name, ModulesSpec::Deno, test_fn)
-    }
-
-    pub fn node(name: &str, test_fn: &'static (dyn TestFn + Sync)) -> Self {
-        Self::new(name, ModulesSpec::Node, test_fn)
-    }
-
-    pub fn optimize(mut self, optimize: OptimizeSpec) -> Self {
-        self.optimize = optimize;
-        self
     }
 }
 

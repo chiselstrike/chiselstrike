@@ -14,6 +14,7 @@ use tokio::io::{AsyncRead, AsyncReadExt, AsyncWriteExt};
 pub mod prelude {
     pub use super::TestContext;
     pub use bytes::Bytes;
+    pub use chisel_macros::test;
     pub use reqwest::Method;
     pub use serde_json::json;
 }

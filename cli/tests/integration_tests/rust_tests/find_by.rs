@@ -1,6 +1,6 @@
 use crate::framework::prelude::*;
-use serde_json::json;
 
+#[chisel_macros::test(modules = Deno, optimize = Both)]
 pub async fn test(mut c: TestContext) {
     c.chisel.copy_to_dir("examples/person.ts", "models");
     c.chisel.copy_to_dir("examples/find_by.ts", "routes");

@@ -1,5 +1,6 @@
 use crate::framework::prelude::*;
 
+#[chisel_macros::test(modules = Deno, optimize = Both)]
 pub async fn test(c: TestContext) {
     c.chisel.copy_to_dir("examples/person.ts", "models");
     c.chisel.write(
