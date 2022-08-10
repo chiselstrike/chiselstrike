@@ -75,8 +75,6 @@ async fn run(
             modules: init.modules.clone(),
             ready_tx,
             request_rx,
-            inspect: init.server.opt.inspect,
-            inspect_brk: init.server.opt.inspect_brk,
         }).await?;
 
         ready_rxs.push(ready_rx);

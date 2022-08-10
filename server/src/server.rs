@@ -7,11 +7,12 @@ use crate::policies::PolicySystem;
 use crate::trunk::{self, Trunk};
 use crate::types::{BuiltinTypes, TypeSystem};
 use crate::version::{self, VersionInfo, VersionInit};
-use anyhow::Result;
+use anyhow::{Context, Result, bail};
 use parking_lot::RwLock;
 use regex::Regex;
 use std::panic;
 use std::collections::HashMap;
+use std::net::SocketAddr;
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
@@ -26,6 +27,7 @@ pub struct Server {
     pub builtin_types: Arc<BuiltinTypes>,
     pub type_systems: tokio::sync::Mutex<HashMap<String, TypeSystem>>,
     pub secrets: RwLock<JsonObject>,
+    pub inspector: Option<Arc<deno_runtime::inspector_server::InspectorServer>>,
     pub trunk: Trunk,
 }
 
@@ -40,18 +42,18 @@ pub async fn run(opt: Opt) -> Result<Restart> {
     let (rpc_addr, rpc_task) = rpc::spawn(
         server.clone(),
         server.opt.rpc_listen_addr,
-    ).await?;
+    ).await.context("Could not start gRPC server")?;
 
     let (api_addrs, api_task) = api::spawn(
         server.clone(),
         server.opt.api_listen_addr.clone(),
-    ).await?;
+    ).await.context("Could not start HTTP API server")?;
 
     let (internal_addr, internal_task) = internal::spawn(
         server.opt.internal_routes_listen_addr,
         server.opt.webui,
         rpc_addr,
-    ).await?;
+    ).await.context("Could not start an internal HTTP server")?;
 
     let secrets_task = TaskHandle(tokio::task::spawn(refresh_secrets(server.clone())));
     let signal_task = TaskHandle(tokio::task::spawn(wait_for_signals()));
@@ -101,9 +103,13 @@ async fn make_server(opt: Opt) -> Result<(Arc<Server>, TaskHandle<Result<()>>)> 
     let secrets = RwLock::new(secrets);
 
     worker::set_v8_flags(&opt.v8_flags)?;
+    let inspector = start_inspector(&opt).await?;
 
     let (trunk, trunk_task) = trunk::spawn().await?;
-    let server = Server { opt, db, query_engine, meta_service, builtin_types, type_systems, secrets, trunk };
+    let server = Server {
+        opt, db, query_engine, meta_service, builtin_types,
+        type_systems, secrets, inspector, trunk,
+    };
     Ok((Arc::new(server), trunk_task))
 }
 
@@ -225,3 +231,29 @@ async fn wait_for_signals() -> Result<Restart> {
         Some(_) = sigusr1.recv() => { debug!("Got SIGUSR1"); Restart::Yes },
     })
 }
+
+async fn start_inspector(opt: &Opt) -> Result<Option<Arc<deno_runtime::inspector_server::InspectorServer>>> {
+    Ok(if opt.inspect || opt.inspect_brk {
+        let addr = alloc_inspector_addr().await
+            .context("Could not allocate an address for V8 inspector")?;
+        let inspector = deno_runtime::inspector_server::InspectorServer::new(addr, "chiseld".into());
+        Some(Arc::new(inspector))
+    } else {
+        None
+    })
+}
+
+async fn alloc_inspector_addr() -> Result<SocketAddr> {
+    use std::io::ErrorKind;
+    for port in 9222..9300 {
+        match tokio::net::TcpListener::bind(("localhost", port)).await {
+            Ok(listener) => return Ok(listener.local_addr()?),
+            Err(err) => match err.kind() {
+                ErrorKind::AddrInUse | ErrorKind::AddrNotAvailable => {},
+                _ => bail!(err),
+            },
+        }
+    }
+    bail!("Could not find an available port")
+}
+
