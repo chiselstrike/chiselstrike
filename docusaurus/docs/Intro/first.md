@@ -438,6 +438,17 @@ In such a scenario, to get all comments that were written byt authors under 40 a
 curl -g localhost:8080/dev/comments?.by.age~lt=40&.by.name=John&sort=by.name
 ```
 
+### Arrays
+We currently support arrays of primitive types (`string`, `number`, `boolean`) and nesting of arrays (`[][]number`, `[][][]string` etc.). For example we could add a keywords array to our `BlogPost`:
+
+```typescript title="my-backend/models/BlogPost.ts"
+export class BlogPost extends ChiselEntity {
+    text: string = "";
+    by: Person;
+    keywords: []string = [];
+}
+```
+
 ## PUT and DELETE
 
 We can also amend an object with `PUT`:
