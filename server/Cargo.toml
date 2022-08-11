@@ -12,7 +12,6 @@ must_not_suspend = []
 aes-gcm = "0.9.4"
 anyhow = { version = "1.0", features = ["backtrace"] }
 api = { path = "../api" }
-async-channel = "1.6.1"
 async-lock = "2.5.0"
 base64 = "0.13.0"
 deno_core = { path = "../third_party/deno/core" }

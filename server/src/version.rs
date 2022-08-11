@@ -33,26 +33,38 @@ pub struct VersionInfo {
     pub tag: String,
 }
 
+/// Instance of a version of the user's code.
+///
+/// There might be multiple versions running in the same server, but they are almost completely
+/// independent. There might also be multiple JS runtimes (workers) running code for the version,
+/// sharing the same instance of this object.
+///
+/// The `Version` is always wrapped in an `Arc`. The workers will gracefully stop when the
+/// `Version` is dropped (more precisely, when `Version::request_tx` is dropped), so you must make
+/// sure not leak `Arc<Version>` or keep it alive longer than necessary.
 pub struct Version {
     pub version_id: String,
     pub info: VersionInfo,
     pub type_system: Arc<TypeSystem>,
     pub policy_system: Arc<PolicySystem>,
-    /// A request sent to this channel will be processed by a worker in this version.
-    pub request_tx: mpsc::Sender<ApiRequestResponse>,
 }
 
-pub async fn spawn(init: VersionInit) -> Result<(Arc<Version>, CancellableTaskHandle<Result<()>>)> {
+pub async fn spawn(init: VersionInit) 
+    -> Result<(
+        Arc<Version>,
+        mpsc::Sender<ApiRequestResponse>,
+        CancellableTaskHandle<Result<()>>,
+    )> 
+{
     let (request_tx, request_rx) = mpsc::channel(1);
     let version = Arc::new(Version {
         version_id: init.version_id.clone(),
         info: init.info.clone(),
         type_system: init.type_system.clone(),
         policy_system: init.policy_system.clone(),
-        request_tx,
     });
     let task = CancellableTaskHandle(task::spawn(run(init, version.clone(), request_rx)));
-    Ok((version, task))
+    Ok((version, request_tx, task))
 }
 
 async fn run(
@@ -67,7 +79,7 @@ async fn run(
     // spawn all workers for this version
     for worker_idx in 0..init.worker_count {
         let (ready_tx, ready_rx) = oneshot::channel();
-        let (request_tx, request_rx) = async_channel::bounded(1);
+        let (request_tx, request_rx) = mpsc::channel(1);
         let worker_handle = worker::spawn(WorkerInit {
             worker_idx,
             server: init.server.clone(),

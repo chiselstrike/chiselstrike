@@ -36,6 +36,13 @@ pub struct Server {
 pub enum Restart { Yes, No }
 
 pub async fn run(opt: Opt) -> Result<Restart> {
+    // Note that we spawn many tasks, but we .await them all at the end; we never leave a task
+    // running in the background. This ensures that we handle all errors and panics and also that
+    // we abort the tasks when they are no longer needed (e.g. if other task has failed). 
+    //
+    // This approach is called "structured concurrency", and it seems to be a good way to write
+    // concurrent programs and keep your sanity.
+
     let (server, trunk_task) = make_server(opt).await?;
     start_versions(server.clone()).await?;
     start_chiselstrike_version(server.clone()).await?;
@@ -155,8 +162,8 @@ async fn start_versions(server: Arc<Server>) -> Result<()> {
             ready_tx,
         };
 
-        let (version, version_task) = version::spawn(init).await?;
-        server.trunk.add_version(version, version_task);
+        let (version, request_tx, version_task) = version::spawn(init).await?;
+        server.trunk.add_version(version, request_tx, version_task);
     }
     Ok(())
 }
@@ -189,8 +196,8 @@ async fn start_chiselstrike_version(server: Arc<Server>) -> Result<()> {
         ready_tx,
     };
 
-    let (version, version_task) = version::spawn(init).await?;
-    server.trunk.add_version(version, version_task);
+    let (version, request_tx, version_task) = version::spawn(init).await?;
+    server.trunk.add_version(version, request_tx, version_task);
     Ok(())
 }
 

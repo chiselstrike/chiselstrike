@@ -199,10 +199,10 @@ async fn apply(server: Arc<Server>, request: ApplyRequest) -> Result<ApplyRespon
         ready_tx,
     };
 
-    let (version, mut version_task) = version::spawn(init).await?;
+    let (version, request_tx, mut version_task) = version::spawn(init).await?;
     wait_until_ready(&mut version_task, ready_rx).await
         .context("The version did not start up correcly, but the database has already been modified")?;
-    server.trunk.add_version(version, version_task);
+    server.trunk.add_version(version, request_tx, version_task);
 
     Ok(ApplyResponse {
         types: result.type_names_user_order,
@@ -231,7 +231,7 @@ async fn validate_modules(
         ready_tx,
     };
 
-    let (_version, mut version_task) = version::spawn(init).await?;
+    let (_version, _request_tx, mut version_task) = version::spawn(init).await?;
     wait_until_ready(&mut version_task, ready_rx).await?;
     Ok(())
 }
@@ -246,7 +246,7 @@ async fn wait_until_ready(
     loop {
         tokio::select!{
             res = &mut version_task => match res {
-                Some(Ok(_)) => bail!("Version task terminated before the version is ready"),
+                Some(Ok(_)) => bail!("Version task terminated before the version was ready"),
                 Some(Err(err)) => return Err(err.context("Could not apply the provided code")),
                 None => bail!("Version task was cancelled"),
             },

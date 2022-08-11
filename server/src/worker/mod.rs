@@ -8,6 +8,7 @@ use crate::version::Version;
 use anyhow::{Context as _, Result, bail};
 use deno_core::url::Url;
 use futures::ready;
+use std::cell::RefCell;
 use std::collections::HashMap;
 use std::future::Future;
 use std::panic;
@@ -17,7 +18,7 @@ use std::pin::Pin;
 use std::rc::Rc;
 use std::sync::Arc;
 use std::task::{Context, Poll};
-use tokio::sync::oneshot;
+use tokio::sync::{mpsc, oneshot};
 use utils::TaskHandle;
 
 mod loader;
@@ -28,27 +29,51 @@ pub struct WorkerInit {
     pub version: Arc<Version>,
     pub modules: Arc<HashMap<String, String>>,
     pub ready_tx: oneshot::Sender<()>,
-    pub request_rx: async_channel::Receiver<ApiRequestResponse>,
+    pub request_rx: mpsc::Receiver<ApiRequestResponse>,
 }
 
+/// Handle to a worker task and thread.
+///
+/// The worker runs as a task in a tokio local set on a dedicated thread. This struct conveniently
+/// bundles the handles to the task and the thread, so that we can join the thread when the task
+/// finishes.
 #[derive(Debug)]
 pub struct WorkerJoinHandle {
     task: TaskHandle<Result<()>>,
     thread: Option<std::thread::JoinHandle<()>>,
 }
 
+/// State of one worker (JavaScript runtime).
+///
+/// This struct is stored in the `op_state` in the Deno runtime. Every worker runs on its own
+/// thread and runs code for a single version.
 pub struct WorkerState {
     pub server: Arc<Server>,
     pub version: Arc<Version>,
+
+    /// The implicit global transaction for all data operations.
+    ///
+    /// TODO: the existence of this transaction means that the worker can only handle a single
+    /// request at a time. Unfortunately, to get rid of this, we have to significantly rework the
+    /// TypeScript API.
     pub transaction: Option<TransactionStatic>,
+
+    /// Channel for signaling that the worker is ready to handle requests.
+    ///
+    /// Once the worker sends the signal, this is reset to `None`.
     pub ready_tx: Option<oneshot::Sender<()>>,
-    pub request_rx: async_channel::Receiver<ApiRequestResponse>,
+
+    /// Channel for receiving HTTP API requests.
+    ///
+    /// We can get await with `Rc<RefCell<>>`, because the worker runs on a single thread.
+    pub request_rx: Rc<RefCell<mpsc::Receiver<ApiRequestResponse>>>,
 }
 
 pub async fn spawn(init: WorkerInit) -> Result<WorkerJoinHandle> {
     let runtime_handle = tokio::runtime::Handle::try_current().unwrap();
     let (task_tx, task_rx) = oneshot::channel();
 
+    // spawn the worker task in a localset on a new dedicated thread
     let thread = std::thread::spawn(move || {
         let local_set = tokio::task::LocalSet::new();
         let task = local_set.spawn_local(run(init));
@@ -131,7 +156,7 @@ async fn run(init: WorkerInit) -> Result<()> {
         version: init.version.clone(),
         transaction: None,
         ready_tx: Some(init.ready_tx),
-        request_rx: init.request_rx,
+        request_rx: Rc::new(RefCell::new(init.request_rx)),
     };
     worker.js_runtime.op_state().borrow_mut().put(worker_state);
 
@@ -149,6 +174,8 @@ impl Future for WorkerJoinHandle {
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         let this = Pin::into_inner(self);
         let task_res = ready!(Pin::new(&mut this.task).poll(cx));
+        // when the task has finished, the thread should also finish, so it is safe to do the
+        // blocking join() here
         let join_res = this.thread.take().unwrap().join();
         Poll::Ready(match (task_res, join_res) {
             (_, Err(join_err)) => panic::resume_unwind(join_err),

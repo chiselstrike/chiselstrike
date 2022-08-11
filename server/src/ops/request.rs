@@ -2,7 +2,7 @@
 
 use crate::api::{ApiRequest, ApiResponse, ApiRequestResponse};
 use crate::worker::WorkerState;
-use anyhow::{Context, Result};
+use anyhow::{Context, Result, bail};
 use std::cell::RefCell;
 use std::rc::Rc;
 use tokio::sync::oneshot;
@@ -16,10 +16,16 @@ impl deno_core::Resource for ResponseResource { }
 
 #[deno_core::op]
 async fn op_chisel_accept(state: Rc<RefCell<deno_core::OpState>>)
-    -> Option<(ApiRequest, deno_core::ResourceId)>
+    -> Result<Option<(ApiRequest, deno_core::ResourceId)>>
 {
-    let request_rx = state.borrow().borrow::<WorkerState>().request_rx.clone();
-    let request_response = request_rx.recv().await.ok()?;
+    let request_rx: Rc<RefCell<_>> = state.borrow().borrow::<WorkerState>().request_rx.clone();
+    let request_response = match request_rx.try_borrow_mut() {
+        Ok(mut request_rx) => match request_rx.recv().await {
+            Some(request_response) => request_response,
+            None => return Ok(None),
+        },
+        Err(_) => bail!("op_chisel_accept cannot be called while another call is pending"),
+    };
     let ApiRequestResponse { request, response_tx } = request_response;
 
     let response_rid = {
@@ -28,7 +34,7 @@ async fn op_chisel_accept(state: Rc<RefCell<deno_core::OpState>>)
         };
         state.borrow_mut().resource_table.add(response_res)
     };
-    Some((request, response_rid))
+    Ok(Some((request, response_rid)))
 }
 
 #[deno_core::op]

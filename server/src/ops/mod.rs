@@ -72,7 +72,6 @@ fn op_chisel_get_version_info(state: &mut deno_core::OpState) -> VersionInfo {
     state.borrow::<WorkerState>().version.info.clone()
 }
 
-
 // Used by deno to format names in errors
 #[deno_core::op]
 fn op_format_file_name(file_name: String) -> Result<String> {

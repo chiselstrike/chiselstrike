@@ -273,7 +273,6 @@ struct ModuleResolver {
 
 impl Resolver for ModuleResolver {
     fn resolve(&self, specifier: &str, referrer: &Url) -> ResolveResponse {
-        println!("resolve {:?} ({})", specifier, referrer);
         if let Some(u) = self.extra_libs.get(specifier) {
             return ResolveResponse::Esm(u.clone());
         }

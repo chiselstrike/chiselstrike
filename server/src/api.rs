@@ -15,7 +15,7 @@ use std::convert::Infallible;
 use std::future::ready;
 use std::net::SocketAddr;
 use std::sync::Arc;
-use tokio::sync::oneshot;
+use tokio::sync::{mpsc, oneshot};
 use utils::TaskHandle;
 
 pub async fn spawn(server: Arc<Server>, listen_addr: String) 
@@ -69,9 +69,11 @@ async fn try_handle_request(
     }
 
     if let Some((version_id, routing_path)) = get_version_path(path) {
-        if let Some(version) = server.trunk.get_version(version_id) {
+        if let Some(trunk_version) = server.trunk.get_trunk_version(version_id) {
+            let version = trunk_version.version;
+            let request_tx = trunk_version.request_tx;
             let routing_path = routing_path.into();
-            return handle_version_request(server, version, request, routing_path).await;
+            return handle_version_request(server, version, request_tx, request, routing_path).await;
         }
     }
 
@@ -84,6 +86,7 @@ pub struct ApiRequestResponse {
     pub response_tx: oneshot::Sender<ApiResponse>,
 }
 
+/// HTTP API request as given to TypeScript.
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ApiRequest {
@@ -95,6 +98,7 @@ pub struct ApiRequest {
     pub user_id: Option<String>,
 }
 
+/// HTTP API response as received from TypeScript.
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ApiResponse {
@@ -106,6 +110,7 @@ pub struct ApiResponse {
 async fn handle_version_request(
     server: Arc<Server>,
     version: Arc<Version>,
+    request_tx: mpsc::Sender<ApiRequestResponse>,
     request: hyper::Request<hyper::Body>,
     routing_path: String,
 ) -> Result<hyper::Response<hyper::Body>> {
@@ -135,7 +140,7 @@ async fn handle_version_request(
     };
 
     let (response_tx, response_rx) = oneshot::channel();
-    let _: Result<_, _> = version.request_tx.send(ApiRequestResponse {
+    let _: Result<_, _> = request_tx.send(ApiRequestResponse {
         request: api_request,
         response_tx,
     }).await;
@@ -163,8 +168,8 @@ fn get_version_path(path: &str) -> Option<(&str, &str)> {
     lazy_static! {
         static ref REGEX: Regex = Regex::new(r"(?x)
             ^
-            / (?P<version_id> [^/]*)
-            (?P<routing_path> (/ .*)?)
+            /(?P<version_id> [^/]*)
+            (?P<routing_path> (/.*)?)
             $
         ").unwrap();
     }
@@ -223,6 +228,7 @@ fn handle_error(method: &hyper::Method, uri: &hyper::Uri, err: Error) -> hyper::
 }
 
 fn add_default_headers(response: &mut hyper::Response<hyper::Body>) {
+    // TODO: we probably should not add these headers to every response
     let default_headers = &[
         ("access-control-allow-origin", "*"),
         ("access-control-allow-methods", "POST, PUT, GET, OPTIONS, DELETE"),

@@ -5,6 +5,7 @@ use std::pin::Pin;
 use std::sync::Arc;
 use deno_core::url::Url;
 
+/// The loader is used by Deno when V8 resolves and loads modules.
 #[derive(Debug)]
 pub struct ModuleLoader {
     modules: Arc<HashMap<String, String>>,
@@ -58,13 +59,8 @@ impl deno_core::ModuleLoader for ModuleLoader {
 }
 
 fn load_chisel_module(url: Url) -> Result<deno_core::ModuleSource> {
-    let path = url.path();
-    // TODO: this is a hack, put main.js together with other .ts files
-    if path == "/main.js" {
-        return Ok(source_from_code(&url, include_str!("main.js")));
-    }
-
-    let path = path.trim_start_matches('/').trim_end_matches(".ts");
+    // note that the module URL may end with ".ts", but we must return the transpiled JavaScript
+    let path = url.path().trim_start_matches('/').trim_end_matches(".ts");
     match api::SOURCES_JS.get(path) {
         Some(code) => Ok(source_from_code(&url, code)),
         None => bail!("Undefined internal chisel module {}", url),

@@ -27,6 +27,7 @@ lazy_static! {
         source_js!("serve"),
         source_js!("special"),
         source_js!("utils"),
+        ("main.js", include_str!("main.js")),
     ].into_iter().collect();
 
     pub static ref SOURCES_D_TS: HashMap<&'static str, &'static str> = vec![
