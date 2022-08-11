@@ -1,4 +1,4 @@
-# ChiselStrike Application
+# {{projectName}}
 
 This project is a starter for a ChiselStrike application!
 
