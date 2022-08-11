@@ -17,7 +17,6 @@
     },
     "author": "ChiselStrike <info@chiselstrike.com>",
     "license": "Apache-2.0",
-    "main": "lib/api.ts",
     "types": "lib/api.ts",
     "scripts": {
         "build": "true"

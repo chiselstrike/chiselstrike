@@ -74,10 +74,6 @@ function run(projectDirectory: string, chiselVersion: string) {
         path.join(projectDirectory, "routes", "hello.ts"),
     );
     fs.copyFileSync(
-        path.join(__dirname, "template", "hello.ts"),
-        path.join(projectDirectory, "routes", "hello.ts"),
-    );
-    fs.copyFileSync(
         path.join(__dirname, "template", "gitignore"),
         path.join(projectDirectory, "", ".gitignore"),
     );

@@ -67,7 +67,7 @@ impl DownloadMap {
     }
 }
 
-fn fetch_impl(map: &mut DownloadMap, path: String, base: String) -> Result<String> {
+fn resolve_impl(map: &mut DownloadMap, path: String, base: String) -> Result<String> {
     if base == ROOT_URL {
         return Ok(path);
     }
@@ -92,8 +92,8 @@ where
 }
 
 #[op]
-fn fetch(s: &mut OpState, path: String, base: String) -> Result<String> {
-    with_map(fetch_impl, s, path, base)
+fn resolve(s: &mut OpState, path: String, base: String) -> Result<String> {
+    with_map(resolve_impl, s, path, base)
 }
 
 fn read_impl(map: &mut DownloadMap, path: String) -> Result<String> {
@@ -273,6 +273,7 @@ struct ModuleResolver {
 
 impl Resolver for ModuleResolver {
     fn resolve(&self, specifier: &str, referrer: &Url) -> ResolveResponse {
+        println!("resolve {:?} ({})", specifier, referrer);
         if let Some(u) = self.extra_libs.get(specifier) {
             return ResolveResponse::Esm(u.clone());
         }
@@ -302,7 +303,7 @@ impl Compiler {
     pub fn new(use_snapshot: bool) -> Compiler {
         let ext = Extension::builder()
             .ops(vec![
-                fetch::decl(),
+                resolve::decl(),
                 read::decl(),
                 write::decl(),
                 get_cwd::decl(),

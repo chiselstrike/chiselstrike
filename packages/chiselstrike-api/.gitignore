@@ -1,4 +1,3 @@
-node_modules
-/lib/*.ts
-/lib/*.js
+/node_modules
+/lib
 yarn.lock

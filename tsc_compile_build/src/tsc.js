@@ -52,7 +52,7 @@
             const ret = [];
             for (const name of moduleNames) {
                 const fname = Deno.core.opSync(
-                    "fetch",
+                    "resolve",
                     name,
                     containingFile,
                 );
