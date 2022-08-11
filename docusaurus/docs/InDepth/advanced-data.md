@@ -90,6 +90,7 @@ model evolution without any database migration. While fully arbitrary evolution 
 many cases that we can already handle. You will see that they cover many scenarios, especially if you
 prepare in advance. They are:
 
+* Models that have no data can always be evolved in any fashion.
 * Fields that have a literal default value can always be added or removed.
 * Fields that are optional can always be added or removed.
 
