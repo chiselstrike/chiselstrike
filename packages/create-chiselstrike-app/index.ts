@@ -14,7 +14,7 @@ function isDirEmpty(dirname: string) {
 }
 
 function run(projectDirectory: string, chiselVersion: string) {
-    const projectName = projectDirectory;
+    const projectName = path.basename(projectDirectory);
     projectDirectory = path.resolve(projectDirectory);
     if (fs.existsSync(projectDirectory)) {
         if (!isDirEmpty(projectDirectory)) {
@@ -65,6 +65,15 @@ function run(projectDirectory: string, chiselVersion: string) {
         'modules = "node"\n',
     );
 
+    const readmeSrc = fs.readFileSync(
+        path.join(__dirname, "template", "README-template.md"),
+        "utf8",
+    );
+    const readme = Handlebars.compile(readmeSrc);
+    fs.writeFileSync(
+        path.join(projectDirectory, "README.md"),
+        readme({ projectName }),
+    );
     fs.copyFileSync(
         path.join(__dirname, "template", "settings.json"),
         path.join(projectDirectory, ".vscode", "settings.json"),
