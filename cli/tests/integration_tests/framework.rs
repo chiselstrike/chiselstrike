@@ -482,6 +482,27 @@ impl Chisel {
             .unwrap_or_else(|_| panic!("failed to copy '{:?}' to '{:?}'", from, to))
     }
 
+    /// Gets an `url` of a running ChielStrike service.
+    pub async fn get(&self, url: &str) -> Result<reqwest::Response> {
+        let url = url::Url::parse(&format!("http://{}", self.config.public_address))
+            .unwrap()
+            .join(url)
+            .unwrap();
+        let resp = self
+            .client
+            .get(url.as_str())
+            .timeout(core::time::Duration::from_secs(5))
+            .send()
+            .await?
+            .error_for_status()?;
+        Ok(resp)
+    }
+
+    /// Gets an `url` of a running ChielStrike service.
+    pub async fn get_json(&self, url: &str) -> serde_json::Value {
+        self.get(url).await.unwrap().json().await.unwrap()
+    }
+
     /// Posts given `data` to an `url` of a running ChielStrike service.
     pub async fn post(&self, url: &str, data: serde_json::Value) -> Result<reqwest::Response> {
         let url = url::Url::parse(&format!("http://{}", self.config.public_address))

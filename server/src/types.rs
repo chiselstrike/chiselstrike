@@ -372,6 +372,12 @@ impl TypeSystem {
 
     /// Looks up a builtin type with name `type_name`.
     pub(crate) fn lookup_builtin_type(&self, type_name: &str) -> Result<Type, TypeSystemError> {
+        if let Some(element_type_str) = type_name.strip_prefix("Array<") {
+            if let Some(element_type_str) = element_type_str.strip_suffix('>') {
+                let element_type = self.lookup_builtin_type(element_type_str)?;
+                return Ok(Type::Array(Box::new(element_type)));
+            }
+        }
         self.builtin_types
             .get(type_name)
             .cloned()
@@ -489,8 +495,8 @@ impl TypeSystem {
 
     pub(crate) fn get(&self, ty: &TypeId) -> Result<Type, TypeSystemError> {
         match ty {
-            TypeId::String | TypeId::Float | TypeId::Boolean | TypeId::Id => {
-                self.lookup_builtin_type(ty.name())
+            TypeId::String | TypeId::Float | TypeId::Boolean | TypeId::Id | TypeId::Array(_) => {
+                self.lookup_builtin_type(&ty.name())
             }
             TypeId::Entity { name, api_version } => {
                 self.lookup_entity(name, api_version).map(Type::Entity)
@@ -505,15 +511,17 @@ pub(crate) enum Type {
     Float,
     Boolean,
     Entity(Entity),
+    Array(Box<Type>),
 }
 
 impl Type {
-    pub(crate) fn name(&self) -> &str {
+    pub(crate) fn name(&self) -> String {
         match self {
-            Type::Float => "number",
-            Type::String => "string",
-            Type::Boolean => "boolean",
-            Type::Entity(ty) => &ty.name,
+            Type::Float => "number".to_string(),
+            Type::String => "string".to_string(),
+            Type::Boolean => "boolean".to_string(),
+            Type::Entity(ty) => ty.name.to_string(),
+            Type::Array(ty) => format!("Array<{}>", ty.name()),
         }
     }
 }
@@ -696,15 +704,17 @@ pub(crate) enum TypeId {
     Boolean,
     Id,
     Entity { name: String, api_version: String },
+    Array(Box<TypeId>),
 }
 
 impl TypeId {
-    pub(crate) fn name(&self) -> &str {
+    pub(crate) fn name(&self) -> String {
         match self {
-            TypeId::Id | TypeId::String => "string",
-            TypeId::Float => "number",
-            TypeId::Boolean => "boolean",
-            TypeId::Entity { ref name, .. } => name,
+            TypeId::Id | TypeId::String => "string".to_string(),
+            TypeId::Float => "number".to_string(),
+            TypeId::Boolean => "boolean".to_string(),
+            TypeId::Entity { ref name, .. } => name.to_string(),
+            TypeId::Array(elem_type) => format!("Array<{}>", elem_type.name()),
         }
     }
 }
@@ -719,6 +729,10 @@ impl From<Type> for TypeId {
                 name: e.name().to_string(),
                 api_version: e.api_version.clone(),
             },
+            Type::Array(elem_type) => {
+                let element_type_id: Self = (*elem_type).into();
+                Self::Array(Box::new(element_type_id))
+            }
         }
     }
 }
