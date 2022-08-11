@@ -48,6 +48,40 @@ $CHISEL apply 2>&1 || echo
 # CHECK: Error: Model Foo defined twice
 rm "$TEMPDIR/models/fooNoteADifferentFilenameHere.ts"
 
+## Making completely arbitrary changes to Foo is okay, as long as there is no data
+cat << EOF > "$TEMPDIR/models/foo.ts"
+export class Foo extends ChiselEntity {
+  a: string;
+  b: string;
+  c: number
+}
+EOF
+$CHISEL apply
+# CHECK: Model defined: Foo
+
+## Go back to the basics, and add some data
+cat << EOF > "$TEMPDIR/models/foo.ts"
+import { ChiselEntity } from "@chiselstrike/api"
+export class Foo extends ChiselEntity {
+  a: string = "foo";
+  b: number;
+}
+EOF
+
+cat << EOF > "$TEMPDIR/endpoints/seed.ts"
+import { Foo } from "../models/foo.ts"
+export default async function seed() {
+    const c = Foo.build({"a": "seed", "b": 2})
+    await c.save()
+}
+EOF
+
+$CHISEL apply
+# CHECK: Model defined: Foo
+
+$CURL -X POST $CHISELD_HOST/dev/seed
+rm "$TEMPDIR/endpoints/seed.ts"
+
 ## Changing b's type is not OK.
 cat << EOF > "$TEMPDIR/models/foo.ts"
 export class Foo extends ChiselEntity {
@@ -88,6 +122,10 @@ EOF
 $CHISEL apply 2>&1 || echo # (swallow the apply abort)
 # CHECK: Model defined: Foo
 
+## clean up data.
+rm "$TEMPDIR/models/foo.ts"
+$CHISEL apply --allow-type-deletion
+
 ## Redefining elemental types is not OK.
 echo 'export class number extends ChiselEntity { a: number}' > "$TEMPDIR/models/foo.ts"
 $CHISEL apply 2>&1 || echo # (swallow the apply abort)
@@ -97,22 +135,3 @@ $CHISEL apply 2>&1 || echo # (swallow the apply abort)
 echo 'export class AuthUser extends ChiselEntity { a: number}' > "$TEMPDIR/models/foo.ts"
 $CHISEL apply 2>&1 ||:
 # CHECK: custom type expected, got `AuthUser` instead
-
-### Removing fields is not OK if they didn't have a default
-cat << EOF > "$TEMPDIR/models/foo.ts"
-export class Bar extends ChiselEntity {
-  a: number;
-  b: number;
-}
-EOF
-$CHISEL apply 2>&1 || echo # (swallow the apply abort)
-# CHECK: Model defined: Bar
-#
-cat << EOF > "$TEMPDIR/models/foo.ts"
-export class Bar extends ChiselEntity {
-  b: number;
-}
-EOF
-$CHISEL apply 2>&1 || echo # (swallow the apply abort)
-# CHECK: unsafe to replace type: Bar
-

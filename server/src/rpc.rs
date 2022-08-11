@@ -392,7 +392,13 @@ or
 
             match version_types.lookup_custom_type(&name) {
                 Ok(old_type) => {
-                    let delta = TypeSystem::generate_type_delta(&old_type, ty, &state.type_system)?;
+                    let is_empty = meta.count_rows(&mut transaction, &old_type).await? == 0;
+                    let delta = TypeSystem::generate_type_delta(
+                        &old_type,
+                        ty,
+                        &state.type_system,
+                        is_empty,
+                    )?;
                     to_update.push((old_type.clone(), delta));
                 }
                 Err(TypeSystemError::NoSuchType(_) | TypeSystemError::NoSuchVersion(_)) => {
