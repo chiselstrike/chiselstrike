@@ -86,7 +86,7 @@ fn walk_dir_entry(route_map: &mut FileRouteMap, entry: &fs::DirEntry, path_patte
             bail!("Found file {}, but only TypeScript files (.ts) are supported", entry_path.display());
         }
     } else if metadata.is_dir() {
-        let dir_path_pattern = format!("{}/{}", path_pattern, stem_to_pattern(&entry_name));
+        let dir_path_pattern = format!("{}/{}", path_pattern, stem_to_pattern(entry_name));
         walk_dir(route_map, &entry_path, &dir_path_pattern)
             .with_context(|| format!("Could not read routes from {}", entry_path.display()))?;
     }
@@ -97,7 +97,7 @@ fn walk_dir_entry(route_map: &mut FileRouteMap, entry: &fs::DirEntry, path_patte
 fn stem_to_pattern(stem: &str) -> String {
     match stem.strip_prefix('[').and_then(|x| x.strip_suffix(']')) {
         Some(group_name) => format!(":{}", group_name),
-        None => format!("{}", stem),
+        None => stem.to_string(),
     }
 }
 

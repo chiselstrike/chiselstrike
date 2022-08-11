@@ -1,4 +1,3 @@
-import { ChiselRequest } from './request.ts';
 import { RouteMap } from './routing.ts';
 import { responseFromJson } from './utils.ts';
 
@@ -11,7 +10,7 @@ type VersionInfo = {
 const versionInfo: VersionInfo = Deno.core.opSync('op_chisel_get_version_info');
 
 export function specialBefore(routeMap: RouteMap) {
-    async function handleSwagger(req: ChiselRequest): Promise<Response> {
+    function handleSwagger(): Promise<Response> {
         const paths: Record<string, unknown> = {};
         for (const route of routeMap.routes) {
             paths[route.pathPattern] = {};
@@ -32,8 +31,8 @@ export function specialBefore(routeMap: RouteMap) {
     routeMap.get('/', handleSwagger);
 
     // Makes CORS preflights pass.
-    routeMap.route('OPTIONS', '.*', (req) => new Response("ok"));
+    routeMap.route('OPTIONS', '.*', () => new Response("ok"));
 }
 
-export function specialAfter(routeMap: RouteMap) {
+export function specialAfter(_routeMap: RouteMap) {
 }

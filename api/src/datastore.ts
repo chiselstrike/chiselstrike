@@ -2,7 +2,7 @@
 
 import { crud } from './crud.ts';
 import type { RouteMap } from './routing.ts';
-import { opSync, opAsync } from './utils.ts';
+import { opAsync } from './utils.ts';
 
 /**
  * Acts the same as Object.assign, but performs deep merge instead of a shallow one.

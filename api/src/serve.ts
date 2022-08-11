@@ -28,7 +28,7 @@ export async function serve(routeMap: RouteMap): Promise<void> {
     const router = new Router(routeMap);
     Deno.core.opSync('op_chisel_ready');
 
-    while (true) {
+    for (;;) {
         const accepted = await Deno.core.opAsync('op_chisel_accept');
         if (accepted === null) { break; }
 

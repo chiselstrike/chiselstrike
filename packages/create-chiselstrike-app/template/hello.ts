@@ -7,7 +7,7 @@
 import { RouteMap, ChiselRequest } from '@chiselstrike/api';
 
 export default new RouteMap()
-    .get('/', function (req: ChiselRequest): string {
+    .get('/', function (): string {
         return 'hello world';
     })
     .post('/', async function (req: ChiselRequest): Promise<unknown> {

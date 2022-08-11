@@ -1,3 +1,4 @@
+#![allow(clippy::expect_fun_call)]
 use std::env;
 use std::fs;
 use std::path::{Path, PathBuf};

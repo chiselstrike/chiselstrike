@@ -11,8 +11,6 @@ type ChiselEntityClass<T extends ChiselEntity> = {
     delete: (_: { id: string }) => Promise<void>;
 };
 
-type GenericChiselEntityClass = ChiselEntityClass<ChiselEntity>;
-
 /** Creates a Response object from response body and status. */
 export type CRUDCreateResponse = (
     body: unknown,

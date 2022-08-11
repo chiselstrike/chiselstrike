@@ -66,7 +66,7 @@ export class RouteMap {
             return routeMap;
         }
     }
-};
+}
 
 export type Route = {
     methods: string[],

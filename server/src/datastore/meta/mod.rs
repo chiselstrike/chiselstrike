@@ -428,7 +428,7 @@ impl MetaService {
             let tag: String = row.get("version_tag");
 
             debug!("Loading api version info for {}", version_id);
-            infos.insert(version_id.into(), VersionInfo { name, tag });
+            infos.insert(version_id, VersionInfo { name, tag });
         }
         Ok(infos)
     }
@@ -512,7 +512,7 @@ impl MetaService {
             let ts = type_systems.entry(desc.version_id())
                 .or_insert_with(|| TypeSystem::new(builtin.clone(), desc.version_id()));
 
-            match self.load_type_fields(&ts, type_id).await {
+            match self.load_type_fields(ts, type_id).await {
                 Ok(fields) => {
                     let indexes = self.load_type_indexes(type_id, backing_table).await?;
 
@@ -541,7 +541,7 @@ impl MetaService {
             let ts = type_systems.entry(desc.version_id())
                 .or_insert_with(|| TypeSystem::new(builtin.clone(), desc.version_id()));
 
-            let fields = self.load_type_fields(&ts, type_id).await?;
+            let fields = self.load_type_fields(ts, type_id).await?;
             let indexes = self.load_type_indexes(type_id, backing_table).await?;
             let ty = ObjectType::new(&desc, fields, indexes)?;
             ts.add_custom_type(Entity::Custom(Arc::new(ty)))?;

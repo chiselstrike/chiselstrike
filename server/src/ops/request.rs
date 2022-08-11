@@ -15,6 +15,7 @@ struct ResponseResource {
 impl deno_core::Resource for ResponseResource { }
 
 #[deno_core::op]
+#[allow(clippy::await_holding_refcell_ref)]
 async fn op_chisel_accept(state: Rc<RefCell<deno_core::OpState>>)
     -> Result<Option<(ApiRequest, deno_core::ResourceId)>>
 {

@@ -62,7 +62,7 @@ impl Trunk {
         // we added the task to `state.tasks`, but we need to explicitly wake up the task that
         // polls `state.tasks`, otherwise we won't get notifications from the newly added task (see
         // documentation of `FuturesUnordered` for details)
-        state.waker.take().map(|waker| waker.wake());
+        if let Some(waker) = state.waker.take() { waker.wake() }
     }
 
     pub fn remove_version(&self, version_id: &str) -> Option<Arc<Version>> {

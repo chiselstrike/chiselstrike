@@ -52,7 +52,7 @@ impl UserAuthorization {
             None => true,
             Some((_, u)) => match username {
                 None => false, // Must be logged in if path specified a regex.
-                Some(username) => u.is_match(&username),
+                Some(username) => u.is_match(username),
             },
         }
     }

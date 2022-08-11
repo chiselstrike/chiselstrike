@@ -172,7 +172,7 @@ async fn apply(server: Arc<Server>, request: ApplyRequest) -> Result<ApplyRespon
 
     let result = {
         let mut type_systems = server.type_systems.lock().await;
-        let mut type_system = type_systems.entry(version_id.clone())
+        let type_system = type_systems.entry(version_id.clone())
             .or_insert_with(|| TypeSystem::new(server.builtin_types.clone(), version_id.clone()));
 
         // NOTE: there is a race condition, because we migrate the database to the new schema, while
@@ -180,7 +180,7 @@ async fn apply(server: Arc<Server>, request: ApplyRequest) -> Result<ApplyRespon
         apply::apply(
             server.clone(),
             &request,
-            &mut type_system,
+            type_system,
             version_id.clone(),
             &info,
             &modules,

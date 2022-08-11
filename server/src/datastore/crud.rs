@@ -156,7 +156,7 @@ fn make_page_url(url_path: &str, url_query: &[(String, String)], cursor: &str) -
         if key == "cursor" || key == "sort" {
             continue;
         }
-        page_query.append_pair(&key, &value);
+        page_query.append_pair(key, value);
     }
     page_query.append_pair("cursor", cursor);
 
@@ -217,7 +217,7 @@ impl Query {
         let mut q = Query::new();
         for (param_key, value) in url_query.iter() {
             match param_key.as_str() {
-                "sort" => q.sort = parse_sort(base_type, &value)?,
+                "sort" => q.sort = parse_sort(base_type, value)?,
                 "limit" | "page_size" => {
                     q.page_size = value.parse().with_context(|| {
                         format!("failed to parse {param_key}. Expected u64, got '{}'", value)
@@ -234,12 +234,12 @@ impl Query {
                         q.cursor.is_none(),
                         "only one occurrence of cursor is allowed."
                     );
-                    let cursor = Cursor::from_string(&value)?;
+                    let cursor = Cursor::from_string(value)?;
                     q.cursor = Some(cursor);
                 }
                 _ => {
                     if let Some(param_key) = param_key.strip_prefix('.') {
-                        let expr = filter_from_param(base_type, param_key, &value, ts)
+                        let expr = filter_from_param(base_type, param_key, value, ts)
                             .with_context(|| {
                                 format!("failed to parse filter {param_key}={value}")
                             })?;
@@ -418,7 +418,7 @@ fn url_query_to_filter(
     for (param_key, value) in url_query.iter() {
         let param_key = param_key.to_string();
         if let Some(param_key) = param_key.strip_prefix('.') {
-            let expression = filter_from_param(base_type, param_key, &value, ts)
+            let expression = filter_from_param(base_type, param_key, value, ts)
                 .context("failed to parse filter")?;
 
             filter = filter

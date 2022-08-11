@@ -1326,17 +1326,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "derive-new"
-version = "0.5.9"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3418329ca0ad70234b9735dc4ceed10af4df60eff9c8e7b06cb5e520d92c3535"
-dependencies = [
- "proc-macro2 1.0.40",
- "quote 1.0.20",
- "syn 1.0.98",
-]
-
-[[package]]
 name = "derive_more"
 version = "0.99.17"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1510,7 +1499,6 @@ version = "0.12.0-dev.0"
 dependencies = [
  "anyhow",
  "api",
- "tempfile",
  "tsc_compile",
  "url 2.2.2 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
@@ -3050,19 +3038,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "624a8340c38c1b80fd549087862da4ba43e08858af025b236e509b6649fc13d5"
 
 [[package]]
-name = "openapi"
-version = "0.1.5"
-source = "git+https://github.com/chiselstrike/openapi.git?rev=fee4da81f6591e4e6e4a37d5b2b67840471566c0#fee4da81f6591e4e6e4a37d5b2b67840471566c0"
-dependencies = [
- "semver 0.11.0",
- "serde",
- "serde_json",
- "serde_yaml",
- "thiserror",
- "url 2.2.2 (registry+https://github.com/rust-lang/crates.io-index)",
-]
-
-[[package]]
 name = "openssl"
 version = "0.10.41"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4038,16 +4013,7 @@ version = "0.9.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1d7eb9ef2c18661902cc47e535f9bc51b78acd254da71d375c2f6720d9a40403"
 dependencies = [
- "semver-parser 0.7.0",
-]
-
-[[package]]
-name = "semver"
-version = "0.11.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f301af10236f6df4160f7c3f04eec6dbc70ace82d23326abad5edee88801c6b6"
-dependencies = [
- "semver-parser 0.10.2",
+ "semver-parser",
 ]
 
 [[package]]
@@ -4064,15 +4030,6 @@ name = "semver-parser"
 version = "0.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "388a1df253eca08550bef6c72392cfe7c30914bf41df5269b68cbd6ff8f570a3"
-
-[[package]]
-name = "semver-parser"
-version = "0.10.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "00b0bef5b7f9e0df16536d3961cfb6e84331c065b4066afb39768d0e319411f7"
-dependencies = [
- "pest",
-]
 
 [[package]]
 name = "serde"
@@ -4150,18 +4107,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "serde_yaml"
-version = "0.8.25"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1ec0091e1f5aa338283ce049bd9dfefd55e1f168ac233e85c1ffe0038fb48cbe"
-dependencies = [
- "indexmap",
- "ryu",
- "serde",
- "yaml-rust",
-]
-
-[[package]]
 name = "server"
 version = "0.12.0-dev.0"
 dependencies = [
@@ -4172,7 +4117,6 @@ dependencies = [
  "base64 0.13.0",
  "deno_core",
  "deno_runtime",
- "derive-new",
  "dirs 4.0.0",
  "enclose",
  "enum-as-inner 0.3.4",
@@ -4188,7 +4132,6 @@ dependencies = [
  "log",
  "nix 0.22.3",
  "once_cell",
- "openapi",
  "parking_lot 0.12.1",
  "permutation",
  "petgraph 0.6.2",
