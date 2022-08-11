@@ -1099,6 +1099,9 @@ export class ChiselEntity {
      * * **PUT:**
      *     * `/comments/:id`         overwrites the element with the given ID. Payload is a JSON with the properties of `Comment` as keys
      *
+     * * **PATCH:**
+     *     * `/comments/:id`         modifies the element with the given ID. Payload is a JSON with the properties of `Comment` that will be modified as keys.
+     *
      * If you need more control over which method to generate and their behavior, see the top-level `crud()` function
      *
      * @returns A request-handling function suitable as a default export in an endpoint.
@@ -1400,6 +1403,7 @@ export type CRUDMethods<
     GET: CRUDMethodSignature<T, E, P>;
     POST: CRUDMethodSignature<T, E, P>;
     PUT: CRUDMethodSignature<T, E, P>;
+    PATCH: CRUDMethodSignature<T, E, P>;
     DELETE: CRUDMethodSignature<T, E, P>;
 };
 
@@ -1497,6 +1501,35 @@ const defaultCrudMethods: CRUDMethods<ChiselEntity, GenericChiselEntityClass> =
             await u.save();
             return createResponse(u, 200);
         },
+        PATCH: async (
+            entity: GenericChiselEntityClass,
+            req: Request,
+            params: CRUDBaseParams,
+            _url: URL,
+            createResponse: CRUDCreateResponse,
+        ) => {
+            const { id } = params;
+            if (!id) {
+                return createResponse(
+                    "PATCH requires item ID in the URL",
+                    400,
+                );
+            }
+            const orig = await entity.findOne({ id });
+            if (!orig) {
+                return createResponse(
+                    "object does not exist, cannot PATCH",
+                    404,
+                );
+            }
+            mergeDeep(
+                orig as unknown as Record<string, unknown>,
+                await req.json(),
+            );
+            await orig.save();
+            return createResponse(orig, 200);
+        },
+
         // Deletes the entity matching params.id (if present) or all entities matching the filter in the `filter` URL parameter. One of the two must be present.
         DELETE: async (
             entity: GenericChiselEntityClass,
