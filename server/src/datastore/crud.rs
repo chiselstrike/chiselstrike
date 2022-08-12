@@ -403,9 +403,9 @@ fn json_to_value(field_type: &Type, value: &serde_json::Value) -> Result<Expr> {
         }};
     }
     let expr_val = match field_type {
-        Type::Entity(ty) => anyhow::bail!(
+        Type::Entity(_) | Type::Array(_) => anyhow::bail!(
             "trying to filter by property of type '{}' which is not supported",
-            ty.name()
+            field_type.name()
         ),
         Type::String => ExprValue::String(convert!(as_str, "string")),
         Type::Float => ExprValue::F64(convert!(as_f64, "float")),
@@ -476,15 +476,15 @@ fn filter_from_param(
     let (property_chain, field_type) = make_property_chain(base_type, &fields, ts)?;
 
     let err_msg = |ty_name| format!("failed to convert filter value '{}' to {}", value, ty_name);
-    let expr_value = match field_type {
-        Type::Entity(ty) => anyhow::bail!(
-            "trying to filter by property '{}' of type '{}' which is not supported",
-            fields.last().unwrap(),
-            ty.name()
-        ),
+    let expr_value = match &field_type {
         Type::String => ExprValue::String(value.to_owned()),
         Type::Float => ExprValue::F64(value.parse::<f64>().with_context(|| err_msg("f64"))?),
         Type::Boolean => ExprValue::Bool(value.parse::<bool>().with_context(|| err_msg("bool"))?),
+        Type::Entity(_) | Type::Array(_) => anyhow::bail!(
+            "trying to filter by property '{}' of type '{}' which is not supported",
+            fields.last().unwrap(),
+            field_type.name()
+        ),
     };
 
     Ok(BinaryExpr::new(operator, property_chain, expr_value.into()).into())
