@@ -8,6 +8,32 @@ function opAsync(opName: string, a?: unknown, b?: unknown): Promise<unknown> {
     return Deno.core.opAsync(opName, a, b);
 }
 
+export enum ActionResult {
+    Allow = 0,
+    Log = 1 << 1,
+    Deny = 1 << 2,
+    Hide = 1 << 3,
+    Skip = 1 << 4,
+    LogDeny = Log | Deny,
+    LogSkip = Log | Skip,
+}
+
+// FIXME: should pass ChiselRequest as well
+export type ActionFunction = (a: unknown, b: ReqContext) => ActionResult;
+
+export type VerbActions = {
+    read?: ActionFunction;
+    create?: ActionFunction;
+    update?: ActionFunction;
+    delete?: ActionFunction;
+};
+
+// FIXME: I wanted VerbActions and ActionFunction to be <T> so we can type check
+// the functions the user writes. However I wasn't able to create this map in that case
+// because there's nowhere to add T, and I also couldn't cast at the call-site because
+// save() doesn't have type information
+const actionMap: Record<string, VerbActions> = {};
+
 /**
  * Acts the same as Object.assign, but performs deep merge instead of a shallow one.
  */
@@ -90,9 +116,21 @@ abstract class Operator<Input, Output> {
         const recordToOutput = (rawRecord: unknown) => {
             return this.recordToOutput(rawRecord);
         };
+        const name = this.modelName();
+	const audit = actionMap[name] as VerbActions;
+	const fn = audit ? audit.read : undefined;
+	// FIXME: extract information from function here, and pass to getRid()
+	// so that we can add restrictions to query.
+	//
+	// Will look like something like (newFn, restrictions) = fn
+	// newFn is whatever is left for runtime
+	//
+	// also FIXME: because Jan wrote crud() in full rust, this doesn't work
+	// for crud(). It's unclear if we should just push newFn as Wasm to the database,
+	// run it here, or whatnot. So for now don't care
         return {
             [Symbol.asyncIterator]: async function* () {
-                const rid = getRid();
+               const rid = getRid();
                 try {
                     while (true) {
                         const properties = await opAsync(
@@ -103,7 +141,38 @@ abstract class Operator<Input, Output> {
                         if (properties === null) {
                             break;
                         }
-                        yield recordToOutput(properties);
+                        const ret = recordToOutput(properties);
+                        let allowed = true;
+                        let doLog = false;
+                        let doYield = true;
+                        let action = ActionResult.Allow;
+                        if (fn) {
+                            action = fn(ret, requestContext);
+                            if ((action & ActionResult.Deny) != 0) {
+                                allowed = false;
+                            }
+                            if ((action & ActionResult.Log) != 0) {
+                                doLog = true;
+                            }
+                            if ((action & ActionResult.Skip) != 0) {
+                                doYield = false;
+                            }
+                        }
+                        if (doLog) {
+                            // FIXME: log into an actual separate table, and expose over __chiselstrike, print action as string
+                            // FIXME: for this to be useful need to log at least object id
+                            console.log(
+                                `${new Date()} ${requestContext.method} ${name}. Action: ${action}`,
+                            );
+                        }
+
+                        if (!allowed) {
+                            throw new Error("403_Unauthorized");
+                        }
+
+                        if (doYield) {
+                            yield ret;
+                        }
                     }
                 } finally {
                     Deno.core.tryClose(rid);
@@ -902,21 +971,62 @@ export class ChiselEntity {
     /** saves the current object into the backend */
     async save() {
         ensureNotGet();
-        type IdsJson = { id: string; children: Record<string, IdsJson> };
-        const jsonIds = await opAsync("op_chisel_store", {
-            name: this.constructor.name,
-            value: this,
-        }, requestContext) as IdsJson;
-        function backfillIds(this_: ChiselEntity, jsonIds: IdsJson) {
-            this_.id = jsonIds.id;
-            for (const [fieldName, value] of Object.entries(jsonIds.children)) {
-                const child = (this_ as unknown as Record<string, unknown>)[
-                    fieldName
-                ];
-                backfillIds(child as ChiselEntity, value);
+        const name = this.constructor.name;
+        const audit = actionMap[name] as VerbActions;
+        // FIXME: detect updates
+        const fn = audit ? audit.create : undefined;
+
+        // FIXME: This will not work well with nested types. But first, arbitrary functions
+        // are easier to execute in typescript. Second, we want to reduce the dependency on
+        // the rust stuff over time. But in this case, do we keep it here?
+        var doLog;
+        let doSave = true;
+        let allowed = true;
+        let action = ActionResult.Allow;
+        if (fn != undefined) {
+            action = fn(this, requestContext);
+            if ((action & ActionResult.Deny) != 0) {
+                doSave = false;
+                allowed = false;
+            }
+            if ((action & ActionResult.Log) != 0) {
+                doLog = true;
+            }
+            if ((action & ActionResult.Skip) != 0) {
+                doSave = false;
             }
         }
-        backfillIds(this, jsonIds);
+
+        if (doSave) {
+            type IdsJson = { id: string; children: Record<string, IdsJson> };
+            const jsonIds = await opAsync("op_chisel_store", {
+                name,
+                value: this,
+            }, requestContext) as IdsJson;
+            function backfillIds(this_: ChiselEntity, jsonIds: IdsJson) {
+                this_.id = jsonIds.id;
+                for (
+                    const [fieldName, value] of Object.entries(jsonIds.children)
+                ) {
+                    const child = (this_ as unknown as Record<string, unknown>)[
+                        fieldName
+                    ];
+                    backfillIds(child as ChiselEntity, value);
+                }
+            }
+            backfillIds(this, jsonIds);
+        }
+
+        if (doLog) {
+            // FIXME: log into an actual separate table, and expose over __chiselstrike, print action as string
+            console.log(
+                `${new Date()} ${requestContext.method} ${name}. Action: ${action}`,
+            );
+        }
+
+        if (!allowed) {
+            throw new Error("403_Unauthorized");
+        }
     }
 
     /** Returns a `ChiselCursor` containing all elements of type T known to ChiselStrike.
@@ -1682,5 +1792,9 @@ export function crud<
         const params = parsePath(url);
         return method(entity, req, params, url, createResponse);
     };
+}
+
+export function Access<T>(c: { new (): T }, actions: VerbActions) {
+    actionMap[c.name] = actions;
 }
 // TODO: END: this should be in another file: crud.ts

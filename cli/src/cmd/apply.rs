@@ -4,7 +4,7 @@ pub mod deno;
 pub mod node;
 
 use crate::chisel::chisel_rpc_client::ChiselRpcClient;
-use crate::chisel::{ChiselApplyRequest, IndexCandidate, PolicyUpdateRequest};
+use crate::chisel::{ChiselApplyRequest, IndexCandidate, PolicyUpdateRequest, TsPolicyRequest};
 use crate::project::{read_manifest, read_to_string, AutoIndex, Module, Optimize};
 use anyhow::{anyhow, Context, Result};
 use serde_json::Value;
@@ -103,7 +103,32 @@ pub(crate) async fn apply(
         deno::apply(&endpoints, &entities, optimize, auto_index).await
     }?;
 
-    for p in policies {
+    let mut ts_policies = vec![];
+    let mut yaml_policies = vec![];
+
+    for pol in policies.into_iter() {
+        let ext = pol.extension().unwrap_or(std::ffi::OsStr::new(""));
+        if ext == "js" || ext == "ts" {
+            ts_policies.push(pol)
+        } else {
+            yaml_policies.push(pol)
+        }
+    }
+
+    let ts_policy = if manifest.modules == Module::Node {
+        node::get_policies(&ts_policies).await
+    } else {
+        panic!("not supported");
+    }?;
+    let ts_policy = ts_policy
+        .into_iter()
+        .map(|x| TsPolicyRequest {
+            file: x.0,
+            code: x.1,
+        })
+        .collect();
+
+    for p in yaml_policies {
         policy_req.push(PolicyUpdateRequest {
             policy_config: read_to_string(p)?,
         });
@@ -149,6 +174,7 @@ pub(crate) async fn apply(
         version,
         version_tag,
         app_name,
+        ts_policy,
     };
 
     // According to the spec

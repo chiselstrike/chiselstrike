@@ -255,6 +255,13 @@ impl RpcService {
         }
         endpoint_paths.sort_unstable();
 
+        let ts_policy = apply_request
+            .ts_policy
+            .iter()
+            .cloned()
+            .map(|x| (x.file, x.code))
+            .collect();
+
         // Do this before any permanent changes to any of the databases. Otherwise
         // we end up with bad code commited to the meta database and will fail to load
         // chiseld next time, as it tries to replenish the endpoints
@@ -508,6 +515,8 @@ or
                     policies.versions.insert(pol_version, policy);
                 })
                 .await;
+
+                deno::compile_policy(ts_policy).await?;
 
                 let runtime = runtime::get();
                 runtime.api.remove_routes(&prefix);

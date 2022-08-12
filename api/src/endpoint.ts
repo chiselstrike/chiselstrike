@@ -105,6 +105,13 @@ export async function importEndpoints(endpoints: [Endpoint]) {
     });
 }
 
+export async function importPolicies(endpoints: [Endpoint]) {
+    await toWorker({
+        cmd: "importPolicies",
+        endpoints,
+    });
+}
+
 export async function activateEndpoint(path: string) {
     await toWorker({
         cmd: "activateEndpoint",

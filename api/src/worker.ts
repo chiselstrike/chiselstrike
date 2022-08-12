@@ -95,6 +95,19 @@ async function importEndpointsImpl(endpoints: [Endpoint]) {
     }
 }
 
+function importPolicies(endpoints: [string]) {
+    handleMsg(() => {
+        return importPoliciesImpl(endpoints);
+    });
+}
+
+async function importPoliciesImpl(endpoints: [string]) {
+    for (const pol of endpoints) {
+   	const url = `file:///${pol}`;
+        await import(url);
+    }
+}
+
 function activateEndpoint(path: string) {
     handleMsg(() => {
         handlers[path] = nextHandlers[path];
@@ -275,6 +288,9 @@ onmessage = function (e) {
             break;
         case "importEndpoints":
             importEndpoints(d.endpoints);
+            break;
+        case "importPolicies":
+            importPolicies(d.endpoints);
             break;
         case "activateEndpoint":
             activateEndpoint(d.path);

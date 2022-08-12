@@ -222,7 +222,20 @@ impl ApiService {
     async fn route(&self, req: Request<hyper::Body>) -> hyper::http::Result<Response<Body>> {
         match self.route_impl(req).await {
             Ok(val) => Ok(val),
-            Err(err) => Self::internal_error(err),
+            Err(err) => {
+                match err.downcast_ref::<deno_core::error::JsError>() {
+                    // unfortunately this is a JSError, rust granularity lost
+                    Some(e) => {
+                        let x = e.message.as_deref().unwrap_or("");
+                        if x.starts_with("403_") {
+                            Self::forbidden(&x[4..])
+                        } else {
+                            Self::internal_error(err)
+                        }
+                    },
+                    _ => Self::internal_error(err)
+                }
+            }
         }
     }
 
@@ -238,7 +251,7 @@ impl ApiService {
             .body(format!("{:?}\n", err).into())
     }
 
-    pub(crate) fn forbidden(err: &str) -> Result<Response<Body>> {
+    pub(crate) fn forbidden(err: &str) -> hyper::http::Result<Response<Body>> {
         Ok(Response::builder()
             .status(StatusCode::FORBIDDEN)
             .body(err.to_string().into())?)
