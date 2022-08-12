@@ -8,6 +8,31 @@ function opAsync(opName: string, a?: unknown, b?: unknown): Promise<unknown> {
     return Deno.core.opAsync(opName, a, b);
 }
 
+export enum ActionResult {
+	Allow = 0,
+	Log = 1 << 1,
+	Deny = 1 << 2,
+	Hide = 1 << 3,
+	LogDeny = Log | Deny
+}
+
+// FIXME: should pass ChiselRequest as well
+export type ActionFunction = (a?: unknown) => ActionResult;
+
+export type VerbActions = {
+    GET?: ActionFunction
+    POST?: ActionFunction
+    PUT?: ActionFunction
+    PATCH?: ActionFunction
+    DELETE?: ActionFunction
+}
+
+// FIXME: I wanted VerbActions and ActionFunction to be <T> so we can type check
+// the functions the user writes. However I wasn't able to create this map in that case
+// because there's nowhere to add T, and I also couldn't cast at the call-site because
+// save() doesn't have type information
+const actionMap : Record<string, VerbActions> = {}
+
 /**
  * Acts the same as Object.assign, but performs deep merge instead of a shallow one.
  */
@@ -894,9 +919,29 @@ export class ChiselEntity {
     /** saves the current object into the backend */
     async save() {
         ensureNotGet();
+	const name = this.constructor.name;
+	const audit = actionMap[name] as VerbActions;
+	console.log(audit)
+	// FIXME: some Javascript nonsense, cannot use requestContext.method
+	const fn = audit ? audit["POST"] : undefined
+	console.log(fn)
+
+	// FIXME: This will not work well with nested types. But first, arbitrary functions
+	// are easier to execute in typescript. Second, we want to reduce the dependency on
+	// the rust stuff over time. But in this case, do we keep it here?
+	var doLog;
+	if (fn != undefined) {
+	   const action = fn(this)
+	   if ((action & ActionResult.Deny) != 0) {
+		throw new Error("throw some better exception")
+	   } else if ((action & ActionResult.Log) != 0) {
+		doLog = true;
+	   }
+	}
+
         type IdsJson = { id: string; children: Record<string, IdsJson> };
         const jsonIds = await opAsync("op_chisel_store", {
-            name: this.constructor.name,
+            name,
             value: this,
         }, requestContext) as IdsJson;
         function backfillIds(this_: ChiselEntity, jsonIds: IdsJson) {
@@ -909,6 +954,11 @@ export class ChiselEntity {
             }
         }
         backfillIds(this, jsonIds);
+
+	if (doLog) {
+		// FIXME: log into an actual separate table, and expose over __chiselstrike
+		console.log(`${new Date()} ${requestContext.method} ${name}`)
+	}
     }
 
     /** Returns a `ChiselCursor` containing all elements of type T known to ChiselStrike.
@@ -1671,5 +1721,9 @@ export function crud<
         const params = parsePath(url);
         return method(entity, req, params, url, createResponse);
     };
+}
+
+export function Log<T>(c: { new (): T }, actions: VerbActions) {
+	actionMap[c.name] = actions;
 }
 // TODO: END: this should be in another file: crud.ts

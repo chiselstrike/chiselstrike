@@ -13,6 +13,55 @@ use std::io::Write;
 use std::path::PathBuf;
 use tokio::task::{spawn_blocking, JoinHandle};
 
+// FIXME: merge with apply
+pub(crate) async fn get_policies(policies: &[PathBuf]) -> Result<Vec<(String, String)>> {
+    if policies.is_empty() {
+        return Ok(vec![]);
+    }
+
+    let mut ret = vec![];
+
+    let mut bundler_cmd_args = vec![];
+    let bundler_output_dir = tempfile::tempdir()?;
+    let bundler_output_dir_name = bundler_output_dir.path();
+
+    for policy in policies.iter() {
+        let bundler_entry_fname = policy.to_str().unwrap().to_owned();
+        bundler_cmd_args.push(bundler_entry_fname);
+    }
+
+    bundler_cmd_args.extend_from_slice(&[
+        "--bundle".to_string(),
+        "--color=true".to_string(),
+        "--target=esnext".to_string(),
+        "--external:@chiselstrike".to_string(),
+        "--format=esm".to_string(),
+        "--tree-shaking=true".to_string(),
+        "--tsconfig=./tsconfig.json".to_string(),
+        "--platform=node".to_string(),
+    ]);
+
+    bundler_cmd_args.push(format!("--outdir={}", bundler_output_dir_name.display()));
+    let cmd = npx("esbuild", &bundler_cmd_args, None);
+    let res = cmd.await.unwrap()?;
+
+    if !res.status.success() {
+        let out = String::from_utf8(res.stdout).expect("command output not utf-8");
+        let err = String::from_utf8(res.stderr).expect("command output not utf-8");
+        return Err(anyhow!("{}\n{}", out, err))
+            .context("could not bundle policies with esbuild (using node-style modules)");
+    }
+
+    for policy in policies.iter() {
+        let mut bundler_output_file = bundler_output_dir_name.join(policy.file_name().unwrap());
+        bundler_output_file.set_extension("js");
+        let code = read_to_string(bundler_output_file)?;
+
+        ret.push((policy.display().to_string(), code));
+    }
+    Ok(ret)
+}
+
 pub(crate) async fn apply(
     endpoints: &[PathBuf],
     entities: &[String],
