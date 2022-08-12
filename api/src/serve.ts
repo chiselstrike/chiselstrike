@@ -127,9 +127,13 @@ async function handleMiddlewareChain(
     if (middlewares.length == 0) {
         // call the handler function
         const responseLike = await handler.call(undefined, request);
-        // TODO: we probably should not convert strings to JSON
-        return (responseLike instanceof Response)
-            ? responseLike : responseFromJson(responseLike);
+        if (responseLike instanceof Response) {
+            return responseLike;
+        } else if (typeof responseLike === 'string') {
+            return new Response(responseLike);
+        } else {
+            return responseFromJson(responseLike);
+        }
     } else {
         // call the middleware handler, passing a callback that will continue in the middleware chain
         const next = (request: ChiselRequest) =>

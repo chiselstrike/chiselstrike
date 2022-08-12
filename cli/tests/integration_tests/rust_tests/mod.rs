@@ -1,25 +1,20 @@
-use crate::framework::{IntegrationTest, OpMode};
+// SPDX-FileCopyrightText: © 2022 ChiselStrike <info@chiselstrike.com>
 
-pub mod test_bad_filter;
-pub mod test_find_by;
-pub mod test_http_import;
+pub use crate::suite::{TestSuite, TestSpec, ModulesSpec, OptimizeSpec};
 
-pub fn all_tests() -> Vec<IntegrationTest> {
-    vec![
-        IntegrationTest {
-            name: "test_bad_filter",
-            mode: OpMode::Deno,
-            test_fn: &test_bad_filter::test_bad_filter,
-        },
-        IntegrationTest {
-            name: "test_find_by",
-            mode: OpMode::Deno,
-            test_fn: &test_find_by::test_find_by,
-        },
-        IntegrationTest {
-            name: "test_http_import",
-            mode: OpMode::Node,
-            test_fn: &test_http_import::test_http_import,
-        },
-    ]
+mod bad_filter;
+mod find_by;
+mod http_import;
+mod routing;
+
+pub fn suite() -> TestSuite {
+    let mut suite = TestSuite::default();
+    suite.add(TestSpec::deno("bad_filter", &bad_filter::test));
+    suite.add(TestSpec::deno("find_by", &find_by::test).optimize(OptimizeSpec::Both));
+    suite.add(TestSpec::node("http_import", &http_import::test));
+    suite.add(TestSpec::new("routing::basic", ModulesSpec::Both, &routing::basic));
+    suite.add(TestSpec::new("routing::params_in_code", ModulesSpec::Both, &routing::params_in_code));
+    suite.add(TestSpec::new("routing::params_in_files", ModulesSpec::Both, &routing::params_in_files));
+    suite
 }
+

@@ -37,10 +37,13 @@ vergen = { version = "6", default-features = false, features = ["git"] }
 bytes = "1.2.0"
 checked_command = "0.2.4"
 colored = "2.0.0"
+enclose = "1.1"
 fs_extra = "1.2.0"
+futures = "0.3"
 glob = "0.3.0"
 itertools = "0.10.3"
 lit = { git = "https://github.com/chiselstrike/lit", rev = "607b0b9" }
+num_cpus = "1.13"
 port_scanner = "0.1.5"
 rand = { version = "0.8.5", features = ["alloc"] }
 rayon = "1.5.1"

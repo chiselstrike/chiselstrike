@@ -1,10 +1,7 @@
-use crate::framework::TestConfig;
+use crate::framework::prelude::*;
 
-pub async fn test_http_import(config: TestConfig) {
-    let mut ctx = config.setup().await;
-    let (chisel, _chiseld) = ctx.get_chisels();
-
-    chisel.write(
+pub async fn test(c: TestContext) {
+    c.chisel.write(
         "routes/error.ts",
         r##"
         import { foo } from "https://foo.bar";
@@ -15,8 +12,8 @@ pub async fn test_http_import(config: TestConfig) {
     "##,
     );
 
-    let err = chisel.apply().await.expect_err("chisel apply should have failed");
-    err.stderr()
+    let mut output = c.chisel.apply_err().await;
+    output.stderr
         .read("Could not apply the provided code")
         .read("chiseld cannot load module https://foo.bar/ at runtime");
 }

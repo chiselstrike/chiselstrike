@@ -21,7 +21,7 @@ export default new RouteMap()
         .middleware(authMiddleware)
     );
 
-function authMiddleware(request: ChiselRequest, next: MiddlewareNext): Promise<Response> {
+async function authMiddleware(request: ChiselRequest, next: MiddlewareNext): Promise<Response> {
     const authHeader = request.headers.get('ChiselAuth');
     if (authHeader === null) {
         // TODO: use a better error message

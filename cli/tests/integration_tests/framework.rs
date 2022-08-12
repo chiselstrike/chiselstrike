@@ -1,7 +1,8 @@
+use crate::database::Database;
 use anyhow::Result;
-use bytes::BytesMut;
-use checked_command::CheckedCommand;
-use rand::{distributions::Alphanumeric, Rng};
+use bytes::{Bytes, BytesMut};
+use std::{error, fmt, str};
+use std::path::{Path, PathBuf};
 use std::pin::Pin;
 use std::process::{ExitStatus, Stdio};
 use std::sync::Arc;
@@ -10,130 +11,8 @@ use std::{fs, net::SocketAddr};
 use tempdir::TempDir;
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWriteExt};
 
-#[derive(Clone, Debug)]
-pub enum OpMode {
-    Deno,
-    Node,
-}
-
-#[derive(Debug, Clone)]
-pub struct PostgresConfig {
-    host: String,
-    user: Option<String>,
-    password: Option<String>,
-    db_name: String,
-}
-
-impl PostgresConfig {
-    pub fn new(host: String, user: Option<String>, password: Option<String>) -> PostgresConfig {
-        let db_id = rand::thread_rng()
-            .sample_iter(&Alphanumeric)
-            .take(40)
-            .map(char::from)
-            .collect::<String>()
-            .to_lowercase();
-        let db_name = format!("datadb_{db_id}");
-        PostgresConfig {
-            host,
-            user,
-            password,
-            db_name,
-        }
-    }
-}
-
-#[derive(Clone, Debug)]
-pub struct ChiseldConfig {
-    pub public_address: SocketAddr,
-    pub internal_address: SocketAddr,
-    pub rpc_address: SocketAddr,
-}
-
-impl PostgresConfig {
-    fn url_prefix(&self) -> url::Url {
-        let user = self.user.clone().unwrap_or_else(whoami::username);
-        let mut url_prefix = "postgres://".to_string();
-        url_prefix.push_str(&user);
-        if let Some(password) = &self.password {
-            url_prefix.push(':');
-            url_prefix.push_str(password);
-        }
-        url_prefix.push('@');
-        url_prefix.push_str(&self.host);
-
-        url::Url::parse(&url_prefix).expect("failed to generate postgres db url")
-    }
-}
-
-#[derive(Debug, Clone)]
-pub enum DatabaseConfig {
-    Postgres(PostgresConfig),
-    Sqlite,
-}
-
-pub enum Database {
-    Postgres(PostgresDb),
-    Sqlite(SqliteDb),
-}
-
-impl Database {
-    fn url(&self) -> Result<String> {
-        match self {
-            Database::Postgres(db) => db.url(),
-            Database::Sqlite(db) => db.url(),
-        }
-    }
-}
-
-pub struct PostgresDb {
-    config: PostgresConfig,
-}
-
-impl Drop for PostgresDb {
-    fn drop(&mut self) {
-        CheckedCommand::new("psql")
-            .args([
-                self.config.url_prefix().as_str(),
-                "-c",
-                format!("DROP DATABASE {}", &self.config.db_name).as_str(),
-            ])
-            .execute()
-            .expect("failed to drop test database on cleanup");
-    }
-}
-
-impl PostgresDb {
-    fn new(config: PostgresConfig) -> Self {
-        CheckedCommand::new("psql")
-            .args([
-                config.url_prefix().as_str(),
-                "-c",
-                format!("CREATE DATABASE {}", &config.db_name).as_str(),
-            ])
-            .execute()
-            .expect("failed to create testing Postgres database");
-        Self { config }
-    }
-
-    fn url(&self) -> Result<String> {
-        Ok(self
-            .config
-            .url_prefix()
-            .join(&self.config.db_name)?
-            .as_str()
-            .to_string())
-    }
-}
-
-pub struct SqliteDb {
-    tmp_dir: Arc<TempDir>,
-}
-
-impl SqliteDb {
-    fn url(&self) -> Result<String> {
-        let path = self.tmp_dir.path().join("chiseld.db");
-        Ok(format!("sqlite://{}?mode=rwc", path.display()))
-    }
+pub mod prelude {
+    pub use super::TestContext;
 }
 
 pub struct GuardedChild {
@@ -143,7 +22,7 @@ pub struct GuardedChild {
 }
 
 impl GuardedChild {
-    fn new(command: &mut tokio::process::Command) -> Self {
+    pub fn new(command: &mut tokio::process::Command) -> Self {
         let mut child = command
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
@@ -160,82 +39,25 @@ impl GuardedChild {
         }
     }
 
-    async fn wait(&mut self) -> Result<ExitStatus> {
-        Ok(self.child.wait().await?)
+    pub async fn wait(&mut self) -> ExitStatus {
+        self.child.wait().await.expect("wait() on a child process failed")
     }
 
     /// Prints both stdout and stderr to standard output.
     pub async fn show_output(&mut self) {
-        self.stdout.show().await.unwrap();
-        self.stderr.show().await.unwrap();
+        self.stdout.show().await;
+        self.stderr.show().await;
     }
 }
 
-trait ExecutableExt {
-    fn execute(&mut self) -> Result<MixedTestableOutput, ProcessError>;
-}
-
-impl ExecutableExt for checked_command::CheckedCommand {
-    /// Executes the command while mapping the output to MixedTestableOutput and
-    /// error into ProcessError for easier manipulation and debugging.
-    fn execute(&mut self) -> Result<MixedTestableOutput, ProcessError> {
-        self.output()
-            .map(|output| MixedTestableOutput::from_output(&output).unwrap())
-            .map_err(|e| e.into())
-    }
-}
-
-pub struct ProcessError {
-    output: MixedTestableOutput,
-}
-
-impl From<checked_command::Error> for ProcessError {
-    fn from(e: checked_command::Error) -> Self {
-        if let checked_command::Error::Failure(_, Some(output)) = e {
-            Self {
-                output: MixedTestableOutput::from_output(&output).unwrap(),
-            }
-        } else {
-            Self {
-                output: MixedTestableOutput {
-                    stdout: TestableOutput::new(OutputType::Stdout, &vec![]).unwrap(),
-                    stderr: TestableOutput::new(OutputType::Stderr, &vec![]).unwrap(),
-                },
-            }
-        }
-    }
-}
-
-impl std::fmt::Debug for ProcessError {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        write!(
-            f,
-            "ProcessError:\nSTDOUT:\n{}\nSTDERR:\n{}",
-            textwrap::indent(&self.stdout().output, "    "),
-            textwrap::indent(&self.stderr().output, "    ")
-        )
-    }
-}
-
-impl ProcessError {
-    #[allow(dead_code)]
-    pub fn stdout(&self) -> TestableOutput {
-        self.output.stdout.clone()
-    }
-
-    pub fn stderr(&self) -> TestableOutput {
-        self.output.stderr.clone()
-    }
-}
-
-#[derive(PartialEq, Debug, Clone)]
+#[derive(PartialEq, Debug, Clone, Copy)]
 pub enum OutputType {
     Stdout,
     Stderr,
 }
 
 impl OutputType {
-    fn to_str(&self) -> &str {
+    fn to_str(&self) -> &'static str {
         match self {
             OutputType::Stdout => "stdout",
             OutputType::Stderr => "stderr",
@@ -243,51 +65,76 @@ impl OutputType {
     }
 }
 
-#[derive(Debug, Clone)]
-pub struct MixedTestableOutput {
+#[derive(Debug)]
+pub struct ProcessOutput {
+    pub status: ExitStatus,
     pub stdout: TestableOutput,
     pub stderr: TestableOutput,
 }
 
-impl MixedTestableOutput {
-    fn from_output(output: &checked_command::Output) -> Result<Self> {
-        Ok(Self {
-            stdout: TestableOutput::new(OutputType::Stdout, &output.stdout)?,
-            stderr: TestableOutput::new(OutputType::Stderr, &output.stderr)?,
-        })
-    }
-
-    fn from_std_output(output: &std::process::Output) -> Result<Self> {
-        Ok(Self {
-            stdout: TestableOutput::new(OutputType::Stdout, &output.stdout)?,
-            stderr: TestableOutput::new(OutputType::Stderr, &output.stderr)?,
-        })
-    }
-
-    /// Prints both stdout and stderr to standard output.
-    #[allow(dead_code)]
-    pub fn show_output(&self) {
-        self.stdout.show();
-        self.stderr.show();
+impl ProcessOutput {
+    pub fn into_result(self) -> Result<Self, Self> {
+        if self.status.success() {
+            Ok(self)
+        } else {
+            Err(self)
+        }
     }
 }
 
-#[derive(Debug, Clone)]
+impl From<std::process::Output> for ProcessOutput {
+    fn from(output: std::process::Output) -> Self {
+        Self {
+            status: output.status,
+            stdout: TestableOutput::new(OutputType::Stdout, &output.stdout),
+            stderr: TestableOutput::new(OutputType::Stderr, &output.stderr),
+        }
+    }
+}
+
+impl fmt::Display for ProcessOutput {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(
+            f,
+            "ProcessOutput ({}):\nSTDOUT:\n{}\nSTDERR:\n{}",
+            self.status,
+            textwrap::indent(&self.stdout.output, "    "),
+            textwrap::indent(&self.stderr.output, "    ")
+        )
+    }
+}
+
+impl error::Error for ProcessOutput {}
+
+/// Executes the command while mapping the output to ProcessOutput for easier manipulation and
+/// debugging.
+pub fn execute(cmd: &mut std::process::Command) -> Result<ProcessOutput> {
+    Ok(ProcessOutput::from(cmd.output()?).into_result()?)
+}
+
+/// Executes the command while mapping the output to ProcessOutput for easier manipulation and
+/// debugging.
+pub async fn execute_async(cmd: &mut tokio::process::Command) -> Result<ProcessOutput> {
+    Ok(ProcessOutput::from(cmd.output().await?).into_result()?)
+}
+
+#[derive(Debug)]
 pub struct TestableOutput {
-    pub output_type: OutputType,
-    pub output: String,
+    output_type: OutputType,
+    output: String,
     cursor: usize,
 }
 
 impl TestableOutput {
-    fn new(output_type: OutputType, raw_output: &[u8]) -> Result<Self> {
-        let colorless_output = strip_ansi_escapes::strip(raw_output)?;
-        let output = String::from_utf8(colorless_output)?;
-        Ok(Self {
+    fn new(output_type: OutputType, raw_output: &[u8]) -> Self {
+        let colorless_output = strip_ansi_escapes::strip(raw_output)
+            .expect("Could not strip ANSI escapes from output");
+        let output = String::from_utf8_lossy(&colorless_output).into();
+        Self {
             output_type,
             output,
             cursor: 0,
-        })
+        }
     }
 
     /// Tries to find `pattern` in the output starting from the last successfully read
@@ -323,7 +170,6 @@ impl TestableOutput {
 }
 
 pub struct AsyncTestableOutput {
-    #[allow(dead_code)]
     pub output_type: OutputType,
     async_output: Pin<Box<dyn AsyncRead + Send>>,
     pub raw_output: BytesMut,
@@ -404,251 +250,202 @@ impl AsyncTestableOutput {
 
     /// Prints all of the output so far onto stdout.
     #[allow(dead_code)]
-    pub async fn show(&mut self) -> Result<()> {
+    pub async fn show(&mut self) {
         self.load_to_buffer(Duration::from_secs(1)).await;
 
         let mut stdout = tokio::io::stdout();
-        stdout.write_all(&self.raw_output).await?;
-        stdout.flush().await?;
-        Ok(())
+        stdout.write_all(&self.raw_output).await.unwrap();
+        stdout.flush().await.unwrap();
     }
 }
 
 pub struct Chisel {
-    config: ChiseldConfig,
-    tmp_dir: Arc<TempDir>,
-    client: reqwest::Client,
+    pub rpc_address: SocketAddr,
+    pub api_address: SocketAddr,
+    pub chisel_path: PathBuf,
+    pub tmp_dir: Arc<TempDir>,
+    pub client: reqwest::Client,
 }
 
 impl Chisel {
-    async fn exec(&self, cmd: &str, args: &[&str]) -> Result<MixedTestableOutput, ProcessError> {
-        let rpc_url = format!("http://{}", self.config.rpc_address);
-        let chisel_path = bin_dir().join("chisel").to_str().unwrap().to_string();
+    /// Runs a `chisel` subcommand.
+    pub async fn exec(&self, cmd: &str, args: &[&str]) -> Result<ProcessOutput, ProcessOutput> {
+        let rpc_url = format!("http://{}", self.rpc_address);
         let args = [&["--rpc-addr", &rpc_url, cmd], args].concat();
 
-        let output = tokio::process::Command::new(chisel_path)
+        let output = tokio::process::Command::new(&self.chisel_path)
             .args(args)
             .current_dir(&*self.tmp_dir)
             .output()
             .await
             .expect(&format!("could not execute `chisel {}`", cmd));
-
-        let mto = MixedTestableOutput::from_std_output(&output).unwrap();
-        if output.status.success() {
-            Ok(mto)
-        } else {
-            Err(ProcessError { output: mto })
-        }
+        ProcessOutput::from(output).into_result()
     }
 
-    /// Runs chisel apply
-    pub async fn apply(&self) -> Result<MixedTestableOutput, ProcessError> {
+    /// Runs `chisel apply`.
+    pub async fn apply(&self) -> Result<ProcessOutput, ProcessOutput> {
         self.exec("apply", &[]).await
     }
 
-    /// Runs chisel wait awaiting the readiness of chiseld service
-    pub async fn wait(&self) -> Result<MixedTestableOutput, ProcessError> {
+    /// Runs `chisel apply` and asserts that it succeeds.
+    pub async fn apply_ok(&self) -> ProcessOutput {
+        self.apply().await.expect("chisel apply failed")
+    }
+
+    /// Runs `chisel apply` and asserts that it fails.
+    pub async fn apply_err(&self) -> ProcessOutput {
+        self.apply().await.expect_err("chisel apply succeeded, but it should have failed")
+    }
+
+    /// Runs `chisel wait` awaiting the readiness of chiseld service
+    pub async fn wait(&self) -> Result<ProcessOutput, ProcessOutput> {
         self.exec("wait", &[]).await
     }
 
-    /// Writes given text (probably code) into a file on given relative `path`
+    /// Writes given `text` (probably code) into a file on given relative `path`
     /// in ChiselStrike project.
-    pub fn write(&self, path: &str, data: &str) {
+    pub fn write(&self, path: &str, text: &str) {
         let full_path = self.tmp_dir.path().join(path);
-        fs::write(full_path, data).expect(&format!("Unable to write to {:?}", path));
+        fs::create_dir_all(full_path.parent().unwrap())
+            .expect(&format!("Unable to create directory for {:?}", path));
+        fs::write(full_path, text)
+            .expect(&format!("Unable to write to {:?}", path));
     }
 
     /// Copies given `file` to a relative directory path `to` inside ChiselStrike project.
     pub fn copy_to_dir<P, Q>(&self, from: P, to: Q) -> u64
     where
-        P: AsRef<std::path::Path> + std::fmt::Debug,
-        Q: AsRef<std::path::Path> + std::fmt::Debug,
+        P: AsRef<Path> + fmt::Debug,
+        Q: AsRef<Path> + fmt::Debug,
     {
         let options = fs_extra::dir::CopyOptions {
             copy_inside: true,
             ..Default::default()
         };
         fs_extra::copy_items(&[&from], self.tmp_dir.path().join(&to), &options)
-            .unwrap_or_else(|_| panic!("failed to copy '{:?}' to '{:?}'", from, to))
+            .unwrap_or_else(|_| panic!("failed to copy {:?} to {:?}", from, to))
     }
 
     /// Copies given `file` to a relative path `to` inside ChiselStrike project.
     pub fn copy_and_rename<P, Q>(&self, from: P, to: Q) -> u64
     where
-        P: AsRef<std::path::Path> + std::fmt::Debug,
-        Q: AsRef<std::path::Path> + std::fmt::Debug,
+        P: AsRef<Path> + fmt::Debug,
+        Q: AsRef<Path> + fmt::Debug,
     {
         std::fs::copy(&from, self.tmp_dir.path().join(&to))
-            .unwrap_or_else(|_| panic!("failed to copy '{:?}' to '{:?}'", from, to))
+            .unwrap_or_else(|_| panic!("failed to copy {:?} to {:?}", from, to))
     }
 
-    /// Posts given `data` to an `url` of a running ChielStrike service.
-    pub async fn post(&self, url: &str, data: serde_json::Value) -> Result<reqwest::Response> {
-        let url = url::Url::parse(&format!("http://{}", self.config.public_address))
+    /// Sends a HTTP request to a relative `url` on the running `chiseld`, using the given request
+    /// `method` and `body`. Does not check that the response is successful. Panics if there was an error while
+    /// handling the request.
+    pub async fn request<B>(&self, method: reqwest::Method, url: &str, body: B) -> reqwest::Response 
+        where B: Into<reqwest::Body>
+    {
+        let full_url = url::Url::parse(&format!("http://{}", self.api_address))
             .unwrap()
             .join(url)
             .unwrap();
-        let resp = self
-            .client
-            .post(url.as_str())
-            .body(data.to_string())
+        self.client.request(method.clone(), full_url)
+            .body(body)
             .timeout(core::time::Duration::from_secs(5))
             .send()
-            .await?
-            .error_for_status()?;
-        Ok(resp)
+            .await
+            .unwrap_or_else(|e| panic!("HTTP error in {} {}: {}", method, url, e))
     }
 
-    /// Posts given `data` to an `url` of a running ChielStrike service and unwraps the
-    /// response as text.
-    pub async fn post_text(&self, url: &str, data: serde_json::Value) -> String {
-        self.post(url, data).await.unwrap().text().await.unwrap()
-    }
-}
-
-fn bin_dir() -> std::path::PathBuf {
-    let mut path = std::env::current_exe().unwrap();
-    path.pop();
-    path.pop();
-    path
-}
-
-fn repo_dir() -> std::path::PathBuf {
-    let mut path = bin_dir();
-    path.pop();
-    path.pop();
-    path
-}
-
-fn chiseld() -> String {
-    bin_dir().join("chiseld").to_str().unwrap().to_string()
-}
-
-async fn setup_chiseld(config: &TestConfig) -> Result<(Database, GuardedChild, Chisel)> {
-    let tmp_dir = Arc::new(TempDir::new("chiseld_test")?);
-
-    let chisel = Chisel {
-        config: config.chiseld_config.clone(),
-        tmp_dir: tmp_dir.clone(),
-        client: reqwest::Client::new(),
-    };
-
-    let optimize_str = format!("{}", config.optimize);
-
-    match config.mode {
-        OpMode::Deno => {
-            chisel
-                .exec(
-                    "init",
-                    &[
-                        "--no-examples",
-                        "--optimize",
-                        &optimize_str,
-                        "--auto-index",
-                        &optimize_str,
-                    ],
-                )
-                .await
-                .expect("chisel init failed");
-        }
-        OpMode::Node => {
-            let create_app = repo_dir()
-                .join("packages/create-chiselstrike-app/dist/index.js")
-                .to_str()
-                .unwrap()
-                .to_string();
-
-            CheckedCommand::new("node")
-                .args([&create_app, "--chisel-version", "latest", "./"])
-                .current_dir(&*tmp_dir)
-                .execute()
-                .expect("failed to init chisel project in node mode");
+    /// Same as `request()`, but reads the response status and body as bytes.
+    pub async fn request_body<B>(&self, method: reqwest::Method, url: &str, body: B) -> (u16, Bytes)
+        where B: Into<reqwest::Body>
+    {
+        let response = self.request(method.clone(), url, body).await;
+        let status = response.status().as_u16();
+        match response.bytes().await {
+            Ok(response_body) => (status, response_body),
+            Err(err) => panic!("HTTP error in {} {} while reading response: {}", method, url, err),
         }
     }
 
-    let db: Database = match config.db_config.clone() {
-        DatabaseConfig::Postgres(config) => Database::Postgres(PostgresDb::new(config)),
-        DatabaseConfig::Sqlite => Database::Sqlite(SqliteDb { tmp_dir }),
-    };
-
-    let mut chiseld = GuardedChild::new(tokio::process::Command::new(chiseld()).args([
-        "--webui",
-        "--db-uri",
-        db.url()?.as_str(),
-        "--api-listen-addr",
-        &config.chiseld_config.public_address.to_string(),
-        "--internal-routes-listen-addr",
-        &config.chiseld_config.internal_address.to_string(),
-        "--rpc-listen-addr",
-        &config.chiseld_config.rpc_address.to_string(),
-    ]));
-
-    tokio::select! {
-        res = chiseld.wait() => {
-            let exit_status = res.expect("could not wait() for chiseld");
-            chiseld.show_output().await;
-            panic!("chiseld prematurely exited with {}", exit_status);
-        },
-        res = chisel.wait() => {
-            res.expect("failed to start up chiseld");
-        },
+    /// Same as `request()`, but returns the response body as text
+    pub async fn request_text<B>(&self, method: reqwest::Method, url: &str, body: B) -> String
+        where B: Into<reqwest::Body>
+    {
+        let (status, response_body) = self.request_body(method.clone(), url, body).await;
+        match str::from_utf8(&response_body) {
+            Ok(text) => text.into(),
+            Err(err) => panic!(
+                "HTTP response for {} {} is not UTF-8: {}\nResponse status {}, body {:?}",
+                method, url, err, status, response_body
+            ),
+        }
     }
 
-    Ok((db, chiseld, chisel))
-}
-
-#[derive(Clone, Debug)]
-pub struct TestConfig {
-    pub mode: OpMode,
-    pub db_config: DatabaseConfig,
-    pub optimize: bool,
-    pub chiseld_config: ChiseldConfig,
-}
-
-impl TestConfig {
-    pub async fn setup(self) -> TestContext {
-        let (db, chiseld, chisel) = setup_chiseld(&self).await.expect("failed to setup chiseld");
-        TestContext {
-            mode: self.mode,
-            chiseld,
-            chisel,
-            _db: db,
+    /// Same as `request()`, but returns the response body as JSON.
+    pub async fn request_json<B>(&self, method: reqwest::Method, url: &str, body: B) -> serde_json::Value
+        where B: Into<reqwest::Body>
+    {
+        let (status, response_body) = self.request_body(method.clone(), url, body).await;
+        match serde_json::from_slice(&response_body) {
+            Ok(json) => json,
+            Err(err) => panic!(
+                "HTTP response for {} {} is not JSON: {}\nResponse status {}, body {:?}",
+                method, url, err, status, response_body,
+            ),
         }
+    }
+
+    /// Same as `request()`, but returns the response status.
+    pub async fn request_status<B>(&self, method: reqwest::Method, url: &str, body: B) -> u16
+        where B: Into<reqwest::Body>
+    {
+        self.request(method, url, body).await.status().as_u16()
+    }
+
+    /*
+    /// Same as `request()`, but sends GET with no request body.
+    pub async fn get(&self, url: &str) -> reqwest::Response {
+        self.request(reqwest::Method::GET, url, "").await
+    }
+    */
+
+    /// Same as `request_text()`, but sends GET with no request body.
+    pub async fn get_text(&self, url: &str) -> String {
+        self.request_text(reqwest::Method::GET, url, "").await
+    }
+
+    /// Same as `request_json()`, but sends GET with no request body.
+    pub async fn get_json(&self, url: &str) -> serde_json::Value {
+        self.request_json(reqwest::Method::GET, url, "").await
+    }
+
+    /// Same as `request_status()`, but sends GET with no request body.
+    pub async fn get_status(&self, url: &str) -> u16 {
+        self.request_status(reqwest::Method::GET, url, "").await
+    }
+
+
+
+    /// Same as `request()`, but sends POST with JSON request payload.
+    pub async fn post_json(&self, url: &str, data: serde_json::Value) -> reqwest::Response {
+        self.request(reqwest::Method::POST, url, serde_json::to_string(&data).unwrap()).await
+    }
+
+    /// Same as `post_json()`, but asserts that the response was a success.
+    pub async fn post_json_ok(&self, url: &str, data: serde_json::Value) {
+         self.post_json(url, data).await.error_for_status()
+            .unwrap_or_else(|e| panic!("HTTP error response in POST {}: {}", url, e));
+    }
+
+    /// Same as `request_text()`, but sends POST with JSON request payload.
+    pub async fn post_json_text(&self, url: &str, data: serde_json::Value) -> String {
+        self.request_text(reqwest::Method::POST, url, serde_json::to_string(&data).unwrap()).await
     }
 }
 
 pub struct TestContext {
-    pub mode: OpMode,
     pub chiseld: GuardedChild,
     pub chisel: Chisel,
     // Note: The Database must come after chiseld to ensure that chiseld is dropped and terminated
     // before we try to drop the database.
-    _db: Database,
-}
-
-impl TestContext {
-    pub fn get_chisels(&mut self) -> (&mut Chisel, &mut GuardedChild) {
-        (&mut self.chisel, &mut self.chiseld)
-    }
-}
-
-use futures::future::BoxFuture;
-pub trait TestFn {
-    fn call(&self, args: TestConfig) -> BoxFuture<'static, ()>;
-}
-
-impl<T, F> TestFn for T
-where
-    T: Fn(TestConfig) -> F,
-    F: std::future::Future<Output = ()> + 'static + std::marker::Send,
-{
-    fn call(&self, config: TestConfig) -> BoxFuture<'static, ()> {
-        Box::pin(self(config))
-    }
-}
-
-pub struct IntegrationTest {
-    pub name: &'static str,
-    pub mode: OpMode,
-    pub test_fn: &'static (dyn TestFn + Sync),
+    pub _db: Database,
 }

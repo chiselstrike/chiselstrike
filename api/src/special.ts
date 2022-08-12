@@ -10,7 +10,7 @@ type VersionInfo = {
 const versionInfo: VersionInfo = Deno.core.opSync('op_chisel_get_version_info');
 
 export function specialBefore(routeMap: RouteMap) {
-    function handleSwagger(): Promise<Response> {
+    async function handleSwagger(): Promise<Response> {
         const paths: Record<string, unknown> = {};
         for (const route of routeMap.routes) {
             paths[route.pathPattern] = {};

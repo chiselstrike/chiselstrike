@@ -75,7 +75,7 @@ export type Route = {
     middlewares: Middleware[],
 };
 export type Handler = (req: ChiselRequest) => ResponseLike | Promise<ResponseLike>;
-export type ResponseLike = Response | unknown;
+export type ResponseLike = Response | string | unknown;
 
 export type RouteMapLike =
     | RouteMap

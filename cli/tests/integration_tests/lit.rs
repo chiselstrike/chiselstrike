@@ -7,12 +7,11 @@ use anyhow::{anyhow, Result};
 use rayon::prelude::*;
 use std::collections::HashMap;
 use std::env;
-use std::path::Path;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 
-pub(crate) fn run_tests(opt: Opt) -> bool {
-    if opt.optimize.unwrap_or(true) && !run_tests_inner(opt.clone(), true) {
+pub(crate) fn run_tests(opt: &Opt) -> bool {
+    if opt.optimize.unwrap_or(true) && !run_tests_inner(opt, true) {
         return false;
     }
     if !opt.optimize.unwrap_or(false) && !run_tests_inner(opt, false) {
@@ -25,7 +24,7 @@ fn chisel() -> String {
     bin_dir().join("chisel").to_str().unwrap().to_string()
 }
 
-fn run_tests_inner(opt: Opt, optimize: bool) -> bool {
+fn run_tests_inner(opt: &Opt, optimize: bool) -> bool {
     if optimize {
         eprintln!("Running tests with optimization");
     } else {
@@ -50,10 +49,10 @@ fn run_tests_inner(opt: Opt, optimize: bool) -> bool {
 
     env::set_var("OPTIMIZE", format!("{}", optimize));
 
-    let database_user = opt.database_user.unwrap_or_else(whoami::username);
+    let database_user = opt.database_user.clone().unwrap_or_else(whoami::username);
     let mut database_url_prefix = "postgres://".to_string();
     database_url_prefix.push_str(&database_user);
-    if let Some(database_password) = opt.database_password {
+    if let Some(database_password) = opt.database_password.clone() {
         database_url_prefix.push(':');
         database_url_prefix.push_str(&database_password);
     }
@@ -61,17 +60,24 @@ fn run_tests_inner(opt: Opt, optimize: bool) -> bool {
     database_url_prefix.push_str(&opt.database_host);
     env::set_var("DATABASE_URL_PREFIX", &database_url_prefix);
 
-    let lit_files = if let Some(test_file) = opt.test {
-        let path = Path::new("tests/integration_tests/lit_tests").join(test_file);
-        vec![std::fs::canonicalize(path).unwrap()]
-    } else {
-        let deno_lits = glob::glob("tests/integration_tests/lit_tests/**/*.deno").unwrap();
-        let node_lits = glob::glob("tests/integration_tests/lit_tests/**/*.node").unwrap();
-        deno_lits
-            .chain(node_lits)
-            .map(|path| std::fs::canonicalize(path.unwrap()).unwrap())
-            .collect()
-    };
+    let deno_lits = glob::glob("tests/integration_tests/lit_tests/**/*.deno").unwrap();
+    let node_lits = glob::glob("tests/integration_tests/lit_tests/**/*.node").unwrap();
+    let mut lit_files = deno_lits
+        .chain(node_lits)
+        .map(|path| std::fs::canonicalize(path.unwrap()).unwrap())
+        .collect::<Vec<_>>();
+
+    if let Some(name_regex) = opt.test.as_ref() {
+        lit_files = lit_files
+            .into_iter()
+            .filter(|path| name_regex.is_match(path.to_str().unwrap()))
+            .collect();
+    }
+
+    if lit_files.is_empty() {
+        println!("No lit files selected, skipping lit");
+        return true
+    }
 
     let event_handler = Arc::new(Mutex::new(lit::event_handler::Default::default()));
     let passed = Arc::new(AtomicBool::new(true));
