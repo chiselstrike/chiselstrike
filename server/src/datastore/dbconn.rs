@@ -4,6 +4,7 @@ use anyhow::Context;
 use anyhow::Result;
 use sea_query::{PostgresQueryBuilder, SchemaBuilder, SqliteQueryBuilder};
 use sqlx::any::{AnyConnectOptions, AnyKind, AnyPool, AnyPoolOptions};
+use sqlx::Executor;
 use std::str::FromStr;
 
 // FIXME: Sqlite's Anykind does not implement Copy / Clone. It got merged
@@ -43,8 +44,17 @@ pub(crate) struct DbConnection {
 impl DbConnection {
     pub(crate) async fn connect(uri: &str, nr_conn: usize) -> Result<Self> {
         let opts = AnyConnectOptions::from_str(uri)?;
+        let kind: Kind = opts.kind().into();
         let pool = AnyPoolOptions::new()
             .max_connections(nr_conn as _)
+            .after_connect(move |conn, _meta| {
+                Box::pin(async move {
+                    if matches!(kind, Kind::Sqlite) {
+                        conn.execute("PRAGMA journal_mode=WAL;").await?;
+                    }
+                    Ok(())
+                })
+            })
             .connect(uri)
             .await
             .with_context(|| format!("failed to connect to {}", uri))?;
@@ -52,7 +62,7 @@ impl DbConnection {
         let conn_uri = uri.to_owned();
 
         Ok(Self {
-            kind: opts.kind().into(),
+            kind,
             pool,
             conn_uri,
         })
