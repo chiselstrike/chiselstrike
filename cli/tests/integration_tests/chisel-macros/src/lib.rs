@@ -63,7 +63,7 @@ pub fn test(args: TokenStream, input: TokenStream) -> TokenStream {
     quote::quote! {
         ::inventory::submit! {
             crate::suite::TestSpec {
-                name: #fun_name_str,
+                name: concat!(module_path!(), "::", #fun_name_str),
                 modules: crate::suite::ModulesSpec::#modules,
                 optimize: crate::suite::OptimizeSpec::#optimize,
                 test_fn: &#fun_name,
