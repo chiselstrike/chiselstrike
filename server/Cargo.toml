@@ -44,7 +44,7 @@ serde_derive = "1.0.137"
 serde_json = "1.0.81"
 sha2 = "0.10.2"
 socket2 = { version = "0.3.18", features = ["unix", "reuseport"] }
-sqlx = { version = "0.6.0", features = [
+sqlx = { version = "0.6.1", features = [
     "any",
     "postgres",
     "sqlite",
