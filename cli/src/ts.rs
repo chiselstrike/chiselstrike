@@ -35,6 +35,7 @@ impl fmt::Display for TypeEnum {
             TypeEnum::String(_) => "string".to_string(),
             TypeEnum::Number(_) => "number".to_string(),
             TypeEnum::Bool(_) => "bool".to_string(),
+            TypeEnum::Date(_) => "Date".to_string(),
             TypeEnum::Entity(name) => name.to_string(),
         };
         write!(f, "{s}")
@@ -75,7 +76,11 @@ fn map_type(handler: &Handler, x: &TsType) -> Result<TypeEnum> {
         TsType::TsTypeRef(tr) => match &tr.type_name {
             TsEntityName::Ident(id) => {
                 let ident_name = ident_to_string(id);
-                Ok(TypeEnum::Entity(ident_name))
+                if ident_name == "Date" {
+                    Ok(TypeEnum::Date(true))
+                } else {
+                    Ok(TypeEnum::Entity(ident_name))
+                }
             }
             TsEntityName::TsQualifiedName(_) => Err(anyhow!("qualified names are not supported")),
         },

@@ -47,6 +47,7 @@ message TypeMsg {
     bool number = 2;
     bool bool = 3;
     string entity = 4;
+    bool date = 5;
   };
 }
 

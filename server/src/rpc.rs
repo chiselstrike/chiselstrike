@@ -599,7 +599,9 @@ impl FieldDefinition {
 impl TypeEnum {
     fn is_builtin(&self, ts: &TypeSystem) -> bool {
         match self {
-            TypeEnum::String(_) | TypeEnum::Number(_) | TypeEnum::Bool(_) => true,
+            TypeEnum::String(_) | TypeEnum::Number(_) | TypeEnum::Bool(_) | TypeEnum::Date(_) => {
+                true
+            }
             TypeEnum::Entity(name) => ts.lookup_builtin_type(name).is_ok(),
         }
     }
@@ -609,6 +611,7 @@ impl TypeEnum {
             TypeEnum::String(_) => Type::String,
             TypeEnum::Number(_) => Type::Float,
             TypeEnum::Bool(_) => Type::Boolean,
+            TypeEnum::Date(_) => Type::Date,
             TypeEnum::Entity(name) => ts.lookup_builtin_type(name)?,
         };
         Ok(ty)
@@ -621,6 +624,7 @@ impl From<Type> for TypeMsg {
             Type::Float => TypeEnum::Number(true),
             Type::String => TypeEnum::String(true),
             Type::Boolean => TypeEnum::Bool(true),
+            Type::Date => TypeEnum::Date(true),
             Type::Entity(entity) => TypeEnum::Entity(entity.name().to_owned()),
         };
         TypeMsg {

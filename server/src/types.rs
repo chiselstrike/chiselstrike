@@ -108,6 +108,7 @@ impl Default for TypeSystem {
         ts.builtin_types.insert("string".into(), Type::String);
         ts.builtin_types.insert("number".into(), Type::Float);
         ts.builtin_types.insert("boolean".into(), Type::Boolean);
+        ts.builtin_types.insert("Date".into(), Type::Date);
         ts.add_auth_entity(
             AUTH_USER_NAME,
             vec![
@@ -489,7 +490,7 @@ impl TypeSystem {
 
     pub(crate) fn get(&self, ty: &TypeId) -> Result<Type, TypeSystemError> {
         match ty {
-            TypeId::String | TypeId::Float | TypeId::Boolean | TypeId::Id => {
+            TypeId::String | TypeId::Float | TypeId::Boolean | TypeId::Id | TypeId::Date => {
                 self.lookup_builtin_type(ty.name())
             }
             TypeId::Entity { name, api_version } => {
@@ -504,6 +505,7 @@ pub(crate) enum Type {
     String,
     Float,
     Boolean,
+    Date,
     Entity(Entity),
 }
 
@@ -513,6 +515,7 @@ impl Type {
             Type::Float => "number",
             Type::String => "string",
             Type::Boolean => "boolean",
+            Type::Date => "Date",
             Type::Entity(ty) => &ty.name,
         }
     }
@@ -694,6 +697,7 @@ pub(crate) enum TypeId {
     String,
     Float,
     Boolean,
+    Date,
     Id,
     Entity { name: String, api_version: String },
 }
@@ -704,6 +708,7 @@ impl TypeId {
             TypeId::Id | TypeId::String => "string",
             TypeId::Float => "number",
             TypeId::Boolean => "boolean",
+            TypeId::Date => "Date",
             TypeId::Entity { ref name, .. } => name,
         }
     }
@@ -715,6 +720,7 @@ impl From<Type> for TypeId {
             Type::String => Self::String,
             Type::Float => Self::Float,
             Type::Boolean => Self::Boolean,
+            Type::Date => Self::Date,
             Type::Entity(e) => Self::Entity {
                 name: e.name().to_string(),
                 api_version: e.api_version.clone(),

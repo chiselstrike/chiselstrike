@@ -148,35 +148,22 @@ import { ChiselEntity, unique } from "@chiselstrike/api"
 
 export class Custom extends ChiselEntity {
     content: string;
-    createdAt: number = Date.now()
-
-    created() : Date {
-        return new Date(this.createdAt)
-    }
+    createdAt: Date = new Date()
 }
 ```
 
-Now, when a new object of the type `Custom` is created, it will have its timestamp automatically inserted. Working
-directly with numbers can be inconvenient, so a helper function `created` can be added as well, that returns a [`Date`](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Date) object.
+Now, when a new object of the type `Custom` is created, it will have its timestamp automatically inserted.
 
 What if we also want to track the update time? First, let's add the property to the model. Adding it as optional will allow us to evolve
-the model automatically. And similar to `createdAt`, we can add a helper function so that we can extract a `Date` type easily:
+the model automatically.
 
 ```typescript title="my-backend/models/Custom.ts"
 import { ChiselEntity, unique } from "@chiselstrike/api"
 
 export class Custom extends ChiselEntity {
     content: string;
-    createdAt: number = Date.now()
-    updatedAt?: number
-
-    created() : Date {
-        return new Date(this.createdAt)
-    }
-
-    updated() : Date {
-        return new Date(this.updatedAt)
-    }
+    createdAt: Date = Date.now()
+    updatedAt?: Date
 }
 ```
 
@@ -192,19 +179,11 @@ import { ChiselEntity, unique } from "@chiselstrike/api"
 
 export class Custom extends ChiselEntity {
     content: string;
-    createdAt: number = Date.now()
-    updatedAt?: number
-
-    created() : Date {
-        return new Date(this.createdAt)
-    }
-
-    updated() : Date {
-        return new Date(this.updatedAt)
-    }
+    createdAt: Date = Date.now()
+    updatedAt?: Date
 
     async save() : Promise<void> {
-        this.updatedAt = Date.now()
+        this.updatedAt = new Date()
         return super.save()
     }
 }

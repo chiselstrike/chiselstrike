@@ -895,10 +895,13 @@ export class ChiselEntity {
     async save() {
         ensureNotGet();
         type IdsJson = { id: string; children: Record<string, IdsJson> };
-        const jsonIds = await opAsync("op_chisel_store", {
+
+        const rid = opSync("op_chisel_store_start", {
             name: this.constructor.name,
             value: this,
-        }, requestContext) as IdsJson;
+        }, requestContext);
+
+        const jsonIds = await opAsync("op_chisel_store", rid) as IdsJson;
         function backfillIds(this_: ChiselEntity, jsonIds: IdsJson) {
             this_.id = jsonIds.id;
             for (const [fieldName, value] of Object.entries(jsonIds.children)) {

@@ -14,9 +14,9 @@ use crate::datastore::MetaService;
 use crate::datastore::QueryEngine;
 use crate::policies::Policies;
 use crate::rcmut::RcMut;
-use crate::types::Type;
 use crate::types::TypeSystem;
 use crate::types::TypeSystemError;
+use crate::types::{Entity, Type, TypeId};
 use crate::vecmap::VecMap;
 use crate::JsonObject;
 use anyhow::{anyhow, Context as AnyhowContext, Result};
@@ -202,6 +202,7 @@ fn build_extensions() -> Vec<Extension> {
         .ops(vec![
             op_format_file_name::decl(),
             op_chisel_read_body::decl(),
+            op_chisel_store_start::decl(),
             op_chisel_store::decl(),
             op_chisel_entity_delete::decl(),
             op_chisel_crud_delete::decl(),
@@ -518,28 +519,90 @@ impl RequestContext<'_> {
     }
 }
 
-#[derive(Deserialize)]
-struct StoreContent {
-    name: String,
-    value: JsonObject,
-}
-
 fn is_auth_path(api_version: &str, path: &str) -> bool {
     api_version == "__chiselstrike" && path.starts_with("/auth/")
 }
 
-#[op]
-async fn op_chisel_store(
-    state: Rc<RefCell<OpState>>,
-    content: StoreContent,
-    c: ChiselRequestContext,
-) -> Result<IdTree> {
-    let type_name = &content.name;
-    let value = &content.value;
+// FIXME: this is wasteful and serialized a new json.
+// The code in add_row will just deserialize it back.
+//
+// However because we depend on the scope to peek into the objects, and the scope
+// has a limited lifetime, it is hard to pass this as-is to add_row, which happens in
+// an async context.
+//
+// It's not impossible and there are a couple of ways to rewrite this. Most of add_row is doing
+// is generating sql statements, and we could generate them here, through helpers, in sync
+// context.
+//
+// If we don't have to pass the transaction to add_row (and instead can pass the
+// TransactionStatic), we may also be able to just build the future here but not .await it,
+// which *may* allow us to pass things with a shorter lifetime?
+fn reserialize<'a>(
+    scope: &mut v8::HandleScope<'a>,
+    obj: v8::Local<v8::Object>,
+    ts: &TypeSystem,
+    ty: &Entity,
+) -> Result<JsonObject> {
+    let mut new_obj = JsonObject::new();
+    for fname in ty.all_fields() {
+        let field: v8::Local<v8::Value> = get_member(obj, scope, &fname.name)?;
+        if field.is_undefined() {
+            continue;
+        }
+        match &fname.type_id {
+            TypeId::String | TypeId::Id => {
+                new_obj.insert(
+                    fname.name.clone(),
+                    serde_json::json!(field.to_rust_string_lossy(scope)),
+                );
+            }
+            TypeId::Float | TypeId::Boolean | TypeId::Date => {
+                new_obj.insert(
+                    fname.name.clone(),
+                    serde_json::json!(field.to_number(scope).unwrap().value()),
+                );
+            }
+            TypeId::Entity { name, api_version } => {
+                let nested_obj = field
+                    .to_object(scope)
+                    .ok_or_else(|| anyhow!("malformed object! expected a nested object"))?;
 
-    let (query_engine, ty) = {
+                let nested_ty = match ts.lookup_type(&name, &api_version) {
+                    Ok(Type::Entity(ty)) => ty,
+                    _ => anyhow::bail!("Cannot save into type {}.", name),
+                };
+
+                let nest = reserialize(scope, nested_obj, ts, &nested_ty)?;
+                new_obj.insert(fname.name.clone(), serde_json::json!(nest));
+            }
+        }
+    }
+    Ok(new_obj)
+}
+
+#[op(v8)]
+fn op_chisel_store_start<'a>(
+    scope: &mut v8::HandleScope<'a>,
+    state: Rc<RefCell<OpState>>,
+    content: serde_v8::Value<'a>,
+    c: ChiselRequestContext,
+) -> Result<ResourceId> {
+    let content = content.v8_value.to_object(scope).unwrap();
+    let name: v8::Local<v8::Value> = get_member(content, scope, "name")?;
+    let type_name = name.to_rust_string_lossy(scope);
+
+    let obj: v8::Local<v8::Value> = get_member(content, scope, "value")?;
+    let obj = obj
+        .to_object(scope)
+        .ok_or_else(|| anyhow!("malformed object! expected a key \"value\", but not found"))?;
+
+    let (ty, new_obj, query_engine, transaction) = {
         let state = state.borrow();
-        let ty = match current_type_system(&state).lookup_type(type_name, &c.api_version) {
+        let ts = current_type_system(&state);
+        let query_engine = query_engine_arc(&state);
+        let transaction = current_transaction(&state);
+
+        let ty = match ts.lookup_type(&type_name, &c.api_version) {
             Ok(Type::Entity(ty)) => ty,
             _ => anyhow::bail!("Cannot save into type {}.", type_name),
         };
@@ -547,21 +610,38 @@ async fn op_chisel_store(
             anyhow::bail!("Cannot save into type {}.", type_name);
         }
 
-        let query_engine = query_engine_arc(&state);
-        (query_engine, ty)
+        let new_obj = reserialize(scope, obj, &ts, &ty)?;
+        (ty, new_obj, query_engine, transaction)
     };
-    let transaction = {
-        let state = state.borrow();
-        current_transaction(&state)
-    };
-    let mut transaction = transaction.lock().await;
 
-    {
-        let state = state.borrow();
-        let ts = current_type_system(&state);
-        query_engine.add_row(&ty, value, Some(transaction.deref_mut()), ts)
-    }
-    .await
+    let st = state.clone();
+    let save = async move {
+        let mut transaction = transaction.lock().await;
+        {
+            let state = state.borrow();
+            let ts = current_type_system(&state);
+            query_engine.add_row(&ty, &new_obj, Some(transaction.deref_mut()), ts)
+        }
+        .await
+    };
+    let task = tokio::task::spawn_local(async move { save.await });
+    let resource = DbSaveResource {
+        task: std::cell::Cell::new(Some(task)),
+        cancel: Default::default(),
+    };
+    let rid = st.borrow_mut().resource_table.add(resource);
+    Ok(rid)
+}
+
+#[op]
+async fn op_chisel_store(state: Rc<RefCell<OpState>>, save_rid: ResourceId) -> Result<IdTree> {
+    let resource = {
+        let rc: Rc<DbSaveResource> = state.borrow().resource_table.get(save_rid)?;
+        rc
+    };
+    let task = resource.task.take().unwrap();
+    let ids = task.await??;
+    Ok(ids)
 }
 
 #[derive(Deserialize)]
@@ -661,6 +741,17 @@ struct QueryStreamResource {
 }
 
 impl Resource for QueryStreamResource {
+    fn close(self: Rc<Self>) {
+        self.cancel.cancel();
+    }
+}
+
+struct DbSaveResource {
+    task: std::cell::Cell<Option<tokio::task::JoinHandle<Result<IdTree>>>>,
+    cancel: CancelHandle,
+}
+
+impl Resource for DbSaveResource {
     fn close(self: Rc<Self>) {
         self.cancel.cancel();
     }
