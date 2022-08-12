@@ -49,7 +49,7 @@ pub fn test(args: TokenStream, input: TokenStream) -> TokenStream {
     quote::quote! {
         inventory::submit! {
             IntegrationTest {
-                name: #fun_name_str,
+                name: concat!(module_path!(), "::", #fun_name_str),
                 mode: #mode,
                 test_fn: &#fun_name,
             }
