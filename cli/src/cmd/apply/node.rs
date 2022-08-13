@@ -30,6 +30,16 @@ pub(crate) async fn apply(
         )),
         TypeChecking::No => None,
     };
+    // ideally we would call this in parallel with the bundle, but npx doesn't like this very much
+    // See #1642
+    if let Some(tsc) = tsc {
+        let tsc_res = tsc.await.unwrap()?;
+        if !tsc_res.status.success() {
+            let out = String::from_utf8(tsc_res.stdout).expect("command output not utf-8");
+            let err = String::from_utf8(tsc_res.stderr).expect("command output not utf-8");
+            anyhow::bail!("{}\n{}", out, err);
+        }
+    }
 
     let cwd = env::current_dir()?;
     let gen_dir = cwd.join(".gen");
@@ -148,14 +158,6 @@ pub(crate) async fn apply(
         }
     }
 
-    if let Some(tsc) = tsc {
-        let tsc_res = tsc.await.unwrap()?;
-        if !tsc_res.status.success() {
-            let out = String::from_utf8(tsc_res.stdout).expect("command output not utf-8");
-            let err = String::from_utf8(tsc_res.stderr).expect("command output not utf-8");
-            anyhow::bail!("{}\n{}", out, err);
-        }
-    }
     Ok((sources, index_candidates))
 }
 
