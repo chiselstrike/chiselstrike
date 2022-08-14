@@ -2,11 +2,13 @@
 
 use crate::prefix_map::PrefixMap;
 use crate::types::ObjectType;
+use crate::JsonObject;
 use anyhow::Result;
+use hyper::HeaderMap;
 use serde_json::{json, Value};
 use std::collections::{HashMap, HashSet};
 use std::path::Path;
-use yaml_rust::YamlLoader;
+use yaml_rust::{Yaml, YamlLoader};
 
 /// Different kinds of policies.
 #[derive(Clone)]
@@ -71,10 +73,69 @@ impl UserAuthorization {
     }
 }
 
+/// Describes secret-based authorization.  An endpoint request will only be allowed if it includes a header
+/// specified in this struct.
+#[derive(Clone, Default, Debug)]
+pub(crate) struct SecretAuthorization {
+    /// A request can access an endpoint if it includes a header required by the longest path prefix.
+    paths: PrefixMap<RequiredHeader>,
+}
+
+impl SecretAuthorization {
+    /// Is a request with these headers allowed to execute the endpoint at this path?
+    pub fn is_allowed(&self, headers: &HeaderMap, secrets: &JsonObject, path: &Path) -> bool {
+        match self.paths.longest_prefix(path) {
+            None => true,
+            Some((
+                _,
+                RequiredHeader {
+                    header_name,
+                    secret_name,
+                },
+            )) => {
+                let secret_value = match secrets.get(secret_name).cloned() {
+                    None => return false, // No expected header value provided => nothing can match.
+                    Some(serde_json::Value::String(s)) => s,
+                    _ => {
+                        warn!("Header auth failed because secret {secret_name} isn't a string");
+                        return false;
+                    }
+                };
+                match headers.get(header_name).map(|v| v.to_str()) {
+                    Some(Ok(header_value)) if header_value == secret_value => true,
+                    Some(Err(e)) => {
+                        warn!("Weird bytes in header {header_name}: {e}");
+                        false
+                    }
+                    _ => false,
+                }
+            }
+        }
+    }
+
+    /// Requires a header for every endpoint under this path.  Longer paths override existing prefixes.  Error if
+    /// this same path has already been added.
+    fn add(&mut self, path: &str, header: RequiredHeader) -> Result<()> {
+        if self.paths.insert(path.into(), header).is_some() {
+            anyhow::bail!("Repeated path in header authorization: {path}");
+        }
+        Ok(())
+    }
+}
+
+/// Describes a header name and expected value.
+#[derive(Clone, Default, Debug)]
+struct RequiredHeader {
+    header_name: String,
+    /// Names a secret (see secrets.rs) whose value must match the header value.
+    secret_name: String,
+}
+
 #[derive(Clone, Default)]
 pub(crate) struct VersionPolicy {
     pub(crate) labels: LabelPolicies,
     pub(crate) user_authorization: UserAuthorization,
+    pub(crate) secret_authorization: SecretAuthorization,
 }
 
 #[derive(Clone, Default)]
@@ -190,6 +251,25 @@ impl VersionPolicy {
                         policies
                             .user_authorization
                             .add(path, regex::Regex::new(users)?)?;
+                    }
+                    let header = &endpoint["mandatory_header"];
+                    match header {
+                        Yaml::BadValue => {}
+                        Yaml::Hash(_) => {
+                            let kv = (&header["name"], &header["value"]);
+                            match kv {
+                                (Yaml::String(name), Yaml::String(value)) => {
+                                    policies.secret_authorization.add(path, RequiredHeader {
+                                        header_name: name.clone(),
+                                        secret_name: value.clone(),
+                                    })?;
+                                }
+                                _ => anyhow::bail!(
+                                    "Header must have string values for keys 'name' and 'value'. Instead got: {header:?}"
+                                ),
+                            }
+                        }
+                        x => anyhow::bail!("Unparsable header: {x:?}"),
                     }
                 }
             }
