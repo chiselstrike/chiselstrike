@@ -1,24 +1,17 @@
-use serde_json::json;
+use crate::framework::prelude::*;
 
-use crate::framework::{IntegrationTest, OpMode, TestConfig};
+#[chisel_macros::test(modules = Deno, optimize = Both)]
+pub async fn test(mut c: TestContext) {
+    c.chisel.copy_to_dir("examples/person.ts", "models");
+    c.chisel.copy_to_dir("examples/find_by.ts", "endpoints");
+    c.chisel
+        .copy_and_rename("examples/store.ts", "endpoints/ins.ts");
 
-#[chisel_macros::test(mode = OpMode::Deno)]
-pub async fn test_find_by(config: TestConfig) {
-    let mut ctx = config.setup().await;
-    let (chisel, chiseld) = ctx.get_chisels();
+    let r = c.chisel.apply_ok().await;
+    r.stdout.peek("Model defined: Person");
 
-    chisel.copy_to_dir("examples/person.ts", "models");
-    chisel.copy_to_dir("examples/find_by.ts", "endpoints");
-    chisel.copy_and_rename("examples/store.ts", "endpoints/ins.ts");
-
-    let r = chisel.apply().await.expect("chisel apply failed");
-    r.stdout
-        .peek("Model defined: Person")
-        .peek("End point defined: /dev/find_by")
-        .peek("End point defined: /dev/ins");
-
-    chisel
-        .post_text(
+    c.chisel
+        .post_json_ok(
             "/dev/ins",
             json!({
                 "first_name":"Glauber",
@@ -29,8 +22,8 @@ pub async fn test_find_by(config: TestConfig) {
             }),
         )
         .await;
-    chisel
-        .post_text(
+    c.chisel
+        .post_json_ok(
             "/dev/ins",
             json!({
                 "first_name":"Jan",
@@ -42,8 +35,9 @@ pub async fn test_find_by(config: TestConfig) {
         )
         .await;
 
-    let resp_txt = chisel
-        .post_text(
+    let resp_txt = c
+        .chisel
+        .post_json_text(
             "/dev/find_by",
             json!({
                 "field_name":"first_name",
@@ -53,8 +47,9 @@ pub async fn test_find_by(config: TestConfig) {
         .await;
     assert_eq!(resp_txt, "Jan Plhak -666 true 10.02 ");
 
-    let resp_txt = chisel
-        .post_text(
+    let resp_txt = c
+        .chisel
+        .post_json_text(
             "/dev/find_by",
             json!({
                 "field_name":"last_name",
@@ -64,8 +59,9 @@ pub async fn test_find_by(config: TestConfig) {
         .await;
     assert_eq!(resp_txt, "Glauber Costa 666 true 10.01 ");
 
-    let resp_txt = chisel
-        .post_text(
+    let resp_txt = c
+        .chisel
+        .post_json_text(
             "/dev/find_by",
             json!({
                 "field_name":"last_name",
@@ -75,8 +71,9 @@ pub async fn test_find_by(config: TestConfig) {
         .await;
     assert_eq!(resp_txt, "");
 
-    let resp_txt = chisel
-        .post_text(
+    let resp_txt = c
+        .chisel
+        .post_json_text(
             "/dev/find_by",
             json!({
                 "field_name":"age",
@@ -86,8 +83,9 @@ pub async fn test_find_by(config: TestConfig) {
         .await;
     assert_eq!(resp_txt, "Jan Plhak -666 true 10.02 ");
 
-    let resp_txt = chisel
-        .post_text(
+    let resp_txt = c
+        .chisel
+        .post_json_text(
             "/dev/find_by",
             json!({
                 "field_name":"human",
@@ -100,8 +98,9 @@ pub async fn test_find_by(config: TestConfig) {
         "Glauber Costa 666 true 10.01 Jan Plhak -666 true 10.02 "
     );
 
-    let resp_txt = chisel
-        .post_text(
+    let resp_txt = c
+        .chisel
+        .post_json_text(
             "/dev/find_by",
             json!({
                 "field_name":"height",
@@ -111,8 +110,9 @@ pub async fn test_find_by(config: TestConfig) {
         .await;
     assert_eq!(resp_txt, "Glauber Costa 666 true 10.01 ");
 
-    let resp_txt = chisel
-        .post_text(
+    let resp_txt = c
+        .chisel
+        .post_json_text(
             "/dev/find_by",
             json!({
                 "field_name":"height",
@@ -124,8 +124,9 @@ pub async fn test_find_by(config: TestConfig) {
         "Glauber Costa 666 true 10.01 Jan Plhak -666 true 10.02 "
     );
 
-    let r = chisel
-        .post(
+    let resp = c
+        .chisel
+        .post_json(
             "/dev/find_by",
             json!({
                 "field_name":"misspelled_field_name",
@@ -133,9 +134,9 @@ pub async fn test_find_by(config: TestConfig) {
             }),
         )
         .await;
-    assert!(r.is_err());
+    assert!(resp.status().is_server_error());
 
-    chiseld
+    c.chiseld
         .stderr
         .read("Error: expression error: entity 'Person' doesn't have field 'misspelled_field_name'")
         .await;

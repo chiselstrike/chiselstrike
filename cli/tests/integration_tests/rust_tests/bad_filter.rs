@@ -1,13 +1,9 @@
-use crate::framework::TestConfig;
-use crate::framework::{IntegrationTest, OpMode};
+use crate::framework::prelude::*;
 
-#[chisel_macros::test(mode = OpMode::Deno)]
-pub async fn test_bad_filter(config: TestConfig) {
-    let mut ctx = config.setup().await;
-    let (chisel, _chiseld) = ctx.get_chisels();
-
-    chisel.copy_to_dir("examples/person.ts", "models");
-    chisel.write(
+#[chisel_macros::test(modules = Deno, optimize = Both)]
+pub async fn test(c: TestContext) {
+    c.chisel.copy_to_dir("examples/person.ts", "models");
+    c.chisel.write(
         "endpoints/query.ts",
         r##"
         import { Person } from "../models/person.ts";
@@ -23,11 +19,8 @@ pub async fn test_bad_filter(config: TestConfig) {
     "##,
     );
 
-    let err = chisel
-        .apply()
-        .await
-        .expect_err("chisel apply should have failed");
-    err.stderr()
+    let mut output = c.chisel.apply_err().await;
+    output.stderr
         .read("endpoints/query.ts:6:53 - error TS2769: No overload matches this call.")
         .read("Argument of type '{ foo: string; }' is not assignable to parameter of type 'Partial<Person>'");
 }
