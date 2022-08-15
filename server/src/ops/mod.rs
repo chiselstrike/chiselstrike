@@ -2,8 +2,8 @@
 
 use crate::version::VersionInfo;
 use crate::worker::WorkerState;
-use anyhow::{Result, bail};
-use deno_core::{v8, serde_v8};
+use anyhow::{bail, Result};
+use deno_core::{serde_v8, v8};
 
 mod datastore;
 mod request;
@@ -52,13 +52,13 @@ fn op_chisel_get_secret<'a>(
         Some(v) => {
             let v = serde_v8::to_v8(scope, v).unwrap();
             serde_v8::from_v8(scope, v).unwrap()
-        },
+        }
         None => {
             // this is necessary to return undefined
             // https://github.com/denoland/deno/issues/14779
             let u = v8::undefined(scope);
             serde_v8::from_v8(scope, u.into()).unwrap()
-        },
+        }
     }
 }
 
@@ -77,4 +77,3 @@ fn op_chisel_get_version_info(state: &mut deno_core::OpState) -> VersionInfo {
 fn op_format_file_name(file_name: String) -> Result<String> {
     Ok(file_name)
 }
-

@@ -1,19 +1,19 @@
 // SPDX-FileCopyrightText: © 2022 ChiselStrike <info@chiselstrike.com>
 
-use crate::ops;
 use crate::api::ApiRequestResponse;
 use crate::datastore::engine::TransactionStatic;
+use crate::ops;
 use crate::server::Server;
 use crate::version::Version;
-use anyhow::{Context as _, Result, bail};
+use anyhow::{bail, Context as _, Result};
 use deno_core::url::Url;
 use futures::ready;
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::future::Future;
-use std::panic;
 use std::iter::once;
 use std::marker::Unpin;
+use std::panic;
 use std::pin::Pin;
 use std::rc::Rc;
 use std::sync::Arc;
@@ -80,9 +80,12 @@ pub async fn spawn(init: WorkerInit) -> Result<WorkerJoinHandle> {
         let _ = task_tx.send(task);
         runtime_handle.block_on(local_set)
     });
-    
+
     let task = TaskHandle(task_rx.await.unwrap());
-    Ok(WorkerJoinHandle { task, thread: Some(thread) })
+    Ok(WorkerJoinHandle {
+        task,
+        thread: Some(thread),
+    })
 }
 
 async fn run(init: WorkerInit) -> Result<()> {
@@ -103,12 +106,8 @@ async fn run(init: WorkerInit) -> Result<()> {
 
     let extensions = vec![ops::extension()];
     let module_loader = Rc::new(loader::ModuleLoader::new(init.modules));
-    let create_web_worker_cb = Arc::new(|_| {
-        panic!("Web workers are not supported")
-    });
-    let web_worker_preload_module_cb = Arc::new(|_| {
-        panic!("Web workers are not supported")
-    });
+    let create_web_worker_cb = Arc::new(|_| panic!("Web workers are not supported"));
+    let web_worker_preload_module_cb = Arc::new(|_| panic!("Web workers are not supported"));
 
     let options = deno_runtime::worker::WorkerOptions {
         format_js_error_fn: None,
@@ -143,12 +142,15 @@ async fn run(init: WorkerInit) -> Result<()> {
     // the `main_url` is given to the Deno `InspectorServer` when registering and is visible in
     // `chrome://inspect`, so it is useful to add version and worker index to the URL in order to
     // distinguish between different targets on the same inspector server
-    main_url.query_pairs_mut()
+    main_url
+        .query_pairs_mut()
         .append_pair("version", &init.version.version_id)
         .append_pair("worker", &init.worker_idx.to_string());
 
     let mut worker = deno_runtime::worker::MainWorker::bootstrap_from_options(
-        main_url.clone(), permissions, options,
+        main_url.clone(),
+        permissions,
+        options,
     );
 
     let worker_state = WorkerState {
@@ -160,11 +162,10 @@ async fn run(init: WorkerInit) -> Result<()> {
     };
     worker.js_runtime.op_state().borrow_mut().put(worker_state);
 
-    worker.execute_main_module(&main_url).await
-        .context(format!(
-            "Error when executing JavaScript for version {:?} in worker {}",
-            init.version.version_id, init.worker_idx
-        ))
+    worker.execute_main_module(&main_url).await.context(format!(
+        "Error when executing JavaScript for version {:?} in worker {}",
+        init.version.version_id, init.worker_idx
+    ))
 }
 
 impl Unpin for WorkerJoinHandle {}
@@ -193,9 +194,7 @@ fn get_error_class_name(e: &anyhow::Error) -> &'static str {
             // friends
             e.downcast_ref::<String>().map(|_| "Error")
         })
-        .or_else(|| {
-            e.downcast_ref::<&'static str>().map(|_| "Error")
-        })
+        .or_else(|| e.downcast_ref::<&'static str>().map(|_| "Error"))
         .unwrap_or_else(|| {
             // when this is printed, please handle the unknown type by adding another
             // `downcast_ref()` check above
@@ -210,7 +209,10 @@ pub fn set_v8_flags(flags: &[String]) -> Result<()> {
         .collect();
     let unrecognized_v8_flags = deno_core::v8_set_flags(v8_flags);
     if unrecognized_v8_flags.len() > 1 {
-        bail!("V8 did not recognize flags: {:?}", &unrecognized_v8_flags[1..])
+        bail!(
+            "V8 did not recognize flags: {:?}",
+            &unrecognized_v8_flags[1..]
+        )
     }
     Ok(())
 }

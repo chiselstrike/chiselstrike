@@ -1,9 +1,9 @@
-use anyhow::{Result, anyhow, bail};
+use anyhow::{anyhow, bail, Result};
+use deno_core::url::Url;
 use futures::FutureExt;
 use std::collections::HashMap;
 use std::pin::Pin;
 use std::sync::Arc;
-use deno_core::url::Url;
 
 /// The loader is used by Deno when V8 resolves and loads modules.
 #[derive(Debug)]
@@ -18,12 +18,7 @@ impl ModuleLoader {
 }
 
 impl deno_core::ModuleLoader for ModuleLoader {
-    fn resolve(
-        &self,
-        specifier: &str,
-        referrer: &str,
-        _is_main: bool
-    ) -> Result<Url> {
+    fn resolve(&self, specifier: &str, referrer: &str, _is_main: bool) -> Result<Url> {
         if specifier == "@chiselstrike/api" {
             return Ok(Url::parse("chisel:///api.ts")?);
         }
@@ -34,7 +29,7 @@ impl deno_core::ModuleLoader for ModuleLoader {
         &self,
         module_specifier: &Url,
         maybe_referrer: Option<Url>,
-        is_dyn_import: bool
+        is_dyn_import: bool,
     ) -> Pin<Box<deno_core::ModuleSourceFuture>> {
         if module_specifier.scheme() == "chisel" {
             let url = module_specifier.clone();
@@ -51,7 +46,11 @@ impl deno_core::ModuleLoader for ModuleLoader {
                 maybe_referrer
                     .map(|url| format!(" (referrer: {})", url))
                     .unwrap_or_default(),
-                if is_dyn_import { " (dynamic import)" } else { "" },
+                if is_dyn_import {
+                    " (dynamic import)"
+                } else {
+                    ""
+                },
             );
             async move { Err(err) }.boxed_local()
         }

@@ -1,8 +1,8 @@
 use anyhow::{ensure, Result};
 use futures_core::ready;
 use reqwest::{Response, Url};
-use std::panic;
 use std::future::Future;
+use std::panic;
 use std::pin::Pin;
 use std::task::{Context, Poll};
 
@@ -54,7 +54,7 @@ impl<T> Future for TaskHandle<T> {
                 } else {
                     panic::resume_unwind(err.into_panic());
                 }
-            },
+            }
         }
     }
 }
@@ -82,7 +82,7 @@ impl<T> Future for CancellableTaskHandle<T> {
                 } else {
                     panic::resume_unwind(err.into_panic());
                 }
-            },
+            }
         }
     }
 }
@@ -92,4 +92,3 @@ impl<T> Drop for CancellableTaskHandle<T> {
         self.0.abort();
     }
 }
-

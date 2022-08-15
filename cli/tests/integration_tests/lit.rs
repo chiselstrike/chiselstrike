@@ -76,7 +76,7 @@ fn run_tests_inner(opt: &Opt, optimize: bool) -> bool {
 
     if lit_files.is_empty() {
         println!("No lit files selected, skipping lit");
-        return true
+        return true;
     }
 
     let event_handler = Arc::new(Mutex::new(lit::event_handler::Default::default()));

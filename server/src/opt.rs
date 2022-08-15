@@ -1,6 +1,6 @@
 // SPDX-FileCopyrightText: © 2022 ChiselStrike <info@chiselstrike.com>
 
-use anyhow::{Result, anyhow};
+use anyhow::{anyhow, Result};
 use serde::{Deserialize, Serialize};
 use std::net::SocketAddr;
 use std::path::{Path, PathBuf};
@@ -74,4 +74,3 @@ impl Opt {
         Self::from_args_with_toml(content).map_err(|e| anyhow!(e.to_string()))
     }
 }
-

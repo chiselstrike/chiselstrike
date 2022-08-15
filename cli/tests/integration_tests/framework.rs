@@ -1,12 +1,12 @@
 use crate::database::Database;
 use anyhow::Result;
 use bytes::{Bytes, BytesMut};
-use std::{error, fmt, str};
 use std::path::{Path, PathBuf};
 use std::pin::Pin;
 use std::process::{ExitStatus, Stdio};
 use std::sync::Arc;
 use std::time::Duration;
+use std::{error, fmt, str};
 use std::{fs, net::SocketAddr};
 use tempdir::TempDir;
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWriteExt};
@@ -43,7 +43,10 @@ impl GuardedChild {
     }
 
     pub async fn wait(&mut self) -> ExitStatus {
-        self.child.wait().await.expect("wait() on a child process failed")
+        self.child
+            .wait()
+            .await
+            .expect("wait() on a child process failed")
     }
 
     /// Prints both stdout and stderr to standard output.
@@ -302,7 +305,9 @@ impl Chisel {
 
     /// Runs `chisel apply` and asserts that it fails.
     pub async fn apply_err(&self) -> ProcessOutput {
-        self.apply().await.expect_err("chisel apply succeeded, but it should have failed")
+        self.apply()
+            .await
+            .expect_err("chisel apply succeeded, but it should have failed")
     }
 
     /// Runs `chisel wait` awaiting the readiness of chiseld service
@@ -316,8 +321,7 @@ impl Chisel {
         let full_path = self.tmp_dir.path().join(path);
         fs::create_dir_all(full_path.parent().unwrap())
             .expect(&format!("Unable to create directory for {:?}", path));
-        fs::write(full_path, text)
-            .expect(&format!("Unable to write to {:?}", path));
+        fs::write(full_path, text).expect(&format!("Unable to write to {:?}", path));
     }
 
     /// Copies given `file` to a relative directory path `to` inside ChiselStrike project.
@@ -347,14 +351,16 @@ impl Chisel {
     /// Sends a HTTP request to a relative `url` on the running `chiseld`, using the given request
     /// `method` and `body`. Does not check that the response is successful. Panics if there was an error while
     /// handling the request.
-    pub async fn request<B>(&self, method: reqwest::Method, url: &str, body: B) -> reqwest::Response 
-        where B: Into<reqwest::Body>
+    pub async fn request<B>(&self, method: reqwest::Method, url: &str, body: B) -> reqwest::Response
+    where
+        B: Into<reqwest::Body>,
     {
         let full_url = url::Url::parse(&format!("http://{}", self.api_address))
             .unwrap()
             .join(url)
             .unwrap();
-        self.client.request(method.clone(), full_url)
+        self.client
+            .request(method.clone(), full_url)
             .body(body)
             .timeout(core::time::Duration::from_secs(5))
             .send()
@@ -364,19 +370,24 @@ impl Chisel {
 
     /// Same as `request()`, but reads the response status and body as bytes.
     pub async fn request_body<B>(&self, method: reqwest::Method, url: &str, body: B) -> (u16, Bytes)
-        where B: Into<reqwest::Body>
+    where
+        B: Into<reqwest::Body>,
     {
         let response = self.request(method.clone(), url, body).await;
         let status = response.status().as_u16();
         match response.bytes().await {
             Ok(response_body) => (status, response_body),
-            Err(err) => panic!("HTTP error in {} {} while reading response: {}", method, url, err),
+            Err(err) => panic!(
+                "HTTP error in {} {} while reading response: {}",
+                method, url, err
+            ),
         }
     }
 
     /// Same as `request()`, but returns the response body as text
     pub async fn request_text<B>(&self, method: reqwest::Method, url: &str, body: B) -> String
-        where B: Into<reqwest::Body>
+    where
+        B: Into<reqwest::Body>,
     {
         let (status, response_body) = self.request_body(method.clone(), url, body).await;
         match str::from_utf8(&response_body) {
@@ -389,8 +400,14 @@ impl Chisel {
     }
 
     /// Same as `request()`, but returns the response body as JSON.
-    pub async fn request_json<B>(&self, method: reqwest::Method, url: &str, body: B) -> serde_json::Value
-        where B: Into<reqwest::Body>
+    pub async fn request_json<B>(
+        &self,
+        method: reqwest::Method,
+        url: &str,
+        body: B,
+    ) -> serde_json::Value
+    where
+        B: Into<reqwest::Body>,
     {
         let (status, response_body) = self.request_body(method.clone(), url, body).await;
         match serde_json::from_slice(&response_body) {
@@ -404,7 +421,8 @@ impl Chisel {
 
     /// Same as `request()`, but returns the response status.
     pub async fn request_status<B>(&self, method: reqwest::Method, url: &str, body: B) -> u16
-        where B: Into<reqwest::Body>
+    where
+        B: Into<reqwest::Body>,
     {
         self.request(method, url, body).await.status().as_u16()
     }
@@ -438,18 +456,30 @@ impl Chisel {
 
     /// Same as `request()`, but sends POST with JSON request payload.
     pub async fn post_json(&self, url: &str, data: serde_json::Value) -> reqwest::Response {
-        self.request(reqwest::Method::POST, url, serde_json::to_string(&data).unwrap()).await
+        self.request(
+            reqwest::Method::POST,
+            url,
+            serde_json::to_string(&data).unwrap(),
+        )
+        .await
     }
 
     /// Same as `post_json()`, but asserts that the response was a success.
     pub async fn post_json_ok(&self, url: &str, data: serde_json::Value) {
-         self.post_json(url, data).await.error_for_status()
+        self.post_json(url, data)
+            .await
+            .error_for_status()
             .unwrap_or_else(|e| panic!("HTTP error response in POST {}: {}", url, e));
     }
 
     /// Same as `request_text()`, but sends POST with JSON request payload.
     pub async fn post_json_text(&self, url: &str, data: serde_json::Value) -> String {
-        self.request_text(reqwest::Method::POST, url, serde_json::to_string(&data).unwrap()).await
+        self.request_text(
+            reqwest::Method::POST,
+            url,
+            serde_json::to_string(&data).unwrap(),
+        )
+        .await
     }
 }
 

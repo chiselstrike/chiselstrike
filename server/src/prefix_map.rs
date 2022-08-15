@@ -35,8 +35,8 @@ impl<T> PrefixMap<T> {
 }
 
 fn is_path_prefix(needle: &str, haystack: &str) -> bool {
-    haystack.starts_with(needle) && 
-        matches!(haystack[needle.len()..].chars().next(), Some('/') | None)
+    haystack.starts_with(needle)
+        && matches!(haystack[needle.len()..].chars().next(), Some('/') | None)
 }
 
 #[cfg(test)]

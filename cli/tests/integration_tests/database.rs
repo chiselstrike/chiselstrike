@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: © 2022 ChiselStrike <info@chiselstrike.com>
 
-use crate::{Opt, DatabaseKind};
 use crate::framework::execute;
+use crate::{DatabaseKind, Opt};
 use rand::{distributions::Alphanumeric, Rng};
 use std::process::Command;
 use std::sync::Arc;
@@ -73,19 +73,17 @@ pub struct PostgresDb {
 
 impl PostgresDb {
     pub fn new(config: PostgresConfig) -> Self {
-        execute(Command::new("psql")
-            .args([
-                config.url_prefix().as_str(),
-                "-c",
-                format!("CREATE DATABASE {}", &config.db_name).as_str(),
-            ])
-        ).expect("failed to create testing Postgres database");
+        execute(Command::new("psql").args([
+            config.url_prefix().as_str(),
+            "-c",
+            format!("CREATE DATABASE {}", &config.db_name).as_str(),
+        ]))
+        .expect("failed to create testing Postgres database");
         Self { config }
     }
 
     pub fn url(&self) -> String {
-        self
-            .config
+        self.config
             .url_prefix()
             .join(&self.config.db_name)
             .unwrap()
@@ -96,13 +94,12 @@ impl PostgresDb {
 
 impl Drop for PostgresDb {
     fn drop(&mut self) {
-        execute(Command::new("psql")
-            .args([
-                self.config.url_prefix().as_str(),
-                "-c",
-                format!("DROP DATABASE {}", &self.config.db_name).as_str(),
-            ])
-        ).expect("failed to drop test database on cleanup");
+        execute(Command::new("psql").args([
+            self.config.url_prefix().as_str(),
+            "-c",
+            format!("DROP DATABASE {}", &self.config.db_name).as_str(),
+        ]))
+        .expect("failed to drop test database on cleanup");
     }
 }
 
@@ -127,4 +124,3 @@ pub fn generate_database_config(opt: &Opt) -> DatabaseConfig {
         )),
     }
 }
-

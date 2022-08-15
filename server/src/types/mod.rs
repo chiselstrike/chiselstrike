@@ -1,9 +1,9 @@
 // SPDX-FileCopyrightText: © 2021 ChiselStrike <info@chiselstrike.com>
 
-use crate::datastore::query::{truncate_identifier, QueryPlan};
-use crate::datastore::QueryEngine;
 pub use self::builtin::BuiltinTypes;
 pub use self::type_system::TypeSystem;
+use crate::datastore::query::{truncate_identifier, QueryPlan};
+use crate::datastore::QueryEngine;
 use std::collections::BTreeMap;
 use std::ops::Deref;
 use std::sync::Arc;
@@ -503,7 +503,11 @@ pub struct NewField<'a> {
 
 impl<'a> NewField<'a> {
     pub fn new(name: &'a str, ty_: Type, version_id: &'a str) -> anyhow::Result<Self> {
-        Ok(Self { name, ty_, version_id })
+        Ok(Self {
+            name,
+            ty_,
+            version_id,
+        })
     }
 }
 
@@ -640,4 +644,3 @@ pub enum TypeSystemError {
     #[error["Error while trying to manipulate types: {0}"]]
     InternalServerError(String),
 }
-

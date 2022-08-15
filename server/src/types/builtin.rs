@@ -1,8 +1,8 @@
 // SPDX-FileCopyrightText: © 2022 ChiselStrike <info@chiselstrike.com>
 
+use super::{Entity, Field, InternalObject, ObjectType, Type, TypeId};
 use crate::auth::{AUTH_ACCOUNT_NAME, AUTH_SESSION_NAME, AUTH_TOKEN_NAME, AUTH_USER_NAME};
 use crate::datastore::QueryEngine;
-use super::{Entity, Field, InternalObject, ObjectType, Type, TypeId};
 use std::collections::HashMap;
 use std::sync::Arc;
 
@@ -87,7 +87,6 @@ impl BuiltinTypes {
     }
 }
 
-
 fn add_auth_entity(
     types: &mut HashMap<String, Type>,
     type_name: &'static str,
@@ -136,4 +135,3 @@ fn optional_number_field(name: &str) -> Field {
         is_unique: false,
     }
 }
-

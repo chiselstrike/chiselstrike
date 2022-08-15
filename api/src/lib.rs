@@ -5,14 +5,20 @@ use std::collections::HashMap;
 
 macro_rules! source_js {
     ($stem:literal) => {
-        ($stem, include_str!(concat!(env!("OUT_DIR"), "/", $stem, ".js")))
-    }
+        (
+            $stem,
+            include_str!(concat!(env!("OUT_DIR"), "/", $stem, ".js")),
+        )
+    };
 }
 
 macro_rules! source_d_ts {
     ($stem:literal) => {
-        ($stem, include_str!(concat!(env!("OUT_DIR"), "/", $stem, ".d.ts")))
-    }
+        (
+            $stem,
+            include_str!(concat!(env!("OUT_DIR"), "/", $stem, ".d.ts")),
+        )
+    };
 }
 
 lazy_static! {
@@ -28,8 +34,9 @@ lazy_static! {
         source_js!("special"),
         source_js!("utils"),
         ("main.js", include_str!("main.js")),
-    ].into_iter().collect();
-
+    ]
+    .into_iter()
+    .collect();
     pub static ref SOURCES_D_TS: HashMap<&'static str, &'static str> = vec![
         source_d_ts!("api"),
         source_d_ts!("chiselstrike_route_map"),
@@ -41,5 +48,7 @@ lazy_static! {
         source_d_ts!("serve"),
         source_d_ts!("special"),
         source_d_ts!("utils"),
-    ].into_iter().collect();
+    ]
+    .into_iter()
+    .collect();
 }

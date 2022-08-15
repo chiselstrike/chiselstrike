@@ -177,7 +177,8 @@ pub fn delete_from_url_query(
     let filter_expr = url_query_to_filter(&base_entity, url_query, c.ts)
         .context("failed to convert crud URL to filter expression")?;
     if filter_expr.is_none() {
-        let delete_all = url_query.iter()
+        let delete_all = url_query
+            .iter()
             .any(|(key, value)| key == "all" && value == "true");
         if !delete_all {
             anyhow::bail!("crud delete requires a filter to be set or `all=true` parameter.")
@@ -213,7 +214,11 @@ impl Query {
     }
 
     /// Parses provided `url_query` and builds a `Query` that can be used to build a `QueryPlan`.
-    fn from_url_query(base_type: &Entity, url_query: &[(String, String)], ts: &TypeSystem) -> Result<Self> {
+    fn from_url_query(
+        base_type: &Entity,
+        url_query: &[(String, String)],
+        ts: &TypeSystem,
+    ) -> Result<Self> {
         let mut q = Query::new();
         for (param_key, value) in url_query.iter() {
             match param_key.as_str() {
@@ -834,7 +839,8 @@ mod tests {
         add_row(qe, &PERSON_TY, &alex, &TYPE_SYSTEM).await;
 
         fn get_url(raw: &serde_json::Value) -> Url {
-            Url::parse("http://localhost").unwrap()
+            Url::parse("http://localhost")
+                .unwrap()
                 .join(raw.as_str().unwrap())
                 .unwrap()
         }
@@ -1001,7 +1007,9 @@ mod tests {
     #[tokio::test]
     async fn test_delete_from_crud_url() {
         let delete_from_url_query = |entity_name: &str, query: &str| {
-            let url_query: Vec<_> = form_urlencoded::parse(query.as_bytes()).into_owned().collect();
+            let url_query: Vec<_> = form_urlencoded::parse(query.as_bytes())
+                .into_owned()
+                .collect();
             delete_from_url_query(
                 &RequestContext {
                     ps: &PolicySystem::default(),
@@ -1056,14 +1064,26 @@ mod tests {
     #[test]
     fn test_make_page_url() {
         fn check(url_path: &str, url_query: &str, cursor: &str, expected: &str) {
-            let url_query: Vec<_> = form_urlencoded::parse(url_query.as_bytes()).into_owned().collect();
+            let url_query: Vec<_> = form_urlencoded::parse(url_query.as_bytes())
+                .into_owned()
+                .collect();
             let actual = make_page_url(url_path, &url_query, cursor);
             assert_eq!(actual.as_str(), expected);
         }
 
         check("/path", "", "abcd", "/path?cursor=abcd");
         check("/path", "really=no", "xyzw", "/path?really=no&cursor=xyzw");
-        check("/path", "really=no&foo=bar", "xyzw", "/path?really=no&foo=bar&cursor=xyzw");
-        check("/longer/url/path", "", "abcd", "/longer/url/path?cursor=abcd");
+        check(
+            "/path",
+            "really=no&foo=bar",
+            "xyzw",
+            "/path?really=no&foo=bar&cursor=xyzw",
+        );
+        check(
+            "/longer/url/path",
+            "",
+            "abcd",
+            "/longer/url/path?cursor=abcd",
+        );
     }
 }

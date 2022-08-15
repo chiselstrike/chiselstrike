@@ -1,15 +1,15 @@
 // SPDX-FileCopyrightText: © 2022 ChiselStrike <info@chiselstrike.com>
 
-use crate::proto::{IndexCandidate, Module};
 use crate::cmd::apply::chiselc_spawn;
 use crate::cmd::apply::parse_indexes;
 use crate::cmd::apply::TypeChecking;
 use crate::project::read_to_string;
-use crate::routes::{FileRouteMap, codegen_route_map};
+use crate::proto::{IndexCandidate, Module};
+use crate::routes::{codegen_route_map, FileRouteMap};
 use anyhow::{anyhow, bail, Context, Result};
-use std::{env, fs};
 use std::ffi::{OsStr, OsString};
 use std::path::Path;
+use std::{env, fs};
 
 pub(crate) async fn apply(
     mut route_map: FileRouteMap,
@@ -34,11 +34,12 @@ pub(crate) async fn apply(
     for route in route_map.routes.iter_mut() {
         // TODO: we need to preprocess all source files with chiselc, not just routes
         if optimize {
-            let route_rel_path = route.file_path.strip_prefix(&cwd)
-                .with_context(|| format!(
+            let route_rel_path = route.file_path.strip_prefix(&cwd).with_context(|| {
+                format!(
                     "Route file {} is not a part of this project",
                     route.file_path.display(),
-                ))?;
+                )
+            })?;
 
             // NOTE: this a horrible hack to make relative imports work
             // it is common that file "routes/books.ts" imports "models/Book.ts" using
@@ -55,14 +56,12 @@ pub(crate) async fn apply(
                     gen_dir.display()
                 )
             })?;
-            fs::create_dir_all(&gen_parent_path)
-                .with_context(|| format!("Could not create directory {}", gen_parent_path.display()))?;
+            fs::create_dir_all(&gen_parent_path).with_context(|| {
+                format!("Could not create directory {}", gen_parent_path.display())
+            })?;
 
-            let chiselc_proc = chiselc_spawn(
-                &route.file_path,
-                &gen_file_path,
-                entities,
-            ).context("Could not start `chiselc`")?;
+            let chiselc_proc = chiselc_spawn(&route.file_path, &gen_file_path, entities)
+                .context("Could not start `chiselc`")?;
 
             // use the chiselc-processed file instead of the original file in the route map
             route.file_path = gen_file_path;
@@ -73,34 +72,42 @@ pub(crate) async fn apply(
         if auto_index {
             let code = read_to_string(route.file_path.clone())
                 .with_context(|| format!("Could not read file {}", route.file_path.display()))?;
-            let mut indexes = parse_indexes(code, entities)
-                .with_context(||
-                    format!("Could not parse auto-indexing information from file {}", route.file_path.display())
-                )?;
+            let mut indexes = parse_indexes(code, entities).with_context(|| {
+                format!(
+                    "Could not parse auto-indexing information from file {}",
+                    route.file_path.display()
+                )
+            })?;
             index_candidates.append(&mut indexes);
         }
     }
 
     for proc in chiselc_procs.into_iter() {
-        let chiselc_output = proc.wait_with_output().await
+        let chiselc_output = proc
+            .wait_with_output()
+            .await
             .context("Could not run chiselc")?;
         ensure_success(chiselc_output).context("chiselc returned errors")?;
     }
 
-    let bundler_input_dir = tempfile::tempdir()
-        .context("Could not create temporary directory for bundler input")?;
-    let bundler_output_dir = tempfile::tempdir()
-        .context("Could not create temporary directory for bundler output")?;
+    let bundler_input_dir =
+        tempfile::tempdir().context("Could not create temporary directory for bundler input")?;
+    let bundler_output_dir =
+        tempfile::tempdir().context("Could not create temporary directory for bundler output")?;
 
     let route_import_fn = |path: &Path| -> Result<String> {
-        path.to_str().map(String::from).context("Path is not valid UTF-8")
+        path.to_str()
+            .map(String::from)
+            .context("Path is not valid UTF-8")
     };
     let route_map_code = codegen_route_map(&route_map, &route_import_fn)
         .context("Could not generate code for file-based routing")?;
 
     let route_map_path = bundler_input_dir.path().join("__route_map.ts");
-    fs::write(&route_map_path, route_map_code)
-        .context(format!("Could not write to file {}", route_map_path.display()))?;
+    fs::write(&route_map_path, route_map_code).context(format!(
+        "Could not write to file {}",
+        route_map_path.display()
+    ))?;
 
     let bundler_args: Vec<OsString> = vec![
         route_map_path.into(),
@@ -120,7 +127,9 @@ pub(crate) async fn apply(
         },
     ];
 
-    let bundler_output = npx("esbuild", &bundler_args)?.wait_with_output().await
+    let bundler_output = npx("esbuild", &bundler_args)?
+        .wait_with_output()
+        .await
         .context("Could not run esbuild")?;
     ensure_success(bundler_output)
         .context("Could not bundle routes with esbuild (using node-style modules)")?;
@@ -132,19 +141,17 @@ pub(crate) async fn apply(
     }];
 
     if let Some(tsc_proc) = tsc_proc {
-        let tsc_output = tsc_proc.wait_with_output().await
+        let tsc_output = tsc_proc
+            .wait_with_output()
+            .await
             .context("Could not run tsc to type-check the code")?;
-        ensure_success(tsc_output)
-            .context("Type-checking with tsc failed")?;
+        ensure_success(tsc_output).context("Type-checking with tsc failed")?;
     }
 
     Ok((modules, index_candidates))
 }
 
-fn npx<A: AsRef<OsStr>>(
-    command: &'static str,
-    args: &[A],
-) -> Result<tokio::process::Child> {
+fn npx<A: AsRef<OsStr>>(command: &'static str, args: &[A]) -> Result<tokio::process::Child> {
     let cmd = tokio::process::Command::new("npx")
         .arg(command)
         .args(args)

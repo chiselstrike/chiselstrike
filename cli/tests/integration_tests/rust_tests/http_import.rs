@@ -13,7 +13,8 @@ pub async fn test(c: TestContext) {
     );
 
     let mut output = c.chisel.apply_err().await;
-    output.stderr
+    output
+        .stderr
         .read("Could not apply the provided code")
         .read("chiseld cannot load module https://foo.bar/ at runtime");
 }

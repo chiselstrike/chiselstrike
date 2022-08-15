@@ -6,11 +6,11 @@ use crate::version::Version;
 use anyhow::{Context, Error, Result};
 use deno_core::serde_v8;
 use enclose::enclose;
-use futures::FutureExt;
 use futures::stream::{FuturesUnordered, TryStreamExt};
+use futures::FutureExt;
 use lazy_static::lazy_static;
 use regex::Regex;
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
 use std::convert::Infallible;
 use std::future::ready;
 use std::net::SocketAddr;
@@ -18,13 +18,14 @@ use std::sync::Arc;
 use tokio::sync::{mpsc, oneshot};
 use utils::TaskHandle;
 
-pub async fn spawn(server: Arc<Server>, listen_addr: String) 
-    -> Result<(Vec<SocketAddr>, TaskHandle<Result<()>>)>
-{
+pub async fn spawn(
+    server: Arc<Server>,
+    listen_addr: String,
+) -> Result<(Vec<SocketAddr>, TaskHandle<Result<()>>)> {
     let servers = FuturesUnordered::new();
     let mut local_addrs = Vec::new();
     for addr in tokio::net::lookup_host(listen_addr).await? {
-        let make_service = hyper::service::make_service_fn(enclose!{(server) move |_conn| {
+        let make_service = hyper::service::make_service_fn(enclose! {(server) move |_conn| {
             let service = hyper::service::service_fn(enclose!{(server) move |request| {
                 handle_request(server.clone(), request).map(Ok::<_, Infallible>)
             }});
@@ -34,14 +35,16 @@ pub async fn spawn(server: Arc<Server>, listen_addr: String)
         // TODO: implement graceful shutdown?
         let incoming = hyper::server::conn::AddrIncoming::bind(&addr)?;
         local_addrs.push(incoming.local_addr());
-        let server = hyper::Server::builder(incoming)
-            .serve(make_service);
+        let server = hyper::Server::builder(incoming).serve(make_service);
 
         servers.push(server);
     }
 
     let task = tokio::task::spawn(async move {
-        servers.try_collect().await.context("Error while serving HTTP API")
+        servers
+            .try_collect()
+            .await
+            .context("Error while serving HTTP API")
     });
     Ok((local_addrs, TaskHandle(task)))
 }
@@ -52,7 +55,8 @@ async fn handle_request(
 ) -> hyper::Response<hyper::Body> {
     let method = request.method().clone();
     let uri = request.uri().clone();
-    let mut response = try_handle_request(server, request).await
+    let mut response = try_handle_request(server, request)
+        .await
         .unwrap_or_else(|err| handle_error(&method, &uri, err));
     add_default_headers(&mut response);
     debug!("{} {} -> {}", method, uri, response.status());
@@ -77,7 +81,8 @@ async fn try_handle_request(
             let version = trunk_version.version;
             let request_tx = trunk_version.request_tx;
             let routing_path = routing_path.into();
-            return handle_version_request(server, version, request_tx, request, routing_path).await;
+            return handle_version_request(server, version, request_tx, request, routing_path)
+                .await;
         }
     }
 
@@ -122,19 +127,27 @@ async fn handle_version_request(
     let req_body = hyper::body::to_bytes(req_body).await?;
 
     // TODO: we don't authenticate the user!!!
-    let user_id: Option<String> = req_parts.headers.get("ChiselUID")
+    let user_id: Option<String> = req_parts
+        .headers
+        .get("ChiselUID")
         .and_then(|value| value.to_str().ok())
         .map(|value| value.into());
 
     let username = auth::get_username_from_id(&server, &version, user_id.as_deref()).await;
-    if !version.policy_system.user_authorization.is_allowed(username.as_deref(), &routing_path) {
+    if !version
+        .policy_system
+        .user_authorization
+        .is_allowed(username.as_deref(), &routing_path)
+    {
         return Ok(handle_forbidden("Unauthorized user"));
     }
 
     let api_request = ApiRequest {
         method: req_parts.method.as_str().into(),
         uri: req_parts.uri.to_string(),
-        headers: req_parts.headers.iter()
+        headers: req_parts
+            .headers
+            .iter()
             .map(|(name, value)| (name.to_string(), value.to_str().unwrap_or("").into()))
             .collect(),
         // TODO: unnecessary copy from `Bytes` to `Vec<u8>`
@@ -144,12 +157,13 @@ async fn handle_version_request(
     };
 
     let (response_tx, response_rx) = oneshot::channel();
-    let _: Result<_, _> = request_tx.send(ApiRequestResponse {
-        request: api_request,
-        response_tx,
-    }).await;
-    let api_response = response_rx.await
-        .context("Request was aborted")?;
+    let _: Result<_, _> = request_tx
+        .send(ApiRequestResponse {
+            request: api_request,
+            response_tx,
+        })
+        .await;
+    let api_response = response_rx.await.context("Request was aborted")?;
 
     // TODO: unnecessary copy from `ZeroCopyBuf` to `Vec<u8>`
     let response_body = hyper::Body::from(api_response.body.to_vec());
@@ -170,12 +184,15 @@ async fn handle_version_request(
 
 fn get_version_path(path: &str) -> Option<(&str, &str)> {
     lazy_static! {
-        static ref REGEX: Regex = Regex::new(r"(?x)
+        static ref REGEX: Regex = Regex::new(
+            r"(?x)
             ^
             /(?P<version_id> [^/]*)
             (?P<routing_path> (/.*)?)
             $
-        ").unwrap();
+        "
+        )
+        .unwrap();
     }
     let captures = REGEX.captures(path)?;
     let version_id = captures.name("version_id").unwrap().as_str();
@@ -232,7 +249,11 @@ fn handle_forbidden(msg: &'static str) -> hyper::Response<hyper::Body> {
         .unwrap()
 }
 
-fn handle_error(method: &hyper::Method, uri: &hyper::Uri, err: Error) -> hyper::Response<hyper::Body> {
+fn handle_error(
+    method: &hyper::Method,
+    uri: &hyper::Uri,
+    err: Error,
+) -> hyper::Response<hyper::Body> {
     log::error!("Error while handling {} {}: {:?}", method, uri, err);
     hyper::Response::builder()
         .status(hyper::StatusCode::INTERNAL_SERVER_ERROR)
@@ -244,7 +265,10 @@ fn add_default_headers(response: &mut hyper::Response<hyper::Body>) {
     // TODO: we probably should not add these headers to every response
     let default_headers = &[
         ("access-control-allow-origin", "*"),
-        ("access-control-allow-methods", "POST, PUT, GET, OPTIONS, DELETE"),
+        (
+            "access-control-allow-methods",
+            "POST, PUT, GET, OPTIONS, DELETE",
+        ),
         ("access-control-allow-headers", "Content-Type,ChiselUID"),
     ];
 
@@ -256,4 +280,3 @@ fn add_default_headers(response: &mut hyper::Response<hyper::Body>) {
         }
     }
 }
-

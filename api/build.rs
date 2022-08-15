@@ -17,7 +17,8 @@ async fn compile(stem: &str) -> Result<()> {
         emit_declarations: true,
         ..Default::default()
     };
-    let mut map = compile_ts_code(&[src], opts).await
+    let mut map = compile_ts_code(&[src], opts)
+        .await
         .context(format!("Could not compile {:?}", src))?;
     let code = map.remove(src).unwrap();
 

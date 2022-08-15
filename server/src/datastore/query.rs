@@ -274,12 +274,9 @@ impl QueryPlan {
     }
 
     fn from_entity_name(c: &RequestContext, entity_name: &str) -> Result<Self> {
-        let ty = c
-            .ts
-            .lookup_entity(entity_name)
-            .with_context(|| {
-                format!("unable to construct QueryPlan from an unknown entity name `{entity_name}`")
-            })?;
+        let ty = c.ts.lookup_entity(entity_name).with_context(|| {
+            format!("unable to construct QueryPlan from an unknown entity name `{entity_name}`")
+        })?;
 
         let mut builder = Self::new(ty.clone());
         builder.entity = builder.load_entity(c, &ty)?;
@@ -288,11 +285,7 @@ impl QueryPlan {
 
     /// Constructs QueryPlan from type `ty` and application of given
     /// `operators.
-    pub fn from_ops(
-        c: &RequestContext,
-        ty: &Entity,
-        operators: Vec<QueryOp>,
-    ) -> Result<Self> {
+    pub fn from_ops(c: &RequestContext, ty: &Entity, operators: Vec<QueryOp>) -> Result<Self> {
         let mut query_plan = Self::new(ty.clone());
         query_plan.entity = query_plan.load_entity(c, ty)?;
         query_plan.extend_operators(operators);

@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: © 2022 ChiselStrike <info@chiselstrike.com>
 
-use crate::JsonObject;
 use crate::opt::Opt;
+use crate::JsonObject;
 use aes_gcm::aead::{Aead, NewAead};
 use aes_gcm::{Aes256Gcm, Nonce};
 use anyhow::Context;

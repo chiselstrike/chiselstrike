@@ -4,8 +4,8 @@
 #![cfg_attr(feature = "must_not_suspend", deny(must_not_suspend))]
 
 pub use crate::auth::is_auth_entity_name;
-pub use crate::server::{Restart, run};
 pub use crate::opt::Opt;
+pub use crate::server::{run, Restart};
 
 pub(crate) type JsonObject = serde_json::Map<String, serde_json::Value>;
 

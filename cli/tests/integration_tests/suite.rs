@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: © 2022 ChiselStrike <info@chiselstrike.com>
 
-use crate::Opt;
 use crate::framework::TestContext;
+use crate::Opt;
 use futures::future::BoxFuture;
 use itertools::iproduct;
 use std::sync::Arc;
@@ -34,24 +34,25 @@ impl TestSuite {
             self.tests.iter(),
             [Modules::Deno, Modules::Node],
             [true, false]
-        ).filter_map(|(test_spec, modules, optimize)| {
+        )
+        .filter_map(|(test_spec, modules, optimize)| {
             if let Some(name_regex) = opt.test.as_ref() {
                 if !name_regex.is_match(&test_spec.name) {
-                    return None
+                    return None;
                 }
             }
 
             match (test_spec.modules, modules) {
-                (ModulesSpec::Deno, Modules::Deno) => {},
-                (ModulesSpec::Node, Modules::Node) => {},
-                (ModulesSpec::Both, _) => {},
+                (ModulesSpec::Deno, Modules::Deno) => {}
+                (ModulesSpec::Node, Modules::Node) => {}
+                (ModulesSpec::Both, _) => {}
                 (_, _) => return None,
             }
 
             match (test_spec.optimize, optimize) {
-                (OptimizeSpec::Yes, true) => {},
+                (OptimizeSpec::Yes, true) => {}
                 //(OptimizeSpec::No, false) => {},
-                (OptimizeSpec::Both, _) => {},
+                (OptimizeSpec::Both, _) => {}
                 (_, _) => return None,
             }
 
@@ -122,4 +123,3 @@ where
         Box::pin(self(ctx))
     }
 }
-

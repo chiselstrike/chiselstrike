@@ -21,13 +21,19 @@ pub struct Command {
 impl Drop for Command {
     fn drop(&mut self) {
         let out = self.inner.output().unwrap_or_else(|err| {
-            panic!("Spawning of command {:?} {:?} failed: {}", self.cmd, self.args, err);
+            panic!(
+                "Spawning of command {:?} {:?} failed: {}",
+                self.cmd, self.args, err
+            );
         });
         let stderr = String::from_utf8_lossy(&out.stderr);
         eprintln!("{stderr}");
         assert!(
             out.status.success(),
-            "Command {:?} {:?} exited with status {}", self.cmd, self.args, out.status,
+            "Command {:?} {:?} exited with status {}",
+            self.cmd,
+            self.args,
+            out.status,
         );
     }
 }

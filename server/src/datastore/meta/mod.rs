@@ -5,8 +5,8 @@ pub mod schema;
 use crate::datastore::DbConnection;
 use crate::policies::PolicySystem;
 use crate::types::{
-    BuiltinTypes, DbIndex, Entity, ExistingField, ExistingObject, Field, FieldDelta,
-    ObjectDelta, ObjectDescriptor, ObjectType, TypeSystem,
+    BuiltinTypes, DbIndex, Entity, ExistingField, ExistingObject, Field, FieldDelta, ObjectDelta,
+    ObjectDescriptor, ObjectType, TypeSystem,
 };
 use crate::version::VersionInfo;
 use anyhow::{Context, Result};
@@ -126,10 +126,7 @@ async fn update_field_query(
     Ok(())
 }
 
-async fn remove_field_query(
-    transaction: &mut Transaction<'_, Any>,
-    field: &Field,
-) -> Result<()> {
+async fn remove_field_query(transaction: &mut Transaction<'_, Any>, field: &Field) -> Result<()> {
     let field_id = field
         .id
         .context("logical error. Trying to delete field without id")?;
@@ -244,11 +241,7 @@ impl MetaService {
     /// For Postgres this is a lot more complex because it is not possible to
     /// do cross-database transactions. But this handles the local dev case,
     /// which is what is most relevant at the moment.
-    pub async fn maybe_migrate_sqlite_database(
-        &self,
-        sources: &[PathBuf],
-        to: &str,
-    ) -> Result<()> {
+    pub async fn maybe_migrate_sqlite_database(&self, sources: &[PathBuf], to: &str) -> Result<()> {
         match self.db.pool.any_kind() {
             AnyKind::Sqlite => {}
             _ => anyhow::bail!("Can't migrate postgres tables yet"),
@@ -455,13 +448,17 @@ impl MetaService {
 
     /// Load module source codes from metadata store.
     pub async fn load_modules(&self, version_id: &str) -> Result<HashMap<String, String>> {
-        let query = sqlx::query("SELECT url, code FROM modules WHERE version = $1").bind(version_id);
+        let query =
+            sqlx::query("SELECT url, code FROM modules WHERE version = $1").bind(version_id);
         let rows = fetch_all(&self.db.pool, query).await?;
-        let modules = rows.into_iter().map(|row| {
-            let url: String = row.get("url");
-            let code: String = row.get("code");
-            (url, code)
-        }).collect();
+        let modules = rows
+            .into_iter()
+            .map(|row| {
+                let url: String = row.get("url");
+                let code: String = row.get("code");
+                (url, code)
+            })
+            .collect();
         Ok(modules)
     }
 
@@ -475,10 +472,11 @@ impl MetaService {
         execute(transaction, drop).await?;
 
         for (url, code) in modules.iter() {
-            let insert = sqlx::query("INSERT INTO modules (version, url, code) VALUES ($1, $2, $3)")
-                .bind(version_id)
-                .bind(url)
-                .bind(code);
+            let insert =
+                sqlx::query("INSERT INTO modules (version, url, code) VALUES ($1, $2, $3)")
+                    .bind(version_id)
+                    .bind(url)
+                    .bind(code);
 
             execute(transaction, insert).await?;
         }
@@ -509,7 +507,8 @@ impl MetaService {
             let backing_table: &str = row.get("backing_table");
             let type_name: &str = row.get("type_name");
             let desc = ExistingObject::new(type_name, backing_table, type_id)?;
-            let ts = type_systems.entry(desc.version_id())
+            let ts = type_systems
+                .entry(desc.version_id())
                 .or_insert_with(|| TypeSystem::new(builtin.clone(), desc.version_id()));
 
             match self.load_type_fields(ts, type_id).await {
@@ -538,7 +537,8 @@ impl MetaService {
             let backing_table: &str = row.get("backing_table");
             let type_name: &str = row.get("type_name");
             let desc = ExistingObject::new(type_name, backing_table, type_id)?;
-            let ts = type_systems.entry(desc.version_id())
+            let ts = type_systems
+                .entry(desc.version_id())
                 .or_insert_with(|| TypeSystem::new(builtin.clone(), desc.version_id()));
 
             let fields = self.load_type_fields(ts, type_id).await?;
@@ -605,11 +605,7 @@ impl MetaService {
         Ok(fields)
     }
 
-    async fn load_type_indexes(
-        &self,
-        type_id: i32,
-        backing_table: &str,
-    ) -> Result<Vec<DbIndex>> {
+    async fn load_type_indexes(&self, type_id: i32, backing_table: &str) -> Result<Vec<DbIndex>> {
         let query = sqlx::query(
             r#"
             SELECT
@@ -688,9 +684,7 @@ impl MetaService {
         Ok(self.db.pool.begin().await?)
     }
 
-    pub async fn commit_transaction(
-        transaction: Transaction<'_, Any>,
-    ) -> Result<()> {
+    pub async fn commit_transaction(transaction: Transaction<'_, Any>) -> Result<()> {
         transaction.commit().await?;
         Ok(())
     }
@@ -733,8 +727,8 @@ impl MetaService {
     ///
     /// Useful on startup, when we have to populate our in-memory state from the meta database.
     pub async fn load_policy_system(&self, version_id: &str) -> Result<PolicySystem> {
-        let get_policy = sqlx::query("SELECT policy_str FROM policies WHERE version = $1")
-            .bind(version_id);
+        let get_policy =
+            sqlx::query("SELECT policy_str FROM policies WHERE version = $1").bind(version_id);
         let mut transaction = self.begin_transaction().await?;
         let row = fetch_one(&mut transaction, get_policy).await?;
         let yaml: &str = row.get("policy_str");
@@ -866,13 +860,19 @@ mod tests {
 
         let conn = Arc::new(DbConnection::connect(&conn_str, 1).await?);
         let meta = MetaService::new(conn.clone());
-        meta.maybe_migrate_sqlite_database(&[meta_path, data_path], &new_path.display().to_string())
-            .await
-            .unwrap();
+        meta.maybe_migrate_sqlite_database(
+            &[meta_path, data_path],
+            &new_path.display().to_string(),
+        )
+        .await
+        .unwrap();
 
         let query = QueryEngine::new(conn);
 
-        let mut tss = meta.load_type_systems(&Arc::new(BuiltinTypes::new())).await.unwrap();
+        let mut tss = meta
+            .load_type_systems(&Arc::new(BuiltinTypes::new()))
+            .await
+            .unwrap();
         let ts = tss.remove("dev").unwrap();
         let ty = ts.lookup_custom_type("BlogComment").unwrap();
         let rows = fetch_rows(&query, &ty).await;
@@ -895,9 +895,12 @@ mod tests {
 
         let conn = Arc::new(DbConnection::connect(&conn_str, 1).await?);
         let meta = MetaService::new(conn.clone());
-        meta.maybe_migrate_sqlite_database(&[meta_path.clone(), data_path], &new_path.display().to_string())
-            .await
-            .unwrap_err();
+        meta.maybe_migrate_sqlite_database(
+            &[meta_path.clone(), data_path],
+            &new_path.display().to_string(),
+        )
+        .await
+        .unwrap_err();
 
         // still exists, wasn't deleted
         fs::metadata(meta_path).await.unwrap();
@@ -923,8 +926,10 @@ mod tests {
         let meta = MetaService::new(conn.clone());
         meta.maybe_migrate_sqlite_database(
             &[meta_path.clone(), data_path.clone()],
-            &new_path.display().to_string()
-        ).await.unwrap_err();
+            &new_path.display().to_string(),
+        )
+        .await
+        .unwrap_err();
 
         // original still exists, werent't deleted
         fs::metadata(data_path).await.unwrap();
@@ -959,8 +964,10 @@ mod tests {
         let meta = MetaService::new(conn.clone());
         meta.maybe_migrate_sqlite_database(
             &[meta_path.clone(), data_path.clone()],
-            &new_path.display().to_string()
-        ).await.unwrap();
+            &new_path.display().to_string(),
+        )
+        .await
+        .unwrap();
 
         // original still exists, werent't deleted
         fs::metadata(data_path).await.unwrap();

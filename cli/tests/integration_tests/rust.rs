@@ -1,17 +1,16 @@
 // SPDX-FileCopyrightText: © 2022 ChiselStrike <info@chiselstrike.com>
 
-use crate::{Opt, rust_tests};
-use crate::database::{Database, DatabaseConfig, PostgresDb, SqliteDb, generate_database_config};
-use crate::framework::{TestContext, Chisel, GuardedChild, execute_async};
-use crate::suite::{TestInstance, Modules};
+use crate::database::{generate_database_config, Database, DatabaseConfig, PostgresDb, SqliteDb};
+use crate::framework::{execute_async, Chisel, GuardedChild, TestContext};
+use crate::suite::{Modules, TestInstance};
+use crate::{rust_tests, Opt};
 use colored::Colorize;
 use enclose::enclose;
 use futures::ready;
 use futures::stream::{FuturesUnordered, StreamExt};
-use std::{env, panic};
 use std::any::Any;
 use std::future::Future;
-use std::io::{Write, stdout};
+use std::io::{stdout, Write};
 use std::marker::Unpin;
 use std::net::{Ipv4Addr, SocketAddr};
 use std::path::PathBuf;
@@ -19,6 +18,7 @@ use std::pin::Pin;
 use std::sync::atomic::{AtomicU16, Ordering};
 use std::sync::Arc;
 use std::task::{Context, Poll};
+use std::{env, panic};
 use tempdir::TempDir;
 
 fn get_free_port(ports_counter: &AtomicU16) -> u16 {
@@ -39,9 +39,7 @@ pub struct ChiseldConfig {
 }
 
 fn generate_chiseld_config(ports_counter: &AtomicU16) -> ChiseldConfig {
-    let make_address = || {
-        SocketAddr::from((Ipv4Addr::LOCALHOST, get_free_port(ports_counter)))
-    };
+    let make_address = || SocketAddr::from((Ipv4Addr::LOCALHOST, get_free_port(ports_counter)));
     ChiseldConfig {
         api_address: make_address(),
         rpc_address: make_address(),
@@ -56,8 +54,7 @@ async fn setup_test_context(
 ) -> TestContext {
     let db_config = generate_database_config(opt);
     let chiseld_config = generate_chiseld_config(ports_counter);
-    let tmp_dir = Arc::new(TempDir::new("chiseld_test")
-        .expect("Could not create tempdir"));
+    let tmp_dir = Arc::new(TempDir::new("chiseld_test").expect("Could not create tempdir"));
     let chisel_path = bin_dir().join("chisel");
 
     let optimize_str = format!("{}", instance.optimize);
@@ -74,8 +71,10 @@ async fn setup_test_context(
                         "--auto-index",
                         &optimize_str,
                     ])
-                    .current_dir(&*tmp_dir)
-            ).await.expect("chisel init failed");
+                    .current_dir(&*tmp_dir),
+            )
+            .await
+            .expect("chisel init failed");
         }
         Modules::Node => {
             let create_app_js = repo_dir().join("packages/create-chiselstrike-app/dist/index.js");
@@ -83,8 +82,10 @@ async fn setup_test_context(
                 tokio::process::Command::new("node")
                     .arg(&create_app_js)
                     .args(["--chisel-version", "latest", "./"])
-                    .current_dir(&*tmp_dir)
-            ).await.expect("create-chiselstrike-app failed");
+                    .current_dir(&*tmp_dir),
+            )
+            .await
+            .expect("create-chiselstrike-app failed");
         }
     };
 
@@ -123,7 +124,11 @@ async fn setup_test_context(
         },
     }
 
-    TestContext { chiseld, chisel, _db: db }
+    TestContext {
+        chiseld,
+        chisel,
+        _db: db,
+    }
 }
 
 fn bin_dir() -> PathBuf {
@@ -160,8 +165,7 @@ impl Future for TestFuture {
     type Output = TestResult;
     fn poll(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Self::Output> {
         let this = self.get_mut();
-        let result = ready!(Pin::new(&mut this.task).poll(cx))
-            .map_err(|err| err.into_panic());
+        let result = ready!(Pin::new(&mut this.task).poll(cx)).map_err(|err| err.into_panic());
         let instance = this.instance.take().unwrap();
         Poll::Ready(TestResult { instance, result })
     }
@@ -190,9 +194,7 @@ pub(crate) async fn run_tests(opt: Arc<Opt>) -> bool {
     // But when this hook is present, we cannot print the backtrace, so we keep the default hook
     // when `RUST_BACKTRACE` env is set. Also, when there is no parallelism, the messages cannot be
     // interleaved, so we also keep the default hook in this case.
-    let setup_panic_hook =
-        !env::var_os("RUST_BACKTRACE").is_some() &&
-        parallel > 1;
+    let setup_panic_hook = !env::var_os("RUST_BACKTRACE").is_some() && parallel > 1;
 
     let mut ok = true;
     let mut futures = FuturesUnordered::new();
@@ -203,7 +205,7 @@ pub(crate) async fn run_tests(opt: Arc<Opt>) -> bool {
     while !instances.is_empty() || !futures.is_empty() {
         if !instances.is_empty() && futures.len() < parallel {
             let instance = Arc::new(instances.pop().unwrap());
-            let future = enclose!{(instance, opt, ports_counter) async move {
+            let future = enclose! {(instance, opt, ports_counter) async move {
                 if setup_panic_hook {
                     panic::set_hook(Box::new(|_| {}));
                 }
@@ -219,7 +221,10 @@ pub(crate) async fn run_tests(opt: Arc<Opt>) -> bool {
             stdout().flush().unwrap();
             printed_pending_instance = Some(instance.clone());
 
-            futures.push(TestFuture { instance: Some(instance), task });
+            futures.push(TestFuture {
+                instance: Some(instance),
+                task,
+            });
             continue;
         }
 
@@ -227,28 +232,29 @@ pub(crate) async fn run_tests(opt: Arc<Opt>) -> bool {
         let TestResult { instance, result } = futures.next().await.unwrap();
 
         match printed_pending_instance {
-            Some(pending) if Arc::ptr_eq(&pending, &instance) => {},
-            Some(_) =>
-                print!("\n{} ... ", format_test_instance(&instance)),
-            None =>
-                print!("{} ... ", format_test_instance(&instance)),
+            Some(pending) if Arc::ptr_eq(&pending, &instance) => {}
+            Some(_) => print!("\n{} ... ", format_test_instance(&instance)),
+            None => print!("{} ... ", format_test_instance(&instance)),
         }
         printed_pending_instance = None;
 
         match result {
             Ok(_) => println!("{}", "PASSED".green()),
             Err(panic) => {
-                let panic_msg =
-                    if let Some(&text) = panic.downcast_ref::<&'static str>() {
-                        text
-                    } else if let Some(text) = panic.downcast_ref::<String>() {
-                        text.as_str()
-                    } else {
-                        "(unknown panic error)"
-                    };
+                let panic_msg = if let Some(&text) = panic.downcast_ref::<&'static str>() {
+                    text
+                } else if let Some(text) = panic.downcast_ref::<String>() {
+                    text.as_str()
+                } else {
+                    "(unknown panic error)"
+                };
 
                 if setup_panic_hook {
-                    println!("{}\n{}", "FAILED".red(), textwrap::indent(panic_msg, "    "));
+                    println!(
+                        "{}\n{}",
+                        "FAILED".red(),
+                        textwrap::indent(panic_msg, "    ")
+                    );
                 } else {
                     // when we have not set up our hook, the panic message has already been
                     // printed, so there is no need to print it again

@@ -1,14 +1,14 @@
-use serde_json::json;
 use crate::framework::prelude::*;
+use serde_json::json;
 
 pub async fn test(mut c: TestContext) {
     c.chisel.copy_to_dir("examples/person.ts", "models");
     c.chisel.copy_to_dir("examples/find_by.ts", "routes");
-    c.chisel.copy_and_rename("examples/store.ts", "routes/ins.ts");
+    c.chisel
+        .copy_and_rename("examples/store.ts", "routes/ins.ts");
 
     let r = c.chisel.apply_ok().await;
-    r.stdout
-        .peek("Model defined: Person");
+    r.stdout.peek("Model defined: Person");
 
     c.chisel
         .post_json_ok(
@@ -35,7 +35,8 @@ pub async fn test(mut c: TestContext) {
         )
         .await;
 
-    let resp_txt = c.chisel
+    let resp_txt = c
+        .chisel
         .post_json_text(
             "/dev/find_by",
             json!({
@@ -46,7 +47,8 @@ pub async fn test(mut c: TestContext) {
         .await;
     assert_eq!(resp_txt, "Jan Plhak -666 true 10.02 ");
 
-    let resp_txt = c.chisel
+    let resp_txt = c
+        .chisel
         .post_json_text(
             "/dev/find_by",
             json!({
@@ -57,7 +59,8 @@ pub async fn test(mut c: TestContext) {
         .await;
     assert_eq!(resp_txt, "Glauber Costa 666 true 10.01 ");
 
-    let resp_txt = c.chisel
+    let resp_txt = c
+        .chisel
         .post_json_text(
             "/dev/find_by",
             json!({
@@ -68,7 +71,8 @@ pub async fn test(mut c: TestContext) {
         .await;
     assert_eq!(resp_txt, "");
 
-    let resp_txt = c.chisel
+    let resp_txt = c
+        .chisel
         .post_json_text(
             "/dev/find_by",
             json!({
@@ -79,7 +83,8 @@ pub async fn test(mut c: TestContext) {
         .await;
     assert_eq!(resp_txt, "Jan Plhak -666 true 10.02 ");
 
-    let resp_txt = c.chisel
+    let resp_txt = c
+        .chisel
         .post_json_text(
             "/dev/find_by",
             json!({
@@ -93,7 +98,8 @@ pub async fn test(mut c: TestContext) {
         "Glauber Costa 666 true 10.01 Jan Plhak -666 true 10.02 "
     );
 
-    let resp_txt = c.chisel
+    let resp_txt = c
+        .chisel
         .post_json_text(
             "/dev/find_by",
             json!({
@@ -104,7 +110,8 @@ pub async fn test(mut c: TestContext) {
         .await;
     assert_eq!(resp_txt, "Glauber Costa 666 true 10.01 ");
 
-    let resp_txt = c.chisel
+    let resp_txt = c
+        .chisel
         .post_json_text(
             "/dev/find_by",
             json!({
@@ -117,7 +124,8 @@ pub async fn test(mut c: TestContext) {
         "Glauber Costa 666 true 10.01 Jan Plhak -666 true 10.02 "
     );
 
-    let resp = c.chisel
+    let resp = c
+        .chisel
         .post_json(
             "/dev/find_by",
             json!({

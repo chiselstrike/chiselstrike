@@ -130,7 +130,11 @@ async fn delete(server_url: String, version_id: String) -> Result<()> {
     Ok(())
 }
 
-async fn populate(server_url: String, to_version_id: String, from_version_id: String) -> Result<()> {
+async fn populate(
+    server_url: String,
+    to_version_id: String,
+    from_version_id: String,
+) -> Result<()> {
     let mut client = ChiselRpcClient::connect(server_url).await?;
 
     let msg = execute!(

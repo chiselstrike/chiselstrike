@@ -1,8 +1,8 @@
 // SPDX-FileCopyrightText: © 2022 ChiselStrike <info@chiselstrike.com>
 
 use super::{
-    BuiltinTypes, DbIndex, Entity, FieldAttrDelta, FieldMap, FieldDelta,
-    ObjectDelta, ObjectType, QueryEngine, QueryPlan, Type, TypeId, TypeSystemError,
+    BuiltinTypes, DbIndex, Entity, FieldAttrDelta, FieldDelta, FieldMap, ObjectDelta, ObjectType,
+    QueryEngine, QueryPlan, Type, TypeId, TypeSystemError,
 };
 use anyhow::Context;
 use futures::StreamExt;
@@ -18,7 +18,11 @@ pub struct TypeSystem {
 
 impl TypeSystem {
     pub fn new(builtin: Arc<BuiltinTypes>, version_id: String) -> Self {
-        Self { custom_types: HashMap::new(), builtin, version_id }
+        Self {
+            custom_types: HashMap::new(),
+            builtin,
+            version_id,
+        }
     }
 
     pub fn lookup_custom_type(&self, type_name: &str) -> Result<Entity, TypeSystemError> {
@@ -186,7 +190,8 @@ impl TypeSystem {
 
     /// Looks up a builtin type with name `type_name`.
     pub fn lookup_builtin_type(&self, type_name: &str) -> Result<Type, TypeSystemError> {
-        self.builtin.types
+        self.builtin
+            .types
             .get(type_name)
             .cloned()
             .ok_or_else(|| TypeSystemError::NotABuiltinType(type_name.to_string()))
@@ -197,10 +202,7 @@ impl TypeSystem {
     /// # Errors
     ///
     /// If the looked up type does not exists, the function returns a `NoSuchType`.
-    pub fn lookup_type(
-        &self,
-        type_name: &str,
-    ) -> Result<Type, TypeSystemError> {
+    pub fn lookup_type(&self, type_name: &str) -> Result<Type, TypeSystemError> {
         if let Ok(ty) = self.lookup_builtin_type(type_name) {
             Ok(ty)
         } else if let Ok(ty) = self.lookup_custom_type(type_name) {
@@ -216,15 +218,10 @@ impl TypeSystem {
     /// # Errors
     ///
     /// If the looked up type does not exists, the function returns a `NoSuchType`.
-    pub fn lookup_entity(
-        &self,
-        type_name: &str,
-    ) -> Result<Entity, TypeSystemError> {
+    pub fn lookup_entity(&self, type_name: &str) -> Result<Entity, TypeSystemError> {
         match self.lookup_builtin_type(type_name) {
             Ok(Type::Entity(ty)) => Ok(ty),
-            Err(TypeSystemError::NotABuiltinType(_)) => {
-                self.lookup_custom_type(type_name)
-            }
+            Err(TypeSystemError::NotABuiltinType(_)) => self.lookup_custom_type(type_name),
             _ => Err(TypeSystemError::NoSuchType(type_name.to_owned())),
         }
     }
@@ -242,9 +239,7 @@ impl TypeSystem {
                     .with_context(|| {
                         format!(
                             "Not possible to evolve type {} ({} -> {})",
-                            ty_name,
-                            from.version_id,
-                            to.version_id,
+                            ty_name, from.version_id, to.version_id,
                         )
                     })?;
 

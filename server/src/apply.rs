@@ -2,14 +2,16 @@
 
 use crate::datastore::{MetaService, QueryEngine};
 use crate::policies::PolicySystem;
-use crate::proto::{ApplyRequest, AddTypeRequest, FieldDefinition, IndexCandidate, TypeMsg};
 use crate::proto::type_msg::TypeEnum;
+use crate::proto::{AddTypeRequest, ApplyRequest, FieldDefinition, IndexCandidate, TypeMsg};
 use crate::server::Server;
-use crate::types::{DbIndex, Entity, Field, NewField, NewObject, ObjectType, Type, TypeSystem, TypeSystemError};
+use crate::types::{
+    DbIndex, Entity, Field, NewField, NewObject, ObjectType, Type, TypeSystem, TypeSystemError,
+};
 use crate::version::VersionInfo;
-use anyhow::{Context, Result, anyhow, bail, ensure};
-use petgraph::Directed;
+use anyhow::{anyhow, bail, ensure, Context, Result};
 use petgraph::graphmap::GraphMap;
+use petgraph::Directed;
 use std::collections::{BTreeSet, HashMap};
 use std::sync::Arc;
 
@@ -113,9 +115,9 @@ or
             } else if let TypeEnum::Entity(entity_name) = field_ty {
                 match new_types.get(entity_name) {
                     Some(ty) => Type::Entity(ty.clone()),
-                    None => bail!(
-                        "field type `{entity_name}` is neither a built-in nor a custom type",
-                    ),
+                    None => {
+                        bail!("field type `{entity_name}` is neither a built-in nor a custom type",)
+                    }
                 }
             } else {
                 bail!("field type must either contain an entity or be a builtin");
@@ -178,7 +180,9 @@ or
     let labels: Vec<String> = policy_system.labels.keys().map(|x| x.to_owned()).collect();
 
     // Reload the type system so that we have new ids
-    *type_system = meta.load_type_systems(&server.builtin_types).await?
+    *type_system = meta
+        .load_type_systems(&server.builtin_types)
+        .await?
         .remove(&version_id)
         .unwrap_or_else(|| TypeSystem::new(server.builtin_types.clone(), version_id.clone()));
 

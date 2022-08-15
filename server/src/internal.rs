@@ -28,12 +28,10 @@ struct WebUIPostBody {
 async fn webapply(body: Body, rpc_addr: &SocketAddr) -> Result<Response<Body>> {
     let body: WebUIPostBody = serde_json::from_slice(&hyper::body::to_bytes(body).await?)?;
     let mut client = ChiselRpcClient::connect(format!("http://{}", rpc_addr)).await?;
-    let modules = vec![
-        Module {
-            url: "file:///__route_map.ts".into(),
-            code: body.route,
-        },
-    ];
+    let modules = vec![Module {
+        url: "file:///__route_map.ts".into(),
+        code: body.route,
+    }];
     client
         .apply(tonic::Request::new(ApplyRequest {
             types: vec![],
@@ -92,9 +90,7 @@ pub async fn spawn(
     let listen_addr = incoming.local_addr();
     let server = Server::builder(incoming).serve(make_svc);
 
-    let task = tokio::task::spawn(async move {
-        server.await.context("Internal server failed")
-    });
+    let task = tokio::task::spawn(async move { server.await.context("Internal server failed") });
 
     Ok((listen_addr, TaskHandle(task)))
 }

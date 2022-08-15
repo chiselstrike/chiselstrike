@@ -1,18 +1,18 @@
 // SPDX-FileCopyrightText: © 2022 ChiselStrike <info@chiselstrike.com>
 
-use crate::{api, internal, rpc, secrets, worker, JsonObject};
 use crate::datastore::{DbConnection, MetaService, QueryEngine};
 use crate::opt::Opt;
 use crate::policies::PolicySystem;
 use crate::trunk::{self, Trunk};
 use crate::types::{BuiltinTypes, TypeSystem};
 use crate::version::{self, VersionInfo, VersionInit};
-use anyhow::{Context, Result, bail};
+use crate::{api, internal, rpc, secrets, worker, JsonObject};
+use anyhow::{bail, Context, Result};
 use parking_lot::RwLock;
 use regex::Regex;
-use std::panic;
 use std::collections::HashMap;
 use std::net::SocketAddr;
+use std::panic;
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
@@ -33,12 +33,15 @@ pub struct Server {
 }
 
 #[derive(Debug, Copy, Clone)]
-pub enum Restart { Yes, No }
+pub enum Restart {
+    Yes,
+    No,
+}
 
 pub async fn run(opt: Opt) -> Result<Restart> {
     // Note that we spawn many tasks, but we .await them all at the end; we never leave a task
     // running in the background. This ensures that we handle all errors and panics and also that
-    // we abort the tasks when they are no longer needed (e.g. if other task has failed). 
+    // we abort the tasks when they are no longer needed (e.g. if other task has failed).
     //
     // This approach is called "structured concurrency", and it seems to be a good way to write
     // concurrent programs and keep your sanity.
@@ -47,21 +50,21 @@ pub async fn run(opt: Opt) -> Result<Restart> {
     start_versions(server.clone()).await?;
     start_chiselstrike_version(server.clone()).await?;
 
-    let (rpc_addr, rpc_task) = rpc::spawn(
-        server.clone(),
-        server.opt.rpc_listen_addr,
-    ).await.context("Could not start gRPC server")?;
+    let (rpc_addr, rpc_task) = rpc::spawn(server.clone(), server.opt.rpc_listen_addr)
+        .await
+        .context("Could not start gRPC server")?;
 
-    let (api_addrs, api_task) = api::spawn(
-        server.clone(),
-        server.opt.api_listen_addr.clone(),
-    ).await.context("Could not start HTTP API server")?;
+    let (api_addrs, api_task) = api::spawn(server.clone(), server.opt.api_listen_addr.clone())
+        .await
+        .context("Could not start HTTP API server")?;
 
     let (internal_addr, internal_task) = internal::spawn(
         server.opt.internal_routes_listen_addr,
         server.opt.webui,
         rpc_addr,
-    ).await.context("Could not start an internal HTTP server")?;
+    )
+    .await
+    .context("Could not start an internal HTTP server")?;
 
     let secrets_task = TaskHandle(tokio::task::spawn(refresh_secrets(server.clone())));
     let signal_task = TaskHandle(tokio::task::spawn(wait_for_signals()));
@@ -90,13 +93,17 @@ async fn make_server(opt: Opt) -> Result<(Arc<Server>, TaskHandle<Result<()>>)> 
 
     let legacy_dbs = find_legacy_sqlite_dbs(&opt);
     if extract_sqlite_file(&opt.db_uri).is_some() && legacy_dbs.len() == 2 {
-        meta_service.maybe_migrate_sqlite_database(&legacy_dbs, &opt.db_uri).await?;
+        meta_service
+            .maybe_migrate_sqlite_database(&legacy_dbs, &opt.db_uri)
+            .await?;
     }
 
     meta_service.create_schema().await?;
 
     let builtin_types = Arc::new(BuiltinTypes::new());
-    builtin_types.create_builtin_backing_tables(&query_engine).await?;
+    builtin_types
+        .create_builtin_backing_tables(&query_engine)
+        .await?;
 
     let type_systems = meta_service.load_type_systems(&builtin_types).await?;
     let type_systems = tokio::sync::Mutex::new(type_systems);
@@ -106,7 +113,7 @@ async fn make_server(opt: Opt) -> Result<(Arc<Server>, TaskHandle<Result<()>>)> 
         Err(err) => {
             log::error!("Could not read secrets: {:?}", err);
             JsonObject::default()
-        },
+        }
     };
     let secrets = RwLock::new(secrets);
 
@@ -115,8 +122,15 @@ async fn make_server(opt: Opt) -> Result<(Arc<Server>, TaskHandle<Result<()>>)> 
 
     let (trunk, trunk_task) = trunk::spawn().await?;
     let server = Server {
-        opt, db, query_engine, meta_service, builtin_types,
-        type_systems, secrets, inspector, trunk,
+        opt,
+        db,
+        query_engine,
+        meta_service,
+        builtin_types,
+        type_systems,
+        secrets,
+        inspector,
+        trunk,
     };
     Ok((Arc::new(server), trunk_task))
 }
@@ -143,7 +157,9 @@ async fn start_versions(server: Arc<Server>) -> Result<()> {
     let version_infos = server.meta_service.load_version_infos().await?;
     let type_systems = server.type_systems.lock().await;
     for (version_id, info) in version_infos.into_iter() {
-        let type_system = type_systems.get(&version_id).cloned()
+        let type_system = type_systems
+            .get(&version_id)
+            .cloned()
             .unwrap_or_else(|| TypeSystem::new(server.builtin_types.clone(), version_id.clone()));
         let policy_system = server.meta_service.load_policy_system(&version_id).await?;
         let modules = server.meta_service.load_modules(&version_id).await?;
@@ -207,13 +223,13 @@ async fn refresh_secrets(server: Arc<Server>) -> Result<()> {
         match secrets::get_secrets(&server.opt).await {
             Ok(secrets) => {
                 *server.secrets.write() = secrets;
-            },
+            }
             Err(err) => {
                 if !last_try_was_failure {
                     log::warn!("Could not re-read secrets: {:?}", err);
                 }
                 last_try_was_failure = true;
-            },
+            }
         }
         tokio::time::sleep(Duration::from_millis(1000)).await;
     }
@@ -226,7 +242,7 @@ async fn wait_for_signals() -> Result<Restart> {
         nix::sys::signal::raise(nix::sys::signal::Signal::SIGINT).unwrap();
     }));
 
-    use tokio::signal::unix::{SignalKind, signal};
+    use tokio::signal::unix::{signal, SignalKind};
     let mut sigterm = signal(SignalKind::terminate())?;
     let mut sigint = signal(SignalKind::interrupt())?;
     let mut sighup = signal(SignalKind::hangup())?;
@@ -240,11 +256,15 @@ async fn wait_for_signals() -> Result<Restart> {
     })
 }
 
-async fn start_inspector(opt: &Opt) -> Result<Option<Arc<deno_runtime::inspector_server::InspectorServer>>> {
+async fn start_inspector(
+    opt: &Opt,
+) -> Result<Option<Arc<deno_runtime::inspector_server::InspectorServer>>> {
     Ok(if opt.inspect || opt.inspect_brk {
-        let addr = alloc_inspector_addr().await
+        let addr = alloc_inspector_addr()
+            .await
             .context("Could not allocate an address for V8 inspector")?;
-        let inspector = deno_runtime::inspector_server::InspectorServer::new(addr, "chiseld".into());
+        let inspector =
+            deno_runtime::inspector_server::InspectorServer::new(addr, "chiseld".into());
         Some(Arc::new(inspector))
     } else {
         None
@@ -257,11 +277,10 @@ async fn alloc_inspector_addr() -> Result<SocketAddr> {
         match tokio::net::TcpListener::bind(("localhost", port)).await {
             Ok(listener) => return Ok(listener.local_addr()?),
             Err(err) => match err.kind() {
-                ErrorKind::AddrInUse | ErrorKind::AddrNotAvailable => {},
+                ErrorKind::AddrInUse | ErrorKind::AddrNotAvailable => {}
                 _ => bail!(err),
             },
         }
     }
     bail!("Could not find an available port")
 }
-

@@ -1,28 +1,27 @@
 // SPDX-FileCopyrightText: © 2022 ChiselStrike <info@chiselstrike.com>
 
-use crate::{apply, version};
 use crate::datastore::{MetaService, QueryEngine};
 use crate::policies::PolicySystem;
+use crate::proto::chisel_rpc_server::{ChiselRpc, ChiselRpcServer};
 use crate::proto::{
-    ApplyRequest, ApplyResponse,
-    DeleteRequest, DeleteResponse, DescribeRequest, DescribeResponse, FieldDefinition,
-    LabelPolicyDefinition, PopulateRequest, PopulateResponse, RestartRequest,
+    ApplyRequest, ApplyResponse, DeleteRequest, DeleteResponse, DescribeRequest, DescribeResponse,
+    FieldDefinition, LabelPolicyDefinition, PopulateRequest, PopulateResponse, RestartRequest,
     RestartResponse, StatusRequest, StatusResponse, TypeDefinition, VersionDefinition,
 };
-use crate::proto::chisel_rpc_server::{ChiselRpc, ChiselRpcServer};
 use crate::server::Server;
 use crate::types::TypeSystem;
 use crate::version::{VersionInfo, VersionInit};
-use anyhow::{Context, Result, bail, ensure};
+use crate::{apply, version};
+use anyhow::{bail, ensure, Context, Result};
 use deno_core::futures;
 use futures::FutureExt;
-use std::panic;
 use std::collections::HashMap;
 use std::net::SocketAddr;
+use std::panic;
 use std::sync::Arc;
 use std::time::Duration;
-use tonic::{Request, Response, Status};
 use tokio::sync::oneshot;
+use tonic::{Request, Response, Status};
 use utils::{CancellableTaskHandle, TaskHandle};
 use uuid::Uuid;
 
@@ -37,12 +36,15 @@ struct RpcService {
     server: Arc<Server>,
 }
 
-pub async fn spawn(server: Arc<Server>, listen_addr: SocketAddr)
-    -> Result<(SocketAddr, TaskHandle<Result<()>>)>
-{
-    let rpc_service = RpcService { id: Uuid::new_v4(), server };
-    let router = tonic::transport::Server::builder()
-        .add_service(ChiselRpcServer::new(rpc_service));
+pub async fn spawn(
+    server: Arc<Server>,
+    listen_addr: SocketAddr,
+) -> Result<(SocketAddr, TaskHandle<Result<()>>)> {
+    let rpc_service = RpcService {
+        id: Uuid::new_v4(),
+        server,
+    };
+    let router = tonic::transport::Server::builder().add_service(ChiselRpcServer::new(rpc_service));
 
     let listener = tokio::net::TcpListener::bind(listen_addr).await?;
     let listen_addr = listener.local_addr()?;
@@ -50,7 +52,9 @@ pub async fn spawn(server: Arc<Server>, listen_addr: SocketAddr)
 
     let task = tokio::task::spawn(async move {
         // TODO: implement graceful shutdown?
-        router.serve_with_incoming(incoming).await
+        router
+            .serve_with_incoming(incoming)
+            .await
             .context("Error while serving gRPC")?;
         Ok(())
     });
@@ -74,7 +78,8 @@ impl ChiselRpc for RpcService {
         &self,
         request: Request<ApplyRequest>,
     ) -> Result<Response<ApplyResponse>, Status> {
-        apply(self.server.clone(), request.into_inner()).await
+        apply(self.server.clone(), request.into_inner())
+            .await
             .map(Response::new)
             .map_err(|e| Status::internal(format!("{:?}", e)))
     }
@@ -84,7 +89,8 @@ impl ChiselRpc for RpcService {
         &self,
         request: Request<DeleteRequest>,
     ) -> Result<Response<DeleteResponse>, Status> {
-        delete(&self.server, request.into_inner()).await
+        delete(&self.server, request.into_inner())
+            .await
             .map(Response::new)
             .map_err(|e| Status::internal(format!("{:?}", e)))
     }
@@ -93,7 +99,8 @@ impl ChiselRpc for RpcService {
         &self,
         request: Request<PopulateRequest>,
     ) -> Result<Response<PopulateResponse>, Status> {
-        populate(&self.server, request.into_inner()).await
+        populate(&self.server, request.into_inner())
+            .await
             .map(Response::new)
             .map_err(|e| Status::internal(format!("{:?}", e)))
     }
@@ -118,40 +125,54 @@ impl ChiselRpc for RpcService {
 fn describe(server: &Server) -> DescribeResponse {
     let versions = server.trunk.list_versions();
 
-    let version_defs = versions.into_iter().map(|version| {
-        let mut type_defs = version.type_system.custom_types.values().map(|entity| {
-            let field_defs = entity.user_fields().map(|field| {
-                let field_type = version.type_system.get(&field.type_id).unwrap();
-                FieldDefinition {
-                    name: field.name.to_owned(),
-                    field_type: Some(field_type.into()),
-                    labels: field.labels.clone(),
-                    default_value: field.user_provided_default().clone(),
-                    is_optional: field.is_optional,
-                    is_unique: field.is_unique,
-                }
-            }).collect();
+    let version_defs = versions
+        .into_iter()
+        .map(|version| {
+            let mut type_defs = version
+                .type_system
+                .custom_types
+                .values()
+                .map(|entity| {
+                    let field_defs = entity
+                        .user_fields()
+                        .map(|field| {
+                            let field_type = version.type_system.get(&field.type_id).unwrap();
+                            FieldDefinition {
+                                name: field.name.to_owned(),
+                                field_type: Some(field_type.into()),
+                                labels: field.labels.clone(),
+                                default_value: field.user_provided_default().clone(),
+                                is_optional: field.is_optional,
+                                is_unique: field.is_unique,
+                            }
+                        })
+                        .collect();
 
-            TypeDefinition {
-                name: entity.name().to_string(),
-                field_defs,
+                    TypeDefinition {
+                        name: entity.name().to_string(),
+                        field_defs,
+                    }
+                })
+                .collect::<Vec<_>>();
+            type_defs.sort_unstable_by(|x, y| x.name.cmp(&y.name));
+
+            let mut label_policy_defs = version
+                .policy_system
+                .labels
+                .keys()
+                .map(|label| LabelPolicyDefinition {
+                    label: label.clone(),
+                })
+                .collect::<Vec<_>>();
+            label_policy_defs.sort_unstable_by(|x, y| x.label.cmp(&y.label));
+
+            VersionDefinition {
+                version_id: version.version_id.clone(),
+                type_defs,
+                label_policy_defs,
             }
-        }).collect::<Vec<_>>();
-        type_defs.sort_unstable_by(|x, y| x.name.cmp(&y.name));
-
-        let mut label_policy_defs = version.policy_system.labels.keys().map(|label| {
-            LabelPolicyDefinition {
-                label: label.clone(),
-            }
-        }).collect::<Vec<_>>();
-        label_policy_defs.sort_unstable_by(|x, y| x.label.cmp(&y.label));
-
-        VersionDefinition {
-            version_id: version.version_id.clone(),
-            type_defs,
-            label_policy_defs,
-        }
-    }).collect();
+        })
+        .collect();
 
     DescribeResponse { version_defs }
 }
@@ -163,16 +184,25 @@ async fn apply(server: Arc<Server>, request: ApplyRequest) -> Result<ApplyRespon
         tag: request.version_tag.clone(),
     };
 
-    let modules = request.modules.iter()
+    let modules = request
+        .modules
+        .iter()
         .map(|m| (m.url.clone(), m.code.clone()))
         .collect::<HashMap<_, _>>();
     let modules = Arc::new(modules);
-    validate_modules(server.clone(), version_id.clone(), info.clone(), modules.clone()).await
-        .context("The provided code does not seem to work")?;
+    validate_modules(
+        server.clone(),
+        version_id.clone(),
+        info.clone(),
+        modules.clone(),
+    )
+    .await
+    .context("The provided code does not seem to work")?;
 
     let result = {
         let mut type_systems = server.type_systems.lock().await;
-        let type_system = type_systems.entry(version_id.clone())
+        let type_system = type_systems
+            .entry(version_id.clone())
             .or_insert_with(|| TypeSystem::new(server.builtin_types.clone(), version_id.clone()));
 
         // NOTE: there is a race condition, because we migrate the database to the new schema, while
@@ -184,7 +214,8 @@ async fn apply(server: Arc<Server>, request: ApplyRequest) -> Result<ApplyRespon
             version_id.clone(),
             &info,
             &modules,
-        ).await?
+        )
+        .await?
     };
 
     let (ready_tx, ready_rx) = oneshot::channel();
@@ -200,8 +231,11 @@ async fn apply(server: Arc<Server>, request: ApplyRequest) -> Result<ApplyRespon
     };
 
     let (version, request_tx, mut version_task) = version::spawn(init).await?;
-    wait_until_ready(&mut version_task, ready_rx).await
-        .context("The version did not start up correcly, but the database has already been modified")?;
+    wait_until_ready(&mut version_task, ready_rx)
+        .await
+        .context(
+            "The version did not start up correcly, but the database has already been modified",
+        )?;
     server.trunk.add_version(version, request_tx, version_task);
 
     Ok(ApplyResponse {
@@ -244,7 +278,7 @@ async fn wait_until_ready(
     let mut ready_rx = ready_rx.fuse();
     let mut timeout = Fuse::terminated();
     loop {
-        tokio::select!{
+        tokio::select! {
             res = &mut version_task => match res {
                 Some(Ok(_)) => bail!("Version task terminated before the version was ready"),
                 Some(Err(err)) => return Err(err.context("Could not apply the provided code")),
@@ -277,7 +311,8 @@ async fn delete(server: &Server, request: DeleteRequest) -> Result<DeleteRespons
 
     let meta = &server.meta_service;
     let mut transaction = meta.begin_transaction().await?;
-    meta.delete_policy_version(&mut transaction, &version.version_id).await?;
+    meta.delete_policy_version(&mut transaction, &version.version_id)
+        .await?;
     for &entity in entities_to_remove.iter() {
         meta.remove_type(&mut transaction, entity).await?;
     }
@@ -294,20 +329,28 @@ async fn delete(server: &Server, request: DeleteRequest) -> Result<DeleteRespons
     Ok(DeleteResponse { message })
 }
 
-async fn populate(
-    server: &Server,
-    request: PopulateRequest,
-) -> Result<PopulateResponse> {
-    let to_version = server.trunk.get_version(&request.to_version_id)
-        .context(format!("To-version {:?} does not exist", request.to_version_id))?;
-    let from_version = server.trunk.get_version(&request.from_version_id)
-        .context(format!("From-version {:?} does not exist", request.from_version_id))?;
+async fn populate(server: &Server, request: PopulateRequest) -> Result<PopulateResponse> {
+    let to_version = server
+        .trunk
+        .get_version(&request.to_version_id)
+        .context(format!(
+            "To-version {:?} does not exist",
+            request.to_version_id
+        ))?;
+    let from_version = server
+        .trunk
+        .get_version(&request.from_version_id)
+        .context(format!(
+            "From-version {:?} does not exist",
+            request.from_version_id
+        ))?;
 
     TypeSystem::populate_types(
         &server.query_engine,
         &to_version.type_system,
         &from_version.type_system,
-    ).await?;
+    )
+    .await?;
 
     let message = "OK".to_string();
     Ok(PopulateResponse { message })
@@ -316,7 +359,8 @@ async fn populate(
 fn validate_version_id(version_id: &str) -> Result<String> {
     ensure!(
         version_id != "__chiselstrike",
-        "Version {:?} is special and cannot be used", version_id,
+        "Version {:?} is special and cannot be used",
+        version_id,
     );
 
     let regex = regex::Regex::new(r"^[-_[[:alnum:]]]+$").unwrap();

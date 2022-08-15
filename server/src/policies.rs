@@ -158,11 +158,7 @@ impl PolicySystem {
                     None => {}
                 };
             }
-            for route in config["routes"]
-                .as_vec()
-                .get_or_insert(&[].into())
-                .iter()
-            {
+            for route in config["routes"].as_vec().get_or_insert(&[].into()).iter() {
                 if let Some(path) = route["path"].as_str() {
                     if let Some(users) = route["users"].as_str() {
                         policies

@@ -5,14 +5,14 @@ use crate::policies::PolicySystem;
 use crate::server::Server;
 use crate::types::TypeSystem;
 use crate::worker::{self, WorkerInit};
-use anyhow::{Result, bail};
+use anyhow::{bail, Result};
 use futures::stream::{FuturesUnordered, TryStreamExt};
 use serde::Serialize;
 use std::collections::HashMap;
 use std::sync::Arc;
-use tokio::task;
 use tokio::sync::{mpsc, oneshot};
-use utils::{TaskHandle, CancellableTaskHandle};
+use tokio::task;
+use utils::{CancellableTaskHandle, TaskHandle};
 
 pub struct VersionInit {
     pub version_id: String,
@@ -49,13 +49,13 @@ pub struct Version {
     pub policy_system: Arc<PolicySystem>,
 }
 
-pub async fn spawn(init: VersionInit) 
-    -> Result<(
-        Arc<Version>,
-        mpsc::Sender<ApiRequestResponse>,
-        CancellableTaskHandle<Result<()>>,
-    )> 
-{
+pub async fn spawn(
+    init: VersionInit,
+) -> Result<(
+    Arc<Version>,
+    mpsc::Sender<ApiRequestResponse>,
+    CancellableTaskHandle<Result<()>>,
+)> {
     let (request_tx, request_rx) = mpsc::channel(1);
     let version = Arc::new(Version {
         version_id: init.version_id.clone(),
@@ -87,7 +87,8 @@ async fn run(
             modules: init.modules.clone(),
             ready_tx,
             request_rx,
-        }).await?;
+        })
+        .await?;
 
         ready_rxs.push(ready_rx);
         request_txs.push(request_tx);
@@ -114,7 +115,11 @@ async fn run(
         let mut worker_i = 0;
         while let Some(request) = request_rx.recv().await {
             if request_txs[worker_i].send(request).await.is_err() {
-                bail!("Worker {:?} {} is unable to accept requests", version_id, worker_i);
+                bail!(
+                    "Worker {:?} {} is unable to accept requests",
+                    version_id,
+                    worker_i
+                );
             }
             worker_i = (worker_i + 1) % request_txs.len();
         }

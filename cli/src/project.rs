@@ -1,6 +1,6 @@
 // SPDX-FileCopyrightText: © 2022 ChiselStrike <info@chiselstrike.com>
 
-use crate::routes::{FileRouteMap, build_file_route_map};
+use crate::routes::{build_file_route_map, FileRouteMap};
 use anyhow::{Context, Result};
 use handlebars::Handlebars;
 use serde_derive::Deserialize;

@@ -87,5 +87,9 @@ fn main() -> ExitCode {
     run("cargo", args);
 
     let ok = rust::run_tests(opt.clone()) & lit::run_tests(&opt);
-    if ok { ExitCode::SUCCESS } else { ExitCode::FAILURE }
+    if ok {
+        ExitCode::SUCCESS
+    } else {
+        ExitCode::FAILURE
+    }
 }

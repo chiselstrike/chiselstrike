@@ -2,10 +2,10 @@
 
 #![allow(unused_imports)]
 
-use crate::proto::{IndexCandidate, Module};
 use crate::cmd::apply::chiselc_output;
 use crate::cmd::apply::parse_indexes;
-use crate::routes::{FileRouteMap, codegen_route_map};
+use crate::proto::{IndexCandidate, Module};
+use crate::routes::{codegen_route_map, FileRouteMap};
 use anyhow::{anyhow, bail, Context, Result};
 use endpoint_tsc::Compiler;
 use std::collections::HashMap;
@@ -32,14 +32,18 @@ pub(crate) async fn apply(
         .prefix("__route_map.")
         .tempfile()
         .context("Could not create a temporary file")?;
-    route_map_file.write_all(route_map_code.as_bytes())
+    route_map_file
+        .write_all(route_map_code.as_bytes())
         .context("Could not write to a temporary file")?;
-    route_map_file.flush()
+    route_map_file
+        .flush()
         .context("Could not flush a temporary file")?;
     let route_map_url = Url::from_file_path(route_map_file.path()).unwrap();
 
     let mut compiler = Compiler::new(true);
-    let compiled = compiler.compile(route_map_url.clone()).await
+    let compiled = compiler
+        .compile(route_map_url.clone())
+        .await
         .context("Could not compile routes (using deno-style modules)")?;
 
     let mut modules = Vec::new();
@@ -59,7 +63,10 @@ pub(crate) async fn apply(
             index_candidates.append(&mut candidates);
         }
 
-        modules.push(Module { url: url.to_string(), code });
+        modules.push(Module {
+            url: url.to_string(),
+            code,
+        });
     }
 
     Ok((modules, index_candidates))

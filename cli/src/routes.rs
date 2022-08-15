@@ -29,7 +29,10 @@ pub(crate) struct FileRoute {
     pub path_pattern: String,
 }
 
-pub(crate) fn build_file_route_map(base_dir: &Path, route_dirs: &[PathBuf]) -> Result<FileRouteMap> {
+pub(crate) fn build_file_route_map(
+    base_dir: &Path,
+    route_dirs: &[PathBuf],
+) -> Result<FileRouteMap> {
     let mut route_map = FileRouteMap { routes: Vec::new() };
     for route_dir in route_dirs.iter() {
         let route_dir = base_dir.join(route_dir);
@@ -38,14 +41,20 @@ pub(crate) fn build_file_route_map(base_dir: &Path, route_dirs: &[PathBuf]) -> R
         walk_dir(&mut route_map, &route_dir, "")
             .with_context(|| format!("Could not read routes from {}", route_dir.display()))?;
     }
-    route_map.routes.sort_unstable_by_key(|route| route.file_path.clone());
+    route_map
+        .routes
+        .sort_unstable_by_key(|route| route.file_path.clone());
     Ok(route_map)
 }
 
 fn walk_dir(route_map: &mut FileRouteMap, dir_path: &Path, path_pattern: &str) -> Result<()> {
     let root_ts_path = dir_path.join("_root.ts");
-    let root_is_file = try_is_file(&root_ts_path)
-        .with_context(|| format!("Could not determine whether {} exists", root_ts_path.display()))?;
+    let root_is_file = try_is_file(&root_ts_path).with_context(|| {
+        format!(
+            "Could not determine whether {} exists",
+            root_ts_path.display()
+        )
+    })?;
     if root_is_file {
         route_map.routes.push(FileRoute {
             file_path: root_ts_path,
@@ -61,9 +70,14 @@ fn walk_dir(route_map: &mut FileRouteMap, dir_path: &Path, path_pattern: &str) -
     Ok(())
 }
 
-fn walk_dir_entry(route_map: &mut FileRouteMap, entry: &fs::DirEntry, path_pattern: &str) -> Result<()> {
+fn walk_dir_entry(
+    route_map: &mut FileRouteMap,
+    entry: &fs::DirEntry,
+    path_pattern: &str,
+) -> Result<()> {
     let entry_name = entry.file_name();
-    let entry_name = entry_name.to_str()
+    let entry_name = entry_name
+        .to_str()
         .with_context(|| format!("Cannot convert file name {:?} to UTF-8", entry.file_name()))?;
     if entry_name.starts_with('_') {
         return Ok(());
@@ -83,7 +97,10 @@ fn walk_dir_entry(route_map: &mut FileRouteMap, entry: &fs::DirEntry, path_patte
                 },
             });
         } else if entry_name.ends_with(".js") {
-            bail!("Found file {}, but only TypeScript files (.ts) are supported", entry_path.display());
+            bail!(
+                "Found file {}, but only TypeScript files (.ts) are supported",
+                entry_path.display()
+            );
         }
     } else if metadata.is_dir() {
         let dir_path_pattern = format!("{}/{}", path_pattern, stem_to_pattern(entry_name));
@@ -122,8 +139,12 @@ pub(crate) fn codegen_route_map(
     lines.push("".into());
 
     for (i, route) in route_map.routes.iter().enumerate() {
-        let import = import_fn(&route.file_path)
-            .with_context(|| format!("Cannot convert file path {} to import", route.file_path.display()))?;
+        let import = import_fn(&route.file_path).with_context(|| {
+            format!(
+                "Cannot convert file path {} to import",
+                route.file_path.display()
+            )
+        })?;
         // TODO: we quote the `import` using fmt::Debug, but we should really quote it as a
         // JavaScript string
         lines.push(format!("import route{} from {:?};", i, import));
@@ -133,7 +154,10 @@ pub(crate) fn codegen_route_map(
     lines.push("const routeMap = new RouteMap();".into());
     for (i, route) in route_map.routes.iter().enumerate() {
         // TODO: same as above, we should quote the `path_pattern` properly
-        lines.push(format!("routeMap.prefix({:?}, route{});", route.path_pattern, i));
+        lines.push(format!(
+            "routeMap.prefix({:?}, route{});",
+            route.path_pattern, i
+        ));
     }
     lines.push("".into());
 

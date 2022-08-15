@@ -43,7 +43,6 @@ fn build_create_chiselstrike_app() {
     }
     run_in("npm", &["install"], create_app.clone());
     run_in("npm", &["run", "build"], create_app);
-
 }
 
 fn run_in(cmd: &str, args: &[&str], dir: PathBuf) {
@@ -70,14 +69,11 @@ fn run_in(cmd: &str, args: &[&str], dir: PathBuf) {
 
 fn mkdir_empty(dir: &Path) {
     if dir.exists() {
-        fs::remove_dir_all(&dir)
-            .expect(&format!("Cannot cleanup directory {}", dir.display()));
+        fs::remove_dir_all(&dir).expect(&format!("Cannot cleanup directory {}", dir.display()));
     }
-    fs::create_dir_all(&dir)
-        .expect(&format!("Cannot create directory {}", dir.display()));
+    fs::create_dir_all(&dir).expect(&format!("Cannot create directory {}", dir.display()));
 }
 
 fn write(output: &Path, data: &str) {
-    fs::write(output, data)
-        .expect(&format!("Cannot write to file {}", output.display()));
+    fs::write(output, data).expect(&format!("Cannot write to file {}", output.display()));
 }

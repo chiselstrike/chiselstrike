@@ -3,14 +3,14 @@
 pub mod deno;
 pub mod node;
 
+use crate::project::{read_manifest, read_to_string, AutoIndex, Module, Optimize};
 use crate::proto::chisel_rpc_client::ChiselRpcClient;
 use crate::proto::{ApplyRequest, IndexCandidate, PolicyUpdateRequest};
-use crate::project::{read_manifest, read_to_string, AutoIndex, Module, Optimize};
 use anyhow::{anyhow, Context, Result};
 use serde_json::Value;
-use std::io::Write;
 use std::env;
 use std::ffi::OsStr;
+use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
 
@@ -91,10 +91,10 @@ pub(crate) async fn apply(
     let optimize = chiselc_available && manifest.optimize == Optimize::Yes;
     let auto_index = chiselc_available && manifest.auto_index == AutoIndex::Yes;
     let (modules, index_candidates) = match manifest.modules {
-        Module::Node =>
-            node::apply(route_map, &entities, optimize, auto_index, &type_check).await?,
-        Module::Deno =>
-            deno::apply(route_map, &entities, optimize, auto_index).await?,
+        Module::Node => {
+            node::apply(route_map, &entities, optimize, auto_index, &type_check).await?
+        }
+        Module::Deno => deno::apply(route_map, &entities, optimize, auto_index).await?,
     };
 
     for p in policies {
@@ -211,11 +211,17 @@ fn is_chiselc_available() -> bool {
 }
 
 /// Spawn `chiselc` and return a reference to the child process.
-fn chiselc_spawn(input: &Path, output: &Path, entities: &[String]) -> Result<tokio::process::Child> {
+fn chiselc_spawn(
+    input: &Path,
+    output: &Path,
+    entities: &[String],
+) -> Result<tokio::process::Child> {
     let mut args: Vec<&OsStr> = vec![
         input.as_ref(),
-        "--output".as_ref(), output.as_ref(),
-        "--target".as_ref(), "js".as_ref(),
+        "--output".as_ref(),
+        output.as_ref(),
+        "--target".as_ref(),
+        "js".as_ref(),
     ];
     if !entities.is_empty() {
         args.push("-e".as_ref());

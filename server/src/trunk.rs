@@ -11,7 +11,7 @@ use std::pin::Pin;
 use std::sync::Arc;
 use std::task::{Context, Poll, Waker};
 use tokio::sync::mpsc;
-use utils::{TaskHandle, CancellableTaskHandle};
+use utils::{CancellableTaskHandle, TaskHandle};
 
 /// Manager of versions (branches).
 ///
@@ -57,25 +57,38 @@ impl Trunk {
     ) {
         let mut state = self.state.write();
         let version_id = version.version_id.clone();
-        state.versions.insert(version_id, TrunkVersion { version, request_tx });
+        state.versions.insert(
+            version_id,
+            TrunkVersion {
+                version,
+                request_tx,
+            },
+        );
         state.tasks.push(task);
         // we added the task to `state.tasks`, but we need to explicitly wake up the task that
         // polls `state.tasks`, otherwise we won't get notifications from the newly added task (see
         // documentation of `FuturesUnordered` for details)
-        if let Some(waker) = state.waker.take() { waker.wake() }
+        if let Some(waker) = state.waker.take() {
+            waker.wake()
+        }
     }
 
     pub fn remove_version(&self, version_id: &str) -> Option<Arc<Version>> {
         let mut state = self.state.write();
         // if there is still a task in `state.tasks` for this version, we just leave it alone. it
         // should terminate on its own when all `Arc<Version>`s are dropped
-        state.versions.remove(version_id).map(|trunk_version| trunk_version.version)
+        state
+            .versions
+            .remove(version_id)
+            .map(|trunk_version| trunk_version.version)
     }
 }
 
 pub async fn spawn() -> Result<(Trunk, TaskHandle<Result<()>>)> {
     let state = Arc::new(RwLock::new(TrunkState::default()));
-    let trunk = Trunk { state: state.clone() };
+    let trunk = Trunk {
+        state: state.clone(),
+    };
     let fut = future::poll_fn(move |cx| poll(&mut state.write(), cx));
     let task = TaskHandle(tokio::task::spawn(fut));
     Ok((trunk, task))

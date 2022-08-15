@@ -16,7 +16,7 @@ use futures::FutureExt;
 use futures::StreamExt;
 use itertools::Itertools;
 use pin_project::pin_project;
-use sea_query::{Alias, ColumnDef, Index, Table, PostgresQueryBuilder};
+use sea_query::{Alias, ColumnDef, Index, PostgresQueryBuilder, Table};
 use serde::Serialize;
 use serde_json::json;
 use sqlx::any::{Any, AnyArguments, AnyKind, AnyRow};
@@ -527,11 +527,7 @@ impl QueryEngine {
         }
     }
 
-    pub async fn add_row_shallow(
-        &self,
-        ty: &ObjectType,
-        ty_value: &JsonObject,
-    ) -> Result<()> {
+    pub async fn add_row_shallow(&self, ty: &ObjectType, ty_value: &JsonObject) -> Result<()> {
         let query = self.prepare_insertion_shallow(ty, ty_value)?;
         self.run_sql_queries(&[query], None).await?;
         Ok(())
@@ -606,7 +602,10 @@ impl QueryEngine {
                             // this save completes.  Better to check at compilation time that the endpoint code
                             // doesn't attempt to modify auth types.
                             Some(serde_json::Value::String(id)) => id.clone(),
-                            _ => anyhow::bail!("Cannot save into nested type {}.", nested_type.name()),
+                            _ => anyhow::bail!(
+                                "Cannot save into nested type {}.",
+                                nested_type.name()
+                            ),
                         }
                     } else {
                         let (nested_inserts, nested_ids) =
