@@ -256,7 +256,7 @@ impl VersionPolicy {
                     match header {
                         Yaml::BadValue => {}
                         Yaml::Hash(_) => {
-                            let kv = (&header["name"], &header["value"]);
+                            let kv = (&header["name"], &header["secret_value_ref"]);
                             match kv {
                                 (Yaml::String(name), Yaml::String(value)) => {
                                     policies.secret_authorization.add(path, RequiredHeader {
@@ -265,7 +265,7 @@ impl VersionPolicy {
                                     })?;
                                 }
                                 _ => anyhow::bail!(
-                                    "Header must have string values for keys 'name' and 'value'. Instead got: {header:?}"
+                                    "Header must have string values for keys 'name' and 'secret_value_ref'. Instead got: {header:?}"
                                 ),
                             }
                         }

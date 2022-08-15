@@ -13,7 +13,7 @@ pub async fn test(c: TestContext) {
         "policies/p.yaml",
         r##"endpoints:
  - path: /
-   mandatory_header: { name: header33, value: TOKEN33 }"##,
+   mandatory_header: { name: header33, secret_value_ref: TOKEN33 }"##,
     );
     c.chisel.write(".env", r##"{ "TOKEN33" : "s3cr3t" }"##);
     c.chisel.restart().await.unwrap();
@@ -46,7 +46,7 @@ pub async fn test(c: TestContext) {
         "policies/p.yaml",
         r##"endpoints:
  - path: /
-   mandatory_header: { name: header33, value: WXYZ }"##,
+   mandatory_header: { name: header33, secret_value_ref: WXYZ }"##,
     );
     c.chisel.apply().await.unwrap();
     assert_eq!(
@@ -61,9 +61,9 @@ pub async fn test(c: TestContext) {
         "policies/p.yaml",
         r##"endpoints:
  - path: /
-   mandatory_header: { name: header33, value: TOKEN33 }
+   mandatory_header: { name: header33, secret_value_ref: TOKEN33 }
  - path: /
-   mandatory_header: { name: foo, value: BAR }"##,
+   mandatory_header: { name: foo, secret_value_ref: BAR }"##,
     );
     c.chisel
         .apply()
@@ -91,26 +91,26 @@ pub async fn test(c: TestContext) {
         "policies/p.yaml",
         r##"endpoints:
  - path: /
-   mandatory_header: { value: TOKEN33 }"##,
+   mandatory_header: { secret_value_ref: TOKEN33 }"##,
     );
     c.chisel
         .apply()
         .await
         .expect_err("Didn't catch wrong header")
         .stderr
-        .peek("Header must have string values for keys 'name' and 'value'");
+        .peek("Header must have string values for keys 'name' and 'secret_value_ref'");
 
-    // Non-string header value.
+    // Non-string secret_value_ref.
     c.chisel.write(
         "policies/p.yaml",
         r##"endpoints:
  - path: /
-   mandatory_header: { name: header33, value: 99 }"##,
+   mandatory_header: { name: header33, secret_value_ref: 99 }"##,
     );
     c.chisel
         .apply()
         .await
         .expect_err("Didn't catch wrong header")
         .stderr
-        .peek("Header must have string values for keys 'name' and 'value'");
+        .peek("Header must have string values for keys 'name' and 'secret_value_ref'");
 }
