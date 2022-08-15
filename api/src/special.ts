@@ -1,13 +1,13 @@
-import { RouteMap } from './routing.ts';
-import { responseFromJson } from './utils.ts';
+import { RouteMap } from "./routing.ts";
+import { responseFromJson } from "./utils.ts";
 
 // Corresponds to the `VersionInfo` struct in Rust
 type VersionInfo = {
-    name: string,
-    tag: string,
+    name: string;
+    tag: string;
 };
 
-const versionInfo: VersionInfo = Deno.core.opSync('op_chisel_get_version_info');
+const versionInfo: VersionInfo = Deno.core.opSync("op_chisel_get_version_info");
 
 export function specialBefore(routeMap: RouteMap) {
     async function handleSwagger(): Promise<Response> {
@@ -17,7 +17,7 @@ export function specialBefore(routeMap: RouteMap) {
         }
 
         const swagger = {
-            swagger: '2.0',
+            swagger: "2.0",
             info: {
                 title: versionInfo.name,
                 version: versionInfo.tag,
@@ -28,7 +28,7 @@ export function specialBefore(routeMap: RouteMap) {
         return responseFromJson(swagger);
     }
 
-    routeMap.get('/', handleSwagger);
+    routeMap.get("/", handleSwagger);
 }
 
 export function specialAfter(_routeMap: RouteMap) {

@@ -1,48 +1,60 @@
 // SPDX-FileCopyrightText: © 2022 ChiselStrike <info@chiselstrike.com>
 
-import { requestContext, loggedInUser } from './datastore.ts';
-import { ChiselRequest } from './request.ts';
-import { Router, RouterMatch, RouteMap, Middleware, Handler } from './routing.ts';
-import { responseFromJson } from './utils.ts';
+import { loggedInUser, requestContext } from "./datastore.ts";
+import { ChiselRequest } from "./request.ts";
+import {
+    Handler,
+    Middleware,
+    RouteMap,
+    Router,
+    RouterMatch,
+} from "./routing.ts";
+import { responseFromJson } from "./utils.ts";
 
 // HTTP API request that we receive from Rust
 type ApiRequest = {
-    method: string,
-    uri: string,
-    headers: [string, string][],
-    body: Uint8Array,
-    routingPath: string,
-    userId: string | undefined,
+    method: string;
+    uri: string;
+    headers: [string, string][];
+    body: Uint8Array;
+    routingPath: string;
+    userId: string | undefined;
 };
 
 // HTTP API response that we give to Rust
 type ApiResponse = {
-    status: number,
-    headers: [string, string][],
-    body: Uint8Array,
+    status: number;
+    headers: [string, string][];
+    body: Uint8Array;
 };
 
-const versionId: string = Deno.core.opSync('op_chisel_get_version_id');
+const versionId: string = Deno.core.opSync("op_chisel_get_version_id");
 
 export async function serve(routeMap: RouteMap): Promise<void> {
     const router = new Router(routeMap);
-    Deno.core.opSync('op_chisel_ready');
+    Deno.core.opSync("op_chisel_ready");
 
     for (;;) {
-        const accepted = await Deno.core.opAsync('op_chisel_accept');
-        if (accepted === null) { break; }
+        const accepted = await Deno.core.opAsync("op_chisel_accept");
+        if (accepted === null) break;
 
         const [apiRequest, responseRid] = accepted;
         const apiResponse = await handleRequest(router, apiRequest);
-        Deno.core.opSync('op_chisel_respond', responseRid, apiResponse);
+        Deno.core.opSync("op_chisel_respond", responseRid, apiResponse);
     }
 }
 
-async function handleRequest(router: Router, apiRequest: ApiRequest): Promise<ApiResponse> {
-    const routerMatch = router.lookup(apiRequest.method, apiRequest.routingPath);
-    if (routerMatch === 'not_found') {
+async function handleRequest(
+    router: Router,
+    apiRequest: ApiRequest,
+): Promise<ApiResponse> {
+    const routerMatch = router.lookup(
+        apiRequest.method,
+        apiRequest.routingPath,
+    );
+    if (routerMatch === "not_found") {
         return emptyResponse(404);
-    } else if (routerMatch === 'method_not_allowed') {
+    } else if (routerMatch === "method_not_allowed") {
         return emptyResponse(405);
     }
 
@@ -60,7 +72,7 @@ async function handleRequest(router: Router, apiRequest: ApiRequest): Promise<Ap
     requestContext.userId = apiRequest.userId;
 
     // we must start the transaction before reading the logged-in user
-    await Deno.core.opAsync('op_chisel_begin_transaction');
+    await Deno.core.opAsync("op_chisel_begin_transaction");
     const user = await loggedInUser(); // reads `requestContext.userId`
 
     // convert the internal `apiRequest` to the request that is visible to user code
@@ -70,8 +82,9 @@ async function handleRequest(router: Router, apiRequest: ApiRequest): Promise<Ap
             method: apiRequest.method,
             headers: apiRequest.headers,
             // Request() complains if there is a body in a GET/HEAD request
-            body: (apiRequest.method == 'GET' || apiRequest.method == 'HEAD') 
-                ? undefined : apiRequest.body,
+            body: (apiRequest.method == "GET" || apiRequest.method == "HEAD")
+                ? undefined
+                : apiRequest.body,
         },
         url.pathname,
         versionId,
@@ -89,18 +102,20 @@ async function handleRequest(router: Router, apiRequest: ApiRequest): Promise<Ap
         // code might still be running while the response is streaming
         responseBody = await response.arrayBuffer();
 
-        await Deno.core.opAsync('op_chisel_commit_transaction');
+        await Deno.core.opAsync("op_chisel_commit_transaction");
     } catch (e) {
-        let description = '';
+        let description = "";
         if (e instanceof Error && e.stack !== undefined) {
             description = e.stack;
         } else {
-            description = '' + e;
+            description = "" + e;
         }
-        console.error(`Error in ${apiRequest.method} ${apiRequest.uri}: ${description}`);
+        console.error(
+            `Error in ${apiRequest.method} ${apiRequest.uri}: ${description}`,
+        );
 
         try {
-            Deno.core.opSync('op_chisel_rollback_transaction');
+            Deno.core.opSync("op_chisel_rollback_transaction");
         } catch (e) {
             console.error(`Error when rolling back transaction: ${e}`);
         }
@@ -117,8 +132,15 @@ async function handleRequest(router: Router, apiRequest: ApiRequest): Promise<Ap
     };
 }
 
-function handleRouterMatch(routerMatch: RouterMatch, request: ChiselRequest): Promise<Response> {
-    return handleMiddlewareChain(routerMatch.middlewares, routerMatch.handler, request);
+function handleRouterMatch(
+    routerMatch: RouterMatch,
+    request: ChiselRequest,
+): Promise<Response> {
+    return handleMiddlewareChain(
+        routerMatch.middlewares,
+        routerMatch.handler,
+        request,
+    );
 }
 
 async function handleMiddlewareChain(
@@ -131,7 +153,7 @@ async function handleMiddlewareChain(
         const responseLike = await handler.call(undefined, request);
         if (responseLike instanceof Response) {
             return responseLike;
-        } else if (typeof responseLike === 'string') {
+        } else if (typeof responseLike === "string") {
             return new Response(responseLike);
         } else {
             return responseFromJson(responseLike);
@@ -145,5 +167,5 @@ async function handleMiddlewareChain(
 }
 
 function emptyResponse(status: number): ApiResponse {
-    return { status, headers: [], body: new Uint8Array(0) }
+    return { status, headers: [], body: new Uint8Array(0) };
 }

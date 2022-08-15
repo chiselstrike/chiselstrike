@@ -4,7 +4,11 @@ export function opSync(opName: string, a?: unknown, b?: unknown): unknown {
     return Deno.core.opSync(opName, a, b);
 }
 
-export function opAsync(opName: string, a?: unknown, b?: unknown): Promise<unknown> {
+export function opAsync(
+    opName: string,
+    a?: unknown,
+    b?: unknown,
+): Promise<unknown> {
     return Deno.core.opAsync(opName, a, b);
 }
 
@@ -41,4 +45,3 @@ export function responseFromJson(body: unknown, status = 200) {
         ],
     });
 }
-

@@ -1,7 +1,7 @@
-import { opAsync, responseFromJson } from './utils.ts';
-import { ChiselEntity, requestContext } from './datastore.ts';
-import { ChiselRequest } from './request.ts';
-import { RouteMap } from './routing.ts';
+import { opAsync, responseFromJson } from "./utils.ts";
+import { ChiselEntity, requestContext } from "./datastore.ts";
+import { ChiselRequest } from "./request.ts";
+import { RouteMap } from "./routing.ts";
 
 type ChiselEntityClass<T extends ChiselEntity> = {
     new (): T;
@@ -16,7 +16,6 @@ export type CRUDCreateResponse = (
     body: unknown,
     status: number,
 ) => Promise<Response> | Response;
-
 
 /**
  * Generates a route map to handle REST methods GET/PUT/POST/DELETE for this entity.
@@ -47,13 +46,13 @@ export function crud<
 >(
     entity: E,
     config?: {
-        createResponse?: CRUDCreateResponse,
-        getAll?: boolean,
-        getOne?: boolean,
-        post?: boolean,
-        put?: boolean,
-        deleteAll?: boolean,
-        deleteOne?: boolean,
+        createResponse?: CRUDCreateResponse;
+        getAll?: boolean;
+        getOne?: boolean;
+        post?: boolean;
+        put?: boolean;
+        deleteAll?: boolean;
+        deleteOne?: boolean;
     },
 ): RouteMap {
     const createResponse = config?.createResponse ?? responseFromJson;
@@ -61,14 +60,18 @@ export function crud<
 
     // Returns all entities matching the filter in the `filter` URL parameter.
     async function getAll(req: ChiselRequest): Promise<Response> {
-        return createResponse(await fetchEntitiesCrud(entity, req.path, Array.from(req.query)), 200);
+        return createResponse(
+            await fetchEntitiesCrud(entity, req.path, Array.from(req.query)),
+            200,
+        );
     }
-    if (config?.getAll ?? true)
-        routeMap.get('/', getAll);
+    if (config?.getAll ?? true) {
+        routeMap.get("/", getAll);
+    }
 
     // Returns a specific entity matching :id
     async function getOne(req: ChiselRequest): Promise<Response> {
-        const id = req.params.get('id');
+        const id = req.params.get("id");
         const u = await entity.findOne({ id });
         if (u !== undefined) {
             return createResponse(u, 200);
@@ -76,8 +79,9 @@ export function crud<
             return createResponse("Not found", 404);
         }
     }
-    if (config?.getOne ?? true)
-        routeMap.get('/:id', getOne);
+    if (config?.getOne ?? true) {
+        routeMap.get("/:id", getOne);
+    }
 
     // Creates and returns a new entity from the `req` payload. Ignores the payload's id property and assigns a fresh one.
     async function post(req: ChiselRequest): Promise<Response> {
@@ -86,35 +90,42 @@ export function crud<
         await u.save();
         return createResponse(u, 200);
     }
-    if (config?.post ?? true)
-        routeMap.post('/', post);
+    if (config?.post ?? true) {
+        routeMap.post("/", post);
+    }
 
     // Updates and returns the entity matching :id from the `req` payload.
     async function put(req: ChiselRequest): Promise<Response> {
         const u = entity.build(await req.json());
-        u.id = req.params.get('id');
+        u.id = req.params.get("id");
         await u.save();
         return createResponse(u, 200);
     }
-    if (config?.put ?? true)
-        routeMap.put('/:id', put);
+    if (config?.put ?? true) {
+        routeMap.put("/:id", put);
+    }
 
     // Deletes all entities matching the filter in the `filter` URL parameter.
     async function deleteAll(req: ChiselRequest): Promise<Response> {
         await deleteEntitiesCrud(entity, Array.from(req.query));
-        return createResponse(`Deleted entities matching ${new URL(req.url).search}`, 200);
+        return createResponse(
+            `Deleted entities matching ${new URL(req.url).search}`,
+            200,
+        );
     }
-    if (config?.deleteAll ?? true)
-        routeMap.delete('/', deleteAll);
+    if (config?.deleteAll ?? true) {
+        routeMap.delete("/", deleteAll);
+    }
 
     // Deletes the entity matching :id
     async function deleteOne(req: ChiselRequest): Promise<Response> {
-        const id = req.params.get('id');
+        const id = req.params.get("id");
         await entity.delete({ id });
         return createResponse(`Deleted ID ${id}`, 200);
     }
-    if (config?.deleteOne ?? true)
-        routeMap.delete('/:id', deleteOne);
+    if (config?.deleteOne ?? true) {
+        routeMap.delete("/:id", deleteOne);
+    }
 
     return routeMap;
 }
@@ -149,4 +160,3 @@ async function deleteEntitiesCrud<T extends ChiselEntity>(
         requestContext,
     );
 }
-

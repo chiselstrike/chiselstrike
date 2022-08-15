@@ -1,8 +1,8 @@
 // SPDX-FileCopyrightText: © 2022 ChiselStrike <info@chiselstrike.com>
 
-import { crud } from './crud.ts';
-import type { RouteMap } from './routing.ts';
-import { opAsync } from './utils.ts';
+import { crud } from "./crud.ts";
+import type { RouteMap } from "./routing.ts";
+import { opAsync } from "./utils.ts";
 
 /**
  * Acts the same as Object.assign, but performs deep merge instead of a shallow one.
@@ -1038,11 +1038,11 @@ export const requestContext: {
     routingPath: string;
     userId: string | undefined;
 } = {
-    versionId: '',
-    method: '',
+    versionId: "",
+    method: "",
     headers: [],
-    path: '',
-    routingPath: '',
+    path: "",
+    routingPath: "",
     userId: undefined,
 };
 
@@ -1067,4 +1067,3 @@ export async function loggedInUser(): Promise<AuthUser | undefined> {
     }
     return await AuthUser.findOne({ id });
 }
-

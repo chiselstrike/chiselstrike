@@ -1,6 +1,6 @@
 // SPDX-FileCopyrightText: © 2022 ChiselStrike <info@chiselstrike.com>
 
-import type { AuthUser } from './datastore.ts';
+import type { AuthUser } from "./datastore.ts";
 
 /** Extends the Request class adding ChiselStrike-specific helpers
  *
@@ -155,12 +155,12 @@ export class Params {
 }
 
 function getNumber(value: string | undefined): number | undefined {
-    const f = Number.parseFloat(value ?? '');
+    const f = Number.parseFloat(value ?? "");
     return Number.isNaN(f) ? undefined : f;
 }
 
 function getInt(value: string | undefined): number | undefined {
-    const i = Number.parseInt(value ?? '', 10);
+    const i = Number.parseInt(value ?? "", 10);
     return Number.isNaN(i) ? undefined : i;
 }
 
@@ -177,4 +177,3 @@ function getBool(value: string | undefined): boolean | undefined {
             return true;
     }
 }
-

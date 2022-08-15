@@ -1,10 +1,10 @@
 // SPDX-FileCopyrightText: © 2022 ChiselStrike <info@chiselstrike.com>
 
-import type { ChiselRequest } from './request.ts';
+import type { ChiselRequest } from "./request.ts";
 
 export class RouteMap {
-    routes: Route[]
-    middlewares: Middleware[]
+    routes: Route[];
+    middlewares: Middleware[];
 
     constructor() {
         this.routes = [];
@@ -13,7 +13,7 @@ export class RouteMap {
 
     route(method: string | string[], path: string, handler: Handler): this {
         const methods = Array.isArray(method) ? method : [method];
-        const pathPattern = path[0] !== '/' ? '/' + path : path;
+        const pathPattern = path[0] !== "/" ? "/" + path : path;
         this.routes.push({ methods, pathPattern, handler, middlewares: [] });
         return this;
     }
@@ -23,10 +23,10 @@ export class RouteMap {
         // "foo" -> "/foo"
         // "foo/" -> "/foo"
         // "/" -> ""
-        if (path[0] !== '/') {
-            path = '/' + path;
+        if (path[0] !== "/") {
+            path = "/" + path;
         }
-        if (path[path.length - 1] === '/') {
+        if (path[path.length - 1] === "/") {
             path = path.slice(0, path.length - 1);
         }
 
@@ -42,11 +42,21 @@ export class RouteMap {
         return this;
     }
 
-    get(path: string, handler: Handler): this { return this.route('GET', path, handler) }
-    post(path: string, handler: Handler): this { return this.route('POST', path, handler) }
-    put(path: string, handler: Handler): this { return this.route('PUT', path, handler) }
-    delete(path: string, handler: Handler): this { return this.route('DELETE', path, handler) }
-    patch(path: string, handler: Handler): this { return this.route('PATCH', path, handler) }
+    get(path: string, handler: Handler): this {
+        return this.route("GET", path, handler);
+    }
+    post(path: string, handler: Handler): this {
+        return this.route("POST", path, handler);
+    }
+    put(path: string, handler: Handler): this {
+        return this.route("PUT", path, handler);
+    }
+    delete(path: string, handler: Handler): this {
+        return this.route("DELETE", path, handler);
+    }
+    patch(path: string, handler: Handler): this {
+        return this.route("PATCH", path, handler);
+    }
 
     middleware(handler: MiddlewareHandler): this {
         this.middlewares.push({ handler });
@@ -56,12 +66,12 @@ export class RouteMap {
     static convert(routes: RouteMapLike): RouteMap {
         if (routes instanceof RouteMap) {
             return routes;
-        } else if (typeof routes === 'function') {
-            return new RouteMap().route('*', '*', routes)
+        } else if (typeof routes === "function") {
+            return new RouteMap().route("*", "*", routes);
         } else {
             const routeMap = new RouteMap();
             for (const method in routes) {
-                routeMap.route(method, '*', routes[method]);
+                routeMap.route(method, "*", routes[method]);
             }
             return routeMap;
         }
@@ -69,12 +79,14 @@ export class RouteMap {
 }
 
 export type Route = {
-    methods: string[],
-    pathPattern: string,
-    handler: Handler,
-    middlewares: Middleware[],
+    methods: string[];
+    pathPattern: string;
+    handler: Handler;
+    middlewares: Middleware[];
 };
-export type Handler = (req: ChiselRequest) => ResponseLike | Promise<ResponseLike>;
+export type Handler = (
+    req: ChiselRequest,
+) => ResponseLike | Promise<ResponseLike>;
 export type ResponseLike = Response | string | unknown;
 
 export type RouteMapLike =
@@ -83,20 +95,27 @@ export type RouteMapLike =
     | Handler;
 
 export type Middleware = {
-    handler: MiddlewareHandler,
+    handler: MiddlewareHandler;
 };
-export type MiddlewareHandler = (request: ChiselRequest, next: MiddlewareNext) => Promise<Response>;
+export type MiddlewareHandler = (
+    request: ChiselRequest,
+    next: MiddlewareNext,
+) => Promise<Response>;
 export type MiddlewareNext = (request: ChiselRequest) => Promise<Response>;
 
-
 export class Router {
-    private routes: RouterRoute[]
+    private routes: RouterRoute[];
 
     constructor(routeMap: RouteMap) {
-        this.routes = routeMap.routes.map((route) => new RouterRoute(route, routeMap));
+        this.routes = routeMap.routes.map((route) =>
+            new RouterRoute(route, routeMap)
+        );
     }
 
-    lookup(method: string, path: string): RouterMatch | 'not_found' | 'method_not_allowed' {
+    lookup(
+        method: string,
+        path: string,
+    ): RouterMatch | "not_found" | "method_not_allowed" {
         for (const route of this.routes) {
             const match = route.match(method, path);
             if (match !== null) {
@@ -106,19 +125,19 @@ export class Router {
 
         for (const route of this.routes) {
             if (route.testNoMethod(path)) {
-                return 'method_not_allowed';
+                return "method_not_allowed";
             }
         }
 
-        return 'not_found';
+        return "not_found";
     }
 }
 
 export type RouterMatch = {
-    params: Record<string, string>,
-    handler: Handler,
-    middlewares: Middleware[],
-}
+    params: Record<string, string>;
+    handler: Handler;
+    middlewares: Middleware[];
+};
 
 class RouterRoute {
     pattern: URLPattern;
@@ -129,10 +148,16 @@ class RouterRoute {
     constructor(route: Route, routeMap: RouteMap) {
         // HACK: we use the hostname part of the URL Pattern to match the method
         const methodPattern = route.methods
-            .map(method => method == '*' ? '.*' : method)
-            .join('|');
-        this.pattern = new URLPattern(route.pathPattern, `http://(${methodPattern})`);
-        this.noMethodPattern = new URLPattern(route.pathPattern, 'http://dummy-host');
+            .map((method) => method == "*" ? ".*" : method)
+            .join("|");
+        this.pattern = new URLPattern(
+            route.pathPattern,
+            `http://(${methodPattern})`,
+        );
+        this.noMethodPattern = new URLPattern(
+            route.pathPattern,
+            "http://dummy-host",
+        );
         this.handler = route.handler;
         this.middlewares = route.middlewares.concat(routeMap.middlewares);
     }
@@ -140,15 +165,15 @@ class RouterRoute {
     match(method: string, path: string): RouterMatch | null {
         const methodUrl = `http://${method}`;
         let match = this.pattern.exec(path, methodUrl);
-        if (match === null && path[path.length - 1] !== '/') {
-            match = this.pattern.exec(path + '/', methodUrl);
+        if (match === null && path[path.length - 1] !== "/") {
+            match = this.pattern.exec(path + "/", methodUrl);
         }
 
         if (match === null) {
             return null;
         }
 
-        return { 
+        return {
             params: match.pathname.groups,
             handler: this.handler,
             middlewares: this.middlewares,
@@ -156,12 +181,11 @@ class RouterRoute {
     }
 
     testNoMethod(path: string): boolean {
-        const baseUrl = 'http://dummy-host';
+        const baseUrl = "http://dummy-host";
         let matches = this.noMethodPattern.test(path, baseUrl);
-        if (!matches && path[path.length - 1] !== '/') {
-            matches = this.noMethodPattern.test(path + '/', baseUrl);
+        if (!matches && path[path.length - 1] !== "/") {
+            matches = this.noMethodPattern.test(path + "/", baseUrl);
         }
         return matches;
     }
 }
-
