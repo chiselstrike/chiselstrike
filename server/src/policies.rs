@@ -91,11 +91,13 @@ impl SecretAuthorization {
     ) -> bool {
         match self.paths.longest_prefix(path) {
             None => true,
+            Some((_, RequiredHeader { verbs: Some(v), .. })) if !v.contains(req.method()) => true,
             Some((
                 _,
                 RequiredHeader {
                     header_name,
                     secret_name,
+                    ..
                 },
             )) => {
                 let secret_value = match secrets.get(secret_name).cloned() {
@@ -128,12 +130,14 @@ impl SecretAuthorization {
     }
 }
 
-/// Describes a header name and expected value.
+/// Describes a header that a request must include.
 #[derive(Clone, Default, Debug)]
 struct RequiredHeader {
     header_name: String,
     /// Names a secret (see secrets.rs) whose value must match the header value.
     secret_name: String,
+    /// HTTP verbs to which this requirement applies.  If absent, apply to all verbs.
+    verbs: Option<Vec<hyper::Method>>,
 }
 
 #[derive(Clone, Default)]
@@ -264,9 +268,20 @@ impl VersionPolicy {
                             let kv = (&header["name"], &header["secret_value_ref"]);
                             match kv {
                                 (Yaml::String(name), Yaml::String(value)) => {
+                                    let verbs = &header["only_for_verbs"];
+                                    let verbs = match verbs {
+                                        Yaml::BadValue => None,
+                                        Yaml::String(_) => Some(parse_verbs(&vec![verbs.clone()])?),
+                                        Yaml::Array(a) => Some(parse_verbs(a)?),
+                                        _ => {
+                                            warn!("only_for_verbs must be a list of strings, instead got {verbs:?}");
+                                            None
+                                        }
+                                    };
                                     policies.secret_authorization.add(path, RequiredHeader {
                                         header_name: name.clone(),
                                         secret_name: value.clone(),
+                                        verbs,
                                     })?;
                                 }
                                 _ => anyhow::bail!(
@@ -286,4 +301,19 @@ impl VersionPolicy {
 pub(crate) fn anonymize(_: Value) -> Value {
     // TODO: use type-specific anonymization.
     json!("xxxxx")
+}
+
+fn parse_verbs(v: &Vec<Yaml>) -> Result<Vec<hyper::Method>> {
+    let mut verbs = vec![];
+    for e in v {
+        use anyhow::Context;
+        use std::str::FromStr;
+        match e {
+            Yaml::String(s) => verbs.push(
+                hyper::Method::from_str(s).with_context(|| format!("Error parsing verb {s}"))?,
+            ),
+            _ => anyhow::bail!("String verb expected in only_for_verbs, instead got {e:?}"),
+        }
+    }
+    Ok(verbs)
 }

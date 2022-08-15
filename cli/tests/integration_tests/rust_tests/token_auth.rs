@@ -1,5 +1,6 @@
 use crate::framework::prelude::*;
 use reqwest::{header::HeaderMap, StatusCode};
+use serde_json::json;
 
 fn header(name: &'static str, value: &str) -> HeaderMap {
     let mut headers = HeaderMap::new();
@@ -113,4 +114,27 @@ pub async fn test(c: TestContext) {
         .expect_err("Didn't catch wrong header")
         .stderr
         .peek("Header must have string values for keys 'name' and 'secret_value_ref'");
+
+    // Only PUTs and GETs require a header.
+    c.chisel.write(
+        "policies/p.yaml",
+        r##"endpoints:
+ - path: /
+   mandatory_header: { name: header33, secret_value_ref: TOKEN33, only_for_verbs: [ PUT, GET ] } "##,
+    );
+    c.chisel.apply().await.unwrap();
+    assert_eq!(
+        c.chisel.get_status("/dev/hello").await,
+        StatusCode::FORBIDDEN
+    );
+    assert_eq!(
+        c.chisel
+            .get_text_with_headers("/dev/hello", header("header33", "s3cr3t"))
+            .await,
+        "\"hello world\""
+    );
+    assert_eq!(
+        c.chisel.post_json_text("/dev/hello", json!(122333)).await,
+        "\"122333\""
+    );
 }
