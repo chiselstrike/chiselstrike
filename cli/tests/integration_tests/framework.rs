@@ -400,7 +400,6 @@ impl Chisel {
         }
     }
 
-    /*
     /// Same as `request()`, but returns the response body as JSON.
     pub async fn request_json<B>(
         &self,
@@ -429,6 +428,7 @@ impl Chisel {
         self.request(method, url, body).await.status().as_u16()
     }
 
+    /*
     /// Same as `request()`, but sends GET with no request body.
     pub async fn get(&self, url: &str) -> reqwest::Response {
         self.request(reqwest::Method::GET, url, "").await
@@ -443,12 +443,14 @@ impl Chisel {
     pub async fn get_text(&self, url: &str) -> String {
         self.request_text(reqwest::Method::GET, url, "").await
     }
+    */
 
     /// Same as `request_json()`, but sends GET with no request body.
     pub async fn get_json(&self, url: &str) -> serde_json::Value {
         self.request_json(reqwest::Method::GET, url, "").await
     }
 
+    /*
     /// Same as `request_status()`, but sends GET with no request body.
     pub async fn get_status(&self, url: &str) -> u16 {
         self.request_status(reqwest::Method::GET, url, "").await
@@ -476,6 +478,16 @@ impl Chisel {
     /// Same as `request_text()`, but sends POST with JSON request payload.
     pub async fn post_json_text(&self, url: &str, data: serde_json::Value) -> String {
         self.request_text(
+            reqwest::Method::POST,
+            url,
+            serde_json::to_string(&data).unwrap(),
+        )
+        .await
+    }
+
+    /// Same as `request_status()`, but sends POST with JSON request payload.
+    pub async fn post_json_status(&self, url: &str, data: serde_json::Value) -> u16 {
+        self.request_status(
             reqwest::Method::POST,
             url,
             serde_json::to_string(&data).unwrap(),
