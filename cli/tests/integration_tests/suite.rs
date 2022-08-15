@@ -46,7 +46,7 @@ impl TestSuite {
             match (test_spec.modules, modules) {
                 (ModulesSpec::Deno, Modules::Deno) => {}
                 (ModulesSpec::Node, Modules::Node) => {}
-                (ModulesSpec::Both, _) => {}
+                //(ModulesSpec::Both, _) => {}
                 (_, _) => return None,
             }
 
@@ -71,7 +71,7 @@ impl TestSuite {
 pub enum ModulesSpec {
     Deno,
     Node,
-    Both,
+    //Both,
 }
 
 #[derive(Copy, Clone, Debug)]
