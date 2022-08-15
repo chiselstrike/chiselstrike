@@ -59,7 +59,7 @@ use futures::{future, FutureExt};
 use hyper::body::HttpBody;
 use hyper::Method;
 use hyper::Uri;
-use hyper::{header::HeaderValue, HeaderMap, Request, Response, StatusCode};
+use hyper::{Request, Response, StatusCode};
 use log::debug;
 use once_cell::sync::Lazy;
 use once_cell::unsync::OnceCell;
@@ -1070,7 +1070,7 @@ fn is_allowed_by_policy(
     state: &OpState,
     api_version: &str,
     username: Option<String>,
-    headers: &HeaderMap<HeaderValue>,
+    req: &Request<hyper::Body>,
     secrets: &JsonObject,
     path: &std::path::Path,
 ) -> Result<bool> {
@@ -1082,7 +1082,7 @@ fn is_allowed_by_policy(
             path.display()
         )),
         Some(x) => Ok(x.user_authorization.is_allowed(username, path)
-            && x.secret_authorization.is_allowed(headers, secrets, path)),
+            && x.secret_authorization.is_allowed(req, secrets, path)),
     }
 }
 
@@ -1280,7 +1280,7 @@ async fn special_response(
             &state.borrow(),
             rp.api_version(),
             username,
-            req.headers(),
+            req,
             current_secrets(&state.borrow()),
             rp.path().as_ref(),
         )?;

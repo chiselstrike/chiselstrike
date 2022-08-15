@@ -4,7 +4,7 @@ use crate::prefix_map::PrefixMap;
 use crate::types::ObjectType;
 use crate::JsonObject;
 use anyhow::Result;
-use hyper::HeaderMap;
+use hyper::Request;
 use serde_json::{json, Value};
 use std::collections::{HashMap, HashSet};
 use std::path::Path;
@@ -83,7 +83,12 @@ pub(crate) struct SecretAuthorization {
 
 impl SecretAuthorization {
     /// Is a request with these headers allowed to execute the endpoint at this path?
-    pub fn is_allowed(&self, headers: &HeaderMap, secrets: &JsonObject, path: &Path) -> bool {
+    pub fn is_allowed(
+        &self,
+        req: &Request<hyper::Body>,
+        secrets: &JsonObject,
+        path: &Path,
+    ) -> bool {
         match self.paths.longest_prefix(path) {
             None => true,
             Some((
@@ -101,7 +106,7 @@ impl SecretAuthorization {
                         return false;
                     }
                 };
-                match headers.get(header_name).map(|v| v.to_str()) {
+                match req.headers().get(header_name).map(|v| v.to_str()) {
                     Some(Ok(header_value)) if header_value == secret_value => true,
                     Some(Err(e)) => {
                         warn!("Weird bytes in header {header_name}: {e}");
