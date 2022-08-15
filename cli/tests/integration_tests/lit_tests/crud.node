@@ -241,4 +241,4 @@ $CURL --no-include $CHISELD_HOST/dev/persons | jq '.results | .[] | .age'
 # CHECK: 2938
 
 $CURL -X PUT -d '{"age":98422}' $CHISELD_HOST/dev/persons/ # PUT without ID.
-# CHECK: HTTP/1.1 404 Not Found
+# CHECK: HTTP/1.1 405 Method Not Allowed

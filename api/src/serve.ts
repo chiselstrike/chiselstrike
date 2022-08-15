@@ -40,8 +40,10 @@ export async function serve(routeMap: RouteMap): Promise<void> {
 
 async function handleRequest(router: Router, apiRequest: ApiRequest): Promise<ApiResponse> {
     const routerMatch = router.lookup(apiRequest.method, apiRequest.routingPath);
-    if (routerMatch === null) {
+    if (routerMatch === 'not_found') {
         return emptyResponse(404);
+    } else if (routerMatch === 'method_not_allowed') {
+        return emptyResponse(405);
     }
 
     // the HTTP request usually specifies only path and query, but we need a full URL; so we resolve the URL
@@ -104,7 +106,7 @@ async function handleRequest(router: Router, apiRequest: ApiRequest): Promise<Ap
         }
 
         // return an empty response to avoid leaking details about the user error
-        // TODO: perhaps we should introduce a "debug mode" that would display a nice error response?
+        // TODO: perhaps we should introduce a "debug mode" that would return a nice error response?
         return emptyResponse(500);
     }
 

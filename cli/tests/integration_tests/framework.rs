@@ -13,6 +13,9 @@ use tokio::io::{AsyncRead, AsyncReadExt, AsyncWriteExt};
 
 pub mod prelude {
     pub use super::TestContext;
+    pub use bytes::Bytes;
+    pub use reqwest::Method;
+    pub use serde_json::json;
 }
 
 pub struct GuardedChild {
@@ -65,7 +68,6 @@ impl OutputType {
     }
 }
 
-#[derive(Debug)]
 pub struct ProcessOutput {
     pub status: ExitStatus,
     pub stdout: TestableOutput,
@@ -101,6 +103,12 @@ impl fmt::Display for ProcessOutput {
             textwrap::indent(&self.stdout.output, "    "),
             textwrap::indent(&self.stderr.output, "    ")
         )
+    }
+}
+
+impl fmt::Debug for ProcessOutput {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        <ProcessOutput as fmt::Display>::fmt(self, f)
     }
 }
 
@@ -408,6 +416,11 @@ impl Chisel {
     }
     */
 
+    /// Same as `request_body()`, but sends GET with no request body.
+    pub async fn get_body(&self, url: &str) -> (u16, Bytes) {
+        self.request_body(reqwest::Method::GET, url, "").await
+    }
+
     /// Same as `request_text()`, but sends GET with no request body.
     pub async fn get_text(&self, url: &str) -> String {
         self.request_text(reqwest::Method::GET, url, "").await
@@ -422,8 +435,6 @@ impl Chisel {
     pub async fn get_status(&self, url: &str) -> u16 {
         self.request_status(reqwest::Method::GET, url, "").await
     }
-
-
 
     /// Same as `request()`, but sends POST with JSON request payload.
     pub async fn post_json(&self, url: &str, data: serde_json::Value) -> reqwest::Response {

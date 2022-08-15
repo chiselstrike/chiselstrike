@@ -68,7 +68,7 @@ pub struct Opt {
     #[structopt(long)]
     pub optimize: Option<bool>,
     /// Number of Rust tests to run in parallel (does not apply to lit).
-    #[structopt(long)]
+    #[structopt(short, long)]
     pub parallel: Option<usize>,
 }
 

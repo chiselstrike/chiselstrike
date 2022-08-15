@@ -29,9 +29,6 @@ export function specialBefore(routeMap: RouteMap) {
     }
 
     routeMap.get('/', handleSwagger);
-
-    // Makes CORS preflights pass.
-    routeMap.route('OPTIONS', '.*', () => new Response("ok"));
 }
 
 export function specialAfter(_routeMap: RouteMap) {

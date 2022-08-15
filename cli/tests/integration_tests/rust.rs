@@ -260,5 +260,12 @@ pub(crate) async fn run_tests(opt: Arc<Opt>) -> bool {
         }
     }
 
+    if !ok {
+        println!("{}", "Some tests have failed".red());
+        if setup_panic_hook {
+            println!("Consider running this test with RUST_BACKTRACE=1 or -p1 to help you with debugging.");
+        }
+    }
+
     ok
 }

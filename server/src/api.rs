@@ -68,6 +68,10 @@ async fn try_handle_request(
         return Ok(handle_index(server));
     }
 
+    if *request.method() == hyper::Method::OPTIONS {
+        return Ok(handle_options());
+    }
+
     if let Some((version_id, routing_path)) = get_version_path(path) {
         if let Some(trunk_version) = server.trunk.get_trunk_version(version_id) {
             let version = trunk_version.version;
@@ -202,6 +206,15 @@ fn handle_index(server: Arc<Server>) -> hyper::Response<hyper::Body> {
     hyper::Response::builder()
         .header("content-type", "application/json")
         .body(hyper::Body::from(response))
+        .unwrap()
+}
+
+fn handle_options() -> hyper::Response<hyper::Body> {
+    // Makes CORS preflights pass.
+    // NOTE: This is a very heavy-handed way to handle CORS!
+    hyper::Response::builder()
+        .status(hyper::StatusCode::OK)
+        .body(hyper::Body::from("ok"))
         .unwrap()
 }
 

@@ -136,7 +136,7 @@ export class Params {
     get(paramName: string): string {
         const value = this.params[paramName];
         if (value === undefined) {
-            throw new Error(`undefined parameter ${paramName}`);
+            throw new Error(`Undefined parameter '${paramName}'`);
         }
         return value;
     }

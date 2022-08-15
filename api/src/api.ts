@@ -8,5 +8,6 @@ export {
 } from './datastore.ts';
 export { ChiselRequest, Query, Params } from './request.ts';
 export { RouteMap } from './routing.ts';
+export type { Handler, MiddlewareHandler, MiddlewareNext } from './routing.ts';
 export { getSecret, responseFromJson } from './utils.ts';
 export type { JSONValue } from './utils.ts';

@@ -96,14 +96,21 @@ export class Router {
         this.routes = routeMap.routes.map((route) => new RouterRoute(route, routeMap));
     }
 
-    lookup(method: string, path: string): RouterMatch | null {
+    lookup(method: string, path: string): RouterMatch | 'not_found' | 'method_not_allowed' {
         for (const route of this.routes) {
             const match = route.match(method, path);
             if (match !== null) {
                 return match;
             }
         }
-        return null;
+
+        for (const route of this.routes) {
+            if (route.testNoMethod(path)) {
+                return 'method_not_allowed';
+            }
+        }
+
+        return 'not_found';
     }
 }
 
@@ -115,6 +122,7 @@ export type RouterMatch = {
 
 class RouterRoute {
     pattern: URLPattern;
+    noMethodPattern: URLPattern;
     handler: Handler;
     middlewares: Middleware[];
 
@@ -124,6 +132,7 @@ class RouterRoute {
             .map(method => method == '*' ? '.*' : method)
             .join('|');
         this.pattern = new URLPattern(route.pathPattern, `http://(${methodPattern})`);
+        this.noMethodPattern = new URLPattern(route.pathPattern, 'http://dummy-host');
         this.handler = route.handler;
         this.middlewares = route.middlewares.concat(routeMap.middlewares);
     }
@@ -144,6 +153,15 @@ class RouterRoute {
             handler: this.handler,
             middlewares: this.middlewares,
         };
+    }
+
+    testNoMethod(path: string): boolean {
+        const baseUrl = 'http://dummy-host';
+        let matches = this.noMethodPattern.test(path, baseUrl);
+        if (!matches && path[path.length - 1] !== '/') {
+            matches = this.noMethodPattern.test(path + '/', baseUrl);
+        }
+        return matches;
     }
 }
 
