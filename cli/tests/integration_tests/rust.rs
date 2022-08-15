@@ -2,7 +2,7 @@
 
 use crate::database::{generate_database_config, Database, DatabaseConfig, PostgresDb, SqliteDb};
 use crate::framework::{execute_async, Chisel, GuardedChild, TestContext};
-use crate::suite::{Modules, TestSuite, TestInstance};
+use crate::suite::{Modules, TestInstance, TestSuite};
 use crate::Opt;
 use colored::Colorize;
 use enclose::enclose;
@@ -11,7 +11,6 @@ use futures::stream::{FuturesUnordered, StreamExt};
 use std::any::Any;
 use std::future::Future;
 use std::io::{stdout, Write};
-use std::marker::Unpin;
 use std::net::{Ipv4Addr, SocketAddr};
 use std::path::PathBuf;
 use std::pin::Pin;
@@ -159,8 +158,6 @@ struct TestResult {
     result: Result<(), Box<dyn Any + Send + 'static>>,
 }
 
-impl Unpin for TestFuture {}
-
 impl Future for TestFuture {
     type Output = TestResult;
     fn poll(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Self::Output> {
@@ -195,6 +192,9 @@ pub(crate) async fn run_tests(opt: Arc<Opt>) -> bool {
     // when `RUST_BACKTRACE` env is set. Also, when there is no parallelism, the messages cannot be
     // interleaved, so we also keep the default hook in this case.
     let setup_panic_hook = !env::var_os("RUST_BACKTRACE").is_some() && parallel > 1;
+    if setup_panic_hook {
+        panic::set_hook(Box::new(|_| {}));
+    }
 
     let mut ok = true;
     let mut futures = FuturesUnordered::new();
@@ -206,9 +206,6 @@ pub(crate) async fn run_tests(opt: Arc<Opt>) -> bool {
         if !instances.is_empty() && futures.len() < parallel {
             let instance = Arc::new(instances.pop().unwrap());
             let future = enclose! {(instance, opt, ports_counter) async move {
-                if setup_panic_hook {
-                    panic::set_hook(Box::new(|_| {}));
-                }
                 let ctx = setup_test_context(&opt, &ports_counter, &instance).await;
                 instance.spec.test_fn.call(ctx).await;
             }};

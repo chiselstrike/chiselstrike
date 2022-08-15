@@ -27,7 +27,9 @@ inventory::collect!(TestSpec);
 
 impl TestSuite {
     pub fn from_inventory() -> Self {
-        Self { tests: inventory::iter::<TestSpec>.into_iter().collect() }
+        Self {
+            tests: inventory::iter::<TestSpec>.into_iter().collect(),
+        }
     }
 
     pub fn instantiate(&self, opt: &Opt) -> Vec<TestInstance> {

@@ -26,11 +26,11 @@ impl Parse for TestArgs {
                 "modules" if modules.is_none() => {
                     let _: Token!(=) = input.parse()?;
                     modules = Some(input.parse()?);
-                },
+                }
                 "optimize" if optimize.is_none() => {
                     let _: Token!(=) = input.parse()?;
                     optimize = Some(input.parse()?);
-                },
+                }
                 other => {
                     return Err(syn::Error::new(
                         key.span(),
@@ -45,7 +45,8 @@ impl Parse for TestArgs {
         }
 
         Ok(Self {
-            modules: modules.ok_or_else(|| syn::Error::new(input.span(), "missing modules argument"))?,
+            modules: modules
+                .ok_or_else(|| syn::Error::new(input.span(), "missing modules argument"))?,
             optimize,
         })
     }
@@ -58,7 +59,9 @@ pub fn test(args: TokenStream, input: TokenStream) -> TokenStream {
     let fun_name = &fun.sig.ident;
     let fun_name_str = fun_name.to_string();
     let modules = args.modules;
-    let optimize = args.optimize.unwrap_or(Ident::new("Yes", Span::call_site()));
+    let optimize = args
+        .optimize
+        .unwrap_or_else(|| Ident::new("Yes", Span::call_site()));
 
     quote::quote! {
         ::inventory::submit! {
