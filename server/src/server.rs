@@ -363,11 +363,11 @@ async fn run_shared_state(
     let mut sigusr1 =
         tokio::signal::unix::signal(tokio::signal::unix::SignalKind::user_defined1())?;
     let sig_task = tokio::task::spawn(async move {
-        let res = futures::select! {
-            _ = sigterm.recv().fuse() => { debug!("Got SIGTERM"); DoRepeat::No },
-            _ = sigint.recv().fuse() => { debug!("Got SIGINT"); DoRepeat::No },
-            _ = sighup.recv().fuse() => { debug!("Got SIGHUP"); DoRepeat::No },
-            _ = sigusr1.recv().fuse() => { debug!("Got SIGUSR1"); DoRepeat::Yes },
+        let res = tokio::select! {
+            _ = sigterm.recv() => { debug!("Got SIGTERM"); DoRepeat::No },
+            _ = sigint.recv() => { debug!("Got SIGINT"); DoRepeat::No },
+            _ = sighup.recv() => { debug!("Got SIGHUP"); DoRepeat::No },
+            _ = sigusr1.recv() => { debug!("Got SIGUSR1"); DoRepeat::Yes },
         };
         mark_not_ready();
         debug!("Got signal");
@@ -382,9 +382,9 @@ async fn run_shared_state(
     let opt_clone = opt.clone();
     let _secret_reader = tokio::task::spawn(async move {
         loop {
-            futures::select! {
-                _ = sleep(Duration::from_millis(1000)).fuse() => {},
-                _ = secret_shutdown.recv().fuse() => {
+            tokio::select! {
+                _ = sleep(Duration::from_millis(1000)) => {},
+                _ = secret_shutdown.recv() => {
                     break;
                 }
             };
