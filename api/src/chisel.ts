@@ -844,6 +844,12 @@ export function chiselIterator<T extends ChiselEntity>(
     return new ChiselCursor(b);
 }
 
+export type UpsertArgs<T> = {
+    restrictions: Partial<T>;
+    create: Partial<T>;
+    update: Partial<T>;
+};
+
 /** ChiselEntity is a class that ChiselStrike user-defined entities are expected to extend.
  *
  * It provides properties that are inherent to a ChiselStrike entity, like an id, and static
@@ -1132,6 +1138,54 @@ export class ChiselEntity {
         mergeDeep(result as Record<string, unknown>, ...properties);
         await result.save();
         return result;
+    }
+
+    /**
+     * Update an object or create it if it doesn't exist.
+     *
+     * @example
+     * ```typescript
+     * export class User extends ChiselEntity {
+     *   username: string,
+     *   email: string,
+     * }
+     * const user = await User.upsert({
+     *     restrictions: { username: "alice", email: "alice@example.com" },
+     *     create: { username: "alice", email: "alice@example.com" },
+     *     update: { email: "alice@chiselstrike.com" }
+     * });
+     * ```
+     *
+     * Please note that upsert only updates a single row it matches on.
+     *
+     * @version experimental
+     */
+    static async upsert<T extends ChiselEntity>(
+        this: { new (): T },
+        args: UpsertArgs<T>,
+    ): Promise<T> {
+        const it = chiselIterator<T>(this).filter(args.restrictions);
+        let record = null;
+        for await (const value of it) {
+            record = value;
+            break;
+        }
+        if (record) {
+            mergeDeep(
+                record as Record<string, unknown>,
+                args.update as Record<string, unknown>,
+            );
+            await record.save();
+            return record;
+        } else {
+            const record = new this();
+            mergeDeep(
+                record as Record<string, unknown>,
+                args.create as Record<string, unknown>,
+            );
+            await record.save();
+            return record;
+        }
     }
 }
 
