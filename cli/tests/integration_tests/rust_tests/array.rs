@@ -1,7 +1,7 @@
 use crate::framework::prelude::*;
 
 #[chisel_macros::test(modules = Deno)]
-pub async fn test_array(c: TestContext) {
+pub async fn test(c: TestContext) {
     c.chisel.write(
         "models/types.ts",
         r##"
