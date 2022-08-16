@@ -182,6 +182,7 @@ pub(crate) async fn run_tests(opt: Arc<Opt>) -> bool {
     let suite = TestSuite::from_inventory();
     let ports_counter = Arc::new(AtomicU16::new(30000));
     let parallel = opt.parallel.unwrap_or_else(num_cpus::get);
+    let is_parallel = parallel > 1;
 
     // By default, when a panic happens, the panic message is immediately written to stderr and
     // only then unwinding starts. However, we normally want to print the messages ourselves, to
@@ -191,7 +192,7 @@ pub(crate) async fn run_tests(opt: Arc<Opt>) -> bool {
     // But when this hook is present, we cannot print the backtrace, so we keep the default hook
     // when `RUST_BACKTRACE` env is set. Also, when there is no parallelism, the messages cannot be
     // interleaved, so we also keep the default hook in this case.
-    let setup_panic_hook = env::var_os("RUST_BACKTRACE").is_none() && parallel > 1;
+    let setup_panic_hook = env::var_os("RUST_BACKTRACE").is_none() && is_parallel;
     if setup_panic_hook {
         panic::set_hook(Box::new(|_| {}));
     }
@@ -200,7 +201,6 @@ pub(crate) async fn run_tests(opt: Arc<Opt>) -> bool {
     let mut futures = FuturesUnordered::new();
     let mut instances = suite.instantiate(&opt);
     instances.reverse();
-    let mut printed_pending_instance = None;
 
     while !instances.is_empty() || !futures.is_empty() {
         if !instances.is_empty() && futures.len() < parallel {
@@ -211,12 +211,10 @@ pub(crate) async fn run_tests(opt: Arc<Opt>) -> bool {
             }};
             let task = tokio::task::spawn(future);
 
-            if printed_pending_instance.is_some() {
-                println!();
+            if !is_parallel {
+                print!("{} ... ", format_test_instance(&instance));
+                stdout().flush().unwrap();
             }
-            print!("{} ... ", format_test_instance(&instance));
-            stdout().flush().unwrap();
-            printed_pending_instance = Some(instance.clone());
 
             futures.push(TestFuture {
                 instance: Some(instance),
@@ -228,12 +226,9 @@ pub(crate) async fn run_tests(opt: Arc<Opt>) -> bool {
         assert!(!futures.is_empty());
         let TestResult { instance, result } = futures.next().await.unwrap();
 
-        match printed_pending_instance {
-            Some(pending) if Arc::ptr_eq(&pending, &instance) => {}
-            Some(_) => print!("\n{} ... ", format_test_instance(&instance)),
-            None => print!("{} ... ", format_test_instance(&instance)),
+        if is_parallel {
+            print!("{}: ", format_test_instance(&instance));
         }
-        printed_pending_instance = None;
 
         match result {
             Ok(_) => println!("{}", "PASSED".green()),
@@ -266,7 +261,7 @@ pub(crate) async fn run_tests(opt: Arc<Opt>) -> bool {
     if !ok {
         println!("{}", "Some tests have failed".red());
         if setup_panic_hook {
-            println!("Consider running this test with RUST_BACKTRACE=1 or -p1 to help you with debugging.");
+            println!("Consider running this test with RUST_BACKTRACE=1 and -p1 to help you with debugging.");
         }
     }
 
