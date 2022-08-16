@@ -441,6 +441,11 @@ fn get_error_class_name(e: &AnyError) -> &'static str {
             // friends
             e.downcast_ref::<String>().map(|_| "Error")
         })
+        .or_else(|| {
+            // plain string errors produced by anyhow!("something"), .context("something") and
+            // friends
+            e.downcast_ref::<&str>().map(|_| "Error")
+        })
         .unwrap_or_else(|| {
             // when this is printed, please handle the unknown type by adding another
             // `downcast_ref()` check above
