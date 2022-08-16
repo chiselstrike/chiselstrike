@@ -1,0 +1,49 @@
+# SPDX-FileCopyrightText: © 2022 ChiselStrike <info@chiselstrike.com>
+
+# RUN: sh -e @file
+
+cd "$TEMPDIR"
+
+cat << EOF > "$TEMPDIR/models/types.ts"
+import { ChiselEntity } from "@chiselstrike/api";
+
+export class Person extends ChiselEntity {
+    name: string = "";
+    email: string = "";
+    isQueen: boolean = false;
+}
+EOF
+
+cat << EOF > "$TEMPDIR/endpoints/upsert.ts"
+import { Person } from "../models/types.ts";
+import { responseFromJson } from "@chiselstrike/api"
+
+export default async function chisel(req: Request) {
+    const ret = await Person.upsert({
+        restrictions: { 'name': 'Elizabeth' },
+        create: { 'name': 'Elizabeth', email: 'elizabeth@example.com', 'isQueen': true },
+        update: { 'isQueen': false }
+    });
+    const people = await Person.findAll();
+    if (people.length != 1) {
+        throw new Error("upsert failed");
+    }
+    return responseFromJson(ret);
+}
+EOF
+
+$CHISEL apply
+# CHECK: Model defined: Person
+# CHECK: End point defined: /dev/upsert
+
+$CURL -X POST $CHISELD_HOST/dev/upsert
+# CHECK: HTTP/1.1 200 OK
+# CHECK: "name": "Elizabeth"
+# CHECK: "email": "elizabeth@example.com"
+# CHECK: "isQueen": true
+
+$CURL -X POST $CHISELD_HOST/dev/upsert
+# CHECK: HTTP/1.1 200 OK
+# CHECK: "name": "Elizabeth"
+# CHECK: "email": "elizabeth@example.com"
+# CHECK: "isQueen": false
