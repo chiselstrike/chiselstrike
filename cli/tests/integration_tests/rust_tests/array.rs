@@ -1,14 +1,8 @@
-use serde_json::json;
+use crate::framework::prelude::*;
 
-use crate::framework::TestConfig;
-use crate::framework::{IntegrationTest, OpMode};
-
-#[chisel_macros::test(mode = OpMode::Deno)]
-pub async fn test_array(config: TestConfig) {
-    let mut ctx = config.setup().await;
-    let (chisel, _chiseld) = ctx.get_chisels();
-
-    chisel.write(
+#[chisel_macros::test(modules = Deno)]
+pub async fn test(c: TestContext) {
+    c.chisel.write(
         "models/types.ts",
         r##"
         export class Foo extends Chisel.ChiselEntity {
@@ -19,11 +13,10 @@ pub async fn test_array(config: TestConfig) {
         }
     "##,
     );
-    chisel.write(
+    c.chisel.write(
         "endpoints/store.ts",
         r##"
         import { Foo } from "../models/types.ts";
-
         export default async function chisel(req: Request) {
             await Foo.build({
                 order: 0,
@@ -34,17 +27,16 @@ pub async fn test_array(config: TestConfig) {
         }
     "##,
     );
-    chisel.write(
+    c.chisel.write(
         "endpoints/get.ts",
         r##"
         import { Foo } from "../models/types.ts";
-
         export default async function chisel(req: Request) {
             return await Foo.findAll();
         }
     "##,
     );
-    chisel.write(
+    c.chisel.write(
         "endpoints/crud_foos.ts",
         r##"
         import { Foo } from "../models/types.ts";
@@ -52,15 +44,14 @@ pub async fn test_array(config: TestConfig) {
     "##,
     );
 
-    chisel.apply().await.expect("chisel apply failed");
+    c.chisel.apply().await.expect("chisel apply failed");
 
-    chisel
-        .post("/dev/store", json!({}))
-        .await
-        .expect("failed to store data");
+    c.chisel
+        .post_json_ok("/dev/store", json!({}))
+        .await;
 
     {
-        let data = chisel.get_json("/dev/get").await;
+        let data = c.chisel.get_json("/dev/get").await;
         let entity = &data[0];
         assert_eq!(entity["order"], json!(0));
         assert_eq!(entity["numbers"], json!([1, 0, -1.01]));
@@ -68,7 +59,7 @@ pub async fn test_array(config: TestConfig) {
         assert_eq!(entity["booleans"], json!([[false], [true, false]]));
     }
     {
-        let data = chisel.get_json("/dev/crud_foos").await;
+        let data = c.chisel.get_json("/dev/crud_foos").await;
         let entity = &data["results"][0];
         assert_eq!(entity["order"], json!(0));
         assert_eq!(entity["numbers"], json!([1, 0, -1.01]));
@@ -76,8 +67,8 @@ pub async fn test_array(config: TestConfig) {
         assert_eq!(entity["booleans"], json!([[false], [true, false]]));
     }
 
-    chisel
-        .post(
+    c.chisel
+        .post_json_ok(
             "/dev/crud_foos",
             json!({
                 "order": 1,
@@ -86,10 +77,9 @@ pub async fn test_array(config: TestConfig) {
                 "booleans": [[true], [false]]
             }),
         )
-        .await
-        .expect("failed to store data using crud");
+        .await;
     {
-        let data = chisel.get_json("/dev/crud_foos?sort=order").await;
+        let data = c.chisel.get_json("/dev/crud_foos?sort=order").await;
         let entity0 = &data["results"][0];
         assert_eq!(entity0["order"], json!(0));
         assert_eq!(entity0["numbers"], json!([1, 0, -1.01]));
@@ -104,8 +94,8 @@ pub async fn test_array(config: TestConfig) {
     }
 
     {
-        chisel
-            .post(
+        let status = c.chisel
+            .post_json_status(
                 "/dev/crud_foos",
                 json!({
                     "order": 1,
@@ -114,10 +104,11 @@ pub async fn test_array(config: TestConfig) {
                     "booleans": [[true]]
                 }),
             )
-            .await
-            .expect_err("storage of incorrect data using CRUD should have failed");
-        chisel
-            .post(
+            .await;
+        assert_eq!(status, 500);
+
+        let status = c.chisel
+            .post_json_status(
                 "/dev/crud_foos",
                 json!({
                     "order": 1,
@@ -126,10 +117,11 @@ pub async fn test_array(config: TestConfig) {
                     "booleans": [[true]]
                 }),
             )
-            .await
-            .expect_err("storage of incorrect data using CRUD should have failed");
-        chisel
-            .post(
+            .await;
+        assert_eq!(status, 500);
+
+        let status = c.chisel
+            .post_json_status(
                 "/dev/crud_foos",
                 json!({
                     "order": 1,
@@ -138,7 +130,7 @@ pub async fn test_array(config: TestConfig) {
                     "booleans": [[1]]
                 }),
             )
-            .await
-            .expect_err("storage of incorrect data using CRUD should have failed");
+            .await;
+        assert_eq!(status, 500);
     }
 }

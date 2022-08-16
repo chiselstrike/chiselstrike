@@ -4,24 +4,32 @@ use proc_macro::TokenStream;
 use proc_macro2::Span;
 use syn::{
     parse::{Parse, ParseStream},
-    parse_macro_input, Ident, ItemFn, LitStr, Path, Token,
+    parse_macro_input, Ident, ItemFn, LitStr, Token,
 };
 
 /// Arguments to the test macro
 struct TestArgs {
-    /// Mode in which to run the tests: either OpMode::Deno or OpMode::Node.
-    mode: Path,
+    /// Variant of the `ModulesSpec` type.
+    modules: Ident,
+    /// Variant of the `OptimizeSpec` type.
+    optimize: Option<Ident>,
 }
 
 impl Parse for TestArgs {
     fn parse(input: ParseStream) -> syn::Result<Self> {
-        let mut mode = None;
+        let mut modules = None;
+        let mut optimize = None;
+        // TODO: use `syn::AttributeArgs` or the `darling` crate to parse the arguments
         while !input.is_empty() {
             let key: Ident = input.parse()?;
             match key.to_string().as_str() {
-                "mode" if mode.is_none() => {
+                "modules" if modules.is_none() => {
                     let _: Token!(=) = input.parse()?;
-                    mode.replace(input.parse()?);
+                    modules = Some(input.parse()?);
+                }
+                "optimize" if optimize.is_none() => {
+                    let _: Token!(=) = input.parse()?;
+                    optimize = Some(input.parse()?);
                 }
                 other => {
                     return Err(syn::Error::new(
@@ -30,10 +38,16 @@ impl Parse for TestArgs {
                     ))
                 }
             }
+
+            if input.peek(Token!(,)) {
+                input.parse::<Token!(,)>()?;
+            }
         }
 
         Ok(Self {
-            mode: mode.ok_or_else(|| syn::Error::new(input.span(), "missing mode argument"))?,
+            modules: modules
+                .ok_or_else(|| syn::Error::new(input.span(), "missing modules argument"))?,
+            optimize,
         })
     }
 }
@@ -44,13 +58,17 @@ pub fn test(args: TokenStream, input: TokenStream) -> TokenStream {
     let fun = parse_macro_input!(input as ItemFn);
     let fun_name = &fun.sig.ident;
     let fun_name_str = fun_name.to_string();
-    let mode = args.mode;
+    let modules = args.modules;
+    let optimize = args
+        .optimize
+        .unwrap_or_else(|| Ident::new("Yes", Span::call_site()));
 
     quote::quote! {
-        inventory::submit! {
-            IntegrationTest {
+        ::inventory::submit! {
+            crate::suite::TestSpec {
                 name: concat!(module_path!(), "::", #fun_name_str),
-                mode: #mode,
+                modules: crate::suite::ModulesSpec::#modules,
+                optimize: crate::suite::OptimizeSpec::#optimize,
                 test_fn: &#fun_name,
             }
         }
