@@ -584,3 +584,9 @@ pub struct TestContext {
     // before we try to drop the database.
     pub _db: Database,
 }
+
+pub fn header(name: &'static str, value: &str) -> HeaderMap {
+    let mut headers = HeaderMap::new();
+    headers.insert(name, value.parse().unwrap());
+    headers
+}

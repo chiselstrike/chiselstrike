@@ -1,12 +1,6 @@
-use crate::framework::prelude::*;
-use reqwest::{header::HeaderMap, StatusCode};
+use crate::framework::{header, prelude::*};
+use reqwest::StatusCode;
 use serde_json::json;
-
-fn header(name: &'static str, value: &str) -> HeaderMap {
-    let mut headers = HeaderMap::new();
-    headers.insert(name, value.parse().unwrap());
-    headers
-}
 
 #[chisel_macros::test(modules = Node)]
 pub async fn test(c: TestContext) {
