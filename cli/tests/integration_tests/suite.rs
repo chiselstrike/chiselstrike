@@ -40,7 +40,7 @@ impl TestSuite {
         )
         .filter_map(|(test_spec, modules, optimize)| {
             if let Some(name_regex) = opt.test.as_ref() {
-                if !name_regex.is_match(&test_spec.name) {
+                if !name_regex.is_match(test_spec.name) {
                     return None;
                 }
             }
@@ -60,7 +60,7 @@ impl TestSuite {
             }
 
             Some(TestInstance {
-                spec: test_spec.clone(),
+                spec: test_spec,
                 modules,
                 optimize,
             })

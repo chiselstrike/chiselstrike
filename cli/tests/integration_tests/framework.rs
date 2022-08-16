@@ -64,7 +64,7 @@ pub enum OutputType {
 }
 
 impl OutputType {
-    fn to_str(&self) -> &'static str {
+    fn as_str(&self) -> &'static str {
         match self {
             OutputType::Stdout => "stdout",
             OutputType::Stderr => "stderr",
@@ -158,7 +158,7 @@ impl TestableOutput {
             self.cursor = idx + pattern.len();
             self
         } else {
-            let out_type = self.output_type.to_str();
+            let out_type = self.output_type.as_str();
             let output = &self.output;
             panic!("failed to find text in the {out_type}: {pattern:?}\nFull output:\n{output}");
         }
@@ -168,7 +168,7 @@ impl TestableOutput {
     /// position (cursor). If not found, the function will panic.
     pub fn peek(self, pattern: &str) -> Self {
         if !self.output[self.cursor..].contains(pattern) {
-            let out_type = self.output_type.to_str();
+            let out_type = self.output_type.as_str();
             let output = &self.output;
             panic!("failed to find text in the {out_type}: {pattern:?}\nFull output:\n{output}");
         }
@@ -217,7 +217,7 @@ impl AsyncTestableOutput {
         };
         let r = tokio::time::timeout(timeout, checking_fut).await;
         if r.is_err() {
-            let out_type = self.output_type.to_str();
+            let out_type = self.output_type.as_str();
             let output = self.decoded_output();
             panic!("failed to find text before timeout in the {out_type}: {pattern}\nFull output:\n{output}")
         }
@@ -290,7 +290,7 @@ impl Chisel {
             .current_dir(&*self.tmp_dir)
             .output()
             .await
-            .expect(&format!("could not execute `chisel {}`", cmd));
+            .unwrap_or_else(|e| panic!("could not execute `chisel {}`: {}", cmd, e));
         ProcessOutput::from(output).into_result()
     }
 
@@ -321,8 +321,9 @@ impl Chisel {
     pub fn write(&self, path: &str, text: &str) {
         let full_path = self.tmp_dir.path().join(path);
         fs::create_dir_all(full_path.parent().unwrap())
-            .expect(&format!("Unable to create directory for {:?}", path));
-        fs::write(full_path, text).expect(&format!("Unable to write to {:?}", path));
+            .unwrap_or_else(|e| panic!("Unable to create directory for {:?}: {}", path, e));
+        fs::write(full_path, text)
+            .unwrap_or_else(|e| panic!("Unable to write to {:?}: {}", path, e));
     }
 
     /// Copies given `file` to a relative directory path `to` inside ChiselStrike project.

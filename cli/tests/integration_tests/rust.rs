@@ -181,7 +181,7 @@ fn format_test_instance(instance: &TestInstance) -> String {
 pub(crate) async fn run_tests(opt: Arc<Opt>) -> bool {
     let suite = TestSuite::from_inventory();
     let ports_counter = Arc::new(AtomicU16::new(30000));
-    let parallel = opt.parallel.unwrap_or(num_cpus::get());
+    let parallel = opt.parallel.unwrap_or_else(num_cpus::get);
 
     // By default, when a panic happens, the panic message is immediately written to stderr and
     // only then unwinding starts. However, we normally want to print the messages ourselves, to
@@ -191,7 +191,7 @@ pub(crate) async fn run_tests(opt: Arc<Opt>) -> bool {
     // But when this hook is present, we cannot print the backtrace, so we keep the default hook
     // when `RUST_BACKTRACE` env is set. Also, when there is no parallelism, the messages cannot be
     // interleaved, so we also keep the default hook in this case.
-    let setup_panic_hook = !env::var_os("RUST_BACKTRACE").is_some() && parallel > 1;
+    let setup_panic_hook = env::var_os("RUST_BACKTRACE").is_none() && parallel > 1;
     if setup_panic_hook {
         panic::set_hook(Box::new(|_| {}));
     }
