@@ -1393,7 +1393,7 @@ export type CRUDMethodSignature<
 ) => Promise<Response>;
 
 /**
- * A dictionary mapping HTTP verbs into corresponding REST methods that process a Request and return a Response.
+ * A dictionary mapping HTTP methods into corresponding REST methods that process a Request and return a Response.
  */
 export type CRUDMethods<
     T extends ChiselEntity,
