@@ -49,6 +49,7 @@ async fn webapply(body: Body, rpc_addr: &SocketAddr) -> Result<Response<Body>> {
             version: "dev".into(),
             version_tag: "dev".into(),
             app_name: "ChiselStrike WebUI".into(),
+            ts_policy: vec![],
         }))
         .await?;
     response("applied", 200)

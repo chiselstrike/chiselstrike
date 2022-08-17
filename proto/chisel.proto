@@ -81,9 +81,15 @@ message PolicyUpdateRequest {
   string policy_config = 1;
 }
 
+message TsPolicyRequest {
+  string file = 1;
+  string code = 2;
+}
+
 message ChiselApplyRequest {
    repeated AddTypeRequest types = 1;
    repeated IndexCandidate index_candidates = 8;
+   repeated TsPolicyRequest ts_policy = 9;
 
    // Location to code map. Includes all modules compiled into JS. The
    // endpoints themselves start with "endpoints/"

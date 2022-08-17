@@ -117,6 +117,9 @@ struct DenoService {
     module_loader: Arc<std::sync::Mutex<ModuleLoaderInner>>,
 
     import_endpoints: v8::Global<v8::Function>,
+
+    import_policies: v8::Global<v8::Function>,
+
     activate_endpoint: v8::Global<v8::Function>,
     call_handler: v8::Global<v8::Function>,
     read_worker_channel: v8::Global<v8::Function>,
@@ -369,6 +372,7 @@ impl DenoService {
 
         let (
             import_endpoints,
+            import_policies,
             activate_endpoint,
             call_handler,
             init_worker,
@@ -385,9 +389,13 @@ impl DenoService {
             let import_endpoints: v8::Local<v8::Function> =
                 get_member(module, scope, "importEndpoints").unwrap();
             let import_endpoints = v8::Global::new(scope, import_endpoints);
+            let import_policies: v8::Local<v8::Function> =
+                get_member(module, scope, "importPolicies").unwrap();
+            let import_policies = v8::Global::new(scope, import_policies);
             let activate_endpoint: v8::Local<v8::Function> =
                 get_member(module, scope, "activateEndpoint").unwrap();
             let activate_endpoint = v8::Global::new(scope, activate_endpoint);
+
             let call_handler: v8::Local<v8::Function> =
                 get_member(module, scope, "callHandler").unwrap();
             let call_handler = v8::Global::new(scope, call_handler);
@@ -403,6 +411,7 @@ impl DenoService {
 
             (
                 import_endpoints,
+                import_policies,
                 activate_endpoint,
                 call_handler,
                 init_worker,
@@ -421,6 +430,7 @@ impl DenoService {
                 _inspector: inspector,
                 module_loader: inner,
                 import_endpoints,
+                import_policies,
                 activate_endpoint,
                 call_handler,
                 to_worker: to_worker_sender,
@@ -1516,6 +1526,38 @@ pub(crate) fn endpoint_path_from_source_path(path: &str) -> String {
     let api_version = iter.nth(1).unwrap();
     let rest = iter.nth(1).unwrap();
     format!("/{}/{}", api_version, without_extension(rest))
+}
+
+pub(crate) async fn compile_policy(ts_policy: Vec<(String, String)>) -> Result<()> {
+    let promise = {
+        let mut service = get();
+        let service: &mut DenoService = &mut service;
+
+        let mut handle = service.module_loader.lock().unwrap();
+        let handle: &mut ModuleLoaderInner = &mut *handle;
+        let code_map = &mut handle.code_map;
+
+        let runtime = &mut service.worker.js_runtime;
+        let scope = &mut runtime.handle_scope();
+        let mut policies: Vec<v8::Local<'_, v8::Value>> = vec![];
+
+        let import_policies = service.import_policies.open(scope);
+        for (path, code) in ts_policy {
+            let url = Url::parse(&format!("file://{}/{}", "/will-be-uuid", path)).unwrap();
+            code_map.insert(url, code);
+
+            let pol = v8::String::new(scope, &format!("will-be-uuid/{}", path)).unwrap();
+            policies.push(pol.into());
+        }
+        let policies = v8::Array::new_with_elements(scope, &policies).into();
+        let undefined = v8::undefined(scope).into();
+
+        let promise = import_policies.call(scope, undefined, &[policies]).unwrap();
+        v8::Global::new(scope, promise)
+    };
+
+    resolve_promise(promise).await?;
+    Ok(())
 }
 
 pub(crate) async fn compile_endpoints(sources: HashMap<String, String>) -> Result<()> {
