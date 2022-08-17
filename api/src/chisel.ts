@@ -1244,13 +1244,16 @@ function ensureNotGet() {
     }
 }
 
-export const requestContext: {
+export type ReqContext = {
     path: string;
     method: string;
     headers: Record<string, string>;
     apiVersion: string;
     userId?: string;
-} = {
+    user?: AuthUser;
+};
+
+export const requestContext: ReqContext = {
     path: "",
     method: "",
     headers: {},

@@ -209,6 +209,8 @@ async function callHandlerImpl(
         "/",
     ).replace(/\/$/, "").substring(fullPath.length + 1);
     const user = await loggedInUser();
+    requestContext.user = user;
+
     const req = new ChiselRequest(
         url,
         init,
