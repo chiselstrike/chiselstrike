@@ -84,7 +84,7 @@ fn run_tests_inner(opt: &Opt, optimize: bool) -> bool {
 
     // ports to use for each service. Low ports will conflict with all
     // kinds of services, so go high.
-    let ports = Arc::new(AtomicUsize::new(30000));
+    let ports = Arc::new(AtomicUsize::new(40000));
     lit_files
         .par_iter()
         .map(|test_path| -> Result<()> {
