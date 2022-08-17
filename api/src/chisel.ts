@@ -76,6 +76,10 @@ abstract class Operator<Input, Output> {
         return undefined;
     }
 
+    modelName(): string {
+        return this.inner!.modelName();
+    }
+
     public runChiselQuery(): AsyncIterable<Output> {
         const getRid = () =>
             opSync(
@@ -131,6 +135,10 @@ class BaseEntity<T> extends Operator<never, T> {
         type RecordType = Record<string, unknown>;
         mergeDeep(result as RecordType, rawRecord as RecordType);
         return result;
+    }
+
+    modelName(): string {
+        return this.name;
     }
 
     public eval(): undefined {
