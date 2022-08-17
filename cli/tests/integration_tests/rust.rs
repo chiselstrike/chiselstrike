@@ -98,20 +98,26 @@ async fn setup_test_context(
 
     let db: Database = match db_config {
         DatabaseConfig::Postgres(config) => Database::Postgres(PostgresDb::new(config)),
-        DatabaseConfig::Sqlite => Database::Sqlite(SqliteDb { tmp_dir }),
+        DatabaseConfig::Sqlite => Database::Sqlite(SqliteDb {
+            tmp_dir: tmp_dir.clone(),
+        }),
     };
 
-    let mut chiseld = GuardedChild::new(tokio::process::Command::new(chiseld()).args([
-        "--webui",
-        "--db-uri",
-        db.url().as_str(),
-        "--api-listen-addr",
-        &chiseld_config.api_address.to_string(),
-        "--internal-routes-listen-addr",
-        &chiseld_config.internal_address.to_string(),
-        "--rpc-listen-addr",
-        &chiseld_config.rpc_address.to_string(),
-    ]));
+    let mut chiseld = GuardedChild::new(
+        tokio::process::Command::new(chiseld())
+            .args([
+                "--webui",
+                "--db-uri",
+                db.url().as_str(),
+                "--api-listen-addr",
+                &chiseld_config.api_address.to_string(),
+                "--internal-routes-listen-addr",
+                &chiseld_config.internal_address.to_string(),
+                "--rpc-listen-addr",
+                &chiseld_config.rpc_address.to_string(),
+            ])
+            .current_dir(tmp_dir.path()),
+    );
 
     tokio::select! {
         exit_status = chiseld.wait() => {

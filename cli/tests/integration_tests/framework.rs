@@ -1,6 +1,7 @@
 use crate::database::Database;
 use anyhow::Result;
 use bytes::{Bytes, BytesMut};
+use reqwest::header::HeaderMap;
 use std::path::{Path, PathBuf};
 use std::pin::Pin;
 use std::process::{ExitStatus, Stdio};
@@ -316,6 +317,10 @@ impl Chisel {
         self.exec("wait", &[]).await
     }
 
+    pub async fn restart(&self) -> Result<ProcessOutput, ProcessOutput> {
+        self.exec("restart", &[]).await
+    }
+
     /// Writes given `text` (probably code) into a file on given relative `path`
     /// in ChiselStrike project.
     pub fn write(&self, path: &str, text: &str) {
@@ -353,7 +358,13 @@ impl Chisel {
     /// Sends a HTTP request to a relative `url` on the running `chiseld`, using the given request
     /// `method` and `body`. Does not check that the response is successful. Panics if there was an error while
     /// handling the request.
-    pub async fn request<B>(&self, method: reqwest::Method, url: &str, body: B) -> reqwest::Response
+    pub async fn request_with_headers<B>(
+        &self,
+        method: reqwest::Method,
+        url: &str,
+        body: B,
+        headers: HeaderMap,
+    ) -> reqwest::Response
     where
         B: Into<reqwest::Body>,
     {
@@ -364,10 +375,19 @@ impl Chisel {
         self.client
             .request(method.clone(), full_url)
             .body(body)
+            .headers(headers)
             .timeout(core::time::Duration::from_secs(5))
             .send()
             .await
             .unwrap_or_else(|e| panic!("HTTP error in {} {}: {}", method, url, e))
+    }
+
+    pub async fn request<B>(&self, method: reqwest::Method, url: &str, body: B) -> reqwest::Response
+    where
+        B: Into<reqwest::Body>,
+    {
+        self.request_with_headers(method, url, body, HeaderMap::new())
+            .await
     }
 
     /// Same as `request()`, but reads the response status and body as bytes.
@@ -375,7 +395,23 @@ impl Chisel {
     where
         B: Into<reqwest::Body>,
     {
-        let response = self.request(method.clone(), url, body).await;
+        self.request_body_with_headers(method, url, body, HeaderMap::new())
+            .await
+    }
+
+    pub async fn request_body_with_headers<B>(
+        &self,
+        method: reqwest::Method,
+        url: &str,
+        body: B,
+        headers: HeaderMap,
+    ) -> (u16, Bytes)
+    where
+        B: Into<reqwest::Body>,
+    {
+        let response = self
+            .request_with_headers(method.clone(), url, body, headers)
+            .await;
         let status = response.status().as_u16();
         match response.bytes().await {
             Ok(response_body) => (status, response_body),
@@ -391,7 +427,24 @@ impl Chisel {
     where
         B: Into<reqwest::Body>,
     {
-        let (status, response_body) = self.request_body(method.clone(), url, body).await;
+        self.request_text_with_headers(method, url, body, HeaderMap::new())
+            .await
+    }
+
+    /// Same as `request_text()`, but with headers
+    pub async fn request_text_with_headers<B>(
+        &self,
+        method: reqwest::Method,
+        url: &str,
+        body: B,
+        headers: HeaderMap,
+    ) -> String
+    where
+        B: Into<reqwest::Body>,
+    {
+        let (status, response_body) = self
+            .request_body_with_headers(method.clone(), url, body, headers)
+            .await;
         match str::from_utf8(&response_body) {
             Ok(text) => text.into(),
             Err(err) => panic!(
@@ -426,7 +479,25 @@ impl Chisel {
     where
         B: Into<reqwest::Body>,
     {
-        self.request(method, url, body).await.status().as_u16()
+        self.request_status_with_headers(method, url, body, HeaderMap::new())
+            .await
+    }
+
+    /// Same as `request()`, but returns the response status.
+    pub async fn request_status_with_headers<B>(
+        &self,
+        method: reqwest::Method,
+        url: &str,
+        body: B,
+        headers: HeaderMap,
+    ) -> u16
+    where
+        B: Into<reqwest::Body>,
+    {
+        self.request_with_headers(method, url, body, headers)
+            .await
+            .status()
+            .as_u16()
     }
 
     /*
@@ -446,17 +517,26 @@ impl Chisel {
     }
     */
 
+    /// Same as `request_text_with_headers()`, but sends GET with no request body.
+    pub async fn get_text_with_headers(&self, url: &str, headers: HeaderMap) -> String {
+        self.request_text_with_headers(reqwest::Method::GET, url, "", headers)
+            .await
+    }
+
     /// Same as `request_json()`, but sends GET with no request body.
     pub async fn get_json(&self, url: &str) -> serde_json::Value {
         self.request_json(reqwest::Method::GET, url, "").await
     }
 
-    /*
     /// Same as `request_status()`, but sends GET with no request body.
     pub async fn get_status(&self, url: &str) -> u16 {
-        self.request_status(reqwest::Method::GET, url, "").await
+        self.get_status_with_headers(url, HeaderMap::new()).await
     }
-    */
+
+    pub async fn get_status_with_headers(&self, url: &str, headers: HeaderMap) -> u16 {
+        self.request_status_with_headers(reqwest::Method::GET, url, "", headers)
+            .await
+    }
 
     /// Same as `request()`, but sends POST with JSON request payload.
     pub async fn post_json(&self, url: &str, data: serde_json::Value) -> reqwest::Response {
@@ -503,4 +583,10 @@ pub struct TestContext {
     // Note: The Database must come after chiseld to ensure that chiseld is dropped and terminated
     // before we try to drop the database.
     pub _db: Database,
+}
+
+pub fn header(name: &'static str, value: &str) -> HeaderMap {
+    let mut headers = HeaderMap::new();
+    headers.insert(name, value.parse().unwrap());
+    headers
 }
