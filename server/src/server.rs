@@ -9,8 +9,9 @@ use crate::deno::set_policies;
 use crate::deno::set_query_engine;
 use crate::deno::set_type_system;
 use crate::deno::update_secrets;
-use crate::deno::{activate_endpoint, compile_endpoints};
+use crate::deno::{activate_endpoint, activate_event_handler, compile_endpoints};
 use crate::internal::mark_not_ready;
+use crate::kafka;
 use crate::rpc::InitState;
 use crate::rpc::{GlobalRpcState, RpcService};
 use crate::runtime;
@@ -58,6 +59,12 @@ pub struct Opt {
     /// Database URI.
     #[structopt(long, default_value = "sqlite://.chiseld.db?mode=rwc")]
     db_uri: String,
+    /// Kafka connection.
+    #[structopt(long)]
+    kafka_connection: Option<String>,
+    /// Kafka topics to subscribe to.
+    #[structopt(long)]
+    kafka_topics: Vec<String>,
     /// Activate inspector and let a debugger attach at any time.
     #[structopt(long)]
     inspect: bool,
@@ -156,14 +163,30 @@ pub(crate) async fn add_endpoints(
     compile_endpoints(sources.clone()).await?;
 
     for path in sources.keys() {
-        let path = deno::endpoint_path_from_source_path(path);
-        activate_endpoint(&path).await?;
+        // FIXME: make this symmetric with apply_aux() logic.
+        if path.contains("/endpoints/") {
+            let path = deno::endpoint_path_from_source_path(path);
+            activate_endpoint(&path).await?;
 
-        let func = Arc::new({
-            let path = path.to_string();
-            move |req| deno::run_js(path.clone(), req).boxed_local()
-        });
-        api_service.add_route(path.into(), func);
+            let func = Arc::new({
+                let path = path.to_string();
+                move |req| deno::run_js(path.clone(), req).boxed_local()
+            });
+            api_service.add_route(path.into(), func);
+        } else if path.contains("/events/") {
+            let path = deno::endpoint_path_from_source_path(path);
+            activate_event_handler(&path).await?;
+
+            let func = Arc::new({
+                let path = path.clone();
+                move |key: Option<Vec<u8>>, value: Option<Vec<u8>>| {
+                    deno::run_js_event(path.clone(), key, value).boxed_local()
+                }
+            });
+            api_service.add_event_handler(path.into(), func);
+        } else {
+            println!("warning: unrecognized source: {}", path);
+        }
     }
     Ok(())
 }
@@ -216,6 +239,8 @@ async fn run(state: SharedState, init: InitState, mut cmd: ExecutorChannel) -> R
 
     let api_info = meta.load_api_info().await?;
 
+    kafka::init().await?;
+
     let mut api_service = ApiService::new(api_info);
     crate::auth::init(&mut api_service).await?;
     crate::introspect::init(&api_service);
@@ -255,6 +280,18 @@ async fn run(state: SharedState, init: InitState, mut cmd: ExecutorChannel) -> R
         }
     });
 
+    let kafka_tasks = if let Some(kafka_connection) = state.opt.kafka_connection {
+        kafka::spawn(
+            api_service.clone(),
+            kafka_connection,
+            state.opt.kafka_topics,
+            state.signal_rx.clone(),
+        )
+        .await?
+    } else {
+        vec![]
+    };
+
     let api_tasks = crate::api::spawn(
         api_service,
         state.opt.api_listen_addr.clone(),
@@ -267,10 +304,14 @@ async fn run(state: SharedState, init: InitState, mut cmd: ExecutorChannel) -> R
         state.opt.api_listen_addr
     );
 
+    for kafka_task in kafka_tasks {
+        kafka_task.await??;
+    }
     for api_task in api_tasks {
         api_task.await??;
     }
     command_task.await?;
+    kafka::shutdown();
     deno::shutdown();
     Ok(())
 }

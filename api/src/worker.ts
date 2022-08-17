@@ -30,6 +30,10 @@ const nextHandlers: Record<string, requestHandler> = {};
 // A map from paths to functions that handle requests for that path.
 const handlers: Record<string, requestHandler> = {};
 
+type eventHandler = (event: Chisel.ChiselEvent) => void;
+const nextEventHandlers: Record<string, eventHandler> = {};
+const eventHandlers: Record<string, eventHandler> = {};
+
 const requestContext = Chisel.requestContext;
 const ChiselRequest = Chisel.ChiselRequest;
 const loggedInUser = Chisel.loggedInUser;
@@ -67,13 +71,18 @@ function readWorkerChannel() {
 
 type Endpoint = { path: string; apiVersion: string; version: number };
 
-function importEndpoints(endpoints: [Endpoint]) {
+type EventHandler = { path: string; apiVersion: string; version: number };
+
+function importEndpoints(endpoints: [Endpoint], eventHandlers: [EventHandler]) {
     handleMsg(() => {
-        return importEndpointsImpl(endpoints);
+        return importEndpointsImpl(endpoints, eventHandlers);
     });
 }
 
-async function importEndpointsImpl(endpoints: [Endpoint]) {
+async function importEndpointsImpl(
+    endpoints: [Endpoint],
+    eventHandlers: [EventHandler],
+) {
     for (const endpoint of endpoints) {
         const { path, apiVersion } = endpoint;
 
@@ -93,12 +102,38 @@ async function importEndpointsImpl(endpoints: [Endpoint]) {
         }
         nextHandlers[fullPath] = handler;
     }
+    for (const eventHandler of eventHandlers) {
+        const { path, apiVersion } = eventHandler;
+
+        requestContext.path = path;
+        const fullPath = "/" + apiVersion + path;
+
+        // Modules are never unloaded, so we need to create an unique
+        // path. This will not be a problem once we publish the entire app
+        // at once, since then we can create a new isolate for it.
+        const url = `file:///${apiVersion}/events${path}`;
+        const mod = await import(url);
+        const handler = mod.default;
+        if (typeof handler !== "function") {
+            throw new Error(
+                "expected type `v8::data::Function`, got `v8::data::Value`",
+            );
+        }
+        nextEventHandlers[fullPath] = handler;
+    }
 }
 
 function activateEndpoint(path: string) {
     handleMsg(() => {
         handlers[path] = nextHandlers[path];
         delete nextHandlers[path];
+    });
+}
+
+function activateEventHandler(path: string) {
+    handleMsg(() => {
+        eventHandlers[path] = nextEventHandlers[path];
+        delete nextEventHandlers[path];
     });
 }
 
@@ -256,6 +291,43 @@ function callHandler(
     });
 }
 
+async function callEventHandlerImpl(
+    path: string,
+    apiVersion: string,
+    key: ArrayBuffer,
+    value: ArrayBuffer,
+) {
+    await Deno.core.opAsync("op_chisel_start_event_handler");
+
+    await Deno.core.opAsync("op_chisel_create_transaction");
+
+    const fullPath = "/" + apiVersion + path;
+
+    eventHandlers[fullPath]({ key, value });
+
+    closeResources();
+
+    await Deno.core.opAsync("op_chisel_commit_transaction");
+}
+
+function callEventHandler(
+    path: string,
+    apiVersion: string,
+    key: ArrayBuffer,
+    value: ArrayBuffer,
+) {
+    handleMsg(() => {
+        return rollback_on_failure(() => {
+            return callEventHandlerImpl(
+                path,
+                apiVersion,
+                key,
+                value,
+            );
+        });
+    });
+}
+
 function endOfRequest(id: number) {
     if (id == currentRequestId) {
         currentRequestId = undefined;
@@ -272,16 +344,27 @@ onmessage = function (e) {
             initWorker(d.id);
             break;
         case "importEndpoints":
-            importEndpoints(d.endpoints);
+            importEndpoints(d.endpoints, d.eventHandlers);
             break;
         case "activateEndpoint":
             activateEndpoint(d.path);
+            break;
+        case "activateEventHandler":
+            activateEventHandler(d.path);
             break;
         case "callHandler":
             callHandler(
                 d.path,
                 d.apiVersion,
                 d.id,
+            );
+            break;
+        case "callEventHandler":
+            callEventHandler(
+                d.path,
+                d.apiVersion,
+                d.key,
+                d.value,
             );
             break;
         case "endOfRequest":

@@ -80,6 +80,7 @@ pub(crate) async fn apply(
     let manifest = read_manifest().context("Could not read manifest file")?;
     let models = manifest.models()?;
     let endpoints = manifest.endpoints()?;
+    let events = manifest.events()?;
     let policies = manifest.policies()?;
 
     let types_req = crate::ts::parse_types(&models)?;
@@ -98,9 +99,17 @@ pub(crate) async fn apply(
     let optimize = chiselc_available && manifest.optimize == Optimize::Yes;
     let auto_index = chiselc_available && manifest.auto_index == AutoIndex::Yes;
     let (sources, index_candidates) = if manifest.modules == Module::Node {
-        node::apply(&endpoints, &entities, optimize, auto_index, &type_check).await
+        node::apply(
+            &endpoints,
+            &events,
+            &entities,
+            optimize,
+            auto_index,
+            &type_check,
+        )
+        .await
     } else {
-        deno::apply(&endpoints, &entities, optimize, auto_index).await
+        deno::apply(&endpoints, &events, &entities, optimize, auto_index).await
     }?;
 
     for p in policies {
@@ -175,6 +184,10 @@ pub(crate) async fn apply(
 
     for end in msg.endpoints {
         println!("End point defined: {}", end);
+    }
+
+    for end in msg.event_handlers {
+        println!("Event handler defined: {}", end);
     }
 
     for lbl in msg.labels {
