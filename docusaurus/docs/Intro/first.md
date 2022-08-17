@@ -181,7 +181,7 @@ That comes next!
 
 We're big fans of [REST](https://en.wikipedia.org/wiki/Representational_state_transfer), but don't strictly require it in ChiselStrike.
 
-If you're not familiar, REST is a set of practices that describes how a URL endpoint can handle various HTTP verbs
+If you're not familiar, REST is a set of practices that describes how a URL endpoint can handle various HTTP methods
 to provide ways to manipulate a collection of entities: create, read,
 update, and delete ([CRUD](https://en.wikipedia.org/wiki/Create,_read,_update_and_delete)).
 
