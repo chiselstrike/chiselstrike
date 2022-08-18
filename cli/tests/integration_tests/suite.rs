@@ -33,6 +33,8 @@ impl TestSuite {
     }
 
     pub fn instantiate(&self, opt: &Opt) -> Vec<TestInstance> {
+        vec![]
+/*
         iproduct!(
             self.tests.iter(),
             [Modules::Deno, Modules::Node],
@@ -66,6 +68,7 @@ impl TestSuite {
             })
         })
         .collect()
+*/
     }
 }
 
