@@ -1,6 +1,7 @@
 // SPDX-FileCopyrightText: © 2022 ChiselStrike <info@chiselstrike.com>
 
 use crate::datastore::{DbConnection, MetaService, QueryEngine};
+use crate::internal::{mark_ready, mark_not_ready};
 use crate::opt::Opt;
 use crate::policies::PolicySystem;
 use crate::trunk::{self, Trunk};
@@ -75,6 +76,7 @@ pub async fn run(opt: Opt) -> Result<Restart> {
     }
     debug!("gRPC API address: {}", rpc_addr);
     debug!("Internal address: http://{}", internal_addr);
+    mark_ready();
 
     let all_tasks = async move {
         tokio::try_join!(trunk_task, rpc_task, api_task, internal_task, secrets_task)
@@ -260,12 +262,14 @@ async fn wait_for_signals() -> Result<Restart> {
     let mut sighup = signal(SignalKind::hangup())?;
     let mut sigusr1 = signal(SignalKind::user_defined1())?;
 
-    Ok(tokio::select! {
+    let restart = tokio::select! {
         Some(_) = sigterm.recv() => { debug!("Got SIGTERM"); Restart::No },
         Some(_) = sigint.recv() => { debug!("Got SIGINT"); Restart::No },
         Some(_) = sighup.recv() => { debug!("Got SIGHUP"); Restart::No },
         Some(_) = sigusr1.recv() => { debug!("Got SIGUSR1"); Restart::Yes },
-    })
+    };
+    mark_not_ready();
+    Ok(restart)
 }
 
 async fn start_inspector(

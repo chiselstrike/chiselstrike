@@ -491,3 +491,5 @@ pub struct TestContext {
     // before we try to drop the database.
     pub _db: Database,
 }
+
+inventory::collect!(IntegrationTest);
