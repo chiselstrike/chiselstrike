@@ -50,6 +50,7 @@ impl TypeSystem {
         &self,
         old_type: &ObjectType,
         new_type: Arc<ObjectType>,
+        allow_unsafe_replacement: bool,
     ) -> Result<ObjectDelta, TypeSystemError> {
         if *old_type != *new_type {
             return Err(TypeSystemError::UnsafeReplacement(
@@ -71,7 +72,7 @@ impl TypeSystem {
         for (name, field) in new_fields.map.iter() {
             match old_fields.map.remove(name) {
                 None => {
-                    if field.default.is_none() && !field.is_optional {
+                    if !allow_unsafe_replacement && field.default.is_none() && !field.is_optional {
                         return Err(TypeSystemError::UnsafeReplacement(new_type.name.clone(), format!("Trying to add a new non-optional field ({}) without a trivial default value. Consider adding a default value or making it optional to make the types compatible", field.name)));
                     }
                     added_fields.push(field.to_owned().clone());
@@ -83,7 +84,7 @@ impl TypeSystem {
                     let field_ty = self.get(&field.type_id)?;
 
                     let old_ty = self.get(&old.type_id)?;
-                    if field_ty != old_ty {
+                    if !allow_unsafe_replacement && field_ty != old_ty {
                         // FIXME: it should be almost always possible to evolve things into
                         // strings.
                         return Err(TypeSystemError::UnsafeReplacement(
@@ -97,7 +98,7 @@ impl TypeSystem {
                         ));
                     }
 
-                    if field.is_unique && !old.is_unique {
+                    if !allow_unsafe_replacement && field.is_unique && !old.is_unique {
                         // FIXME: it should be possible to do it by issuing a select count() and
                         // then a select count distinct and comparing both results. But to do this
                         // safely this needs to be protected by a transaction, so we won't allow it
@@ -150,7 +151,7 @@ impl TypeSystem {
 
         // only allow the removal of fields that previously had a default value or was optional
         for (_, field) in old_fields.map.into_iter() {
-            if field.default.is_none() && !field.is_optional {
+            if !allow_unsafe_replacement && field.default.is_none() && !field.is_optional {
                 return Err(TypeSystemError::UnsafeReplacement(
                     new_type.name.clone(),
                     format!(
