@@ -26,6 +26,17 @@ pub(crate) async fn apply(
         TypeChecking::No => None,
     };
 
+    // ideally we would call this in parallel with the bundle, but npx doesn't like this very much
+    // See #1642
+    if let Some(tsc_proc) = tsc_proc {
+        let tsc_output = tsc_proc
+            .wait_with_output()
+            .await
+            .context("Could not run tsc to type-check the code")?;
+        ensure_success(tsc_output).context("Type-checking with tsc failed")?;
+    }
+
+
     let cwd = env::current_dir()?;
     let gen_dir = cwd.join(".gen");
 
@@ -139,14 +150,6 @@ pub(crate) async fn apply(
         url: "file:///__route_map.ts".into(),
         code: bundled_code,
     }];
-
-    if let Some(tsc_proc) = tsc_proc {
-        let tsc_output = tsc_proc
-            .wait_with_output()
-            .await
-            .context("Could not run tsc to type-check the code")?;
-        ensure_success(tsc_output).context("Type-checking with tsc failed")?;
-    }
 
     Ok((modules, index_candidates))
 }
