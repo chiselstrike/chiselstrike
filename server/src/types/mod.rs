@@ -18,15 +18,17 @@ pub enum Type {
     Float,
     Boolean,
     Entity(Entity),
+    Array(Box<Type>),
 }
 
 impl Type {
-    pub fn name(&self) -> &str {
+    pub fn name(&self) -> String {
         match self {
-            Type::Float => "number",
-            Type::String => "string",
-            Type::Boolean => "boolean",
-            Type::Entity(ty) => &ty.name,
+            Type::Float => "number".to_string(),
+            Type::String => "string".to_string(),
+            Type::Boolean => "boolean".to_string(),
+            Type::Entity(ty) => ty.name.to_string(),
+            Type::Array(ty) => format!("Array<{}>", ty.name()),
         }
     }
 }
@@ -209,15 +211,17 @@ pub enum TypeId {
     Boolean,
     Id,
     Entity { name: String, version_id: String },
+    Array(Box<TypeId>),
 }
 
 impl TypeId {
-    pub fn name(&self) -> &str {
+    pub fn name(&self) -> String {
         match self {
-            TypeId::Id | TypeId::String => "string",
-            TypeId::Float => "number",
-            TypeId::Boolean => "boolean",
-            TypeId::Entity { ref name, .. } => name,
+            TypeId::Id | TypeId::String => "string".to_string(),
+            TypeId::Float => "number".to_string(),
+            TypeId::Boolean => "boolean".to_string(),
+            TypeId::Entity { ref name, .. } => name.to_string(),
+            TypeId::Array(elem_type) => format!("Array<{}>", elem_type.name()),
         }
     }
 }
@@ -232,6 +236,10 @@ impl From<Type> for TypeId {
                 name: e.name().to_string(),
                 version_id: e.version_id.clone(),
             },
+            Type::Array(elem_type) => {
+                let element_type_id: Self = (*elem_type).into();
+                Self::Array(Box::new(element_type_id))
+            }
         }
     }
 }

@@ -49,7 +49,7 @@ export function responseFromJson(body: unknown, status = 200) {
 /**
  * Acts the same as Object.assign, but performs deep merge instead of a shallow one.
  */
-function mergeDeep(
+export function mergeDeep(
     target: Record<string, unknown>,
     ...sources: Record<string, unknown>[]
 ): Record<string, unknown> {

@@ -1,4 +1,4 @@
-use crate::proto::{type_msg::TypeEnum, AddTypeRequest, FieldDefinition, TypeMsg};
+use crate::proto::{type_msg::TypeEnum, AddTypeRequest, ContainerType, FieldDefinition, TypeMsg};
 use anyhow::{anyhow, bail, ensure, Context, Result};
 use chisel_server::is_auth_entity_name;
 use std::collections::BTreeSet;
@@ -15,7 +15,7 @@ use swc_ecma_ast::{
     TsEntityName, TsKeywordTypeKind, TsType, TsTypeAnn,
 };
 use swc_ecma_parser::{lexer::Lexer, Parser, StringInput, Syntax, TsConfig};
-use swc_ecmascript::ast as swc_ecma_ast;
+use swc_ecmascript::ast::{self as swc_ecma_ast};
 use swc_ecmascript::parser as swc_ecma_parser;
 
 impl FieldDefinition {
@@ -29,15 +29,40 @@ impl FieldDefinition {
     }
 }
 
+impl ContainerType {
+    fn value_type(&self) -> Result<&TypeEnum> {
+        self.value_type
+            .as_ref()
+            .context("value_type of ContainerType is None")?
+            .type_enum
+            .as_ref()
+            .context("type_enum of value_type of ContainerType is None")
+    }
+}
+
+impl TypeEnum {
+    fn array(inner: TypeEnum) -> Self {
+        let inner = TypeMsg {
+            type_enum: Some(inner),
+        };
+        TypeEnum::Array(Box::new(ContainerType {
+            value_type: Some(Box::new(inner)),
+        }))
+    }
+}
+
 impl fmt::Display for TypeEnum {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let s = match self {
-            TypeEnum::String(_) => "string".to_string(),
-            TypeEnum::Number(_) => "number".to_string(),
-            TypeEnum::Bool(_) => "bool".to_string(),
-            TypeEnum::Entity(name) => name.to_string(),
-        };
-        write!(f, "{s}")
+        match self {
+            TypeEnum::String(_) => f.write_str("string"),
+            TypeEnum::Number(_) => f.write_str("number"),
+            TypeEnum::Bool(_) => f.write_str("bool"),
+            TypeEnum::Entity(name) => name.fmt(f),
+            TypeEnum::Array(inner) => {
+                let inner = inner.value_type().unwrap();
+                write!(f, "Array<{inner}>")
+            }
+        }
     }
 }
 
@@ -64,6 +89,27 @@ fn get_field_info(handler: &Handler, x: &PropName) -> Result<(String, bool)> {
     }
 }
 
+fn map_array_type(handler: &Handler, x: &TsType) -> Result<TypeEnum> {
+    match x {
+        TsType::TsArrayType(array_type) => match &*array_type.elem_type {
+            TsType::TsKeywordType(kw) => match kw.kind {
+                TsKeywordTypeKind::TsStringKeyword => Ok(TypeEnum::String(true)),
+                TsKeywordTypeKind::TsNumberKeyword => Ok(TypeEnum::Number(true)),
+                TsKeywordTypeKind::TsBooleanKeyword => Ok(TypeEnum::Bool(true)),
+                _ => Err(swc_err(handler, x, "type keyword not supported")),
+            },
+            TsType::TsArrayType(_) => map_array_type(handler, &*array_type.elem_type),
+            _ => Err(swc_err(
+                handler,
+                x,
+                "only arrays of primitive types are supported",
+            )),
+        }
+        .map(TypeEnum::array),
+        _ => panic!("trying to map as array a type which is not an array"),
+    }
+}
+
 fn map_type(handler: &Handler, x: &TsType) -> Result<TypeEnum> {
     match x {
         TsType::TsKeywordType(kw) => match kw.kind {
@@ -79,6 +125,7 @@ fn map_type(handler: &Handler, x: &TsType) -> Result<TypeEnum> {
             }
             TsEntityName::TsQualifiedName(_) => Err(anyhow!("qualified names are not supported")),
         },
+        TsType::TsArrayType(_) => map_array_type(handler, x),
         t => Err(swc_err(handler, t, "type is not supported")),
     }
 }

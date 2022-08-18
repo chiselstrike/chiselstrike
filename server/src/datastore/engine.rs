@@ -100,6 +100,7 @@ impl TryFrom<&Field> for ColumnDef {
             TypeId::Float => column_def.double(),
             TypeId::Boolean => column_def.boolean(),
             TypeId::Entity { .. } => column_def.text(), // Foreign key, must the be same type as Type::Id
+            TypeId::Array(_) => column_def.text(),      // Arrays are stored as serialized JSONs.
         };
 
         Ok(column_def)
@@ -415,6 +416,11 @@ impl QueryEngine {
                             }
                         }
                         TypeId::Entity { .. } => anyhow::bail!("object is not a scalar"),
+                        TypeId::Array(_) => {
+                            let array_str = row.get::<&str, _>(column_idx);
+                            serde_json::from_str(array_str)
+                                .context("failed to deserialize array from raw JSON string")?
+                        }
                     };
                     if let Some(tr) = transform {
                         // Apply policy transformation
@@ -677,15 +683,56 @@ impl QueryEngine {
             }};
         }
 
-        let arg = match field.type_id {
+        let arg = match &field.type_id {
             TypeId::String | TypeId::Id | TypeId::Entity { .. } => {
                 SqlValue::String(convert_json_value!(as_str, str))
             }
             TypeId::Float => SqlValue::F64(convert_json_value!(as_f64, f64)),
             TypeId::Boolean => SqlValue::Bool(convert_json_value!(as_bool, bool)),
+            TypeId::Array(element_type) => {
+                let val = match ty_value.get(&field.name) {
+                    Some(value_json) => {
+                        self.validate_array(element_type, value_json)
+                            .context("provided value for array has invalid type")?;
+                        serde_json::to_string(value_json)?
+                    }
+                    None => field.generate_value().context("failed to generate value")?,
+                };
+                SqlValue::String(val)
+            }
         };
 
         Ok(arg)
+    }
+
+    /// `validate_array` ensures that given JSON `value` is an array and it's elements are of
+    /// compliant type with `element_type`.
+    fn validate_array(&self, element_type: &TypeId, value: &serde_json::Value) -> Result<()> {
+        if let Some(elements) = value.as_array() {
+            for (i, e) in elements.iter().enumerate() {
+                macro_rules! maybe_bail {
+                    ($is_type:ident) => {{
+                        if !e.$is_type() {
+                            anyhow::bail!("stored array should have elements of type '{}', but found '{:?}' at position {i}", element_type.name(), e)
+                        }
+                    }};
+                }
+                match element_type {
+                    TypeId::String | TypeId::Id => maybe_bail!(is_string),
+                    TypeId::Float => maybe_bail!(is_number),
+                    TypeId::Boolean => maybe_bail!(is_boolean),
+                    TypeId::Array(inner_element) => self
+                        .validate_array(inner_element, e)
+                        .context("failed to validate inner array at position {i}")?,
+                    TypeId::Entity { .. } => {
+                        unreachable!("entity can't be a contained within an array")
+                    }
+                }
+            }
+        } else {
+            anyhow::bail!("provided json value is not an array")
+        }
+        Ok(())
     }
 
     /// For given object of type `ty` and its value `ty_value` computes a string

@@ -190,6 +190,12 @@ impl TypeSystem {
 
     /// Looks up a builtin type with name `type_name`.
     pub fn lookup_builtin_type(&self, type_name: &str) -> Result<Type, TypeSystemError> {
+        if let Some(element_type_str) = type_name.strip_prefix("Array<") {
+            if let Some(element_type_str) = element_type_str.strip_suffix('>') {
+                let element_type = self.lookup_builtin_type(element_type_str)?;
+                return Ok(Type::Array(Box::new(element_type)));
+            }
+        }
         self.builtin
             .types
             .get(type_name)
@@ -262,8 +268,8 @@ impl TypeSystem {
 
     pub fn get(&self, ty: &TypeId) -> Result<Type, TypeSystemError> {
         match ty {
-            TypeId::String | TypeId::Float | TypeId::Boolean | TypeId::Id => {
-                self.lookup_builtin_type(ty.name())
+            TypeId::String | TypeId::Float | TypeId::Boolean | TypeId::Id | TypeId::Array(_) => {
+                self.lookup_builtin_type(&ty.name())
             }
             TypeId::Entity { name, version_id } => {
                 if version_id == "__chiselstrike" {

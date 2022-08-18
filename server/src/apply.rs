@@ -3,7 +3,7 @@
 use crate::datastore::{MetaService, QueryEngine};
 use crate::policies::PolicySystem;
 use crate::proto::type_msg::TypeEnum;
-use crate::proto::{AddTypeRequest, ApplyRequest, FieldDefinition, IndexCandidate, TypeMsg};
+use crate::proto::{AddTypeRequest, ApplyRequest, ContainerType, FieldDefinition, IndexCandidate, TypeMsg};
 use crate::server::Server;
 use crate::types::{
     DbIndex, Entity, Field, NewField, NewObject, ObjectType, Type, TypeSystem, TypeSystemError,
@@ -110,7 +110,7 @@ or
             }
 
             let field_ty = field.field_type()?;
-            let field_ty = if field_ty.is_builtin(type_system) {
+            let field_ty = if field_ty.is_builtin(type_system)? {
                 field_ty.get_builtin(type_system)?
             } else if let TypeEnum::Entity(entity_name) = field_ty {
                 match new_types.get(entity_name) {
@@ -258,7 +258,7 @@ fn sort_custom_types(
         for field in &ty.field_defs {
             let field_type = field.field_type()?;
             match field_type {
-                TypeEnum::Entity(name) if !field_type.is_builtin(ts) => {
+                TypeEnum::Entity(name) if !field_type.is_builtin(ts)? => {
                     graph.add_node(name);
                     graph.add_edge(name, ty.name.as_str(), ());
                 }
@@ -297,12 +297,25 @@ impl FieldDefinition {
     }
 }
 
+impl ContainerType {
+    fn value_type(&self) -> Result<&TypeEnum> {
+        self.value_type
+            .as_ref()
+            .context("value_type of ContainerType is None")?
+            .type_enum
+            .as_ref()
+            .context("type_enum of value_type of ContainerType is None")
+    }
+}
+
 impl TypeEnum {
-    fn is_builtin(&self, ts: &TypeSystem) -> bool {
-        match self {
+    fn is_builtin(&self, ts: &TypeSystem) -> Result<bool> {
+        let is_builtin = match self {
             TypeEnum::String(_) | TypeEnum::Number(_) | TypeEnum::Bool(_) => true,
             TypeEnum::Entity(name) => ts.lookup_builtin_type(name).is_ok(),
-        }
+            TypeEnum::Array(inner) => inner.value_type()?.is_builtin(ts)?,
+        };
+        Ok(is_builtin)
     }
 
     fn get_builtin(&self, ts: &TypeSystem) -> Result<Type> {
@@ -311,6 +324,7 @@ impl TypeEnum {
             TypeEnum::Number(_) => Type::Float,
             TypeEnum::Bool(_) => Type::Boolean,
             TypeEnum::Entity(name) => ts.lookup_builtin_type(name)?,
+            TypeEnum::Array(inner) => Type::Array(Box::new(inner.value_type()?.get_builtin(ts)?)),
         };
         Ok(ty)
     }
@@ -323,6 +337,12 @@ impl From<Type> for TypeMsg {
             Type::String => TypeEnum::String(true),
             Type::Boolean => TypeEnum::Bool(true),
             Type::Entity(entity) => TypeEnum::Entity(entity.name().to_owned()),
+            Type::Array(elem_type) => {
+                let inner_msg = (*elem_type).into();
+                TypeEnum::Array(Box::new(ContainerType {
+                    value_type: Some(Box::new(inner_msg)),
+                }))
+            }
         };
         TypeMsg {
             type_enum: Some(ty),
