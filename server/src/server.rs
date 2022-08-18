@@ -164,6 +164,18 @@ async fn start_versions(server: Arc<Server>) -> Result<()> {
         let policy_system = server.meta_service.load_policy_system(&version_id).await?;
         let modules = server.meta_service.load_modules(&version_id).await?;
 
+        let route_map_url = "file:///__route_map.ts";
+        if !modules.contains_key(route_map_url) {
+            warn!(
+                "Version {:?} does not contain module {:?}, it was probably created by an old \
+                chisel version. This version will be skipped, please rerun `chisel apply` to fix \
+                this problem.",
+                version_id,
+                route_map_url,
+            );
+            continue;
+        }
+
         // ignore the notification that the version is ready
         let (ready_tx, _ready_rx) = oneshot::channel();
 
