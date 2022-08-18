@@ -3,7 +3,7 @@ use crate::framework::prelude::*;
 #[chisel_macros::test(modules = Node)]
 pub async fn test(c: TestContext) {
     c.chisel.write(
-        "routes/error.ts",
+        "endpoints/error.ts",
         r##"
         import { foo } from "https://foo.bar";
 
@@ -16,6 +16,6 @@ pub async fn test(c: TestContext) {
     let mut output = c.chisel.apply_err().await;
     output
         .stderr
-        .read("Could not apply the provided code")
+        .read("could not import endpoint code into the runtime")
         .read("chiseld cannot load module https://foo.bar/ at runtime");
 }

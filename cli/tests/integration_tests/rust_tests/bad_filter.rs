@@ -4,7 +4,7 @@ use crate::framework::prelude::*;
 pub async fn test(c: TestContext) {
     c.chisel.copy_to_dir("examples/person.ts", "models");
     c.chisel.write(
-        "routes/query.ts",
+        "endpoints/query.ts",
         r##"
         import { Person } from "../models/person.ts";
 
@@ -21,6 +21,6 @@ pub async fn test(c: TestContext) {
 
     let mut output = c.chisel.apply_err().await;
     output.stderr
-        .read("routes/query.ts:6:53 - error TS2769: No overload matches this call.")
+        .read("endpoints/query.ts:6:53 - error TS2769: No overload matches this call.")
         .read("Argument of type '{ foo: string; }' is not assignable to parameter of type 'Partial<Person>'");
 }

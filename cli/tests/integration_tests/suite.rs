@@ -27,7 +27,9 @@ inventory::collect!(TestSpec);
 
 impl TestSuite {
     pub fn from_inventory() -> Self {
-        Self { tests: inventory::iter::<TestSpec>.into_iter().collect() }
+        Self {
+            tests: inventory::iter::<TestSpec>.into_iter().collect(),
+        }
     }
 
     pub fn instantiate(&self, opt: &Opt) -> Vec<TestInstance> {
@@ -38,7 +40,7 @@ impl TestSuite {
         )
         .filter_map(|(test_spec, modules, optimize)| {
             if let Some(name_regex) = opt.test.as_ref() {
-                if !name_regex.is_match(&test_spec.name) {
+                if !name_regex.is_match(test_spec.name) {
                     return None;
                 }
             }
@@ -46,7 +48,7 @@ impl TestSuite {
             match (test_spec.modules, modules) {
                 (ModulesSpec::Deno, Modules::Deno) => {}
                 (ModulesSpec::Node, Modules::Node) => {}
-                (ModulesSpec::Both, _) => {}
+                //(ModulesSpec::Both, _) => {}
                 (_, _) => return None,
             }
 
@@ -58,7 +60,7 @@ impl TestSuite {
             }
 
             Some(TestInstance {
-                spec: test_spec.clone(),
+                spec: test_spec,
                 modules,
                 optimize,
             })
@@ -71,7 +73,7 @@ impl TestSuite {
 pub enum ModulesSpec {
     Deno,
     Node,
-    Both,
+    //Both,
 }
 
 #[derive(Copy, Clone, Debug)]
