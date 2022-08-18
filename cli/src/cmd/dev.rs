@@ -8,7 +8,7 @@ use anyhow::Result;
 use deno_core::futures;
 use endpoint_tsc::tsc_compile;
 use futures::channel::mpsc::channel;
-use futures::{FutureExt, SinkExt, StreamExt};
+use futures::{SinkExt, StreamExt};
 use notify::{event::ModifyKind, Event, EventKind, RecommendedWatcher, RecursiveMode, Watcher};
 use std::collections::HashSet;
 use std::env;
@@ -30,10 +30,10 @@ pub(crate) async fn cmd_dev(
     let mut sigint = tokio::signal::unix::signal(tokio::signal::unix::SignalKind::interrupt())?;
     let mut sighup = tokio::signal::unix::signal(tokio::signal::unix::SignalKind::hangup())?;
     let sig_task: JoinHandle<Result<()>> = tokio::task::spawn(async move {
-        futures::select! {
-            _ = sigterm.recv().fuse() => { },
-            _ = sigint.recv().fuse() => { },
-            _ = sighup.recv().fuse() => { },
+        tokio::select! {
+            _ = sigterm.recv() => { },
+            _ = sigint.recv() => { },
+            _ = sighup.recv() => { },
         };
         signal_tx.send(()).await?;
         Ok(())
@@ -69,11 +69,11 @@ pub(crate) async fn cmd_dev(
     apply_watcher.watch(&cwd, RecursiveMode::Recursive)?;
 
     loop {
-        futures::select! {
-            _ = signal_rx.next().fuse() => {
+        tokio::select! {
+            _ = signal_rx.next() => {
                 break;
             }
-            res = watcher_rx.next().fuse() => {
+            res = watcher_rx.next() => {
                 let res = res.unwrap();
                 match res {
                     Ok(Event {
