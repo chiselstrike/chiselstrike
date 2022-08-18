@@ -109,7 +109,7 @@ pub struct SqliteDb {
 
 impl SqliteDb {
     pub fn url(&self) -> String {
-        let path = self.tmp_dir.path().join("chiseld.db");
+        let path = self.tmp_dir.path().join(".chiseld.db");
         format!("sqlite://{}?mode=rwc", path.display())
     }
 }

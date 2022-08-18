@@ -142,6 +142,17 @@ async fn handle_version_request(
         return Ok(handle_forbidden("Unauthorized user"));
     }
 
+    {
+        let secrets = server.secrets.read();
+        if !version
+            .policy_system
+            .secret_authorization
+            .is_allowed(&req_parts, &secrets, &routing_path)
+        {
+            return Ok(handle_forbidden("Invalid header authentication"));
+        }
+    }
+
     let api_request = ApiRequest {
         method: req_parts.method.as_str().into(),
         uri: req_parts.uri.to_string(),

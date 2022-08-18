@@ -2,10 +2,12 @@
 
 use crate::prefix_map::PrefixMap;
 use crate::types::ObjectType;
+use crate::JsonObject;
 use anyhow::Result;
+use hyper::Request;
 use serde_json::{json, Value};
 use std::collections::{HashMap, HashSet};
-use yaml_rust::YamlLoader;
+use yaml_rust::{Yaml, YamlLoader};
 
 /// Different kinds of policies.
 #[derive(Clone)]
@@ -67,11 +69,79 @@ impl UserAuthorization {
     }
 }
 
+/// Describes secret-based authorization.  An endpoint request will only be allowed if it includes a header
+/// specified in this struct.
+#[derive(Clone, Default, Debug)]
+pub(crate) struct SecretAuthorization {
+    /// A request can access an endpoint if it includes a header required by the longest path prefix.
+    paths: PrefixMap<RequiredHeader>,
+}
+
+impl SecretAuthorization {
+    /// Is a request with these headers allowed to execute the endpoint at this path?
+    pub fn is_allowed(
+        &self,
+        req: &hyper::http::Parts,
+        secrets: &JsonObject,
+        path: &str,
+    ) -> bool {
+        match self.paths.longest_prefix(path) {
+            None => true,
+            Some((_, RequiredHeader { verbs: Some(v), .. })) if !v.contains(req.method) => true,
+            Some((
+                _,
+                RequiredHeader {
+                    header_name,
+                    secret_name,
+                    ..
+                },
+            )) => {
+                let secret_value = match secrets.get(secret_name).cloned() {
+                    None => return false, // No expected header value provided => nothing can match.
+                    Some(serde_json::Value::String(s)) => s,
+                    _ => {
+                        warn!("Header auth failed because secret {secret_name} isn't a string");
+                        return false;
+                    }
+                };
+                match req.headers.get(header_name).map(|v| v.to_str()) {
+                    Some(Ok(header_value)) if header_value == secret_value => true,
+                    Some(Err(e)) => {
+                        warn!("Weird bytes in header {header_name}: {e}");
+                        false
+                    }
+                    _ => false,
+                }
+            }
+        }
+    }
+
+    /// Requires a header for every endpoint under this path.  Longer paths override existing prefixes.  Error if
+    /// this same path has already been added.
+    fn add(&mut self, path: &str, header: RequiredHeader) -> Result<()> {
+        if self.paths.insert(path.into(), header).is_some() {
+            anyhow::bail!("Repeated path in header authorization: {path}");
+        }
+        Ok(())
+    }
+}
+
+/// Describes a header that a request must include.
+#[derive(Clone, Default, Debug)]
+struct RequiredHeader {
+    header_name: String,
+    /// Names a secret (see secrets.rs) whose value must match the header value.
+    secret_name: String,
+    /// HTTP verbs to which this requirement applies.  If absent, apply to all verbs.
+    verbs: Option<Vec<hyper::Method>>,
+}
+
 #[derive(Clone, Default)]
 pub struct PolicySystem {
     /// Maps labels to their applicable policies.
     pub labels: HashMap<String, Policy>,
     pub user_authorization: UserAuthorization,
+    pub secret_authorization: SecretAuthorization,
 }
 
 impl PolicySystem {
@@ -165,6 +235,36 @@ impl PolicySystem {
                             .user_authorization
                             .add(path, regex::Regex::new(users)?)?;
                     }
+                    let header = &endpoint["mandatory_header"];
+                    match header {
+                        Yaml::BadValue => {}
+                        Yaml::Hash(_) => {
+                            let kv = (&header["name"], &header["secret_value_ref"]);
+                            match kv {
+                                (Yaml::String(name), Yaml::String(value)) => {
+                                    let verbs = &header["only_for_verbs"];
+                                    let verbs = match verbs {
+                                        Yaml::BadValue => None,
+                                        Yaml::String(_) => Some(parse_verbs(&vec![verbs.clone()])?),
+                                        Yaml::Array(a) => Some(parse_verbs(a)?),
+                                        _ => {
+                                            warn!("only_for_verbs must be a list of strings, instead got {verbs:?}");
+                                            None
+                                        }
+                                    };
+                                    policies.secret_authorization.add(path, RequiredHeader {
+                                        header_name: name.clone(),
+                                        secret_name: value.clone(),
+                                        verbs,
+                                    })?;
+                                }
+                                _ => anyhow::bail!(
+                                    "Header must have string values for keys 'name' and 'secret_value_ref'. Instead got: {header:?}"
+                                ),
+                            }
+                        }
+                        x => anyhow::bail!("Unparsable header: {x:?}"),
+                    }
                 }
             }
         }
@@ -175,4 +275,19 @@ impl PolicySystem {
 pub fn anonymize(_: Value) -> Value {
     // TODO: use type-specific anonymization.
     json!("xxxxx")
+}
+
+fn parse_verbs(v: &Vec<Yaml>) -> Result<Vec<hyper::Method>> {
+    let mut verbs = vec![];
+    for e in v {
+        use anyhow::Context;
+        use std::str::FromStr;
+        match e {
+            Yaml::String(s) => verbs.push(
+                hyper::Method::from_str(s).with_context(|| format!("Error parsing verb {s}"))?,
+            ),
+            _ => anyhow::bail!("String verb expected in only_for_verbs, instead got {e:?}"),
+        }
+    }
+    Ok(verbs)
 }
