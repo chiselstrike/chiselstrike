@@ -1,13 +1,13 @@
 extern crate lit;
 
-use crate::common::{bin_dir, repo_dir};
+use crate::common::{bin_dir, get_free_port, repo_dir};
 use crate::Opt;
 use ::lit::event_handler::EventHandler;
 use anyhow::{anyhow, Result};
 use rayon::prelude::*;
 use std::collections::HashMap;
 use std::env;
-use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU16, Ordering};
 use std::sync::{Arc, Mutex};
 
 pub(crate) fn run_tests(opt: &Opt) -> bool {
@@ -84,7 +84,7 @@ fn run_tests_inner(opt: &Opt, optimize: bool) -> bool {
 
     // ports to use for each service. Low ports will conflict with all
     // kinds of services, so go high.
-    let ports = Arc::new(AtomicUsize::new(30000));
+    let ports = Arc::new(AtomicU16::new(30000));
     lit_files
         .par_iter()
         .map(|test_path| -> Result<()> {
@@ -95,9 +95,9 @@ fn run_tests_inner(opt: &Opt, optimize: bool) -> bool {
                 },
                 |config| {
                     // Add one to avoid conflict with local instances of chisel.
-                    let rpc = ports.fetch_add(1, Ordering::Relaxed);
-                    let internal = ports.fetch_add(1, Ordering::Relaxed);
-                    let api = ports.fetch_add(1, Ordering::Relaxed);
+                    let rpc = get_free_port(&ports);
+                    let internal = get_free_port(&ports);
+                    let api = get_free_port(&ports);
 
                     config.test_paths = vec![test_path.clone()];
                     config.truncate_output_context_to_number_of_lines = Some(500);
