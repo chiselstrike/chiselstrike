@@ -183,7 +183,7 @@ fn format_test_instance(instance: &TestInstance) -> String {
 #[tokio::main]
 pub(crate) async fn run_tests(opt: Arc<Opt>) -> bool {
     let suite = TestSuite::from_inventory();
-    let ports_counter = Arc::new(AtomicU16::new(30000));
+    let ports_counter = Arc::new(AtomicU16::new(40000));
     let parallel = opt.parallel.unwrap_or(num_cpus::get());
 
     // By default, when a panic happens, the panic message is immediately written to stderr and
