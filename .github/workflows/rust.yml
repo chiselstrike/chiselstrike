@@ -21,6 +21,8 @@ jobs:
   build:
     runs-on: self-hosted
     steps:
+    - name: Kill stray chiseld processes
+      run: "killall -9 -q chiseld || true"
     - name: checkout repo
       uses: actions/checkout@v2
       with:
@@ -109,6 +111,8 @@ jobs:
         ports:
           - 5432:5432
     steps:
+    - name: Kill stray chiseld processes
+      run: "killall -9 -q chiseld || true"
     - name: Checkout repository
       uses: actions/checkout@v2
       with:
