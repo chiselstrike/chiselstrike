@@ -157,7 +157,7 @@ dependencies = [
 
 [[package]]
 name = "api"
-version = "0.12.0-dev.0"
+version = "0.13.0-dev.0"
 dependencies = [
  "anyhow",
  "tokio",
@@ -583,7 +583,7 @@ dependencies = [
 
 [[package]]
 name = "chisel-macros"
-version = "0.1.0"
+version = "0.13.0-dev.0"
 dependencies = [
  "proc-macro2 1.0.43",
  "quote 1.0.21",
@@ -593,7 +593,7 @@ dependencies = [
 
 [[package]]
 name = "chiselc"
-version = "0.12.0-dev.0"
+version = "0.13.0-dev.0"
 dependencies = [
  "anyhow",
  "indexmap",
@@ -656,7 +656,7 @@ dependencies = [
 
 [[package]]
 name = "cli"
-version = "0.12.0-dev.0"
+version = "0.13.0-dev.0"
 dependencies = [
  "anyhow",
  "bytes",
@@ -1022,7 +1022,7 @@ dependencies = [
 
 [[package]]
 name = "dbgarc"
-version = "0.12.0-dev.0"
+version = "0.13.0-dev.0"
 dependencies = [
  "backtrace",
 ]
@@ -1541,7 +1541,7 @@ dependencies = [
 
 [[package]]
 name = "endpoint_tsc"
-version = "0.12.0-dev.0"
+version = "0.13.0-dev.0"
 dependencies = [
  "anyhow",
  "api",
@@ -2898,7 +2898,7 @@ checksum = "e5ce46fe64a9d73be07dcbe690a38ce1b293be448fd8ce1e6c1b8062c9f72c6a"
 
 [[package]]
 name = "my_tsc"
-version = "0.12.0-dev.0"
+version = "0.13.0-dev.0"
 dependencies = [
  "deno_runtime",
  "endpoint_tsc",
@@ -3220,7 +3220,7 @@ dependencies = [
 
 [[package]]
 name = "packages"
-version = "0.12.0-dev.0"
+version = "0.13.0-dev.0"
 dependencies = [
  "api",
 ]
@@ -4276,7 +4276,7 @@ dependencies = [
 
 [[package]]
 name = "server"
-version = "0.12.0-dev.0"
+version = "0.13.0-dev.0"
 dependencies = [
  "aes-gcm 0.9.4",
  "anyhow",
@@ -5537,7 +5537,7 @@ checksum = "59547bce71d9c38b83d9c0e92b6066c4253371f15005def0c30d9657f50c7642"
 
 [[package]]
 name = "tsc_compile"
-version = "0.12.0-dev.0"
+version = "0.13.0-dev.0"
 dependencies = [
  "console",
  "deno_core",
@@ -5551,7 +5551,7 @@ dependencies = [
 
 [[package]]
 name = "tsc_compile_build"
-version = "0.12.0-dev.0"
+version = "0.13.0-dev.0"
 
 [[package]]
 name = "tungstenite"
@@ -5777,7 +5777,7 @@ checksum = "936e4b492acfd135421d8dca4b1aa80a7bfc26e702ef3af710e0752684df5372"
 
 [[package]]
 name = "utils"
-version = "0.12.0-dev.0"
+version = "0.13.0-dev.0"
 dependencies = [
  "anyhow",
  "async-channel",
