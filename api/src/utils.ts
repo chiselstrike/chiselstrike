@@ -45,3 +45,39 @@ export function responseFromJson(body: unknown, status = 200) {
         ],
     });
 }
+
+/**
+ * Acts the same as Object.assign, but performs deep merge instead of a shallow one.
+ */
+function mergeDeep(
+    target: Record<string, unknown>,
+    ...sources: Record<string, unknown>[]
+): Record<string, unknown> {
+    function isObject(item: unknown): boolean {
+        return (item && typeof item === "object" &&
+            !Array.isArray(item)) as boolean;
+    }
+
+    if (!sources.length) {
+        return target;
+    }
+    const source = sources.shift();
+
+    if (isObject(target) && isObject(source)) {
+        for (const key in source) {
+            if (isObject(source[key])) {
+                if (!target[key]) {
+                    Object.assign(target, { [key]: {} });
+                }
+                mergeDeep(
+                    target[key] as Record<string, unknown>,
+                    source[key] as Record<string, unknown>,
+                );
+            } else {
+                Object.assign(target, { [key]: source[key] });
+            }
+        }
+    }
+    return mergeDeep(target, ...sources);
+}
+

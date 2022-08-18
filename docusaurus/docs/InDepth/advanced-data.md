@@ -157,7 +157,7 @@ export class Custom extends ChiselEntity {
 ```
 
 Now, when a new object of the type `Custom` is created, it will have its timestamp automatically inserted. Working
-directly with numbers can be inconvenient, so a helper function `created` can be added as well, that returns a [`Date`](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Date) object
+directly with numbers can be inconvenient, so a helper function `created` can be added as well, that returns a [`Date`](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Date) object.
 
 What if we also want to track the update time? First, let's add the property to the model. Adding it as optional will allow us to evolve
 the model automatically. And similar to `createdAt`, we can add a helper function so that we can extract a `Date` type easily:

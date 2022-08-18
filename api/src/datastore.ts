@@ -2,42 +2,7 @@
 
 import { crud } from "./crud.ts";
 import type { RouteMap } from "./routing.ts";
-import { opAsync } from "./utils.ts";
-
-/**
- * Acts the same as Object.assign, but performs deep merge instead of a shallow one.
- */
-function mergeDeep(
-    target: Record<string, unknown>,
-    ...sources: Record<string, unknown>[]
-): Record<string, unknown> {
-    function isObject(item: unknown): boolean {
-        return (item && typeof item === "object" &&
-            !Array.isArray(item)) as boolean;
-    }
-
-    if (!sources.length) {
-        return target;
-    }
-    const source = sources.shift();
-
-    if (isObject(target) && isObject(source)) {
-        for (const key in source) {
-            if (isObject(source[key])) {
-                if (!target[key]) {
-                    Object.assign(target, { [key]: {} });
-                }
-                mergeDeep(
-                    target[key] as Record<string, unknown>,
-                    source[key] as Record<string, unknown>,
-                );
-            } else {
-                Object.assign(target, { [key]: source[key] });
-            }
-        }
-    }
-    return mergeDeep(target, ...sources);
-}
+import { mergeDeep, opAsync } from "./utils.ts";
 
 /**
  * Base class for various Operators applicable on `ChiselCursor`. An
@@ -951,6 +916,9 @@ export class ChiselEntity {
      *
      * * **PUT:**
      *     * `/comments/:id`         overwrites the element with the given ID. Payload is a JSON with the properties of `Comment` as keys
+     *
+     * * **PATCH:**
+     *     * `/comments/:id`         modifies the element with the given ID. Payload is a JSON with the properties of `Comment` that will be modified as keys.
      *
      * If you need more control over which method to generate and their behavior, see the top-level `crud()` function
      *

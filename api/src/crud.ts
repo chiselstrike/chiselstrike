@@ -1,4 +1,4 @@
-import { opAsync, responseFromJson } from "./utils.ts";
+import { mergeDeep, opAsync, responseFromJson } from "./utils.ts";
 import { ChiselEntity, requestContext } from "./datastore.ts";
 import { ChiselRequest } from "./request.ts";
 import { RouteMap } from "./routing.ts";
@@ -35,6 +35,7 @@ export type CRUDCreateResponse = (
  *  - `getOne`: should we generate `GET /:id` route that returns one entity by id? Defaults to true.
  *  - `post`: should we generate `POST /` route that creates a new entity? Defaults to true.
  *  - `put`: should we generate `PUT /:id` route that creates or updates an entity? Defaults to true.
+ *  - `patch`: should we generate `PATCH /:id` route that modifies an entity? Defaults to true.
  *  - `deleteAll`: should we generate `DELETE /` route that deletes all entities according to filters in the
  *    URL query parameters? Defaults to true.
  *  - `deleteOne`: should we generate `DELETE /:id` route that deletes one entity by id? Defaults to true.
@@ -51,6 +52,7 @@ export function crud<
         getOne?: boolean;
         post?: boolean;
         put?: boolean;
+        patch?: boolean;
         deleteAll?: boolean;
         deleteOne?: boolean;
     },
@@ -103,6 +105,26 @@ export function crud<
     }
     if (config?.put ?? true) {
         routeMap.put("/:id", put);
+    }
+
+    // Modifies an entity matching :id from the `req` payload.
+    async function patch(req: ChiselRequest): Promise<Response> {
+        const orig = await entity.findOne({ id: req.params.get("id") });
+        if (!orig) {
+            return createResponse(
+                "object does not exist, cannot PATCH",
+                404,
+            );
+        }
+        mergeDeep(
+            orig as unknown as Record<string, unknown>,
+            await req.json(),
+        );
+        await orig.save();
+        return createResponse(orig, 200);
+    }
+    if (config?.patch ?? true) {
+        routeMap.patch("/:id", patch);
     }
 
     // Deletes all entities matching the filter in the `filter` URL parameter.

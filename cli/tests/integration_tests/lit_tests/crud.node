@@ -229,16 +229,28 @@ $CURL -X DELETE "$CHISELD_HOST/dev/persons?all=true"
 # CHECK: HTTP/1.1 200 OK
 # CHECK: Deleted entities matching ?all=true
 
-$CURL -X PUT -d '{"age":98422}' $CHISELD_HOST/dev/persons/cef5d492-d7e3-4c45-9a55-5929b9ab8292
+$CURL -X PUT -d '{"age":98422, "height": 2 }' $CHISELD_HOST/dev/persons/cef5d492-d7e3-4c45-9a55-5929b9ab8292
 # CHECK: HTTP/1.1 200 OK
 # CHECK: "age": 98422
-$CURL -X PUT -d '{"age":2938}' $CHISELD_HOST/dev/persons/cef5d492-d7e3-4c45-9a55-5929b9ab8292 # Repeated PUT of the same id.
+# CHECK: "height": 2
+$CURL -X PUT -d '{"age":2938}' $CHISELD_HOST/dev/persons/cef5d492-d7e3-4c45-9a55-5929b9ab8292 # Repeated PUT of the same id, object is entirely recreated
 # CHECK: HTTP/1.1 200 OK
 # CHECK: "age": 2938
+# CHECK: "height": 1
 echo there is just `$CURL --no-include $CHISELD_HOST/dev/persons | jq '.results | length'` entry
 # CHECK: there is just 1 entry
 $CURL --no-include $CHISELD_HOST/dev/persons | jq '.results | .[] | .age'
 # CHECK: 2938
+$CURL -X PATCH -d '{"height": 4 }' $CHISELD_HOST/dev/persons/cef5d492-d7e3-4c45-9a55-5929b9ab8292 # PATCH on an existing object, only mentioned properties are changed
+# CHECK: HTTP/1.1 200 OK
+# CHECK: "age": 2938
+# CHECK: "height": 4
+
+$CURL -X PATCH -d '{"height": 4 }' $CHISELD_HOST/dev/persons/ # PATCH with no id, 400
+# CHECK: HTTP/1.1 400 Bad Request
+
+$CURL -X PATCH -d '{"height": 4 }' $CHISELD_HOST/dev/persons/0000 # PATCH of a non-existent object, 404
+# CHECK: HTTP/1.1 404 Not Found
 
 $CURL -X PUT -d '{"age":98422}' $CHISELD_HOST/dev/persons/ # PUT without ID.
 # CHECK: HTTP/1.1 405 Method Not Allowed
