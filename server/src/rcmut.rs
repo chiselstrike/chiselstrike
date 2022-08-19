@@ -17,7 +17,7 @@ use std::rc::Rc;
     feature = "must_not_suspend",
     must_not_suspend = "holding a RcMut across suspend"
 )]
-pub(crate) struct RcMut<T: 'static> {
+pub struct RcMut<T: 'static> {
     rc: Rc<RefCell<T>>,
     refmut: MaybeUninit<RefMut<'static, T>>,
 }
@@ -29,7 +29,7 @@ impl<T> Drop for RcMut<T> {
 }
 
 impl<T> RcMut<T> {
-    pub(crate) fn new(rc: Rc<RefCell<T>>) -> Self {
+    pub fn new(rc: Rc<RefCell<T>>) -> Self {
         let mut ret = Self {
             rc,
             refmut: MaybeUninit::uninit(),

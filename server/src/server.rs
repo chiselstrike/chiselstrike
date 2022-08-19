@@ -116,7 +116,7 @@ pub enum DoRepeat {
     No,
 }
 
-pub(crate) trait CommandTrait:
+pub trait CommandTrait:
     (FnOnce() -> LocalBoxFuture<'static, Result<()>>) + Send + 'static
 {
 }
@@ -156,7 +156,7 @@ impl SharedTasks {
     }
 }
 
-pub(crate) async fn add_endpoints(
+pub async fn add_endpoints(
     sources: HashMap<String, String>,
     api_service: &ApiService,
 ) -> Result<()> {
@@ -324,7 +324,7 @@ struct ExecutorChannel {
 
 // Sends commands, receives results.
 #[derive(Clone)]
-pub(crate) struct CoordinatorChannel {
+pub struct CoordinatorChannel {
     pub tx: async_channel::Sender<Command>,
     pub rx: async_channel::Receiver<CommandResult>,
 }

@@ -11,7 +11,7 @@ use std::str::FromStr;
 // in their cdb40b1f8e5f, but that was not released yet. So temporarily wrap
 // around ours. When they release we can remove this.
 #[derive(Debug, Copy, Clone)]
-pub(crate) enum Kind {
+pub enum Kind {
     Postgres,
     Sqlite,
 }
@@ -35,14 +35,14 @@ impl From<AnyKind> for Kind {
 }
 
 #[derive(Debug, Clone)]
-pub(crate) struct DbConnection {
-    pub(crate) kind: Kind,
-    pub(crate) pool: AnyPool,
-    pub(crate) conn_uri: String,
+pub struct DbConnection {
+    pub kind: Kind,
+    pub pool: AnyPool,
+    pub conn_uri: String,
 }
 
 impl DbConnection {
-    pub(crate) async fn connect(uri: &str, nr_conn: usize) -> Result<Self> {
+    pub async fn connect(uri: &str, nr_conn: usize) -> Result<Self> {
         let opts = AnyConnectOptions::from_str(uri)?;
         let kind: Kind = opts.kind().into();
         let pool = AnyPoolOptions::new()
@@ -68,14 +68,14 @@ impl DbConnection {
         })
     }
 
-    pub(crate) async fn local_connection(&self, nr_conn: usize) -> Result<Self> {
+    pub async fn local_connection(&self, nr_conn: usize) -> Result<Self> {
         match self.kind {
             Kind::Postgres => Self::connect(&self.conn_uri, nr_conn).await,
             Kind::Sqlite => Ok(self.clone()),
         }
     }
 
-    pub(crate) fn get_query_builder(kind: &Kind) -> &dyn SchemaBuilder {
+    pub fn get_query_builder(kind: &Kind) -> &dyn SchemaBuilder {
         match kind {
             Kind::Postgres => &PostgresQueryBuilder,
             Kind::Sqlite => &SqliteQueryBuilder,

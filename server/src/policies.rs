@@ -12,7 +12,7 @@ use yaml_rust::{Yaml, YamlLoader};
 
 /// Different kinds of policies.
 #[derive(Clone)]
-pub(crate) enum Kind {
+pub enum Kind {
     /// How this policy transforms values read from storage.
     Transform(fn(Value) -> Value),
     /// Field is of AuthUser type and must match the user currently logged in.
@@ -22,30 +22,30 @@ pub(crate) enum Kind {
 }
 
 #[derive(Clone)]
-pub(crate) struct Policy {
-    pub(crate) kind: Kind,
+pub struct Policy {
+    pub kind: Kind,
 
     /// This policy doesn't apply when the request URI matches.
-    pub(crate) except_uri: regex::Regex,
+    pub except_uri: regex::Regex,
 }
 
 /// Maps labels to their applicable policies.
-pub(crate) type LabelPolicies = HashMap<String, Policy>;
+pub type LabelPolicies = HashMap<String, Policy>;
 
 #[derive(Clone, Default, Debug)]
-pub(crate) struct FieldPolicies {
+pub struct FieldPolicies {
     /// Maps a field name to the transformation we apply to that field's values.
-    pub(crate) transforms: HashMap<String, fn(Value) -> Value>,
+    pub transforms: HashMap<String, fn(Value) -> Value>,
     /// Names of fields that must equal the currently logged-in user.
-    pub(crate) match_login: HashSet<String>,
+    pub match_login: HashSet<String>,
     /// ID of the currently logged-in user.
-    pub(crate) current_userid: Option<String>,
+    pub current_userid: Option<String>,
     /// Names of fields which will be excluded from query's resulting json object.
-    pub(crate) omit: HashSet<String>,
+    pub omit: HashSet<String>,
 }
 
 #[derive(Clone, Default, Debug)]
-pub(crate) struct UserAuthorization {
+pub struct UserAuthorization {
     /// A user is authorized to access a path if the username matches the regex for the longest path prefix present
     /// here.
     paths: PrefixMap<regex::Regex>,
@@ -76,7 +76,7 @@ impl UserAuthorization {
 /// Describes secret-based authorization.  An endpoint request will only be allowed if it includes a header
 /// specified in this struct.
 #[derive(Clone, Default, Debug)]
-pub(crate) struct SecretAuthorization {
+pub struct SecretAuthorization {
     /// A request can access an endpoint if it includes a header required by the longest path prefix.
     paths: PrefixMap<RequiredHeader>,
 }
@@ -146,19 +146,19 @@ struct RequiredHeader {
 }
 
 #[derive(Clone, Default)]
-pub(crate) struct VersionPolicy {
-    pub(crate) labels: LabelPolicies,
-    pub(crate) user_authorization: UserAuthorization,
-    pub(crate) secret_authorization: SecretAuthorization,
+pub struct VersionPolicy {
+    pub labels: LabelPolicies,
+    pub user_authorization: UserAuthorization,
+    pub secret_authorization: SecretAuthorization,
 }
 
 #[derive(Clone, Default)]
-pub(crate) struct Policies {
-    pub(crate) versions: HashMap<String, VersionPolicy>,
+pub struct Policies {
+    pub versions: HashMap<String, VersionPolicy>,
 }
 
 impl Policies {
-    pub(crate) fn add_from_yaml<K: ToString, Y: AsRef<str>>(
+    pub fn add_from_yaml<K: ToString, Y: AsRef<str>>(
         &mut self,
         version: K,
         yaml: Y,
@@ -169,7 +169,7 @@ impl Policies {
     }
 
     /// For field of type `ty` creates field policies.
-    pub(crate) fn make_field_policies(
+    pub fn make_field_policies(
         &self,
         user_id: &Option<String>,
         current_path: &str,
@@ -206,7 +206,7 @@ impl Policies {
 }
 
 impl VersionPolicy {
-    pub(crate) fn from_yaml<S: AsRef<str>>(config: S) -> Result<Self> {
+    pub fn from_yaml<S: AsRef<str>>(config: S) -> Result<Self> {
         let mut policies = Self::default();
         let mut labels = vec![];
 
@@ -303,7 +303,7 @@ impl VersionPolicy {
     }
 }
 
-pub(crate) fn anonymize(_: Value) -> Value {
+pub fn anonymize(_: Value) -> Value {
     // TODO: use type-specific anonymization.
     json!("xxxxx")
 }

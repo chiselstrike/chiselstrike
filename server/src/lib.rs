@@ -3,6 +3,9 @@
 #![cfg_attr(feature = "must_not_suspend", feature(must_not_suspend))]
 #![cfg_attr(feature = "must_not_suspend", deny(must_not_suspend))]
 
+pub use crate::auth::is_auth_entity_name;
+pub use crate::server::{run_all, DoRepeat, Opt};
+
 pub(crate) type JsonObject = serde_json::Map<String, serde_json::Value>;
 
 macro_rules! send_command {
@@ -15,7 +18,7 @@ macro_rules! send_command {
 extern crate log;
 
 pub(crate) mod api;
-pub mod auth;
+pub(crate) mod auth;
 pub(crate) mod datastore;
 pub(crate) mod deno;
 pub(crate) mod internal;
@@ -27,7 +30,7 @@ pub(crate) mod rcmut;
 pub(crate) mod rpc;
 pub(crate) mod runtime;
 pub(crate) mod secrets;
-pub mod server;
+pub(crate) mod server;
 pub(crate) mod types;
 pub(crate) mod vecmap;
 

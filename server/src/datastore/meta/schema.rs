@@ -83,14 +83,14 @@ enum Policies {
     PolicyStr,
 }
 
-pub(crate) static CURRENT_VERSION: &str = "0.7";
+pub static CURRENT_VERSION: &str = "0.7";
 
 // Evolves from a version and returns the new version it evolved to
 //
 // The intention is to evolve from one version to the one immediately following, which is the only
 // way we can keep tests of this sane over the long run. So don't try to be smart and skip
 // versions.
-pub(crate) async fn evolve_from(
+pub async fn evolve_from(
     version: &str,
 ) -> anyhow::Result<(Vec<TableAlterStatement>, String)> {
     match version {
@@ -105,7 +105,7 @@ pub(crate) async fn evolve_from(
     }
 }
 
-pub(crate) fn tables() -> Vec<TableCreateStatement> {
+pub fn tables() -> Vec<TableCreateStatement> {
     let version = Table::create()
         .table(ChiselVersion::Table)
         .if_not_exists()

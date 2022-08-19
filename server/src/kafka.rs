@@ -11,7 +11,7 @@ use rskafka::client::{
 use std::rc::Rc;
 use std::sync::Arc;
 
-pub(crate) async fn spawn(
+pub async fn spawn(
     api: Rc<ApiService>,
     connection: String,
     topics: Vec<String>,
@@ -49,8 +49,8 @@ pub(crate) async fn spawn(
     Ok(tasks)
 }
 
-pub(crate) async fn init() -> Result<()> {
+pub async fn init() -> Result<()> {
     Ok(())
 }
 
-pub(crate) fn shutdown() {}
+pub fn shutdown() {}

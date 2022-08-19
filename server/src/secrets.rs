@@ -86,7 +86,7 @@ fn get_pkcs8_private_key(pem: &str) -> Result<Option<RsaPrivateKey>> {
     Ok(Some(key))
 }
 
-pub(crate) async fn get_private_key(opt: &Opt) -> Result<Option<RsaPrivateKey>> {
+pub async fn get_private_key(opt: &Opt) -> Result<Option<RsaPrivateKey>> {
     let url = match &opt.chisel_secret_key_location {
         Some(x) => match Url::parse(x) {
             Ok(o) => Ok(o),
@@ -116,7 +116,7 @@ fn parse_rsa_key(pem: &str) -> Result<Option<RsaPrivateKey>> {
     get_pkcs8_private_key(pem)
 }
 
-pub(crate) async fn get_secrets(opt: &Opt) -> Result<JsonObject> {
+pub async fn get_secrets(opt: &Opt) -> Result<JsonObject> {
     let secret_location = match &opt.chisel_secret_location {
         Some(s) => Url::parse(s)?,
         None => {

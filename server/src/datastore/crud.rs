@@ -12,14 +12,14 @@ use serde_json::json;
 use std::sync::Arc;
 
 #[derive(Clone, Serialize, Deserialize)]
-pub(crate) struct QueryParams {
+pub struct QueryParams {
     #[serde(rename = "typeName")]
     type_name: String,
     url: Url,
 }
 
 /// Parses CRUD `params` and runs the query with provided `query_engine`.
-pub(crate) fn run_query(
+pub fn run_query(
     context: &RequestContext<'_>,
     params: QueryParams,
     query_engine: Arc<QueryEngine>,
@@ -172,7 +172,7 @@ fn make_page_url(url: &Url, host: &Option<String>, cursor: &Cursor) -> Result<Ur
 }
 
 /// Constructs Delete Mutation from CRUD url.
-pub(crate) fn delete_from_url(c: &RequestContext, type_name: &str, url: &str) -> Result<Mutation> {
+pub fn delete_from_url(c: &RequestContext, type_name: &str, url: &str) -> Result<Mutation> {
     let base_entity = match c.ts.lookup_type(type_name, &c.api_version) {
         Ok(Type::Entity(ty)) => ty,
         Ok(ty) => anyhow::bail!("Cannot delete scalar type {type_name} ({})", ty.name()),
@@ -583,7 +583,7 @@ mod tests {
     use serde_json::json;
     use std::collections::HashMap;
 
-    pub(crate) struct FakeField {
+    pub struct FakeField {
         name: &'static str,
         ty: Type,
     }
@@ -603,7 +603,7 @@ mod tests {
         }
     }
 
-    pub(crate) struct FakeObject {
+    pub struct FakeObject {
         name: &'static str,
     }
 

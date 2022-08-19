@@ -84,7 +84,7 @@ async fn introspect(req: Request<hyper::Body>) -> Result<Response<Body>> {
         .unwrap())
 }
 
-pub(crate) fn add_introspection<P: AsRef<Path>>(api: &ApiService, path: P) {
+pub fn add_introspection<P: AsRef<Path>>(api: &ApiService, path: P) {
     let mut introspect_route = PathBuf::from("/");
     introspect_route.push(&path);
     api.add_route(
@@ -93,7 +93,7 @@ pub(crate) fn add_introspection<P: AsRef<Path>>(api: &ApiService, path: P) {
     );
 }
 
-pub(crate) fn init(api: &ApiService) {
+pub fn init(api: &ApiService) {
     add_introspection(api, "/");
     add_introspection(api, "__chiselstrike");
 }
