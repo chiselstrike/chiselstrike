@@ -157,7 +157,7 @@ impl RpcService {
         let to_remove: Vec<&Entity> = version_types.custom_types.iter().map(|x| x.1).collect();
 
         let meta = &state.meta;
-        let mut transaction = meta.start_transaction().await?;
+        let mut transaction = meta.begin_transaction().await?;
 
         meta.delete_policy_version(&mut transaction, &api_version)
             .await?;
@@ -169,7 +169,7 @@ impl RpcService {
         MetaService::commit_transaction(transaction).await?;
 
         let query_engine = &state.query_engine;
-        let mut transaction = query_engine.start_transaction().await?;
+        let mut transaction = query_engine.begin_transaction().await?;
         for ty in to_remove.into_iter() {
             query_engine.drop_table(&mut transaction, ty).await?;
         }
@@ -300,7 +300,7 @@ impl RpcService {
         let version_types = state.type_system.get_version(&api_version)?; // End mutable state borrow from above.
 
         let meta = &state.meta;
-        let mut transaction = meta.start_transaction().await?;
+        let mut transaction = meta.begin_transaction().await?;
 
         for (existing, removed) in version_types.custom_types.iter() {
             if type_names.get(existing).is_none() {
@@ -474,7 +474,7 @@ or
             .collect::<Result<Vec<_>, _>>()?;
 
         let query_engine = &state.query_engine;
-        let mut transaction = query_engine.start_transaction().await?;
+        let mut transaction = query_engine.begin_transaction().await?;
         for ty in to_insert.into_iter() {
             query_engine.create_table(&mut transaction, &ty).await?;
         }

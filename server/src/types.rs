@@ -165,7 +165,7 @@ impl TypeSystem {
         &self,
         query_engine: &QueryEngine,
     ) -> anyhow::Result<()> {
-        let mut transaction = query_engine.start_transaction().await?;
+        let mut transaction = query_engine.begin_transaction().await?;
         for ty in self.builtin_types.values() {
             if let Type::Entity(ty) = ty {
                 query_engine.create_table(&mut transaction, ty).await?;
@@ -458,7 +458,7 @@ impl TypeSystem {
                         )
                     })?;
 
-                let tr = engine.clone().start_transaction_static().await?;
+                let tr = engine.clone().begin_transaction_static().await?;
                 let query_plan = QueryPlan::from_type(ty_obj);
                 let mut row_streams = engine.query(tr.clone(), query_plan)?;
 

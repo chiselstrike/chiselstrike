@@ -772,7 +772,7 @@ mod tests {
         headers: HashMap<String, String>,
     ) -> Result<JsonObject> {
         let qe = Arc::new(qe.clone());
-        let tr = qe.clone().start_transaction_static().await.unwrap();
+        let tr = qe.clone().begin_transaction_static().await.unwrap();
         super::run_query(
             &RequestContext {
                 policies: &Policies::default(),

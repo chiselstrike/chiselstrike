@@ -283,7 +283,7 @@ impl MetaService {
             );
         }
 
-        let mut transaction = self.start_transaction().await?;
+        let mut transaction = self.begin_transaction().await?;
         match self
             .maybe_migrate_sqlite_database_inner(&mut transaction, sources)
             .await
@@ -375,7 +375,7 @@ impl MetaService {
         let query_builder = DbConnection::get_query_builder(&self.kind);
         let tables = schema::tables();
 
-        let mut transaction = self.start_transaction().await?;
+        let mut transaction = self.begin_transaction().await?;
         // The chisel_version table is relatively new, so if it doesn't exist
         // it could be that this is either a new installation, or an upgrade. So
         // we query something that was with us from the beginning to tell those apart
@@ -684,7 +684,7 @@ impl MetaService {
         Ok(())
     }
 
-    pub async fn start_transaction(&self) -> anyhow::Result<Transaction<'_, Any>> {
+    pub async fn begin_transaction(&self) -> anyhow::Result<Transaction<'_, Any>> {
         Ok(self.pool.begin().await?)
     }
 
@@ -830,20 +830,20 @@ mod tests {
         let meta_conn = DbConnection::connect(&conn_str, 1).await?;
         let meta = MetaService::local_connection(&meta_conn, 1).await.unwrap();
 
-        let mut transaction = meta.start_transaction().await.unwrap();
+        let mut transaction = meta.begin_transaction().await.unwrap();
         let version = MetaService::get_version(&mut transaction).await.unwrap();
         MetaService::commit_transaction(transaction).await.unwrap();
         assert_eq!(version, "0");
 
         meta.create_schema().await.unwrap();
-        let mut transaction = meta.start_transaction().await.unwrap();
+        let mut transaction = meta.begin_transaction().await.unwrap();
         let version = MetaService::get_version(&mut transaction).await.unwrap();
         MetaService::commit_transaction(transaction).await.unwrap();
         assert_eq!(version, schema::CURRENT_VERSION);
 
         // evolving again works (idempotency, we don't fail)
         meta.create_schema().await.unwrap();
-        let mut transaction = meta.start_transaction().await.unwrap();
+        let mut transaction = meta.begin_transaction().await.unwrap();
         let version = MetaService::get_version(&mut transaction).await.unwrap();
         MetaService::commit_transaction(transaction).await.unwrap();
         assert_eq!(version, schema::CURRENT_VERSION);

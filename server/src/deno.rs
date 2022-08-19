@@ -660,7 +660,7 @@ async fn op_chisel_crud_delete(
         query_engine_arc(&state).clone()
     };
 
-    let transaction = query_engine.clone().start_transaction_static().await?;
+    let transaction = query_engine.clone().begin_transaction_static().await?;
 
     let mut guard = transaction.lock().await;
     query_engine
@@ -1206,7 +1206,7 @@ fn op_chisel_rollback_transaction(state: &mut OpState) -> Result<()> {
 #[op]
 async fn op_chisel_create_transaction(state: Rc<RefCell<OpState>>) -> Result<()> {
     let qe = query_engine_arc(&state.borrow());
-    let transaction = qe.start_transaction_static().await?;
+    let transaction = qe.begin_transaction_static().await?;
     set_current_transaction(&mut state.borrow_mut(), transaction);
     Ok(())
 }

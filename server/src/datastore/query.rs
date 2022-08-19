@@ -903,7 +903,7 @@ pub mod tests {
     }
 
     async fn init_database(query_engine: &QueryEngine, entities: &[Entity]) {
-        let mut tr = query_engine.start_transaction().await.unwrap();
+        let mut tr = query_engine.begin_transaction().await.unwrap();
         for entity in entities {
             query_engine.create_table(&mut tr, entity).await.unwrap();
         }
@@ -947,7 +947,7 @@ pub mod tests {
 
     async fn fetch_rows_with_plan(qe: &QueryEngine, query_plan: QueryPlan) -> Vec<JsonObject> {
         let qe = Arc::new(qe.clone());
-        let tr = qe.clone().start_transaction_static().await.unwrap();
+        let tr = qe.clone().begin_transaction_static().await.unwrap();
         let row_streams = qe.query(tr, query_plan).unwrap();
 
         row_streams
