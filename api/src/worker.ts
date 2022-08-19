@@ -30,7 +30,7 @@ const nextHandlers: Record<string, requestHandler> = {};
 // A map from paths to functions that handle requests for that path.
 const handlers: Record<string, requestHandler> = {};
 
-type eventHandler = (event: Chisel.ChiselEvent) => void;
+type eventHandler = (event: Chisel.ChiselEvent) => Promise<void>;
 const nextEventHandlers: Record<string, eventHandler> = {};
 const eventHandlers: Record<string, eventHandler> = {};
 
@@ -297,13 +297,16 @@ async function callEventHandlerImpl(
     key: ArrayBuffer,
     value: ArrayBuffer,
 ) {
+    requestContext.method = "POST";
+    requestContext.apiVersion = apiVersion;
+
     await Deno.core.opAsync("op_chisel_start_event_handler");
 
     await Deno.core.opAsync("op_chisel_create_transaction");
 
     const fullPath = "/" + apiVersion + path;
 
-    eventHandlers[fullPath]({ key, value });
+    await eventHandlers[fullPath]({ key, value });
 
     closeResources();
 
