@@ -297,6 +297,8 @@ async function callEventHandlerImpl(
     key: ArrayBuffer,
     value: ArrayBuffer,
 ) {
+    requestContext.apiVersion = apiVersion;
+
     await Deno.core.opAsync("op_chisel_start_event_handler");
 
     await Deno.core.opAsync("op_chisel_create_transaction");
