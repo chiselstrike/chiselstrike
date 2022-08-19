@@ -289,11 +289,7 @@ impl QueryPlan {
 
     /// Constructs QueryPlan from type `ty` and application of given
     /// `operators.
-    pub fn from_ops(
-        c: &RequestContext,
-        ty: &Entity,
-        operators: Vec<QueryOp>,
-    ) -> Result<Self> {
+    pub fn from_ops(c: &RequestContext, ty: &Entity, operators: Vec<QueryOp>) -> Result<Self> {
         let mut query_plan = Self::new(ty.clone());
         query_plan.entity = query_plan.load_entity(c, ty)?;
         query_plan.extend_operators(operators);

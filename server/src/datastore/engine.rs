@@ -539,11 +539,7 @@ impl QueryEngine {
         }
     }
 
-    pub async fn add_row_shallow(
-        &self,
-        ty: &ObjectType,
-        ty_value: &JsonObject,
-    ) -> Result<()> {
+    pub async fn add_row_shallow(&self, ty: &ObjectType, ty_value: &JsonObject) -> Result<()> {
         let query = self.prepare_insertion_shallow(ty, ty_value)?;
         self.run_sql_queries(&[query], None).await?;
         Ok(())

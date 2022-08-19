@@ -116,10 +116,7 @@ pub enum DoRepeat {
     No,
 }
 
-pub trait CommandTrait:
-    (FnOnce() -> LocalBoxFuture<'static, Result<()>>) + Send + 'static
-{
-}
+pub trait CommandTrait: (FnOnce() -> LocalBoxFuture<'static, Result<()>>) + Send + 'static {}
 
 impl<T> CommandTrait for T where
     T: (FnOnce() -> LocalBoxFuture<'static, Result<()>>) + Send + 'static

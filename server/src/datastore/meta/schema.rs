@@ -90,9 +90,7 @@ pub static CURRENT_VERSION: &str = "0.7";
 // The intention is to evolve from one version to the one immediately following, which is the only
 // way we can keep tests of this sane over the long run. So don't try to be smart and skip
 // versions.
-pub async fn evolve_from(
-    version: &str,
-) -> anyhow::Result<(Vec<TableAlterStatement>, String)> {
+pub async fn evolve_from(version: &str) -> anyhow::Result<(Vec<TableAlterStatement>, String)> {
     match version {
         "0" => {
             let v = vec![Table::alter()

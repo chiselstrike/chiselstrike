@@ -222,10 +222,7 @@ impl MetaService {
         Self { kind, pool }
     }
 
-    pub async fn local_connection(
-        conn: &DbConnection,
-        nr_conn: usize,
-    ) -> anyhow::Result<Self> {
+    pub async fn local_connection(conn: &DbConnection, nr_conn: usize) -> anyhow::Result<Self> {
         let local = conn.local_connection(nr_conn).await?;
         Ok(Self::new(local.kind, local.pool))
     }
@@ -691,9 +688,7 @@ impl MetaService {
         Ok(self.pool.begin().await?)
     }
 
-    pub async fn commit_transaction(
-        transaction: Transaction<'_, Any>,
-    ) -> anyhow::Result<()> {
+    pub async fn commit_transaction(transaction: Transaction<'_, Any>) -> anyhow::Result<()> {
         transaction.commit().await?;
         Ok(())
     }

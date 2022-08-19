@@ -158,11 +158,7 @@ pub struct Policies {
 }
 
 impl Policies {
-    pub fn add_from_yaml<K: ToString, Y: AsRef<str>>(
-        &mut self,
-        version: K,
-        yaml: Y,
-    ) -> Result<()> {
+    pub fn add_from_yaml<K: ToString, Y: AsRef<str>>(&mut self, version: K, yaml: Y) -> Result<()> {
         let v = VersionPolicy::from_yaml(yaml)?;
         self.versions.insert(version.to_string(), v);
         Ok(())

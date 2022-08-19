@@ -870,11 +870,7 @@ extern "C" fn promise_reject_callback(message: v8::PromiseRejectMessage) {
     }
 }
 
-pub async fn init_deno(
-    v8_flags: Vec<String>,
-    inspect: bool,
-    inspect_brk: bool,
-) -> Result<()> {
+pub async fn init_deno(v8_flags: Vec<String>, inspect: bool, inspect_brk: bool) -> Result<()> {
     let v8_flags = once("unused_arg0".to_owned())
         .chain(v8_flags.iter().cloned())
         .collect();
@@ -1151,10 +1147,7 @@ pub async fn set_query_engine(query_engine: Arc<QueryEngine>) {
     to_worker(WorkerMsg::SetQueryEngine(query_engine)).await;
 }
 
-pub fn lookup_builtin_type(
-    state: &OpState,
-    type_name: &str,
-) -> Result<Type, TypeSystemError> {
+pub fn lookup_builtin_type(state: &OpState, type_name: &str) -> Result<Type, TypeSystemError> {
     let type_system = current_type_system(state);
     type_system.lookup_builtin_type(type_name)
 }
