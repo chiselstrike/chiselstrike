@@ -180,7 +180,7 @@ pub async fn add_endpoints(
                     deno::run_js_event(path.clone(), key, value).boxed_local()
                 }
             });
-            api_service.add_event_handler(path.into(), func);
+            api_service.add_event_handler(path, func);
         } else {
             println!("warning: unrecognized source: {}", path);
         }

@@ -16,8 +16,6 @@ use std::convert::Infallible;
 use std::convert::TryFrom;
 use std::io::Cursor;
 use std::net::ToSocketAddrs;
-use std::path::Path;
-use std::path::PathBuf;
 use std::pin::Pin;
 use std::rc::Rc;
 use std::sync::{Arc, Mutex};
@@ -123,15 +121,8 @@ pub struct ApiInfo {
 }
 
 impl ApiInfo {
-    pub fn new<N, T>(name: N, tag: T) -> Self
-    where
-        N: ToString,
-        T: ToString,
-    {
-        Self {
-            name: name.to_string(),
-            tag: tag.to_string(),
-        }
+    pub fn new(name: String, tag: String) -> Self {
+        Self { name, tag }
     }
 
     pub fn all_routes() -> Self {
@@ -150,7 +141,7 @@ impl ApiInfo {
         }
     }
 }
-pub type ApiInfoMap = HashMap<PathBuf, ApiInfo>;
+pub type ApiInfoMap = HashMap<String, ApiInfo>;
 
 /// API service for Chisel server.
 pub struct ApiService {
@@ -159,7 +150,7 @@ pub struct ApiService {
     // with runtime checking, which is likely cheaper, but still this is safer and we don't
     // have to manually implement Send (which is unsafe).
     paths: Mutex<PrefixMap<RouteFn>>,
-    event_handlers: Mutex<HashMap<PathBuf, EventFn>>,
+    event_handlers: Mutex<HashMap<String, EventFn>>,
     info: Mutex<ApiInfoMap>,
 }
 
@@ -200,27 +191,24 @@ impl ApiService {
     }
 
     /// Finds the right EventFn for this topic.
-    fn find_event_fn<S: AsRef<Path>>(&self, topic: S) -> Option<EventFn> {
-        match self.event_handlers.lock().unwrap().get(topic.as_ref()) {
+    fn find_event_fn(&self, topic: &str) -> Option<EventFn> {
+        match self.event_handlers.lock().unwrap().get(topic) {
             None => None,
             Some(f) => Some(f.clone()),
         }
     }
 
-    pub fn add_event_handler(&self, path: PathBuf, event_fn: EventFn) {
+    pub fn add_event_handler(&self, path: String, event_fn: EventFn) {
         self.event_handlers.lock().unwrap().insert(path, event_fn);
     }
 
-    pub fn update_api_info<P: AsRef<str>>(&self, api_version: P, info: ApiInfo) {
-        crate::introspect::add_introspection(self, &api_version);
-        self.info
-            .lock()
-            .unwrap()
-            .insert(api_version.as_ref().into(), info);
+    pub fn update_api_info(&self, api_version: &str, info: ApiInfo) {
+        crate::introspect::add_introspection(self, api_version);
+        self.info.lock().unwrap().insert(api_version.into(), info);
     }
 
-    pub fn get_api_info<P: AsRef<Path>>(&self, api_version: P) -> Option<ApiInfo> {
-        self.info.lock().unwrap().get(api_version.as_ref()).cloned()
+    pub fn get_api_info(&self, api_version: &str) -> Option<ApiInfo> {
+        self.info.lock().unwrap().get(api_version).cloned()
     }
 
     pub fn routes(&self) -> Vec<String> {
@@ -251,26 +239,22 @@ impl ApiService {
         key: Option<Vec<u8>>,
         value: Option<Vec<u8>>,
     ) -> Result<()> {
-        let versions: Vec<PathBuf> = {
+        let versions: Vec<String> = {
             let info = self.info.lock().unwrap();
             info.keys().cloned().collect()
         };
         for version in versions {
             // skip internal versions
-            if version == PathBuf::from("__chiselstrike") || version == PathBuf::from("") {
+            if version == "__chiselstrike" || version.is_empty() {
                 continue;
             }
-            let path = PathBuf::from("/").join(version).join(topic.clone());
-            if let Some(event_fn) = self.find_event_fn(path.clone()) {
+            let path = format!("/{}/{}", version, topic);
+            if let Some(event_fn) = self.find_event_fn(&path) {
                 if let Err(err) = event_fn(key.clone(), value.clone()).await {
-                    println!(
-                        "Warning: event handler for {} failed: {}",
-                        path.display(),
-                        err
-                    );
+                    println!("Warning: event handler for {} failed: {}", path, err);
                 }
             } else {
-                println!("Warning: event handler for {} not found.", path.display());
+                println!("Warning: event handler for {} not found.", path);
             }
         }
         Ok(())
