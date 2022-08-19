@@ -181,23 +181,23 @@ pub async fn find_one(c: TestContext) {
     for name in ["Glauber", "Jan", "Pekka"] {
         assert_eq!(
             c.chisel
-                .get_json(&format!("/dev/find_one?first_name={name}"))
+                .get_text(&format!("/dev/find_one?first_name={name}"))
                 .await,
-            json!(name)
+            name,
         );
         assert_eq!(
             c.chisel
-                .get_json(&format!(
+                .get_text(&format!(
                     "/dev/find_one?first_name={name}&use_predicate=true"
                 ))
                 .await,
-            json!(name)
+            name,
         );
         assert_eq!(
             c.chisel
-                .get_json(&format!("/dev/find_one?first_name={name}&use_expr=true"))
+                .get_text(&format!("/dev/find_one?first_name={name}&use_expr=true"))
                 .await,
-            json!(name)
+            name,
         );
     }
 }
