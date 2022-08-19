@@ -83,8 +83,8 @@ async fn introspect(req: Request<hyper::Body>) -> Result<Response<Body>> {
         .unwrap())
 }
 
-pub fn add_introspection<P: AsRef<str>>(api: &ApiService, path: P) {
-    let introspect_route = format!("/{}", path.as_ref());
+pub fn add_introspection(api: &ApiService, path: &str) {
+    let introspect_route = format!("/{}", path);
     api.add_route(
         introspect_route,
         Arc::new(move |req| { introspect(req) }.boxed_local()),

@@ -152,9 +152,9 @@ pub struct Policies {
 }
 
 impl Policies {
-    pub fn add_from_yaml<K: ToString, Y: AsRef<str>>(&mut self, version: K, yaml: Y) -> Result<()> {
+    pub fn add_from_yaml(&mut self, version: String, yaml: &str) -> Result<()> {
         let v = VersionPolicy::from_yaml(yaml)?;
-        self.versions.insert(version.to_string(), v);
+        self.versions.insert(version, v);
         Ok(())
     }
 
@@ -196,11 +196,11 @@ impl Policies {
 }
 
 impl VersionPolicy {
-    pub fn from_yaml<S: AsRef<str>>(config: S) -> Result<Self> {
+    pub fn from_yaml(config: &str) -> Result<Self> {
         let mut policies = Self::default();
         let mut labels = vec![];
 
-        let docs = YamlLoader::load_from_str(config.as_ref())?;
+        let docs = YamlLoader::load_from_str(config)?;
         for config in docs.iter() {
             for label in config["labels"].as_vec().get_or_insert(&[].into()).iter() {
                 let name = label["name"].as_str().ok_or_else(|| {

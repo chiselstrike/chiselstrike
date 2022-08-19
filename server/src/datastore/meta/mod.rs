@@ -14,7 +14,7 @@ use anyhow::Context;
 use sqlx::any::{Any, AnyKind};
 use sqlx::{Execute, Executor, Row, Transaction};
 use std::fmt::Write;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use tokio::fs;
 
@@ -248,12 +248,11 @@ impl MetaService {
     /// For Postgres this is a lot more complex because it is not possible to
     /// do cross-database transactions. But this handles the local dev case,
     /// which is what is most relevant at the moment.
-    pub async fn maybe_migrate_sqlite_database<P: AsRef<Path>, T: AsRef<Path>>(
+    pub async fn maybe_migrate_sqlite_database(
         &self,
-        sources: &[P],
-        to: T,
+        sources: &[PathBuf],
+        to: &str,
     ) -> anyhow::Result<()> {
-        let to = to.as_ref();
         match self.db.pool.any_kind() {
             AnyKind::Sqlite => {}
             _ => anyhow::bail!("Can't migrate postgres tables yet"),
@@ -290,10 +289,10 @@ impl MetaService {
             Ok(true) => {
                 let mut full_str = format!(
                     "Migrated your data to {}. You can now delete the following files:",
-                    to.display()
+                    to,
                 );
                 for src in sources {
-                    let s = src.as_ref().display();
+                    let s = src.display();
                     write!(full_str, "\n\t{}\n\t{}-wal\n\t{}-shm", s, s, s).unwrap();
                 }
 
@@ -306,10 +305,10 @@ impl MetaService {
         Ok(())
     }
 
-    async fn maybe_migrate_sqlite_database_inner<P: AsRef<Path>>(
+    async fn maybe_migrate_sqlite_database_inner(
         &self,
         transaction: &mut Transaction<'_, Any>,
-        sources: &[P],
+        sources: &[PathBuf],
     ) -> anyhow::Result<bool> {
         // this sqlite instance already has data, nothing to migrate.
         if self.count_tables(transaction).await? != 0 {
@@ -317,10 +316,9 @@ impl MetaService {
         }
 
         for (idx, src) in sources.iter().enumerate() {
-            let src = src.as_ref().to_str().unwrap();
             let db = format!("db{}", idx);
 
-            let attach = format!("attach database '{}' as '{}'", src, db);
+            let attach = format!("attach database '{}' as '{}'", src.display(), db);
             execute(transaction, sqlx::query::<sqlx::Any>(&attach)).await?;
 
             let query = format!(
@@ -430,8 +428,8 @@ impl MetaService {
         let mut info = ApiInfoMap::default();
         for row in rows {
             let api_version: &str = row.get("api_version");
-            let app_name: &str = row.get("app_name");
-            let tag: &str = row.get("version_tag");
+            let app_name: String = row.get("app_name");
+            let tag: String = row.get("version_tag");
 
             debug!("Loading api version info for {}", api_version);
             info.insert(api_version.into(), ApiInfo::new(app_name, tag));
@@ -735,7 +733,7 @@ impl MetaService {
 
         let mut policies = Policies::default();
         for row in rows {
-            let version: &str = row.get("version");
+            let version: String = row.get("version");
             let yaml: &str = row.get("policy_str");
 
             policies.add_from_yaml(version, yaml)?;
@@ -869,9 +867,12 @@ mod tests {
 
         let conn = DbConnection::connect(&conn_str, 1).await?;
         let meta = MetaService::local_connection(&conn, 1).await.unwrap();
-        meta.maybe_migrate_sqlite_database(&[&meta_path, &data_path], &new_path)
-            .await
-            .unwrap();
+        meta.maybe_migrate_sqlite_database(
+            &[meta_path, data_path],
+            &new_path.display().to_string(),
+        )
+        .await
+        .unwrap();
 
         let query = QueryEngine::local_connection(&conn, 1).await.unwrap();
 
@@ -897,9 +898,12 @@ mod tests {
 
         let conn = DbConnection::connect(&conn_str, 1).await?;
         let meta = MetaService::local_connection(&conn, 1).await.unwrap();
-        meta.maybe_migrate_sqlite_database(&[&meta_path, &data_path], &new_path)
-            .await
-            .unwrap_err();
+        meta.maybe_migrate_sqlite_database(
+            &[meta_path.clone(), data_path],
+            &new_path.display().to_string(),
+        )
+        .await
+        .unwrap_err();
 
         // still exists, wasn't deleted
         fs::metadata(meta_path).await.unwrap();
@@ -923,9 +927,12 @@ mod tests {
 
         let conn = DbConnection::connect(&conn_str, 1).await?;
         let meta = MetaService::local_connection(&conn, 1).await.unwrap();
-        meta.maybe_migrate_sqlite_database(&[&meta_path, &data_path], &new_path)
-            .await
-            .unwrap_err();
+        meta.maybe_migrate_sqlite_database(
+            &[meta_path.clone(), data_path.clone()],
+            &new_path.display().to_string(),
+        )
+        .await
+        .unwrap_err();
 
         // original still exists, werent't deleted
         fs::metadata(data_path).await.unwrap();
@@ -958,9 +965,12 @@ mod tests {
 
         let conn = DbConnection::connect(&conn_str, 1).await?;
         let meta = MetaService::local_connection(&conn, 1).await.unwrap();
-        meta.maybe_migrate_sqlite_database(&[&meta_path, &data_path], &new_path)
-            .await
-            .unwrap();
+        meta.maybe_migrate_sqlite_database(
+            &[meta_path.clone(), data_path.clone()],
+            &new_path.display().to_string(),
+        )
+        .await
+        .unwrap();
 
         // original still exists, werent't deleted
         fs::metadata(data_path).await.unwrap();
