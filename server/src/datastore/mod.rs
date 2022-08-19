@@ -52,14 +52,14 @@
 //! object instead and returns a `QueryResults` object, which represents a
 //! stream of query results with *policies applied*.
 
-pub(crate) mod crud;
+pub mod crud;
 mod dbconn;
-pub(crate) mod engine;
-pub(crate) mod expr;
-pub(crate) mod meta;
-pub(crate) mod query;
+pub mod engine;
+pub mod expr;
+pub mod meta;
+pub mod query;
 
-pub(crate) use dbconn::DbConnection;
-pub(crate) use dbconn::Kind;
-pub(crate) use engine::QueryEngine;
-pub(crate) use meta::MetaService;
+pub use dbconn::DbConnection;
+pub use dbconn::Kind;
+pub use engine::QueryEngine;
+pub use meta::MetaService;

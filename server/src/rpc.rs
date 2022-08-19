@@ -60,7 +60,7 @@ fn validate_api_version(version: &str) -> Result<()> {
 // types (especially because they may error out in different ways due to ordering).
 //
 // Policies and endpoints are stateless so we don't need a global copy.
-pub(crate) struct GlobalRpcState {
+pub struct GlobalRpcState {
     /// Unique UUID identifying this RPC runtime.
     id: Uuid,
     type_system: TypeSystem,
@@ -73,14 +73,14 @@ pub(crate) struct GlobalRpcState {
 }
 
 #[derive(Clone)]
-pub(crate) struct InitState {
+pub struct InitState {
     pub sources: PrefixMap<String>,
     pub policies: Policies,
     pub type_system: TypeSystem,
 }
 
 impl GlobalRpcState {
-    pub(crate) async fn new(
+    pub async fn new(
         meta: MetaService,
         init: InitState,
         query_engine: QueryEngine,
@@ -129,12 +129,12 @@ impl GlobalRpcState {
 /// The RPC service provides a Protobuf-based interface for Chisel control
 /// plane. For example, the service has RPC calls for managing types and
 /// endpoints. The user-generated data plane endpoints are serviced with REST.
-pub(crate) struct RpcService {
+pub struct RpcService {
     state: Arc<Mutex<GlobalRpcState>>,
 }
 
 impl RpcService {
-    pub(crate) fn new(state: Arc<Mutex<GlobalRpcState>>) -> Self {
+    pub fn new(state: Arc<Mutex<GlobalRpcState>>) -> Self {
         Self { state }
     }
 
@@ -806,7 +806,7 @@ impl ChiselRpc for RpcService {
     }
 }
 
-pub(crate) fn spawn(
+pub fn spawn(
     rpc: RpcService,
     addr: SocketAddr,
     start_wait: impl core::future::Future<Output = ()> + Send + 'static,

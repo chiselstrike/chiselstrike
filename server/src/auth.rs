@@ -13,10 +13,10 @@ use std::cell::RefCell;
 use std::collections::HashMap;
 use std::rc::Rc;
 
-pub(crate) const AUTH_USER_NAME: &str = "AuthUser";
-pub(crate) const AUTH_SESSION_NAME: &str = "AuthSession";
-pub(crate) const AUTH_TOKEN_NAME: &str = "AuthToken";
-pub(crate) const AUTH_ACCOUNT_NAME: &str = "AuthAccount";
+pub const AUTH_USER_NAME: &str = "AuthUser";
+pub const AUTH_SESSION_NAME: &str = "AuthSession";
+pub const AUTH_TOKEN_NAME: &str = "AuthToken";
+pub const AUTH_ACCOUNT_NAME: &str = "AuthAccount";
 
 const AUTH_ENTITY_NAMES: [&str; 4] = [
     AUTH_USER_NAME,
@@ -55,7 +55,7 @@ export default {type_name}.crud()"#
     crate::server::add_endpoints(sources, api).await
 }
 
-pub(crate) async fn init(api: &mut ApiService) -> Result<()> {
+pub async fn init(api: &mut ApiService) -> Result<()> {
     add_crud_endpoint_for_type(AUTH_USER_NAME, "users", api).await?;
     add_crud_endpoint_for_type(AUTH_SESSION_NAME, "sessions", api).await?;
     add_crud_endpoint_for_type(AUTH_TOKEN_NAME, "tokens", api).await?;
@@ -63,7 +63,7 @@ pub(crate) async fn init(api: &mut ApiService) -> Result<()> {
 }
 
 /// Extracts the username of the logged-in user, or None if there was no login.
-pub(crate) async fn get_username_from_id(
+pub async fn get_username_from_id(
     state: Rc<RefCell<OpState>>,
     userid: Option<String>,
 ) -> Option<String> {

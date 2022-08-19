@@ -1,6 +1,6 @@
 use crate::chisel::{type_msg::TypeEnum, AddTypeRequest, ContainerType, FieldDefinition, TypeMsg};
 use anyhow::{anyhow, bail, ensure, Context, Result};
-use chisel_server::auth::is_auth_entity_name;
+use chisel_server::is_auth_entity_name;
 use std::collections::BTreeSet;
 use std::fmt;
 use std::path::Path;

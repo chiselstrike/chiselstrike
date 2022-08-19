@@ -4,7 +4,7 @@ use serde_derive::{Deserialize, Serialize};
 #[cfg_attr(test, derive(PartialEq))]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "exprType")]
-pub(crate) enum Expr {
+pub enum Expr {
     /// A value expression.
     Value { value: Value },
     /// Expression for addressing function parameters of the current expression
@@ -37,7 +37,7 @@ impl From<PropertyAccess> for Expr {
 #[cfg_attr(test, derive(PartialEq))]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(untagged)]
-pub(crate) enum Value {
+pub enum Value {
     Bool(bool),
     U64(u64),
     I64(i64),
@@ -94,7 +94,7 @@ impl From<Option<Value>> for Value {
 /// Expression of a property access on an Entity
 #[cfg_attr(test, derive(PartialEq))]
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub(crate) struct PropertyAccess {
+pub struct PropertyAccess {
     /// Name of a property that will be accessed.
     pub property: String,
     /// Expression whose property will be accessed. The expression
@@ -106,7 +106,7 @@ pub(crate) struct PropertyAccess {
 /// A binary operator.
 #[cfg_attr(test, derive(PartialEq))]
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub(crate) enum BinaryOp {
+pub enum BinaryOp {
     Eq,
     NotEq,
     Lt,
@@ -139,7 +139,7 @@ impl BinaryOp {
 /// A binary expression.
 #[cfg_attr(test, derive(PartialEq))]
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub(crate) struct BinaryExpr {
+pub struct BinaryExpr {
     pub left: Box<Expr>,
     pub op: BinaryOp,
     pub right: Box<Expr>,
@@ -155,7 +155,7 @@ macro_rules! make_op_method {
 }
 
 impl BinaryExpr {
-    pub(crate) fn new(op: BinaryOp, lhs: Expr, rhs: Expr) -> Self {
+    pub fn new(op: BinaryOp, lhs: Expr, rhs: Expr) -> Self {
         BinaryExpr {
             left: Box::new(lhs),
             op,

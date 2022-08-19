@@ -13,7 +13,7 @@ use std::sync::Arc;
 use uuid::Uuid;
 
 #[derive(thiserror::Error, Debug)]
-pub(crate) enum TypeSystemError {
+pub enum TypeSystemError {
     #[error["type already exists"]]
     CustomTypeExists(Entity),
     #[error["no such type: {0}"]]
@@ -31,19 +31,19 @@ pub(crate) enum TypeSystemError {
 }
 
 #[derive(Debug, Default, Clone, new)]
-pub(crate) struct VersionTypes {
+pub struct VersionTypes {
     #[new(default)]
-    pub(crate) custom_types: HashMap<String, Entity>,
+    pub custom_types: HashMap<String, Entity>,
 }
 
 #[derive(Debug, Clone)]
-pub(crate) struct TypeSystem {
-    pub(crate) versions: HashMap<String, VersionTypes>,
+pub struct TypeSystem {
+    pub versions: HashMap<String, VersionTypes>,
     builtin_types: HashMap<String, Type>,
 }
 
 impl VersionTypes {
-    pub(crate) fn lookup_custom_type(&self, type_name: &str) -> Result<Entity, TypeSystemError> {
+    pub fn lookup_custom_type(&self, type_name: &str) -> Result<Entity, TypeSystemError> {
         match self.custom_types.get(type_name) {
             Some(ty) => Ok(ty.to_owned()),
             None => Err(TypeSystemError::NoSuchType(type_name.to_owned())),
@@ -161,7 +161,7 @@ impl Default for TypeSystem {
 }
 
 impl TypeSystem {
-    pub(crate) async fn create_builtin_backing_tables(
+    pub async fn create_builtin_backing_tables(
         &self,
         query_engine: &QueryEngine,
     ) -> anyhow::Result<()> {
@@ -178,7 +178,7 @@ impl TypeSystem {
     /// Returns a mutable reference to all types from a specific version.
     ///
     /// If there are no types for this version, the version is created.
-    pub(crate) fn get_version_mut(&mut self, api_version: &str) -> &mut VersionTypes {
+    pub fn get_version_mut(&mut self, api_version: &str) -> &mut VersionTypes {
         self.versions
             .entry(api_version.to_string())
             .or_insert_with(VersionTypes::default)
@@ -187,7 +187,7 @@ impl TypeSystem {
     /// Returns a read-only reference to all types from a specific version.
     ///
     /// If there are no types for this version, an error is returned
-    pub(crate) fn get_version(&self, api_version: &str) -> Result<&VersionTypes, TypeSystemError> {
+    pub fn get_version(&self, api_version: &str) -> Result<&VersionTypes, TypeSystemError> {
         self.versions
             .get(api_version)
             .ok_or_else(|| TypeSystemError::NoSuchVersion(api_version.to_owned()))
@@ -203,13 +203,13 @@ impl TypeSystem {
     ///
     /// If type `ty` already exists in the type system isn't Entity::Custom type,
     /// the function returns `TypeSystemError`.
-    pub(crate) fn add_custom_type(&mut self, ty: Entity) -> Result<(), TypeSystemError> {
+    pub fn add_custom_type(&mut self, ty: Entity) -> Result<(), TypeSystemError> {
         let version = self.get_version_mut(&ty.api_version);
         version.add_custom_type(ty)
     }
 
     /// Generate an [`ObjectDelta`] with the necessary information to evolve a specific type.
-    pub(crate) fn generate_type_delta(
+    pub fn generate_type_delta(
         old_type: &ObjectType,
         new_type: Arc<ObjectType>,
         ts: &TypeSystem,
@@ -362,7 +362,7 @@ impl TypeSystem {
     /// # Errors
     ///
     /// If the looked up type does not exists, the function returns a `TypeSystemError`.
-    pub(crate) fn lookup_custom_type(
+    pub fn lookup_custom_type(
         &self,
         type_name: &str,
         api_version: &str,
@@ -372,7 +372,7 @@ impl TypeSystem {
     }
 
     /// Looks up a builtin type with name `type_name`.
-    pub(crate) fn lookup_builtin_type(&self, type_name: &str) -> Result<Type, TypeSystemError> {
+    pub fn lookup_builtin_type(&self, type_name: &str) -> Result<Type, TypeSystemError> {
         if let Some(element_type_str) = type_name.strip_prefix("Array<") {
             if let Some(element_type_str) = element_type_str.strip_suffix('>') {
                 let element_type = self.lookup_builtin_type(element_type_str)?;
@@ -390,11 +390,7 @@ impl TypeSystem {
     /// # Errors
     ///
     /// If the looked up type does not exists, the function returns a `NoSuchType`.
-    pub(crate) fn lookup_type(
-        &self,
-        type_name: &str,
-        api_version: &str,
-    ) -> Result<Type, TypeSystemError> {
+    pub fn lookup_type(&self, type_name: &str, api_version: &str) -> Result<Type, TypeSystemError> {
         if let Ok(ty) = self.lookup_builtin_type(type_name) {
             Ok(ty)
         } else {
@@ -414,7 +410,7 @@ impl TypeSystem {
     /// # Errors
     ///
     /// If the looked up type does not exists, the function returns a `NoSuchType`.
-    pub(crate) fn lookup_entity(
+    pub fn lookup_entity(
         &self,
         type_name: &str,
         api_version: &str,
@@ -428,7 +424,7 @@ impl TypeSystem {
         }
     }
 
-    pub(crate) async fn populate_types<T: AsRef<str>, F: AsRef<str>>(
+    pub async fn populate_types<T: AsRef<str>, F: AsRef<str>>(
         &self,
         engine: Arc<QueryEngine>,
         api_version_to: T,
@@ -494,7 +490,7 @@ impl TypeSystem {
         });
     }
 
-    pub(crate) fn get(&self, ty: &TypeId) -> Result<Type, TypeSystemError> {
+    pub fn get(&self, ty: &TypeId) -> Result<Type, TypeSystemError> {
         match ty {
             TypeId::String | TypeId::Float | TypeId::Boolean | TypeId::Id | TypeId::Array(_) => {
                 self.lookup_builtin_type(&ty.name())
@@ -507,7 +503,7 @@ impl TypeSystem {
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub(crate) enum Type {
+pub enum Type {
     String,
     Float,
     Boolean,
@@ -516,7 +512,7 @@ pub(crate) enum Type {
 }
 
 impl Type {
-    pub(crate) fn name(&self) -> String {
+    pub fn name(&self) -> String {
         match self {
             Type::Float => "number".to_string(),
             Type::String => "string".to_string(),
@@ -534,7 +530,7 @@ impl From<Entity> for Type {
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub(crate) enum Entity {
+pub enum Entity {
     /// User defined Custom entity.
     Custom(Arc<ObjectType>),
     /// Built-in Auth entity.
@@ -543,7 +539,7 @@ pub(crate) enum Entity {
 
 impl Entity {
     /// Checks whether `Entity` is Auth builtin type.
-    pub(crate) fn is_auth(&self) -> bool {
+    pub fn is_auth(&self) -> bool {
         matches!(self, Entity::Auth(_))
     }
 }
@@ -584,14 +580,14 @@ impl Deref for Entity {
 /// reload the type system after changes are made to the database.
 ///
 /// This may become a problem if a user has many types, but it is simple, robust, and elegant.
-pub(crate) trait ObjectDescriptor {
+pub trait ObjectDescriptor {
     fn name(&self) -> String;
     fn id(&self) -> Option<i32>;
     fn backing_table(&self) -> String;
     fn api_version(&self) -> String;
 }
 
-pub(crate) struct InternalObject {
+pub struct InternalObject {
     name: &'static str,
     backing_table: &'static str,
 }
@@ -614,7 +610,7 @@ impl ObjectDescriptor for InternalObject {
     }
 }
 
-pub(crate) struct ExistingObject<'a> {
+pub struct ExistingObject<'a> {
     name: String,
     api_version: String,
     backing_table: &'a str,
@@ -622,7 +618,7 @@ pub(crate) struct ExistingObject<'a> {
 }
 
 impl<'a> ExistingObject<'a> {
-    pub(crate) fn new(name: &str, backing_table: &'a str, id: i32) -> anyhow::Result<Self> {
+    pub fn new(name: &str, backing_table: &'a str, id: i32) -> anyhow::Result<Self> {
         let split: Vec<&str> = name.split('.').collect();
 
         anyhow::ensure!(
@@ -660,14 +656,14 @@ impl<'a> ObjectDescriptor for ExistingObject<'a> {
     }
 }
 
-pub(crate) struct NewObject<'a> {
+pub struct NewObject<'a> {
     name: &'a str,
     backing_table: String, // store at object creation time so consecutive calls to backing_table() return the same value
     api_version: &'a str,
 }
 
 impl<'a> NewObject<'a> {
-    pub(crate) fn new(name: &'a str, api_version: &'a str) -> Self {
+    pub fn new(name: &'a str, api_version: &'a str) -> Self {
         let mut buf = Uuid::encode_buffer();
         let uuid = Uuid::new_v4();
         let backing_table = format!("ty_{}_{}", name, uuid.to_simple().encode_upper(&mut buf));
@@ -699,7 +695,7 @@ impl<'a> ObjectDescriptor for NewObject<'a> {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) enum TypeId {
+pub enum TypeId {
     String,
     Float,
     Boolean,
@@ -709,7 +705,7 @@ pub(crate) enum TypeId {
 }
 
 impl TypeId {
-    pub(crate) fn name(&self) -> String {
+    pub fn name(&self) -> String {
         match self {
             TypeId::Id | TypeId::String => "string".to_string(),
             TypeId::Float => "number".to_string(),
@@ -748,9 +744,9 @@ where
 }
 
 #[derive(Debug)]
-pub(crate) struct ObjectType {
+pub struct ObjectType {
     /// id of this object in the meta-database. Will be None for objects that are not persisted yet
-    pub(crate) meta_id: Option<i32>,
+    pub meta_id: Option<i32>,
     /// Name of this type.
     name: String,
     /// Fields of this type.
@@ -762,11 +758,11 @@ pub(crate) struct ObjectType {
     /// Name of the backing table for this type.
     backing_table: String,
 
-    pub(crate) api_version: String,
+    pub api_version: String,
 }
 
 impl ObjectType {
-    pub(crate) fn new<D: ObjectDescriptor>(
+    pub fn new<D: ObjectDescriptor>(
         desc: D,
         fields: Vec<Field>,
         indexes: Vec<DbIndex>,
@@ -818,31 +814,31 @@ impl ObjectType {
         })
     }
 
-    pub(crate) fn user_fields(&self) -> impl Iterator<Item = &Field> {
+    pub fn user_fields(&self) -> impl Iterator<Item = &Field> {
         self.fields.iter()
     }
 
-    pub(crate) fn all_fields(&self) -> impl Iterator<Item = &Field> {
+    pub fn all_fields(&self) -> impl Iterator<Item = &Field> {
         std::iter::once(&self.chisel_id).chain(self.fields.iter())
     }
 
-    pub(crate) fn has_field(&self, field_name: &str) -> bool {
+    pub fn has_field(&self, field_name: &str) -> bool {
         self.all_fields().any(|f| f.name == field_name)
     }
 
-    pub(crate) fn get_field(&self, field_name: &str) -> Option<&Field> {
+    pub fn get_field(&self, field_name: &str) -> Option<&Field> {
         self.all_fields().find(|f| f.name == field_name)
     }
 
-    pub(crate) fn backing_table(&self) -> &str {
+    pub fn backing_table(&self) -> &str {
         &self.backing_table
     }
 
-    pub(crate) fn name(&self) -> &str {
+    pub fn name(&self) -> &str {
         &self.name
     }
 
-    pub(crate) fn persisted_name(&self) -> String {
+    pub fn persisted_name(&self) -> String {
         format!("{}.{}", self.api_version, self.name)
     }
 
@@ -852,7 +848,7 @@ impl ObjectType {
         to_map.check_populate_from(&source_map)
     }
 
-    pub(crate) fn indexes(&self) -> &Vec<DbIndex> {
+    pub fn indexes(&self) -> &Vec<DbIndex> {
         &self.indexes
     }
 }
@@ -864,16 +860,16 @@ impl PartialEq for ObjectType {
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub(crate) struct DbIndex {
+pub struct DbIndex {
     /// Id of this index in the meta database. Before it's creation, it will be None.
-    pub(crate) meta_id: Option<i32>,
+    pub meta_id: Option<i32>,
     /// Name of the index in database. Before it's creation, it will be None.
     backing_table: Option<String>,
-    pub(crate) fields: Vec<String>,
+    pub fields: Vec<String>,
 }
 
 impl DbIndex {
-    pub(crate) fn new(meta_id: i32, backing_table: String, fields: Vec<String>) -> Self {
+    pub fn new(meta_id: i32, backing_table: String, fields: Vec<String>) -> Self {
         Self {
             meta_id: Some(meta_id),
             backing_table: Some(backing_table),
@@ -881,7 +877,7 @@ impl DbIndex {
         }
     }
 
-    pub(crate) fn new_from_fields(fields: Vec<String>) -> Self {
+    pub fn new_from_fields(fields: Vec<String>) -> Self {
         Self {
             meta_id: None,
             backing_table: None,
@@ -889,7 +885,7 @@ impl DbIndex {
         }
     }
 
-    pub(crate) fn name(&self) -> Option<String> {
+    pub fn name(&self) -> Option<String> {
         self.meta_id.map(|id| {
             let name = format!(
                 "index_{id}_{}__{}",
@@ -948,14 +944,14 @@ impl<'a> FieldMap<'a> {
 ///
 /// See the [`ObjectDescriptor`] trait for details.
 /// Situations where a new versus existing field are created are similar.
-pub(crate) trait FieldDescriptor {
+pub trait FieldDescriptor {
     fn name(&self) -> String;
     fn id(&self) -> Option<i32>;
     fn ty(&self) -> Type;
     fn api_version(&self) -> String;
 }
 
-pub(crate) struct ExistingField {
+pub struct ExistingField {
     name: String,
     ty_: Type,
     id: i32,
@@ -963,7 +959,7 @@ pub(crate) struct ExistingField {
 }
 
 impl ExistingField {
-    pub(crate) fn new(name: &str, ty_: Type, id: i32, version: &str) -> Self {
+    pub fn new(name: &str, ty_: Type, id: i32, version: &str) -> Self {
         Self {
             name: name.to_owned(),
             ty_,
@@ -991,14 +987,14 @@ impl FieldDescriptor for ExistingField {
     }
 }
 
-pub(crate) struct NewField<'a> {
+pub struct NewField<'a> {
     name: &'a str,
     ty_: Type,
     version: &'a str,
 }
 
 impl<'a> NewField<'a> {
-    pub(crate) fn new(name: &'a str, ty_: Type, version: &'a str) -> anyhow::Result<Self> {
+    pub fn new(name: &'a str, ty_: Type, version: &'a str) -> anyhow::Result<Self> {
         Ok(Self { name, ty_, version })
     }
 }
@@ -1022,13 +1018,13 @@ impl<'a> FieldDescriptor for NewField<'a> {
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub(crate) struct Field {
-    pub(crate) id: Option<i32>,
-    pub(crate) name: String,
-    pub(crate) type_id: TypeId,
-    pub(crate) labels: Vec<String>,
-    pub(crate) is_optional: bool,
-    pub(crate) is_unique: bool,
+pub struct Field {
+    pub id: Option<i32>,
+    pub name: String,
+    pub type_id: TypeId,
+    pub labels: Vec<String>,
+    pub is_optional: bool,
+    pub is_unique: bool,
     // We want to keep the default the user gave us so we can
     // return it in `chisel describe`. That's the default that is
     // valid in typescriptland.
@@ -1043,7 +1039,7 @@ pub(crate) struct Field {
 }
 
 impl Field {
-    pub(crate) fn new<D: FieldDescriptor>(
+    pub fn new<D: FieldDescriptor>(
         desc: D,
         labels: Vec<String>,
         default: Option<String>,
@@ -1072,22 +1068,22 @@ impl Field {
         }
     }
 
-    pub(crate) fn user_provided_default(&self) -> &Option<String> {
+    pub fn user_provided_default(&self) -> &Option<String> {
         &self.default
     }
 
-    pub(crate) fn default_value(&self) -> &Option<String> {
+    pub fn default_value(&self) -> &Option<String> {
         &self.effective_default
     }
 
-    pub(crate) fn generate_value(&self) -> Option<String> {
+    pub fn generate_value(&self) -> Option<String> {
         match self.type_id {
             TypeId::Id => Some(Uuid::new_v4().to_string()),
             _ => self.default.clone(),
         }
     }
 
-    pub(crate) fn persisted_name(&self, parent_type_name: &ObjectType) -> String {
+    pub fn persisted_name(&self, parent_type_name: &ObjectType) -> String {
         format!(
             "{}.{}.{}",
             self.api_version,
@@ -1098,25 +1094,25 @@ impl Field {
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub(crate) struct FieldAttrDelta {
-    pub(crate) type_id: TypeId,
-    pub(crate) default: Option<String>,
-    pub(crate) is_optional: bool,
-    pub(crate) is_unique: bool,
+pub struct FieldAttrDelta {
+    pub type_id: TypeId,
+    pub default: Option<String>,
+    pub is_optional: bool,
+    pub is_unique: bool,
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub(crate) struct FieldDelta {
-    pub(crate) id: i32,
-    pub(crate) attrs: Option<FieldAttrDelta>,
-    pub(crate) labels: Option<Vec<String>>,
+pub struct FieldDelta {
+    pub id: i32,
+    pub attrs: Option<FieldAttrDelta>,
+    pub labels: Option<Vec<String>>,
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub(crate) struct ObjectDelta {
-    pub(crate) added_fields: Vec<Field>,
-    pub(crate) removed_fields: Vec<Field>,
-    pub(crate) updated_fields: Vec<FieldDelta>,
-    pub(crate) added_indexes: Vec<DbIndex>,
-    pub(crate) removed_indexes: Vec<DbIndex>,
+pub struct ObjectDelta {
+    pub added_fields: Vec<Field>,
+    pub removed_fields: Vec<Field>,
+    pub updated_fields: Vec<FieldDelta>,
+    pub added_indexes: Vec<DbIndex>,
+    pub removed_indexes: Vec<DbIndex>,
 }

@@ -25,7 +25,7 @@ use std::task::{Context, Poll};
 
 type JsStream = Pin<Box<dyn Stream<Item = Result<Box<[u8]>>>>>;
 
-pub(crate) enum Body {
+pub enum Body {
     Const(Option<Box<[u8]>>),
     Stream(JsStream),
 }
@@ -81,17 +81,17 @@ type EventFn = Arc<
 >;
 
 #[derive(Default, Clone, Debug)]
-pub(crate) struct RequestPath {
+pub struct RequestPath {
     api_version: String,
     path: String,
 }
 
 impl RequestPath {
-    pub(crate) fn api_version(&self) -> &str {
+    pub fn api_version(&self) -> &str {
         &self.api_version
     }
 
-    pub(crate) fn path(&self) -> &str {
+    pub fn path(&self) -> &str {
         &self.path
     }
 }
@@ -117,13 +117,13 @@ impl TryFrom<&str> for RequestPath {
 }
 
 #[derive(Default, Debug, Clone)]
-pub(crate) struct ApiInfo {
-    pub(crate) name: String,
-    pub(crate) tag: String,
+pub struct ApiInfo {
+    pub name: String,
+    pub tag: String,
 }
 
 impl ApiInfo {
-    pub(crate) fn new<N, T>(name: N, tag: T) -> Self
+    pub fn new<N, T>(name: N, tag: T) -> Self
     where
         N: ToString,
         T: ToString,
@@ -134,7 +134,7 @@ impl ApiInfo {
         }
     }
 
-    pub(crate) fn all_routes() -> Self {
+    pub fn all_routes() -> Self {
         let tag = env!("VERGEN_GIT_SEMVER_LIGHTWEIGHT").to_string();
         Self {
             name: "ChiselStrike all routes".into(),
@@ -142,7 +142,7 @@ impl ApiInfo {
         }
     }
 
-    pub(crate) fn chiselstrike() -> Self {
+    pub fn chiselstrike() -> Self {
         let tag = env!("VERGEN_GIT_SEMVER_LIGHTWEIGHT").to_string();
         Self {
             name: "ChiselStrike Internal API".into(),
@@ -150,10 +150,10 @@ impl ApiInfo {
         }
     }
 }
-pub(crate) type ApiInfoMap = HashMap<PathBuf, ApiInfo>;
+pub type ApiInfoMap = HashMap<PathBuf, ApiInfo>;
 
 /// API service for Chisel server.
-pub(crate) struct ApiService {
+pub struct ApiService {
     // Although we are on a TPC environment, this sync mutex should be fine. It will
     // never contend because the ApiService is thread-local. The alternative is a RefCell
     // with runtime checking, which is likely cheaper, but still this is safer and we don't
@@ -164,7 +164,7 @@ pub(crate) struct ApiService {
 }
 
 impl ApiService {
-    pub(crate) fn new(mut info: ApiInfoMap) -> Self {
+    pub fn new(mut info: ApiInfoMap) -> Self {
         info.insert("__chiselstrike".into(), ApiInfo::chiselstrike());
         info.insert("".into(), ApiInfo::all_routes());
         Self {
@@ -189,12 +189,12 @@ impl ApiService {
     ///  * path: The path for the route, including any leading /
     ///  * code: A String containing the raw code of the endpoint, before any compilation.
     ///  * route_fn: the actual function to be executed, likely some call to deno.
-    pub(crate) fn add_route(&self, path: PathBuf, route_fn: RouteFn) {
+    pub fn add_route(&self, path: PathBuf, route_fn: RouteFn) {
         self.paths.lock().unwrap().insert(path, route_fn);
     }
 
     /// Remove all routes that have this prefix.
-    pub(crate) fn remove_routes(&self, prefix: &Path) {
+    pub fn remove_routes(&self, prefix: &Path) {
         self.paths.lock().unwrap().remove_prefix(prefix)
     }
 
@@ -206,11 +206,11 @@ impl ApiService {
         }
     }
 
-    pub(crate) fn add_event_handler(&self, path: PathBuf, event_fn: EventFn) {
+    pub fn add_event_handler(&self, path: PathBuf, event_fn: EventFn) {
         self.event_handlers.lock().unwrap().insert(path, event_fn);
     }
 
-    pub(crate) fn update_api_info<P: AsRef<Path>>(&self, api_version: P, info: ApiInfo) {
+    pub fn update_api_info<P: AsRef<Path>>(&self, api_version: P, info: ApiInfo) {
         crate::introspect::add_introspection(self, &api_version);
         self.info
             .lock()
@@ -218,11 +218,11 @@ impl ApiService {
             .insert(api_version.as_ref().into(), info);
     }
 
-    pub(crate) fn get_api_info<P: AsRef<Path>>(&self, api_version: P) -> Option<ApiInfo> {
+    pub fn get_api_info<P: AsRef<Path>>(&self, api_version: P) -> Option<ApiInfo> {
         self.info.lock().unwrap().get(api_version.as_ref()).cloned()
     }
 
-    pub(crate) fn routes(&self) -> Vec<String> {
+    pub fn routes(&self) -> Vec<String> {
         let mut result = vec![];
         for (path, _) in self.paths.lock().unwrap().iter() {
             result.push(path.display().to_string());
@@ -275,7 +275,7 @@ impl ApiService {
         Ok(())
     }
 
-    pub(crate) fn not_found() -> Result<Response<Body>> {
+    pub fn not_found() -> Result<Response<Body>> {
         Ok(Response::builder()
             .status(StatusCode::NOT_FOUND)
             .body(Body::default())?)
@@ -287,7 +287,7 @@ impl ApiService {
             .body(format!("{:?}\n", err).into())
     }
 
-    pub(crate) fn forbidden(err: &str) -> Result<Response<Body>> {
+    pub fn forbidden(err: &str) -> Result<Response<Body>> {
         Ok(Response::builder()
             .status(StatusCode::FORBIDDEN)
             .body(err.to_string().into())?)
@@ -312,7 +312,7 @@ where
 /// * `api` - the API service of the server
 /// * `listen_addr` - the listen address of the API server
 /// * `shutdown` - channel that notifies the server of shutdown
-pub(crate) fn spawn(
+pub fn spawn(
     api: Rc<ApiService>,
     listen_addr: String,
     shutdown: async_channel::Receiver<()>,
@@ -360,7 +360,7 @@ pub(crate) fn spawn(
     Ok(tasks)
 }
 
-pub(crate) fn response_template() -> http::response::Builder {
+pub fn response_template() -> http::response::Builder {
     Response::builder()
         // TODO: Let the user control this.
         .header("Access-Control-Allow-Origin", "*")

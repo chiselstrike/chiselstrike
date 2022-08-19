@@ -14,11 +14,11 @@ use std::sync::atomic::{AtomicU16, Ordering};
 static SERVE_WEBUI: OnceCell<SocketAddr> = OnceCell::new();
 static HEALTH_READY: AtomicU16 = AtomicU16::new(404);
 
-pub(crate) fn mark_ready() {
+pub fn mark_ready() {
     HEALTH_READY.store(200, Ordering::Relaxed);
 }
 
-pub(crate) fn mark_not_ready() {
+pub fn mark_not_ready() {
     HEALTH_READY.store(400, Ordering::Relaxed);
 }
 
@@ -78,7 +78,7 @@ async fn route(req: Request<Body>) -> Result<Response<Body>> {
 /// Unlike the API server, it is strictly bound to 127.0.0.1. This is enough
 /// for the Kubernetes checks to work, and it is one less thing for us to secure
 /// and prevent DDoS attacks again - which is why this is a different server
-pub(crate) fn init(addr: SocketAddr, serve_webui: bool, rpc_addr: SocketAddr) {
+pub fn init(addr: SocketAddr, serve_webui: bool, rpc_addr: SocketAddr) {
     if serve_webui {
         SERVE_WEBUI
             .set(rpc_addr)

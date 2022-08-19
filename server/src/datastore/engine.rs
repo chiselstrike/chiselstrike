@@ -30,14 +30,14 @@ use std::task::{Context, Poll};
 use uuid::Uuid;
 
 /// A query row is a JSON object that represent the queried entities.
-pub(crate) type ResultRow = JsonObject;
+pub type ResultRow = JsonObject;
 
 /// A query results is a stream of query rows after policies have been applied.
-pub(crate) type QueryResults = BoxStream<'static, Result<ResultRow>>;
+pub type QueryResults = BoxStream<'static, Result<ResultRow>>;
 
-pub(crate) type TransactionStatic = Arc<Mutex<Transaction<'static, Any>>>;
+pub type TransactionStatic = Arc<Mutex<Transaction<'static, Any>>>;
 
-pub(crate) fn extract_transaction(transaction: TransactionStatic) -> Transaction<'static, Any> {
+pub fn extract_transaction(transaction: TransactionStatic) -> Transaction<'static, Any> {
     let transaction = Arc::try_unwrap(transaction).expect("Transaction still has references held!");
     transaction.into_inner()
 }
@@ -72,7 +72,7 @@ async fn make_transactioned_stream(
     }
 }
 
-pub(crate) fn new_query_results(
+pub fn new_query_results(
     raw_query: String,
     tr: TransactionStatic,
 ) -> impl Stream<Item = anyhow::Result<AnyRow>> {
@@ -110,11 +110,11 @@ impl TryFrom<&Field> for ColumnDef {
 /// An SQL string with placeholders, plus its argument values.  Keeps them all alive so they can be fed to
 /// sqlx::Query by reference.
 #[derive(Debug)]
-pub(crate) struct SqlWithArguments {
+pub struct SqlWithArguments {
     /// SQL query text with placeholders $1, $2, ...
-    pub(crate) sql: String,
+    pub sql: String,
     /// Values for $n placeholders.
-    pub(crate) args: Vec<SqlValue>,
+    pub args: Vec<SqlValue>,
 }
 
 impl SqlWithArguments {
@@ -151,8 +151,8 @@ impl SqlWithArguments {
 ///     }
 /// }
 #[derive(Debug, Serialize)]
-pub(crate) struct IdTree {
-    pub(crate) id: String,
+pub struct IdTree {
+    pub id: String,
     children: HashMap<String, IdTree>,
 }
 
@@ -184,7 +184,7 @@ fn id_idx(entity: &QueriedEntity) -> usize {
 /// some parts of a mutation or query need to run through the policy engine,
 /// which is not always offloadable to a database.
 #[derive(Clone)]
-pub(crate) struct QueryEngine {
+pub struct QueryEngine {
     kind: Kind,
     pool: AnyPool,
 }
@@ -194,7 +194,7 @@ impl QueryEngine {
         Self { kind, pool }
     }
 
-    pub(crate) async fn local_connection(conn: &DbConnection, nr_conn: usize) -> Result<Self> {
+    pub async fn local_connection(conn: &DbConnection, nr_conn: usize) -> Result<Self> {
         let local = conn.local_connection(nr_conn).await?;
         Ok(Self::new(local.kind, local.pool))
     }
@@ -206,7 +206,7 @@ impl QueryEngine {
         }
     }
 
-    pub(crate) async fn drop_table(
+    pub async fn drop_table(
         &self,
         transaction: &mut Transaction<'_, Any>,
         ty: &ObjectType,
@@ -223,26 +223,26 @@ impl QueryEngine {
         Ok(())
     }
 
-    pub(crate) async fn start_transaction_static(self: Arc<Self>) -> Result<TransactionStatic> {
+    pub async fn start_transaction_static(self: Arc<Self>) -> Result<TransactionStatic> {
         Ok(Arc::new(Mutex::new(self.pool.begin().await?)))
     }
 
-    pub(crate) async fn start_transaction(&self) -> Result<Transaction<'static, Any>> {
+    pub async fn start_transaction(&self) -> Result<Transaction<'static, Any>> {
         Ok(self.pool.begin().await?)
     }
 
-    pub(crate) async fn commit_transaction(transaction: Transaction<'static, Any>) -> Result<()> {
+    pub async fn commit_transaction(transaction: Transaction<'static, Any>) -> Result<()> {
         transaction.commit().await?;
         Ok(())
     }
 
-    pub(crate) async fn commit_transaction_static(transaction: TransactionStatic) -> Result<()> {
+    pub async fn commit_transaction_static(transaction: TransactionStatic) -> Result<()> {
         let transaction = extract_transaction(transaction);
         transaction.commit().await?;
         Ok(())
     }
 
-    pub(crate) async fn create_table(
+    pub async fn create_table(
         &self,
         transaction: &mut Transaction<'_, Any>,
         ty: &ObjectType,
@@ -265,7 +265,7 @@ impl QueryEngine {
         Ok(())
     }
 
-    pub(crate) async fn alter_table(
+    pub async fn alter_table(
         &self,
         transaction: &mut Transaction<'_, Any>,
         ty: &ObjectType,
@@ -333,7 +333,7 @@ impl QueryEngine {
         Ok(())
     }
 
-    pub(crate) async fn create_indexes(
+    pub async fn create_indexes(
         transaction: &mut Transaction<'_, Any>,
         ty: &ObjectType,
         indexes: &[DbIndex],
@@ -355,7 +355,7 @@ impl QueryEngine {
         Ok(())
     }
 
-    pub(crate) async fn drop_indexes(
+    pub async fn drop_indexes(
         &self,
         transaction: &mut Transaction<'_, Any>,
         ty: &ObjectType,
@@ -476,7 +476,7 @@ impl QueryEngine {
     }
 
     /// Execute the given `query` and return a stream to the results.
-    pub(crate) fn query(
+    pub fn query(
         &self,
         tr: TransactionStatic,
         query_plan: QueryPlan,
@@ -495,7 +495,7 @@ impl QueryEngine {
     ///
     /// Only for testing purposes. For any other purpose, use `mutate_with_transaction`.
     #[cfg(test)]
-    pub(crate) async fn mutate(&self, mutation: Mutation) -> Result<()> {
+    pub async fn mutate(&self, mutation: Mutation) -> Result<()> {
         let mut transaction = self.start_transaction().await?;
         self.mutate_with_transaction(mutation, &mut transaction)
             .await?;
@@ -503,7 +503,7 @@ impl QueryEngine {
         Ok(())
     }
 
-    pub(crate) async fn mutate_with_transaction(
+    pub async fn mutate_with_transaction(
         &self,
         mutation: Mutation,
         transaction: &mut Transaction<'_, Any>,
@@ -524,7 +524,7 @@ impl QueryEngine {
     ///     ...
     /// }
     ///
-    pub(crate) fn add_row<'a>(
+    pub fn add_row<'a>(
         &'a self,
         ty: &ObjectType,
         ty_value: &JsonObject,
@@ -539,17 +539,13 @@ impl QueryEngine {
         }
     }
 
-    pub(crate) async fn add_row_shallow(
-        &self,
-        ty: &ObjectType,
-        ty_value: &JsonObject,
-    ) -> Result<()> {
+    pub async fn add_row_shallow(&self, ty: &ObjectType, ty_value: &JsonObject) -> Result<()> {
         let query = self.prepare_insertion_shallow(ty, ty_value)?;
         self.run_sql_queries(&[query], None).await?;
         Ok(())
     }
 
-    pub(crate) async fn fetch_one(&self, q: SqlWithArguments) -> Result<AnyRow> {
+    pub async fn fetch_one(&self, q: SqlWithArguments) -> Result<AnyRow> {
         Ok(q.get_sqlx().fetch_one(&self.pool).await?)
     }
 

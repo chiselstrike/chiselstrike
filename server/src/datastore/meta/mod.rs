@@ -1,4 +1,4 @@
-pub(crate) mod schema;
+pub mod schema;
 
 // SPDX-FileCopyrightText: © 2021 ChiselStrike <info@chiselstrike.com>
 
@@ -23,7 +23,7 @@ use tokio::fs;
 /// The meta service is responsible for managing metadata such as object
 /// types and labels persistently.
 #[derive(Debug)]
-pub(crate) struct MetaService {
+pub struct MetaService {
     kind: Kind,
     pool: AnyPool,
 }
@@ -218,14 +218,11 @@ async fn insert_field_query(
 }
 
 impl MetaService {
-    pub(crate) fn new(kind: Kind, pool: AnyPool) -> Self {
+    pub fn new(kind: Kind, pool: AnyPool) -> Self {
         Self { kind, pool }
     }
 
-    pub(crate) async fn local_connection(
-        conn: &DbConnection,
-        nr_conn: usize,
-    ) -> anyhow::Result<Self> {
+    pub async fn local_connection(conn: &DbConnection, nr_conn: usize) -> anyhow::Result<Self> {
         let local = conn.local_connection(nr_conn).await?;
         Ok(Self::new(local.kind, local.pool))
     }
@@ -253,7 +250,7 @@ impl MetaService {
     /// For Postgres this is a lot more complex because it is not possible to
     /// do cross-database transactions. But this handles the local dev case,
     /// which is what is most relevant at the moment.
-    pub(crate) async fn maybe_migrate_sqlite_database<P: AsRef<Path>, T: AsRef<Path>>(
+    pub async fn maybe_migrate_sqlite_database<P: AsRef<Path>, T: AsRef<Path>>(
         &self,
         sources: &[P],
         to: T,
@@ -374,7 +371,7 @@ impl MetaService {
     }
 
     /// Create the schema of the underlying metadata store.
-    pub(crate) async fn create_schema(&self) -> anyhow::Result<()> {
+    pub async fn create_schema(&self) -> anyhow::Result<()> {
         let query_builder = DbConnection::get_query_builder(&self.kind);
         let tables = schema::tables();
 
@@ -428,7 +425,7 @@ impl MetaService {
     }
 
     /// Load information about the current API versions present in this system
-    pub(crate) async fn load_api_info(&self) -> anyhow::Result<ApiInfoMap> {
+    pub async fn load_api_info(&self) -> anyhow::Result<ApiInfoMap> {
         let query = sqlx::query("SELECT api_version, app_name, version_tag FROM api_info");
         let rows = fetch_all(&self.pool, query).await?;
 
@@ -444,7 +441,7 @@ impl MetaService {
         Ok(info)
     }
 
-    pub(crate) async fn persist_api_info(
+    pub async fn persist_api_info(
         &self,
         transaction: &mut Transaction<'_, Any>,
         api_version: &str,
@@ -465,7 +462,7 @@ impl MetaService {
     }
 
     /// Load the existing endpoints from from metadata store.
-    pub(crate) async fn load_sources<'r>(&self) -> anyhow::Result<PrefixMap<String>> {
+    pub async fn load_sources<'r>(&self) -> anyhow::Result<PrefixMap<String>> {
         let query = sqlx::query("SELECT path, code FROM sources");
         let rows = fetch_all(&self.pool, query).await?;
 
@@ -479,7 +476,7 @@ impl MetaService {
         Ok(sources)
     }
 
-    pub(crate) async fn persist_sources(&self, sources: &PrefixMap<String>) -> anyhow::Result<()> {
+    pub async fn persist_sources(&self, sources: &PrefixMap<String>) -> anyhow::Result<()> {
         let mut transaction = self.pool.begin().await?;
 
         let drop = sqlx::query("DELETE FROM sources");
@@ -497,7 +494,7 @@ impl MetaService {
     }
 
     /// Load the type system from metadata store.
-    pub(crate) async fn load_type_system<'r>(&self) -> anyhow::Result<TypeSystem> {
+    pub async fn load_type_system<'r>(&self) -> anyhow::Result<TypeSystem> {
         let query = sqlx::query(
             r#"
             SELECT
@@ -635,7 +632,7 @@ impl MetaService {
         Ok(indexes)
     }
 
-    pub(crate) async fn remove_type(
+    pub async fn remove_type(
         &self,
         transaction: &mut Transaction<'_, Any>,
         ty: &ObjectType,
@@ -657,7 +654,7 @@ impl MetaService {
         Ok(())
     }
 
-    pub(crate) async fn update_type(
+    pub async fn update_type(
         &self,
         transaction: &mut Transaction<'_, Any>,
         ty: &ObjectType,
@@ -687,13 +684,11 @@ impl MetaService {
         Ok(())
     }
 
-    pub(crate) async fn start_transaction(&self) -> anyhow::Result<Transaction<'_, Any>> {
+    pub async fn start_transaction(&self) -> anyhow::Result<Transaction<'_, Any>> {
         Ok(self.pool.begin().await?)
     }
 
-    pub(crate) async fn commit_transaction(
-        transaction: Transaction<'_, Any>,
-    ) -> anyhow::Result<()> {
+    pub async fn commit_transaction(transaction: Transaction<'_, Any>) -> anyhow::Result<()> {
         transaction.commit().await?;
         Ok(())
     }
@@ -702,7 +697,7 @@ impl MetaService {
     ///
     /// We don't have a method that persist all policies, for all versions, because
     /// versions are applied independently
-    pub(crate) async fn persist_policy_version(
+    pub async fn persist_policy_version(
         &self,
         transaction: &mut Transaction<'_, Any>,
         version: &str,
@@ -721,7 +716,7 @@ impl MetaService {
         Ok(())
     }
 
-    pub(crate) async fn delete_policy_version(
+    pub async fn delete_policy_version(
         &self,
         transaction: &mut Transaction<'_, Any>,
         version: &str,
@@ -735,7 +730,7 @@ impl MetaService {
     /// Loads all policies, for all versions.
     ///
     /// Useful on startup, when we have to populate our in-memory state from the meta database.
-    pub(crate) async fn load_policies(&self) -> anyhow::Result<Policies> {
+    pub async fn load_policies(&self) -> anyhow::Result<Policies> {
         let get_policy = sqlx::query("SELECT version, policy_str FROM policies");
 
         let rows = fetch_all(&self.pool, get_policy).await?;
@@ -750,7 +745,7 @@ impl MetaService {
         Ok(policies)
     }
 
-    pub(crate) async fn count_rows(
+    pub async fn count_rows(
         &self,
         transaction: &mut Transaction<'_, Any>,
         ty: &ObjectType,
@@ -762,7 +757,7 @@ impl MetaService {
         Ok(cnt)
     }
 
-    pub(crate) async fn insert_type(
+    pub async fn insert_type(
         &self,
         transaction: &mut Transaction<'_, Any>,
         ty: &ObjectType,

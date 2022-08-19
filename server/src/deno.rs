@@ -285,7 +285,7 @@ thread_local! {
 }
 
 impl DenoService {
-    pub(crate) async fn new(inspect: bool, inspect_brk: bool) -> (Self, v8::Global<v8::Function>) {
+    pub async fn new(inspect: bool, inspect_brk: bool) -> (Self, v8::Global<v8::Function>) {
         let web_worker_preload_module_cb =
             Arc::new(|worker| LocalFutureObj::new(Box::new(future::ready(Ok(worker)))));
         let inner = Arc::new(std::sync::Mutex::new(ModuleLoaderInner {
@@ -842,7 +842,7 @@ thread_local! {
     static REJECTED: RefCell<HashSet<v8::Global<v8::Promise>>> = RefCell::new(HashSet::new());
 }
 
-pub(crate) fn shutdown() {
+pub fn shutdown() {
     REJECTED.with(|r| {
         assert!(r.borrow().is_empty());
     });
@@ -870,11 +870,7 @@ extern "C" fn promise_reject_callback(message: v8::PromiseRejectMessage) {
     }
 }
 
-pub(crate) async fn init_deno(
-    v8_flags: Vec<String>,
-    inspect: bool,
-    inspect_brk: bool,
-) -> Result<()> {
+pub async fn init_deno(v8_flags: Vec<String>, inspect: bool, inspect_brk: bool) -> Result<()> {
     let v8_flags = once("unused_arg0".to_owned())
         .chain(v8_flags.iter().cloned())
         .collect();
@@ -1107,14 +1103,14 @@ async fn mutate_policies_impl(func: Box<dyn FnOnce(&mut Policies) + Send>) {
     to_worker(WorkerMsg::MutatePolicies(func)).await;
 }
 
-pub(crate) async fn mutate_policies<F>(func: F)
+pub async fn mutate_policies<F>(func: F)
 where
     F: FnOnce(&mut Policies) + Send + 'static,
 {
     mutate_policies_impl(Box::new(func)).await;
 }
 
-pub(crate) async fn set_policies(policies: Policies) {
+pub async fn set_policies(policies: Policies) {
     to_worker(WorkerMsg::SetPolicies(policies)).await;
 }
 
@@ -1139,27 +1135,24 @@ fn current_type_system(st: &OpState) -> &TypeSystem {
     st.borrow()
 }
 
-pub(crate) async fn set_meta(meta: MetaService) {
+pub async fn set_meta(meta: MetaService) {
     to_worker(WorkerMsg::SetMeta(meta)).await;
 }
 
-pub(crate) fn query_engine_arc(st: &OpState) -> Arc<QueryEngine> {
+pub fn query_engine_arc(st: &OpState) -> Arc<QueryEngine> {
     st.borrow::<Arc<QueryEngine>>().clone()
 }
 
-pub(crate) async fn set_query_engine(query_engine: Arc<QueryEngine>) {
+pub async fn set_query_engine(query_engine: Arc<QueryEngine>) {
     to_worker(WorkerMsg::SetQueryEngine(query_engine)).await;
 }
 
-pub(crate) fn lookup_builtin_type(
-    state: &OpState,
-    type_name: &str,
-) -> Result<Type, TypeSystemError> {
+pub fn lookup_builtin_type(state: &OpState, type_name: &str) -> Result<Type, TypeSystemError> {
     let type_system = current_type_system(state);
     type_system.lookup_builtin_type(type_name)
 }
 
-pub(crate) async fn remove_type_version(version: &str) {
+pub async fn remove_type_version(version: &str) {
     to_worker(WorkerMsg::RemoveTypeVersion(version.to_string())).await;
 }
 
@@ -1182,11 +1175,11 @@ async fn to_worker(msg: WorkerMsg) {
     resolve_promise(promise).await.unwrap();
 }
 
-pub(crate) async fn set_type_system(type_system: TypeSystem) {
+pub async fn set_type_system(type_system: TypeSystem) {
     to_worker(WorkerMsg::SetTypeSystem(type_system)).await;
 }
 
-pub(crate) async fn update_secrets(secrets: JsonObject) {
+pub async fn update_secrets(secrets: JsonObject) {
     to_worker(WorkerMsg::SetCurrentSecrets(secrets.clone())).await;
 }
 
@@ -1330,7 +1323,7 @@ async fn convert_response(mut res: Response<Body>) -> Result<ResponseParts> {
     })
 }
 
-pub(crate) async fn run_js(path: String, req: Request<hyper::Body>) -> Result<Response<Body>> {
+pub async fn run_js(path: String, req: Request<hyper::Body>) -> Result<Response<Body>> {
     thread_local! {
         static NEXT_REQUEST_ID: Cell<u32> = Cell::new(0);
     }
@@ -1428,7 +1421,7 @@ pub(crate) async fn run_js(path: String, req: Request<hyper::Body>) -> Result<Re
     Ok(body)
 }
 
-pub(crate) async fn run_js_event(
+pub async fn run_js_event(
     path: String,
     key: Option<Vec<u8>>,
     value: Option<Vec<u8>>,
@@ -1578,7 +1571,7 @@ fn get() -> RcMut<DenoService> {
     })
 }
 
-pub(crate) fn endpoint_path_from_source_path(path: &str) -> String {
+pub fn endpoint_path_from_source_path(path: &str) -> String {
     // The source path format is /api_version/endpoints/rest.js. The endpoint is /api_version/rest.
     let mut iter = path.splitn(4, '/');
     let api_version = iter.nth(1).unwrap();
@@ -1586,7 +1579,7 @@ pub(crate) fn endpoint_path_from_source_path(path: &str) -> String {
     format!("/{}/{}", api_version, without_extension(rest))
 }
 
-pub(crate) async fn compile_endpoints(sources: HashMap<String, String>) -> Result<()> {
+pub async fn compile_endpoints(sources: HashMap<String, String>) -> Result<()> {
     let promise = {
         let mut service = get();
         let service: &mut DenoService = &mut service;
@@ -1660,7 +1653,7 @@ pub(crate) async fn compile_endpoints(sources: HashMap<String, String>) -> Resul
     Ok(())
 }
 
-pub(crate) async fn activate_endpoint(path: &str) -> Result<()> {
+pub async fn activate_endpoint(path: &str) -> Result<()> {
     let promise = {
         let mut service = get();
         let service: &mut DenoService = &mut service;
@@ -1676,7 +1669,7 @@ pub(crate) async fn activate_endpoint(path: &str) -> Result<()> {
     Ok(())
 }
 
-pub(crate) async fn activate_event_handler(path: &str) -> Result<()> {
+pub async fn activate_event_handler(path: &str) -> Result<()> {
     let promise = {
         let mut service = get();
         let service: &mut DenoService = &mut service;

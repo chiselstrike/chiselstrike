@@ -4,22 +4,22 @@
 // function. We should switch to vec-map if they accept a PR adding
 // push.
 
-pub(crate) struct VecMap<V> {
+pub struct VecMap<V> {
     vec: Vec<Option<V>>,
 }
 
 impl<V> VecMap<V> {
-    pub(crate) fn push(&mut self, v: V) -> usize {
+    pub fn push(&mut self, v: V) -> usize {
         let ret = self.vec.len();
         self.vec.push(Some(v));
         ret
     }
 
-    pub(crate) fn new() -> Self {
+    pub fn new() -> Self {
         Self { vec: vec![] }
     }
 
-    pub(crate) fn remove(&mut self, key: usize) -> Option<V> {
+    pub fn remove(&mut self, key: usize) -> Option<V> {
         if key >= self.vec.len() {
             return None;
         }
