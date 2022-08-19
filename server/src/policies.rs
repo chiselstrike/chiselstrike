@@ -7,7 +7,6 @@ use anyhow::Result;
 use hyper::Request;
 use serde_json::{json, Value};
 use std::collections::{HashMap, HashSet};
-use std::path::Path;
 use yaml_rust::{Yaml, YamlLoader};
 
 /// Different kinds of policies.
@@ -53,7 +52,7 @@ pub struct UserAuthorization {
 
 impl UserAuthorization {
     /// Is this username allowed to execute the endpoint at this path?
-    pub fn is_allowed(&self, username: Option<String>, path: &Path) -> bool {
+    pub fn is_allowed(&self, username: Option<String>, path: &str) -> bool {
         match self.paths.longest_prefix(path) {
             None => true,
             Some((_, u)) => match username {
@@ -87,7 +86,7 @@ impl SecretAuthorization {
         &self,
         req: &Request<hyper::Body>,
         secrets: &JsonObject,
-        path: &Path,
+        path: &str,
     ) -> bool {
         match self.paths.longest_prefix(path) {
             None => true,

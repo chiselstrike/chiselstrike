@@ -33,7 +33,6 @@ use petgraph::graphmap::GraphMap;
 use petgraph::Directed;
 use std::collections::{BTreeSet, HashMap};
 use std::net::SocketAddr;
-use std::path::PathBuf;
 use std::sync::Arc;
 use tonic::{transport::Server, Request, Response, Status};
 use utils::without_extension;
@@ -97,7 +96,7 @@ impl GlobalRpcState {
             versions.insert(v.to_owned());
         }
         for (p, _) in sources.iter() {
-            let rp = RequestPath::try_from(p.to_str().unwrap()).unwrap();
+            let rp = RequestPath::try_from(p).unwrap();
             versions.insert(rp.api_version().to_owned());
         }
 
@@ -175,7 +174,7 @@ impl RpcService {
         }
         QueryEngine::commit_transaction(transaction).await?;
 
-        let prefix: PathBuf = format!("/{}/", api_version).into();
+        let prefix = format!("/{}/", api_version);
         state.sources.remove_prefix(&prefix);
         state.type_system.versions.remove(&api_version);
         state.policies.versions.remove(&api_version);
@@ -490,7 +489,7 @@ or
         }
         QueryEngine::commit_transaction(transaction).await?;
 
-        let prefix: PathBuf = format!("/{}/", api_version).into();
+        let prefix = format!("/{}/", api_version);
         state.sources.remove_prefix(&prefix);
 
         for (path, code) in &sources {
@@ -762,7 +761,6 @@ impl ChiselRpc for RpcService {
             let mut endpoint_defs = vec![];
             let version_path_str = format!("/{}/", api_version);
             for (path, _) in state.sources.iter() {
-                let path = path.to_str().unwrap();
                 if path.split('/').nth(2) != Some("endpoints") {
                     continue;
                 }

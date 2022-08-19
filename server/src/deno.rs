@@ -1085,14 +1085,14 @@ fn is_allowed_by_policy(
     username: Option<String>,
     req: &Request<hyper::Body>,
     secrets: &JsonObject,
-    path: &std::path::Path,
+    path: &str,
 ) -> Result<bool> {
     let policies = current_policies(state);
     match policies.versions.get(api_version) {
         None => Err(anyhow!(
             "found a route, but no version object for {}/{}",
             api_version,
-            path.display()
+            path,
         )),
         Some(x) => Ok(x.user_authorization.is_allowed(username, path)
             && x.secret_authorization.is_allowed(req, secrets, path)),
@@ -1292,7 +1292,7 @@ async fn special_response(
             username,
             req,
             current_secrets(&state.borrow()),
-            rp.path().as_ref(),
+            rp.path(),
         )?;
         if !is_allowed {
             return Ok(Some(ApiService::forbidden("Unauthorized")?));
