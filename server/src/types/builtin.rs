@@ -72,10 +72,7 @@ impl BuiltinTypes {
         Self { types }
     }
 
-    pub async fn create_builtin_backing_tables(
-        &self,
-        query_engine: &QueryEngine,
-    ) -> anyhow::Result<()> {
+    pub async fn create_backing_tables(&self, query_engine: &QueryEngine) -> anyhow::Result<()> {
         let mut transaction = query_engine.begin_transaction().await?;
         for ty in self.types.values() {
             if let Type::Entity(ty) = ty {

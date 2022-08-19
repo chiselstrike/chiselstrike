@@ -245,7 +245,7 @@ async fn run(state: SharedState, init: InitState, mut cmd: ExecutorChannel) -> R
     let query_engine =
         Arc::new(QueryEngine::local_connection(&state.db, state.opt.nr_connections).await?);
     ts.builtin
-        .create_builtin_backing_tables(query_engine.as_ref())
+        .create_backing_tables(query_engine.as_ref())
         .await?;
     let api_service = Rc::new(api_service);
     let versions: Vec<&String> = ts.versions.keys().collect();

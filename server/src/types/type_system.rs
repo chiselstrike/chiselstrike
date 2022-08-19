@@ -292,11 +292,7 @@ impl TypeSystem {
     /// # Errors
     ///
     /// If the looked up type does not exists, the function returns a `NoSuchType`.
-    pub fn lookup_type(
-        &self,
-        type_name: &str,
-        api_version: &str,
-    ) -> Result<Type, TypeSystemError> {
+    pub fn lookup_type(&self, type_name: &str, api_version: &str) -> Result<Type, TypeSystemError> {
         if let Ok(ty) = self.lookup_builtin_type(type_name) {
             Ok(ty)
         } else {
