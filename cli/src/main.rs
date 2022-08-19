@@ -5,12 +5,12 @@ use crate::cmd::dev::cmd_dev;
 use crate::project::{create_project, CreateProjectOptions};
 use crate::server::{start_server, wait, wait_with_cond};
 use anyhow::{anyhow, Result};
-use chisel::chisel_rpc_client::ChiselRpcClient;
-use chisel::{
+use futures::{pin_mut, Future, FutureExt};
+use proto::chisel_rpc_client::ChiselRpcClient;
+use proto::{
     type_msg::TypeEnum, ChiselDeleteRequest, DescribeRequest, PopulateRequest, RestartRequest,
     StatusRequest,
 };
-use futures::{pin_mut, Future, FutureExt};
 use std::env;
 use std::fs;
 use std::io::ErrorKind;
@@ -18,11 +18,14 @@ use std::path::Path;
 use structopt::StructOpt;
 use tokio::process::Child;
 
-mod chisel;
 mod cmd;
 mod project;
 mod server;
 mod ts;
+
+mod proto {
+    tonic::include_proto!("chisel");
+}
 
 fn parse_version(version: &str) -> anyhow::Result<String> {
     anyhow::ensure!(!version.is_empty(), "version name can't be empty");

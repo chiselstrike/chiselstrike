@@ -1,6 +1,6 @@
 // SPDX-FileCopyrightText: © 2021 ChiselStrike <info@chiselstrike.com>
 
-use crate::chisel::{chisel_rpc_client::ChiselRpcClient, ChiselApplyRequest};
+use crate::proto::{chisel_rpc_client::ChiselRpcClient, ChiselApplyRequest};
 use anyhow::Result;
 use hyper::service::{make_service_fn, service_fn};
 use hyper::{Body, Request, Response, Server};

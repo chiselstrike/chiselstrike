@@ -1,9 +1,9 @@
 // SPDX-FileCopyrightText: © 2022 ChiselStrike <info@chiselstrike.com>
 
-use crate::chisel::IndexCandidate;
 use crate::cmd::apply::chiselc_output;
 use crate::cmd::apply::parse_indexes;
 use crate::cmd::apply::SourceMap;
+use crate::proto::IndexCandidate;
 use anyhow::{anyhow, Context, Result};
 use endpoint_tsc::compile_endpoints;
 use std::path::PathBuf;

@@ -1,10 +1,10 @@
 // SPDX-FileCopyrightText: © 2022 ChiselStrike <info@chiselstrike.com>
 
-use crate::chisel::IndexCandidate;
 use crate::cmd::apply::chiselc_spawn;
 use crate::cmd::apply::parse_indexes;
 use crate::cmd::apply::{SourceMap, TypeChecking};
 use crate::project::read_to_string;
+use crate::proto::IndexCandidate;
 use anyhow::{anyhow, Context, Result};
 use std::env;
 use std::ffi::OsStr;
