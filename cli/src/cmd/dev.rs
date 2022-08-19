@@ -64,6 +64,13 @@ pub(crate) async fn cmd_dev(
         let dir = cwd.join(dir);
         tracked.insert(dir);
     }
+
+    if let Some(events) = &manifest.events {
+        for dir in events {
+            let dir = cwd.join(dir);
+            tracked.insert(dir);
+        }
+    }
     apply_watcher.watch(&cwd, RecursiveMode::Recursive)?;
 
     loop {
