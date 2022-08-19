@@ -3,7 +3,7 @@
 use crate::datastore::query::{
     KeepOrOmitField, Mutation, QueriedEntity, QueryField, QueryPlan, SqlValue, TargetDatabase,
 };
-use crate::datastore::{DbConnection, Kind};
+use crate::datastore::DbConnection;
 use crate::types::{DbIndex, Field, ObjectDelta, ObjectType, Type, TypeId, TypeSystem};
 use crate::JsonObject;
 use anyhow::{anyhow, Context as AnyhowContext, Result};
@@ -16,10 +16,10 @@ use futures::FutureExt;
 use futures::StreamExt;
 use itertools::Itertools;
 use pin_project::pin_project;
-use sea_query::{Alias, ColumnDef, Index, Table};
+use sea_query::{Alias, ColumnDef, Index, PostgresQueryBuilder, Table};
 use serde::Serialize;
 use serde_json::json;
-use sqlx::any::{Any, AnyArguments, AnyPool, AnyRow};
+use sqlx::any::{Any, AnyArguments, AnyKind, AnyRow};
 use sqlx::{Executor, Row, Transaction, ValueRef};
 use std::collections::{HashMap, HashSet};
 use std::fmt::Write;
@@ -185,24 +185,22 @@ fn id_idx(entity: &QueriedEntity) -> usize {
 /// which is not always offloadable to a database.
 #[derive(Clone)]
 pub struct QueryEngine {
-    kind: Kind,
-    pool: AnyPool,
+    db: Arc<DbConnection>,
 }
 
 impl QueryEngine {
-    fn new(kind: Kind, pool: AnyPool) -> Self {
-        Self { kind, pool }
+    fn new(db: Arc<DbConnection>) -> Self {
+        Self { db }
     }
 
     pub async fn local_connection(conn: &DbConnection, nr_conn: usize) -> Result<Self> {
-        let local = conn.local_connection(nr_conn).await?;
-        Ok(Self::new(local.kind, local.pool))
+        Ok(Self::new(Arc::new(conn.local_connection(nr_conn).await?)))
     }
 
     fn target_db(&self) -> TargetDatabase {
-        match self.kind {
-            Kind::Postgres => TargetDatabase::Postgres,
-            Kind::Sqlite => TargetDatabase::Sqlite,
+        match self.db.pool.any_kind() {
+            AnyKind::Postgres => TargetDatabase::Postgres,
+            AnyKind::Sqlite => TargetDatabase::Sqlite,
         }
     }
 
@@ -216,7 +214,7 @@ impl QueryEngine {
         let drop_table = Table::drop()
             .table(Alias::new(ty.backing_table()))
             .to_owned();
-        let drop_table = drop_table.build_any(DbConnection::get_query_builder(&self.kind));
+        let drop_table = drop_table.build_any(self.db.query_builder());
         let drop_table = sqlx::query(&drop_table);
         transaction.execute(drop_table).await?;
 
@@ -224,11 +222,11 @@ impl QueryEngine {
     }
 
     pub async fn begin_transaction_static(self: Arc<Self>) -> Result<TransactionStatic> {
-        Ok(Arc::new(Mutex::new(self.pool.begin().await?)))
+        Ok(Arc::new(Mutex::new(self.db.pool.begin().await?)))
     }
 
     pub async fn begin_transaction(&self) -> Result<Transaction<'static, Any>> {
-        Ok(self.pool.begin().await?)
+        Ok(self.db.pool.begin().await?)
     }
 
     pub async fn commit_transaction(transaction: Transaction<'static, Any>) -> Result<()> {
@@ -256,7 +254,7 @@ impl QueryEngine {
             let mut column_def = ColumnDef::try_from(field)?;
             create_table.col(&mut column_def);
         }
-        let create_table = create_table.build_any(DbConnection::get_query_builder(&self.kind));
+        let create_table = create_table.build_any(self.db.query_builder());
 
         let create_table = sqlx::query(&create_table);
         transaction.execute(create_table).await?;
@@ -277,7 +275,7 @@ impl QueryEngine {
         // using a macro as async closures are unstable
         macro_rules! do_query {
             ( $table:expr ) => {{
-                let table = $table.build_any(DbConnection::get_query_builder(&Kind::Postgres));
+                let table = $table.build_any(&PostgresQueryBuilder);
                 let table = sqlx::query(&table);
 
                 transaction.execute(table).await
@@ -371,14 +369,14 @@ impl QueryEngine {
                 .table(Alias::new(ty.backing_table()))
                 .to_owned();
 
-            let drop_idx = drop_idx.build_any(DbConnection::get_query_builder(&Kind::Postgres));
+            let drop_idx = drop_idx.build_any(&PostgresQueryBuilder);
             let drop_idx = sqlx::query(&drop_idx);
             transaction.execute(drop_idx).await?;
         }
         Ok(())
     }
 
-    fn row_to_json(db_kind: Kind, entity: &QueriedEntity, row: &AnyRow) -> Result<ResultRow> {
+    fn row_to_json(db_kind: AnyKind, entity: &QueriedEntity, row: &AnyRow) -> Result<ResultRow> {
         let mut ret = JsonObject::default();
         for s_field in &entity.fields {
             match s_field {
@@ -414,7 +412,7 @@ impl QueryEngine {
                             // Similarly to the float issue, type information is not filled in
                             // *if* this value was put in as a result of coalesce() (default).
                             match db_kind {
-                                Kind::Sqlite => {
+                                AnyKind::Sqlite => {
                                     let val: String = row.get_unchecked(column_idx);
                                     json!(val == "1" || val.to_lowercase() == "true")
                                 }
@@ -483,7 +481,7 @@ impl QueryEngine {
     ) -> anyhow::Result<QueryResults> {
         let query = query_plan.build_query(&self.target_db())?;
         let allowed_fields = query.allowed_fields;
-        let db_kind = self.kind;
+        let db_kind = self.db.pool.any_kind();
 
         let stream = new_query_results(query.raw_sql, tr);
         let stream = stream.map(move |row| Self::row_to_json(db_kind, &query.entity, &row?));
@@ -546,7 +544,7 @@ impl QueryEngine {
     }
 
     pub async fn fetch_one(&self, q: SqlWithArguments) -> Result<AnyRow> {
-        Ok(q.get_sqlx().fetch_one(&self.pool).await?)
+        Ok(q.get_sqlx().fetch_one(&self.db.pool).await?)
     }
 
     async fn run_sql_queries(
