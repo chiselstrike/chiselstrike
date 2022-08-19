@@ -1,7 +1,6 @@
 // SPDX-FileCopyrightText: © 2021 ChiselStrike <info@chiselstrike.com>
 
 use crate::api::{ApiInfo, RequestPath};
-use crate::chisel::{self, AddTypeRequest, FieldDefinition};
 use crate::datastore::{MetaService, QueryEngine};
 use crate::deno;
 use crate::deno::endpoint_path_from_source_path;
@@ -11,6 +10,14 @@ use crate::deno::set_type_system;
 use crate::internal::mark_ready;
 use crate::policies::{Policies, VersionPolicy};
 use crate::prefix_map::PrefixMap;
+use crate::proto::chisel_rpc_server::{ChiselRpc, ChiselRpcServer};
+use crate::proto::{self, AddTypeRequest, FieldDefinition};
+use crate::proto::{
+    type_msg::TypeEnum, ChiselApplyRequest, ChiselApplyResponse, ChiselDeleteRequest,
+    ChiselDeleteResponse, ContainerType, DescribeRequest, DescribeResponse, IndexCandidate,
+    PopulateRequest, PopulateResponse, RestartRequest, RestartResponse, StatusRequest,
+    StatusResponse, TypeMsg,
+};
 use crate::runtime;
 use crate::server::CommandTrait;
 use crate::server::CoordinatorChannel;
@@ -19,13 +26,6 @@ use crate::types::{
 };
 use anyhow::{Context, Result};
 use async_lock::Mutex;
-use chisel::chisel_rpc_server::{ChiselRpc, ChiselRpcServer};
-use chisel::{
-    type_msg::TypeEnum, ChiselApplyRequest, ChiselApplyResponse, ChiselDeleteRequest,
-    ChiselDeleteResponse, ContainerType, DescribeRequest, DescribeResponse, IndexCandidate,
-    PopulateRequest, PopulateResponse, RestartRequest, RestartResponse, StatusRequest,
-    StatusResponse, TypeMsg,
-};
 use deno_core::futures;
 use deno_core::url::Url;
 use futures::FutureExt;
@@ -217,7 +217,7 @@ impl RpcService {
             .populate_types(state.query_engine.clone(), &to, &from)
             .await?;
 
-        let response = chisel::PopulateResponse {
+        let response = proto::PopulateResponse {
             msg: "OK".to_string(),
         };
 
@@ -688,7 +688,7 @@ impl ChiselRpc for RpcService {
             let state = self.state.lock().await;
             state.id.to_string()
         };
-        let response = chisel::StatusResponse {
+        let response = proto::StatusResponse {
             server_id,
             message: "OK".to_string(),
         };
@@ -743,7 +743,7 @@ impl ChiselRpc for RpcService {
                     let mut field_defs = vec![];
                     for field in ty.user_fields() {
                         let field_type = state.type_system.get(&field.type_id).unwrap();
-                        field_defs.push(chisel::FieldDefinition {
+                        field_defs.push(proto::FieldDefinition {
                             name: field.name.to_owned(),
                             field_type: Some(field_type.into()),
                             labels: field.labels.clone(),
@@ -752,7 +752,7 @@ impl ChiselRpc for RpcService {
                             is_unique: field.is_unique,
                         });
                     }
-                    let type_def = chisel::TypeDefinition {
+                    let type_def = proto::TypeDefinition {
                         name: ty.name().to_string(),
                         field_defs,
                     };
@@ -768,7 +768,7 @@ impl ChiselRpc for RpcService {
                 }
                 let path = endpoint_path_from_source_path(path);
                 if path.starts_with(&version_path_str) {
-                    endpoint_defs.push(chisel::EndpointDefinition {
+                    endpoint_defs.push(proto::EndpointDefinition {
                         path: path.to_string(),
                     });
                 }
@@ -776,12 +776,12 @@ impl ChiselRpc for RpcService {
             let mut label_policy_defs = vec![];
             if let Some(policies) = state.policies.versions.get(api_version) {
                 for label in policies.labels.keys() {
-                    label_policy_defs.push(chisel::LabelPolicyDefinition {
+                    label_policy_defs.push(proto::LabelPolicyDefinition {
                         label: label.clone(),
                     });
                 }
             }
-            version_defs.push(chisel::VersionDefinition {
+            version_defs.push(proto::VersionDefinition {
                 version: api_version.to_string(),
                 type_defs,
                 endpoint_defs,
@@ -789,7 +789,7 @@ impl ChiselRpc for RpcService {
             });
         }
 
-        let response = chisel::DescribeResponse { version_defs };
+        let response = proto::DescribeResponse { version_defs };
         Ok(Response::new(response))
     }
 

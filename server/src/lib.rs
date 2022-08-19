@@ -31,6 +31,6 @@ pub mod server;
 pub(crate) mod types;
 pub(crate) mod vecmap;
 
-pub(crate) mod chisel {
+pub(crate) mod proto {
     tonic::include_proto!("chisel");
 }

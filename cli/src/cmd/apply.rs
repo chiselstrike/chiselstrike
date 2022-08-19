@@ -3,9 +3,9 @@
 pub mod deno;
 pub mod node;
 
-use crate::chisel::chisel_rpc_client::ChiselRpcClient;
-use crate::chisel::{ChiselApplyRequest, IndexCandidate, PolicyUpdateRequest};
 use crate::project::{read_manifest, read_to_string, AutoIndex, Module, Optimize};
+use crate::proto::chisel_rpc_client::ChiselRpcClient;
+use crate::proto::{ChiselApplyRequest, IndexCandidate, PolicyUpdateRequest};
 use anyhow::{anyhow, Context, Result};
 use serde_json::Value;
 use std::collections::HashMap;
