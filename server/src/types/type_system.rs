@@ -1,10 +1,9 @@
 // SPDX-FileCopyrightText: © 2022 ChiselStrike <info@chiselstrike.com>
 
 use super::{
-    DbIndex, Entity, Field, FieldAttrDelta, FieldDelta, FieldMap, InternalObject, ObjectDelta,
-    ObjectType, Type, TypeId,
+    BuiltinTypes, DbIndex, Entity, FieldAttrDelta, FieldDelta, FieldMap, ObjectDelta, ObjectType,
+    Type, TypeId,
 };
-use crate::auth::{AUTH_ACCOUNT_NAME, AUTH_SESSION_NAME, AUTH_TOKEN_NAME, AUTH_USER_NAME};
 use crate::datastore::query::QueryPlan;
 use crate::datastore::QueryEngine;
 use anyhow::Context;
@@ -15,7 +14,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 #[derive(thiserror::Error, Debug)]
-pub(crate) enum TypeSystemError {
+pub enum TypeSystemError {
     #[error["type already exists"]]
     CustomTypeExists(Entity),
     #[error["no such type: {0}"]]
@@ -33,19 +32,19 @@ pub(crate) enum TypeSystemError {
 }
 
 #[derive(Debug, Default, Clone, new)]
-pub(crate) struct VersionTypes {
+pub struct VersionTypes {
     #[new(default)]
-    pub(crate) custom_types: HashMap<String, Entity>,
+    pub custom_types: HashMap<String, Entity>,
 }
 
 #[derive(Debug, Clone)]
-pub(crate) struct TypeSystem {
-    pub(crate) versions: HashMap<String, VersionTypes>,
-    builtin_types: HashMap<String, Type>,
+pub struct TypeSystem {
+    pub versions: HashMap<String, VersionTypes>,
+    pub builtin: Arc<BuiltinTypes>,
 }
 
 impl VersionTypes {
-    pub(crate) fn lookup_custom_type(&self, type_name: &str) -> Result<Entity, TypeSystemError> {
+    pub fn lookup_custom_type(&self, type_name: &str) -> Result<Entity, TypeSystemError> {
         match self.custom_types.get(type_name) {
             Some(ty) => Ok(ty.to_owned()),
             None => Err(TypeSystemError::NoSuchType(type_name.to_owned())),
@@ -66,121 +65,21 @@ impl VersionTypes {
     }
 }
 
-fn string_field(name: &str) -> Field {
-    let api_version = "__chiselstrike".to_string();
-    Field {
-        id: None,
-        name: name.into(),
-        type_id: TypeId::String,
-        labels: vec![],
-        default: None,
-        effective_default: None,
-        is_optional: false,
-        api_version,
-        is_unique: false,
-    }
-}
-
-fn optional_string_field(name: &str) -> Field {
-    let mut f = string_field(name);
-    f.is_optional = true;
-    f
-}
-
-fn optional_number_field(name: &str) -> Field {
-    Field {
-        id: None,
-        name: name.into(),
-        type_id: TypeId::Float,
-        labels: vec![],
-        default: None,
-        effective_default: None,
-        is_optional: true,
-        api_version: "__chiselstrike".into(),
-        is_unique: false,
-    }
-}
-
 impl Default for TypeSystem {
     fn default() -> Self {
-        let mut ts = Self {
-            versions: Default::default(),
-            builtin_types: Default::default(),
-        };
-        ts.builtin_types.insert("string".into(), Type::String);
-        ts.builtin_types.insert("number".into(), Type::Float);
-        ts.builtin_types.insert("boolean".into(), Type::Boolean);
-        ts.add_auth_entity(
-            AUTH_USER_NAME,
-            vec![
-                optional_string_field("emailVerified"),
-                optional_string_field("name"),
-                optional_string_field("email"),
-                optional_string_field("image"),
-            ],
-            "auth_user",
-        );
-        ts.add_auth_entity(
-            AUTH_SESSION_NAME,
-            vec![
-                string_field("sessionToken"),
-                string_field("userId"),
-                string_field("expires"),
-            ],
-            "auth_session",
-        );
-        ts.add_auth_entity(
-            AUTH_TOKEN_NAME,
-            vec![
-                string_field("identifier"),
-                string_field("expires"),
-                string_field("token"),
-            ],
-            "auth_token",
-        );
-        ts.add_auth_entity(
-            AUTH_ACCOUNT_NAME,
-            vec![
-                string_field("providerAccountId"),
-                string_field("userId"),
-                string_field("provider"),
-                string_field("type"),
-                optional_string_field("access_token"),
-                optional_string_field("token_type"),
-                optional_string_field("id_token"),
-                optional_string_field("refresh_token"),
-                optional_string_field("scope"),
-                optional_string_field("session_state"),
-                optional_string_field("oauth_token_secret"),
-                optional_string_field("oauth_token"),
-                optional_number_field("expires_at"),
-            ],
-            "auth_account",
-        );
-
-        ts
+        let builtin = Arc::new(BuiltinTypes::new());
+        Self {
+            versions: HashMap::new(),
+            builtin,
+        }
     }
 }
 
 impl TypeSystem {
-    pub(crate) async fn create_builtin_backing_tables(
-        &self,
-        query_engine: &QueryEngine,
-    ) -> anyhow::Result<()> {
-        let mut transaction = query_engine.start_transaction().await?;
-        for ty in self.builtin_types.values() {
-            if let Type::Entity(ty) = ty {
-                query_engine.create_table(&mut transaction, ty).await?;
-            }
-        }
-        QueryEngine::commit_transaction(transaction).await?;
-        Ok(())
-    }
-
     /// Returns a mutable reference to all types from a specific version.
     ///
     /// If there are no types for this version, the version is created.
-    pub(crate) fn get_version_mut(&mut self, api_version: &str) -> &mut VersionTypes {
+    pub fn get_version_mut(&mut self, api_version: &str) -> &mut VersionTypes {
         self.versions
             .entry(api_version.to_string())
             .or_insert_with(VersionTypes::default)
@@ -189,7 +88,7 @@ impl TypeSystem {
     /// Returns a read-only reference to all types from a specific version.
     ///
     /// If there are no types for this version, an error is returned
-    pub(crate) fn get_version(&self, api_version: &str) -> Result<&VersionTypes, TypeSystemError> {
+    pub fn get_version(&self, api_version: &str) -> Result<&VersionTypes, TypeSystemError> {
         self.versions
             .get(api_version)
             .ok_or_else(|| TypeSystemError::NoSuchVersion(api_version.to_owned()))
@@ -205,13 +104,13 @@ impl TypeSystem {
     ///
     /// If type `ty` already exists in the type system isn't Entity::Custom type,
     /// the function returns `TypeSystemError`.
-    pub(crate) fn add_custom_type(&mut self, ty: Entity) -> Result<(), TypeSystemError> {
+    pub fn add_custom_type(&mut self, ty: Entity) -> Result<(), TypeSystemError> {
         let version = self.get_version_mut(&ty.api_version);
         version.add_custom_type(ty)
     }
 
     /// Generate an [`ObjectDelta`] with the necessary information to evolve a specific type.
-    pub(crate) fn generate_type_delta(
+    pub fn generate_type_delta(
         old_type: &ObjectType,
         new_type: Arc<ObjectType>,
         ts: &TypeSystem,
@@ -364,7 +263,7 @@ impl TypeSystem {
     /// # Errors
     ///
     /// If the looked up type does not exists, the function returns a `TypeSystemError`.
-    pub(crate) fn lookup_custom_type(
+    pub fn lookup_custom_type(
         &self,
         type_name: &str,
         api_version: &str,
@@ -374,14 +273,15 @@ impl TypeSystem {
     }
 
     /// Looks up a builtin type with name `type_name`.
-    pub(crate) fn lookup_builtin_type(&self, type_name: &str) -> Result<Type, TypeSystemError> {
+    pub fn lookup_builtin_type(&self, type_name: &str) -> Result<Type, TypeSystemError> {
         if let Some(element_type_str) = type_name.strip_prefix("Array<") {
             if let Some(element_type_str) = element_type_str.strip_suffix('>') {
                 let element_type = self.lookup_builtin_type(element_type_str)?;
                 return Ok(Type::Array(Box::new(element_type)));
             }
         }
-        self.builtin_types
+        self.builtin
+            .types
             .get(type_name)
             .cloned()
             .ok_or_else(|| TypeSystemError::NotABuiltinType(type_name.to_string()))
@@ -392,7 +292,7 @@ impl TypeSystem {
     /// # Errors
     ///
     /// If the looked up type does not exists, the function returns a `NoSuchType`.
-    pub(crate) fn lookup_type(
+    pub fn lookup_type(
         &self,
         type_name: &str,
         api_version: &str,
@@ -416,7 +316,7 @@ impl TypeSystem {
     /// # Errors
     ///
     /// If the looked up type does not exists, the function returns a `NoSuchType`.
-    pub(crate) fn lookup_entity(
+    pub fn lookup_entity(
         &self,
         type_name: &str,
         api_version: &str,
@@ -430,7 +330,7 @@ impl TypeSystem {
         }
     }
 
-    pub(crate) async fn populate_types<T: AsRef<str>, F: AsRef<str>>(
+    pub async fn populate_types<T: AsRef<str>, F: AsRef<str>>(
         &self,
         engine: Arc<QueryEngine>,
         api_version_to: T,
@@ -464,7 +364,7 @@ impl TypeSystem {
                         )
                     })?;
 
-                let tr = engine.clone().start_transaction_static().await?;
+                let tr = engine.clone().begin_transaction_static().await?;
                 let query_plan = QueryPlan::from_type(ty_obj);
                 let mut row_streams = engine.query(tr.clone(), query_plan)?;
 
@@ -481,22 +381,7 @@ impl TypeSystem {
         Ok(())
     }
 
-    fn add_auth_entity(
-        &mut self,
-        type_name: &'static str,
-        fields: Vec<Field>,
-        backing_table_name: &'static str,
-    ) {
-        self.builtin_types.insert(type_name.into(), {
-            let desc = InternalObject {
-                name: type_name,
-                backing_table: backing_table_name,
-            };
-            Entity::Auth(Arc::new(ObjectType::new(desc, fields, vec![]).unwrap())).into()
-        });
-    }
-
-    pub(crate) fn get(&self, ty: &TypeId) -> Result<Type, TypeSystemError> {
+    pub fn get(&self, ty: &TypeId) -> Result<Type, TypeSystemError> {
         match ty {
             TypeId::String | TypeId::Float | TypeId::Boolean | TypeId::Id | TypeId::Array(_) => {
                 self.lookup_builtin_type(&ty.name())
