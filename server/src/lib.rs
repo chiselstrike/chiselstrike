@@ -18,6 +18,7 @@ macro_rules! send_command {
 extern crate log;
 
 pub(crate) mod api;
+pub(crate) mod apply;
 pub(crate) mod auth;
 pub(crate) mod datastore;
 pub(crate) mod deno;
