@@ -243,11 +243,8 @@ impl From<Type> for TypeId {
     }
 }
 
-impl<T> From<T> for TypeId
-where
-    T: FieldDescriptor,
-{
-    fn from(other: T) -> Self {
+impl From<&dyn FieldDescriptor> for TypeId {
+    fn from(other: &dyn FieldDescriptor) -> Self {
         other.ty().into()
     }
 }
@@ -271,8 +268,8 @@ pub struct ObjectType {
 }
 
 impl ObjectType {
-    pub fn new<D: ObjectDescriptor>(
-        desc: D,
+    pub fn new(
+        desc: &dyn ObjectDescriptor,
         fields: Vec<Field>,
         indexes: Vec<DbIndex>,
     ) -> anyhow::Result<Self> {
@@ -548,8 +545,8 @@ pub struct Field {
 }
 
 impl Field {
-    pub fn new<D: FieldDescriptor>(
-        desc: D,
+    pub fn new(
+        desc: &dyn FieldDescriptor,
         labels: Vec<String>,
         default: Option<String>,
         is_optional: bool,

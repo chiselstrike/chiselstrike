@@ -95,7 +95,7 @@ fn add_auth_entity(
             name: type_name,
             backing_table,
         };
-        Entity::Auth(Arc::new(ObjectType::new(desc, fields, vec![]).unwrap())).into()
+        Entity::Auth(Arc::new(ObjectType::new(&desc, fields, vec![]).unwrap())).into()
     });
 }
 

@@ -516,7 +516,7 @@ impl MetaService {
                 Ok(fields) => {
                     let indexes = self.load_type_indexes(type_id, backing_table).await?;
 
-                    let ty = ObjectType::new(desc, fields, indexes)?;
+                    let ty = ObjectType::new(&desc, fields, indexes)?;
                     ts.add_custom_type(Entity::Custom(Arc::new(ty)))?;
                 }
                 Err(_) => {
@@ -541,7 +541,7 @@ impl MetaService {
             let fields = self.load_type_fields(&ts, type_id).await?;
             let indexes = self.load_type_indexes(type_id, backing_table).await?;
 
-            let ty = ObjectType::new(desc, fields, indexes)?;
+            let ty = ObjectType::new(&desc, fields, indexes)?;
             ts.add_custom_type(Entity::Custom(Arc::new(ty)))?;
         }
 
@@ -598,7 +598,7 @@ impl MetaService {
                 .map(|r| r.get("label_name"))
                 .collect::<Vec<String>>();
 
-            fields.push(Field::new(desc, labels, field_def, is_optional, is_unique));
+            fields.push(Field::new(&desc, labels, field_def, is_optional, is_unique));
         }
         Ok(fields)
     }
