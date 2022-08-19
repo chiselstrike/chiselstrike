@@ -3,7 +3,7 @@ pub mod schema;
 // SPDX-FileCopyrightText: © 2021 ChiselStrike <info@chiselstrike.com>
 
 use crate::api::{ApiInfo, ApiInfoMap};
-use crate::datastore::{DbConnection, Kind};
+use crate::datastore::DbConnection;
 use crate::policies::Policies;
 use crate::prefix_map::PrefixMap;
 use crate::types::{
@@ -11,7 +11,7 @@ use crate::types::{
     TypeSystem,
 };
 use anyhow::Context;
-use sqlx::any::{Any, AnyPool};
+use sqlx::any::{Any, AnyKind};
 use sqlx::{Execute, Executor, Row, Transaction};
 use std::fmt::Write;
 use std::path::Path;
@@ -24,8 +24,7 @@ use tokio::fs;
 /// types and labels persistently.
 #[derive(Debug)]
 pub struct MetaService {
-    kind: Kind,
-    pool: AnyPool,
+    db: Arc<DbConnection>,
 }
 
 async fn execute<'a, 'b>(
@@ -218,13 +217,12 @@ async fn insert_field_query(
 }
 
 impl MetaService {
-    pub fn new(kind: Kind, pool: AnyPool) -> Self {
-        Self { kind, pool }
+    pub fn new(db: Arc<DbConnection>) -> Self {
+        Self { db }
     }
 
     pub async fn local_connection(conn: &DbConnection, nr_conn: usize) -> anyhow::Result<Self> {
-        let local = conn.local_connection(nr_conn).await?;
-        Ok(Self::new(local.kind, local.pool))
+        Ok(Self::new(Arc::new(conn.local_connection(nr_conn).await?)))
     }
 
     async fn get_version(transaction: &mut Transaction<'_, Any>) -> anyhow::Result<String> {
@@ -256,8 +254,8 @@ impl MetaService {
         to: T,
     ) -> anyhow::Result<()> {
         let to = to.as_ref();
-        match self.kind {
-            Kind::Sqlite => {}
+        match self.db.pool.any_kind() {
+            AnyKind::Sqlite => {}
             _ => anyhow::bail!("Can't migrate postgres tables yet"),
         }
 
@@ -352,14 +350,14 @@ impl MetaService {
     }
 
     async fn count_tables(&self, transaction: &mut Transaction<'_, Any>) -> anyhow::Result<usize> {
-        let query = match self.kind {
-            Kind::Sqlite => sqlx::query(
+        let query = match self.db.pool.any_kind() {
+            AnyKind::Sqlite => sqlx::query(
                 r#"
                 SELECT name
                 FROM sqlite_schema
                 WHERE type ='table' AND name NOT LIKE 'sqlite_%'"#,
             ),
-            Kind::Postgres => sqlx::query(
+            AnyKind::Postgres => sqlx::query(
                 r#"
                 SELECT tablename AS name
                 FROM pg_catalog.pg_tables
@@ -372,7 +370,7 @@ impl MetaService {
 
     /// Create the schema of the underlying metadata store.
     pub async fn create_schema(&self) -> anyhow::Result<()> {
-        let query_builder = DbConnection::get_query_builder(&self.kind);
+        let query_builder = self.db.query_builder();
         let tables = schema::tables();
 
         let mut transaction = self.begin_transaction().await?;
@@ -427,7 +425,7 @@ impl MetaService {
     /// Load information about the current API versions present in this system
     pub async fn load_api_info(&self) -> anyhow::Result<ApiInfoMap> {
         let query = sqlx::query("SELECT api_version, app_name, version_tag FROM api_info");
-        let rows = fetch_all(&self.pool, query).await?;
+        let rows = fetch_all(&self.db.pool, query).await?;
 
         let mut info = ApiInfoMap::default();
         for row in rows {
@@ -464,7 +462,7 @@ impl MetaService {
     /// Load the existing endpoints from from metadata store.
     pub async fn load_sources<'r>(&self) -> anyhow::Result<PrefixMap<String>> {
         let query = sqlx::query("SELECT path, code FROM sources");
-        let rows = fetch_all(&self.pool, query).await?;
+        let rows = fetch_all(&self.db.pool, query).await?;
 
         let mut sources = PrefixMap::default();
         for row in rows {
@@ -477,7 +475,7 @@ impl MetaService {
     }
 
     pub async fn persist_sources(&self, sources: &PrefixMap<String>) -> anyhow::Result<()> {
-        let mut transaction = self.pool.begin().await?;
+        let mut transaction = self.db.pool.begin().await?;
 
         let drop = sqlx::query("DELETE FROM sources");
         execute(&mut transaction, drop).await?;
@@ -504,7 +502,7 @@ impl MetaService {
             FROM types
             INNER JOIN type_names ON types.type_id = type_names.type_id"#,
         );
-        let rows = fetch_all(&self.pool, query).await?;
+        let rows = fetch_all(&self.db.pool, query).await?;
 
         let mut ts = TypeSystem::default();
         let mut failures = vec![];
@@ -565,7 +563,7 @@ impl MetaService {
                 ON fields.type_id = $1 AND field_names.field_id = fields.field_id;"#,
         );
         let query = query.bind(type_id);
-        let rows = fetch_all(&self.pool, query).await?;
+        let rows = fetch_all(&self.db.pool, query).await?;
 
         let mut fields = Vec::new();
         for row in rows {
@@ -593,7 +591,7 @@ impl MetaService {
 
             let query = labels_query.bind(field_id);
 
-            let rows = fetch_all(&self.pool, query).await?;
+            let rows = fetch_all(&self.db.pool, query).await?;
 
             let labels = rows
                 .iter()
@@ -619,7 +617,7 @@ impl MetaService {
             WHERE type_id = $1"#,
         )
         .bind(type_id);
-        let rows = fetch_all(&self.pool, query).await?;
+        let rows = fetch_all(&self.db.pool, query).await?;
 
         let mut indexes = vec![];
         for row in rows {
@@ -685,7 +683,7 @@ impl MetaService {
     }
 
     pub async fn begin_transaction(&self) -> anyhow::Result<Transaction<'_, Any>> {
-        Ok(self.pool.begin().await?)
+        Ok(self.db.pool.begin().await?)
     }
 
     pub async fn commit_transaction(transaction: Transaction<'_, Any>) -> anyhow::Result<()> {
@@ -733,7 +731,7 @@ impl MetaService {
     pub async fn load_policies(&self) -> anyhow::Result<Policies> {
         let get_policy = sqlx::query("SELECT version, policy_str FROM policies");
 
-        let rows = fetch_all(&self.pool, get_policy).await?;
+        let rows = fetch_all(&self.db.pool, get_policy).await?;
 
         let mut policies = Policies::default();
         for row in rows {

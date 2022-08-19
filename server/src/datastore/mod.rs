@@ -60,6 +60,5 @@ pub mod meta;
 pub mod query;
 
 pub use dbconn::DbConnection;
-pub use dbconn::Kind;
 pub use engine::QueryEngine;
 pub use meta::MetaService;
