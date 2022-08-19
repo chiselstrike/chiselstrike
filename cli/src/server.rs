@@ -5,7 +5,7 @@ use crate::chisel::{StatusRequest, StatusResponse};
 use anyhow::Result;
 use std::future::Future;
 use std::io::ErrorKind;
-
+use std::thread;
 use std::time::Duration;
 use tonic::transport::Channel;
 
@@ -60,7 +60,7 @@ where
                 if total > timeout {
                     anyhow::bail!("Timeout");
                 }
-                tokio::time::sleep(wait_time).await;
+                thread::sleep(wait_time);
                 total += wait_time;
                 wait_time *= 2;
             }
