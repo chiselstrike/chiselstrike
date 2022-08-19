@@ -169,7 +169,7 @@ pub async fn add_endpoints(
                 let path = path.to_string();
                 move |req| deno::run_js(path.clone(), req).boxed_local()
             });
-            api_service.add_route(path.into(), func);
+            api_service.add_route(path, func);
         } else if path.contains("/events/") {
             let path = deno::endpoint_path_from_source_path(path);
             activate_event_handler(&path).await?;
@@ -264,7 +264,7 @@ async fn run(state: SharedState, init: InitState, mut cmd: ExecutorChannel) -> R
     let hashmap = sources
         .iter()
         .map(|(k, v)| {
-            let path = k.to_str().unwrap().to_string();
+            let path = k.to_string();
             (path, v.clone())
         })
         .collect();

@@ -174,9 +174,10 @@ impl ApiService {
         }
     }
 
-    /// Finds the right RouteFn for this request.
-    fn find_route_fn<S: AsRef<Path>>(&self, request: S) -> Option<RouteFn> {
-        match self.paths.lock().unwrap().longest_prefix(request.as_ref()) {
+    /// Finds the right RouteFn for this path.
+    fn find_route_fn(&self, path: &str) -> Option<RouteFn> {
+        let path = normalize_path(path);
+        match self.paths.lock().unwrap().longest_prefix(&path) {
             None => None,
             Some((_, f)) => Some(f.clone()),
         }
@@ -189,12 +190,12 @@ impl ApiService {
     ///  * path: The path for the route, including any leading /
     ///  * code: A String containing the raw code of the endpoint, before any compilation.
     ///  * route_fn: the actual function to be executed, likely some call to deno.
-    pub fn add_route(&self, path: PathBuf, route_fn: RouteFn) {
+    pub fn add_route(&self, path: String, route_fn: RouteFn) {
         self.paths.lock().unwrap().insert(path, route_fn);
     }
 
     /// Remove all routes that have this prefix.
-    pub fn remove_routes(&self, prefix: &Path) {
+    pub fn remove_routes(&self, prefix: &str) {
         self.paths.lock().unwrap().remove_prefix(prefix)
     }
 
@@ -210,7 +211,7 @@ impl ApiService {
         self.event_handlers.lock().unwrap().insert(path, event_fn);
     }
 
-    pub fn update_api_info<P: AsRef<Path>>(&self, api_version: P, info: ApiInfo) {
+    pub fn update_api_info<P: AsRef<str>>(&self, api_version: P, info: ApiInfo) {
         crate::introspect::add_introspection(self, &api_version);
         self.info
             .lock()
@@ -225,7 +226,7 @@ impl ApiService {
     pub fn routes(&self) -> Vec<String> {
         let mut result = vec![];
         for (path, _) in self.paths.lock().unwrap().iter() {
-            result.push(path.display().to_string());
+            result.push(path.to_string());
         }
         result
     }
@@ -291,6 +292,18 @@ impl ApiService {
         Ok(Response::builder()
             .status(StatusCode::FORBIDDEN)
             .body(err.to_string().into())?)
+    }
+}
+
+fn normalize_path(path: &str) -> String {
+    let mut path = path.to_string();
+    loop {
+        let deduped = path.replace("//", "/");
+        if deduped.len() < path.len() {
+            path = deduped;
+        } else {
+            return path;
+        }
     }
 }
 

@@ -484,7 +484,7 @@ impl MetaService {
 
         for (path, code) in sources.iter() {
             let new_route = sqlx::query("INSERT INTO sources (path, code) VALUES ($1, $2)")
-                .bind(path.to_str())
+                .bind(path)
                 .bind(code);
 
             execute(&mut transaction, new_route).await?;

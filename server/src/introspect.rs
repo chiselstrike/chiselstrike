@@ -17,7 +17,6 @@ use hyper::{Request, Response};
 use openapi::v2::{Info, PathItem, Spec};
 use openapi::OpenApi;
 use std::collections::BTreeMap;
-use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 async fn introspect(req: Request<hyper::Body>) -> Result<Response<Body>> {
@@ -84,9 +83,8 @@ async fn introspect(req: Request<hyper::Body>) -> Result<Response<Body>> {
         .unwrap())
 }
 
-pub fn add_introspection<P: AsRef<Path>>(api: &ApiService, path: P) {
-    let mut introspect_route = PathBuf::from("/");
-    introspect_route.push(&path);
+pub fn add_introspection<P: AsRef<str>>(api: &ApiService, path: P) {
+    let introspect_route = format!("/{}", path.as_ref());
     api.add_route(
         introspect_route,
         Arc::new(move |req| { introspect(req) }.boxed_local()),
@@ -94,6 +92,6 @@ pub fn add_introspection<P: AsRef<Path>>(api: &ApiService, path: P) {
 }
 
 pub fn init(api: &ApiService) {
-    add_introspection(api, "/");
+    add_introspection(api, "");
     add_introspection(api, "__chiselstrike");
 }
