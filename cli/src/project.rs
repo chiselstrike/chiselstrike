@@ -308,9 +308,9 @@ mod tests {
 
     fn check_manifest(d: &TempDir) -> Manifest {
         let m = read_manifest(d.path()).unwrap();
-        m.models(&d.path()).unwrap();
-        m.policies(&d.path()).unwrap();
-        m.route_map(&d.path()).unwrap();
+        m.models(d.path()).unwrap();
+        m.policies(d.path()).unwrap();
+        m.route_map(d.path()).unwrap();
         m
     }
 

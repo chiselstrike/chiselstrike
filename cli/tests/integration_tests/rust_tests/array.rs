@@ -5,7 +5,8 @@ pub async fn test(c: TestContext) {
     c.chisel.write(
         "models/types.ts",
         r##"
-        export class Foo extends Chisel.ChiselEntity {
+        import { ChiselEntity } from '@chiselstrike/api';
+        export class Foo extends ChiselEntity {
             order: number = 0;
             numbers: number[] = [];
             strings: string[] = [];
@@ -14,7 +15,7 @@ pub async fn test(c: TestContext) {
     "##,
     );
     c.chisel.write(
-        "endpoints/store.ts",
+        "routes/store.ts",
         r##"
         import { Foo } from "../models/types.ts";
         export default async function chisel(req: Request) {
@@ -28,7 +29,7 @@ pub async fn test(c: TestContext) {
     "##,
     );
     c.chisel.write(
-        "endpoints/get.ts",
+        "routes/get.ts",
         r##"
         import { Foo } from "../models/types.ts";
         export default async function chisel(req: Request) {
@@ -37,7 +38,7 @@ pub async fn test(c: TestContext) {
     "##,
     );
     c.chisel.write(
-        "endpoints/crud_foos.ts",
+        "routes/crud_foos.ts",
         r##"
         import { Foo } from "../models/types.ts";
         export default Foo.crud();

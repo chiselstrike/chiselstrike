@@ -247,7 +247,7 @@ $CURL -X PATCH -d '{"height": 4 }' $CHISELD_HOST/dev/persons/cef5d492-d7e3-4c45-
 # CHECK: "height": 4
 
 $CURL -X PATCH -d '{"height": 4 }' $CHISELD_HOST/dev/persons/ # PATCH with no id, 400
-# CHECK: HTTP/1.1 400 Bad Request
+# CHECK: HTTP/1.1 405 Method Not Allowed
 
 $CURL -X PATCH -d '{"height": 4 }' $CHISELD_HOST/dev/persons/0000 # PATCH of a non-existent object, 404
 # CHECK: HTTP/1.1 404 Not Found

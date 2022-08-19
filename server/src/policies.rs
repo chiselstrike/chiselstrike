@@ -4,7 +4,7 @@ use crate::prefix_map::PrefixMap;
 use crate::types::ObjectType;
 use crate::JsonObject;
 use anyhow::Result;
-use hyper::Request;
+use hyper::http;
 use serde_json::{json, Value};
 use std::collections::{HashMap, HashSet};
 use yaml_rust::{Yaml, YamlLoader};
@@ -72,22 +72,17 @@ impl UserAuthorization {
 /// Describes secret-based authorization.  An endpoint request will only be allowed if it includes a header
 /// specified in this struct.
 #[derive(Clone, Default, Debug)]
-pub(crate) struct SecretAuthorization {
+pub struct SecretAuthorization {
     /// A request can access an endpoint if it includes a header required by the longest path prefix.
     paths: PrefixMap<RequiredHeader>,
 }
 
 impl SecretAuthorization {
     /// Is a request with these headers allowed to execute the endpoint at this path?
-    pub fn is_allowed(
-        &self,
-        req: &hyper::http::Parts,
-        secrets: &JsonObject,
-        path: &str,
-    ) -> bool {
+    pub fn is_allowed(&self, req: &http::request::Parts, secrets: &JsonObject, path: &str) -> bool {
         match self.paths.longest_prefix(path) {
             None => true,
-            Some((_, RequiredHeader { verbs: Some(v), .. })) if !v.contains(req.method) => true,
+            Some((_, RequiredHeader { verbs: Some(v), .. })) if !v.contains(&req.method) => true,
             Some((
                 _,
                 RequiredHeader {
@@ -235,7 +230,7 @@ impl PolicySystem {
                             .user_authorization
                             .add(path, regex::Regex::new(users)?)?;
                     }
-                    let header = &endpoint["mandatory_header"];
+                    let header = &route["mandatory_header"];
                     match header {
                         Yaml::BadValue => {}
                         Yaml::Hash(_) => {

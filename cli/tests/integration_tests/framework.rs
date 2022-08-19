@@ -505,6 +505,7 @@ impl Chisel {
     pub async fn get(&self, url: &str) -> reqwest::Response {
         self.request(reqwest::Method::GET, url, "").await
     }
+    */
 
     /// Same as `request_body()`, but sends GET with no request body.
     pub async fn get_body(&self, url: &str) -> (u16, Bytes) {
@@ -515,7 +516,6 @@ impl Chisel {
     pub async fn get_text(&self, url: &str) -> String {
         self.request_text(reqwest::Method::GET, url, "").await
     }
-    */
 
     /// Same as `request_text_with_headers()`, but sends GET with no request body.
     pub async fn get_text_with_headers(&self, url: &str, headers: HeaderMap) -> String {

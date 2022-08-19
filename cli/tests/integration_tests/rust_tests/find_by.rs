@@ -3,9 +3,9 @@ use crate::framework::prelude::*;
 #[chisel_macros::test(modules = Deno, optimize = Both)]
 pub async fn test(mut c: TestContext) {
     c.chisel.copy_to_dir("examples/person.ts", "models");
-    c.chisel.copy_to_dir("examples/find_by.ts", "endpoints");
+    c.chisel.copy_to_dir("examples/find_by.ts", "routes");
     c.chisel
-        .copy_and_rename("examples/store.ts", "endpoints/ins.ts");
+        .copy_and_rename("examples/store.ts", "routes/ins.ts");
 
     let r = c.chisel.apply_ok().await;
     r.stdout.peek("Model defined: Person");

@@ -17,7 +17,7 @@ impl DbConnection {
             .max_connections(max_connections as u32)
             .after_connect(move |conn, _meta| {
                 Box::pin(async move {
-                    if matches!(conn.kind(), Kind::Sqlite) {
+                    if matches!(conn.kind(), AnyKind::Sqlite) {
                         conn.execute("PRAGMA journal_mode=WAL;").await?;
                     }
                     Ok(())

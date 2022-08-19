@@ -6,7 +6,7 @@ use serde_json::json;
 pub async fn test(c: TestContext) {
     c.chisel.write(
         "policies/p.yaml",
-        r##"endpoints:
+        r##"routes:
  - path: /
    mandatory_header: { name: header33, secret_value_ref: TOKEN33 }"##,
     );
@@ -25,7 +25,7 @@ pub async fn test(c: TestContext) {
         c.chisel
             .get_text_with_headers("/dev/hello", header("header33", "s3cr3t"))
             .await,
-        "\"hello world\""
+        "hello world"
     );
 
     // Wrong header value.
@@ -39,7 +39,7 @@ pub async fn test(c: TestContext) {
     // Header spec references non-existing secret.
     c.chisel.write(
         "policies/p.yaml",
-        r##"endpoints:
+        r##"routes:
  - path: /
    mandatory_header: { name: header33, secret_value_ref: WXYZ }"##,
     );
@@ -54,7 +54,7 @@ pub async fn test(c: TestContext) {
     // Repeated path for header auth.
     c.chisel.write(
         "policies/p.yaml",
-        r##"endpoints:
+        r##"routes:
  - path: /
    mandatory_header: { name: header33, secret_value_ref: TOKEN33 }
  - path: /
@@ -70,7 +70,7 @@ pub async fn test(c: TestContext) {
     // Unparsable header.
     c.chisel.write(
         "policies/p.yaml",
-        r##"endpoints:
+        r##"routes:
  - path: /
    mandatory_header: aaabbb"##,
     );
@@ -84,7 +84,7 @@ pub async fn test(c: TestContext) {
     // Header without name.
     c.chisel.write(
         "policies/p.yaml",
-        r##"endpoints:
+        r##"routes:
  - path: /
    mandatory_header: { secret_value_ref: TOKEN33 }"##,
     );
@@ -98,7 +98,7 @@ pub async fn test(c: TestContext) {
     // Non-string secret_value_ref.
     c.chisel.write(
         "policies/p.yaml",
-        r##"endpoints:
+        r##"routes:
  - path: /
    mandatory_header: { name: header33, secret_value_ref: 99 }"##,
     );
@@ -112,7 +112,7 @@ pub async fn test(c: TestContext) {
     // Only PUTs and GETs require a header.
     c.chisel.write(
         "policies/p.yaml",
-        r##"endpoints:
+        r##"routes:
  - path: /
    mandatory_header: { name: header33, secret_value_ref: TOKEN33, only_for_verbs: [ PUT, GET ] } "##,
     );
@@ -125,10 +125,10 @@ pub async fn test(c: TestContext) {
         c.chisel
             .get_text_with_headers("/dev/hello", header("header33", "s3cr3t"))
             .await,
-        "\"hello world\""
+        "hello world"
     );
     assert_eq!(
         c.chisel.post_json_text("/dev/hello", json!(122333)).await,
-        "\"122333\""
+        "122333"
     );
 }

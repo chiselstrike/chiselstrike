@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: © 2022 ChiselStrike <info@chiselstrike.com>
 
 use crate::datastore::{DbConnection, MetaService, QueryEngine};
-use crate::internal::{mark_ready, mark_not_ready};
+use crate::internal::{mark_not_ready, mark_ready};
 use crate::opt::Opt;
 use crate::policies::PolicySystem;
 use crate::trunk::{self, Trunk};
@@ -172,8 +172,7 @@ async fn start_versions(server: Arc<Server>) -> Result<()> {
                 "Version {:?} does not contain module {:?}, it was probably created by an old \
                 chisel version. This version will be skipped, please rerun `chisel apply` to fix \
                 this problem.",
-                version_id,
-                route_map_url,
+                version_id, route_map_url,
             );
             continue;
         }

@@ -36,7 +36,6 @@ pub(crate) async fn apply(
         ensure_success(tsc_output).context("Type-checking with tsc failed")?;
     }
 
-
     let cwd = env::current_dir()?;
     let gen_dir = cwd.join(".gen");
 

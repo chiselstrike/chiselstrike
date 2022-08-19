@@ -3,7 +3,9 @@
 use crate::datastore::{MetaService, QueryEngine};
 use crate::policies::PolicySystem;
 use crate::proto::type_msg::TypeEnum;
-use crate::proto::{AddTypeRequest, ApplyRequest, ContainerType, FieldDefinition, IndexCandidate, TypeMsg};
+use crate::proto::{
+    AddTypeRequest, ApplyRequest, ContainerType, FieldDefinition, IndexCandidate, TypeMsg,
+};
 use crate::server::Server;
 use crate::types::{
     DbIndex, Entity, Field, NewField, NewObject, ObjectType, Type, TypeSystem, TypeSystemError,
@@ -143,12 +145,7 @@ or
         match type_system.lookup_custom_type(&name) {
             Ok(old_type) => {
                 let is_empty = meta.count_rows(&mut transaction, &old_type).await? == 0;
-                let delta = TypeSystem::generate_type_delta(
-                    &old_type,
-                    ty,
-                    &state.type_system,
-                    is_empty,
-                )?;
+                let delta = type_system.generate_type_delta(&old_type, ty, is_empty)?;
                 to_update.push((old_type.clone(), delta));
             }
             Err(TypeSystemError::NoSuchType(_)) => {

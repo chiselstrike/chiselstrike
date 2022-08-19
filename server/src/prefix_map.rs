@@ -35,8 +35,14 @@ impl<T> PrefixMap<T> {
 }
 
 fn is_path_prefix(needle: &str, haystack: &str) -> bool {
-    haystack.starts_with(needle)
-        && matches!(haystack[needle.len()..].chars().next(), Some('/') | None)
+    if !haystack.starts_with(needle) {
+        return false;
+    }
+
+    needle.ends_with('/') || {
+        let unmatched = &haystack[needle.len()..];
+        unmatched.is_empty() || unmatched.starts_with('/')
+    }
 }
 
 #[cfg(test)]
@@ -89,5 +95,46 @@ mod tests {
         assert_longest_prefix!(tt, "/a/b/c/d", "/a/b/c");
         assert_longest_prefix!(tt, "/a/bb/c/d", "/a/bb/c");
         assert_longest_prefix!(tt, "/a/b/d", "/a/b");
+    }
+
+    #[test]
+    fn root() {
+        let mut map = PrefixMap::default();
+        map.insert("/".into(), 10);
+        map.insert("/hello".into(), 20);
+        assert_eq!(map.longest_prefix(""), None);
+        assert_eq!(map.longest_prefix("/"), Some(("/", &10)));
+        assert_eq!(map.longest_prefix("/foo"), Some(("/", &10)));
+        assert_eq!(map.longest_prefix("/hello"), Some(("/hello", &20)));
+        assert_eq!(map.longest_prefix("/hello/foo"), Some(("/hello", &20)));
+    }
+
+    #[test]
+    fn not_simple_prefix() {
+        let mut map = PrefixMap::default();
+        map.insert("/hello".into(), 10);
+        assert_eq!(map.longest_prefix("/hello"), Some(("/hello", &10)));
+        assert_eq!(map.longest_prefix("/hell"), None);
+        assert_eq!(map.longest_prefix("/hellos"), None);
+    }
+
+    #[test]
+    fn needle_ends_with_slash() {
+        let mut map = PrefixMap::default();
+        map.insert("/hello/".into(), 10);
+        assert_eq!(map.longest_prefix("/hello"), None);
+        assert_eq!(map.longest_prefix("/hello/"), Some(("/hello/", &10)));
+        assert_eq!(map.longest_prefix("/hello/foo"), Some(("/hello/", &10)));
+    }
+
+    #[test]
+    fn needle_or_haystack_empty() {
+        let mut map = PrefixMap::default();
+        map.insert("".into(), 10);
+        map.insert("/hello".into(), 20);
+        assert_eq!(map.longest_prefix(""), Some(("", &10)));
+        assert_eq!(map.longest_prefix("/"), Some(("", &10)));
+        assert_eq!(map.longest_prefix("/hell"), Some(("", &10)));
+        assert_eq!(map.longest_prefix("/hello"), Some(("/hello", &20)));
     }
 }

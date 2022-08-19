@@ -144,11 +144,11 @@ async fn handle_version_request(
 
     {
         let secrets = server.secrets.read();
-        if !version
-            .policy_system
-            .secret_authorization
-            .is_allowed(&req_parts, &secrets, &routing_path)
-        {
+        if !version.policy_system.secret_authorization.is_allowed(
+            &req_parts,
+            &secrets,
+            &routing_path,
+        ) {
             return Ok(handle_forbidden("Invalid header authentication"));
         }
     }
