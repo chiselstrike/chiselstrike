@@ -887,12 +887,12 @@ pub mod tests {
 
     pub fn make_entity(name: &str, fields: Vec<Field>) -> Entity {
         let desc = types::NewObject::new(name, VERSION);
-        Entity::Custom(Arc::new(ObjectType::new(desc, fields, vec![]).unwrap()))
+        Entity::Custom(Arc::new(ObjectType::new(&desc, fields, vec![]).unwrap()))
     }
 
     pub fn make_field(name: &str, ty: Type) -> Field {
         let desc = types::NewField::new(name, ty, VERSION).unwrap();
-        Field::new(desc, vec![], None, false, false)
+        Field::new(&desc, vec![], None, false, false)
     }
 
     async fn init_query_engine(db_file: &NamedTempFile) -> QueryEngine {

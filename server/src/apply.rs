@@ -127,7 +127,7 @@ or
             };
 
             fields.push(Field::new(
-                NewField::new(&field.name, field_ty, &api_version)?,
+                &NewField::new(&field.name, field_ty, &api_version)?,
                 field.labels,
                 field.default_value,
                 field.is_optional,
@@ -137,7 +137,7 @@ or
         let ty_indexes = indexes.get(&name).cloned().unwrap_or_default();
 
         let ty = Arc::new(ObjectType::new(
-            NewObject::new(&name, &api_version),
+            &NewObject::new(&name, &api_version),
             fields,
             ty_indexes,
         )?);
