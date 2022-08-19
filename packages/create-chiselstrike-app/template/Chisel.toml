@@ -1,3 +1,4 @@
 models = ["models"]
 endpoints = ["endpoints"]
+events = ["events"]
 policies = ["policies"]
