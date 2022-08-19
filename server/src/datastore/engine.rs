@@ -223,11 +223,11 @@ impl QueryEngine {
         Ok(())
     }
 
-    pub async fn start_transaction_static(self: Arc<Self>) -> Result<TransactionStatic> {
+    pub async fn begin_transaction_static(self: Arc<Self>) -> Result<TransactionStatic> {
         Ok(Arc::new(Mutex::new(self.pool.begin().await?)))
     }
 
-    pub async fn start_transaction(&self) -> Result<Transaction<'static, Any>> {
+    pub async fn begin_transaction(&self) -> Result<Transaction<'static, Any>> {
         Ok(self.pool.begin().await?)
     }
 
@@ -496,7 +496,7 @@ impl QueryEngine {
     /// Only for testing purposes. For any other purpose, use `mutate_with_transaction`.
     #[cfg(test)]
     pub async fn mutate(&self, mutation: Mutation) -> Result<()> {
-        let mut transaction = self.start_transaction().await?;
+        let mut transaction = self.begin_transaction().await?;
         self.mutate_with_transaction(mutation, &mut transaction)
             .await?;
         QueryEngine::commit_transaction(transaction).await?;
@@ -559,7 +559,7 @@ impl QueryEngine {
                 transaction.execute(q.get_sqlx()).await?;
             }
         } else {
-            let mut transaction = self.start_transaction().await?;
+            let mut transaction = self.begin_transaction().await?;
             for q in queries {
                 transaction.execute(q.get_sqlx()).await?;
             }
