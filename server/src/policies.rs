@@ -82,12 +82,7 @@ pub struct SecretAuthorization {
 
 impl SecretAuthorization {
     /// Is a request with these headers allowed to execute the endpoint at this path?
-    pub fn is_allowed(
-        &self,
-        req: &Request<hyper::Body>,
-        secrets: &JsonObject,
-        path: &str,
-    ) -> bool {
+    pub fn is_allowed(&self, req: &Request<hyper::Body>, secrets: &JsonObject, path: &str) -> bool {
         match self.paths.longest_prefix(path) {
             None => true,
             Some((

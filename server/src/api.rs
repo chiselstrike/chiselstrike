@@ -174,9 +174,10 @@ impl ApiService {
         }
     }
 
-    /// Finds the right RouteFn for this request.
-    fn find_route_fn<S: AsRef<str>>(&self, request: S) -> Option<RouteFn> {
-        match self.paths.lock().unwrap().longest_prefix(request.as_ref()) {
+    /// Finds the right RouteFn for this path.
+    fn find_route_fn(&self, path: &str) -> Option<RouteFn> {
+        let path = normalize_path(path);
+        match self.paths.lock().unwrap().longest_prefix(&path) {
             None => None,
             Some((_, f)) => Some(f.clone()),
         }
@@ -291,6 +292,18 @@ impl ApiService {
         Ok(Response::builder()
             .status(StatusCode::FORBIDDEN)
             .body(err.to_string().into())?)
+    }
+}
+
+fn normalize_path(path: &str) -> String {
+    let mut path = path.to_string();
+    loop {
+        let deduped = path.replace("//", "/");
+        if deduped.len() < path.len() {
+            path = deduped;
+        } else {
+            return path;
+        }
     }
 }
 
