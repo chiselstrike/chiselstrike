@@ -25,7 +25,7 @@ pub async fn test(c: TestContext) {
         c.chisel
             .get_text_with_headers("/dev/hello", header("header33", "s3cr3t"))
             .await,
-        "\"hello world\""
+        "hello world"
     );
 
     // Wrong header value.
@@ -125,10 +125,10 @@ pub async fn test(c: TestContext) {
         c.chisel
             .get_text_with_headers("/dev/hello", header("header33", "s3cr3t"))
             .await,
-        "\"hello world\""
+        "hello world"
     );
     assert_eq!(
         c.chisel.post_json_text("/dev/hello", json!(122333)).await,
-        "\"122333\""
+        "122333"
     );
 }

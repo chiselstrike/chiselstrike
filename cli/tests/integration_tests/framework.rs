@@ -511,12 +511,12 @@ impl Chisel {
     pub async fn get_body(&self, url: &str) -> (u16, Bytes) {
         self.request_body(reqwest::Method::GET, url, "").await
     }
+    */
 
     /// Same as `request_text()`, but sends GET with no request body.
     pub async fn get_text(&self, url: &str) -> String {
         self.request_text(reqwest::Method::GET, url, "").await
     }
-    */
 
     /// Same as `request_text_with_headers()`, but sends GET with no request body.
     pub async fn get_text_with_headers(&self, url: &str, headers: HeaderMap) -> String {

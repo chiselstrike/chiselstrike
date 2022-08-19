@@ -259,7 +259,11 @@ async function callHandlerImpl(
     // this instead of materializing a full response. Probably
     // a bit faster but this is a lot simpler for now.
     if (res?.constructor.name != "Response") {
-        res = Chisel.responseFromJson(res);
+        if (typeof res === "string") {
+            res = new Response(res);
+        } else {
+            res = Chisel.responseFromJson(res);
+        }
     }
 
     for (const h of res.headers) {
