@@ -161,7 +161,7 @@ pub async fn add_endpoints(
 
     for path in sources.keys() {
         // FIXME: make this symmetric with apply_aux() logic.
-        if path.contains("/routes/") {
+        if path.contains("/routes/") || path.contains("/endpoints/") {
             let path = deno::endpoint_path_from_source_path(path);
             activate_endpoint(&path).await?;
 

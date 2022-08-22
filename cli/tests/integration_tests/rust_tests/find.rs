@@ -1,5 +1,4 @@
 use crate::framework::prelude::*;
-use crate::framework::Chisel;
 
 async fn store_people(chisel: &Chisel) {
     chisel

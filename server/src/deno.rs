@@ -1602,7 +1602,7 @@ pub async fn compile_endpoints(sources: HashMap<String, String>) -> Result<()> {
                 continue;
             }
             match path.split('/').nth(2) {
-                Some("routes") => {
+                Some("routes") | Some("endpoints") => {
                     let path = without_extension(&path);
                     let url = Url::parse(&format!("file://{}", path)).unwrap();
                     code_map.insert(url, code);
