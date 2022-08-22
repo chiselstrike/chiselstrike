@@ -91,8 +91,7 @@ pub async fn find_many(c: TestContext) {
     "##,
     );
 
-    let r = c.chisel.apply_ok().await;
-    r.stdout.peek("Model defined: Person");
+    c.chisel.apply_ok().await;
 
     store_people(&c.chisel).await;
 
@@ -173,8 +172,7 @@ pub async fn find_one(c: TestContext) {
     "##,
     );
 
-    let r = c.chisel.apply_ok().await;
-    r.stdout.peek("Model defined: Person");
+    c.chisel.apply_ok().await;
 
     store_people(&c.chisel).await;
 
@@ -208,8 +206,7 @@ pub async fn find_by(mut c: TestContext) {
     c.chisel.copy_to_dir("examples/find_by.ts", "endpoints");
     c.chisel.copy_to_dir("examples/store.ts", "endpoints");
 
-    let r = c.chisel.apply_ok().await;
-    r.stdout.peek("Model defined: Person");
+    c.chisel.apply_ok().await;
 
     store_people(&c.chisel).await;
 

@@ -19,9 +19,7 @@ EOF
 
 cd "$TEMPDIR"
 $CHISEL apply
-
-# CHECK: End point defined: /dev/bar
-# CHECK: End point defined: /dev/foo
+# CHECK: Code was applied
 
 $CURL -o - $CHISELD_HOST/dev/foo
 
@@ -43,9 +41,7 @@ EOF
 
 npm i
 $CHISEL apply
-
-# CHECK: End point defined: /dev/bar
-# CHECK: End point defined: /dev/foo
+# CHECK: Code was applied
 
 $CURL -o - $CHISELD_HOST/dev/foo
 

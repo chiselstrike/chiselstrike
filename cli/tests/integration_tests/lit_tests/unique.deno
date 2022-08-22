@@ -78,7 +78,7 @@ export class BlogPost extends ChiselEntity {
 EOF
 
 $CHISEL apply
-# CHECK: Model defined: BlogPost
+# CHECK: Code was applied
 
 $CHISEL restart
 describe_output=$($CHISEL describe)

@@ -26,9 +26,7 @@ EOF
 
 $CHISEL apply
 
-# CHECK: Model defined: Foo
-# CHECK: Model defined: Bar
-# CHECK: End point defined: /dev/hello
+# CHECK: Code was applied
 
 $CHISEL describe
 

@@ -16,8 +16,7 @@ EOF
 cd "$TEMPDIR"
 npm i handlebars
 $CHISEL apply
-
-# CHECK: End point defined: /dev/pad
+# CHECK: Code was applied
 
 $CURL -o - $CHISELD_HOST/dev/pad
 

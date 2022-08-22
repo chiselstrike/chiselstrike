@@ -28,18 +28,10 @@ $CHISEL apply --version string-# 2>&1 || echo
 # CHECK: Error
 
 $CHISEL apply --version v0
-# CHECK: Model defined: Person
-# CHECK: Model defined: Position
-# CHECK: End point defined: /v0/csv
-# CHECK: End point defined: /v0/find
-# CHECK: End point defined: /v0/foo
+# CHECK: Code was applied
 
 $CHISEL apply --version v0-_
-# CHECK: Model defined: Person
-# CHECK: Model defined: Position
-# CHECK: End point defined: /v0-_/csv
-# CHECK: End point defined: /v0-_/find
-# CHECK: End point defined: /v0-_/foo
+# CHECK: Code was applied
 
 
 cat << EOF > "endpoints/foo.js"
@@ -49,11 +41,7 @@ export default async function my_req_func(req) {
 EOF
 
 $CHISEL apply --version v1
-# CHECK: Model defined: Person
-# CHECK: Model defined: Position
-# CHECK: End point defined: /v1/csv
-# CHECK: End point defined: /v1/find
-# CHECK: End point defined: /v1/foo
+# CHECK: Code was applied
 
 $CURL -o - $CHISELD_HOST/v0/foo
 # CHECK: HTTP/1.1 200 OK

@@ -56,9 +56,7 @@ EOF
 
 cd "$TEMPDIR"
 $CHISEL apply
-# CHECK: Model defined: Person
-# CHECK: End point defined: /dev/get_sorted_by
-# CHECK: End point defined: /dev/store
+# CHECK: Code was applied
 
 $CURL -X POST -o - $CHISELD_HOST/dev/store
 # CHECK: Ok
@@ -92,7 +90,7 @@ export default async function chisel(req: Request) {
 EOF
 
 $CHISEL apply
-# CHECK: End point defined: /dev/get_sorted
+# CHECK: Code was applied
 
 $CURL -o - $CHISELD_HOST/dev/get_sorted
 # CHECK: [Glauber, Jan, Pekka]
@@ -117,7 +115,7 @@ export default async function chisel(req: Request) {
 EOF
 
 $CHISEL apply
-# CHECK: End point defined: /dev/get_sorted
+# CHECK: Code was applied
 
 $CURL -o - $CHISELD_HOST/dev/get_sorted
 # CHECK: [Pekka]
@@ -140,7 +138,7 @@ export default async function chisel(req: Request) {
 EOF
 
 $CHISEL apply
-# CHECK: End point defined: /dev/get_sorted
+# CHECK: Code was applied
 
 $CURL -o - $CHISELD_HOST/dev/get_sorted
 # CHECK: [Glauber, Pekka]
@@ -161,7 +159,7 @@ export default async function chisel(req: Request) {
 EOF
 
 $CHISEL apply
-# CHECK: End point defined: /dev/get_sorted
+# CHECK: Code was applied
 
 $CURL -o - $CHISELD_HOST/dev/get_sorted
 # CHECK: Error: entity 'Person' has no field named 'invalid_field'
@@ -187,7 +185,7 @@ export default async function chisel(req: Request) {
 EOF
 
 $CHISEL apply
-# CHECK: End point defined: /dev/get_sorted
+# CHECK: Code was applied
 
 $CURL -o - $CHISELD_HOST/dev/get_sorted
 # CHECK: [Glauber, Jan, Pekka]

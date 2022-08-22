@@ -20,10 +20,7 @@ EOF
 
 cd "$TEMPDIR"
 $CHISEL apply
-
-# CHECK: Model defined: Person
-# CHECK: End point defined: /dev/query
-# CHECK: End point defined: /dev/store
+# CHECK: Code was applied
 
 $CURL --data '{
     "first_name":"Bob'\''",

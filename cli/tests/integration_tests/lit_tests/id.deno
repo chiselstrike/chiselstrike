@@ -78,14 +78,7 @@ export default async function chisel(req: Request) {
 EOF
 
 $CHISEL apply
-
-# CHECK: Model defined: Person
-# CHECK: End point defined: /dev/bad_id
-# CHECK: End point defined: /dev/count_glaubers
-# CHECK: End point defined: /dev/find_by_id
-# CHECK: End point defined: /dev/store_no_id
-# CHECK: End point defined: /dev/store_with_id
-# CHECK: End point defined: /dev/update_by_id
+# CHECK: Code was applied
 
 $CURL -X POST $CHISELD_HOST/dev/bad_id  2>&1 || echo
 # CHECK: invalid ID 'badid'
