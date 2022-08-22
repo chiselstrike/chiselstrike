@@ -128,8 +128,8 @@ $CURL -X POST -o - $CHISELD_HOST/dev/take_filter
 # Test sql keywords
 
 cat << EOF > "$TEMPDIR/models/types.ts"
-
-export class TestingEntity extends Chisel.ChiselEntity {
+import { ChiselEntity } from '@chiselstrike/api';
+export class TestingEntity extends ChiselEntity {
     limit: string = "limit";
     group: string = "group";
     where: string = "where";
