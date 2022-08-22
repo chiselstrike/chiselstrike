@@ -243,7 +243,8 @@ impl RpcService {
 
             sources.insert(format!("/{}/{}", api_version, path), code.clone());
             let path = without_extension(&path);
-            if let Some(path) = path.strip_prefix("routes/")
+            if let Some(path) = path
+                .strip_prefix("routes/")
                 .or_else(|| path.strip_prefix("endpoints/"))
             {
                 let path = format!("/{}/{}", api_version, path);
