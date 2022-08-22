@@ -7,6 +7,9 @@ edition = "2021"
 [lib]
 name = "api"
 
+[dependencies]
+lazy_static = "1.4"
+
 [build-dependencies]
 anyhow = "1.0"
 tokio = { version = "1.11.0", features = ["rt-multi-thread", "macros"] }

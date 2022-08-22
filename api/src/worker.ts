@@ -1,6 +1,6 @@
 // SPDX-FileCopyrightText: © 2022 ChiselStrike <info@chiselstrike.com>
 
-import * as Chisel from "./chisel.ts";
+import * as Chisel from "./api.ts";
 
 // Hack to pretend we are not in a web worker. On workers 'window'
 // doesn't exist, but globalThis does. They are not exactly the same,

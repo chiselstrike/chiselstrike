@@ -20,9 +20,7 @@ use crate::types::TypeSystemError;
 use crate::vecmap::VecMap;
 use crate::JsonObject;
 use anyhow::{anyhow, Context as AnyhowContext, Result};
-use api::chisel_js;
-use api::endpoint_js;
-use api::worker_js;
+use api::SOURCES_JS;
 use async_channel::Receiver;
 use async_channel::Sender;
 use deno_core::error::AnyError;
@@ -168,7 +166,7 @@ impl deno_core::ModuleLoader for ModuleLoader {
     ) -> Result<ModuleSpecifier, AnyError> {
         debug!("Deno resolving {:?}", specifier);
         if specifier == "@chiselstrike/api" {
-            let api_path = "/chisel.ts".to_string();
+            let api_path = "/api.ts".to_string();
             let spec = ModuleSpecifier::from_file_path(&api_path)
                 .map_err(|_| anyhow!("Can't convert {} to file-based URL", api_path))?;
             Ok(spec)
@@ -358,17 +356,15 @@ impl DenoService {
         let mut worker =
             MainWorker::bootstrap_from_options(Url::parse(path).unwrap(), permissions, opts);
 
-        let main_path = "/main.js";
-        let endpoint_path = "/endpoint.ts";
         {
             let mut handle = inner.lock().unwrap();
-            handle.insert_path(main_path, include_str!("./main.js"));
-            handle.insert_path("/chisel.ts", chisel_js());
-            handle.insert_path(endpoint_path, endpoint_js());
-            handle.insert_path("/worker.js", worker_js());
+            handle.insert_path("/main.js", include_str!("./main.js"));
+            for (name, code) in SOURCES_JS.iter() {
+                handle.insert_path(&format!("/{}.ts", name), code);
+            }
         }
 
-        let main_url = Url::parse(&format!("file://{}", main_path)).unwrap();
+        let main_url = Url::parse("file:///main.js").unwrap();
         worker.execute_main_module(&main_url).await.unwrap();
 
         let (
@@ -383,7 +379,7 @@ impl DenoService {
         ) = {
             let runtime = &mut worker.js_runtime;
             let promise = runtime
-                .execute_script(main_path, &format!("import(\"file://{}\")", endpoint_path))
+                .execute_script("/main.js", "import(\"file:///endpoint.ts\")")
                 .unwrap();
             let module = runtime.resolve_value(promise).await.unwrap();
             let scope = &mut runtime.handle_scope();
@@ -504,7 +500,7 @@ async fn op_chisel_read_body(
     Ok(fut.await?.transpose()?.map(|x| x.to_vec().into()))
 }
 
-/// RequestContext corresponds to `requestContext` structure used in chisel.ts.
+/// RequestContext corresponds to `requestContext` structure used in datastore.ts.
 #[derive(Deserialize)]
 struct ChiselRequestContext {
     /// Current URL path.
