@@ -1,6 +1,6 @@
 // SPDX-FileCopyrightText: © 2021 ChiselStrike <info@chiselstrike.com>
 
-const endpointWorker = new Worker("file:///worker.js", {
+const endpointWorker = new Worker("file:///worker.ts", {
     type: "module",
     name: "endpointWorker",
 });

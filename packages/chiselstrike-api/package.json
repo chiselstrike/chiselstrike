@@ -17,8 +17,7 @@
     },
     "author": "ChiselStrike <info@chiselstrike.com>",
     "license": "Apache-2.0",
-    "main": "lib/chisel.js",
-    "types": "lib/chisel.d.ts",
+    "types": "lib/api.ts.d.ts",
     "scripts": {
         "build": "true"
     },
