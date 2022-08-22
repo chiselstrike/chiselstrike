@@ -178,21 +178,11 @@ pub(crate) async fn apply(
 
     let msg = execute!(client.apply(tonic::Request::new(req)).await);
 
-    for ty in msg.types {
-        println!("Model defined: {}", ty);
-    }
-
-    for end in msg.endpoints {
-        println!("End point defined: {}", end);
-    }
-
-    for end in msg.event_handlers {
-        println!("Event handler defined: {}", end);
-    }
-
-    for lbl in msg.labels {
-        println!("Policy defined for label {}", lbl);
-    }
+    println!("Code was applied to the ChiselStrike server. It contained:");
+    println!("  - models: {}", msg.types.len());
+    println!("  - endpoints: {}", msg.endpoints.len());
+    println!("  - event handlers: {}", msg.event_handlers.len());
+    println!("  - labels: {}", msg.labels.len());
 
     Ok(())
 }

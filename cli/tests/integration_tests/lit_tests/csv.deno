@@ -7,10 +7,7 @@ cp examples/csv.ts examples/find.ts "$TEMPDIR/endpoints"
 
 cd "$TEMPDIR"
 $CHISEL apply
-
-# CHECK: Model defined: Person
-# CHECK: End point defined: /dev/csv
-# CHECK: End point defined: /dev/find
+# CHECK: Code was applied
 
 $CURL --data '
 adam,smith

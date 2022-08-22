@@ -105,8 +105,7 @@ export default async function (req: Request) {
 EOF
 
 $CHISEL apply --allow-type-deletion
-# CHECK: Model defined: Post
-# CHECK: End point defined: /dev/po
+# CHECK: Code was applied
 
 $CURL -H ChiselUID\:$id_al -d '{"text": "first post by al"}' $CHISELD_HOST/dev/po
 # CHECK: HTTP/1.1 200 OK
@@ -154,7 +153,7 @@ EOF
 
 rm "$TEMPDIR/policies/pol.yaml"
 $CHISEL apply
-# CHECK: End point defined: /dev/blogs
+# CHECK: Code was applied
 
 $CURL -d '{"text": "first post by al"}' $CHISELD_HOST/dev/po
 # CHECK:  HTTP/1.1 401 Unauthorized
@@ -194,7 +193,7 @@ labels:
     transform: match_login
 EOF
 $CHISEL apply
-# CHECK:Policy defined for label protect
+# CHECK: Code was applied
 
 count=$($CURL -H ChiselUID\:$id_al $CHISELD_HOST/dev/blogs | grep 'blog post by' | wc -l | tr -d '[:space:]')
 echo "result count:$count"

@@ -7,9 +7,7 @@ cp examples/store.ts "$TEMPDIR/endpoints"
 
 cd "$TEMPDIR"
 $CHISEL apply
-
-# CHECK: Model defined: Person
-# CHECK: End point defined: /dev/store
+# CHECK: Code was applied
 
 $CURL --data '{
     "first_name":"Glauber",
@@ -111,8 +109,7 @@ export default async (req: Request) => {
 }
 EOF
 $CHISEL apply
-# CHECK: Model defined: Post
-# CHECK: End point defined: /dev/take_filter
+# CHECK: Code was applied
 
 $CURL -X POST -o - $CHISELD_HOST/dev/take_filter
 # CHECK: "simple_take": [
@@ -170,9 +167,7 @@ EOF
 
 cd "$TEMPDIR"
 $CHISEL apply
-
-# CHECK: Model defined: TestingEntity
-# CHECK: End point defined: /dev/findall
+# CHECK: Code was applied
 
 $CURL -X POST -o - $CHISELD_HOST/dev/store_testing_entity
 # CHECK: Ok

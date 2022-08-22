@@ -298,7 +298,7 @@ async fn run(state: SharedState, init: InitState, mut cmd: ExecutorChannel) -> R
     state.readiness_tx.send(()).await?;
 
     info!(
-        "ChiselStrike is ready 🚀 - URL: http://{} ",
+        "ChiselStrike server is ready 🚀 - URL: http://{} ",
         state.opt.api_listen_addr
     );
 

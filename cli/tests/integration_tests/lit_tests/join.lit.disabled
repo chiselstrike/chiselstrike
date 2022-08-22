@@ -47,13 +47,7 @@ EOF
 
 cd "$TEMPDIR"
 $CHISEL apply
-
-# CHECK: Model defined: Nickname
-# CHECK: Model defined: Person
-# CHECK: End point defined: /dev/query
-# CHECK: End point defined: /dev/store
-# CHECK: End point defined: /dev/store_nick
-# CHECK: Policy defined for label pii
+# CHECK: Code was applied
 
 $CURL --data '{
     "first_name":"Glauber",

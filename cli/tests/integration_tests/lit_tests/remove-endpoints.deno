@@ -24,9 +24,7 @@ export default async function chisel(req: Request) {
 EOF
 
 $CHISEL apply
-# CHECK: End point defined: /dev/end
-# CHECK: End point defined: /dev/endpo
-# CHECK: End point defined: /dev/endpoint
+# CHECK: Code was applied
 
 $CURL -o - $CHISELD_HOST/dev/end
 # CHECK: HTTP/1.1 200 OK

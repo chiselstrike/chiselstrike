@@ -25,9 +25,7 @@ pub async fn policies(c: TestContext) {
         }
     "##,
     );
-
-    let mut r = c.chisel.apply_ok().await;
-    r.stdout.read("Model defined: Person");
+    c.chisel.apply_ok().await;
 
     let pekka = json!({
         "first_name":"Pekka",

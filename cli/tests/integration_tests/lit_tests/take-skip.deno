@@ -112,15 +112,7 @@ export default async function chisel(req: Request) {
 EOF
 
 $CHISEL apply
-
-# CHECK: Model defined: Person
-# CHECK: End point defined: /dev/findall
-# CHECK: End point defined: /dev/findfilter
-# CHECK: End point defined: /dev/findtake
-# CHECK: End point defined: /dev/store
-# CHECK: End point defined: /dev/takecopies
-# CHECK: End point defined: /dev/taketwice
-# CHECK: End point defined: /dev/taketwicereverse
+# CHECK: Code was applied
 
 $CURL -X POST $CHISELD_HOST/dev/store
 # CHECK: Ok
@@ -249,13 +241,7 @@ export default async function chisel(req: Request) {
 EOF
 
 $CHISEL apply
-
-# CHECK: Model defined: Person
-# CHECK: End point defined: /dev/filter_skip
-# CHECK: End point defined: /dev/predicate_filter_skip
-# CHECK: End point defined: /dev/skip1
-# CHECK: End point defined: /dev/sort_skip_sort
-# CHECK: End point defined: /dev/two_skips
+# CHECK: Code was applied
 
 $CURL $CHISELD_HOST/dev/skip1
 # CHECK: [Jan, Pekka]

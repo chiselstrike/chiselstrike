@@ -21,4 +21,4 @@ cp "$TEMPDIR/endpoints/hello.ts" "$TEMPDIR/endpoints/#hello.ts#"
 
 $CHISEL apply
 
-# CHECK: End point defined: /dev/hello
+# CHECK: Code was applied

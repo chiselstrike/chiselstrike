@@ -21,9 +21,7 @@ EOF
 
 cd "$TEMPDIR"
 $CHISEL apply
-
-# CHECK: Model defined: User
-# CHECK: End point defined: /dev/find
+# CHECK: Code was applied
 
 $CURL -o - $CHISELD_HOST/dev/find
 
