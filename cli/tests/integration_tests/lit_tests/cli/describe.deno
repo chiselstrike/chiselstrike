@@ -36,26 +36,4 @@ $CHISEL describe
 # CHECK: class Foo {
 # CHECK:   [[^ *a: string]]
 # CHECK: }
-# CHECK: Endpoint: /dev/hello
 # CHECK: Label policy: pii
-
-echo "found $($CHISEL describe | grep Endpoint | wc -l | awk '{print $1}') routes"
-# CHECK: found 1 routes
-
-## check that an endpoint-only scenario works
-rm -rf "$TEMPDIR/models"
-rm -rf "$TEMPDIR/policies"
-cat << EOF > "$TEMPDIR/routes/hello.ts"
-export default async function chisel(req: Request) {
-    return new Response('ok');
-}
-EOF
-$CHISEL apply
-
-$CHISEL describe
-# CHECK: Endpoint: /dev/hello
-
-$CHISEL restart
-
-$CHISEL describe
-# CHECK: Endpoint: /dev/hello
