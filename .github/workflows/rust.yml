@@ -20,27 +20,14 @@ env:
 jobs:
   build:
     runs-on: self-hosted
+    container:
+      image: ghcr.io/chiselstrike/rust-build-image:v1.0
+      options: --user 1000
     steps:
-    - name: Kill stray chiseld processes
-      run: "killall -9 -q chiseld || true"
     - name: checkout repo
-      uses: actions/checkout@v2
+      uses: actions/checkout@v3
       with:
         submodules: true
-    - name: Log in to the Container registry
-      uses: docker/login-action@f054a8b539a109f9f41c372932f1ae047eff08c9
-      with:
-        registry: ${{ env.REGISTRY }}
-        username: ${{ github.actor }}
-        password: ${{ secrets.GITHUB_TOKEN }}
-
-    - name: Make some room available
-      id: makeroom
-      run: "sudo rm -rf /usr/local/lib/android && sudo rm -rf /usr/share/dotnet"
-
-    - name: Install lld
-      id: lld
-      run: "sudo apt-get -y install lld"
 
     - name: Install rust toolchain
       uses: actions-rs/toolchain@v1
@@ -99,6 +86,9 @@ jobs:
 
   postgres-test:
     runs-on: self-hosted
+    container:
+      image: ghcr.io/chiselstrike/rust-build-image:v1.0
+      options: --user 1000
     services:
       postgres:
         image: postgres
@@ -109,19 +99,11 @@ jobs:
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
-        ports:
-          - 5432:5432
     steps:
-    - name: Kill stray chiseld processes
-      run: "killall -9 -q chiseld || true"
     - name: Checkout repository
-      uses: actions/checkout@v2
+      uses: actions/checkout@v3
       with:
         submodules: true
-
-    - name: Install lld
-      id: lld
-      run: "sudo apt-get -y install lld"
 
     - name: Install Rust toolchain
       uses: actions-rs/toolchain@v1
@@ -130,6 +112,11 @@ jobs:
 
     - name: Configure Rust cache
       uses: Swatinem/rust-cache@v1
+
+    - name: Install node
+      uses: actions/setup-node@v3
+      with:
+        node-version: 16
 
     - name: Configure Node cache
       uses: actions/cache@v2
@@ -147,4 +134,4 @@ jobs:
       timeout-minutes: 20
       with:
           command: test
-          args: -p cli --test integration_tests -- --database postgres --database-user postgres --database-password "$POSTGRES_PASSWORD"
+          args: -p cli --test integration_tests -- --database postgres --database-user postgres --database-password "$POSTGRES_PASSWORD" --database-host postgres
