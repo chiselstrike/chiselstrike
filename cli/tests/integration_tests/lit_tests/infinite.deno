@@ -2,13 +2,13 @@
 
 # RUN: sh -e @file
 
-cat << EOF > "$TEMPDIR/endpoints/hello.ts"
+cat << EOF > "$TEMPDIR/routes/hello.ts"
 export default async function chisel(req: Request) {
     return new Response("HELLO\n");
 }
 EOF
 
-cat << EOF > "$TEMPDIR/endpoints/inf.ts"
+cat << EOF > "$TEMPDIR/routes/inf.ts"
 export default async function chisel(req: Request) {
     let stream = new ReadableStream({
         async pull(controller) {

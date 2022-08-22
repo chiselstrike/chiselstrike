@@ -4,7 +4,7 @@
 
 cd "$TEMPDIR"
 
-cat << EOF > "$TEMPDIR/endpoints/chisel.ts"
+cat << EOF > "$TEMPDIR/routes/chisel.ts"
 import { ChiselRequest, responseFromJson } from "@chiselstrike/api"
 
 export default async function chisel(req: ChiselRequest) {
@@ -13,8 +13,8 @@ export default async function chisel(req: ChiselRequest) {
 }
 EOF
 
-mkdir "$TEMPDIR/endpoints/chisel"
-cat << EOF > "$TEMPDIR/endpoints/chisel/inner.ts"
+mkdir "$TEMPDIR/routes/chisel"
+cat << EOF > "$TEMPDIR/routes/chisel/inner.ts"
 import { ChiselRequest, responseFromJson } from "@chiselstrike/api"
 
 export default async function chisel(req: ChiselRequest) {

@@ -23,7 +23,7 @@ pub(crate) async fn apply(
         .collect();
     let mut output = compile_endpoints(&paths?)
         .await
-        .context("could not compile endpoints (using deno-style modules)")?;
+        .context("Could not compile routes (using deno-style modules)")?;
     for f in modules {
         let path = f.to_str().unwrap();
         let orig = output.get_mut(path).unwrap();

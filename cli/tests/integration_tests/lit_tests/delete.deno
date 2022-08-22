@@ -13,12 +13,12 @@ export class User extends ChiselEntity {
 }
 EOF
 
-cat << EOF > "$TEMPDIR/endpoints/user.ts"
+cat << EOF > "$TEMPDIR/routes/user.ts"
 import { User } from "../models/user.ts";
 export default User.crud();
 EOF
 
-cat << EOF > "$TEMPDIR/endpoints/delete.ts"
+cat << EOF > "$TEMPDIR/routes/delete.ts"
 import { User } from "../models/user.ts";
 export default async function chisel(req: Request) {
     await User.delete({ email: "alice@example.com"});
@@ -26,7 +26,7 @@ export default async function chisel(req: Request) {
 }
 EOF
 
-cat << EOF > "$TEMPDIR/endpoints/update-delete.ts"
+cat << EOF > "$TEMPDIR/routes/update-delete.ts"
 import { User } from "../models/user.ts";
 export default async function chisel(req: Request) {
     await User.delete({ email: "test@example.com"});

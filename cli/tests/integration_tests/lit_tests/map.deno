@@ -13,7 +13,7 @@ export class Person extends ChiselEntity {
 }
 EOF
 
-cat << EOF > "$TEMPDIR/endpoints/store.ts"
+cat << EOF > "$TEMPDIR/routes/store.ts"
 import { Person } from "../models/types.ts";
 
 export default async function chisel() {
@@ -23,7 +23,7 @@ export default async function chisel() {
 }
 EOF
 
-cat << EOF > "$TEMPDIR/endpoints/maparray.ts"
+cat << EOF > "$TEMPDIR/routes/maparray.ts"
 import { Person } from "../models/types.ts";
 
 export default async function chisel(): Promise<Array<number>> {
@@ -31,7 +31,7 @@ export default async function chisel(): Promise<Array<number>> {
 }
 EOF
 
-cat << EOF > "$TEMPDIR/endpoints/mapfor.ts"
+cat << EOF > "$TEMPDIR/routes/mapfor.ts"
 import { Person } from "../models/types.ts";
 
 export default async function chisel(): Promise<number> {
@@ -43,7 +43,7 @@ export default async function chisel(): Promise<number> {
 }
 EOF
 
-cat << EOF > "$TEMPDIR/endpoints/doublemap.ts"
+cat << EOF > "$TEMPDIR/routes/doublemap.ts"
 import { Person } from "../models/types.ts";
 
 export default async function chisel(): Promise<Array<number>> {
@@ -51,7 +51,7 @@ export default async function chisel(): Promise<Array<number>> {
 }
 EOF
 
-cat << EOF > "$TEMPDIR/endpoints/maptake.ts"
+cat << EOF > "$TEMPDIR/routes/maptake.ts"
 import { Person } from "../models/types.ts";
 
 export default async function chisel(): Promise<number> {
@@ -61,7 +61,7 @@ export default async function chisel(): Promise<number> {
 EOF
 
 
-cat << EOF > "$TEMPDIR/endpoints/mapskip.ts"
+cat << EOF > "$TEMPDIR/routes/mapskip.ts"
 import { Person } from "../models/types.ts";
 
 export default async function chisel(): Promise<number> {
@@ -70,7 +70,7 @@ export default async function chisel(): Promise<number> {
 }
 EOF
 
-cat << EOF > "$TEMPDIR/endpoints/mapfilter.ts"
+cat << EOF > "$TEMPDIR/routes/mapfilter.ts"
 import { Person } from "../models/types.ts";
 
 export default async function chisel(): Promise<number> {

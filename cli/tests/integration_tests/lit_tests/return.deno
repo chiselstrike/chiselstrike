@@ -4,7 +4,7 @@
 
 cd "$TEMPDIR"
 
-cat << EOF > "$TEMPDIR/endpoints/return.ts"
+cat << EOF > "$TEMPDIR/routes/return.ts"
 type MyReturn = {
     a: string;
     b: number;
@@ -15,7 +15,7 @@ export default async function() : Promise<MyReturn> {
 }
 EOF
 
-cat << EOF > "$TEMPDIR/endpoints/undefined.ts"
+cat << EOF > "$TEMPDIR/routes/undefined.ts"
 type MyReturn = {
     a: string;
     b: number;
@@ -36,7 +36,7 @@ $CURL $CHISELD_HOST/dev/undefined && echo "UniqueString"
 # CHECK: HTTP/1.1 200 OK
 # CHECK: UniqueString
 
-cat << EOF > "$TEMPDIR/endpoints/return.ts"
+cat << EOF > "$TEMPDIR/routes/return.ts"
 type MyReturn = {
     a: string;
     b: number;

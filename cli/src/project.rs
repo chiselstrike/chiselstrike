@@ -13,7 +13,7 @@ use utils::without_extension;
 
 const MANIFEST_FILE: &str = "Chisel.toml";
 const TYPES_DIR: &str = "./models";
-const ENDPOINTS_DIR: &str = "./endpoints";
+const ROUTES_DIR: &str = "./routes";
 const EVENTS_DIR: &str = "./events";
 const LIB_DIR: &str = "./lib";
 const POLICIES_DIR: &str = "./policies";
@@ -61,18 +61,20 @@ impl Default for AutoIndex {
     }
 }
 
-/// Manifest defines the files that describe types, endpoints, and policies.
+/// Manifest defines the files that describe types, routes, events, and policies.
 ///
 /// The manifest is a high-level declaration of application behavior.
 /// The individual definitions are passed to `chiseld`, which processes them
 /// accordingly. For example, type definitions are imported as types and
-/// endpoints are made executable via Deno.
+/// routes are made executable via Deno.
 #[derive(Deserialize)]
 pub(crate) struct Manifest {
     /// Vector of directories to scan for model definitions.
     pub(crate) models: Vec<String>,
-    /// Vector of directories to scan for endpoint definitions.
-    pub(crate) endpoints: Vec<String>,
+    /// Vector of directories to scan for route definitions.
+    /// For backwards compatibility, we also support the old-style name `endpoints` here.
+    #[serde(alias = "endpoints")]
+    pub(crate) routes: Vec<String>,
     /// Vector of directories to scan for event handler definitions.
     pub(crate) events: Option<Vec<String>>,
     /// Vector of directories to scan for policy definitions.
@@ -94,9 +96,9 @@ impl Manifest {
     }
 
     pub fn endpoints(&self) -> anyhow::Result<Vec<PathBuf>> {
-        let ret = Self::dirs_to_paths(&self.endpoints)?;
+        let ret = Self::dirs_to_paths(&self.routes)?;
         if let Some((a, b)) = check_duplicates(&ret) {
-            anyhow::bail!("Cannot add both {} {} as routes. ChiselStrike uses filesystem-based routing, so we don't know what to do. Sorry! 🥺", a, b);
+            anyhow::bail!("Cannot add both {} and {} as routes. ChiselStrike uses filesystem-based routing, so we don't know what to do. Sorry! 🥺", a, b);
         }
         Ok(ret)
     }
@@ -108,7 +110,7 @@ impl Manifest {
         };
         let ret = Self::dirs_to_paths(&events)?;
         if let Some((a, b)) = check_duplicates(&ret) {
-            anyhow::bail!("Cannot add both {} {} as event handlers. ChiselStrike uses filesystem-based routing, so we don't know what to do. Sorry! 🥺", a, b);
+            anyhow::bail!("Cannot add both {} and {} as event handlers. ChiselStrike uses filesystem-based routing, so we don't know what to do. Sorry! 🥺", a, b);
         }
         Ok(ret)
     }
@@ -280,7 +282,7 @@ pub(crate) fn create_project(path: &Path, opts: CreateProjectOptions) -> Result<
         anyhow::bail!("You cannot run `chisel init` on an existing ChiselStrike project");
     }
     fs::create_dir_all(path.join(TYPES_DIR))?;
-    fs::create_dir_all(path.join(ENDPOINTS_DIR))?;
+    fs::create_dir_all(path.join(ROUTES_DIR))?;
     fs::create_dir_all(path.join(EVENTS_DIR))?;
     fs::create_dir_all(path.join(LIB_DIR))?;
     fs::create_dir_all(path.join(POLICIES_DIR))?;
@@ -319,7 +321,7 @@ pub(crate) fn create_project(path: &Path, opts: CreateProjectOptions) -> Result<
     )?;
 
     if opts.examples {
-        write_template!("hello.ts", "hello.ts", data, &path.join(ENDPOINTS_DIR))?;
+        write_template!("hello.ts", "hello.ts", data, &path.join(ROUTES_DIR))?;
     }
     println!("Created ChiselStrike project in {}", path.display());
     Ok(())
@@ -328,7 +330,7 @@ pub(crate) fn create_project(path: &Path, opts: CreateProjectOptions) -> Result<
 pub(crate) fn project_exists(path: &Path) -> bool {
     path.join(Path::new(MANIFEST_FILE)).exists()
         || path.join(Path::new(TYPES_DIR)).exists()
-        || path.join(Path::new(ENDPOINTS_DIR)).exists()
+        || path.join(Path::new(ROUTES_DIR)).exists()
         || path.join(Path::new(EVENTS_DIR)).exists()
         || path.join(Path::new(POLICIES_DIR)).exists()
 }
@@ -343,7 +345,7 @@ mod tests {
         let dir = tmp_dir.path();
         std::fs::write(dir.join(MANIFEST_FILE), toml.as_bytes()).unwrap();
         std::fs::create_dir(dir.join("./policies")).unwrap();
-        std::fs::create_dir(dir.join("./endpoints")).unwrap();
+        std::fs::create_dir(dir.join("./routes")).unwrap();
         std::fs::create_dir(dir.join("./events")).unwrap();
         std::fs::create_dir(dir.join("./models")).unwrap();
         tmp_dir
@@ -354,7 +356,7 @@ mod tests {
         let d = gen_manifest(
             r#"
 models = ["models"]
-endpoints = ["endpoints"]
+routes = ["routes"]
 events = ["events"]
 policies = ["policies"]
 "#,
@@ -373,7 +375,7 @@ policies = ["policies"]
         let d = gen_manifest(
             r#"
 models = ["/models/models"]
-endpoints = ["endpoints"]
+routes = ["routes"]
 events = ["events"]
 policies = ["policies"]
 "#,
@@ -391,7 +393,7 @@ policies = ["policies"]
         let d = gen_manifest(
             r#"
 models = ["./"]
-endpoints = ["endpoints"]
+routes = ["routes"]
 events = ["events"]
 policies = ["policies"]
 "#,
@@ -409,7 +411,7 @@ policies = ["policies"]
         let d = gen_manifest(
             r#"
 models = ["../"]
-endpoints = ["endpoints"]
+routes = ["routes"]
 events = ["events"]
 policies = ["policies"]
 "#,

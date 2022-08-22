@@ -1572,7 +1572,7 @@ fn get() -> RcMut<DenoService> {
 }
 
 pub fn endpoint_path_from_source_path(path: &str) -> String {
-    // The source path format is /api_version/endpoints/rest.js. The endpoint is /api_version/rest.
+    // The source path format is /api_version/routes/rest.js. The endpoint is /api_version/rest.
     let mut iter = path.splitn(4, '/');
     let api_version = iter.nth(1).unwrap();
     let rest = iter.nth(1).unwrap();
@@ -1602,7 +1602,7 @@ pub async fn compile_endpoints(sources: HashMap<String, String>) -> Result<()> {
                 continue;
             }
             match path.split('/').nth(2) {
-                Some("endpoints") => {
+                Some("routes") => {
                     let path = without_extension(&path);
                     let url = Url::parse(&format!("file://{}", path)).unwrap();
                     code_map.insert(url, code);

@@ -20,7 +20,7 @@ export class Person extends ChiselEntity {
 }
 EOF
 
-cat << EOF > "$TEMPDIR/endpoints/store.ts"
+cat << EOF > "$TEMPDIR/routes/store.ts"
 import { Person, Biography } from "../models/types.ts";
 
 export default async function chisel(req: Request) {
@@ -59,7 +59,7 @@ export default async function chisel(req: Request) {
 EOF
 
 
-cat << EOF > "$TEMPDIR/endpoints/compute_aggregations.ts"
+cat << EOF > "$TEMPDIR/routes/compute_aggregations.ts"
 import { Person } from "../models/types.ts";
 
 export default async function chisel(req: Request) {

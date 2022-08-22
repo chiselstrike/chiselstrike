@@ -13,7 +13,7 @@ export class User extends ChiselEntity {
 }
 EOF
 
-cat << EOF > "$TEMPDIR/endpoints/user.ts"
+cat << EOF > "$TEMPDIR/routes/user.ts"
 import { User } from "../models/user.ts";
 
 export default async function (req: Request): Promise<Response> {

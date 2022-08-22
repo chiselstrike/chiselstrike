@@ -5,13 +5,13 @@
 # Test that we can have multiple end points, that they can use the
 # same function name and that that name is arbitrary.
 
-cat << EOF > "$TEMPDIR/endpoints/foo.js"
+cat << EOF > "$TEMPDIR/routes/foo.js"
 export default async function my_req_func(req) {
     return new Response("foo");
 }
 EOF
 
-cat << EOF > "$TEMPDIR/endpoints/bar.js"
+cat << EOF > "$TEMPDIR/routes/bar.js"
 export default async function my_req_func(req) {
     return new Response("bar");
 }
@@ -34,7 +34,7 @@ $CURL -o - $CHISELD_HOST/dev/bar
 # Test that all of this works in node-mode as well
 cat << EOF > "$TEMPDIR/Chisel.toml"
 models = ["models"]
-endpoints = ["endpoints"]
+routes = ["routes"]
 policies = ["policies"]
 modules = "node"
 EOF

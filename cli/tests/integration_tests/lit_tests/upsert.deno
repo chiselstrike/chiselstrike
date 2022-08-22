@@ -14,7 +14,7 @@ export class Person extends ChiselEntity {
 }
 EOF
 
-cat << EOF > "$TEMPDIR/endpoints/upsert.ts"
+cat << EOF > "$TEMPDIR/routes/upsert.ts"
 import { Person } from "../models/types.ts";
 import { responseFromJson } from "@chiselstrike/api"
 

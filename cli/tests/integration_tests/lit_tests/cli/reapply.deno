@@ -68,7 +68,7 @@ export class Foo extends ChiselEntity {
 }
 EOF
 
-cat << EOF > "$TEMPDIR/endpoints/seed.ts"
+cat << EOF > "$TEMPDIR/routes/seed.ts"
 import { Foo } from "../models/foo.ts"
 export default async function seed() {
     const c = Foo.build({"a": "seed", "b": 2})
@@ -80,7 +80,7 @@ $CHISEL apply
 # CHECK: Code was applied
 
 $CURL -X POST $CHISELD_HOST/dev/seed
-rm "$TEMPDIR/endpoints/seed.ts"
+rm "$TEMPDIR/routes/seed.ts"
 
 ## Changing b's type is not OK.
 cat << EOF > "$TEMPDIR/models/foo.ts"

@@ -6,7 +6,7 @@ cp examples/person.ts "$TEMPDIR/models"
 
 cd "$TEMPDIR"
 
-cat << EOF > "$TEMPDIR/endpoints/store.ts"
+cat << EOF > "$TEMPDIR/routes/store.ts"
 import { Person } from "../models/person.ts";
 
 export default async function chisel(req: Request) {
@@ -19,12 +19,12 @@ EOF
 
 $CHISEL apply 2>&1 | $RMCOLOR|| true
 
-# CHECK:  Error: could not compile endpoints
+# CHECK:  Error: Could not compile routes
 # CHECK:  Caused by:
 # CHECK:      Compilation failed:
-# CHECK:      endpoints/store.ts:5:12 - error TS2339: Property 'invalidField' does not exist on type 'Person'.
+# CHECK:      routes/store.ts:5:12 - error TS2339: Property 'invalidField' does not exist on type 'Person'.
 
-cat << EOF > "$TEMPDIR/endpoints/store.ts"
+cat << EOF > "$TEMPDIR/routes/store.ts"
 import { Person } from "../models/person.ts";
 
 export default async function chisel(req: Request) {
@@ -46,8 +46,8 @@ $CURL -X POST $CHISELD_HOST/dev/store
 
 # CHECK: Ok984
 
-## Can't save auth types from user endpoints:
-cat << EOF > "$TEMPDIR/endpoints/store.ts"
+## Can't save auth types from user routes:
+cat << EOF > "$TEMPDIR/routes/store.ts"
 import { AuthUser } from '@chiselstrike/api';
 export default AuthUser.crud();
 EOF
@@ -68,7 +68,7 @@ export class Post extends ChiselEntity {
 }
 EOF
 
-cat << EOF > "$TEMPDIR/endpoints/store.ts"
+cat << EOF > "$TEMPDIR/routes/store.ts"
 import { Post } from '../models/post.ts';
 export default Post.crud();
 EOF

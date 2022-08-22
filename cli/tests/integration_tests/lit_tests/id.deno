@@ -6,7 +6,7 @@ cp examples/person.ts "$TEMPDIR/models"
 
 cd "$TEMPDIR"
 
-cat << EOF > "$TEMPDIR/endpoints/bad_id.ts"
+cat << EOF > "$TEMPDIR/routes/bad_id.ts"
 import { Person } from "../models/person.ts";
 
 export default async function chisel(req: Request) {
@@ -19,7 +19,7 @@ export default async function chisel(req: Request) {
 }
 EOF
 
-cat << EOF > "$TEMPDIR/endpoints/store_with_id.ts"
+cat << EOF > "$TEMPDIR/routes/store_with_id.ts"
 import { Person } from "../models/person.ts";
 
 export default async function chisel(req: Request) {
@@ -31,7 +31,7 @@ export default async function chisel(req: Request) {
 }
 EOF
 
-cat << EOF > "$TEMPDIR/endpoints/find_by_id.ts"
+cat << EOF > "$TEMPDIR/routes/find_by_id.ts"
 import { Person } from "../models/person.ts";
 
 export default async function chisel(req: Request) {
@@ -42,7 +42,7 @@ export default async function chisel(req: Request) {
 }
 EOF
 
-cat << EOF > "$TEMPDIR/endpoints/store_no_id.ts"
+cat << EOF > "$TEMPDIR/routes/store_no_id.ts"
 import { Person } from "../models/person.ts";
 
 export default async function chisel(req: Request) {
@@ -53,7 +53,7 @@ export default async function chisel(req: Request) {
 }
 EOF
 
-cat << EOF > "$TEMPDIR/endpoints/update_by_id.ts"
+cat << EOF > "$TEMPDIR/routes/update_by_id.ts"
 import { Person } from "../models/person.ts";
 
 export default async function chisel(req: Request) {
@@ -64,7 +64,7 @@ export default async function chisel(req: Request) {
 }
 EOF
 
-cat << EOF > "$TEMPDIR/endpoints/count_glaubers.ts"
+cat << EOF > "$TEMPDIR/routes/count_glaubers.ts"
 import { Person } from "../models/person.ts";
 
 export default async function chisel(req: Request) {

@@ -2,7 +2,7 @@
 
 # RUN: sh -e @file
 
-cat << EOF > "$TEMPDIR/endpoints/test1.ts"
+cat << EOF > "$TEMPDIR/routes/test1.ts"
 export default async function chisel(req: Request) {
     const getResources = () => {
         return Object.values(Deno.core.resources()).filter(x => x == "chisel_server::deno::BodyResource");
@@ -23,7 +23,7 @@ export default async function chisel(req: Request) {
 }
 EOF
 
-cat << EOF > "$TEMPDIR/endpoints/test2.ts"
+cat << EOF > "$TEMPDIR/routes/test2.ts"
 export default async function chisel(req: Request) {
     const getResources = () => {
         return Object.values(Deno.core.resources()).filter(x => x == "chisel_server::deno::BodyResource");

@@ -29,7 +29,7 @@ export class Company extends ChiselEntity {
 }
 EOF
 
-cat << EOF > "$TEMPDIR/endpoints/store_adalbrecht.ts"
+cat << EOF > "$TEMPDIR/routes/store_adalbrecht.ts"
 import { Company, Person } from "../models/types.ts";
 
 export default async function chisel(req: Request) {
@@ -54,7 +54,7 @@ export default async function chisel(req: Request) {
 }
 EOF
 
-cat << EOF > "$TEMPDIR/endpoints/query_people.ts"
+cat << EOF > "$TEMPDIR/routes/query_people.ts"
 import { Person } from "../models/types.ts";
 
 export default async function chisel(req: Request) {
@@ -66,7 +66,7 @@ export default async function chisel(req: Request) {
 }
 EOF
 
-cat << EOF > "$TEMPDIR/endpoints/query_companies.ts"
+cat << EOF > "$TEMPDIR/routes/query_companies.ts"
 import { Company } from "../models/types.ts";
 
 export default async function chisel(req: Request) {
@@ -98,7 +98,7 @@ $CURL -o - $CHISELD_HOST/dev/query_companies
 
 ## Test find + update
 
-cat << EOF > "$TEMPDIR/endpoints/update.ts"
+cat << EOF > "$TEMPDIR/routes/update.ts"
 import { Company, Person } from "../models/types.ts";
 
 export default async function chisel(req: Request) {
@@ -124,7 +124,7 @@ $CURL -o - $CHISELD_HOST/dev/query_people
 
 ## Try saving the inner entity
 
-cat << EOF > "$TEMPDIR/endpoints/update.ts"
+cat << EOF > "$TEMPDIR/routes/update.ts"
 import { Company, Person } from "../models/types.ts";
 
 export default async function chisel(req: Request) {
@@ -149,7 +149,7 @@ $CURL -o - $CHISELD_HOST/dev/query_people
 
 ## Try saving created entity
 
-cat << EOF > "$TEMPDIR/endpoints/update.ts"
+cat << EOF > "$TEMPDIR/routes/update.ts"
 import { Company, Person } from "../models/types.ts";
 
 export default async function chisel(req: Request) {
@@ -177,7 +177,7 @@ $CURL -o - $CHISELD_HOST/dev/query_people
 # CHECK: HTTP/1.1 200 OK
 # CHECK: [(Many, Bianco), (Adalbrecht, Bond)]
 
-cat << EOF > "$TEMPDIR/endpoints/update.ts"
+cat << EOF > "$TEMPDIR/routes/update.ts"
 import { Company, Person } from "../models/types.ts";
 
 export default async function chisel(req: Request) {

@@ -4,20 +4,20 @@
 
 cd "$TEMPDIR"
 
-cat << EOF > "$TEMPDIR/endpoints/hello.ts"
+cat << EOF > "$TEMPDIR/routes/hello.ts"
 export default async function (req: Request) {
     return new Response('ok');
 }
 EOF
 
 # Generate hidden file (in this case, vim swap file):
-cp "$TEMPDIR/endpoints/hello.ts" "$TEMPDIR/endpoints/.hello.ts.swp"
+cp "$TEMPDIR/routes/hello.ts" "$TEMPDIR/routes/.hello.ts.swp"
 
 # Generate vim backup file:
-cp "$TEMPDIR/endpoints/hello.ts" "$TEMPDIR/endpoints/hello.ts~"
+cp "$TEMPDIR/routes/hello.ts" "$TEMPDIR/routes/hello.ts~"
 
 # Generate emacs autosave file:
-cp "$TEMPDIR/endpoints/hello.ts" "$TEMPDIR/endpoints/#hello.ts#"
+cp "$TEMPDIR/routes/hello.ts" "$TEMPDIR/routes/#hello.ts#"
 
 $CHISEL apply
 

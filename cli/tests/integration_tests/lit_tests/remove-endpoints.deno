@@ -2,22 +2,22 @@
 
 # RUN: sh -e @file
 
-mkdir -p "$TEMPDIR/endpoints"
+mkdir -p "$TEMPDIR/routes"
 cd "$TEMPDIR"
 
-cat << EOF > ./endpoints/end.ts
+cat << EOF > ./routes/end.ts
 export default async function chisel(req: Request) {
     return new Response("");
 }
 EOF
 
-cat << EOF > ./endpoints/endpoint.ts
+cat << EOF > ./routes/endpoint.ts
 export default async function chisel(req: Request) {
     return new Response("");
 }
 EOF
 
-cat << EOF > ./endpoints/endpo.ts
+cat << EOF > ./routes/endpo.ts
 export default async function chisel(req: Request) {
     return new Response("");
 }
@@ -33,7 +33,7 @@ $CURL -o - $CHISELD_HOST/dev/endpo
 $CURL -o - $CHISELD_HOST/dev/endpoint
 # CHECK: HTTP/1.1 200 OK
 
-rm ./endpoints/end.ts
+rm ./routes/end.ts
 
 $CHISEL apply
 
@@ -44,7 +44,7 @@ $CURL -o - $CHISELD_HOST/dev/endpo
 $CURL -o - $CHISELD_HOST/dev/endpoint
 # CHECK: HTTP/1.1 200 OK
 
-rm ./endpoints/endpoint.ts
+rm ./routes/endpoint.ts
 
 $CHISEL apply
 

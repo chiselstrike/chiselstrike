@@ -3,9 +3,9 @@
 # RUN: sh -e @file
 
 cp examples/person.ts "$TEMPDIR/models"
-cp examples/store.ts "$TEMPDIR/endpoints"
+cp examples/store.ts "$TEMPDIR/routes"
 
-cat << EOF > "$TEMPDIR/endpoints/query.ts"
+cat << EOF > "$TEMPDIR/routes/query.ts"
 import { Person } from "../models/person.ts";
 
 export default async function (req: Request) {

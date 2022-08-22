@@ -4,7 +4,7 @@
 
 cd "$TEMPDIR"
 
-cat << EOF > "$TEMPDIR/endpoints/foo.ts"
+cat << EOF > "$TEMPDIR/routes/foo.ts"
 import * as module from "https://deno.land/std@0.145.0/node/module.ts";
 
 export default async function (req: Request): Promise<Response> {

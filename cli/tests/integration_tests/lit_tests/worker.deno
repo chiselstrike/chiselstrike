@@ -2,7 +2,7 @@
 
 # RUN: sh -e @file
 
-cat << EOF > "$TEMPDIR/endpoints/worker.js"
+cat << EOF > "$TEMPDIR/routes/worker.js"
 export default async function chisel(req) {
     const worker = new Worker('./bar.js', {type: 'module'});
     return new Response("worker");

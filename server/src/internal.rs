@@ -38,7 +38,7 @@ async fn webapply(body: Body, rpc_addr: &SocketAddr) -> Result<Response<Body>> {
     let body: WebUIPostBody = serde_json::from_slice(&hyper::body::to_bytes(body).await?)?;
     let mut client = ChiselRpcClient::connect(format!("http://{}", rpc_addr)).await?;
     let mut endpoints = HashMap::new();
-    endpoints.insert("endpoints/ep1.js".to_string(), body.endpoint);
+    endpoints.insert("routes/ep1.js".to_string(), body.endpoint);
     client
         .apply(tonic::Request::new(ChiselApplyRequest {
             types: vec![],

@@ -2,7 +2,7 @@
 
 # RUN: sh -e @file
 
-cat << EOF > "$TEMPDIR/endpoints/simple.ts"
+cat << EOF > "$TEMPDIR/routes/simple.ts"
 export default function chisel(_req: Request) : Promise<Response> {
     return new Response("");
 }
@@ -58,7 +58,7 @@ $CURL $CHISELD_HOST/dev
 # CHECK: "version": "1.0.0"
 
 git init ./
-git add endpoints/simple.ts
+git add routes/simple.ts
 git commit -m "test"
 $CHISEL apply
 $CURL $CHISELD_HOST/dev

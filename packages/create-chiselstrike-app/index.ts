@@ -34,13 +34,13 @@ function run(projectDirectory: string, chiselVersion: string) {
         } ...`,
     );
 
-    const endpointsPath = path.join(projectDirectory, "endpoints");
+    const routesPath = path.join(projectDirectory, "routes");
     const eventsPath = path.join(projectDirectory, "events");
     const modelsPath = path.join(projectDirectory, "models");
     const policiesPath = path.join(projectDirectory, "policies");
 
     fs.mkdirSync(path.join(projectDirectory, ".vscode"));
-    fs.mkdirSync(endpointsPath);
+    fs.mkdirSync(routesPath);
     fs.mkdirSync(eventsPath);
     fs.closeSync(fs.openSync(path.join(eventsPath, ".gitkeep"), "w"));
     fs.mkdirSync(modelsPath);
@@ -83,11 +83,11 @@ function run(projectDirectory: string, chiselVersion: string) {
     );
     fs.copyFileSync(
         path.join(__dirname, "template", "hello.ts"),
-        path.join(projectDirectory, "endpoints", "hello.ts"),
+        path.join(projectDirectory, "routes", "hello.ts"),
     );
     fs.copyFileSync(
         path.join(__dirname, "template", "hello.ts"),
-        path.join(projectDirectory, "endpoints", "hello.ts"),
+        path.join(projectDirectory, "routes", "hello.ts"),
     );
     fs.copyFileSync(
         path.join(__dirname, "template", "gitignore"),
@@ -108,7 +108,7 @@ if (os.type() == "Windows_NT") {
     );
     console.log("");
     console.log(
-        "Please create your project in an ext4 filesystem (like the $HOME folder) to support hot reloading of endpoints.",
+        "Please create your project in an ext4 filesystem (like the $HOME folder) to support hot reloading of routes.",
     );
     console.log("");
     console.log(

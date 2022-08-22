@@ -2,13 +2,13 @@
 
 # RUN: sh -e @file
 
-cat << EOF > "$TEMPDIR/endpoints/empty.ts"
+cat << EOF > "$TEMPDIR/routes/empty.ts"
 export default async function chisel(req: Request) {
     return new Response(null, { status : 204 });
 }
 EOF
 
-cat << EOF > "$TEMPDIR/endpoints/emptychisel.ts"
+cat << EOF > "$TEMPDIR/routes/emptychisel.ts"
 import { responseFromJson } from "@chiselstrike/api"
 
 export default async function chisel(req: Request) {

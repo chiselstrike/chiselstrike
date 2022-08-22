@@ -16,7 +16,7 @@ export class Data extends ChiselEntity {
 }
 EOF
 
-cat << EOF > "$TEMPDIR/endpoints/stream.ts"
+cat << EOF > "$TEMPDIR/routes/stream.ts"
 import { Data } from "../models/types.ts";
 
 export default async function chisel(req: Request) {
