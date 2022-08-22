@@ -332,6 +332,13 @@ impl Chisel {
             .unwrap_or_else(|e| panic!("Unable to write to {:?}: {}", path, e));
     }
 
+    /// Writes given `text` (probably code) into a file on given relative `path`
+    /// in ChiselStrike project while unindenting everything as left as possible.
+    pub fn write_unindent(&self, path: &str, text: &str) {
+        let unindent_text = unindent::unindent(text);
+        self.write(path, &unindent_text);
+    }
+
     /// Copies given `file` to a relative directory path `to` inside ChiselStrike project.
     pub fn copy_to_dir<P, Q>(&self, from: P, to: Q) -> u64
     where
