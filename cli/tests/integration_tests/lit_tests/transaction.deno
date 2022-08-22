@@ -3,7 +3,8 @@
 # RUN: sh -e @file
 
 cat << EOF > "$TEMPDIR/models/types.ts"
-export class Person extends Chisel.ChiselEntity {
+import { ChiselEntity } from '@chiselstrike/api';
+export class Person extends ChiselEntity {
    name: string = "";
 }
 EOF

@@ -5,7 +5,8 @@ pub async fn test(c: TestContext) {
     c.chisel.write(
         "models/types.ts",
         r##"
-        export class Foo extends Chisel.ChiselEntity {
+        import { ChiselEntity } from '@chiselstrike/api';
+        export class Foo extends ChiselEntity {
             order: number = 0;
             numbers: number[] = [];
             strings: string[] = [];
