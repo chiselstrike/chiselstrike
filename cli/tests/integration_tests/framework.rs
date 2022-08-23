@@ -2,6 +2,7 @@ use crate::database::Database;
 use anyhow::Result;
 use bytes::{Bytes, BytesMut};
 use reqwest::header::HeaderMap;
+use std::borrow::Borrow;
 use std::path::{Path, PathBuf};
 use std::pin::Pin;
 use std::process::{ExitStatus, Stdio};
@@ -331,6 +332,13 @@ impl Chisel {
             .unwrap_or_else(|e| panic!("Unable to write to {:?}: {}", path, e));
     }
 
+    /// Writes given `text` (probably code) into a file on given relative `path`
+    /// in ChiselStrike project while unindenting everything as left as possible.
+    pub fn write_unindent(&self, path: &str, text: &str) {
+        let unindent_text = unindent::unindent(text);
+        self.write(path, &unindent_text);
+    }
+
     /// Copies given `file` to a relative directory path `to` inside ChiselStrike project.
     pub fn copy_to_dir<P, Q>(&self, from: P, to: Q) -> u64
     where
@@ -540,17 +548,23 @@ impl Chisel {
     }
 
     /// Same as `request()`, but sends POST with JSON request payload.
-    pub async fn post_json(&self, url: &str, data: serde_json::Value) -> reqwest::Response {
+    pub async fn post_json<Value>(&self, url: &str, data: Value) -> reqwest::Response
+    where
+        Value: Borrow<serde_json::Value>,
+    {
         self.request(
             reqwest::Method::POST,
             url,
-            serde_json::to_string(&data).unwrap(),
+            serde_json::to_string(data.borrow()).unwrap(),
         )
         .await
     }
 
     /// Same as `post_json()`, but asserts that the response was a success.
-    pub async fn post_json_ok(&self, url: &str, data: serde_json::Value) {
+    pub async fn post_json_ok<Value>(&self, url: &str, data: Value)
+    where
+        Value: Borrow<serde_json::Value>,
+    {
         self.post_json(url, data)
             .await
             .error_for_status()
@@ -558,21 +572,27 @@ impl Chisel {
     }
 
     /// Same as `request_text()`, but sends POST with JSON request payload.
-    pub async fn post_json_text(&self, url: &str, data: serde_json::Value) -> String {
+    pub async fn post_json_text<Value>(&self, url: &str, data: Value) -> String
+    where
+        Value: Borrow<serde_json::Value>,
+    {
         self.request_text(
             reqwest::Method::POST,
             url,
-            serde_json::to_string(&data).unwrap(),
+            serde_json::to_string(data.borrow()).unwrap(),
         )
         .await
     }
 
     /// Same as `request_status()`, but sends POST with JSON request payload.
-    pub async fn post_json_status(&self, url: &str, data: serde_json::Value) -> u16 {
+    pub async fn post_json_status<Value>(&self, url: &str, data: Value) -> u16
+    where
+        Value: Borrow<serde_json::Value>,
+    {
         self.request_status(
             reqwest::Method::POST,
             url,
-            serde_json::to_string(&data).unwrap(),
+            serde_json::to_string(data.borrow()).unwrap(),
         )
         .await
     }
