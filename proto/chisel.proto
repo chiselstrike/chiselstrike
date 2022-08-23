@@ -107,6 +107,7 @@ message ApplyRequest {
 message ApplyResponse {
   repeated string types = 1;
   repeated string labels = 3;
+  repeated string event_handlers = 4;
 
   // deprecated: endpoints/routes can be introspected only from JavaScript
   //repeated string endpoints = 2;

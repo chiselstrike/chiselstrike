@@ -19,6 +19,7 @@ pub(crate) mod datastore;
 pub(crate) mod internal;
 pub(crate) mod ops;
 pub(crate) mod opt;
+pub(crate) mod kafka;
 pub(crate) mod policies;
 pub(crate) mod prefix_map;
 pub(crate) mod rpc;

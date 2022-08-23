@@ -241,6 +241,7 @@ async fn apply(server: Arc<Server>, request: ApplyRequest) -> Result<ApplyRespon
     Ok(ApplyResponse {
         types: result.type_names_user_order,
         labels: result.labels,
+        event_handlers: Vec::new(),
     })
 }
 

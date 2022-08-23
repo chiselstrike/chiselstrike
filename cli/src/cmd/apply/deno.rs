@@ -15,6 +15,7 @@ use url::Url;
 
 pub(crate) async fn apply(
     route_map: FileRouteMap,
+    _events: &[PathBuf],
     entities: &[String],
     optimize: bool,
     auto_index: bool,

@@ -9,10 +9,12 @@ use std::fmt::Write;
 use std::fs;
 use std::io::{stdin, ErrorKind, Read};
 use std::path::{Path, PathBuf};
+use utils::without_extension;
 
 const MANIFEST_FILE: &str = "Chisel.toml";
 const TYPES_DIR: &str = "./models";
 const ROUTES_DIR: &str = "./routes";
+const EVENTS_DIR: &str = "./events";
 const LIB_DIR: &str = "./lib";
 const POLICIES_DIR: &str = "./policies";
 const VSCODE_DIR: &str = "./.vscode/";
@@ -73,6 +75,8 @@ pub(crate) struct Manifest {
     /// For backwards compatibility, we also support the old-style name `endpoints` here.
     #[serde(alias = "endpoints")]
     pub(crate) routes: Vec<PathBuf>,
+    /// Vector of directories to scan for event handler definitions.
+    pub(crate) events: Option<Vec<PathBuf>>,
     /// Vector of directories to scan for policy definitions.
     pub(crate) policies: Vec<PathBuf>,
     /// Whether to use deno-style or node-style modules
@@ -94,6 +98,18 @@ impl Manifest {
     pub fn route_map(&self, base_dir: &Path) -> anyhow::Result<FileRouteMap> {
         build_file_route_map(base_dir, &self.routes)
             .context("Could not read routes (endpoints) from filesystem")
+    }
+        
+    pub fn events(&self, base_dir: &Path) -> anyhow::Result<Vec<PathBuf>> {
+        let events = match &self.events {
+            Some(events) => events.to_owned(),
+            None => vec![EVENTS_DIR.into()],
+        };
+        let ret = Self::dirs_to_paths(base_dir, &events)?;
+        if let Some((a, b)) = check_duplicates(&ret) {
+            anyhow::bail!("Cannot add both {} {} as event handlers. ChiselStrike uses filesystem-based routing, so we don't know what to do. Sorry! 🥺", a, b);
+        }
+        Ok(ret)
     }
 
     pub fn policies(&self, base_dir: &Path) -> anyhow::Result<Vec<PathBuf>> {
@@ -126,6 +142,21 @@ impl Manifest {
         paths.sort_unstable();
         Ok(paths)
     }
+}
+
+fn check_duplicates(source_files: &[PathBuf]) -> Option<(String, String)> {
+    // Check for duplicated endpoints now since otherwise TSC
+    // reports the issue and we can produce a better diagnostic
+    // than TSC.
+    let i = source_files.iter();
+    for (a, b) in i.clone().zip(i.skip(1)) {
+        let a = &a.display().to_string();
+        let b = &b.display().to_string();
+        if without_extension(a) == without_extension(b) {
+            return Some((a.to_string(), b.to_string()));
+        }
+    }
+    None
 }
 
 fn dir_to_paths(dir: &Path, paths: &mut Vec<PathBuf>) -> anyhow::Result<()> {
@@ -241,6 +272,7 @@ pub(crate) fn create_project(path: &Path, opts: CreateProjectOptions) -> Result<
     }
     fs::create_dir_all(path.join(TYPES_DIR))?;
     fs::create_dir_all(path.join(ROUTES_DIR))?;
+    fs::create_dir_all(path.join(EVENTS_DIR))?;
     fs::create_dir_all(path.join(LIB_DIR))?;
     fs::create_dir_all(path.join(POLICIES_DIR))?;
     fs::create_dir_all(path.join(VSCODE_DIR))?;
@@ -288,6 +320,7 @@ pub(crate) fn project_exists(path: &Path) -> bool {
     path.join(Path::new(MANIFEST_FILE)).exists()
         || path.join(Path::new(TYPES_DIR)).exists()
         || path.join(Path::new(ROUTES_DIR)).exists()
+        || path.join(Path::new(EVENTS_DIR)).exists()
         || path.join(Path::new(POLICIES_DIR)).exists()
 }
 
@@ -302,6 +335,7 @@ mod tests {
         std::fs::write(dir.join(MANIFEST_FILE), toml.as_bytes()).unwrap();
         std::fs::create_dir(dir.join("./policies")).unwrap();
         std::fs::create_dir(dir.join("./routes")).unwrap();
+        std::fs::create_dir(dir.join("./events")).unwrap();
         std::fs::create_dir(dir.join("./models")).unwrap();
         tmp_dir
     }
@@ -311,6 +345,7 @@ mod tests {
         m.models(d.path()).unwrap();
         m.policies(d.path()).unwrap();
         m.route_map(d.path()).unwrap();
+        m.events(d.path()).unwrap();
         m
     }
 
@@ -332,6 +367,7 @@ policies = ["policies"]
             r#"
 models = ["models"]
 endpoints = ["endpoints"]
+events = ["events"]
 policies = ["policies"]
 "#,
         );
@@ -347,6 +383,7 @@ policies = ["policies"]
             r#"
 models = ["/models/models"]
 routes = ["routes"]
+events = ["events"]
 policies = ["policies"]
 "#,
         );
@@ -360,6 +397,7 @@ policies = ["policies"]
             r#"
 models = ["./"]
 routes = ["routes"]
+events = ["events"]
 policies = ["policies"]
 "#,
         );
@@ -373,6 +411,7 @@ policies = ["policies"]
             r#"
 models = ["../"]
 routes = ["routes"]
+events = ["events"]
 policies = ["policies"]
 "#,
         );

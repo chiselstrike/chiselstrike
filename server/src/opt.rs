@@ -20,6 +20,7 @@ pub struct Opt {
     /// Internal routes (for k8s) listen address
     #[structopt(short, long, default_value = "127.0.0.1:9090")]
     pub internal_routes_listen_addr: SocketAddr,
+
     /// Metadata database URI. [deprecated: use --db-uri instead]
     #[structopt(short, long, default_value = "sqlite://chiseld.db?mode=rwc")]
     pub _metadata_db_uri: String,
@@ -29,6 +30,13 @@ pub struct Opt {
     /// Database URI.
     #[structopt(long, default_value = "sqlite://.chiseld.db?mode=rwc")]
     pub db_uri: String,
+    /// Kafka connection.
+    #[structopt(long)]
+    pub kafka_connection: Option<String>,
+    /// Kafka topics to subscribe to.
+    #[structopt(long)]
+    pub kafka_topics: Vec<String>,
+
     /// Activate inspector and let a debugger attach at any time.
     #[structopt(long)]
     pub inspect: bool,

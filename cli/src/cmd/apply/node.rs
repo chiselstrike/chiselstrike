@@ -8,11 +8,12 @@ use crate::proto::{IndexCandidate, Module};
 use crate::routes::{codegen_route_map, FileRouteMap};
 use anyhow::{anyhow, bail, Context, Result};
 use std::ffi::{OsStr, OsString};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::{env, fs};
 
 pub(crate) async fn apply(
     mut route_map: FileRouteMap,
+    _events: &[PathBuf],
     entities: &[String],
     optimize: bool,
     auto_index: bool,

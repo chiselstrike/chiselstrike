@@ -73,6 +73,7 @@ pub(crate) async fn apply(
     let manifest = read_manifest(&cwd).context("Could not read manifest file")?;
     let models = manifest.models(&cwd)?;
     let route_map = manifest.route_map(&cwd)?;
+    let events = manifest.events(&cwd)?;
     let policies = manifest.policies(&cwd)?;
 
     let types_req = crate::ts::parse_types(&models)?;
@@ -92,9 +93,9 @@ pub(crate) async fn apply(
     let auto_index = chiselc_available && manifest.auto_index == AutoIndex::Yes;
     let (modules, index_candidates) = match manifest.modules {
         Module::Node => {
-            node::apply(route_map, &entities, optimize, auto_index, &type_check).await?
+            node::apply(route_map, &events, &entities, optimize, auto_index, &type_check).await?
         }
-        Module::Deno => deno::apply(route_map, &entities, optimize, auto_index).await?,
+        Module::Deno => deno::apply(route_map, &events, &entities, optimize, auto_index).await?,
     };
 
     for p in policies {
@@ -149,6 +150,10 @@ pub(crate) async fn apply(
 
     for ty in msg.types {
         println!("Model defined: {}", ty);
+    }
+
+    for end in msg.event_handlers {
+        println!("Event handler defined: {}", end);
     }
 
     for lbl in msg.labels {
