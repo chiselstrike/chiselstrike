@@ -22,6 +22,7 @@ export class BlogComment extends ChiselEntity {
 and another example:
 
 ```typescript  title="my-backend/models/User.ts"
+import { ChiselEntity } from "@chiselstrike/api"
 
 export class User extends ChiselEntity {
     username: string;
