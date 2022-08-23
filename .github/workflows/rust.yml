@@ -21,7 +21,7 @@ jobs:
   build:
     runs-on: self-hosted
     container:
-      image: ghcr.io/chiselstrike/rust-build-image:v1.0
+      image: ghcr.io/chiselstrike/rust-build-image:v1.1
       options: --user 1000
     steps:
     - name: checkout repo
@@ -61,33 +61,22 @@ jobs:
           cp scripts/cargo-config.toml ~/.cargo/config.toml
 
     - name: Build debug mode binaries
-      uses: actions-rs/cargo@v1
-      with:
-          command: build
-          args: --verbose
+      run: mold -run cargo build --verbose
 
     - name: Build cli in isolation
-      uses: actions-rs/cargo@v1
-      with:
-          command: build
-          args: --verbose -p cli
+      run: mold -run cargo build --verbose -p cli
 
     - name: Build server in isolation
-      uses: actions-rs/cargo@v1
-      with:
-          command: build
-          args: --verbose -p server
+      run: mold -run cargo build --verbose -p server
 
     - name: run unit tests
-      uses: actions-rs/cargo@v1
       timeout-minutes: 20
-      with:
-          command: test
+      run: mold -run cargo test
 
   postgres-test:
     runs-on: self-hosted
     container:
-      image: ghcr.io/chiselstrike/rust-build-image:v1.0
+      image: ghcr.io/chiselstrike/rust-build-image:v1.1
       options: --user 1000
     services:
       postgres:
@@ -130,8 +119,6 @@ jobs:
           cp scripts/cargo-config.toml ~/.cargo/config.toml
 
     - name: Run integration tests against Postgres
-      uses: actions-rs/cargo@v1
       timeout-minutes: 20
-      with:
-          command: test
-          args: -p cli --test integration_tests -- --database postgres --database-user postgres --database-password "$POSTGRES_PASSWORD" --database-host postgres
+      run:
+        mold -run cargo test -p cli --test integration_tests -- --database postgres --database-user postgres --database-password "$POSTGRES_PASSWORD" --database-host postgres
