@@ -24,7 +24,7 @@ const sidebars = {
     {
       type: 'category',
       label: 'Introduction',
-      items: ['Intro/welcome', 'Intro/first', 'Intro/endpoints', 'Intro/data-access', 'Intro/streaming', 'Intro/deploying', 'Intro/debugging' ]
+      items: ['Intro/welcome', 'Intro/first', 'Intro/routes', 'Intro/data-access', 'Intro/streaming', 'Intro/deploying', 'Intro/debugging' ]
     },
     {
       type: 'category',

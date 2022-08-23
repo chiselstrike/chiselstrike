@@ -1,7 +1,7 @@
 # API Versioning
 
-Now that we have defined our endpoints, models, and policies, it is time to spice things up.
-You may have noticed that all endpoints created by ChiselStrike have `/dev/` as part of the route.
+Now that we have defined our routes, models, and policies, it is time to spice things up.
+You may have noticed that all routes created by ChiselStrike start with `/dev/`.
 That's because ChiselStrike makes API versioning a first-class citizen: everything you deploy to
 ChiselStrike is deployed as part of a _version_.
 
@@ -35,7 +35,7 @@ Model defined: BlogComment
 End point defined: /experimental/comments
 ```
 
-Now let's try comparing the two endpoints.
+Now let's try comparing the two versions.
 
 If we invoke the new `experimental` API version:
 
@@ -49,7 +49,7 @@ The `curl` command reports no data:
 []
 ```
 
-However, we can still invoke the old `dev` version of the endpoint:
+However, we can still invoke the old `dev` version of the code:
 
 ```bash
 curl localhost:8080/dev/comments
@@ -78,7 +78,7 @@ chisel populate --version experimental --from dev
 Assuming `experimental` is empty before the population starts, you should see that the `experimental` version
 now holding the same data as `dev`.
 
-If you invoke the `/experimental/comments` endpoint:
+If you invoke the `GET /experimental/comments` endpoint:
 
 ```bash
 curl localhost:8080/experimental/comments

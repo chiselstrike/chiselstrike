@@ -11,7 +11,7 @@ for building queries.
 
 For example, the `findOne()` example could be written using the cursor-based API as:
 
-```typescript title="my-backend/endpoints/find-one-cursor.ts"
+```typescript title="my-backend/routes/find-one-cursor.ts"
 import { responseFromJson } from "@chiselstrike/api"
 import { User } from "../models/models"
 
@@ -22,7 +22,7 @@ export default async function (req) {
 }
 ```
 
-You can invoke the `/dev/find-one-cursor` endpoint with:
+You can invoke the `POST /dev/find-one-cursor` endpoint with:
 
 ```bash
 curl -d '{ "email": "alice@mit.edu" }' localhost:8080/dev/find-one-cursor
@@ -73,8 +73,8 @@ The second overload takes a restrictions-object parameter. It allows you to filt
 ## Notes On Transactions
 
 ChiselStrke currently implements implicit transactional evaluation. A transaction is created before ChiselStrike
-starts evaluating your endpoint and is automatically committed after your endpoint ends and we generate
-the HTTP response. In case your endpoint returns a stream, any database-related operation done within
+starts evaluating your request handler and is automatically committed after your handler ends and we generate
+the HTTP response. If your handler returns a stream, any database-related operation done within
 stream-generation code will happen outside of the transaction and can result in a crash.
 
 If your code crashes or explicitly throws an exception that is not caught, ChiselStrike rolls back the

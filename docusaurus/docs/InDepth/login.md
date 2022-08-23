@@ -28,7 +28,7 @@ NextAuth user ID.
 
 The ChiselStrike backend keeps track of your website's users via a
 builtin type called AuthUser.  When a user logs in for the first
-time, a new AuthUser entity is added.  And when an endpoint is
+time, a new AuthUser entity is added.  And when a request handler is
 executed, it has access to this builtin type.
 
 One interesting thing to do is have AuthUser-typed fields in your
@@ -50,7 +50,7 @@ returns the AuthUser object corresponding to the user currently
 logged in (or `undefined` if no one is logged in).  This works, for
 example:
 
-```typescript title="my-backend/endpoints/example.ts"
+```typescript title="my-backend/routes/example.ts"
 import { BlogComment } from '../models/models.ts';
 import { loggedInUser, responseFromJson } from '@chiselstrike/api';
 export default async function (req) {

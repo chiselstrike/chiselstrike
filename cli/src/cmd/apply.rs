@@ -180,7 +180,7 @@ pub(crate) async fn apply(
 
     println!("Code was applied to the ChiselStrike server. It contained:");
     println!("  - models: {}", msg.types.len());
-    println!("  - endpoints: {}", msg.endpoints.len());
+    println!("  - routes: {}", msg.endpoints.len());
     println!("  - event handlers: {}", msg.event_handlers.len());
     println!("  - labels: {}", msg.labels.len());
 
