@@ -22,6 +22,7 @@ export class BlogComment extends ChiselEntity {
 and another example:
 
 ```typescript  title="my-backend/models/User.ts"
+import { ChiselEntity } from "@chiselstrike/api"
 
 export class User extends ChiselEntity {
     username: string;
@@ -219,10 +220,21 @@ The documentation robots are at work. Examples coming soon!
 
 ## Deleting Objects
 
-```typescript title="my-backend/endpoints/find-one.ts"
-object.delete()
+Entities are deleted using the `ChiselEntity.delete(restriction)` method. For
+example, with the `User` entity defined earlier, you delete an entity as follows:
+
+```typescript title="my-backend/endpoints/delete.ts"
+import { User } from "../models/User.ts"
+
+export default async function (req: Request) {
+    const payload = await req.json()
+    const email = payload.email;
+    await User.delete({ email });
+    return new Response("Deleted " + email);
+}
 ```
-Examples coming soon!
+
+In this example, we delete an user by their email address.
 
 ## See Also: Cursors
 
