@@ -304,10 +304,9 @@ impl MetaService {
         }
 
         for (idx, src) in sources.iter().enumerate() {
-            let src = src.to_str().unwrap();
             let db = format!("db{}", idx);
 
-            let attach = format!("attach database '{}' as '{}'", src, db);
+            let attach = format!("attach database '{}' as '{}'", src.display(), db);
             execute(transaction, sqlx::query::<sqlx::Any>(&attach)).await?;
 
             let query = format!(
