@@ -92,10 +92,8 @@ To handle HTTP requests on "/dev/comments", we create a TypeScript file
 in the `my-backend/routes` directory.  Here is one:
 
 ```typescript title="my-backend/routes/comments.ts"
-import { responseFromJson } from "@chiselstrike/api"
-
-export default function (_req) {
-    return responseFromJson("Comments go here!");
+export default async function (req: Request) {
+    return "Comments go here!";
 }
 ```
 
