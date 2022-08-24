@@ -92,10 +92,8 @@ To make our endpoint for "/dev/comments", we create a TypeScript file
 in the `my-backend/endpoints` directory.  Here is one:
 
 ```typescript title="my-backend/endpoints/comments.ts"
-import { responseFromJson } from "@chiselstrike/api"
-
-export default function chisel(_req) {
-    return responseFromJson("Comments go here!");
+export default async function (req: Request) {
+    return "Comments go here!";
 }
 ```
 
