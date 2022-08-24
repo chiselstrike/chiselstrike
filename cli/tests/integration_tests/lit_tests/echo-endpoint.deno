@@ -2,7 +2,7 @@
 
 # RUN: sh -e @file
 
-cat << EOF > "$TEMPDIR/endpoints/echo.ts"
+cat << EOF > "$TEMPDIR/routes/echo.ts"
 // This function produces a response whose body is a json of the request
 export default async function chisel(req: Request) {
     // Stringfy needs some help to see some of the fields

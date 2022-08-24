@@ -2,7 +2,7 @@
 
 # RUN: sh -e @file
 
-cat << EOF > "$TEMPDIR/endpoints/mischief.ts"
+cat << EOF > "$TEMPDIR/routes/mischief.ts"
 export default async function (req: Request): Promise<string> {
     try {
         const status = await Deno.run({cmd: ["true"]}).status();

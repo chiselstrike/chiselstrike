@@ -29,7 +29,7 @@ This must be explicitly named ".env", it's not a file with a ".env" suffix.
 
 Now those values are available as objects from your typescript code:
 
-```typescript title="my-backend/endpoints/secrets.ts"
+```typescript title="my-backend/routes/secrets.ts"
 import { getSecret, responseFromJson } from "@chiselstrike/api"
 
 export default async function (req) {

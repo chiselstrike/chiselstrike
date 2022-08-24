@@ -4,7 +4,7 @@
 
 cp examples/person.ts "$TEMPDIR/models"
 
-cat << EOF > "$TEMPDIR/endpoints/persons.ts"
+cat << EOF > "$TEMPDIR/routes/persons.ts"
 import { Person } from "../models/person";
 export default Person.crud();
 EOF

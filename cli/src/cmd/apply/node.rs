@@ -142,7 +142,7 @@ pub(crate) async fn apply(
         let out = String::from_utf8(res.stdout).expect("command output not utf-8");
         let err = String::from_utf8(res.stderr).expect("command output not utf-8");
         return Err(anyhow!("{}\n{}", out, err))
-            .context("could not bundle endpoints with esbuild (using node-style modules)");
+            .context("Could not bundle routes with esbuild (using node-style modules)");
     }
 
     for bundler_info in bundler_file_mapping.iter() {

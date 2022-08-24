@@ -3,9 +3,9 @@
 # RUN: sh -e @file
 
 cp examples/person.ts "$TEMPDIR/models"
-cp examples/store.ts "$TEMPDIR/endpoints/ins.ts"
+cp examples/store.ts "$TEMPDIR/routes/ins.ts"
 
-cat << EOF > "$TEMPDIR/endpoints/count.ts"
+cat << EOF > "$TEMPDIR/routes/count.ts"
 import { Person } from "../models/person.ts";
 
 export default async function chisel(req: Request) {
@@ -64,7 +64,7 @@ export class Company extends ChiselEntity {
 }
 EOF
 
-cat << EOF > "$TEMPDIR/endpoints/store_adalbrecht.ts"
+cat << EOF > "$TEMPDIR/routes/store_adalbrecht.ts"
 import { Company, Employee } from "../models/types.ts";
 
 export default async function chisel(req: Request) {
@@ -85,7 +85,7 @@ export default async function chisel(req: Request) {
 }
 EOF
 
-cat << EOF > "$TEMPDIR/endpoints/retrieve_nested.ts"
+cat << EOF > "$TEMPDIR/routes/retrieve_nested.ts"
 import { Company, Employee } from "../models/types.ts";
 
 export default async function chisel(req: Request) {

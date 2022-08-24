@@ -15,7 +15,7 @@ to bother implementing an entire backend server, configuring a SQL database, and
 for it.
 
 One of the simplest examples might involve building a blog that allows readers to make comments.
-Even if a blog articles were statically rendered, the comment section would need some kind of
+Even if blog articles were statically rendered, the comment section would need some kind of
 dynamic endpoint to make it work.
 
 # Setup
@@ -31,10 +31,10 @@ npx create-chiselstrike-app my-backend
 You need Node 14.18.0 or later installed to successfully run the command.
 :::
 
-:::info Are you on Windows??
+:::info Are you on Windows?
 At the moment, ChiselStrike is supported on Windows through WSL.
 Aside from that, on WSL2 you should create your project in an ext4 filesystem (like the `$HOME` folder) to support hot reloading
-of endpoints. See details [here](https://stackoverflow.com/a/70275534)
+of your code. See details [here](https://stackoverflow.com/a/70275534)
 
 You may also need [to install node.js into WSL](https://docs.microsoft.com/en-us/windows/dev-environment/javascript/nodejs-on-wsl).
 :::
@@ -55,7 +55,7 @@ found 0 vulnerabilities
 
 You can then start ChiselStrike in local development mode by running ChiselStrike in a new
 terminal tab. As ChiselStrike runs, it will compile your work automatically as you
-make changes. It is also hosting your endpoints with a local development server at the same time.
+make changes. It is also hosting your code with a local development server at the same time.
 
 ```bash
 cd my-backend
@@ -86,15 +86,15 @@ End point defined: /dev/hello
 For more about `chisel` command usage, please see [the CLI reference](InDepth/chisel-cli.md) or run `chisel --help`.
 ...
 
-## Our First Endpoint
+## Our First HTTP Route
 
-To make our endpoint for "/dev/comments", we create a TypeScript file
-in the `my-backend/endpoints` directory.  Here is one:
+To handle HTTP requests on "/dev/comments", we create a TypeScript file
+in the `my-backend/routes` directory.  Here is one:
 
-```typescript title="my-backend/endpoints/comments.ts"
+```typescript title="my-backend/routes/comments.ts"
 import { responseFromJson } from "@chiselstrike/api"
 
-export default function chisel(_req) {
+export default function (_req) {
     return responseFromJson("Comments go here!");
 }
 ```
@@ -103,10 +103,10 @@ Once you save this file, you'll see output in the `chisel dev`
 output:
 
 ```
-End point defined: /dev/comments
+Route defined: /dev/comments
 ```
 
-That's all it takes to define an endpoint!  It is now ready for use,
+That's all it takes to handle an HTTP request!  It is now ready for use,
 which you can check with `curl`:
 
 ```bash
@@ -119,15 +119,15 @@ and should see the following output:
 "Comments go here!"
 ```
 
-In the next step, we'll make our endpoint connect to some data.
+In the next step, we'll make our requesthandler connect to some data.
 
 What happened in the above example? The first
-thing you'll notice is that the endpoint file `comments.ts` exports a function named `chisel` with
-a single parameter.  This function defines the logic for the endpoint.  It takes a
+thing you'll notice is that the route file `comments.ts` exports a function with
+a single parameter.  This function handles the HTTP request.  It takes a
 [Request](https://developer.mozilla.org/en-US/docs/Web/API/Request)
 and returns the corresponding
 [Response](https://developer.mozilla.org/en-US/docs/Web/API/Response).
-In this above example, we simply returns a string wrapped as a JSON value. Where it is obvious
+In the example above, we simply return a string wrapped as a JSON value. Where it is obvious
 that an object is being returned (this will be explained soon), explicit calls to `responseFromJson`
 are not needed.
 
@@ -174,27 +174,27 @@ compile your work and serve up your endpoints:
 Model defined: BlogComment
 ```
 
-Now you are able to store `BlogComment` objects!  However, we still need to surface those entities through a web-services API endpoint.
+Now you are able to store `BlogComment` objects!  However, we still need to surface those entities in the HTTP
+API.
 That comes next!
 
-## Combining Endpoints And Models
+## Combining Request Handlers And Models
 
 We're big fans of [REST](https://en.wikipedia.org/wiki/Representational_state_transfer), but don't strictly require it in ChiselStrike.
 
-If you're not familiar, REST is a set of practices that describes how a URL endpoint can handle various HTTP methods
+If you're not familiar, REST is a set of practices that describes how a URL route can handle various HTTP methods
 to provide ways to manipulate a collection of entities: create, read,
 update, and delete ([CRUD](https://en.wikipedia.org/wiki/Create,_read,_update_and_delete)).
 
 ChiselStrike makes REST as easy as it gets. To generate a REST collection for BlogComment, including a `POST` method
-so we can add comments to the database, we can create the following endpoints file:
+so we can add comments to the database, we can create the following route file:
 
-```typescript title="my-backend/endpoints/comments.ts"
+```typescript title="my-backend/routes/comments.ts"
 import { BlogComment } from "../models/BlogComment";
 export default BlogComment.crud();
 ```
 
-Wow that was short! After saving this file, there will be an endpoint in ChiselStrike
-for us to try out!
+Wow that was short! After saving this file, we can try this out!
 
 ```bash
 curl -X POST -d '{"content": "First comment", "by": "Jill"}' localhost:8080/dev/comments
@@ -260,7 +260,7 @@ curl localhost:8080/dev/comments
 ...note:
 Obviously, If we had 10,000 blog responses we wouldn't want to return them all at once.
 For that reason, CRUD supports pagination. For further details, please refer to
-[paging docs](Intro/endpoints.md#crud-paging)
+[paging docs](Intro/routes.md#crud-paging)
 ...
 
 To get a specific comment, we can specify an id in the URL:
@@ -302,7 +302,7 @@ curl -g localhost:8080/dev/comments?.by=Jack
 }
 ```
 
-will return all comments where field `by` is equal to `Jack`. Our api supports other comparison operators as well. For example
+will return all comments where field `by` is equal to `Jack`. Our API supports other comparison operators as well. For example
 `curl -g localhost:8080/dev/comments?.by~like=Ji%25` will in our example return all comments by Jim and Jill (`%25` is encoded wildcard `%`). We support the following comparators:
 
 | symbol  | Description                                                       |
@@ -439,7 +439,7 @@ curl -g localhost:8080/dev/comments?.by.age~lt=40&.by.name=John&sort=by.name
 ```
 
 ### Arrays
-We currently support arrays of primitive types (`string`, `number`, `boolean`) and nesting of arrays (`number[][]`, `string[][][]` etc.). For example we could add a keywords array to our `BlogPost`:
+We currently support arrays of primitive types (`string`, `number`, `boolean`) and nesting of arrays (`number[][]`, `string[][][]` etc.). For example, we could add a keywords array to our `BlogPost`:
 
 ```typescript title="my-backend/models/BlogPost.ts"
 export class BlogPost extends ChiselEntity {

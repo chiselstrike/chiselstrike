@@ -60,7 +60,7 @@ pub(crate) async fn cmd_dev(
         tracked.insert(dir);
     }
 
-    for dir in &manifest.endpoints {
+    for dir in &manifest.routes {
         let dir = cwd.join(dir);
         tracked.insert(dir);
     }

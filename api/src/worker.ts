@@ -88,11 +88,19 @@ async function importEndpointsImpl(
         requestContext.path = path;
         const fullPath = "/" + apiVersion + path;
 
-        // Modules are never unloaded, so we need to create an unique
-        // path. This will not be a problem once we publish the entire app
-        // at once, since then we can create a new isolate for it.
-        const url = `file:///${apiVersion}/endpoints${path}`;
-        const mod = await import(url);
+        const backCompatUrl = `file:///${apiVersion}/endpoints${path}`;
+        let mod;
+        try {
+            mod = await import(backCompatUrl);
+        } catch {
+            // ignore
+        }
+
+        if (mod === undefined) {
+            const url = `file:///${apiVersion}/routes${path}`;
+            mod = await import(url);
+        }
+
         const handler = mod.default;
         if (typeof handler !== "function") {
             throw new Error(

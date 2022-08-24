@@ -1,4 +1,4 @@
-# More About Endpoints
+# More About Routes
 
 In this section we'll show how to move beyond simple CRUD requests, as shown in [Getting Started](Intro/first.md).
 
@@ -38,19 +38,19 @@ export default crud(
 
 You may also be interested in the [Authentication](InDepth/login.md) chapter.
 
-## Full Custom Endpoints
+## Full Custom Routes
 
 Being able to just get started very quickly and spawn a CRUD API is great, but as your
-project evolves in complexity you may find yourself needing custom business logic and endpoints
+project evolves in complexity you may find yourself needing custom business logic and HTTP requests
 that don't fit neatly into REST workflows. This is a big advantage of ChiselStrike, since you will
 be able to express complex logic, sometimes dealing with multiple models and queries, with a single
 roundtrip.
 
-ChiselStrike allows each `endpoint` file to export a default method implementing your custom logic. You can return any type you want, either an existing model or a user-defined type.
+ChiselStrike requires each `routes` file to export a default function implementing your custom logic for handling a HTTP request. You can return any type you want, either an existing model or a user-defined type, and it will be converted to JSON automatically.
 
 For example, here's how you can have a specialized endpoint that returns all posts:
 
-```typescript title="my-backend/endpoints/allcomments.ts"
+```typescript title="my-backend/routes/allcomments.ts"
 import { BlogComment } from "../models/BlogComment"
 
 export default async function() : Promise<Array<BlogComment>> {
@@ -58,7 +58,7 @@ export default async function() : Promise<Array<BlogComment>> {
 }
 ```
 
-Optionally, your function can take as a parameter a [Request](https://developer.mozilla.org/en-US/docs/Web/API/Request), or the specialized `ChiselRequest`, a subclass with a few convenience fields added. In the following example, we can use the `pathComponents()` method of `ChiselRequest` to implement path-based finding:
+Optionally, your function can take a [Request](https://developer.mozilla.org/en-US/docs/Web/API/Request) as a parameter, or it can take the specialized `ChiselRequest`, a subclass with a few convenience fields added. In the following example, we can use the `pathComponents()` method of `ChiselRequest` to implement path-based finding:
 
 ```typescript title="my-backend/endpoints/onecomment.ts"
 import { BlogComment } from "../models/BlogComment"
@@ -70,7 +70,7 @@ export default async function (req: ChiselRequest) : Promise<BlogComment> {
 }
 ```
 
-Ultimately, you can code endpoints of arbitrary complexity. For example, having a single endpoint that handles multiple methods, returning either one of your types or an HTTP [Response](https://developer.mozilla.org/en-US/docs/Web/API/Response). You can then add whatever logic you want!
+Ultimately, you can code request handlers of arbitrary complexity. For example, having a single function that handles multiple methods, returning either one of your types or an HTTP [Response](https://developer.mozilla.org/en-US/docs/Web/API/Response). You can then add whatever logic you want!
 
 This is a lower level mechanism and is pretty raw -- we are working on syntax features that will make this much more powerful.
 
@@ -79,15 +79,15 @@ You can't change data during a `GET` request. Make sure that if you are making c
 they happen under `PUT`, `POST`, or `DELETE`!
 :::
 
-Now let's edit our endpoint's code to show off a "full customization" example.
+Now let's edit our code to show off a "full customization" example.
 
-```typescript title="my-backend/endpoints/comments.ts"
+```typescript title="my-backend/routes/comments.ts"
 import { ChiselRequest, responseFromJson } from "@chiselstrike/api"
 import { BlogComment } from "../models/BlogComment"
 
 type Return = Array<BlogComment> | BlogComment | Response;
 
-export default async function chisel(req: ChiselRequest) : Promise<Return> {
+export default async function (req: ChiselRequest) : Promise<Return> {
     if (req.method == 'POST') {
         const payload = await req.json();
         const by = payload["by"] || "anonymous";
@@ -124,7 +124,7 @@ than raising an error. This may change in the near future. We do our own explici
 error checking in this example.
 :::
 
-With this endpoint example, we're now getting to know ChiselStrike's API and runtime better. Notice how
+With this example, we're now getting to know ChiselStrike's API and runtime better. Notice how
 we were able to parse the request under `POST` with our own custom validation, and then use
 the `build` API to construct an object that is then persisted with `save`.  We'll explain the use of the
 data model more in [Data Access](Intro/data-access).
@@ -132,7 +132,7 @@ data model more in [Data Access](Intro/data-access).
 Finally, notice the `responseFromJson` convenience method, which takes a JavaScript object and serializes it into a
 `Response` ready to be returned.
 
-Let's now test our endpoint with a POST, and see it works similarly to the automatic "CRUD" example above.
+Let's now test our request handler with a POST, and see it works similarly to the automatic "CRUD" example above.
 
 ```bash
 curl -X POST -d '{"content": "Fifth comment", "by": "Jill"}' localhost:8080/dev/comments
@@ -181,26 +181,26 @@ and we should see something like the following:
 ```
 
 
-🎉 Nice! You've gone from a simple REST API for learning how to write full custom endpoints using the full data model.
+🎉 Nice! You've gone from a simple REST API to learning how to write full custom endpoints using the full data model.
 It's time to explore our API in greater depth, then you can set out and explore other documentation sections according
 to your interests!
 
-## Code sharing between endpoints
+## Code sharing between routes
 
-It is common for endpoints to share more code than just the models. If
+It is common for routes to share more code than just the models. If
 the common code is already published as module, the module can be
 imported directly:
 
-```typescript title="my-backend/endpoints/indented.ts"
+```typescript title="my-backend/routes/indented.ts"
 import indent from 'https://deno.land/x/text_indent@v0.1.0/mod.ts';
 
-export default async function chisel(req: Request) {
+export default async function (req: Request) {
     return new Response("the following is indented" + indent("foo", 16));
 }
 ```
 
 But for code that is specific to a project and not publicly available,
-the module can be placed in a directory next to the endpoints. By
+the module can be placed in a directory next to the routes. By
 convention that directory is named lib, but any other name would
 work. For example:
 
@@ -210,7 +210,7 @@ export function hello() {
 }
 ```
 
-```typescript title="my-backend/endpoints/day.ts"
+```typescript title="my-backend/routes/day.ts"
 import { hello } from "../lib/hello.ts";
 
 export default async function (req: Request) {
@@ -277,7 +277,7 @@ curl -g localhost:8080/dev/comments?.by~like=Ji%25&page_size=2&cursor=eyJheGV...
 }
 ```
 
-This gives us the reminder of the results as well as a link to the previous page that would take us
+This gives us the remainder of the results as well as a link to the previous page that would take us
 back where we came from. Similarly to the next page situation, the `cursor` parameter in this case
 ensures that you will get elements that come before the first element of current page, in current
 sort.
@@ -299,11 +299,11 @@ Cursor-based paging on the other hand leverages the user-specified sort (primary
 if no sort is specified) and uses the elements as pivots. This way we can directly jump to the pivot
 using index and start filling the page from there.
 
-### HOST header
+### `Host` header
 
 To construct the next/prev page links, we need to know what host and possibly port to use. It's not
-trivial to retrieve it automatically due to proxies etc., hence we utilize the `HOST` HTTP header
+trivial to retrieve it automatically due to proxies etc., hence we utilize the `Host` HTTP header
 from your request. For example `curl` sets it automatically and many HTTP libraries do the same.
 
-If `HOST` header is not specified, we will try to guess it, but it's highly recomended that it's
+If `Host` header is not specified, we will try to guess it, but it's highly recomended that it's
 provided.

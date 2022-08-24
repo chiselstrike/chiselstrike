@@ -1,4 +1,4 @@
 models = ["models"]
-endpoints = ["endpoints"]
+routes = ["routes"]
 events = ["events"]
 policies = ["policies"]

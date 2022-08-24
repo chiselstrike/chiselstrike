@@ -2,7 +2,7 @@
 
 # RUN: sh -e @file
 
-cat << EOF > "$TEMPDIR/endpoints/inf.ts"
+cat << EOF > "$TEMPDIR/routes/inf.ts"
 export default async function chisel(req: Request) {
     let i = 0;
     let stream = new ReadableStream({

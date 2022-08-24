@@ -2,13 +2,13 @@
 
 # RUN: sh -e @file
 
-cat << EOF > "$TEMPDIR/endpoints/foo.ts"
+cat << EOF > "$TEMPDIR/routes/foo.ts"
 export default async function chisel(req: Request) {
     return new Response("");
 }
 EOF
 
-cat << EOF > "$TEMPDIR/endpoints/foo.js"
+cat << EOF > "$TEMPDIR/routes/foo.js"
 export default async function chisel(req) {
     return new Response("");
 }
@@ -17,4 +17,4 @@ EOF
 cd "$TEMPDIR"
 $CHISEL apply 2>&1 || true
 
-# CHECK: Error: Cannot add both endpoints/foo.js endpoints/foo.ts as routes. ChiselStrike uses filesystem-based routing, so we don't know what to do. Sorry!
+# CHECK: Error: Cannot add both routes/foo.js and routes/foo.ts as routes. ChiselStrike uses filesystem-based routing, so we don't know what to do. Sorry!

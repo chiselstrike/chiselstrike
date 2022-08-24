@@ -12,7 +12,7 @@ export class BlogPost extends ChiselEntity {
     content: string;
 }
 EOF
-cat << EOF > "$TEMPDIR/endpoints/post.ts"
+cat << EOF > "$TEMPDIR/routes/post.ts"
 import { BlogPost } from "../models/post.ts";
 import { responseFromJson } from "@chiselstrike/api";
 

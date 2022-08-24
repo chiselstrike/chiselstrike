@@ -16,7 +16,7 @@ export class Foo extends ChiselEntity {
 }
 EOF
 
-cat << EOF > "$TEMPDIR/endpoints/save.ts"
+cat << EOF > "$TEMPDIR/routes/save.ts"
 import { Foo } from "../models/t.ts";
 import { responseFromJson } from "@chiselstrike/api";
 export default async function (req: Request) {
@@ -26,7 +26,7 @@ export default async function (req: Request) {
 }
 EOF
 
-cat << EOF > "$TEMPDIR/endpoints/sum.ts"
+cat << EOF > "$TEMPDIR/routes/sum.ts"
 import { Foo } from "../models/t.ts";
 export default async function (_: Request) {
     let sum = 0;

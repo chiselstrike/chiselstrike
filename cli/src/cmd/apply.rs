@@ -66,7 +66,7 @@ impl From<bool> for TypeChecking {
 ///
 /// The apply phase performs bunch of processing on the source files. This
 /// map contains the final processed source files with the full path name
-/// to be shipped to the server. For example, endpoints have a `endpoints/`
+/// to be shipped to the server. For example, endpoints have a `routes/`
 /// prefix in the path for the server in cases the server needs to do
 /// something special depending on the source file type.
 pub(crate) type SourceMap = HashMap<String, String>;
@@ -180,7 +180,7 @@ pub(crate) async fn apply(
 
     println!("Code was applied to the ChiselStrike server. It contained:");
     println!("  - models: {}", msg.types.len());
-    println!("  - endpoints: {}", msg.endpoints.len());
+    println!("  - routes: {}", msg.endpoints.len());
     println!("  - event handlers: {}", msg.event_handlers.len());
     println!("  - labels: {}", msg.labels.len());
 

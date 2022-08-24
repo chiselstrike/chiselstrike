@@ -24,7 +24,7 @@ EOF
 $CHISEL apply
 # CHECK: Code was applied
 
-cat << EOF > "$TEMPDIR/endpoints/store.js"
+cat << EOF > "$TEMPDIR/routes/store.js"
 import { Evolving } from "../models/types.ts";
 
 export default async function chisel(req) {
@@ -35,7 +35,7 @@ export default async function chisel(req) {
 }
 EOF
 
-cat << EOF > "$TEMPDIR/endpoints/find.js"
+cat << EOF > "$TEMPDIR/routes/find.js"
 import { Evolving } from "../models/types.ts";
 
 export default async function chisel(req) {
@@ -136,7 +136,7 @@ $CURL $CHISELD_HOST/dev/find
 
 ## Test field deletion with index
 
-cat << EOF > "$TEMPDIR/endpoints/test_indexes.ts"
+cat << EOF > "$TEMPDIR/routes/test_indexes.ts"
 import { Evolving } from "../models/types.ts";
 
 export default async function chisel(req: Request) {
@@ -161,13 +161,13 @@ export class Evolving extends ChiselEntity {
 }
 EOF
 
-rm $TEMPDIR/endpoints/test_indexes.ts
+rm $TEMPDIR/routes/test_indexes.ts
 
 $CHISEL apply
 # CHECK: Code was applied
 
 ### get / set helpers for the tests below
-cat << EOF > "$TEMPDIR/endpoints/get.ts"
+cat << EOF > "$TEMPDIR/routes/get.ts"
 import { Defaults } from "../models/defaults.ts";
 
 export default async function chisel(req: Request) {
@@ -175,7 +175,7 @@ export default async function chisel(req: Request) {
 }
 EOF
 
-cat << EOF > "$TEMPDIR/endpoints/set.ts"
+cat << EOF > "$TEMPDIR/routes/set.ts"
 import { Defaults } from "../models/defaults.ts";
 
 export default async function chisel(req: Request) {

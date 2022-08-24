@@ -13,7 +13,7 @@ export class Person extends ChiselEntity {
 }
 EOF
 
-cat << EOF > "$TEMPDIR/endpoints/store.ts"
+cat << EOF > "$TEMPDIR/routes/store.ts"
 import { Person } from "../models/types.ts";
 
 export default async function chisel(req: Request) {
@@ -36,7 +36,7 @@ export default async function chisel(req: Request) {
 }
 EOF
 
-cat << EOF > "$TEMPDIR/endpoints/get_sorted_by.ts"
+cat << EOF > "$TEMPDIR/routes/get_sorted_by.ts"
 import { Person } from "../models/types.ts";
 
 export default async function chisel(req: Request) {
@@ -76,7 +76,7 @@ $CURL -o - "$CHISELD_HOST/dev/get_sorted_by?key=age&order=descending"
 
 ## ________________ Double sortBy ________________
 
-cat << EOF > "$TEMPDIR/endpoints/get_sorted.ts"
+cat << EOF > "$TEMPDIR/routes/get_sorted.ts"
 import { Person } from "../models/types.ts";
 
 export default async function chisel(req: Request) {
@@ -99,7 +99,7 @@ $CURL -o - $CHISELD_HOST/dev/get_sorted
 
 ## ________________ sortBy filter ________________
 
-cat << EOF > "$TEMPDIR/endpoints/get_sorted.ts"
+cat << EOF > "$TEMPDIR/routes/get_sorted.ts"
 import { Person } from "../models/types.ts";
 
 export default async function chisel(req: Request) {
@@ -123,7 +123,7 @@ $CURL -o - $CHISELD_HOST/dev/get_sorted
 
 ## ________________ sortBy take SortBy ________________
 
-cat << EOF > "$TEMPDIR/endpoints/get_sorted.ts"
+cat << EOF > "$TEMPDIR/routes/get_sorted.ts"
 import { Person } from "../models/types.ts";
 
 export default async function chisel(req: Request) {
@@ -146,7 +146,7 @@ $CURL -o - $CHISELD_HOST/dev/get_sorted
 
 ## ________________ sortBy invalid key ________________
 
-cat << EOF > "$TEMPDIR/endpoints/get_sorted.ts"
+cat << EOF > "$TEMPDIR/routes/get_sorted.ts"
 import { Person } from "../models/types.ts";
 
 export default async function chisel(req: Request) {
@@ -167,7 +167,7 @@ $CURL -o - $CHISELD_HOST/dev/get_sorted
 
 ## ________________ enforce sorting in Typescript ________________
 
-cat << EOF > "$TEMPDIR/endpoints/get_sorted.ts"
+cat << EOF > "$TEMPDIR/routes/get_sorted.ts"
 import { Person } from "../models/types.ts";
 
 export default async function chisel(req: Request) {

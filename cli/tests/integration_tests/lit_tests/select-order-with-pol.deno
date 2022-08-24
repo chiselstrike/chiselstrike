@@ -3,7 +3,7 @@
 # RUN: sh -e @file
 
 cp examples/person.ts "$TEMPDIR/models"
-cp examples/store.ts "$TEMPDIR/endpoints"
+cp examples/store.ts "$TEMPDIR/routes"
 
 cat << EOF > "$TEMPDIR/policies/pol.yaml"
 labels:
@@ -11,7 +11,7 @@ labels:
     transform: anonymize
 EOF
 
-cat << EOF > "$TEMPDIR/endpoints/query.ts"
+cat << EOF > "$TEMPDIR/routes/query.ts"
 import { Person } from "../models/person.ts";
 
 export default async function chisel(req: Request) {

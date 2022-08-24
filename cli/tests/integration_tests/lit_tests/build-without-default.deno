@@ -11,7 +11,7 @@ export class Person extends ChiselEntity {
 EOF
 
 
-cat << EOF > "$TEMPDIR/endpoints/build.ts"
+cat << EOF > "$TEMPDIR/routes/build.ts"
 import { Person } from "../models/person.ts";
 
 export default async function chisel(req: Request) {

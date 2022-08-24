@@ -11,7 +11,7 @@ export class Camel extends ChiselEntity {
    camelCase: string;
 }
 EOF
-cat << EOF > "$TEMPDIR/endpoints/camel.ts"
+cat << EOF > "$TEMPDIR/routes/camel.ts"
 import { Camel } from "../models/camel";
 
 export default async function chisel(req) {

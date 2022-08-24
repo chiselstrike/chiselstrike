@@ -2,7 +2,7 @@
 
 # RUN: sh -e @file
 
-cat << EOF > "$TEMPDIR/endpoints/title.ts"
+cat << EOF > "$TEMPDIR/routes/title.ts"
 const titles = {'glauber': 'CEO', 'dejan': 'CTO'}
 type keys = 'glauber' | 'dejan';
 

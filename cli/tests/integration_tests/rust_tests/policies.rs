@@ -14,10 +14,10 @@ async fn fetch_person(chisel: &Chisel) -> serde_json::Value {
 #[chisel_macros::test(modules = Deno, optimize = Both)]
 pub async fn policies(c: TestContext) {
     c.chisel.copy_to_dir("examples/person.ts", "models");
-    c.chisel.copy_to_dir("examples/store.ts", "endpoints");
+    c.chisel.copy_to_dir("examples/store.ts", "routes");
 
     c.chisel.write(
-        "endpoints/find_person.ts",
+        "routes/find_person.ts",
         r##"
         import { Person } from "../models/person.ts";
         export default async function chisel(req: Request) {
@@ -171,7 +171,7 @@ pub async fn policies(c: TestContext) {
     "##,
     );
     c.chisel.write(
-        "endpoints/companies.ts",
+        "routes/companies.ts",
         r##"
         import { crud } from "@chiselstrike/api";
         import { Company } from "../models/company.ts";

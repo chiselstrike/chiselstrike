@@ -30,7 +30,7 @@ export class Foo extends ChiselEntity {
 }
 EOF
 
-cat << EOF > "$TEMPDIR/endpoints/default.ts"
+cat << EOF > "$TEMPDIR/routes/default.ts"
 import { Foo } from "../models/types.ts";
 
 export default async function chisel(req: Request) {
@@ -41,7 +41,7 @@ export default async function chisel(req: Request) {
 }
 EOF
 
-cat << EOF > "$TEMPDIR/endpoints/read.ts"
+cat << EOF > "$TEMPDIR/routes/read.ts"
 import { Foo } from "../models/types.ts";
 
 export default async function chisel(req: Request) {
@@ -82,7 +82,7 @@ export class Foo extends ChiselEntity {
 }
 EOF
 
-cat << EOF > "$TEMPDIR/endpoints/readold.ts"
+cat << EOF > "$TEMPDIR/routes/readold.ts"
 import { Foo } from "../models/types.ts";
 
 export default async function chisel(req: Request) {
@@ -99,7 +99,7 @@ export default async function chisel(req: Request) {
 }
 EOF
 
-cat << EOF > "$TEMPDIR/endpoints/crud_foo.ts"
+cat << EOF > "$TEMPDIR/routes/crud_foo.ts"
 import { Foo } from "../models/types.ts";
 export default Foo.crud();
 EOF
@@ -153,7 +153,7 @@ $CURL "$CHISELD_HOST/dev/crud_foo?.d=2" | count_results
 # CHECK: "a": "dfl1"
 
 
-cat << EOF > "$TEMPDIR/endpoints/find_many.ts"
+cat << EOF > "$TEMPDIR/routes/find_many.ts"
 import { responseFromJson } from "@chiselstrike/api";
 import { Foo } from "../models/types.ts";
 

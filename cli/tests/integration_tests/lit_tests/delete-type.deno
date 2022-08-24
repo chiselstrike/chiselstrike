@@ -13,7 +13,7 @@ export class User extends ChiselEntity {
 }
 EOF
 
-cat << EOF > "$TEMPDIR/endpoints/user.ts"
+cat << EOF > "$TEMPDIR/routes/user.ts"
 import { User } from "../models/user.ts";
 export default User.crud();
 EOF
@@ -25,7 +25,7 @@ $CURL -X POST -d '{"username": "alice", "email": "alice@example.org"}' $CHISELD_
 # CHECK: "alice"
 
 rm models/user.ts
-rm endpoints/user.ts
+rm routes/user.ts
 
 ## can't remove the type because it has data
 $CHISEL apply 2>&1 || true

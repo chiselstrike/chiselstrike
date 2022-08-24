@@ -243,7 +243,10 @@ impl RpcService {
 
             sources.insert(format!("/{}/{}", api_version, path), code.clone());
             let path = without_extension(&path);
-            if let Some(path) = path.strip_prefix("endpoints/") {
+            if let Some(path) = path
+                .strip_prefix("routes/")
+                .or_else(|| path.strip_prefix("endpoints/"))
+            {
                 let path = format!("/{}/{}", api_version, path);
                 endpoint_paths.push(path);
             }
@@ -266,7 +269,7 @@ impl RpcService {
         state
             .send_command(cmd)
             .await
-            .context("could not import endpoint code into the runtime")?;
+            .context("Could not apply the provided code")?;
 
         anyhow::ensure!(
             "__chiselstrike" != &api_version,
@@ -450,7 +453,8 @@ impl ChiselRpc for RpcService {
             let mut endpoint_defs = vec![];
             let version_path_str = format!("/{}/", api_version);
             for (path, _) in state.sources.iter() {
-                if path.split('/').nth(2) != Some("endpoints") {
+                let dir_name = path.split('/').nth(2);
+                if dir_name != Some("routes") || dir_name != Some("endpoints") {
                     continue;
                 }
                 let path = endpoint_path_from_source_path(path);

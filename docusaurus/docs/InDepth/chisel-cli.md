@@ -37,7 +37,7 @@ TODO
 
 ### `chisel describe`
 
-The `chisel describe` command displays the current state of the running ChiselStrike server: models, endpoints, and policies.
+The `chisel describe` command displays the current state of the running ChiselStrike server: models, routes, and policies.
 
 ### `chisel dev`
 
@@ -131,7 +131,7 @@ The CLI parses a manifest file `Chisel.toml`, which has the following format:
 
 ```toml
 models = ["models"]
-endpoints = ["endpoints"]
+routess = ["routes"]
 policies = ["policies"]
 ```
 
@@ -141,7 +141,7 @@ The `chiseld` program is the ChiselStrike server daemon. For development purpose
 
 #### `--api-listen-addr [ADDR]`
 
-The API listen address of the server. This is the address that servers ChiselStrike endpoints.
+The API listen address of the server. This is the address that serves ChiselStrike API.
 
 #### `--data-db-uri [URI]`
 

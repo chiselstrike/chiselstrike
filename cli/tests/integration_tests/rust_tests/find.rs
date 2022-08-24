@@ -1,5 +1,4 @@
 use crate::framework::prelude::*;
-use crate::framework::Chisel;
 
 async fn store_people(chisel: &Chisel) {
     chisel
@@ -43,9 +42,9 @@ async fn store_people(chisel: &Chisel) {
 #[chisel_macros::test(modules = Deno, optimize = Both)]
 pub async fn find_many(c: TestContext) {
     c.chisel.copy_to_dir("examples/person.ts", "models");
-    c.chisel.copy_to_dir("examples/store.ts", "endpoints");
+    c.chisel.copy_to_dir("examples/store.ts", "routes");
     c.chisel.write(
-        "endpoints/find_many.ts",
+        "routes/find_many.ts",
         r##"
         import { ChiselRequest } from "@chiselstrike/api"
         import { Person } from "../models/person.ts";
@@ -122,9 +121,9 @@ pub async fn find_many(c: TestContext) {
 #[chisel_macros::test(modules = Deno, optimize = Both)]
 pub async fn find_one(c: TestContext) {
     c.chisel.copy_to_dir("examples/person.ts", "models");
-    c.chisel.copy_to_dir("examples/store.ts", "endpoints");
+    c.chisel.copy_to_dir("examples/store.ts", "routes");
     c.chisel.write(
-        "endpoints/find_one.ts",
+        "routes/find_one.ts",
         r##"
         import { ChiselRequest } from "@chiselstrike/api"
         import { Person } from "../models/person.ts";
@@ -203,8 +202,8 @@ pub async fn find_one(c: TestContext) {
 #[chisel_macros::test(modules = Deno, optimize = Both)]
 pub async fn find_by(mut c: TestContext) {
     c.chisel.copy_to_dir("examples/person.ts", "models");
-    c.chisel.copy_to_dir("examples/find_by.ts", "endpoints");
-    c.chisel.copy_to_dir("examples/store.ts", "endpoints");
+    c.chisel.copy_to_dir("examples/find_by.ts", "routes");
+    c.chisel.copy_to_dir("examples/store.ts", "routes");
 
     c.chisel.apply_ok().await;
 
