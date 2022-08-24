@@ -79,7 +79,7 @@ export async function handleKafkaEvent(
         );
 
         try {
-            Deno.core.opSync("op_chisel_rollback_transaction");
+            opSync("op_chisel_rollback_transaction");
         } catch (e) {
             console.error(`Error when rolling back transaction: ${e}`);
         }

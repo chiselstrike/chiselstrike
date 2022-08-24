@@ -26,6 +26,7 @@ export const routeMap = new RouteMap()
 
 export const topicMap = new TopicMap();
 
+// deno-lint-ignore require-await
 async function authMiddleware(
     request: ChiselRequest,
     next: MiddlewareNext,

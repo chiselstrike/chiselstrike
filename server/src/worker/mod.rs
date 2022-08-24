@@ -11,7 +11,6 @@ use std::cell::RefCell;
 use std::collections::HashMap;
 use std::future::Future;
 use std::iter::once;
-use std::marker::Unpin;
 use std::panic;
 use std::pin::Pin;
 use std::rc::Rc;

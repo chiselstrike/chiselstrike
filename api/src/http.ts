@@ -2,13 +2,7 @@
 
 import { loggedInUser, requestContext } from "./datastore.ts";
 import { ChiselRequest } from "./request.ts";
-import {
-    Handler,
-    Middleware,
-    RouteMap,
-    Router,
-    RouterMatch,
-} from "./routing.ts";
+import { Handler, Middleware, Router, RouterMatch } from "./routing.ts";
 import { opAsync, opSync, responseFromJson } from "./utils.ts";
 
 // HTTP request that we receive from Rust

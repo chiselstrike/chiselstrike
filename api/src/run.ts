@@ -2,8 +2,8 @@
 
 import { handleHttpRequest } from "./http.ts";
 import type { HttpRequest } from "./http.ts";
-import { handleKafkaEvent } from "./kafka.ts";
-import type { KafkaEvent, TopicMap } from "./kafka.ts";
+import { handleKafkaEvent, TopicMap } from "./kafka.ts";
+import type { KafkaEvent } from "./kafka.ts";
 import { Router } from "./routing.ts";
 import { RouteMap } from "./routing.ts";
 import type { RouteMapLike } from "./routing.ts";
@@ -35,7 +35,9 @@ export default async function (
     Deno.core.opSync("op_chisel_ready");
 
     for (;;) {
-        const job = await opAsync("op_chisel_accept_job") as (AcceptedJob | null);
+        const job = await opAsync(
+            "op_chisel_accept_job",
+        ) as (AcceptedJob | null);
         if (job === null) {
             break;
         } else if (job.type == "http") {
@@ -63,4 +65,3 @@ Deno.core.opSync(
         }
     },
 );
-
