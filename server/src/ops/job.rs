@@ -33,7 +33,6 @@ impl deno_core::Resource for HttpResponseResource {}
 #[deno_core::op]
 // yes, we really *do* want to hold a `RefCell` across `.await`
 #[allow(clippy::await_holding_refcell_ref)]
-#[cfg_attr(feature = "must_not_suspend", allow(must_not_suspend))]
 async fn op_chisel_accept_job(
     state: Rc<RefCell<deno_core::OpState>>,
 ) -> Result<Option<AcceptedJob>> {

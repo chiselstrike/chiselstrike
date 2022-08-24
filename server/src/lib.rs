@@ -1,8 +1,5 @@
 // SPDX-FileCopyrightText: © 2022 ChiselStrike <info@chiselstrike.com>
 
-#![cfg_attr(feature = "must_not_suspend", feature(must_not_suspend))]
-#![cfg_attr(feature = "must_not_suspend", deny(must_not_suspend))]
-
 pub use crate::auth::is_auth_entity_name;
 pub use crate::opt::Opt;
 pub use crate::server::{run, Restart};

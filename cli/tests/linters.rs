@@ -93,11 +93,6 @@ mod tests {
     }
 
     #[test]
-    fn must_not_suspend() {
-        nightly(["check", "--features", "must_not_suspend"]);
-    }
-
-    #[test]
     fn check_clippy() {
         cargo(["clippy", "--all-targets", "--", "-D", "warnings"]);
     }
