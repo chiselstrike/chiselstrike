@@ -23,7 +23,7 @@ export type CRUDCreateResponse = (
  * Put this in the file 'endpoints/comments.ts':
  * ```typescript
  * import { Comment } from "../models/comment";
- * export default crud(Comment, ":id");
+ * export default crud(Comment);
  * ```
  * This results in a /comments endpoint that correctly handles all REST methods over Comment.
  * @param entity Entity type

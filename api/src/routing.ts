@@ -2,15 +2,73 @@
 
 import type { ChiselRequest } from "./request.ts";
 
+/** Container for HTTP routes and their handlers.
+ *
+ * This class is used to define HTTP routes in ChiselStrike. Every file under
+ * the `routes/` directory in your ChiselStrike project should export a
+ * `RouteMap`. For example, to handle HTTP requests for `GET /blog` and `POST
+ * /blog/comment`, you might create a file `routes/blog.ts` with this content:
+ *
+ * ```typescript
+ * async function getBlog(req: ChiselRequest) {
+ *      // handle `GET /blog`
+ * }
+ *
+ * async function postBlogComment(req: ChiselRequest) {
+ *      // handle `POST /blog/comment`
+ * }
+ *
+ * export default new RouteMap()
+ *      .get("/", getBlog)
+ *      .post("/comment", postBlogComment);
+ * ```
+ *
+ * You can also register another `RouteMap` under a path prefix:
+ *
+ * ```typescript
+ * const commentRoutes = new RouteMap()
+ *      .get("/", getAllComments)
+ *      .get("/:id", getOneComment)
+ *      .post("/", postComment);
+ *
+ * export default new RouteMap()
+ *      .prefix("/comment", commentRoutes)
+ *      .prefix("/post", Post.crud()); // the `.crud()` method returns a RouteMap
+ * ```
+ */
 export class RouteMap {
     routes: Route[];
     middlewares: Middleware[];
 
+    /** Creates an empty `RouteMap`. */
     constructor() {
         this.routes = [];
         this.middlewares = [];
     }
 
+    /** Adds a route to the route map.
+     *
+     * When an HTTP request matches the given `method` and `path`, we will call
+     * the `handler` to handle the request.
+     *
+     * @param method Either one HTTP method (`"GET"`) or an array of methods
+     * (`["GET", "POST"]`) that should be handled by the `handler`. You can also
+     * pass `"*"` to handle all HTTP methods.
+     *
+     * @param path A pattern that must the URL path of the HTTP request. We
+     * support patterns from the [URL Pattern API][url-pattern-api], so you can
+     * also use "named groups" like `"/post/:id"` that dynamically match a part
+     * of the URL. You can read the matched value in the `handler` using
+     * `ChiselRequest.params`.
+     *
+     * @param handler A function that handles the request. It takes a
+     * `ChiselRequest` (or `Request`) and returns the response. If the returned
+     * value is not a `Response`, we convert it automatically: strings are
+     * returned verbatim and other values are converted to JSON. The handler can
+     * also be async (it can return a `Promise`).
+     *
+     * [url-pattern-api]: https://developer.mozilla.org/en-US/docs/Web/API/URL_Pattern_API
+     */
     route(method: string | string[], path: string, handler: Handler): this {
         const methods = Array.isArray(method) ? method : [method];
         const pathPattern = path[0] !== "/" ? "/" + path : path;
@@ -18,6 +76,18 @@ export class RouteMap {
         return this;
     }
 
+    /** Adds routes from another `RouteMap` under a URL prefix.
+     *
+     * @param path The prefix that is prepended to all routes in `routes`. If
+     * you don't want to add any prefix, use `"/"` or `""`. The prefix can also
+     * contain patterns (see the documentation for `route()`).
+     *
+     * @param routes A `RouteMap` with routes that will be added to `this`.
+     * converted into a `RouteMap`: you can also pass a handler function (it
+     * will receive all requests under this path prefix) or a plain object that
+     * maps HTTP methods to handler functions. In most cases, you should use a
+     * `RouteMap`.
+     */
     prefix(path: string, routes: RouteMapLike): this {
         // "/foo" -> "/foo"
         // "foo" -> "/foo"
@@ -42,22 +112,35 @@ export class RouteMap {
         return this;
     }
 
+    /** A shorthand for `route()` with `GET` method. */
     get(path: string, handler: Handler): this {
         return this.route("GET", path, handler);
     }
+
+    /** A shorthand for `route()` with `POST` method. */
     post(path: string, handler: Handler): this {
         return this.route("POST", path, handler);
     }
+
+    /** A shorthand for `route()` with `PUT` method. */
     put(path: string, handler: Handler): this {
         return this.route("PUT", path, handler);
     }
+
+    /** A shorthand for `route()` with `DELETE` method. */
     delete(path: string, handler: Handler): this {
         return this.route("DELETE", path, handler);
     }
+
+    /** A shorthand for `route()` with `PATCH` method. */
     patch(path: string, handler: Handler): this {
         return this.route("PATCH", path, handler);
     }
 
+    /** Adds a middleware that will apply to all routes in this route map.
+     *
+     * Support for middlewares is experimental and it may change in the future.
+     */
     middleware(handler: MiddlewareHandler): this {
         this.middlewares.push({ handler });
         return this;
@@ -88,9 +171,18 @@ export type Route = {
     handler: Handler;
     middlewares: Middleware[];
 };
+
+/** A request handler that maps HTTP request to an HTTP response. */
 export type Handler = (
     req: ChiselRequest,
 ) => ResponseLike | Promise<ResponseLike>;
+
+/** Anything that we can convert to a `Response`:
+ *
+ * - `Response` is not modified in any way
+ * - `string` is converted using `new Response(string)`
+ * - Other values are converted to JSON using `responseFromJson()`
+ */
 export type ResponseLike = Response | string | unknown;
 
 export type RouteMapLike =
@@ -101,10 +193,12 @@ export type RouteMapLike =
 export type Middleware = {
     handler: MiddlewareHandler;
 };
+
 export type MiddlewareHandler = (
     request: ChiselRequest,
     next: MiddlewareNext,
 ) => Promise<Response>;
+
 export type MiddlewareNext = (request: ChiselRequest) => Promise<Response>;
 
 export class Router {

@@ -129,10 +129,15 @@ export class Query {
     }
 }
 
-/** Params is a helper class used to access route parameters from the URL path. */
+/** Params is a helper class used to access route parameters defined in
+ * `RouteMap`, extracted from the URL path. */
 export class Params {
     constructor(private params: Record<string, string>) {}
 
+    /**
+     * Gets the parameter named `paramName`. If the parameter does not exist,
+     * throws an error.
+     */
     get(paramName: string): string {
         const value = this.params[paramName];
         if (value === undefined) {
@@ -141,16 +146,32 @@ export class Params {
         return value;
     }
 
+    /**
+     * Gets the parameter named `paramName` and parses it as a number. If the
+     * parameter does not exist, throws an error. If the parsing fails, returns
+     * `undefined`.
+     */
     getNumber(paramName: string): number | undefined {
         return getNumber(this.get(paramName));
     }
 
+    /**
+     * Gets the parameter named `paramName` and parses it as an integer. If the
+     * parameter does not exist, throws an error. If the parsing fails, returns
+     * `undefined`.
+     */
     getInt(paramName: string): number | undefined {
         return getInt(this.get(paramName));
     }
 
-    getBool(paramName: string): boolean | undefined {
-        return getBool(this.get(paramName));
+    /**
+     * Gets the parameter named `paramName` and parses it as an integer. If the
+     * parameter does not exist, throws an error. Parsing a boolean cannot fail,
+     * because all values other than `"false"`, `"0"` and `""` are treated as
+     * `true`.
+     */
+    getBool(paramName: string): boolean {
+        return getBool(this.get(paramName)) ?? false;
     }
 }
 
