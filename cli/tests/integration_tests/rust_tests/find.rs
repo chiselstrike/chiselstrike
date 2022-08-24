@@ -1,0 +1,321 @@
+use crate::framework::prelude::*;
+use crate::framework::Chisel;
+
+async fn store_people(chisel: &Chisel) {
+    chisel
+        .post_json_ok(
+            "dev/store",
+            json!({
+                "first_name":"Glauber",
+                "last_name":"Costa",
+                "age": 666,
+                "human": true,
+                "height": 10.01
+            }),
+        )
+        .await;
+    chisel
+        .post_json_ok(
+            "dev/store",
+            json!({
+                "first_name":"Jan",
+                "last_name":"Plhak",
+                "age": -666,
+                "human": true,
+                "height": 10.02
+            }),
+        )
+        .await;
+    chisel
+        .post_json_ok(
+            "dev/store",
+            json!({
+                "first_name":"Pekka",
+                "last_name":"Enberg",
+                "age": 888,
+                "human": false,
+                "height": 12.2
+            }),
+        )
+        .await;
+}
+
+#[chisel_macros::test(modules = Deno, optimize = Both)]
+pub async fn find_many(c: TestContext) {
+    c.chisel.copy_to_dir("examples/person.ts", "models");
+    c.chisel.copy_to_dir("examples/store.ts", "endpoints");
+    c.chisel.write(
+        "endpoints/find_many.ts",
+        r##"
+        import { ChiselRequest } from "@chiselstrike/api"
+        import { Person } from "../models/person.ts";
+
+        export default async function chisel(req: ChiselRequest) {
+            const use_predicate = req.query.getBool("use_predicate") ?? false;
+            const use_expr = req.query.getBool("use_expr") ?? false;
+            const first_name = req.query.get("first_name");
+            if (first_name == undefined) {
+                throw Error("first_name parameter must be specified.");
+            }
+
+            let filtered = undefined;
+            if (use_expr) {
+                filtered = await Person.__findMany(
+                    p => p.first_name == first_name,
+                    {
+                        exprType: "Binary",
+                        left: {
+                        exprType: "Property",
+                        property: "first_name",
+                        object: {
+                            exprType: "Parameter",
+                            position: 0
+                        }
+                        },
+                        op: "Eq",
+                        right: {
+                        exprType: "Value",
+                        value: first_name
+                        }
+                    },
+                    undefined,
+                    1
+                );
+            } else if (use_predicate) {
+                filtered = await Person.findMany(p => p.first_name == first_name, 1);
+            } else {
+                filtered = await Person.findMany({"first_name": first_name}, 1);
+            }
+            return filtered.map(p => p.first_name);
+        }
+    "##,
+    );
+
+    let r = c.chisel.apply_ok().await;
+    r.stdout.peek("Model defined: Person");
+
+    store_people(&c.chisel).await;
+
+    for name in ["Glauber", "Jan", "Pekka"] {
+        assert_eq!(
+            c.chisel
+                .get_json(&format!("/dev/find_many?first_name={name}"))
+                .await,
+            json!([name])
+        );
+        assert_eq!(
+            c.chisel
+                .get_json(&format!(
+                    "/dev/find_many?first_name={name}&use_predicate=true"
+                ))
+                .await,
+            json!([name])
+        );
+        assert_eq!(
+            c.chisel
+                .get_json(&format!("/dev/find_many?first_name={name}&use_expr=true"))
+                .await,
+            json!([name])
+        );
+    }
+}
+
+#[chisel_macros::test(modules = Deno, optimize = Both)]
+pub async fn find_one(c: TestContext) {
+    c.chisel.copy_to_dir("examples/person.ts", "models");
+    c.chisel.copy_to_dir("examples/store.ts", "endpoints");
+    c.chisel.write(
+        "endpoints/find_one.ts",
+        r##"
+        import { ChiselRequest } from "@chiselstrike/api"
+        import { Person } from "../models/person.ts";
+
+        export default async function chisel(req: ChiselRequest) {
+            const use_predicate = req.query.getBool("use_predicate") ?? false;
+            const use_expr = req.query.getBool("use_expr") ?? false;
+            const first_name = req.query.get("first_name");
+            if (first_name == undefined) {
+                throw Error("first_name parameter must be specified.");
+            }
+
+            let the_one = undefined;
+            if (use_expr) {
+                the_one = await Person.__findOne(
+                    p => p.first_name == first_name,
+                    {
+                        exprType: "Binary",
+                        left: {
+                        exprType: "Property",
+                        property: "first_name",
+                        object: {
+                            exprType: "Parameter",
+                            position: 0
+                        }
+                        },
+                        op: "Eq",
+                        right: {
+                        exprType: "Value",
+                        value: first_name
+                        }
+                    }
+                );
+            } else if (use_predicate) {
+                the_one = await Person.findOne(p => p.first_name == first_name);
+            } else {
+                the_one = await Person.findOne({"first_name": first_name});
+            }
+            let name = "undefined";
+            if (the_one !== undefined) {
+                name = the_one.first_name
+            }
+            return name;
+        }
+    "##,
+    );
+
+    let r = c.chisel.apply_ok().await;
+    r.stdout.peek("Model defined: Person");
+
+    store_people(&c.chisel).await;
+
+    for name in ["Glauber", "Jan", "Pekka"] {
+        assert_eq!(
+            c.chisel
+                .get_json(&format!("/dev/find_one?first_name={name}"))
+                .await,
+            json!(name)
+        );
+        assert_eq!(
+            c.chisel
+                .get_json(&format!(
+                    "/dev/find_one?first_name={name}&use_predicate=true"
+                ))
+                .await,
+            json!(name)
+        );
+        assert_eq!(
+            c.chisel
+                .get_json(&format!("/dev/find_one?first_name={name}&use_expr=true"))
+                .await,
+            json!(name)
+        );
+    }
+}
+
+#[chisel_macros::test(modules = Deno, optimize = Both)]
+pub async fn find_by(mut c: TestContext) {
+    c.chisel.copy_to_dir("examples/person.ts", "models");
+    c.chisel.copy_to_dir("examples/find_by.ts", "endpoints");
+    c.chisel.copy_to_dir("examples/store.ts", "endpoints");
+
+    let r = c.chisel.apply_ok().await;
+    r.stdout.peek("Model defined: Person");
+
+    store_people(&c.chisel).await;
+
+    let resp_txt = c
+        .chisel
+        .post_json_text(
+            "/dev/find_by",
+            json!({
+                "field_name":"first_name",
+                "value":"Jan"
+            }),
+        )
+        .await;
+    assert_eq!(resp_txt, "Jan Plhak -666 true 10.02 ");
+
+    let resp_txt = c
+        .chisel
+        .post_json_text(
+            "/dev/find_by",
+            json!({
+                "field_name":"last_name",
+                "value":"Costa"
+            }),
+        )
+        .await;
+    assert_eq!(resp_txt, "Glauber Costa 666 true 10.01 ");
+
+    let resp_txt = c
+        .chisel
+        .post_json_text(
+            "/dev/find_by",
+            json!({
+                "field_name":"last_name",
+                "value":"bagr"
+            }),
+        )
+        .await;
+    assert_eq!(resp_txt, "");
+
+    let resp_txt = c
+        .chisel
+        .post_json_text(
+            "/dev/find_by",
+            json!({
+                "field_name":"age",
+                "value":-666
+            }),
+        )
+        .await;
+    assert_eq!(resp_txt, "Jan Plhak -666 true 10.02 ");
+
+    let resp_txt = c
+        .chisel
+        .post_json_text(
+            "/dev/find_by",
+            json!({
+                "field_name":"human",
+                "value":true
+            }),
+        )
+        .await;
+    assert_eq!(
+        resp_txt,
+        "Glauber Costa 666 true 10.01 Jan Plhak -666 true 10.02 "
+    );
+
+    let resp_txt = c
+        .chisel
+        .post_json_text(
+            "/dev/find_by",
+            json!({
+                "field_name":"height",
+                "value":10.01
+            }),
+        )
+        .await;
+    assert_eq!(resp_txt, "Glauber Costa 666 true 10.01 ");
+
+    let resp_txt = c
+        .chisel
+        .post_json_text(
+            "/dev/find_by",
+            json!({
+                "field_name":"height",
+            }),
+        )
+        .await;
+    assert_eq!(
+        resp_txt,
+        "Glauber Costa 666 true 10.01 Jan Plhak -666 true 10.02 Pekka Enberg 888 false 12.2 "
+    );
+
+    let resp = c
+        .chisel
+        .post_json(
+            "/dev/find_by",
+            json!({
+                "field_name":"misspelled_field_name",
+                "value":10.01
+            }),
+        )
+        .await;
+    assert!(resp.status().is_server_error());
+
+    c.chiseld
+        .stderr
+        .read("Error: expression error: entity 'Person' doesn't have field 'misspelled_field_name'")
+        .await;
+}

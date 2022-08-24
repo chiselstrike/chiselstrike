@@ -346,6 +346,7 @@ impl Chisel {
     }
 
     /// Copies given `file` to a relative path `to` inside ChiselStrike project.
+    #[allow(dead_code)]
     pub fn copy_and_rename<P, Q>(&self, from: P, to: Q) -> u64
     where
         P: AsRef<Path> + fmt::Debug,
