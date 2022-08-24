@@ -161,13 +161,13 @@ async fn run(init: WorkerInit) -> Result<()> {
     };
     worker.js_runtime.op_state().borrow_mut().put(worker_state);
 
+    // start executing the JavaScript code in main.js; this will return when the worker is
+    // terminated, any futher interaction with JavaScript is done exclusively using Deno ops
     worker.execute_main_module(&main_url).await.context(format!(
         "Error when executing JavaScript for version {:?} in worker {}",
         init.version.version_id, init.worker_idx
     ))
 }
-
-impl Unpin for WorkerJoinHandle {}
 
 impl Future for WorkerJoinHandle {
     type Output = Result<()>;

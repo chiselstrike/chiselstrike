@@ -1,7 +1,53 @@
-import { TopicMap } from "./kafka.ts";
-import { RouteMap, RouteMapLike } from "./routing.ts";
-import { serve } from "./serve.ts";
+// SPDX-FileCopyrightText: © 2022 ChiselStrike <info@chiselstrike.com>
+
+import { handleHttpRequest } from "./http.ts";
+import type { HttpRequest } from "./http.ts";
+import { handleKafkaEvent } from "./kafka.ts";
+import type { KafkaEvent, TopicMap } from "./kafka.ts";
+import { Router } from "./routing.ts";
+import { RouteMap } from "./routing.ts";
+import type { RouteMapLike } from "./routing.ts";
 import { specialAfter, specialBefore } from "./special.ts";
+import { opAsync, opSync } from "./utils.ts";
+
+// A generic job that we receive from Rust
+type AcceptedJob =
+    | { type: "http"; request: HttpRequest; responseRid: number }
+    | { type: "kafka"; event: KafkaEvent };
+
+// This is the entry point into the TypeScript runtime, called from `main.js`
+// with structures that describe the user-defined behavior (such as how to
+// handle HTTP requests)
+export default async function (
+    userRouteMap: RouteMapLike,
+    userTopicMap: TopicMap | undefined,
+): Promise<void> {
+    // build the root RouteMap from the map provided by the user and a few internal routes
+    const routeMap = new RouteMap();
+    specialBefore(routeMap);
+    routeMap.prefix("/", RouteMap.convert(userRouteMap));
+    specialAfter(routeMap);
+    const router = new Router(routeMap);
+
+    const topicMap = userTopicMap ?? new TopicMap();
+
+    // signal to Rust that we are ready to handle jobs
+    Deno.core.opSync("op_chisel_ready");
+
+    for (;;) {
+        const job = await opAsync("op_chisel_accept_job") as (AcceptedJob | null);
+        if (job === null) {
+            break;
+        } else if (job.type == "http") {
+            const httpResponse = await handleHttpRequest(router, job.request);
+            opSync("op_chisel_http_respond", job.responseRid, httpResponse);
+        } else if (job.type == "kafka") {
+            await handleKafkaEvent(topicMap, job.event);
+        } else {
+            throw new Error("Unknown type of AcceptedJob");
+        }
+    }
+}
 
 // TODO: explore what this does in more detail
 Deno.core.opSync(
@@ -18,17 +64,3 @@ Deno.core.opSync(
     },
 );
 
-export default async function (
-    userRouteMap: RouteMapLike,
-    userTopicMap: TopicMap | undefined,
-): Promise<void> {
-    // build the root RouteMap from the map provided by the user and a few internal routes
-    const routeMap = new RouteMap();
-    specialBefore(routeMap);
-    routeMap.prefix("/", RouteMap.convert(userRouteMap));
-    specialAfter(routeMap);
-
-    const topicMap = userTopicMap ?? new TopicMap();
-
-    await serve(routeMap, topicMap);
-}

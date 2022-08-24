@@ -32,7 +32,6 @@ lazy_static! {
         source_js!("request"),
         source_js!("routing"),
         source_js!("run"),
-        source_js!("serve"),
         source_js!("special"),
         source_js!("utils"),
         ("main.js", include_str!("main.js")),
@@ -49,7 +48,6 @@ lazy_static! {
         source_d_ts!("request"),
         source_d_ts!("routing"),
         source_d_ts!("run"),
-        source_d_ts!("serve"),
         source_d_ts!("special"),
         source_d_ts!("utils"),
     ]
