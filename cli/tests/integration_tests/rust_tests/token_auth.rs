@@ -114,7 +114,7 @@ pub async fn test(c: TestContext) {
         "policies/p.yaml",
         r##"routes:
  - path: /
-   mandatory_header: { name: header33, secret_value_ref: TOKEN33, only_for_verbs: [ PUT, GET ] } "##,
+   mandatory_header: { name: header33, secret_value_ref: TOKEN33, only_for_methods: [ PUT, GET ] } "##,
     );
     c.chisel.apply().await.unwrap();
     assert_eq!(

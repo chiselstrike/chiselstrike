@@ -3,6 +3,7 @@ use std::ffi::OsString;
 use std::ops::{Deref, DerefMut};
 use std::path::PathBuf;
 use std::process;
+use std::sync::atomic::{AtomicU16, Ordering};
 
 use once_cell::sync::Lazy;
 
@@ -96,4 +97,15 @@ pub fn repo_dir() -> PathBuf {
     path.pop();
     path.pop();
     path
+}
+
+#[allow(dead_code)]
+pub fn get_free_port(ports_counter: &AtomicU16) -> u16 {
+    for _ in 0..10000 {
+        let port = ports_counter.fetch_add(1, Ordering::Relaxed);
+        if port_scanner::local_port_available(port) {
+            return port;
+        }
+    }
+    panic!("failed to find free port in 10000 iterations");
 }

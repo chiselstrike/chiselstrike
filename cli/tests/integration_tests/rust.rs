@@ -1,5 +1,6 @@
 // SPDX-FileCopyrightText: © 2022 ChiselStrike <info@chiselstrike.com>
 
+use crate::common::get_free_port;
 use crate::database::{generate_database_config, Database, DatabaseConfig, PostgresDb, SqliteDb};
 use crate::framework::{execute_async, Chisel, GuardedChild, TestContext};
 use crate::suite::{Modules, TestInstance, TestSuite};
@@ -14,21 +15,11 @@ use std::io::{stdout, Write};
 use std::net::{Ipv4Addr, SocketAddr};
 use std::path::PathBuf;
 use std::pin::Pin;
-use std::sync::atomic::{AtomicU16, Ordering};
+use std::sync::atomic::AtomicU16;
 use std::sync::Arc;
 use std::task::{Context, Poll};
 use std::{env, panic};
 use tempdir::TempDir;
-
-fn get_free_port(ports_counter: &AtomicU16) -> u16 {
-    for _ in 0..10000 {
-        let port = ports_counter.fetch_add(1, Ordering::Relaxed);
-        if port_scanner::local_port_available(port) {
-            return port;
-        }
-    }
-    panic!("failed to find free port in 10000 iterations");
-}
 
 #[derive(Clone, Debug)]
 pub struct ChiseldConfig {

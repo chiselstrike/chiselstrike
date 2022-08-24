@@ -82,7 +82,7 @@ impl SecretAuthorization {
     pub fn is_allowed(&self, req: &http::request::Parts, secrets: &JsonObject, path: &str) -> bool {
         match self.paths.longest_prefix(path) {
             None => true,
-            Some((_, RequiredHeader { verbs: Some(v), .. })) if !v.contains(&req.method) => true,
+            Some((_, RequiredHeader { methods: Some(v), .. })) if !v.contains(&req.method) => true,
             Some((
                 _,
                 RequiredHeader {
@@ -127,8 +127,8 @@ struct RequiredHeader {
     header_name: String,
     /// Names a secret (see secrets.rs) whose value must match the header value.
     secret_name: String,
-    /// HTTP verbs to which this requirement applies.  If absent, apply to all verbs.
-    verbs: Option<Vec<hyper::Method>>,
+    /// HTTP methods to which this requirement applies.  If absent, apply to all methods.
+    methods: Option<Vec<hyper::Method>>,
 }
 
 #[derive(Clone, Default)]
@@ -237,20 +237,20 @@ impl PolicySystem {
                             let kv = (&header["name"], &header["secret_value_ref"]);
                             match kv {
                                 (Yaml::String(name), Yaml::String(value)) => {
-                                    let verbs = &header["only_for_verbs"];
-                                    let verbs = match verbs {
+                                    let methods = &header["only_for_methods"];
+                                    let methods = match methods {
                                         Yaml::BadValue => None,
-                                        Yaml::String(_) => Some(parse_verbs(&vec![verbs.clone()])?),
-                                        Yaml::Array(a) => Some(parse_verbs(a)?),
+                                        Yaml::String(_) => Some(parse_methods(&vec![methods.clone()])?),
+                                        Yaml::Array(a) => Some(parse_methods(a)?),
                                         _ => {
-                                            warn!("only_for_verbs must be a list of strings, instead got {verbs:?}");
+                                            warn!("only_for_methods must be a list of strings, instead got {methods:?}");
                                             None
                                         }
                                     };
                                     policies.secret_authorization.add(path, RequiredHeader {
                                         header_name: name.clone(),
                                         secret_name: value.clone(),
-                                        verbs,
+                                        methods,
                                     })?;
                                 }
                                 _ => anyhow::bail!(
@@ -272,17 +272,17 @@ pub fn anonymize(_: Value) -> Value {
     json!("xxxxx")
 }
 
-fn parse_verbs(v: &Vec<Yaml>) -> Result<Vec<hyper::Method>> {
-    let mut verbs = vec![];
+fn parse_methods(v: &Vec<Yaml>) -> Result<Vec<hyper::Method>> {
+    let mut methods = vec![];
     for e in v {
         use anyhow::Context;
         use std::str::FromStr;
         match e {
-            Yaml::String(s) => verbs.push(
-                hyper::Method::from_str(s).with_context(|| format!("Error parsing verb {s}"))?,
+            Yaml::String(s) => methods.push(
+                hyper::Method::from_str(s).with_context(|| format!("Error parsing method {s}"))?,
             ),
-            _ => anyhow::bail!("String verb expected in only_for_verbs, instead got {e:?}"),
+            _ => anyhow::bail!("String method expected in only_for_methods, instead got {e:?}"),
         }
     }
-    Ok(verbs)
+    Ok(methods)
 }
