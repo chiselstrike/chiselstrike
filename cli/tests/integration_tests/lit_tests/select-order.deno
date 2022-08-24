@@ -24,8 +24,7 @@ EOF
 
 cd "$TEMPDIR"
 $CHISEL apply
-
-# CHECK: Model defined: Person
+# CHECK: Code was applied
 
 $CURL --data '{
     "first_name":"Glauber",

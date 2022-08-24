@@ -11,7 +11,7 @@ export class Evolving extends ChiselEntity {
 }
 EOF
 $CHISEL apply
-# CHECK: Model defined: Evolving
+# CHECK: Code was applied
 
 cat << EOF > "$TEMPDIR/models/types.ts"
 import { ChiselEntity } from "@chiselstrike/api";
@@ -22,7 +22,7 @@ export class Evolving extends ChiselEntity {
 }
 EOF
 $CHISEL apply
-# CHECK: Model defined: Evolving
+# CHECK: Code was applied
 
 cat << EOF > "$TEMPDIR/routes/store.ts"
 import { Evolving } from "../models/types.ts";
@@ -52,7 +52,7 @@ export default async function chisel(req: Request): Promise<Response> {
 EOF
 
 $CHISEL apply
-# CHECK: Model defined: Evolving
+# CHECK: Code was applied
 
 $CURL -X POST $CHISELD_HOST/dev/store
 # CHECK: HTTP/1.1 200 OK
@@ -72,7 +72,7 @@ export class Evolving extends ChiselEntity {
 EOF
 rm "$TEMPDIR/routes/store.ts"
 $CHISEL apply
-# CHECK: Model defined: Evolving
+# CHECK: Code was applied
 
 $CURL $CHISELD_HOST/dev/find
 # CHECK: HTTP/1.1 200 OK
@@ -87,7 +87,7 @@ export class Evolving extends ChiselEntity {
 }
 EOF
 $CHISEL apply
-# CHECK: Model defined: Evolving
+# CHECK: Code was applied
 
 $CURL $CHISELD_HOST/dev/find
 # CHECK: HTTP/1.1 200 OK
@@ -102,7 +102,7 @@ export class Evolving extends ChiselEntity {
 }
 EOF
 $CHISEL apply
-# CHECK: Model defined: Evolving
+# CHECK: Code was applied
 
 $CURL $CHISELD_HOST/dev/find
 # CHECK: HTTP/1.1 200 OK
@@ -118,7 +118,7 @@ export class Evolving extends ChiselEntity {
 }
 EOF
 $CHISEL apply
-# CHECK: Model defined: Evolving
+# CHECK: Code was applied
 
 cat << EOF > "$TEMPDIR/models/types.ts"
 import { ChiselEntity } from "@chiselstrike/api";
@@ -129,7 +129,7 @@ export class Evolving extends ChiselEntity {
 }
 EOF
 $CHISEL apply
-# CHECK: Model defined: Evolving
+# CHECK: Code was applied
 
 $CURL $CHISELD_HOST/dev/find
 # CHECK: HTTP/1.1 200 OK
@@ -152,6 +152,7 @@ export default async function chisel(req: Request) {
 EOF
 
 $CHISEL apply
+# CHECK: Code was applied
 
 
 cat << EOF > "$TEMPDIR/models/types.ts"
@@ -165,7 +166,7 @@ EOF
 rm $TEMPDIR/routes/test_indexes.ts
 
 $CHISEL apply
-# CHECK: Model defined: Evolving
+# CHECK: Code was applied
 
 ### get / set helpers for the tests below
 cat << EOF > "$TEMPDIR/routes/get.ts"
@@ -195,7 +196,7 @@ export class Defaults extends ChiselEntity {
 EOF
 
 $CHISEL apply
-# CHECK: Model defined: Defaults
+# CHECK: Code was applied
 
 $CURL -d '{}' $CHISELD_HOST/dev/set
 # CHECK: HTTP/1.1 200 OK
@@ -238,8 +239,7 @@ export class Defaults extends ChiselEntity {
 EOF
 
 $CHISEL apply
-# CHECK: Model defined: Aux
-# CHECK: Model defined: Defaults
+# CHECK: Code was applied
 
 $CURL -d '{}' $CHISELD_HOST/dev/set
 # CHECK: HTTP/1.1 200 OK

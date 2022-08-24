@@ -19,6 +19,7 @@ EOF
 
 cd "$TEMPDIR"
 $CHISEL apply
+# CHECK: Code was applied
 
 $CURL -o - $CHISELD_HOST/dev/foo
 
@@ -40,6 +41,7 @@ EOF
 
 npm i
 $CHISEL apply
+# CHECK: Code was applied
 
 $CURL -o - $CHISELD_HOST/dev/foo
 

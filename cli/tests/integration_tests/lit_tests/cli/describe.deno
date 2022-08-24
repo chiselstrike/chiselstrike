@@ -26,8 +26,7 @@ EOF
 
 $CHISEL apply
 
-# CHECK: Model defined: Foo
-# CHECK: Model defined: Bar
+# CHECK: Code was applied
 
 $CHISEL describe
 

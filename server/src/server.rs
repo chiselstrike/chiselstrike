@@ -79,9 +79,13 @@ pub async fn run(opt: Opt) -> Result<Restart> {
     let secrets_task = TaskHandle(tokio::task::spawn(refresh_secrets(server.clone())));
     let signal_task = TaskHandle(tokio::task::spawn(wait_for_signals()));
 
-    info!("ChiselStrike server is ready 🚀");
-    for http_addr in http_addrs.iter() {
-        info!("URL: http://{}", http_addr);
+    info!(
+        "ChiselStrike server is ready 🚀 - URL: http://{} ",
+        state.opt.api_listen_addr
+    );
+
+    for kafka_task in kafka_tasks {
+        kafka_task.await??;
     }
     debug!("gRPC API address: {}", rpc_addr);
     debug!("Internal address: http://{}", internal_addr);

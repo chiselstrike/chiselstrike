@@ -112,8 +112,7 @@ export default async function chisel(req: Request) {
 EOF
 
 $CHISEL apply
-
-# CHECK: Model defined: Person
+# CHECK: Code was applied
 
 $CURL -X POST $CHISELD_HOST/dev/store
 # CHECK: Ok
@@ -242,8 +241,7 @@ export default async function chisel(req: Request) {
 EOF
 
 $CHISEL apply
-
-# CHECK: Model defined: Person
+# CHECK: Code was applied
 
 $CURL $CHISELD_HOST/dev/skip1
 # CHECK: [Jan, Pekka]

@@ -36,7 +36,7 @@ EOF
 
 
 $CHISEL apply
-# CHECK: Model defined: Person
+# CHECK: Code was applied
 
 $CURL -X POST $CHISELD_HOST/dev/store
 # CHECK: Ok

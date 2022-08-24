@@ -19,7 +19,7 @@ EOF
 
 cd "$TEMPDIR"
 $CHISEL apply
-# CHECK: Model defined: Person
+# CHECK: Code was applied
 
 $CURL --data '{
     "first_name":"Glauber",
@@ -36,7 +36,7 @@ $CURL $CHISELD_HOST/dev/count
 # CHECK: 1
 
 $CHISEL apply --version staging
-# CHECK: Model defined: Person
+# CHECK: Code was applied
 
 $CURL $CHISELD_HOST/staging/count
 # CHECK: HTTP/1.1 200 OK

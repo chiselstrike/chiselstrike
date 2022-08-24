@@ -15,6 +15,7 @@ EOF
 
 cd "$TEMPDIR"
 $CHISEL apply
+# CHECK: Code was applied
 
 $CURL -o - $CHISELD_HOST/dev/err
 

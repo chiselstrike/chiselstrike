@@ -97,8 +97,7 @@ EOF
 
 cd "$TEMPDIR"
 $CHISEL apply
-
-# CHECK: Model defined: Person
+# CHECK: Code was applied
 
 $CHISEL apply
 $CURL -X POST -o - $CHISELD_HOST/dev/store

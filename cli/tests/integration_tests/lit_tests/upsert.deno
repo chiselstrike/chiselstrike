@@ -33,8 +33,7 @@ export default async function chisel(req: Request) {
 EOF
 
 $CHISEL apply
-# CHECK: Model defined: Person
-# CHECK: End point defined: /dev/upsert
+# CHECK: Code was applied
 
 $CURL -X POST $CHISELD_HOST/dev/upsert
 # CHECK: HTTP/1.1 200 OK

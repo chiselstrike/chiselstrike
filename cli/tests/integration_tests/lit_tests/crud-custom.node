@@ -78,7 +78,7 @@ EOF
 
 cd "$TEMPDIR"
 $CHISEL apply
-# CHECK: Model defined: Person
+# CHECK: Code was applied
 
 $CURL -d '{"first_name":"Alice","last_name":"Anderson","age":30,"human":true,"height":10}' $CHISELD_HOST/dev/persons
 # CHECK: HTTP/1.1 200 OK

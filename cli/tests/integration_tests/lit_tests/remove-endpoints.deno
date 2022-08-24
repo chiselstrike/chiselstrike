@@ -24,6 +24,7 @@ export default async function chisel(req: Request) {
 EOF
 
 $CHISEL apply
+# CHECK: Code was applied
 
 $CURL -o - $CHISELD_HOST/dev/end
 # CHECK: HTTP/1.1 200 OK

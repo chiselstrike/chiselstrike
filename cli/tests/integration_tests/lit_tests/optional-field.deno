@@ -39,8 +39,7 @@ export default async function (_: Request) {
 EOF
 
 $CHISEL apply
-# CHECK: Model defined: Bar
-# CHECK: Model defined: Foo
+# CHECK: Code was applied
 
 ## Accept payload without optional values:
 $CURL -d '{}' $CHISELD_HOST/dev/save
@@ -85,13 +84,11 @@ export class Foo extends ChiselEntity {
 EOF
 
 $CHISEL apply
-# CHECK: Model defined: Bar
-# CHECK: Model defined: Foo
+# CHECK: Code was applied
 
 ## Correctly populate from optional fields
 $CHISEL apply --version=v2
-# CHECK: Model defined: Bar
-# CHECK: Model defined: Foo
+# CHECK: Code was applied
 $CHISEL populate --version=v2 --from=dev
 $CURL $CHISELD_HOST/v2/sum
 # CHECK: HTTP/1.1 200 OK
