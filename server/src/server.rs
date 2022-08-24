@@ -120,7 +120,7 @@ async fn make_server(opt: Opt) -> Result<(Arc<Server>, TaskHandle<Result<()>>)> 
 
     let builtin_types = Arc::new(BuiltinTypes::new());
     builtin_types
-        .create_builtin_backing_tables(&query_engine)
+        .create_backing_tables(&query_engine)
         .await?;
 
     let type_systems = meta_service.load_type_systems(&builtin_types).await?;

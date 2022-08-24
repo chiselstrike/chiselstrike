@@ -72,7 +72,7 @@ impl BuiltinTypes {
         Self { types }
     }
 
-    pub async fn create_builtin_backing_tables(
+    pub async fn create_backing_tables(
         &self,
         query_engine: &QueryEngine,
     ) -> anyhow::Result<()> {
