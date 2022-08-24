@@ -61,7 +61,7 @@ impl Default for AutoIndex {
     }
 }
 
-/// Manifest defines the files that describe types, routes, and policies.
+/// Manifest defines the files that describe types, routes, events, and policies.
 ///
 /// The manifest is a high-level declaration of application behavior.
 /// The individual definitions are passed to `chiseld`, which processes them

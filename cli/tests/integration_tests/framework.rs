@@ -14,7 +14,7 @@ use tempdir::TempDir;
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWriteExt};
 
 pub mod prelude {
-    pub use super::TestContext;
+    pub use super::{Chisel, TestContext};
     pub use bytes::Bytes;
     pub use chisel_macros::test;
     pub use reqwest::Method;

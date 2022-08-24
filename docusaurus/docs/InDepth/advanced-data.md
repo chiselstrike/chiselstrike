@@ -29,14 +29,14 @@ export class BlogPost extends ChiselEntity {
 }
 ```
 
-We can now code an endpoint that will store a post, but posts must
+We can now code a request handler that will store a post, but posts must
 have unique URLs:
 
-```typescript title="my-backend/endpoints/post.ts"
+```typescript title="my-backend/routes/post.ts"
 import { BlogPost } from "../models/BlogPost";
 import { responseFromJson } from "@chiselstrike/api";
 
-export default async function chisel(req) {
+export default async function (req) {
     if (req.method == 'POST') {
         const payload = await req.json();
         const content = payload["content"] ?? "";
@@ -182,7 +182,7 @@ export class Custom extends ChiselEntity {
 ```
 
 But doing that is not enough. The field exists, but we don't want to add
-custom logic into endpoints to handle it. We want to make sure it is always
+custom logic into request handlers to handle it. We want to make sure it is always
 updated when we save the model.
 
 To do that, we can override the `save()` method of `ChiselEntity`. That is the method
