@@ -1,10 +1,9 @@
 // SPDX-FileCopyrightText: © 2022 ChiselStrike <info@chiselstrike.com>
 
-use crate::api::ApiRequestResponse;
 use crate::datastore::engine::TransactionStatic;
 use crate::ops;
 use crate::server::Server;
-use crate::version::Version;
+use crate::version::{Version, VersionJob};
 use anyhow::{bail, Context as _, Result};
 use deno_core::url::Url;
 use futures::ready;
@@ -29,7 +28,7 @@ pub struct WorkerInit {
     pub version: Arc<Version>,
     pub modules: Arc<HashMap<String, String>>,
     pub ready_tx: oneshot::Sender<()>,
-    pub request_rx: mpsc::Receiver<ApiRequestResponse>,
+    pub job_rx: mpsc::Receiver<VersionJob>,
 }
 
 /// Handle to a worker task and thread.
@@ -54,19 +53,19 @@ pub struct WorkerState {
     /// The implicit global transaction for all data operations.
     ///
     /// TODO: the existence of this transaction means that the worker can only handle a single
-    /// request at a time. Unfortunately, to get rid of this, we have to significantly rework the
+    /// job at a time. Unfortunately, to get rid of this, we have to significantly rework the
     /// TypeScript API.
     pub transaction: Option<TransactionStatic>,
 
-    /// Channel for signaling that the worker is ready to handle requests.
+    /// Channel for signaling that the worker is ready to handle jobs.
     ///
     /// Once the worker sends the signal, this is reset to `None`.
     pub ready_tx: Option<oneshot::Sender<()>>,
 
-    /// Channel for receiving HTTP API requests.
+    /// Channel for receiving jobs.
     ///
     /// We can get await with `Rc<RefCell<>>`, because the worker runs on a single thread.
-    pub request_rx: Rc<RefCell<mpsc::Receiver<ApiRequestResponse>>>,
+    pub job_rx: Rc<RefCell<mpsc::Receiver<VersionJob>>>,
 }
 
 pub async fn spawn(init: WorkerInit) -> Result<WorkerJoinHandle> {
@@ -158,7 +157,7 @@ async fn run(init: WorkerInit) -> Result<()> {
         version: init.version.clone(),
         transaction: None,
         ready_tx: Some(init.ready_tx),
-        request_rx: Rc::new(RefCell::new(init.request_rx)),
+        job_rx: Rc::new(RefCell::new(init.job_rx)),
     };
     worker.js_runtime.op_state().borrow_mut().put(worker_state);
 

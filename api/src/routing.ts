@@ -68,12 +68,16 @@ export class RouteMap {
             return routes;
         } else if (typeof routes === "function") {
             return new RouteMap().route("*", "*", routes);
-        } else {
+        } else if (typeof routes === "object") {
             const routeMap = new RouteMap();
             for (const method in routes) {
                 routeMap.route(method, "*", routes[method]);
             }
             return routeMap;
+        } else {
+            throw new TypeError(
+                `Cannot convert ${typeof routes} into a RouteMap`,
+            );
         }
     }
 }

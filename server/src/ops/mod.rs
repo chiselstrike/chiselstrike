@@ -6,7 +6,7 @@ use anyhow::{bail, Result};
 use deno_core::{serde_v8, v8};
 
 mod datastore;
-mod request;
+mod job;
 
 pub fn extension() -> deno_core::Extension {
     deno_core::Extension::builder()
@@ -25,8 +25,8 @@ pub fn extension() -> deno_core::Extension {
             datastore::op_chisel_crud_query::decl(),
             datastore::op_chisel_relational_query_create::decl(),
             datastore::op_chisel_query_next::decl(),
-            request::op_chisel_accept::decl(),
-            request::op_chisel_respond::decl(),
+            job::op_chisel_accept_job::decl(),
+            job::op_chisel_http_respond::decl(),
         ])
         .build()
 }

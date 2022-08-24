@@ -38,9 +38,11 @@ async fn main() -> Result<()> {
     println!("cargo:rerun-if-changed=../third_party/deno/core/lib.deno_core.d.ts");
 
     compile("api").await?;
-    compile("chiselstrike_route_map").await?;
+    compile("chiselstrike_root").await?;
     compile("crud").await?;
     compile("datastore").await?;
+    compile("http").await?;
+    compile("kafka").await?;
     compile("request").await?;
     compile("routing").await?;
     compile("run").await?;

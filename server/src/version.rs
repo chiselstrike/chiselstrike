@@ -1,6 +1,7 @@
 // SPDX-FileCopyrightText: © 2022 ChiselStrike <info@chiselstrike.com>
 
-use crate::api::ApiRequestResponse;
+use crate::http::HttpRequestResponse;
+use crate::kafka::KafkaEvent;
 use crate::policies::PolicySystem;
 use crate::server::Server;
 use crate::types::TypeSystem;
@@ -23,7 +24,7 @@ pub struct VersionInit {
     pub policy_system: Arc<PolicySystem>,
     pub worker_count: usize,
     /// We will signal you on this channel when all workers in the version are ready to accept
-    /// requests.
+    /// jobs.
     pub ready_tx: oneshot::Sender<()>,
 }
 
@@ -38,10 +39,6 @@ pub struct VersionInfo {
 /// There might be multiple versions running in the same server, but they are almost completely
 /// independent. There might also be multiple JS runtimes (workers) running code for the version,
 /// sharing the same instance of this object.
-///
-/// The `Version` is always wrapped in an `Arc`. The workers will gracefully stop when the
-/// `Version` is dropped (more precisely, when `Version::request_tx` is dropped), so you must make
-/// sure not leak `Arc<Version>` or keep it alive longer than necessary.
 pub struct Version {
     pub version_id: String,
     pub info: VersionInfo,
@@ -49,49 +46,57 @@ pub struct Version {
     pub policy_system: Arc<PolicySystem>,
 }
 
+/// A job that should be handled by a version (more precisely, by one of the workers in the
+/// version).
+#[derive(Debug)]
+pub enum VersionJob {
+    Http(HttpRequestResponse),
+    Kafka(KafkaEvent),
+}
+
 pub async fn spawn(
     init: VersionInit,
 ) -> Result<(
     Arc<Version>,
-    mpsc::Sender<ApiRequestResponse>,
+    mpsc::Sender<VersionJob>,
     CancellableTaskHandle<Result<()>>,
 )> {
-    let (request_tx, request_rx) = mpsc::channel(1);
+    let (job_tx, job_rx) = mpsc::channel(1);
     let version = Arc::new(Version {
         version_id: init.version_id.clone(),
         info: init.info.clone(),
         type_system: init.type_system.clone(),
         policy_system: init.policy_system.clone(),
     });
-    let task = CancellableTaskHandle(task::spawn(run(init, version.clone(), request_rx)));
-    Ok((version, request_tx, task))
+    let task = CancellableTaskHandle(task::spawn(run(init, version.clone(), job_rx)));
+    Ok((version, job_tx, task))
 }
 
 async fn run(
     init: VersionInit,
     version: Arc<Version>,
-    mut request_rx: mpsc::Receiver<ApiRequestResponse>,
+    mut job_rx: mpsc::Receiver<VersionJob>,
 ) -> Result<()> {
     let ready_rxs = FuturesUnordered::new();
-    let mut request_txs = Vec::new();
+    let mut job_txs = Vec::new();
     let worker_handles = FuturesUnordered::new();
 
     // spawn all workers for this version
     for worker_idx in 0..init.worker_count {
         let (ready_tx, ready_rx) = oneshot::channel();
-        let (request_tx, request_rx) = mpsc::channel(1);
+        let (job_tx, job_rx) = mpsc::channel(1);
         let worker_handle = worker::spawn(WorkerInit {
             worker_idx,
             server: init.server.clone(),
             version: version.clone(),
             modules: init.modules.clone(),
             ready_tx,
-            request_rx,
+            job_rx,
         })
         .await?;
 
         ready_rxs.push(ready_rx);
-        request_txs.push(request_tx);
+        job_txs.push(job_tx);
         worker_handles.push(worker_handle);
     }
 
@@ -110,18 +115,18 @@ async fn run(
     }));
 
     let version_id = version.version_id.clone();
-    let request_task = TaskHandle(task::spawn(async move {
-        // distribute requests among workers in a round-robin fashion
+    let job_task = TaskHandle(task::spawn(async move {
+        // distribute jobs among workers in a round-robin fashion
         let mut worker_i = 0;
-        while let Some(request) = request_rx.recv().await {
-            if request_txs[worker_i].send(request).await.is_err() {
+        while let Some(job) = job_rx.recv().await {
+            if job_txs[worker_i].send(job).await.is_err() {
                 bail!(
-                    "Worker {:?} {} is unable to accept requests",
+                    "Worker {:?} {} is unable to accept jobs",
                     version_id,
                     worker_i
                 );
             }
-            worker_i = (worker_i + 1) % request_txs.len();
+            worker_i = (worker_i + 1) % job_txs.len();
         }
         Ok(())
     }));
@@ -131,6 +136,6 @@ async fn run(
         worker_handles.try_collect::<()>().await
     }));
 
-    tokio::try_join!(ready_task, request_task, join_task)?;
+    tokio::try_join!(ready_task, job_task, join_task)?;
     Ok(())
 }

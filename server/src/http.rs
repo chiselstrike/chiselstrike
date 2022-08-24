@@ -2,7 +2,7 @@
 
 use crate::auth;
 use crate::server::Server;
-use crate::version::Version;
+use crate::version::{Version, VersionJob};
 use anyhow::{Context, Error, Result};
 use deno_core::serde_v8;
 use enclose::enclose;
@@ -79,10 +79,9 @@ async fn try_handle_request(
     if let Some((version_id, routing_path)) = get_version_path(path) {
         if let Some(trunk_version) = server.trunk.get_trunk_version(version_id) {
             let version = trunk_version.version;
-            let request_tx = trunk_version.request_tx;
+            let job_tx = trunk_version.job_tx;
             let routing_path = routing_path.into();
-            return handle_version_request(server, version, request_tx, request, routing_path)
-                .await;
+            return handle_version_request(server, version, job_tx, request, routing_path).await;
         }
     }
 
@@ -90,15 +89,15 @@ async fn try_handle_request(
 }
 
 #[derive(Debug)]
-pub struct ApiRequestResponse {
-    pub request: ApiRequest,
-    pub response_tx: oneshot::Sender<ApiResponse>,
+pub struct HttpRequestResponse {
+    pub request: HttpRequest,
+    pub response_tx: oneshot::Sender<HttpResponse>,
 }
 
-/// HTTP API request as given to TypeScript.
+/// HTTP request that is passed to JavaScript.
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct ApiRequest {
+pub struct HttpRequest {
     pub method: String,
     pub uri: String,
     pub headers: Vec<(String, String)>,
@@ -107,10 +106,10 @@ pub struct ApiRequest {
     pub user_id: Option<String>,
 }
 
-/// HTTP API response as received from TypeScript.
+/// HTTP response that is received from JavaScript.
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct ApiResponse {
+pub struct HttpResponse {
     pub status: u16,
     pub headers: Vec<(String, String)>,
     pub body: serde_v8::ZeroCopyBuf,
@@ -119,7 +118,7 @@ pub struct ApiResponse {
 async fn handle_version_request(
     server: Arc<Server>,
     version: Arc<Version>,
-    request_tx: mpsc::Sender<ApiRequestResponse>,
+    job_tx: mpsc::Sender<VersionJob>,
     request: hyper::Request<hyper::Body>,
     routing_path: String,
 ) -> Result<hyper::Response<hyper::Body>> {
@@ -153,7 +152,7 @@ async fn handle_version_request(
         }
     }
 
-    let api_request = ApiRequest {
+    let http_request = HttpRequest {
         method: req_parts.method.as_str().into(),
         uri: req_parts.uri.to_string(),
         headers: req_parts
@@ -167,22 +166,22 @@ async fn handle_version_request(
         user_id,
     };
 
+    // send the job and wait for the response
     let (response_tx, response_rx) = oneshot::channel();
-    let _: Result<_, _> = request_tx
-        .send(ApiRequestResponse {
-            request: api_request,
-            response_tx,
-        })
-        .await;
-    let api_response = response_rx.await.context("Request was aborted")?;
+    let job = VersionJob::Http(HttpRequestResponse {
+        request: http_request,
+        response_tx,
+    });
+    let _: Result<_, _> = job_tx.send(job).await;
+    let http_response = response_rx.await.context("Request was aborted")?;
 
     // TODO: unnecessary copy from `ZeroCopyBuf` to `Vec<u8>`
-    let response_body = hyper::Body::from(api_response.body.to_vec());
+    let response_body = hyper::Body::from(http_response.body.to_vec());
     let mut response = hyper::Response::new(response_body);
 
-    *response.status_mut() = hyper::StatusCode::from_u16(api_response.status)
+    *response.status_mut() = hyper::StatusCode::from_u16(http_response.status)
         .context("Response specified an invalid status code")?;
-    for (name, value) in api_response.headers.into_iter() {
+    for (name, value) in http_response.headers.into_iter() {
         let name = hyper::header::HeaderName::from_bytes(name.as_bytes())
             .with_context(|| format!("Response header {:?} is not a valid header name", name))?;
         let value = hyper::header::HeaderValue::from_str(&value)

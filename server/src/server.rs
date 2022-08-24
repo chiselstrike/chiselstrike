@@ -2,13 +2,15 @@
 
 use crate::datastore::{DbConnection, MetaService, QueryEngine};
 use crate::internal::{mark_not_ready, mark_ready};
+use crate::kafka;
 use crate::opt::Opt;
 use crate::policies::PolicySystem;
 use crate::trunk::{self, Trunk};
 use crate::types::{BuiltinTypes, TypeSystem};
 use crate::version::{self, VersionInfo, VersionInit};
-use crate::{api, internal, rpc, secrets, worker, JsonObject};
+use crate::{http, internal, rpc, secrets, worker, JsonObject};
 use anyhow::{bail, Context, Result};
+use futures::future::{Fuse, FutureExt};
 use parking_lot::RwLock;
 use regex::Regex;
 use std::collections::HashMap;
@@ -55,7 +57,7 @@ pub async fn run(opt: Opt) -> Result<Restart> {
         .await
         .context("Could not start gRPC server")?;
 
-    let (api_addrs, api_task) = api::spawn(server.clone(), server.opt.api_listen_addr.clone())
+    let (http_addrs, http_task) = http::spawn(server.clone(), server.opt.api_listen_addr.clone())
         .await
         .context("Could not start HTTP API server")?;
 
@@ -67,19 +69,33 @@ pub async fn run(opt: Opt) -> Result<Restart> {
     .await
     .context("Could not start an internal HTTP server")?;
 
+    let kafka_task = match server.opt.kafka_connection.clone() {
+        Some(connection) => {
+            kafka::spawn(server.clone(), connection, &server.opt.kafka_topics).fuse()
+        }
+        None => Fuse::terminated(),
+    };
+
     let secrets_task = TaskHandle(tokio::task::spawn(refresh_secrets(server.clone())));
     let signal_task = TaskHandle(tokio::task::spawn(wait_for_signals()));
 
-    info!("ChiselStrike is ready 🚀");
-    for api_addr in api_addrs.iter() {
-        info!("URL: http://{}", api_addr);
+    info!("ChiselStrike server is ready 🚀");
+    for http_addr in http_addrs.iter() {
+        info!("URL: http://{}", http_addr);
     }
     debug!("gRPC API address: {}", rpc_addr);
     debug!("Internal address: http://{}", internal_addr);
     mark_ready();
 
     let all_tasks = async move {
-        tokio::try_join!(trunk_task, rpc_task, api_task, internal_task, secrets_task)
+        tokio::try_join!(
+            trunk_task,
+            rpc_task,
+            http_task,
+            internal_task,
+            kafka_task,
+            secrets_task
+        )
     };
     tokio::select! {
         res = all_tasks => res.map(|_| Restart::No),
@@ -166,13 +182,13 @@ async fn start_versions(server: Arc<Server>) -> Result<()> {
         let policy_system = server.meta_service.load_policy_system(&version_id).await?;
         let modules = server.meta_service.load_modules(&version_id).await?;
 
-        let route_map_url = "file:///__route_map.ts";
-        if !modules.contains_key(route_map_url) {
+        let root_url = "file:///__root.ts";
+        if !modules.contains_key(root_url) {
             warn!(
                 "Version {:?} does not contain module {:?}, it was probably created by an old \
                 chisel version. This version will be skipped, please rerun `chisel apply` to fix \
                 this problem.",
-                version_id, route_map_url,
+                version_id, root_url,
             );
             continue;
         }
@@ -191,8 +207,8 @@ async fn start_versions(server: Arc<Server>) -> Result<()> {
             ready_tx,
         };
 
-        let (version, request_tx, version_task) = version::spawn(init).await?;
-        server.trunk.add_version(version, request_tx, version_task);
+        let (version, job_tx, version_task) = version::spawn(init).await?;
+        server.trunk.add_version(version, job_tx, version_task);
     }
     Ok(())
 }
@@ -208,8 +224,11 @@ async fn start_chiselstrike_version(server: Arc<Server>) -> Result<()> {
 
     let mut modules = HashMap::new();
     modules.insert(
-        "file:///__route_map.ts".into(),
-        "export { default } from 'chisel:///chiselstrike_route_map.ts';".into(),
+        "file:///__root.ts".into(),
+        r"
+        export * from 'chisel:///chiselstrike_root.ts';
+        "
+        .into(),
     );
 
     let (ready_tx, _ready_rx) = oneshot::channel();
@@ -225,8 +244,8 @@ async fn start_chiselstrike_version(server: Arc<Server>) -> Result<()> {
         ready_tx,
     };
 
-    let (version, request_tx, version_task) = version::spawn(init).await?;
-    server.trunk.add_version(version, request_tx, version_task);
+    let (version, job_tx, version_task) = version::spawn(init).await?;
+    server.trunk.add_version(version, job_tx, version_task);
     Ok(())
 }
 

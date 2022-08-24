@@ -3,17 +3,19 @@
 use crate::cmd::apply::chiselc_spawn;
 use crate::cmd::apply::parse_indexes;
 use crate::cmd::apply::TypeChecking;
+use crate::codegen::codegen_root_module;
+use crate::events::FileTopicMap;
 use crate::project::read_to_string;
 use crate::proto::{IndexCandidate, Module};
-use crate::routes::{codegen_route_map, FileRouteMap};
+use crate::routes::FileRouteMap;
 use anyhow::{anyhow, bail, Context, Result};
 use std::ffi::{OsStr, OsString};
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::{env, fs};
 
 pub(crate) async fn apply(
     mut route_map: FileRouteMap,
-    _events: &[PathBuf],
+    topic_map: FileTopicMap,
     entities: &[String],
     optimize: bool,
     auto_index: bool,
@@ -106,22 +108,20 @@ pub(crate) async fn apply(
     let bundler_output_dir =
         tempfile::tempdir().context("Could not create temporary directory for bundler output")?;
 
-    let route_import_fn = |path: &Path| -> Result<String> {
+    let import_fn = |path: &Path| -> Result<String> {
         path.to_str()
             .map(String::from)
             .context("Path is not valid UTF-8")
     };
-    let route_map_code = codegen_route_map(&route_map, &route_import_fn)
-        .context("Could not generate code for file-based routing")?;
+    let root_code = codegen_root_module(&route_map, &topic_map, &import_fn)
+        .context("Could not generate code for file-based routing and event topics")?;
 
-    let route_map_path = bundler_input_dir.path().join("__route_map.ts");
-    fs::write(&route_map_path, route_map_code).context(format!(
-        "Could not write to file {}",
-        route_map_path.display()
-    ))?;
+    let root_path = bundler_input_dir.path().join("__root.ts");
+    fs::write(&root_path, root_code)
+        .context(format!("Could not write to file {}", root_path.display()))?;
 
     let bundler_args: Vec<OsString> = vec![
-        route_map_path.into(),
+        root_path.into(),
         "--bundle".into(),
         "--color=true".into(),
         "--target=esnext".into(),
@@ -145,9 +145,9 @@ pub(crate) async fn apply(
     ensure_success(bundler_output)
         .context("Could not bundle routes with esbuild (using node-style modules)")?;
 
-    let bundled_code = fs::read_to_string(bundler_output_dir.path().join("__route_map.js"))?;
+    let bundled_code = fs::read_to_string(bundler_output_dir.path().join("__root.js"))?;
     let modules = vec![Module {
-        url: "file:///__route_map.ts".into(),
+        url: "file:///__root.ts".into(),
         code: bundled_code,
     }];
 

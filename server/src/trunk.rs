@@ -1,7 +1,6 @@
 // SPDX-FileCopyrightText: © 2022 ChiselStrike <info@chiselstrike.com>
 
-use crate::api::ApiRequestResponse;
-use crate::version::Version;
+use crate::version::{Version, VersionJob};
 use anyhow::Result;
 use futures::future;
 use futures::stream::{FuturesUnordered, Stream};
@@ -30,13 +29,18 @@ struct TrunkState {
 #[derive(Clone)]
 pub struct TrunkVersion {
     pub version: Arc<Version>,
-    pub request_tx: mpsc::Sender<ApiRequestResponse>,
+    pub job_tx: mpsc::Sender<VersionJob>,
 }
 
 impl Trunk {
     pub fn list_versions(&self) -> Vec<Arc<Version>> {
         let state = self.state.read();
         state.versions.values().map(|v| v.version.clone()).collect()
+    }
+
+    pub fn list_trunk_versions(&self) -> Vec<TrunkVersion> {
+        let state = self.state.read();
+        state.versions.values().cloned().collect()
     }
 
     pub fn get_trunk_version(&self, version_id: &str) -> Option<TrunkVersion> {
@@ -52,18 +56,14 @@ impl Trunk {
     pub fn add_version(
         &self,
         version: Arc<Version>,
-        request_tx: mpsc::Sender<ApiRequestResponse>,
+        job_tx: mpsc::Sender<VersionJob>,
         task: CancellableTaskHandle<Result<()>>,
     ) {
         let mut state = self.state.write();
         let version_id = version.version_id.clone();
-        state.versions.insert(
-            version_id,
-            TrunkVersion {
-                version,
-                request_tx,
-            },
-        );
+        state
+            .versions
+            .insert(version_id, TrunkVersion { version, job_tx });
         state.tasks.push(task);
         // we added the task to `state.tasks`, but we need to explicitly wake up the task that
         // polls `state.tasks`, otherwise we won't get notifications from the newly added task (see

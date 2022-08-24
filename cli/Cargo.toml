@@ -9,6 +9,7 @@ anyhow = "1.0"
 chisel_server = { package = "server", path = "../server" }
 endpoint_tsc = { path = "../endpoint_tsc" }
 futures = "0.3.21"
+guard = "0.5"
 handlebars = "4.2.2"
 nix = "0.22.2"
 notify = "5.0.0-pre.12"

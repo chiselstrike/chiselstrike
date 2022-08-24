@@ -230,13 +230,13 @@ async fn apply(server: Arc<Server>, request: ApplyRequest) -> Result<ApplyRespon
         ready_tx,
     };
 
-    let (version, request_tx, mut version_task) = version::spawn(init).await?;
+    let (version, job_tx, mut version_task) = version::spawn(init).await?;
     wait_until_ready(&mut version_task, ready_rx)
         .await
         .context(
             "The version did not start up correcly, but the database has already been modified",
         )?;
-    server.trunk.add_version(version, request_tx, version_task);
+    server.trunk.add_version(version, job_tx, version_task);
 
     Ok(ApplyResponse {
         types: result.type_names_user_order,
@@ -266,7 +266,7 @@ async fn validate_modules(
         ready_tx,
     };
 
-    let (_version, _request_tx, mut version_task) = version::spawn(init).await?;
+    let (_version, _job_tx, mut version_task) = version::spawn(init).await?;
     wait_until_ready(&mut version_task, ready_rx).await?;
     Ok(())
 }

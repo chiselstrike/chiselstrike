@@ -1,3 +1,4 @@
+import { TopicMap } from "./kafka.ts";
 import { RouteMap, RouteMapLike } from "./routing.ts";
 import { serve } from "./serve.ts";
 import { specialAfter, specialBefore } from "./special.ts";
@@ -17,10 +18,17 @@ Deno.core.opSync(
     },
 );
 
-export default async function (userRouteMap: RouteMapLike): Promise<void> {
+export default async function (
+    userRouteMap: RouteMapLike,
+    userTopicMap: TopicMap | undefined,
+): Promise<void> {
+    // build the root RouteMap from the map provided by the user and a few internal routes
     const routeMap = new RouteMap();
     specialBefore(routeMap);
     routeMap.prefix("/", RouteMap.convert(userRouteMap));
     specialAfter(routeMap);
-    await serve(routeMap);
+
+    const topicMap = userTopicMap ?? new TopicMap();
+
+    await serve(routeMap, topicMap);
 }

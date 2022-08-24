@@ -4,8 +4,10 @@
 
 use crate::cmd::apply::chiselc_output;
 use crate::cmd::apply::parse_indexes;
+use crate::codegen::codegen_root_module;
+use crate::events::FileTopicMap;
 use crate::proto::{IndexCandidate, Module};
-use crate::routes::{codegen_route_map, FileRouteMap};
+use crate::routes::FileRouteMap;
 use anyhow::{anyhow, bail, Context, Result};
 use endpoint_tsc::Compiler;
 use std::collections::HashMap;
@@ -15,35 +17,24 @@ use url::Url;
 
 pub(crate) async fn apply(
     route_map: FileRouteMap,
-    _events: &[PathBuf],
+    topic_map: FileTopicMap,
     entities: &[String],
     optimize: bool,
     auto_index: bool,
 ) -> Result<(Vec<Module>, Vec<IndexCandidate>)> {
-    let route_import_fn = |path: &Path| -> Result<String> {
+    let import_fn = |path: &Path| -> Result<String> {
         Url::from_file_path(path)
             .map(|url| url.to_string())
             .map_err(|_| anyhow!("Cannot convert file path {} to import URL", path.display()))
     };
-    let route_map_code = codegen_route_map(&route_map, &route_import_fn)
-        .context("Could not generate code for file-based routing")?;
 
-    let mut route_map_file = tempfile::Builder::new()
-        .suffix(".ts")
-        .prefix("__route_map.")
-        .tempfile()
-        .context("Could not create a temporary file")?;
-    route_map_file
-        .write_all(route_map_code.as_bytes())
-        .context("Could not write to a temporary file")?;
-    route_map_file
-        .flush()
-        .context("Could not flush a temporary file")?;
-    let route_map_url = Url::from_file_path(route_map_file.path()).unwrap();
+    let root_code = codegen_root_module(&route_map, &topic_map, &import_fn)
+        .context("Could not generate code for file-based routing and event topics")?;
+    let (_root_file, root_url) = temporary_source_file("__root.", &root_code)?;
 
     let mut compiler = Compiler::new(true);
     let compiled = compiler
-        .compile(route_map_url.clone())
+        .compile(root_url.clone())
         .await
         .context("Could not compile routes (using deno-style modules)")?;
 
@@ -51,8 +42,8 @@ pub(crate) async fn apply(
     let mut index_candidates = Vec::new();
     for (url, mut code, _is_dts) in compiled.into_iter() {
         let mut url = Url::parse(&url.to_string()).unwrap();
-        if url == route_map_url {
-            url = Url::parse("file:///__route_map.ts").unwrap();
+        if url == root_url {
+            url = Url::parse("file:///__root.ts").unwrap();
         }
 
         if optimize {
@@ -71,4 +62,17 @@ pub(crate) async fn apply(
     }
 
     Ok((modules, index_candidates))
+}
+
+fn temporary_source_file(name_prefix: &str, code: &str) -> Result<(tempfile::NamedTempFile, Url)> {
+    let mut file = tempfile::Builder::new()
+        .suffix(".ts")
+        .prefix(name_prefix)
+        .tempfile()
+        .context("Could not create a temporary file")?;
+    file.write_all(code.as_bytes())
+        .context("Could not write to a temporary file")?;
+    file.flush().context("Could not flush a temporary file")?;
+    let url = Url::from_file_path(file.path()).unwrap();
+    Ok((file, url))
 }

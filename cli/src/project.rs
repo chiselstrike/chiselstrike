@@ -1,5 +1,6 @@
 // SPDX-FileCopyrightText: © 2022 ChiselStrike <info@chiselstrike.com>
 
+use crate::events::{build_file_topic_map, FileTopicMap};
 use crate::routes::{build_file_route_map, FileRouteMap};
 use anyhow::{Context, Result};
 use handlebars::Handlebars;
@@ -9,7 +10,6 @@ use std::fmt::Write;
 use std::fs;
 use std::io::{stdin, ErrorKind, Read};
 use std::path::{Path, PathBuf};
-use utils::without_extension;
 
 const MANIFEST_FILE: &str = "Chisel.toml";
 const TYPES_DIR: &str = "./models";
@@ -99,17 +99,14 @@ impl Manifest {
         build_file_route_map(base_dir, &self.routes)
             .context("Could not read routes (endpoints) from filesystem")
     }
-        
-    pub fn events(&self, base_dir: &Path) -> anyhow::Result<Vec<PathBuf>> {
-        let events = match &self.events {
-            Some(events) => events.to_owned(),
-            None => vec![EVENTS_DIR.into()],
-        };
-        let ret = Self::dirs_to_paths(base_dir, &events)?;
-        if let Some((a, b)) = check_duplicates(&ret) {
-            anyhow::bail!("Cannot add both {} {} as event handlers. ChiselStrike uses filesystem-based routing, so we don't know what to do. Sorry! 🥺", a, b);
+
+    pub fn topic_map(&self, base_dir: &Path) -> anyhow::Result<FileTopicMap> {
+        if let Some(events) = self.events.as_ref() {
+            build_file_topic_map(base_dir, events)
+                .context("Could not read event handlers (Kafka topics) from filesystem")
+        } else {
+            Ok(FileTopicMap::default())
         }
-        Ok(ret)
     }
 
     pub fn policies(&self, base_dir: &Path) -> anyhow::Result<Vec<PathBuf>> {
@@ -142,21 +139,6 @@ impl Manifest {
         paths.sort_unstable();
         Ok(paths)
     }
-}
-
-fn check_duplicates(source_files: &[PathBuf]) -> Option<(String, String)> {
-    // Check for duplicated endpoints now since otherwise TSC
-    // reports the issue and we can produce a better diagnostic
-    // than TSC.
-    let i = source_files.iter();
-    for (a, b) in i.clone().zip(i.skip(1)) {
-        let a = &a.display().to_string();
-        let b = &b.display().to_string();
-        if without_extension(a) == without_extension(b) {
-            return Some((a.to_string(), b.to_string()));
-        }
-    }
-    None
 }
 
 fn dir_to_paths(dir: &Path, paths: &mut Vec<PathBuf>) -> anyhow::Result<()> {

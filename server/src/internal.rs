@@ -33,15 +33,15 @@ fn response(body: &str, status: u16) -> Result<Response<Body>> {
 
 #[derive(Serialize, Deserialize)]
 struct WebUIPostBody {
-    route: String,
+    code: String,
 }
 
 async fn webapply(body: Body, rpc_addr: &SocketAddr) -> Result<Response<Body>> {
     let body: WebUIPostBody = serde_json::from_slice(&hyper::body::to_bytes(body).await?)?;
     let mut client = ChiselRpcClient::connect(format!("http://{}", rpc_addr)).await?;
     let modules = vec![Module {
-        url: "file:///__route_map.ts".into(),
-        code: body.route,
+        url: "file:///__root.ts".into(),
+        code: body.code,
     }];
     client
         .apply(tonic::Request::new(ApplyRequest {

@@ -2,7 +2,7 @@
 
 import { crud } from "./crud.ts";
 import type { RouteMap } from "./routing.ts";
-import { mergeDeep, opAsync } from "./utils.ts";
+import { mergeDeep, opAsync, opSync } from "./utils.ts";
 
 /**
  * Base class for various Operators applicable on `ChiselCursor`. An
@@ -1006,7 +1006,7 @@ export const requestContext: {
     routingPath: string;
     userId: string | undefined;
 } = {
-    versionId: "",
+    versionId: opSync("op_chisel_get_version_id") as string,
     method: "",
     headers: [],
     path: "",

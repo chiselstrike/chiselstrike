@@ -12,14 +12,14 @@ pub(crate) type JsonObject = serde_json::Map<String, serde_json::Value>;
 #[macro_use]
 extern crate log;
 
-pub(crate) mod api;
 pub(crate) mod apply;
 pub(crate) mod auth;
 pub(crate) mod datastore;
+pub(crate) mod http;
 pub(crate) mod internal;
+pub(crate) mod kafka;
 pub(crate) mod ops;
 pub(crate) mod opt;
-pub(crate) mod kafka;
 pub(crate) mod policies;
 pub(crate) mod prefix_map;
 pub(crate) mod rpc;

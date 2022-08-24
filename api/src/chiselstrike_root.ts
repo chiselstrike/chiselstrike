@@ -3,6 +3,7 @@
 // This is code for the special `__chiselstrike` version in chiseld
 
 import { ChiselEntity } from "./datastore.ts";
+import { TopicMap } from "./kafka.ts";
 import { ChiselRequest } from "./request.ts";
 import { MiddlewareNext, RouteMap } from "./routing.ts";
 import { getSecret } from "./utils.ts";
@@ -12,7 +13,7 @@ class AuthSession extends ChiselEntity {}
 class AuthToken extends ChiselEntity {}
 class AuthAccount extends ChiselEntity {}
 
-export default new RouteMap()
+export const routeMap = new RouteMap()
     .prefix(
         "/auth",
         new RouteMap()
@@ -22,6 +23,8 @@ export default new RouteMap()
             .prefix("/accounts", AuthAccount.crud())
             .middleware(authMiddleware),
     );
+
+export const topicMap = new TopicMap();
 
 async function authMiddleware(
     request: ChiselRequest,

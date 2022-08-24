@@ -11,7 +11,7 @@ use structopt_toml::StructOptToml;
 #[structopt(name = "chiseld", version = env!("VERGEN_GIT_SEMVER_LIGHTWEIGHT"))]
 #[serde(deny_unknown_fields, default)]
 pub struct Opt {
-    /// user-visible API server listen address.
+    /// User-visible HTTP API server listen address.
     #[structopt(short, long, default_value = "localhost:8080")]
     pub api_listen_addr: String,
     /// RPC server listen address.

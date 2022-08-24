@@ -24,9 +24,11 @@ macro_rules! source_d_ts {
 lazy_static! {
     pub static ref SOURCES_JS: HashMap<&'static str, &'static str> = vec![
         source_js!("api"),
-        source_js!("chiselstrike_route_map"),
+        source_js!("chiselstrike_root"),
         source_js!("crud"),
         source_js!("datastore"),
+        source_js!("http"),
+        source_js!("kafka"),
         source_js!("request"),
         source_js!("routing"),
         source_js!("run"),
@@ -39,9 +41,11 @@ lazy_static! {
     .collect();
     pub static ref SOURCES_D_TS: HashMap<&'static str, &'static str> = vec![
         source_d_ts!("api"),
-        source_d_ts!("chiselstrike_route_map"),
+        source_d_ts!("chiselstrike_root"),
         source_d_ts!("crud"),
         source_d_ts!("datastore"),
+        source_d_ts!("http"),
+        source_d_ts!("kafka"),
         source_d_ts!("request"),
         source_d_ts!("routing"),
         source_d_ts!("run"),
