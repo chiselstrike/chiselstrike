@@ -574,15 +574,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "fd16c4719339c4530435d38e511904438d07cce7950afa3718a84ac36c10e89e"
 
 [[package]]
-name = "checked_command"
-version = "0.2.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "16fc244716619667ca8e5e25fc2a6242cebb6d4f28c1c2b96d3762bf04ab7015"
-dependencies = [
- "quick-error",
-]
-
-[[package]]
 name = "chisel-macros"
 version = "0.13.0-dev.0"
 dependencies = [
@@ -661,7 +652,6 @@ version = "0.13.0-dev.0"
 dependencies = [
  "anyhow",
  "bytes",
- "checked_command",
  "chisel-macros",
  "colored",
  "enclose",

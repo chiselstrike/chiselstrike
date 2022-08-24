@@ -36,7 +36,6 @@ vergen = { version = "6", default-features = false, features = ["git"] }
 
 [dev-dependencies]
 bytes = "1.2.0"
-checked_command = "0.2.4"
 chisel-macros = { path = "tests/integration_tests/chisel-macros" }
 colored = "2.0.0"
 enclose = "1.1"
