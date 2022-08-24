@@ -56,6 +56,7 @@ server = { path = "../server" }
 strip-ansi-escapes = "0.1.1"
 tempdir = "0.3.7"
 textwrap = "0.15.0"
+unindent = "0.1.10"
 url = "2.2.2"
 whoami = "1.2.1"
 
