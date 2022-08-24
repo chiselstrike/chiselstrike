@@ -51,8 +51,8 @@ pub async fn spawn(
 }
 
 async fn handle_event(server: &Server, topic: String, record: Record) -> Result<()> {
-    let key = record.key.unwrap_or_else(|| Vec::new());
-    let value = record.value.unwrap_or_else(|| Vec::new());
+    let key = record.key.unwrap_or_default();
+    let value = record.value.unwrap_or_default();
 
     // TODO: this is just a dirty proof-of-concept; in particular:
     // - we don't know how to map events to versions, so we send the event to _all_ versions
@@ -76,7 +76,7 @@ async fn handle_event(server: &Server, topic: String, record: Record) -> Result<
             }}
         })
         .collect::<FuturesUnordered<_>>();
-    let () = send_futs.collect().await;
+    send_futs.collect::<()>().await;
 
     Ok(())
 }

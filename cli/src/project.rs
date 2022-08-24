@@ -327,7 +327,7 @@ mod tests {
         m.models(d.path()).unwrap();
         m.policies(d.path()).unwrap();
         m.route_map(d.path()).unwrap();
-        m.events(d.path()).unwrap();
+        m.topic_map(d.path()).unwrap();
         m
     }
 

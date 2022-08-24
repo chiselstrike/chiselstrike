@@ -79,13 +79,9 @@ pub async fn run(opt: Opt) -> Result<Restart> {
     let secrets_task = TaskHandle(tokio::task::spawn(refresh_secrets(server.clone())));
     let signal_task = TaskHandle(tokio::task::spawn(wait_for_signals()));
 
-    info!(
-        "ChiselStrike server is ready 🚀 - URL: http://{} ",
-        state.opt.api_listen_addr
-    );
-
-    for kafka_task in kafka_tasks {
-        kafka_task.await??;
+    info!("ChiselStrike server is ready 🚀");
+    for http_addr in http_addrs.iter() {
+        info!("URL: http://{}", http_addr);
     }
     debug!("gRPC API address: {}", rpc_addr);
     debug!("Internal address: http://{}", internal_addr);
@@ -123,9 +119,7 @@ async fn make_server(opt: Opt) -> Result<(Arc<Server>, TaskHandle<Result<()>>)> 
     meta_service.create_schema().await?;
 
     let builtin_types = Arc::new(BuiltinTypes::new());
-    builtin_types
-        .create_backing_tables(&query_engine)
-        .await?;
+    builtin_types.create_backing_tables(&query_engine).await?;
 
     let type_systems = meta_service.load_type_systems(&builtin_types).await?;
     let type_systems = tokio::sync::Mutex::new(type_systems);

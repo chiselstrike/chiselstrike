@@ -29,17 +29,8 @@ impl<T> PrefixMap<T> {
         None
     }
 
-    pub fn iter(&self) -> impl Iterator<Item = (&str, &T)> {
-        self.map.iter().map(|(k, v)| (k.as_str(), v))
-    }
-
     pub fn insert(&mut self, k: String, v: T) -> Option<T> {
         self.map.insert(k, v)
-    }
-}
-
-    pub fn remove_prefix(&mut self, prefix: &str) {
-        self.map.retain(|k, _| !is_path_prefix(prefix, k))
     }
 }
 

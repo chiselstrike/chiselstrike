@@ -82,7 +82,12 @@ impl SecretAuthorization {
     pub fn is_allowed(&self, req: &http::request::Parts, secrets: &JsonObject, path: &str) -> bool {
         match self.paths.longest_prefix(path) {
             None => true,
-            Some((_, RequiredHeader { methods: Some(v), .. })) if !v.contains(&req.method) => true,
+            Some((
+                _,
+                RequiredHeader {
+                    methods: Some(v), ..
+                },
+            )) if !v.contains(&req.method) => true,
             Some((
                 _,
                 RequiredHeader {
