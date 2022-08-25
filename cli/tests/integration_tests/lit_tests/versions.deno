@@ -28,10 +28,10 @@ $CHISEL apply --version string-# 2>&1 || echo
 # CHECK: Error
 
 $CHISEL apply --version v0
-# CHECK: Code was applied
+# CHECK: Applied:
 
 $CHISEL apply --version v0-_
-# CHECK: Code was applied
+# CHECK: Applied:
 
 
 cat << EOF > "routes/foo.js"
@@ -41,7 +41,7 @@ export default async function my_req_func(req) {
 EOF
 
 $CHISEL apply --version v1
-# CHECK: Code was applied
+# CHECK: Applied:
 
 $CURL -o - $CHISELD_HOST/v0/foo
 # CHECK: HTTP/1.1 200 OK

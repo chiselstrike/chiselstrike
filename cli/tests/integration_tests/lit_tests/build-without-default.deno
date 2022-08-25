@@ -25,7 +25,7 @@ cd "$TEMPDIR"
 # FIXME, We should detect this error at compile time.
 $CHISEL apply
 
-# CHECK: Code was applied
+# CHECK: Applied:
 
 $CURL -X POST $CHISELD_HOST/dev/build
 

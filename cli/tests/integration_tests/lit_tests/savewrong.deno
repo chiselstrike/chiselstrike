@@ -36,7 +36,7 @@ export default async function chisel(req: Request) {
 EOF
 
 $CHISEL apply
-# CHECK: Code was applied
+# CHECK: Applied:
 
 $CURL $CHISELD_HOST/dev/store
 
@@ -52,7 +52,7 @@ import { AuthUser } from '@chiselstrike/api';
 export default AuthUser.crud();
 EOF
 $CHISEL apply
-# CHECK: Code was applied
+# CHECK: Applied:
 
 $CURL -d '{"name":"Foo", "email":"foo@t.co"}' $CHISELD_HOST/dev/store
 # CHECK: Error: Cannot save into type AuthUser.
@@ -74,7 +74,7 @@ export default Post.crud();
 EOF
 
 $CHISEL apply
-# CHECK: Code was applied
+# CHECK: Applied:
 
 $CURL -d '{"author":{"email": "foo@t.co"}}' $CHISELD_HOST/dev/store
 # CHECK: Error: Cannot save into type AuthUser.

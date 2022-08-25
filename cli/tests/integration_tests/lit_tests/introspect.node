@@ -17,7 +17,7 @@ cd "$TEMPDIR"
 mv package.json pkg.json
 
 $CHISEL apply
-# CHECK: Code was applied
+# CHECK: Applied:
 
 $CURL $CHISELD_HOST/__chiselstrike/
 # CHECK: HTTP/1.1 200 OK

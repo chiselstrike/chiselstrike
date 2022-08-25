@@ -30,7 +30,7 @@ export default async function chisel(req: Request) {
 EOF
 
 $CHISEL apply
-# CHECK: Code was applied
+# CHECK: Applied:
 
 $CURL -X POST $CHISELD_HOST/dev/savemany
 # CHECK: Ok

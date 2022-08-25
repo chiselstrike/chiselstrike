@@ -29,7 +29,7 @@ EOF
 
 cd "$TEMPDIR"
 $CHISEL apply
-# CHECK: Code was applied
+# CHECK: Applied:
 
 $CURL --data foobar -o - $CHISELD_HOST/dev/echo
 
