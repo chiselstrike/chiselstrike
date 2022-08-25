@@ -3,7 +3,39 @@ use reqwest::StatusCode;
 use serde_json::json;
 
 #[chisel_macros::test(modules = Node)]
-pub async fn test(mut c: TestContext) {
+pub async fn header_auth(mut c: TestContext) {
+    c.chisel.apply().await.unwrap();
+
+    // Can't access users without auth header
+    assert_eq!(
+        c.chisel.get_status("/__chiselstrike/auth/users").await,
+        StatusCode::FORBIDDEN
+    );
+
+    c.chisel.write(".env", r##"{ "CHISELD_AUTH_SECRET" : "1234" }"##);
+    c.restart_chiseld().await;
+
+    assert_eq!(c.chisel.get_text("/dev/hello").await, "hello world");
+    assert_eq!(
+        c.chisel.get_status_with_headers("/__chiselstrike/auth/users", header("ChiselAuth", "1234")).await,
+        StatusCode::OK
+    );
+    assert_eq!(
+        c.chisel.get_status_with_headers("/__chiselstrike/auth/users", header("ChiselAuth", "12345")).await,
+        StatusCode::FORBIDDEN
+    );
+    assert_eq!(
+        c.chisel.get_status_with_headers("/__chiselstrike/auth/users", header("ChiselAuth", "")).await,
+        StatusCode::FORBIDDEN
+    );
+    assert_eq!(
+        c.chisel.get_status("/__chiselstrike/auth/users").await,
+        StatusCode::FORBIDDEN
+    );
+}
+
+#[chisel_macros::test(modules = Node)]
+pub async fn token_auth(mut c: TestContext) {
     c.chisel.write_unindent(
         "policies/p.yaml", r##"
         routes:
