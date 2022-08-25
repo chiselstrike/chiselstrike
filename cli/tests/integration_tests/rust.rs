@@ -2,7 +2,9 @@
 
 use crate::common::get_free_port;
 use crate::database::{generate_database_config, Database, DatabaseConfig, PostgresDb, SqliteDb};
-use crate::framework::{execute_async, Chisel, GuardedChild, TestContext};
+use crate::framework::{
+    execute_async, wait_for_chiseld_startup, Chisel, GuardedChild, TestContext,
+};
 use crate::suite::{Modules, TestInstance, TestSuite};
 use crate::Opt;
 use colored::Colorize;
@@ -94,31 +96,22 @@ async fn setup_test_context(
         }),
     };
 
-    let mut chiseld = GuardedChild::new(
-        tokio::process::Command::new(chiseld())
-            .args([
-                "--webui",
-                "--db-uri",
-                db.url().as_str(),
-                "--api-listen-addr",
-                &chiseld_config.api_address.to_string(),
-                "--internal-routes-listen-addr",
-                &chiseld_config.internal_address.to_string(),
-                "--rpc-listen-addr",
-                &chiseld_config.rpc_address.to_string(),
-            ])
-            .current_dir(tmp_dir.path()),
-    );
+    let mut cmd = tokio::process::Command::new(chiseld());
+    cmd.args([
+        "--webui",
+        "--db-uri",
+        &db.url(),
+        "--api-listen-addr",
+        &chiseld_config.api_address.to_string(),
+        "--internal-routes-listen-addr",
+        &chiseld_config.internal_address.to_string(),
+        "--rpc-listen-addr",
+        &chiseld_config.rpc_address.to_string(),
+    ])
+    .current_dir(tmp_dir.path());
 
-    tokio::select! {
-        exit_status = chiseld.wait() => {
-            chiseld.show_output().await;
-            panic!("chiseld prematurely exited with {}", exit_status);
-        },
-        res = chisel.wait() => {
-            res.expect("failed to start up chiseld");
-        },
-    }
+    let mut chiseld = GuardedChild::new(cmd);
+    wait_for_chiseld_startup(&mut chiseld, &chisel).await;
 
     TestContext {
         chiseld,

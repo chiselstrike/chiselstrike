@@ -3,7 +3,7 @@ use reqwest::StatusCode;
 use serde_json::json;
 
 #[chisel_macros::test(modules = Node)]
-pub async fn test(c: TestContext) {
+pub async fn test(mut c: TestContext) {
     c.chisel.write(
         "policies/p.yaml",
         r##"routes:
@@ -11,7 +11,7 @@ pub async fn test(c: TestContext) {
    mandatory_header: { name: header33, secret_value_ref: TOKEN33 }"##,
     );
     c.chisel.write(".env", r##"{ "TOKEN33" : "s3cr3t" }"##);
-    c.chisel.restart().await.unwrap();
+    c.restart_chiseld().await;
     c.chisel.apply().await.unwrap();
 
     // Can't access /dev/hello without the required header.

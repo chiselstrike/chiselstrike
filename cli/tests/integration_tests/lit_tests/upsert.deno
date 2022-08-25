@@ -33,7 +33,7 @@ export default async function chisel(req: Request) {
 EOF
 
 $CHISEL apply
-# CHECK: Code was applied
+# CHECK: Applied:
 
 $CURL -X POST $CHISELD_HOST/dev/upsert
 # CHECK: HTTP/1.1 200 OK

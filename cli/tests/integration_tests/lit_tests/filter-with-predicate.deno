@@ -97,7 +97,7 @@ EOF
 
 cd "$TEMPDIR"
 $CHISEL apply
-# CHECK: Code was applied
+# CHECK: Applied:
 
 $CHISEL apply
 $CURL -X POST -o - $CHISELD_HOST/dev/store

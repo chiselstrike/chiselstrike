@@ -40,7 +40,7 @@ export default async function chisel(req: Request) {
 EOF
 
 $CHISEL apply
-# CHECK: Code was applied
+# CHECK: Applied:
 
 $CURL $CHISELD_HOST/dev/store
 
@@ -67,7 +67,7 @@ async function showError(req: ChiselRequest, next: MiddlewareNext): Promise<Resp
 }
 EOF
 $CHISEL apply
-# CHECK: Code was applied
+# CHECK: Applied:
 
 $CURL -d '{"name":"Foo", "email":"foo@t.co"}' $CHISELD_HOST/dev/store
 # CHECK: Error: Cannot save into auth type AuthUser
@@ -101,7 +101,7 @@ async function showError(req: ChiselRequest, next: MiddlewareNext): Promise<Resp
 EOF
 
 $CHISEL apply
-# CHECK: Code was applied
+# CHECK: Applied:
 
 $CURL -d '{"author":{"email": "foo@t.co"}}' $CHISELD_HOST/dev/store
 # CHECK: Error: Cannot save into nested type AuthUser

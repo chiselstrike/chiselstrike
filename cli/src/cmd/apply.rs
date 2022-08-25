@@ -106,7 +106,7 @@ pub(crate) async fn apply(
         Module::Deno => deno::apply(route_map, topic_map, &entities, optimize, auto_index).await?,
     };
 
-    for p in policies {
+    for p in &policies {
         policy_req.push(PolicyUpdateRequest {
             policy_config: read_to_string(p)?,
         });
@@ -156,10 +156,16 @@ pub(crate) async fn apply(
 
     let msg = execute!(client.apply(tonic::Request::new(req)).await);
 
-    println!("Code was applied to the ChiselStrike server. It contained:");
-    println!("  - models: {}", msg.types.len());
-    println!("  - event handlers: {}", msg.event_handlers.len());
-    println!("  - labels: {}", msg.labels.len());
+    println!("Applied:");
+    if !msg.types.is_empty() {
+        println!("  {} models", msg.types.len());
+    }
+    if !msg.event_handlers.is_empty() {
+        println!("  {} event handlers", msg.event_handlers.len());
+    }
+    if !msg.labels.is_empty() {
+        println!("  {} labels", msg.labels.len());
+    }
 
     Ok(())
 }

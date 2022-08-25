@@ -11,11 +11,11 @@ EOF
 
 cd "$TEMPDIR"
 $CHISEL apply
-# CHECK: Code was applied
+# CHECK: Applied:
 
 ## Identical definition is OK.
 $CHISEL apply
-# CHECK: Code was applied
+# CHECK: Applied:
 
 ## Changing labels is OK.
 cat << EOF > "$TEMPDIR/models/foo.ts"
@@ -25,7 +25,7 @@ export class Foo extends ChiselEntity {
 }
 EOF
 $CHISEL apply
-# CHECK: Code was applied
+# CHECK: Applied:
 
 # Adding default values is OK.
 cat << EOF > "$TEMPDIR/models/foo.ts"
@@ -35,7 +35,7 @@ export class Foo extends ChiselEntity {
 }
 EOF
 $CHISEL apply
-# CHECK: Code was applied
+# CHECK: Applied:
 
 ## Two compatible definitions in different files are rejected.
 cat << EOF > "$TEMPDIR/models/fooNoteADifferentFilenameHere.ts"
@@ -57,7 +57,7 @@ export class Foo extends ChiselEntity {
 }
 EOF
 $CHISEL apply
-# CHECK: Code was applied
+# CHECK: Applied:
 
 ## Go back to the basics, and add some data
 cat << EOF > "$TEMPDIR/models/foo.ts"
@@ -77,7 +77,7 @@ export default async function seed() {
 EOF
 
 $CHISEL apply
-# CHECK: Code was applied
+# CHECK: Applied:
 
 $CURL -X POST $CHISELD_HOST/dev/seed
 rm "$TEMPDIR/routes/seed.ts"
@@ -111,7 +111,7 @@ export class Foo extends ChiselEntity {
 }
 EOF
 $CHISEL apply 2>&1 || echo # (swallow the apply abort)
-# CHECK: Code was applied
+# CHECK: Applied:
 
 ## Removing fields is OK if they previously had a default
 cat << EOF > "$TEMPDIR/models/foo.ts"
@@ -120,7 +120,7 @@ export class Foo extends ChiselEntity {
 }
 EOF
 $CHISEL apply 2>&1 || echo # (swallow the apply abort)
-# CHECK: Code was applied
+# CHECK: Applied:
 
 ## clean up data.
 rm "$TEMPDIR/models/foo.ts"

@@ -81,7 +81,7 @@ EOF
 
 
 $CHISEL apply
-# CHECK: Code was applied
+# CHECK: Applied:
 
 $CURL -X POST $CHISELD_HOST/dev/store
 # CHECK: Ok
