@@ -23,23 +23,24 @@ pub mod prelude {
 
 pub struct GuardedChild {
     child: tokio::process::Child,
+    command: tokio::process::Command,
     pub stdout: AsyncTestableOutput,
     pub stderr: AsyncTestableOutput,
 }
 
 impl GuardedChild {
-    pub fn new(command: &mut tokio::process::Command) -> Self {
-        let mut child = command
-            .stdout(Stdio::piped())
+    pub fn new(mut cmd: tokio::process::Command) -> Self {
+        cmd.stdout(Stdio::piped())
             .stderr(Stdio::piped())
-            .kill_on_drop(true)
-            .spawn()
-            .expect("failed to spawn GuardedChild");
+            .kill_on_drop(true);
+
+        let mut child = cmd.spawn().expect("failed to spawn GuardedChild");
 
         let stdout = child.stdout.take().unwrap();
         let stderr = child.stderr.take().unwrap();
         Self {
             child,
+            command: cmd,
             stdout: AsyncTestableOutput::new(OutputType::Stdout, Box::pin(stdout)),
             stderr: AsyncTestableOutput::new(OutputType::Stderr, Box::pin(stderr)),
         }
@@ -56,6 +57,19 @@ impl GuardedChild {
     pub async fn show_output(&mut self) {
         self.stdout.show().await;
         self.stderr.show().await;
+    }
+
+    async fn restart(&mut self) {
+        use nix::sys::signal;
+        use nix::unistd::Pid;
+
+        let pid = Pid::from_raw(self.child.id().unwrap().try_into().unwrap());
+        signal::kill(pid, signal::Signal::SIGTERM).unwrap();
+        tokio::time::timeout(Duration::from_secs(10), self.wait())
+            .await
+            .expect("child process failed to respond to SIGTERM");
+
+        self.child = self.command.spawn().expect("failed to spawn GuardedChild");
     }
 }
 
@@ -316,10 +330,6 @@ impl Chisel {
     /// Runs `chisel wait` awaiting the readiness of chiseld service
     pub async fn wait(&self) -> Result<ProcessOutput, ProcessOutput> {
         self.exec("wait", &[]).await
-    }
-
-    pub async fn restart(&self) -> Result<ProcessOutput, ProcessOutput> {
-        self.exec("restart", &[]).await
     }
 
     /// Writes given `text` (probably code) into a file on given relative `path`
@@ -604,6 +614,26 @@ pub struct TestContext {
     // Note: The Database must come after chiseld to ensure that chiseld is dropped and terminated
     // before we try to drop the database.
     pub _db: Database,
+}
+
+impl TestContext {
+    /// Restarts the chiseld service and waits for it to come back online.
+    pub async fn restart_chiseld(&mut self) {
+        self.chiseld.restart().await;
+        wait_for_chiseld_startup(&mut self.chiseld, &self.chisel).await;
+    }
+}
+
+pub async fn wait_for_chiseld_startup(chiseld: &mut GuardedChild, chisel: &Chisel) {
+    tokio::select! {
+        exit_status = chiseld.wait() => {
+            chiseld.show_output().await;
+            panic!("chiseld prematurely exited with {}", exit_status);
+        },
+        res = chisel.wait() => {
+            res.expect("failed to start up chiseld");
+        },
+    }
 }
 
 pub fn header(name: &'static str, value: &str) -> HeaderMap {
