@@ -31,7 +31,7 @@ else
     DB_URL="sqlite://$TEMPDIR/chiseld.db?mode=rwc"
 fi
 
-$CHISELD --webui --db-uri "$DB_URL" --api-listen-addr "$CHISELD_HOST" --internal-routes-listen-addr "$CHISELD_INTERNAL" --rpc-listen-addr $CHISELD_RPC_HOST &
+$CHISELD --webui --debug --db-uri "$DB_URL" --api-listen-addr "$CHISELD_HOST" --internal-routes-listen-addr "$CHISELD_INTERNAL" --rpc-listen-addr $CHISELD_RPC_HOST &
 PID=$!
 
 function cleanup() {
