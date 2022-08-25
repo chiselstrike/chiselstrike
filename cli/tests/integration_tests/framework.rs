@@ -70,6 +70,11 @@ impl GuardedChild {
             .expect("child process failed to respond to SIGTERM");
 
         self.child = self.command.spawn().expect("failed to spawn GuardedChild");
+
+        let stdout = self.child.stdout.take().unwrap();
+        let stderr = self.child.stderr.take().unwrap();
+        self.stdout = AsyncTestableOutput::new(OutputType::Stdout, Box::pin(stdout));
+        self.stderr = AsyncTestableOutput::new(OutputType::Stderr, Box::pin(stderr));
     }
 }
 
