@@ -317,7 +317,10 @@ async function callEventHandlerImpl(
 
     const fullPath = "/" + apiVersion + path;
 
-    await eventHandlers[fullPath]({ key, value });
+    await eventHandlers[fullPath]({
+        key: new Blob([key]),
+        value: new Blob([value]),
+    });
 
     closeResources();
 

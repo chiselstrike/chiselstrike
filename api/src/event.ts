@@ -1,4 +1,4 @@
 export type ChiselEvent = {
-    key: ArrayBuffer;
-    value: ArrayBuffer;
+    key: Blob;
+    value: Blob;
 };

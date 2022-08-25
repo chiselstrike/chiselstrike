@@ -11,12 +11,9 @@ For example, to consume events from a `hello` topic, create a `events/hello.ts` 
 ```typescript title="my-backend/events/hello.ts"
 import { ChiselEvent } from "@chiselstrike/api";
 
-function toJSON(buffer: ArrayBuffer) {
-    return JSON.parse(String.fromCharCode.apply(null, new Uint8Array(buffer)));
-}
-
 export default async function (event: ChiselEvent) {
-    console.log(toJSON(event.value));
+    const value = JSON.parse(await event.value.text());
+    console.log(value);
 }
 ```
 
