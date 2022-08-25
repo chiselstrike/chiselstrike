@@ -15,12 +15,8 @@ cat << EOF > "$TEMPDIR/routes/build.ts"
 import { Person } from "../models/person.ts";
 
 export default async function chisel(req: Request) {
-    try {
-        await Person.build({}).save();
-        return new Response("");
-    } catch (e) {
-        return new Response("" + e);
-    }
+    await Person.build({}).save();
+    return new Response("");
 }
 EOF
 

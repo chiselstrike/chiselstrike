@@ -32,12 +32,8 @@ $CHISEL restart
 
 cat << EOF > "$TEMPDIR/routes/test2.ts"
 export default function chisel(req: Request): Response {
-    try {
-        // @ts-expect-error
-        return new Response(foo());
-    } catch (e) {
-        return new Response("" + e, { status: 500 });
-    }
+    // @ts-expect-error
+    return new Response(foo());
 }
 EOF
 $CHISEL apply

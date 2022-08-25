@@ -21,12 +21,8 @@ EOF
 cat << EOF > "$TEMPDIR/routes/delete.ts"
 import { User } from "../models/user.ts";
 export default async function chisel(req: Request) {
-    try {
-        await User.delete({ email: "alice@example.com"});
-        return new Response("OK");
-    } catch (e) {
-        return new Response("" + e, { status: 500 });
-    }
+    await User.delete({ email: "alice@example.com"});
+    return new Response("OK");
 }
 EOF
 

@@ -26,11 +26,7 @@ export default async function chisel(req: Request) {
             return new Response("Missing relUrl", { status: 400 });
         }
         const created = BlogPost.build({content, relUrl});
-        try {
-            await created.save();
-        } catch (e) {
-            return new Response("" + e, { status: 500 });
-        }
+        await created.save();
         return responseFromJson('inserted ' + created.id);
     } else if (req.method == 'GET') {
         const comments = await BlogPost.findMany({});

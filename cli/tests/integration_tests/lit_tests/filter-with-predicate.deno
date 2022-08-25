@@ -386,12 +386,8 @@ export default async function chisel(req: Request) {
             }
         });
 
-    try {
-        const results = (await filtered.toArray()).map(p => p.name);
-        return new Response("[" + results.join(", ") + "]");
-    } catch (e) {
-        return new Response("" + e);
-    }
+    const results = (await filtered.toArray()).map(p => p.name);
+    return new Response("[" + results.join(", ") + "]");
 }
 EOF
 
@@ -432,12 +428,8 @@ export default async function chisel(req: Request) {
             }
         });
 
-    try {
-        const results = (await filtered.toArray()).map(p => p.name);
-        return new Response("[" + results.join(", ") + "]");
-    } catch (e) {
-        return new Response("" + e);
-    }
+    const results = (await filtered.toArray()).map(p => p.name);
+    return new Response("[" + results.join(", ") + "]");
 }
 EOF
 

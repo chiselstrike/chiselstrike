@@ -30,11 +30,7 @@ import { Person } from "../models/person.ts";
 export default async function chisel(req: Request) {
     let person = new Person();
     person.first_name = "foo";
-    try {
-        await person.save();
-    } catch (e) {
-        return new Response("" + e, { status: 500 });
-    }
+    await person.save();
     return new Response("Ok984");
 }
 EOF
@@ -53,18 +49,7 @@ $CURL -X POST $CHISELD_HOST/dev/store
 ## Can't save auth types from user routes:
 cat << EOF > "$TEMPDIR/routes/store.ts"
 import { AuthUser, ChiselRequest } from '@chiselstrike/api';
-import { MiddlewareNext } from 'chisel:///routing.ts'; // TODO : replace with public API
-
-export default AuthUser.crud()
-    .middleware(showError);
-
-async function showError(req: ChiselRequest, next: MiddlewareNext): Promise<Response> {
-    try {
-        return await next(req);
-    } catch (e) {
-        return new Response("" + e, { status: 500 });
-    }
-}
+export default AuthUser.crud();
 EOF
 $CHISEL apply
 # CHECK: Applied:
@@ -84,20 +69,8 @@ export class Post extends ChiselEntity {
 EOF
 
 cat << EOF > "$TEMPDIR/routes/store.ts"
-import { ChiselRequest } from '@chiselstrike/api';
-import { MiddlewareNext } from 'chisel:///routing.ts'; // TODO : replace with public API
-
 import { Post } from '../models/post.ts';
-export default Post.crud()
-    .middleware(showError);
-
-async function showError(req: ChiselRequest, next: MiddlewareNext): Promise<Response> {
-    try {
-        return await next(req);
-    } catch (e) {
-        return new Response("" + e, { status: 500 });
-    }
-}
+export default Post.crud();
 EOF
 
 $CHISEL apply

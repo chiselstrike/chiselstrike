@@ -14,12 +14,8 @@ export default async function chisel(req: Request) {
     filtered.id = "badid";
     filtered.first_name = "Glauber";
 
-    try {
-        await filtered.save();
-        return new Response("Ok");
-    } catch (e) {
-        return new Response("" + e, { status: 500 });
-    }
+    await filtered.save();
+    return new Response("Ok");
 }
 EOF
 

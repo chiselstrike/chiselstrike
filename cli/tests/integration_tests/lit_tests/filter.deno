@@ -126,7 +126,6 @@ $CURL -X POST -o - $CHISELD_HOST/dev/take_filter
 
 cat << EOF > "$TEMPDIR/models/types.ts"
 import { ChiselEntity } from '@chiselstrike/api';
-
 export class TestingEntity extends ChiselEntity {
     limit: string = "limit";
     group: string = "group";
