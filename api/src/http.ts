@@ -72,16 +72,20 @@ export async function handleHttpRequest(
         routerMatch.params,
     );
 
-    let response: Response;
-    let responseBody: ArrayBuffer;
     try {
-        response = await handleRouterMatch(routerMatch, chiselRequest);
+        const response = await handleRouterMatch(routerMatch, chiselRequest);
 
         // read the response body before committing the transaction, because user
         // code might still be running while the response is streaming
-        responseBody = await response.arrayBuffer();
+        const responseBody = await response.arrayBuffer();
 
         await opAsync("op_chisel_commit_transaction");
+
+        return {
+            status: response.status,
+            headers: Array.from(response.headers.entries()),
+            body: new Uint8Array(responseBody),
+        };
     } catch (e) {
         let description = "";
         if (e instanceof Error && e.stack !== undefined) {
@@ -103,12 +107,6 @@ export async function handleHttpRequest(
         // TODO: perhaps we should introduce a "debug mode" that would return a nice error response?
         return emptyResponse(500);
     }
-
-    return {
-        status: response.status,
-        headers: Array.from(response.headers.entries()),
-        body: new Uint8Array(responseBody),
-    };
 }
 
 function handleRouterMatch(
@@ -119,6 +117,7 @@ function handleRouterMatch(
         routerMatch.middlewares,
         routerMatch.handler,
         request,
+        0,
     );
 }
 
@@ -126,8 +125,9 @@ async function handleMiddlewareChain(
     middlewares: Middleware[],
     handler: Handler,
     request: ChiselRequest,
+    middlewareIndex: number,
 ): Promise<Response> {
-    if (middlewares.length == 0) {
+    if (middlewareIndex >= middlewares.length) {
         // call the handler function
         const responseLike = await handler.call(undefined, request);
         if (responseLike instanceof Response) {
@@ -140,8 +140,8 @@ async function handleMiddlewareChain(
     } else {
         // call the middleware handler, passing a callback that will continue in the middleware chain
         const next = (request: ChiselRequest) =>
-            handleMiddlewareChain(middlewares.slice(1), handler, request);
-        return middlewares[0].handler.call(undefined, request, next);
+            handleMiddlewareChain(middlewares, handler, request, middlewareIndex + 1);
+        return middlewares[middlewareIndex].handler.call(undefined, request, next);
     }
 }
 

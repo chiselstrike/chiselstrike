@@ -131,7 +131,7 @@ export function crud<
     async function deleteAll(req: ChiselRequest): Promise<Response> {
         await deleteEntitiesCrud(entity, Array.from(req.query));
         return createResponse(
-            `Deleted entities matching ${new URL(req.url).search}`,
+            `Deleted entities matching ?${req.query.toString()}`,
             200,
         );
     }

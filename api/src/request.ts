@@ -11,11 +11,11 @@ import type { AuthUser } from "./datastore.ts";
  * @property {Params} params - Helper class containing parameters from the URL path.
  */
 export class ChiselRequest extends Request {
-    public path: string;
-    public versionId: string;
-    public user: AuthUser | undefined;
-    public query: Query;
-    public params: Params;
+    public readonly path: string;
+    public readonly versionId: string;
+    public readonly user: AuthUser | undefined;
+    public readonly query: Query;
+    public readonly params: Params;
 
     constructor(
         input: string,
@@ -126,6 +126,13 @@ export class Query {
      */
     [Symbol.iterator](): IterableIterator<[string, string]> {
         return this.entries();
+    }
+
+    /**
+     * The toString() method returns a query string suitable for use in a URL.
+     */
+    toString(): string {
+        return this.params.toString();
     }
 }
 
