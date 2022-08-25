@@ -71,6 +71,9 @@ pub struct Opt {
     /// Activate inspector, but pause the runtime at startup to wait for a debugger to attach.
     #[structopt(long)]
     inspect_brk: bool,
+    /// Activate debug mode, it will show runtime exceptions in HTTP responses.
+    #[structopt(long)]
+    debug: bool,
     /// size of database connection pool.
     #[structopt(short, long, default_value = "10")]
     nr_connections: usize,
@@ -238,7 +241,7 @@ async fn run(state: SharedState, init: InitState, mut cmd: ExecutorChannel) -> R
 
     kafka::init().await?;
 
-    let mut api_service = ApiService::new(api_info);
+    let mut api_service = ApiService::new(api_info, state.opt.debug);
     crate::auth::init(&mut api_service).await?;
     crate::introspect::init(&api_service);
 

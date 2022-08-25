@@ -152,16 +152,18 @@ pub struct ApiService {
     paths: Mutex<PrefixMap<RouteFn>>,
     event_handlers: Mutex<HashMap<String, EventFn>>,
     info: Mutex<ApiInfoMap>,
+    debug: bool,
 }
 
 impl ApiService {
-    pub fn new(mut info: ApiInfoMap) -> Self {
+    pub fn new(mut info: ApiInfoMap, debug: bool) -> Self {
         info.insert("__chiselstrike".into(), ApiInfo::chiselstrike());
         info.insert("".into(), ApiInfo::all_routes());
         Self {
             paths: Default::default(),
             event_handlers: Default::default(),
             info: Mutex::new(info),
+            debug,
         }
     }
 
@@ -229,7 +231,7 @@ impl ApiService {
     async fn route(&self, req: Request<hyper::Body>) -> hyper::http::Result<Response<Body>> {
         match self.route_impl(req).await {
             Ok(val) => Ok(val),
-            Err(err) => Self::internal_error(err),
+            Err(err) => self.internal_error(err),
         }
     }
 
@@ -266,10 +268,15 @@ impl ApiService {
             .body(Body::default())?)
     }
 
-    fn internal_error(err: anyhow::Error) -> hyper::http::Result<Response<Body>> {
+    fn internal_error(&self, err: anyhow::Error) -> hyper::http::Result<Response<Body>> {
         Response::builder()
             .status(StatusCode::INTERNAL_SERVER_ERROR)
-            .body(format!("{:?}\n", err).into())
+            .body(if self.debug {
+                format!("{:?}\n", err).into()
+            } else {
+                log::error!("Internal server error: {:?}", err);
+                Body::default()
+            })
     }
 
     pub fn forbidden(err: &str) -> Result<Response<Body>> {
