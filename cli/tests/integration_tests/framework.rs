@@ -403,6 +403,10 @@ impl Chisel {
         self.request(reqwest::Method::POST, url)
     }
 
+    pub fn delete(&self, url: &str) -> RequestBuilder {
+        self.request(reqwest::Method::DELETE, url)
+    }
+
     pub async fn get_text(&self, url: &str) -> String {
         self.get(url).send().await.text()
     }
