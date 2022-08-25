@@ -22,7 +22,7 @@ export type HttpResponse = {
     body: Uint8Array;
 };
 
-const versionId: string = opSync("op_chisel_get_version_id") as string;
+const versionId = opSync("op_chisel_get_version_id") as string;
 
 export async function handleHttpRequest(
     router: Router,

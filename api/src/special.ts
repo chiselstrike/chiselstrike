@@ -1,5 +1,5 @@
 import { RouteMap } from "./routing.ts";
-import { responseFromJson } from "./utils.ts";
+import { opSync, responseFromJson } from "./utils.ts";
 
 // Corresponds to the `VersionInfo` struct in Rust
 type VersionInfo = {
@@ -7,13 +7,14 @@ type VersionInfo = {
     tag: string;
 };
 
-const versionInfo: VersionInfo = Deno.core.opSync("op_chisel_get_version_info");
+const versionId = opSync("op_chisel_get_version_id") as string;
+const versionInfo = opSync("op_chisel_get_version_info") as VersionInfo;
 
 export function specialBefore(routeMap: RouteMap) {
     function handleSwagger(): Response {
         const paths: Record<string, unknown> = {};
         for (const route of routeMap.routes) {
-            paths[route.pathPattern] = {};
+            paths[`/${versionId}${route.pathPattern}`] = {};
         }
 
         const swagger = {
