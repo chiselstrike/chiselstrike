@@ -10,7 +10,7 @@ EOF
 
 cd "$TEMPDIR"
 $CHISEL apply
-# CHECK: Code was applied
+# CHECK: Applied:
 
 num=$($CURL $CHISELD_HOST/dev/foo | grep ChiselUID | wc -l)
 echo Found $num copies

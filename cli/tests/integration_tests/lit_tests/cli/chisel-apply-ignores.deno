@@ -21,4 +21,4 @@ cp "$TEMPDIR/routes/hello.ts" "$TEMPDIR/routes/#hello.ts#"
 
 $CHISEL apply
 
-# CHECK: Code was applied
+# CHECK: Applied:

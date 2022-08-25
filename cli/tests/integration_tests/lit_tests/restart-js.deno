@@ -18,7 +18,7 @@ EOF
 
 cd "$TEMPDIR"
 $CHISEL apply
-# CHECK: Code was applied
+# CHECK: Applied:
 
 $CURL -o - $CHISELD_HOST/dev/test1
 # CHECK: HTTP/1.1 200 OK
@@ -36,7 +36,7 @@ export default async function chisel(req) {
 }
 EOF
 $CHISEL apply
-# CHECK: Code was applied
+# CHECK: Applied:
 
 $CURL -o - $CHISELD_HOST/dev/test2
 

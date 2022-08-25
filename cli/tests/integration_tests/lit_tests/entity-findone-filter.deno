@@ -26,7 +26,7 @@ export default async function (req: Request): Promise<Response> {
 EOF
 
 $CHISEL apply
-# CHECK: Code was applied
+# CHECK: Applied:
 
 $CURL -X POST $CHISELD_HOST/dev/entity-methods
 # CHECK: Ok

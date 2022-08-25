@@ -26,7 +26,7 @@ export default async function (req: Request): Promise<Response> {
 EOF
 
 $CHISEL apply
-# CHECK: Code was applied
+# CHECK: Applied:
 
 $CURL -d '{"username": "penberg"}' $CHISELD_HOST/dev/user
 # CHECK: penbergPekka

@@ -9,7 +9,7 @@ export class Foo extends ChiselEntity { a?: string; }
 export class Bar extends ChiselEntity { a: string = "default"; }
 EOF
 $CHISEL apply
-# CHECK: Code was applied
+# CHECK: Applied:
 
 $CHISEL restart
 $CHISEL describe

@@ -7,7 +7,7 @@ cp examples/csv.ts examples/find.ts "$TEMPDIR/routes"
 
 cd "$TEMPDIR"
 $CHISEL apply
-# CHECK: Code was applied
+# CHECK: Applied:
 
 $CURL --data '
 adam,smith

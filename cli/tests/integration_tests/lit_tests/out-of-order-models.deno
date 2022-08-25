@@ -34,4 +34,4 @@ EOF
 cd "$TEMPDIR"
 
 $CHISEL apply
-# CHECK: Code was applied
+# CHECK: Applied:

@@ -8,7 +8,7 @@ cat << EOF > "$TEMPDIR/models/types.ts"
 export class Unary extends ChiselEntity { a: number = +1; b: number = 0; c: number = -1 ;}
 EOF
 $CHISEL apply
-# CHECK: Code was applied
+# CHECK: Applied:
 
 $CHISEL restart
 $CHISEL describe
@@ -106,7 +106,7 @@ EOF
 
 cd "$TEMPDIR"
 $CHISEL apply
-# CHECK: Code was applied
+# CHECK: Applied:
 
 
 $CURL -o - $CHISELD_HOST/dev/readold
@@ -169,7 +169,7 @@ EOF
 
 cd "$TEMPDIR"
 $CHISEL apply
-# CHECK: Code was applied
+# CHECK: Applied:
 
 $CURL -o - "$CHISELD_HOST/dev/find_many?key=a&value=xaxa" | count_results
 # CHECK: Number of results: 0
