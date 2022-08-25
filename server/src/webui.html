@@ -33,7 +33,7 @@
     <label for="code">Code:</label><textarea id="code">
 import { RouteMap } from "@chiselstrike/api";
 export const routeMap = new RouteMap();
-routeMap.prefix("/ep1", async function (req) {
+routeMap.get("/ep1", async function (req) {
     return new Response("hello");
 });
 export const topicMap = undefined;

@@ -27,6 +27,9 @@ pub(crate) struct FileRoute {
     pub file_path: PathBuf,
     /// URL Pattern path for this route.
     pub path_pattern: String,
+    /// Legacy: relative path to the file without extension. Remove this when `RouteMap.convert()`
+    /// no longer needs it to emulate the deprecated field `ChiselRequest.endpoint`.
+    pub legacy_file_name: Option<String>,
 }
 
 pub(crate) fn build_file_route_map(
@@ -38,7 +41,7 @@ pub(crate) fn build_file_route_map(
         let route_dir = base_dir.join(route_dir);
         let route_dir = fs::canonicalize(&route_dir)
             .with_context(|| format!("Could not canonicalize path {}", route_dir.display()))?;
-        walk_dir(&mut route_map, &route_dir, "")
+        walk_dir(&mut route_map, &route_dir, &route_dir, "")
             .with_context(|| format!("Could not read routes from {}", route_dir.display()))?;
     }
     route_map
@@ -47,7 +50,12 @@ pub(crate) fn build_file_route_map(
     Ok(route_map)
 }
 
-fn walk_dir(route_map: &mut FileRouteMap, dir_path: &Path, path_pattern: &str) -> Result<()> {
+fn walk_dir(
+    route_map: &mut FileRouteMap,
+    route_dir: &Path,
+    dir_path: &Path,
+    path_pattern: &str,
+) -> Result<()> {
     let root_ts_path = dir_path.join("_root.ts");
     let root_is_file = try_is_file(&root_ts_path).with_context(|| {
         format!(
@@ -59,19 +67,21 @@ fn walk_dir(route_map: &mut FileRouteMap, dir_path: &Path, path_pattern: &str) -
         route_map.routes.push(FileRoute {
             file_path: root_ts_path,
             path_pattern: path_pattern.into(),
+            legacy_file_name: None,
         });
         return Ok(());
     }
 
     for entry in fs::read_dir(dir_path)? {
         let entry = entry?;
-        walk_dir_entry(route_map, &entry, path_pattern)?;
+        walk_dir_entry(route_map, route_dir, &entry, path_pattern)?;
     }
     Ok(())
 }
 
 fn walk_dir_entry(
     route_map: &mut FileRouteMap,
+    route_dir: &Path,
     entry: &fs::DirEntry,
     path_pattern: &str,
 ) -> Result<()> {
@@ -89,12 +99,14 @@ fn walk_dir_entry(
         .with_context(|| format!("Could not read metadata of {}", entry_path.display()))?;
     if metadata.is_file() {
         if let Some(stem) = entry_name.strip_suffix(".ts") {
+            let legacy_file_name = get_legacy_file_name(route_dir, &entry_path);
             route_map.routes.push(FileRoute {
                 file_path: entry_path,
                 path_pattern: match stem {
                     "index" => path_pattern.to_string(),
                     stem => format!("{}/{}", path_pattern, stem_to_pattern(stem)),
                 },
+                legacy_file_name,
             });
         } else if entry_name.ends_with(".js") {
             bail!(
@@ -104,7 +116,7 @@ fn walk_dir_entry(
         }
     } else if metadata.is_dir() {
         let dir_path_pattern = format!("{}/{}", path_pattern, stem_to_pattern(entry_name));
-        walk_dir(route_map, &entry_path, &dir_path_pattern)
+        walk_dir(route_map, route_dir, &entry_path, &dir_path_pattern)
             .with_context(|| format!("Could not read routes from {}", entry_path.display()))?;
     }
 
@@ -127,4 +139,11 @@ fn try_is_file(path: &Path) -> Result<bool> {
             _ => Err(anyhow!(err)),
         },
     }
+}
+
+fn get_legacy_file_name(route_dir: &Path, file_path: &Path) -> Option<String> {
+    let relative_path = file_path.strip_prefix(route_dir).ok()?;
+    let parent = relative_path.parent()?;
+    let stem = relative_path.file_stem()?;
+    parent.join(stem).to_str().map(str::to_string)
 }

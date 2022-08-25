@@ -70,6 +70,7 @@ export async function handleHttpRequest(
         user,
         url.searchParams,
         routerMatch.params,
+        routerMatch.legacyFileName,
     );
 
     try {

@@ -43,7 +43,7 @@ fn run_tests_inner(opt: &Opt, optimize: bool) -> bool {
 
     env::set_var("CHISELD", chiseld);
     env::set_var("RMCOLOR", "sed s/\x1B\\[[0-9;]*[A-Za-z]//g");
-    env::set_var("CURL", "curl -N -S -s -i -w \\n");
+    env::set_var("CURL", "curl -N -S -s -i -L -w \\n");
     env::set_var("CREATE_APP", create_app);
     env::set_var("TEST_DATABASE", opt.database.to_string());
 

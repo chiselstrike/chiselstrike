@@ -459,27 +459,35 @@ async fn method_manual(c: TestContext) {
 }
 
 #[test(modules = Deno)]
-async fn method_object(c: TestContext) {
+async fn object(c: TestContext) {
     c.chisel.write(
-        "routes/index.ts",
-        r#"
-        import { RouteMap } from '@chiselstrike/api';
-        export default new RouteMap()
-            .prefix('/route1', {
-                get: () => [1, 'get'],
-                post: () => [1, 'post'],
-            })
-            .prefix('/route2', {
-                'get|post': () => [2],
-            })
-            .prefix('/route3', {
-                'DELETE': () => [3, "delete"],
-                'patch': () => [3, "patch"],
-            })
-            .prefix('/route4', {
-                '*': () => [4],
-            });
-        "#,
+        "routes/route1.ts",
+        r#"export default {
+            get: () => [1, 'get'],
+            post: () => [1, 'post'],
+        }"#,
+    );
+
+    c.chisel.write(
+        "routes/route2.ts",
+        r#"export default {
+            'get|post': () => [2],
+        }"#,
+    );
+
+    c.chisel.write(
+        "routes/route3.ts",
+        r#"export default {
+            'DELETE': () => [3, "delete"],
+            'patch': () => [3, "patch"],
+        }"#,
+    );
+
+    c.chisel.write(
+        "routes/route4.ts",
+        r#"export default {
+            '*': () => [4],
+        }"#,
     );
 
     c.chisel.apply_ok().await;

@@ -2,7 +2,7 @@
 
 # RUN: sh -e @file
 
-$CURL -d '{"code": "import { RouteMap } from \"@chiselstrike/api\"; export const routeMap = new RouteMap(); routeMap.prefix(\"/ep1\", async function(r) { return new Response(\"success\\n\") }); export const topicMap = undefined;"}' $CHISELD_INTERNAL/apply
+$CURL -d '{"code": "import { RouteMap } from \"@chiselstrike/api\"; export const routeMap = new RouteMap(); routeMap.get(\"/ep1\", async function(r) { return \"success\\n\" }); export const topicMap = undefined;"}' $CHISELD_INTERNAL/apply
 # CHECK: access-control-allow-origin: *
 # CHECK: access-control-allow-methods: POST, PUT, GET, OPTIONS
 

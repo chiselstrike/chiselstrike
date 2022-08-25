@@ -17,6 +17,8 @@ export class ChiselRequest extends Request {
     public readonly query: Query;
     public readonly params: Params;
 
+    private readonly legacyFileName: string | undefined;
+
     constructor(
         input: string,
         init: RequestInit,
@@ -25,6 +27,7 @@ export class ChiselRequest extends Request {
         user: AuthUser | undefined,
         query: URLSearchParams,
         params: Record<string, string>,
+        legacyFileName: string | undefined,
     ) {
         super(input, init);
         this.path = path;
@@ -32,6 +35,27 @@ export class ChiselRequest extends Request {
         this.user = user;
         this.query = new Query(query);
         this.params = new Params(params);
+        this.legacyFileName = legacyFileName;
+    }
+
+    /** @deprecated */
+    get endpoint(): string {
+        return "/" + (this.legacyFileName ?? "");
+    }
+
+    /** @deprecated */
+    get pathParams(): string {
+        return this.params.get("legacyPathParams");
+    }
+
+    /** @deprecated */
+    pathComponents(): string[] {
+        return this.pathParams.split("/").filter((n) => n.length != 0);
+    }
+
+    /** @deprecated */
+    get version(): string {
+        return this.versionId;
     }
 }
 

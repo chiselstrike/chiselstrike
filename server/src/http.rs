@@ -14,6 +14,7 @@ use serde::{Deserialize, Serialize};
 use std::convert::Infallible;
 use std::future::ready;
 use std::net::SocketAddr;
+use std::str::FromStr;
 use std::sync::Arc;
 use tokio::sync::{mpsc, oneshot};
 use utils::TaskHandle;
@@ -68,6 +69,11 @@ async fn try_handle_request(
     request: hyper::Request<hyper::Body>,
 ) -> Result<hyper::Response<hyper::Body>> {
     let path = request.uri().path();
+    let normalized_path = normalize_path(&path);
+    if normalized_path != path {
+        return Ok(redirect_to_path(request.uri(), &normalized_path));
+    }
+
     if path == "/" {
         return Ok(handle_index(server));
     }
@@ -267,6 +273,37 @@ fn handle_error(
     log::error!("Error while handling {} {}: {:?}", method, uri, err);
     hyper::Response::builder()
         .status(hyper::StatusCode::INTERNAL_SERVER_ERROR)
+        .body(hyper::Body::empty())
+        .unwrap()
+}
+
+fn normalize_path(path: &str) -> String {
+    let mut normalized = String::with_capacity(path.len());
+    normalized.push('/');
+    for (i, segment) in path.split('/').filter(|segment| !segment.is_empty()).enumerate() {
+        if i != 0 {
+            normalized.push('/');
+        }
+        normalized.push_str(segment);
+    }
+    normalized
+}
+
+fn redirect_to_path(uri: &hyper::Uri, path: &str) -> hyper::Response<hyper::Body> {
+    let mut parts = uri.clone().into_parts();
+
+    let path_and_query = parts.path_and_query
+        .unwrap_or_else(|| http::uri::PathAndQuery::from_static("/"));
+    let path_and_query_str = match path_and_query.query() {
+        Some(query) => format!("{}?{}", path, query),
+        None => path.to_string(),
+    };
+    parts.path_and_query = Some(http::uri::PathAndQuery::from_str(&path_and_query_str).unwrap());
+
+    let redirect_uri = hyper::Uri::from_parts(parts).unwrap();
+    hyper::Response::builder()
+        .status(hyper::StatusCode::PERMANENT_REDIRECT)
+        .header("location", redirect_uri.to_string())
         .body(hyper::Body::empty())
         .unwrap()
 }

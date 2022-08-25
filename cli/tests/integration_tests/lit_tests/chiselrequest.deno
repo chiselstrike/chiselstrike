@@ -1,0 +1,57 @@
+# SPDX-FileCopyrightText: © 2022 ChiselStrike <info@chiselstrike.com>
+
+# RUN: sh -e @file
+
+cd "$TEMPDIR"
+
+cat << EOF > "$TEMPDIR/routes/chisel.ts"
+import { ChiselRequest, responseFromJson } from "@chiselstrike/api"
+
+export default async function chisel(req: ChiselRequest) {
+    const obj = { "path": req.pathParams, "version": req.version, "endpoint": req.endpoint, "components": req.pathComponents().length };
+    return responseFromJson(obj);
+}
+EOF
+
+mkdir "$TEMPDIR/routes/chisel"
+cat << EOF > "$TEMPDIR/routes/chisel/inner.ts"
+import { ChiselRequest, responseFromJson } from "@chiselstrike/api"
+
+export default async function chisel(req: ChiselRequest) {
+    const obj = { "path": req.pathParams, "version": req.version, "endpoint": req.endpoint, "components": req.pathComponents().length };
+    return responseFromJson(obj);
+}
+EOF
+
+$CHISEL apply
+
+# overdo on extra / and make sure the path is sanitized on ChiselRequest
+$CURL $CHISELD_HOST/dev//////chisel////arg//
+# CHECK: HTTP/1.1 308
+# CHECK: HTTP/1.1 200
+# CHECK: "path": "arg",
+# CHECK: "version": "dev",
+# CHECK: "endpoint": "/chisel"
+# CHECK: "components": 1
+
+$CURL $CHISELD_HOST/dev//////chisel////arg//foo/bar
+# CHECK: HTTP/1.1 308
+# CHECK: HTTP/1.1 200
+# CHECK: "path": "arg/foo/bar",
+# CHECK: "components": 3
+
+$CURL $CHISELD_HOST/dev//////chisel////inner//foo/bar
+# CHECK: HTTP/1.1 308
+# CHECK: HTTP/1.1 200
+# CHECK: "path": "foo/bar",
+# CHECK: "components": 2
+
+$CURL $CHISELD_HOST/dev/chisel/
+# CHECK: HTTP/1.1 200
+# CHECK: "path": "",
+# CHECK: "components": 0
+
+$CURL $CHISELD_HOST/dev/chisel?query_path="Doesntshow"
+# CHECK: HTTP/1.1 200
+# CHECK: "path": "",
+# CHECK: "components": 0

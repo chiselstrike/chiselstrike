@@ -72,7 +72,13 @@ export class RouteMap {
     route(method: string | string[], path: string, handler: Handler): this {
         const methods = Array.isArray(method) ? method : [method];
         const pathPattern = path[0] !== "/" ? "/" + path : path;
-        this.routes.push({ methods, pathPattern, handler, middlewares: [] });
+        this.routes.push({
+            methods,
+            pathPattern,
+            handler,
+            middlewares: [],
+            legacyFileName: undefined,
+        });
         return this;
     }
 
@@ -82,13 +88,9 @@ export class RouteMap {
      * you don't want to add any prefix, use `"/"` or `""`. The prefix can also
      * contain patterns (see the documentation for `route()`).
      *
-     * @param routes A `RouteMap` with routes that will be added to `this`.
-     * converted into a `RouteMap`: you can also pass a handler function (it
-     * will receive all requests under this path prefix) or a plain object that
-     * maps HTTP methods to handler functions. In most cases, you should use a
-     * `RouteMap`.
+     * @param routeMap A `RouteMap` with routes that will be added to `this`.
      */
-    prefix(path: string, routes: RouteMapLike): this {
+    prefix(path: string, routeMap: RouteMap): this {
         // "/foo" -> "/foo"
         // "foo" -> "/foo"
         // "foo/" -> "/foo"
@@ -100,13 +102,13 @@ export class RouteMap {
             path = path.slice(0, path.length - 1);
         }
 
-        const routeMap = RouteMap.convert(routes);
         for (const route of routeMap.routes) {
             this.routes.push({
                 methods: route.methods,
                 pathPattern: path + route.pathPattern,
                 handler: route.handler,
                 middlewares: route.middlewares.concat(routeMap.middlewares),
+                legacyFileName: route.legacyFileName,
             });
         }
         return this;
@@ -146,22 +148,35 @@ export class RouteMap {
         return this;
     }
 
-    static convert(routes: RouteMapLike): RouteMap {
+    // This is called to convert a default export from a file inside `/routes` into a `RouteMap`.
+    // TODO: remove the `legacyFileName` when we no longer need the legacy properties in `ChiselRequest`.
+    static convert(routes: RouteMapLike, legacyFileName?: string): RouteMap {
         if (routes instanceof RouteMap) {
             return routes;
-        } else if (typeof routes === "function") {
-            return new RouteMap().route("*", "*", routes);
+        }
+
+        const routeMap = new RouteMap();
+        if (typeof routes === "function") {
+            const route = {
+                methods: ["*"],
+                // TODO: replace this with just "/(.*)" when we no longer need the legacy properties in
+                // `ChiselRequest`
+                pathPattern: "/:legacyPathParams(.*)",
+                handler: routes,
+                middlewares: [],
+                legacyFileName,
+            };
+            routeMap.routes.push(route);
         } else if (typeof routes === "object") {
-            const routeMap = new RouteMap();
             for (const method in routes) {
                 routeMap.route(method, "*", routes[method]);
             }
-            return routeMap;
         } else {
             throw new TypeError(
                 `Cannot convert ${typeof routes} into a RouteMap`,
             );
         }
+        return routeMap;
     }
 }
 
@@ -170,6 +185,8 @@ export type Route = {
     pathPattern: string;
     handler: Handler;
     middlewares: Middleware[];
+    // TODO: remove this when we no longer need the legacy properties in `ChiselRequest`
+    legacyFileName: string | undefined;
 };
 
 /** A request handler that maps HTTP request to an HTTP response. */
@@ -235,6 +252,7 @@ export type RouterMatch = {
     params: Record<string, string>;
     handler: Handler;
     middlewares: Middleware[];
+    legacyFileName: string | undefined;
 };
 
 class RouterRoute {
@@ -242,6 +260,7 @@ class RouterRoute {
     noMethodPattern: URLPattern;
     handler: Handler;
     middlewares: Middleware[];
+    legacyFileName: string | undefined;
 
     constructor(route: Route, routeMap: RouteMap) {
         // HACK: we use the hostname part of the URL Pattern to match the method
@@ -258,6 +277,7 @@ class RouterRoute {
         );
         this.handler = route.handler;
         this.middlewares = route.middlewares.concat(routeMap.middlewares);
+        this.legacyFileName = route.legacyFileName;
     }
 
     match(method: string, path: string): RouterMatch | null {
@@ -275,6 +295,7 @@ class RouterRoute {
             params: match.pathname.groups,
             handler: this.handler,
             middlewares: this.middlewares,
+            legacyFileName: this.legacyFileName,
         };
     }
 
