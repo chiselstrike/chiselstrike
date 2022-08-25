@@ -15,6 +15,7 @@ pub fn extension() -> deno_core::Extension {
             op_chisel_get_secret::decl(),
             op_chisel_get_version_id::decl(),
             op_chisel_get_version_info::decl(),
+            op_chisel_is_debug::decl(),
             op_format_file_name::decl(),
             datastore::op_chisel_begin_transaction::decl(),
             datastore::op_chisel_commit_transaction::decl(),
@@ -70,6 +71,11 @@ fn op_chisel_get_version_id(state: &mut deno_core::OpState) -> String {
 #[deno_core::op]
 fn op_chisel_get_version_info(state: &mut deno_core::OpState) -> VersionInfo {
     state.borrow::<WorkerState>().version.info.clone()
+}
+
+#[deno_core::op]
+fn op_chisel_is_debug(state: &mut deno_core::OpState) -> bool {
+    state.borrow::<WorkerState>().server.opt.debug
 }
 
 // Used by deno to format names in errors

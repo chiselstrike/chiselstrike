@@ -23,6 +23,7 @@ export type HttpResponse = {
 };
 
 const versionId = opSync("op_chisel_get_version_id") as string;
+const isDebug = opSync("op_chisel_is_debug") as boolean;
 
 export async function handleHttpRequest(
     router: Router,
@@ -94,19 +95,21 @@ export async function handleHttpRequest(
         } else {
             description = "" + e;
         }
-        console.error(
-            `Error in ${httpRequest.method} ${httpRequest.uri}: ${description}`,
-        );
+        let message =
+            `Error in ${httpRequest.method} ${httpRequest.uri}: ${description}`;
 
         try {
             opSync("op_chisel_rollback_transaction");
         } catch (e) {
-            console.error(`Error when rolling back transaction: ${e}`);
+            message += `\nError when rolling back transaction: ${e}`;
         }
 
-        // return an empty response to avoid leaking details about the user error
-        // TODO: perhaps we should introduce a "debug mode" that would return a nice error response?
-        return emptyResponse(500);
+        console.error(message);
+        if (isDebug) {
+            return textResponse(500, message);
+        } else {
+            return emptyResponse(500);
+        }
     }
 }
 
@@ -141,11 +144,28 @@ async function handleMiddlewareChain(
     } else {
         // call the middleware handler, passing a callback that will continue in the middleware chain
         const next = (request: ChiselRequest) =>
-            handleMiddlewareChain(middlewares, handler, request, middlewareIndex + 1);
-        return middlewares[middlewareIndex].handler.call(undefined, request, next);
+            handleMiddlewareChain(
+                middlewares,
+                handler,
+                request,
+                middlewareIndex + 1,
+            );
+        return middlewares[middlewareIndex].handler.call(
+            undefined,
+            request,
+            next,
+        );
     }
 }
 
 function emptyResponse(status: number): HttpResponse {
     return { status, headers: [], body: new Uint8Array(0) };
+}
+
+function textResponse(status: number, text: string): HttpResponse {
+    return {
+        status,
+        headers: [["content-type", "text/plain"]],
+        body: new TextEncoder().encode(text),
+    };
 }

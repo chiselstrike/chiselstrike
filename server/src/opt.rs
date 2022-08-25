@@ -43,6 +43,9 @@ pub struct Opt {
     /// Activate inspector, but pause the runtime at startup to wait for a debugger to attach.
     #[structopt(long)]
     pub inspect_brk: bool,
+    /// Activate debug mode, it will show runtime exceptions in HTTP responses.
+    #[structopt(long)]
+    pub debug: bool,
     /// size of database connection pool.
     #[structopt(short, long, default_value = "10")]
     pub nr_connections: usize,

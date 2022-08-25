@@ -42,12 +42,17 @@ fn codegen_route_map(
 
         let route_code = match route.legacy_file_name.as_ref() {
             // TODO: same as above, we should quote `legacy_file_name` properly
-            Some(legacy_file_name) => format!("RouteMap.convert(route{}, {:?})", i, legacy_file_name),
+            Some(legacy_file_name) => {
+                format!("RouteMap.convert(route{}, {:?})", i, legacy_file_name)
+            }
             None => format!("RouteMap.convert(route{})", i),
         };
 
         // TODO: same as above, we should quote the `path_pattern` properly
-        lines.push(format!("routeMap.prefix({:?}, {});", route.path_pattern, route_code));
+        lines.push(format!(
+            "routeMap.prefix({:?}, {});",
+            route.path_pattern, route_code
+        ));
     }
     lines.push("".into());
 

@@ -564,7 +564,7 @@ async fn errors(c: TestContext) {
         r#"
         import { RouteMap } from '@chiselstrike/api';
         export default new RouteMap()
-            .get('/route1', function () { throw new Error("error") })
+            .get('/route1', function () { throw new Error("it blew up") })
             // @ts-expect-error
             .get('/route2', () => nonexistent)
             .post('/route3', () => [3]);
@@ -573,14 +573,20 @@ async fn errors(c: TestContext) {
 
     c.chisel.apply_ok().await;
 
-    assert_eq!(
-        c.chisel.get_body("/dev/route1").await,
-        (500, Bytes::from(""))
+    let (status, body) = c.chisel.get_body("/dev/route1").await;
+    assert_eq!(status, 500);
+    assert!(
+        body.starts_with("Error in GET /dev/route1: Error: it blew up".as_bytes()),
+        "{:?}", body,
     );
-    assert_eq!(
-        c.chisel.get_body("/dev/route2").await,
-        (500, Bytes::from(""))
+
+    let (status, body) = c.chisel.get_body("/dev/route2").await;
+    assert_eq!(status, 500);
+    assert!(
+        body.starts_with("Error in GET /dev/route2: ReferenceError: nonexistent is not defined".as_bytes()),
+        "{:?}", body,
     );
+
     assert_eq!(
         c.chisel.get_body("/dev/route3").await,
         (405, Bytes::from(""))

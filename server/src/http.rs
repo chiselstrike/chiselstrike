@@ -69,7 +69,7 @@ async fn try_handle_request(
     request: hyper::Request<hyper::Body>,
 ) -> Result<hyper::Response<hyper::Body>> {
     let path = request.uri().path();
-    let normalized_path = normalize_path(&path);
+    let normalized_path = normalize_path(path);
     if normalized_path != path {
         return Ok(redirect_to_path(request.uri(), &normalized_path));
     }
@@ -280,7 +280,11 @@ fn handle_error(
 fn normalize_path(path: &str) -> String {
     let mut normalized = String::with_capacity(path.len());
     normalized.push('/');
-    for (i, segment) in path.split('/').filter(|segment| !segment.is_empty()).enumerate() {
+    for (i, segment) in path
+        .split('/')
+        .filter(|segment| !segment.is_empty())
+        .enumerate()
+    {
         if i != 0 {
             normalized.push('/');
         }
@@ -292,7 +296,8 @@ fn normalize_path(path: &str) -> String {
 fn redirect_to_path(uri: &hyper::Uri, path: &str) -> hyper::Response<hyper::Body> {
     let mut parts = uri.clone().into_parts();
 
-    let path_and_query = parts.path_and_query
+    let path_and_query = parts
+        .path_and_query
         .unwrap_or_else(|| http::uri::PathAndQuery::from_static("/"));
     let path_and_query_str = match path_and_query.query() {
         Some(query) => format!("{}?{}", path, query),

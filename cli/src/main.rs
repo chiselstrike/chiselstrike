@@ -275,6 +275,7 @@ async fn main() -> Result<()> {
 
                 Ok(())
             };
+            chiseld_args.push("--debug".to_string());
             if inspect {
                 chiseld_args.push("--inspect".to_string());
             }
