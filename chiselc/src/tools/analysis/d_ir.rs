@@ -1,7 +1,7 @@
 use std::collections::{HashMap, HashSet};
 use std::fmt;
 
-use crate::tools::region::CondRegion;
+use crate::tools::analysis::region::CondRegion;
 use crate::Symbol;
 
 use petgraph::dot::Dot;
