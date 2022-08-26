@@ -17,18 +17,12 @@ use crate::{
     symbols::Symbols,
 };
 
-#[derive(Clone)]
+#[derive(Clone, Default)]
 struct ErrorBuffer {
     inner: Arc<std::sync::Mutex<Vec<u8>>>,
 }
 
 impl ErrorBuffer {
-    fn new() -> Self {
-        Self {
-            inner: Arc::new(std::sync::Mutex::new(vec![])),
-        }
-    }
-
     fn get(&self) -> String {
         String::from_utf8_lossy(&self.inner.lock().unwrap().clone()).to_string()
     }
@@ -45,40 +39,51 @@ impl std::io::Write for ErrorBuffer {
     }
 }
 
-pub fn parse(code: String, sm: &Lrc<SourceMap>) -> Result<Module> {
-    let err_buf = ErrorBuffer::new();
-    let emitter = Box::new(emitter::EmitterWriter::new(
-        Box::new(err_buf.clone()),
-        Some(sm.clone()),
-        false,
-        true,
-    ));
-    let handler = Handler::with_emitter(true, false, emitter);
-    let fm = sm.new_source_file(FileName::Anon, code);
-    let config = swc_ecmascript::parser::TsConfig {
-        decorators: true,
-        ..Default::default()
-    };
-    let lexer = Lexer::new(
-        Syntax::Typescript(config),
-        Default::default(),
-        StringInput::from(&*fm),
-        None,
-    );
+#[derive(Default)]
+pub struct ParserContext {
+    sm: Lrc<SourceMap>,
+    error_buffer: ErrorBuffer,
+}
 
-    let mut parser = Parser::new_from(lexer);
-
-    for e in parser.take_errors() {
-        e.into_diagnostic(&handler).emit();
+impl ParserContext {
+    pub fn new() -> Self {
+        Self::default()
     }
 
-    let module = parser.parse_typescript_module().map_err(|e| {
-        // Unrecoverable fatal error occurred
-        e.into_diagnostic(&handler).emit();
-        anyhow!("Parse failed: {}", err_buf.get())
-    })?;
+    pub fn parse(&self, code: String) -> Result<Module> {
+        let emitter = Box::new(emitter::EmitterWriter::new(
+            Box::new(self.error_buffer.clone()),
+            Some(self.sm.clone()),
+            false,
+            true,
+        ));
+        let handler = Handler::with_emitter(true, false, emitter);
+        let fm = self.sm.new_source_file(FileName::Anon, code);
+        let config = swc_ecmascript::parser::TsConfig {
+            decorators: true,
+            ..Default::default()
+        };
+        let lexer = Lexer::new(
+            Syntax::Typescript(config),
+            Default::default(),
+            StringInput::from(&*fm),
+            None,
+        );
 
-    Ok(module)
+        let mut parser = Parser::new_from(lexer);
+
+        for e in parser.take_errors() {
+            e.into_diagnostic(&handler).emit();
+        }
+
+        let module = parser.parse_typescript_module().map_err(|e| {
+            // Unrecoverable fatal error occurred
+            e.into_diagnostic(&handler).emit();
+            anyhow!("Parse failed: {}", self.error_buffer.get())
+        })?;
+
+        Ok(module)
+    }
 }
 
 pub fn compile(
@@ -87,9 +92,9 @@ pub fn compile(
     target: Target,
     mut output: Box<dyn Write>,
 ) -> Result<()> {
-    let sm: Lrc<SourceMap> = Default::default();
+    let ctx = ParserContext::new();
     // FIXME: We probably need a name for better error messages.
-    let module = parse(code, &sm)?;
+    let module = ctx.parse(code)?;
 
     let mut rewriter = Rewriter::new(symbols);
     let module = rewriter.rewrite(module);
@@ -113,9 +118,9 @@ pub fn compile(
                 cfg: swc_ecmascript::codegen::Config {
                     ..Default::default()
                 },
-                cm: sm.clone(),
+                cm: ctx.sm.clone(),
                 comments: None,
-                wr: JsWriter::new(sm, "\n", &mut output, None),
+                wr: JsWriter::new(ctx.sm, "\n", &mut output, None),
             };
             emitter.emit_module(&module).unwrap();
         }
