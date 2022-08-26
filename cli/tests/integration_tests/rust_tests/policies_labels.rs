@@ -1,56 +1,74 @@
 use crate::framework::prelude::*;
-use crate::framework::{json_is_subset, Chisel};
 
-async fn fetch_person(chisel: &Chisel) -> serde_json::Value {
-    let mut person = chisel.get_json("/dev/find_person").await;
+async fn store_person(chisel: &Chisel, person: &serde_json::Value) -> String {
+    let resp = chisel.post("/dev/persons").json(person).send().await
+        .assert_ok().json();
+    resp["id"].as_str().unwrap().into()
+}
 
+async fn fetch_person(chisel: &Chisel, id: &str) -> serde_json::Value {
+    let mut person = chisel.get_json(&format!("/dev/persons/{}", id)).await;
     person.as_object_mut().unwrap().remove("id");
     person
 }
 
-#[chisel_macros::test(modules = Deno, optimize = Both)]
-pub async fn policies(c: TestContext) {
-    c.chisel.copy_to_dir("examples/person.ts", "models");
-    c.chisel.copy_to_dir("examples/store.ts", "routes");
+static PERSONS_ROUTE: &str = r##"
+    import { Person } from "../models/person.ts";
+    export default Person.crud();
+    "##;
 
-    c.chisel.write(
-        "routes/find_person.ts",
-        r##"
-        import { Person } from "../models/person.ts";
-        export default async function chisel(req: Request) {
-            return (await Person.findAll())[0];
-        }
-    "##,
-    );
-    c.chisel.apply_ok().await;
+static PERSON: &str = r##"
+    import { ChiselEntity, labels } from "@chiselstrike/api";
 
-    let pekka = json!({
+    export class Person extends ChiselEntity {
+        first_name: string = "";
+        @labels("pii") last_name: string = "";
+        age: number = 0;
+        human: boolean = false;
+        height: number = 1;
+    }
+    "##;
+
+static PERSON_WITH_LABELS: &str = r##"
+    import { ChiselEntity, labels } from "@chiselstrike/api";
+
+    export class Person extends ChiselEntity {
+        @labels("L1", "L2", "L3") first_name: string;
+        @labels("pii", "L2") last_name: string;
+        @labels("L1", "L3") human: boolean;
+        age: number;
+        height: number;
+    }
+    "##;
+
+lazy_static::lazy_static! {
+    static ref PEKKA: serde_json::Value = json!({
         "first_name":"Pekka",
         "last_name":"Heidelberg",
         "age": 2147483647,
         "human": false,
         "height": 12742333
     });
+}
 
-    c.chisel.post_json_ok("dev/store", &pekka).await;
+#[self::test(modules = Deno, optimize = Yes)]
+async fn no_policy(c: TestContext) {
+    c.chisel.write_unindent("routes/persons.ts", PERSONS_ROUTE);
+    c.chisel.write_unindent("models/person.ts", PERSON);
+    c.chisel.apply_ok().await;
 
-    assert_eq!(fetch_person(&c.chisel).await, pekka);
+    let pekka_id = store_person(&c.chisel, &PEKKA).await;
+    assert_eq!(fetch_person(&c.chisel, &pekka_id).await, *PEKKA);
+}
+
+#[self::test(modules = Deno, optimize = Both)]
+async fn transform_anonymize(c: TestContext) {
+    c.chisel.write_unindent("routes/persons.ts", PERSONS_ROUTE);
+    c.chisel.write_unindent("models/person.ts", PERSON_WITH_LABELS);
+    c.chisel.apply_ok().await;
+    let pekka_id = store_person(&c.chisel, &PEKKA).await;
 
     // anonymize first_name and last_name
-    c.chisel.write(
-        "models/person.ts",
-        r##"
-        import { ChiselEntity, labels } from "@chiselstrike/api";
-
-        export class Person extends ChiselEntity {
-            @labels("L1", "L2", "L3") first_name: string;
-            @labels("pii", "L2") last_name: string;
-            @labels("L1", "L3") human: boolean;
-            age: number;
-            height: number;
-        }
-    "##,
-    );
     c.chisel.write_unindent(
         "policies/pol.yaml",
         r##"
@@ -64,7 +82,7 @@ pub async fn policies(c: TestContext) {
     );
     c.chisel.apply_ok().await;
     assert_eq!(
-        fetch_person(&c.chisel).await,
+        fetch_person(&c.chisel, &pekka_id).await,
         json!({
             "first_name":"xxxxx",
             "last_name":"xxxxx",
@@ -81,11 +99,11 @@ pub async fn policies(c: TestContext) {
         labels:
           - name: L2
             transform: anonymize
-            except_uri: find_person
+            except_uri: persons
         "##,
     );
     c.chisel.apply_ok().await;
-    assert_eq!(fetch_person(&c.chisel).await, pekka);
+    assert_eq!(fetch_person(&c.chisel, &pekka_id).await, *PEKKA);
 
     // except_uri - regex match
     c.chisel.write_unindent(
@@ -94,11 +112,11 @@ pub async fn policies(c: TestContext) {
         labels:
           - name: L2
             transform: anonymize
-            except_uri: person$
+            except_uri: sons$
         "##,
     );
     c.chisel.apply_ok().await;
-    assert_eq!(fetch_person(&c.chisel).await, pekka);
+    assert_eq!(fetch_person(&c.chisel, &pekka_id).await, *PEKKA);
 
     // except_uri - no regex match
     c.chisel.write_unindent(
@@ -112,7 +130,7 @@ pub async fn policies(c: TestContext) {
     );
     c.chisel.apply_ok().await;
     assert_eq!(
-        fetch_person(&c.chisel).await,
+        fetch_person(&c.chisel, &pekka_id).await,
         json!({
             "first_name":"xxxxx",
             "last_name":"xxxxx",
@@ -121,6 +139,14 @@ pub async fn policies(c: TestContext) {
             "height": 12742333
         })
     );
+}
+
+#[self::test(modules = Deno, optimize = Both)]
+async fn transform_omit(c: TestContext) {
+    c.chisel.write_unindent("routes/persons.ts", PERSONS_ROUTE);
+    c.chisel.write_unindent("models/person.ts", PERSON_WITH_LABELS);
+    c.chisel.apply_ok().await;
+    let pekka_id = store_person(&c.chisel, &PEKKA).await;
 
     // test omit transformation
     c.chisel.write_unindent(
@@ -133,15 +159,17 @@ pub async fn policies(c: TestContext) {
     );
     c.chisel.apply_ok().await;
     assert_eq!(
-        fetch_person(&c.chisel).await,
+        fetch_person(&c.chisel, &pekka_id).await,
         json!({
             "age": 2147483647,
             "human": false,
             "height": 12742333
         })
     );
+}
 
-    // test anonymization of related entities
+#[self::test(modules = Deno, optimize = Both)]
+async fn transform_anonymize_related_entities(c: TestContext) {
     c.chisel.write_unindent(
         "policies/pol.yaml",
         r##"
@@ -189,18 +217,17 @@ pub async fn policies(c: TestContext) {
             }),
         )
         .await;
-    {
-        let companies = c.chisel.get_json("/dev/companies").await;
-        let company = &companies["results"].as_array().unwrap()[0];
-        json_is_subset(
-            company,
-            json!({
-                "name": "Chiselstrike",
-                "ceo": {"firstName": "xxxxx", "lastName": "Costa"},
-                "accountant": "xxxxx",
-                "secretSauce": "xxxxx"
-            }),
-        )
-        .unwrap();
-    }
+
+    let companies = c.chisel.get_json("/dev/companies").await;
+    let company = &companies["results"].as_array().unwrap()[0];
+    json_is_subset(
+        company,
+        &json!({
+            "name": "Chiselstrike",
+            "ceo": {"firstName": "xxxxx", "lastName": "Costa"},
+            "accountant": "xxxxx",
+            "secretSauce": "xxxxx"
+        }),
+    )
+    .unwrap();
 }

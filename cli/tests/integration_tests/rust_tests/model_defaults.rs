@@ -30,7 +30,7 @@ pub async fn non_trivial_defaults(c: TestContext) {
 
     c.chisel.post_json_ok("/dev/defaults", json!({})).await;
 
-    json_is_subset(c.chisel.get_json("dev/defaults").await, json!({
+    json_is_subset(&c.chisel.get_json("dev/defaults").await, &json!({
         "results": [{"a": 13}],
     })).unwrap();
 }
@@ -58,7 +58,7 @@ pub async fn complex_optional_defaults(c: TestContext) {
     c.chisel.apply_ok().await;
 
     c.chisel.post_json_ok("/dev/defaults", json!({})).await;
-    json_is_subset(c.chisel.get_json("dev/defaults").await, json!({
+    json_is_subset(&c.chisel.get_json("dev/defaults").await, &json!({
         "results": [{
             "a": "{\"a\":\"test2\"}",
             "b": "funcreturn",
