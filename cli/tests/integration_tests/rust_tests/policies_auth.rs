@@ -118,3 +118,20 @@ pub async fn token_auth(mut c: TestContext) {
     c.chisel.get("/dev/hello").header("header33", "s3cr3t").send().await.assert_text("hello world");
     c.chisel.post("/dev/hello").json(&json!(122333)).send().await.assert_text("122333");
 }
+
+#[chisel_macros::test(modules = Node)]
+pub async fn endpoints_backcompat(mut c: TestContext) {
+    c.chisel.write_unindent(
+        "policies/p.yaml", r##"
+        endpoints:
+          - path: /
+            mandatory_header: { name: header33, secret_value_ref: TOKEN33 }"##,
+    );
+    c.chisel.write(".env", r##"{ "TOKEN33" : "s3cr3t" }"##);
+    c.restart_chiseld().await;
+    c.chisel.apply().await.unwrap();
+
+    // the policy is applied when we use `endpoints:` instead of `routes:`
+    c.chisel.get("/dev/hello").send().await.assert_status(403);
+    c.chisel.get("/dev/hello").header("header33", "s3cr3t").send().await.assert_status(200);
+}

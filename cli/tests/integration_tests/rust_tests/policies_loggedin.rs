@@ -67,6 +67,23 @@ async fn basic(mut c: TestContext) {
 }
 
 #[self::test(modules = Deno, optimize = Yes)]
+async fn endpoints_backcompat(c: TestContext) {
+    // test that we support `endpoints:` instead of `routes:` for backwards compatibility
+    c.chisel.write_unindent("routes/test.ts", TEST_ROUTE);
+    c.chisel.write_unindent(
+        "policies/pol.yaml",
+        r##"
+            endpoints:
+            - path: /test
+              users: ^$
+        "##,
+    );
+    c.chisel.apply_ok().await;
+
+    c.chisel.get("/dev/test").send().await.assert_status(403);
+}
+
+#[self::test(modules = Deno, optimize = Yes)]
 async fn repeated_path(c: TestContext) {
     c.chisel.write_unindent(
         "policies/pol.yaml",
