@@ -7,9 +7,11 @@ edition = "2021"
 [dependencies]
 anyhow = "1.0.57"
 indexmap = "1.8.1"
+petgraph = "0.6.2"
 serde = "1.0.137"
 serde_json = "1.0.81"
 structopt = "0.3.26"
 swc_atoms = "0.3.0"
 swc_common = "0.25.0"
 swc_ecmascript = { version = "0.185.0", features = ["visit", "parser", "transforms", "codegen", "typescript"] }
+vec_map = "0.8.2"

@@ -205,9 +205,9 @@ dependencies = [
 
 [[package]]
 name = "ast_node"
-version = "0.8.3"
+version = "0.8.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0a614981a880a40522cf6fbe8b1a8365eb253655939f812a9db03e8ba4e2cb1f"
+checksum = "1a36288803cd1605bc4f0e3189970a0db8e602bb01a39f8133889f35ece7ddde"
 dependencies = [
  "darling 0.13.4",
  "pmutil",
@@ -603,12 +603,14 @@ version = "0.13.0-dev.0"
 dependencies = [
  "anyhow",
  "indexmap",
+ "petgraph 0.6.2",
  "serde",
  "serde_json",
  "structopt",
  "swc_atoms 0.3.1",
  "swc_common 0.25.0",
  "swc_ecmascript 0.185.0",
+ "vec_map",
 ]
 
 [[package]]
@@ -4884,7 +4886,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "754abca85a90c21660b558a41c2763caa5cea86df7ed8d206d609eea7ad436bd"
 dependencies = [
  "ahash",
- "ast_node 0.8.3",
+ "ast_node 0.8.2",
  "better_scoped_tls",
  "cfg-if 1.0.0",
  "debug_unreachable",
@@ -4906,9 +4908,9 @@ dependencies = [
 
 [[package]]
 name = "swc_config"
-version = "0.1.2"
+version = "0.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fc17721410f3f12aeb42dcb99528350adf122681ab4796e48c2cfc0bda0c752c"
+checksum = "b8bb05ef56c14b95dd7e62e95960153af811b9a447287f1f6ca59f1337fb83d4"
 dependencies = [
  "anyhow",
  "indexmap",
