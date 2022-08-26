@@ -40,8 +40,8 @@ pub async fn add_field(mut c: TestContext) {
     c.chisel.apply_ok().await;
 
     json_is_subset(
-        c.chisel.get_json("/dev/evolving").await,
-        json!({
+        &c.chisel.get_json("/dev/evolving").await,
+        &json!({
             "results": [{"a": "with_default"}],
         }),
     )
@@ -50,8 +50,8 @@ pub async fn add_field(mut c: TestContext) {
     // Ensure that changes are persisted
     c.restart_chiseld().await;
     json_is_subset(
-        c.chisel.get_json("/dev/evolving").await,
-        json!({
+        &c.chisel.get_json("/dev/evolving").await,
+        &json!({
             "results": [{"a": "with_default"}],
         }),
     )
@@ -92,7 +92,7 @@ pub async fn remove_field(c: TestContext) {
     let r = c.chisel.get_json("/dev/evolving").await;
     json_is_subset(
         &r,
-        json!({
+        &json!({
             "results": [{"a": "Heracles"}],
         }),
     )
@@ -132,7 +132,7 @@ pub async fn change_default(c: TestContext) {
     let r = c.chisel.get_json("/dev/evolving").await;
     json_is_subset(
         &r,
-        json!({
+        &json!({
             "results": [{"a": true}],
         }),
     )
@@ -153,7 +153,7 @@ pub async fn change_default(c: TestContext) {
     let r = c.chisel.get_json("/dev/evolving").await;
     json_is_subset(
         &r,
-        json!({
+        &json!({
             "results": [{"a": false}],
         }),
     )
