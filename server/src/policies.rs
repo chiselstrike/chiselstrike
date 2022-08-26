@@ -4,6 +4,7 @@ use crate::prefix_map::PrefixMap;
 use crate::types::ObjectType;
 use crate::JsonObject;
 use anyhow::Result;
+use chiselc::parse::ParserContext;
 use hyper::Request;
 use serde_json::{json, Value};
 use std::collections::{HashMap, HashSet};
@@ -319,6 +320,17 @@ fn parse_methods(v: &Vec<Yaml>) -> Result<Vec<hyper::Method>> {
 }
 
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 pub struct EntityPolicy {
-    _policies: chiselc::policies::Policies,
+    policies: chiselc::policies::Policies,
+}
+
+impl EntityPolicy {
+    #[allow(dead_code)]
+    pub fn from_policy_code(code: String) -> Result<Self> {
+        let ctx = ParserContext::new();
+        let module = ctx.parse(code, true)?;
+        let policies = chiselc::policies::Policies::parse(&module);
+        Ok(Self { policies })
+    }
 }
