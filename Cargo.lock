@@ -4422,6 +4422,7 @@ dependencies = [
  "async-channel",
  "async-lock",
  "base64 0.13.0",
+ "chiselc",
  "deno_core",
  "deno_runtime",
  "derive-new",

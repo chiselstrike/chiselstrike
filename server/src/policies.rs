@@ -319,4 +319,6 @@ fn parse_methods(v: &Vec<Yaml>) -> Result<Vec<hyper::Method>> {
 }
 
 #[derive(Debug, Clone)]
-pub struct EntityPolicy;
+pub struct EntityPolicy {
+    _policies: chiselc::policies::Policies,
+}
