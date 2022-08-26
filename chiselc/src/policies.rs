@@ -4,6 +4,7 @@ use std::ops::{Deref, DerefMut};
 
 use boa::{Context, JsString, JsValue};
 use quine_mc_cluskey::Bool;
+use serde_json::Value;
 use swc_ecmascript::ast::{
     BinaryOp, Expr, Lit, MemberProp, Module, ModuleDecl, ModuleItem, Prop, PropName, PropOrSpread,
     Stmt, UnaryOp,
@@ -14,7 +15,7 @@ use crate::tools::analysis::d_ir::{EnrichedRegion, EnrichedRegionInner};
 use crate::tools::analysis::stmt_map::StmtMap;
 use crate::tools::functions::ArrowFunction;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Policies {
     pub read: Option<Policy>,
     pub write: Option<Policy>,
@@ -67,7 +68,7 @@ impl Policies {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Policy {
     pub actions: Actions,
     pub where_conds: Cond,
@@ -150,8 +151,8 @@ impl Cond {
             Cond::Predicate(id) => {
                 let predicate = preds.get(*id);
                 match predicate {
-                    Predicate::Lit(l) if l.to_boolean() => Bool::True,
-                    Predicate::Lit(_) => Bool::False,
+                    Predicate::Lit(Value::Bool(true)) => Bool::True,
+                    Predicate::Lit(Value::Bool(false)) => Bool::False,
                     _ => {
                         let id = match mapping.iter().position(|i| i == id) {
                             Some(id) => id as u8,
@@ -196,7 +197,7 @@ enum Predicate {
         rhs: Box<Self>,
     },
     Not(Box<Self>),
-    Lit(JsValue),
+    Lit(Value),
     Var(Var),
 }
 
@@ -208,7 +209,7 @@ enum Var {
 
 #[derive(Debug, Default)]
 pub struct Values {
-    values: serde_json::Map<String, serde_json::Value>,
+    values: serde_json::Map<String, Value>,
 }
 
 impl Values {
@@ -216,11 +217,11 @@ impl Values {
         Self::default()
     }
 
-    pub fn from_json(values: serde_json::Map<String, serde_json::Value>) -> Self {
+    pub fn from_json(values: serde_json::Map<String, Value>) -> Self {
         Self { values }
     }
 
-    fn get(&self, var: &Var) -> Option<&serde_json::Value> {
+    fn get(&self, var: &Var) -> Option<&Value> {
         match var {
             Var::Ident(val) => self.values.get(val),
             Var::Member(var, val) => self.get(var).and_then(|o| o.get(val)),
@@ -228,16 +229,16 @@ impl Values {
     }
 }
 
-fn json_js_value(json: &serde_json::Value) -> JsValue {
+fn json_to_js_value(json: &Value) -> JsValue {
     match json {
-        serde_json::Value::Null => JsValue::Null,
-        serde_json::Value::Bool(b) => JsValue::Boolean(*b),
-        serde_json::Value::Number(n) if n.is_u64() => JsValue::Integer(n.as_u64().unwrap() as i32),
-        serde_json::Value::Number(n) if n.is_i64() => JsValue::Integer(n.as_i64().unwrap() as i32),
-        serde_json::Value::Number(n) if n.is_f64() => JsValue::Rational(n.as_f64().unwrap() as f64),
-        serde_json::Value::String(s) => JsValue::String(JsString::new(s)),
-        serde_json::Value::Array(_) => todo!(),
-        serde_json::Value::Object(_) => todo!(),
+        Value::Null => JsValue::Null,
+        Value::Bool(b) => JsValue::Boolean(*b),
+        Value::Number(n) if n.is_u64() => JsValue::Integer(n.as_u64().unwrap() as i32),
+        Value::Number(n) if n.is_i64() => JsValue::Integer(n.as_i64().unwrap() as i32),
+        Value::Number(n) if n.is_f64() => JsValue::Rational(n.as_f64().unwrap() as f64),
+        Value::String(s) => JsValue::String(JsString::new(s)),
+        Value::Array(_) => todo!(),
+        Value::Object(_) => todo!(),
         _ => unreachable!(),
     }
 }
@@ -257,7 +258,7 @@ impl Predicate {
         }
     }
 
-    fn as_lit(&self) -> Option<&JsValue> {
+    fn as_lit(&self) -> Option<&Value> {
         match self {
             Self::Lit(ref l) => Some(l),
             _ => None,
@@ -266,12 +267,12 @@ impl Predicate {
 
     fn eval_bin_lit(op: LogicOp, lhs: &JsValue, rhs: &JsValue, ctx: &mut Context) -> Self {
         match op {
-            LogicOp::Eq => Predicate::Lit(JsValue::Boolean(lhs == rhs)),
-            LogicOp::Neq => Predicate::Lit(JsValue::Boolean(lhs != rhs)),
-            LogicOp::Gt => Predicate::Lit(JsValue::Boolean(lhs.gt(rhs, ctx).unwrap())),
-            LogicOp::Gte => Predicate::Lit(JsValue::Boolean(lhs.ge(rhs, ctx).unwrap())),
-            LogicOp::Lt => Predicate::Lit(JsValue::Boolean(lhs.lt(rhs, ctx).unwrap())),
-            LogicOp::Lte => Predicate::Lit(JsValue::Boolean(lhs.le(rhs, ctx).unwrap())),
+            LogicOp::Eq => Predicate::Lit(Value::Bool(lhs.equals(rhs, ctx).unwrap())),
+            LogicOp::Neq => Predicate::Lit(Value::Bool(!lhs.equals(rhs, ctx).unwrap())),
+            LogicOp::Gt => Predicate::Lit(Value::Bool(lhs.gt(rhs, ctx).unwrap())),
+            LogicOp::Gte => Predicate::Lit(Value::Bool(lhs.ge(rhs, ctx).unwrap())),
+            LogicOp::Lt => Predicate::Lit(Value::Bool(lhs.lt(rhs, ctx).unwrap())),
+            LogicOp::Lte => Predicate::Lit(Value::Bool(lhs.le(rhs, ctx).unwrap())),
             LogicOp::And => todo!(),
             LogicOp::Or => todo!(),
         }
@@ -279,9 +280,12 @@ impl Predicate {
 
     pub fn eval(&self, ctx: &mut Context) -> Self {
         match self {
-            Predicate::Bin { op, lhs, rhs } if lhs.is_lit() && rhs.is_lit() => {
-                Self::eval_bin_lit(*op, lhs.as_lit().unwrap(), rhs.as_lit().unwrap(), ctx)
-            }
+            Predicate::Bin { op, lhs, rhs } if lhs.is_lit() && rhs.is_lit() => Self::eval_bin_lit(
+                *op,
+                &json_to_js_value(lhs.as_lit().unwrap()),
+                &json_to_js_value(rhs.as_lit().unwrap()),
+                ctx,
+            ),
             Predicate::Bin { lhs, rhs, .. } if lhs.is_var() || rhs.is_var() => self.clone(),
             Predicate::Bin { op, lhs, rhs } => {
                 let new_pred = Predicate::Bin {
@@ -293,12 +297,16 @@ impl Predicate {
                 new_pred.eval(ctx)
             }
             Predicate::Not(p) if p.is_lit() => {
-                Predicate::Lit(p.as_lit().unwrap().as_boolean().unwrap().into())
+                let js_value = json_to_js_value(p.as_lit().unwrap());
+                Predicate::Lit(Value::Bool(!js_value.as_boolean().unwrap()))
             }
             Predicate::Not(p) if !p.is_var() => {
                 let p_eval = p.eval(ctx);
                 match p_eval {
-                    Predicate::Lit(l) => Predicate::Lit(JsValue::Boolean(l.not(ctx).unwrap())),
+                    Predicate::Lit(l) => {
+                        let js_value = json_to_js_value(&l);
+                        Predicate::Lit(Value::Bool(js_value.not(ctx).unwrap()))
+                    }
                     _ => Predicate::Not(Box::new(p_eval)),
                 }
             }
@@ -316,7 +324,7 @@ impl Predicate {
             Predicate::Not(p) => Self::Not(Box::new(p.substitute(subs))),
             Predicate::Lit(_) => self.clone(),
             Predicate::Var(ref val) => match subs.get(val) {
-                Some(val) => Self::Lit(json_js_value(val)),
+                Some(val) => Self::Lit(val.clone()),
                 None => self.clone(),
             },
         }
@@ -347,10 +355,10 @@ impl Predicate {
                 }
             }
             Expr::Lit(lit) => match lit {
-                Lit::Str(s) => Self::Lit(JsValue::String(JsString::new(&s.value))),
-                Lit::Bool(b) => Self::Lit(JsValue::Boolean(b.value)),
-                Lit::Null(_) => Self::Lit(JsValue::Null),
-                Lit::Num(n) => Self::Lit(JsValue::Rational(n.value)),
+                Lit::Str(s) => Self::Lit((*s.value).into()),
+                Lit::Bool(b) => Self::Lit(b.value.into()),
+                Lit::Null(_) => Self::Lit(Value::Null),
+                Lit::Num(n) => Self::Lit(n.value.into()),
                 Lit::BigInt(_) => todo!(),
                 Lit::Regex(_) => todo!(),
                 Lit::JSXText(_) => todo!(),
@@ -388,7 +396,7 @@ impl fmt::Debug for Actions {
 
 type PredicateId = usize;
 
-#[derive(Default)]
+#[derive(Clone, Default)]
 pub struct Predicates(Vec<Predicate>);
 
 impl fmt::Debug for Predicates {
