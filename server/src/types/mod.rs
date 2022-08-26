@@ -3,6 +3,7 @@
 pub use self::builtin::BuiltinTypes;
 pub use self::type_system::{TypeSystem, TypeSystemError};
 use crate::datastore::query::truncate_identifier;
+use crate::policies::EntityPolicy;
 use std::collections::BTreeMap;
 use std::ops::Deref;
 use std::sync::Arc;
@@ -38,10 +39,14 @@ impl From<Entity> for Type {
     }
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug)]
 pub enum Entity {
     /// User defined Custom entity.
-    Custom(Arc<ObjectType>),
+    Custom {
+        object: Arc<ObjectType>,
+        #[allow(dead_code)]
+        policy: Option<EntityPolicy>,
+    },
     /// Built-in Auth entity.
     Auth(Arc<ObjectType>),
 }
@@ -57,7 +62,17 @@ impl Deref for Entity {
     type Target = ObjectType;
     fn deref(&self) -> &Self::Target {
         match self {
-            Self::Custom(obj) | Self::Auth(obj) => obj,
+            Self::Custom { object, .. } | Self::Auth(object) => object,
+        }
+    }
+}
+
+impl PartialEq for Entity {
+    fn eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            (Entity::Custom { object: o1, .. }, Entity::Custom { object: o2, .. })
+            | (Entity::Auth(o1), Entity::Auth(o2)) => o1 == o2,
+            _ => false,
         }
     }
 }

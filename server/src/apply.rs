@@ -141,7 +141,13 @@ or
             fields,
             ty_indexes,
         )?);
-        new_types.insert(name.to_owned(), Entity::Custom(ty.clone()));
+        new_types.insert(
+            name.to_owned(),
+            Entity::Custom {
+                object: ty.clone(),
+                policy: None,
+            },
+        );
 
         match version_types.lookup_custom_type(&name) {
             Ok(old_type) => {
