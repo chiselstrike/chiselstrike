@@ -9,57 +9,49 @@ use swc_common::{
     sync::Lrc,
     Globals, Mark, SourceMap, GLOBALS,
 };
+use swc_ecmascript::ast::Module;
 use swc_ecmascript::codegen::{text_writer::JsWriter, Emitter};
 use swc_ecmascript::parser::{lexer::Lexer, Parser, StringInput, Syntax};
 use swc_ecmascript::visit::FoldWith;
 
-pub fn compile(
-    code: String,
-    symbols: Symbols,
-    target: Target,
-    mut output: Box<dyn Write>,
-) -> Result<()> {
-    #[derive(Clone)]
-    struct ErrorBuffer {
-        inner: Arc<std::sync::Mutex<Vec<u8>>>,
-    }
+#[derive(Clone)]
+struct ErrorBuffer {
+    inner: Arc<std::sync::Mutex<Vec<u8>>>,
+}
 
-    impl ErrorBuffer {
-        fn new() -> Self {
-            Self {
-                inner: Arc::new(std::sync::Mutex::new(vec![])),
-            }
-        }
-
-        fn get(&self) -> String {
-            String::from_utf8_lossy(&self.inner.lock().unwrap().clone()).to_string()
+impl ErrorBuffer {
+    fn new() -> Self {
+        Self {
+            inner: Arc::new(std::sync::Mutex::new(vec![])),
         }
     }
 
-    impl std::io::Write for ErrorBuffer {
-        fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
-            let mut v = self.inner.lock().unwrap();
-            v.extend_from_slice(buf);
-            Ok(buf.len())
-        }
-        fn flush(&mut self) -> std::io::Result<()> {
-            Ok(())
-        }
+    fn get(&self) -> String {
+        String::from_utf8_lossy(&self.inner.lock().unwrap().clone()).to_string()
     }
+}
 
+impl std::io::Write for ErrorBuffer {
+    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+        let mut v = self.inner.lock().unwrap();
+        v.extend_from_slice(buf);
+        Ok(buf.len())
+    }
+    fn flush(&mut self) -> std::io::Result<()> {
+        Ok(())
+    }
+}
+
+pub fn parse(code: String, sm: &Lrc<SourceMap>) -> Result<Module> {
     let err_buf = ErrorBuffer::new();
-
-    let cm: Lrc<SourceMap> = Default::default();
     let emitter = Box::new(emitter::EmitterWriter::new(
         Box::new(err_buf.clone()),
-        Some(cm.clone()),
+        Some(sm.clone()),
         false,
         true,
     ));
     let handler = Handler::with_emitter(true, false, emitter);
-
-    // FIXME: We probably need a name for better error messages.
-    let fm = cm.new_source_file(FileName::Anon, code);
+    let fm = sm.new_source_file(FileName::Anon, code);
     let config = swc_ecmascript::parser::TsConfig {
         decorators: true,
         ..Default::default()
@@ -83,6 +75,19 @@ pub fn compile(
         anyhow!("Parse failed: {}", err_buf.get())
     })?;
 
+    Ok(module)
+}
+
+pub fn compile(
+    code: String,
+    symbols: Symbols,
+    target: Target,
+    mut output: Box<dyn Write>,
+) -> Result<()> {
+    let sm: Lrc<SourceMap> = Default::default();
+    // FIXME: We probably need a name for better error messages.
+    let module = parse(code, &sm)?;
+
     let mut rewriter = Rewriter::new(symbols);
     let module = rewriter.rewrite(module);
     // If we're emitting JavaScript, get rid of TypeScript types.
@@ -105,9 +110,9 @@ pub fn compile(
                 cfg: swc_ecmascript::codegen::Config {
                     ..Default::default()
                 },
-                cm: cm.clone(),
+                cm: sm.clone(),
                 comments: None,
-                wr: JsWriter::new(cm, "\n", &mut output, None),
+                wr: JsWriter::new(sm, "\n", &mut output, None),
             };
             emitter.emit_module(&module).unwrap();
         }
