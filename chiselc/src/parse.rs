@@ -1,5 +1,3 @@
-use crate::rewrite::{Rewriter, Target};
-use crate::symbols::Symbols;
 use anyhow::{anyhow, Result};
 use std::io::Write;
 use std::sync::Arc;
@@ -13,6 +11,11 @@ use swc_ecmascript::ast::Module;
 use swc_ecmascript::codegen::{text_writer::JsWriter, Emitter};
 use swc_ecmascript::parser::{lexer::Lexer, Parser, StringInput, Syntax};
 use swc_ecmascript::visit::FoldWith;
+
+use crate::{
+    rewrite::{Rewriter, Target},
+    symbols::Symbols,
+};
 
 #[derive(Clone)]
 struct ErrorBuffer {
