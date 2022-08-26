@@ -24,10 +24,6 @@ struct ErrorBuffer {
 }
 
 impl ErrorBuffer {
-    fn new() -> Self {
-        Self::default()
-    }
-
     fn get(&self) -> String {
         String::from_utf8_lossy(&self.inner.lock().unwrap().clone()).to_string()
     }
@@ -44,12 +40,6 @@ impl std::io::Write for ErrorBuffer {
     }
 }
 
-#[derive(Default)]
-pub struct ParserContext {
-    sm: Lrc<SourceMap>,
-    error_buffer: ErrorBuffer,
-}
-
 fn canonical_transforms(module: &mut Module) {
     let globals = Globals::new();
     GLOBALS.set(&globals, || {
@@ -61,44 +51,10 @@ fn canonical_transforms(module: &mut Module) {
     })
 }
 
-pub fn parse(code: String, sm: &Lrc<SourceMap>, apply_transforms: bool) -> Result<Module> {
-    let err_buf = ErrorBuffer::new();
-    let emitter = Box::new(emitter::EmitterWriter::new(
-        Box::new(err_buf.clone()),
-        Some(sm.clone()),
-        false,
-        true,
-    ));
-    let handler = Handler::with_emitter(true, false, emitter);
-    let fm = sm.new_source_file(FileName::Anon, code);
-    let config = swc_ecmascript::parser::TsConfig {
-        decorators: true,
-        ..Default::default()
-    };
-    let lexer = Lexer::new(
-        Syntax::Typescript(config),
-        Default::default(),
-        StringInput::from(&*fm),
-        None,
-    );
-
-    let mut parser = Parser::new_from(lexer);
-
-    for e in parser.take_errors() {
-        e.into_diagnostic(&handler).emit();
-    }
-
-    let mut module = parser.parse_typescript_module().map_err(|e| {
-        // Unrecoverable fatal error occurred
-        e.into_diagnostic(&handler).emit();
-        anyhow!("Parse failed: {}", err_buf.get())
-    })?;
-
-    if apply_transforms {
-        canonical_transforms(&mut module);
-    }
-
-    Ok(module)
+#[derive(Default)]
+pub struct ParserContext {
+    sm: Lrc<SourceMap>,
+    error_buffer: ErrorBuffer,
 }
 
 impl ParserContext {
@@ -106,7 +62,7 @@ impl ParserContext {
         Self::default()
     }
 
-    pub fn parse(&self, code: String) -> Result<Module> {
+    pub fn parse(&self, code: String, apply_transforms: bool) -> Result<Module> {
         let emitter = Box::new(emitter::EmitterWriter::new(
             Box::new(self.error_buffer.clone()),
             Some(self.sm.clone()),
@@ -132,11 +88,15 @@ impl ParserContext {
             e.into_diagnostic(&handler).emit();
         }
 
-        let module = parser.parse_typescript_module().map_err(|e| {
+        let mut module = parser.parse_typescript_module().map_err(|e| {
             // Unrecoverable fatal error occurred
             e.into_diagnostic(&handler).emit();
             anyhow!("Parse failed: {}", self.error_buffer.get())
         })?;
+
+        if apply_transforms {
+            canonical_transforms(&mut module);
+        }
 
         Ok(module)
     }
@@ -150,7 +110,7 @@ pub fn compile<W: Write>(
 ) -> Result<()> {
     let ctx = ParserContext::new();
     // FIXME: We probably need a name for better error messages.
-    let module = ctx.parse(code)?;
+    let module = ctx.parse(code, false)?;
 
     let mut rewriter = Rewriter::new(symbols);
     let module = rewriter.rewrite(module);
