@@ -3,7 +3,6 @@ use std::fmt;
 use petgraph::dot::{Config, Dot};
 use petgraph::graph::{DefaultIx, Graph, NodeIndex};
 use petgraph::visit::Reversed;
-use swc_atoms::JsWord;
 use swc_ecmascript::ast::Stmt;
 
 use super::stmt_map::StmtMap;
@@ -28,8 +27,6 @@ impl fmt::Display for Edge {
         f.write_str(name)
     }
 }
-
-pub type Symbol = JsWord;
 
 #[derive(Debug, Clone)]
 pub struct Entry<'a> {
@@ -143,6 +140,7 @@ impl<'a> CFGBuilder<'a, CfgGraph> {
 pub struct ControlFlow<G = CfgGraph> {
     inner: G,
     start: Idx,
+    #[allow(dead_code)]
     end: Idx,
 }
 
@@ -201,6 +199,7 @@ impl ControlFlow<CfgGraph> {
     }
 }
 
+#[allow(dead_code)]
 impl<G> ControlFlow<G> {
     /// Resturns the inverse control flow graph
     pub fn reversed(&self) -> ControlFlow<Reversed<&G>> {

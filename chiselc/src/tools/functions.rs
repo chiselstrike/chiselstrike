@@ -2,25 +2,10 @@ use std::fmt;
 
 use swc_ecmascript::ast::{ArrowExpr, BlockStmtOrExpr};
 
-use crate::Symbol;
-
 use super::analysis::control_flow::ControlFlow;
 use super::analysis::d_ir::DIr;
 use super::analysis::region::Region;
 use super::analysis::stmt_map::StmtMap;
-
-#[derive(Debug)]
-pub enum Func<'a> {
-    Arrow(ArrowFunction<'a>),
-}
-
-impl<'a> Func<'a> {
-    pub fn name(&self) -> Option<&Symbol> {
-        match self {
-            Func::Arrow(_) => None,
-        }
-    }
-}
 
 pub struct ArrowFunction<'a> {
     pub orig: &'a ArrowExpr,
