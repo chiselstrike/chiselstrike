@@ -7,15 +7,16 @@ use swc_common::{
     sync::Lrc,
     Globals, Mark, SourceMap, GLOBALS,
 };
-use swc_ecmascript::ast::Module;
-use swc_ecmascript::codegen::{text_writer::JsWriter, Emitter};
 use swc_ecmascript::parser::{lexer::Lexer, Parser, StringInput, Syntax};
-use swc_ecmascript::visit::FoldWith;
-
-use crate::{
-    rewrite::{Rewriter, Target},
-    symbols::Symbols,
+use swc_ecmascript::visit::{FoldWith, VisitMut};
+use swc_ecmascript::{ast::Module, transforms::resolver};
+use swc_ecmascript::{
+    codegen::{text_writer::JsWriter, Emitter},
+    transforms::hygiene,
 };
+
+use crate::rewrite::{Rewriter, Target};
+use crate::symbols::Symbols;
 
 #[derive(Clone, Default)]
 struct ErrorBuffer {
@@ -23,6 +24,10 @@ struct ErrorBuffer {
 }
 
 impl ErrorBuffer {
+    fn new() -> Self {
+        Self::default()
+    }
+
     fn get(&self) -> String {
         String::from_utf8_lossy(&self.inner.lock().unwrap().clone()).to_string()
     }
@@ -43,6 +48,57 @@ impl std::io::Write for ErrorBuffer {
 pub struct ParserContext {
     sm: Lrc<SourceMap>,
     error_buffer: ErrorBuffer,
+}
+
+fn canonical_transforms(module: &mut Module) {
+    let globals = Globals::new();
+    GLOBALS.set(&globals, || {
+        let mut resolver = resolver(Mark::new(), Mark::new(), true);
+        resolver.visit_mut_module(module);
+
+        let mut hygiene = hygiene();
+        hygiene.visit_mut_module(module);
+    })
+}
+
+pub fn parse(code: String, sm: &Lrc<SourceMap>, apply_transforms: bool) -> Result<Module> {
+    let err_buf = ErrorBuffer::new();
+    let emitter = Box::new(emitter::EmitterWriter::new(
+        Box::new(err_buf.clone()),
+        Some(sm.clone()),
+        false,
+        true,
+    ));
+    let handler = Handler::with_emitter(true, false, emitter);
+    let fm = sm.new_source_file(FileName::Anon, code);
+    let config = swc_ecmascript::parser::TsConfig {
+        decorators: true,
+        ..Default::default()
+    };
+    let lexer = Lexer::new(
+        Syntax::Typescript(config),
+        Default::default(),
+        StringInput::from(&*fm),
+        None,
+    );
+
+    let mut parser = Parser::new_from(lexer);
+
+    for e in parser.take_errors() {
+        e.into_diagnostic(&handler).emit();
+    }
+
+    let mut module = parser.parse_typescript_module().map_err(|e| {
+        // Unrecoverable fatal error occurred
+        e.into_diagnostic(&handler).emit();
+        anyhow!("Parse failed: {}", err_buf.get())
+    })?;
+
+    if apply_transforms {
+        canonical_transforms(&mut module);
+    }
+
+    Ok(module)
 }
 
 impl ParserContext {
