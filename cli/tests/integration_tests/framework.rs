@@ -186,7 +186,7 @@ impl TestableOutput {
 
     /// Tries to find `pattern` in the output starting from the last successfully read
     /// position (cursor). If not found, the function will panic.
-    pub fn peek(self, pattern: &str) -> Self {
+    pub fn peek(&self, pattern: &str) -> &Self {
         if !self.output[self.cursor..].contains(pattern) {
             let out_type = self.output_type.as_str();
             let output = &self.output;
@@ -334,6 +334,11 @@ impl Chisel {
     /// Runs `chisel wait` awaiting the readiness of chiseld service
     pub async fn wait(&self) -> Result<ProcessOutput, ProcessOutput> {
         self.exec("wait", &[]).await
+    }
+
+    /// Runs `chisel describe` awaiting the readiness of chiseld service
+    pub async fn describe(&self) -> Result<ProcessOutput, ProcessOutput> {
+        self.exec("describe", &[]).await
     }
 
     /// Writes given `text` (probably code) into a file on given relative `path`
