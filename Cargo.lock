@@ -656,6 +656,7 @@ dependencies = [
  "colored",
  "enclose",
  "endpoint_tsc",
+ "file-mode",
  "fs_extra",
  "futures",
  "glob",
@@ -1651,6 +1652,15 @@ checksum = "df689201f395c6b90dfe87127685f8dbfc083a5e779e613575d8bd7314300c3e"
 dependencies = [
  "rand_core 0.6.3",
  "subtle",
+]
+
+[[package]]
+name = "file-mode"
+version = "0.1.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "773ea145485772b8d354624b32adbe20e776353d3e48c7b03ef44e3455e9815c"
+dependencies = [
+ "libc",
 ]
 
 [[package]]

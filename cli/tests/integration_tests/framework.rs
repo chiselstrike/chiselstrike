@@ -1,5 +1,5 @@
 use crate::database::Database;
-use anyhow::Result;
+use anyhow::{anyhow, Context, Result};
 use bytes::{Bytes, BytesMut};
 use reqwest::header::HeaderMap;
 use std::borrow::Borrow;
@@ -379,6 +379,14 @@ impl Chisel {
             .unwrap_or_else(|_| panic!("failed to copy {:?} to {:?}", from, to))
     }
 
+    pub fn remove_file<P>(&self, path: P)
+    where
+        P: AsRef<Path> + fmt::Debug,
+    {
+        std::fs::remove_file(self.tmp_dir.path().join(&path))
+            .unwrap_or_else(|_| panic!("failed to remove file {:?}", path))
+    }
+
     /// Sends a HTTP request to a relative `url` on the running `chiseld`, using the given request
     /// `method` and `body`. Does not check that the response is successful. Panics if there was an error while
     /// handling the request.
@@ -645,4 +653,72 @@ pub fn header(name: &'static str, value: &str) -> HeaderMap {
     let mut headers = HeaderMap::new();
     headers.insert(name, value.parse().unwrap());
     headers
+}
+
+pub fn json_is_subset<V1, V2>(val: V1, subset: V2) -> Result<()>
+where
+    V1: Borrow<serde_json::Value>,
+    V2: Borrow<serde_json::Value>,
+{
+    use serde_json::Value;
+    let val = val.borrow();
+    let subset = subset.borrow();
+
+    match subset {
+        Value::Object(sub_obj) => {
+            let obj = val.as_object().context(anyhow!(
+                "subset value is object but reference value is {val}"
+            ))?;
+            for (key, value) in sub_obj {
+                let ref_value = obj
+                    .get(key)
+                    .context(anyhow!("reference object doesn't contain key `{key}`"))?;
+                json_is_subset(ref_value, value).context(anyhow!(
+                    "value of key `{key}` is not a subset of given value"
+                ))?;
+            }
+        }
+        Value::Array(sub_array) => {
+            let arr = val.as_array().context(anyhow!(
+                "subset value is array but reference value is {val}"
+            ))?;
+            anyhow::ensure!(
+                arr.len() == sub_array.len(),
+                "arrays have different lengths"
+            );
+            for (i, e) in arr.iter().enumerate() {
+                let sub_e = &sub_array[i];
+                json_is_subset(e, sub_e)
+                    .context(anyhow!("failed to match elements of array on position {i}"))?
+            }
+        }
+        Value::Number(_) => {
+            anyhow::ensure!(
+                val.is_number(),
+                "subset value is number but reference value is {val}",
+            );
+            anyhow::ensure!(val == subset);
+        }
+        Value::String(_) => {
+            anyhow::ensure!(
+                val.is_string(),
+                "subset value is string but reference value is {val}",
+            );
+            anyhow::ensure!(val == subset);
+        }
+        Value::Bool(_) => {
+            anyhow::ensure!(
+                val.is_boolean(),
+                "subset value is bool but reference value is {val}",
+            );
+            anyhow::ensure!(val == subset);
+        }
+        Value::Null => {
+            anyhow::ensure!(
+                val.is_null(),
+                "subset value is null but reference value is {val}",
+            );
+        }
+    }
+    Ok(())
 }
