@@ -196,14 +196,90 @@ The `curl` command reports:
 As you can see, this request handler now operates with the raw, untransformed
 data.
 
-## Policies for Logged-in Users
+## Restricting Access to Routes
+
+You may or may not want to allow everyone on the Internet to invoke your
+ChiselStrike endpoints.  In case you don't, we got you covered via our policy
+capabilities.  You can restrict access to individual endpoints or entire
+subdirectories.  And you can treat different HTTP methods differently.
+
+Route access can be restricted in two different ways: a _shared secret_ or a
+_proof of user login_.  A shared secret is a value that a request must include
+to be authorized.  It is typically long-lived and known to all valid clients.  A
+proof of user login, on the other hand, is user-specific and typically
+short-lived.  It is obtained when a user logs in successfully in the client.
+The shared-secret method is considerably simpler to set up, but the user-login
+one offers additional capabilities, such as different permissions for different
+users and preventing one user from accessing another user's data.
+
+When restricting routes, you use a top-level entry named `routes` in the policy
+YAML.  It is a list of route-specific policies, each of which begins with a
+`path` entry that denotes the route to which the restriction applies.
+
+For example, this YAML:
+
+```yaml title="my-backend/policies/pol.yml"
+routes:
+  - path: /comments
+    # corresponding restriction goes here
+  - path: /
+    # corresponding restriction goes here
+  - path: /users
+    # corresponding restriction goes here
+```
+
+defines three restrictions: one for route `/comments`, one for route `/`, and
+one for route `/users`.  As you can see, `path` values may overlap, in which
+case longer overrides shorter.  When a request arrives, the longest prefix of
+its path that matches some `path` entry will dictate which restriction applies.
+Although multiple paths may overlap, they must not be identical.
+
+### Shared Secret
+
+To restrict a route via a shared secret, you set a policy that names that route
+and specifies how clients will provide the secret value.  Then a client's
+request must conform to this specification in order to be allowed to proceed.
+In particular, the request must provide the secret value via a certain HTTP
+header described by the policy.  Consider this example policy:
+
+```yaml title="my-backend/policies/pol.yml"
+routes:
+  - path: /comments
+    mandatory_header: { name: header123, secret_value_ref: TOKEN123 }
+```
+
+This says that any request accessing the `/comments` route must provide an HTTP
+header named `header123` with a value equaling that of the secret TOKEN123.
+(See the ["Secrets"](./secrets.md) section to learn how to set secret values in
+ChiselStrike.  The secret value in this case must be a string.)  The
+`mandatory_header` entry is a dictionary containing at least the `name` and
+`secret_value_ref` keys, which together describe the HTTP header required for a
+request to succeed.  Requests without this header or with a wrong value will be
+rejected with status 403 Forbidden.
+
+#### Exempting Some HTTP Methods
+
+If you want to restrict a route only for some HTTP methods (eg, anyone can GET,
+but only a restricted few can PUT), use an `only_for_methods` entry in
+`mandatory_header`.  For example:
+
+```yaml title="my-backend/policies/pol.yml"
+routes:
+  - path: /comments
+    mandatory_header: { name: header123, secret_value_ref: TOKEN123, only_for_methods: [ PUT, POST, PATCH ] }
+```
+
+The value of `only_for_methods` is a list of methods covered by this
+restriction.  Any method not on the list will be unrestricted.
+
+### User Login
 
 ChiselStrike supports [having users log into your dynamic
 website](./login.md).  It even lets you restrict access to HTTP routes by
 user.
 
-To restrict who can access the `comments` path, please edit the
-file `my-backend/policies/pol.yml` like this:
+To restrict who can access a path, provide a `users` entry with a regular
+expression describing the permitted users.  For example:
 
 ```yaml title="my-backend/policies/pol.yml"
 routes:
@@ -219,22 +295,12 @@ NextAuth guarantees to be unique.  Your feedback is welcome as we
 evolve this aspect of our product.
 :::
 
-The `routes` section can have any number of `path` items, each
-affecting a different path prefix.  The `users` attribute is a regular
-expression that the logged-in user's email must match in order to access
-endpoints under the given path.
-
-`path` values may overlap, in which case longer overrides shorter.
-When you attempt to send a request, the longest specified prefix
-of its path dictates which users may access it.  Although multiple
-`path` entries may overlap, they must not be identical.
-
 When `users` is specified, anonymous access to the path will be
 prohibited.  For example, if you want to force the user to log in to
 access `comments` but don't care which specific user is accessing it,
 you can set `users` to `.*`.
 
-### Restricting Data Access to Matching User
+#### Restricting Data Access to Matching User
 
 As explained in ["Accessing User Info in the
 Backend"](login#accessing-user-info-in-the-backend), you can store the
