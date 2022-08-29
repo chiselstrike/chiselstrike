@@ -1,8 +1,5 @@
-use anyhow::{anyhow, Context, Result};
-use std::borrow::Borrow;
-
 use crate::framework::prelude::*;
-use crate::framework::Chisel;
+use crate::framework::{json_is_subset, Chisel};
 
 async fn fetch_person(chisel: &Chisel) -> serde_json::Value {
     let mut person = chisel.get_json("/dev/find_person").await;
@@ -206,71 +203,4 @@ pub async fn policies(c: TestContext) {
         )
         .unwrap();
     }
-}
-
-fn json_is_subset<V1, V2>(val: V1, subset: V2) -> Result<()>
-where
-    V1: Borrow<serde_json::Value>,
-    V2: Borrow<serde_json::Value>,
-{
-    use serde_json::Value;
-    let val = val.borrow();
-    let subset = subset.borrow();
-
-    match subset {
-        Value::Object(sub_obj) => {
-            let obj = val.as_object().context(anyhow!(
-                "subset value is object but reference value is {val}"
-            ))?;
-            for (key, value) in sub_obj {
-                let ref_value = obj
-                    .get(key)
-                    .context(anyhow!("reference object doesn't contain key `{key}`"))?;
-                json_is_subset(ref_value, value)
-                    .context(anyhow!("object properties `{key}` don't match"))?;
-            }
-        }
-        Value::Array(sub_array) => {
-            let arr = val.as_array().context(anyhow!(
-                "subset value is array but reference value is {val}"
-            ))?;
-            anyhow::ensure!(
-                arr.len() == sub_array.len(),
-                "arrays have different lengths"
-            );
-            for (i, e) in arr.iter().enumerate() {
-                let sub_e = &sub_array[i];
-                json_is_subset(e, sub_e)
-                    .context(anyhow!("failed to match elements of array on position {i}"))?
-            }
-        }
-        Value::Number(_) => {
-            anyhow::ensure!(
-                val.is_number(),
-                "subset value is number but reference value is {val}",
-            );
-            anyhow::ensure!(val == subset);
-        }
-        Value::String(_) => {
-            anyhow::ensure!(
-                val.is_string(),
-                "subset value is string but reference value is {val}",
-            );
-            anyhow::ensure!(val == subset);
-        }
-        Value::Bool(_) => {
-            anyhow::ensure!(
-                val.is_string(),
-                "subset value is bool but reference value is {val}",
-            );
-            anyhow::ensure!(val == subset);
-        }
-        Value::Null => {
-            anyhow::ensure!(
-                val.is_null(),
-                "subset value is null but reference value is {val}",
-            );
-        }
-    }
-    Ok(())
 }
