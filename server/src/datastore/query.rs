@@ -461,13 +461,19 @@ impl QueryPlan {
         let mut column_string = String::new();
         for c in &self.columns {
             let col = match c.field.default_value() {
-                Some(dfl) => format!(
-                    "coalesce(\"{}\".\"{}\",'{}') AS \"{}\",",
-                    c.table_name,
-                    c.name,
-                    dfl,
-                    c.alias()
-                ),
+                Some(dfl) => {
+                    let sql_default = match c.field.type_id {
+                        TypeId::String => format!("'{}'", dfl),
+                        _ => dfl.to_string(),
+                    };
+                    format!(
+                        "coalesce(\"{}\".\"{}\",{}) AS \"{}\",",
+                        c.table_name,
+                        c.name,
+                        sql_default,
+                        c.alias()
+                    )
+                }
                 None => format!("\"{}\".\"{}\" AS \"{}\",", c.table_name, c.name, c.alias()),
             };
             column_string += &col;

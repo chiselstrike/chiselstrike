@@ -585,7 +585,7 @@ impl Field {
     pub fn generate_value(&self) -> Option<String> {
         match self.type_id {
             TypeId::Id => Some(Uuid::new_v4().to_string()),
-            _ => self.default.clone(),
+            _ => self.default_value().clone(),
         }
     }
 
