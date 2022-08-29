@@ -56,7 +56,7 @@ impl fmt::Display for TypeEnum {
         match self {
             TypeEnum::String(_) => f.write_str("string"),
             TypeEnum::Number(_) => f.write_str("number"),
-            TypeEnum::Bool(_) => f.write_str("bool"),
+            TypeEnum::Bool(_) => f.write_str("boolean"),
             TypeEnum::Entity(name) => name.fmt(f),
             TypeEnum::Array(inner) => {
                 let inner = inner.value_type().unwrap();
