@@ -1,37 +1,20 @@
-use crate::framework::{header, prelude::*};
-use reqwest::StatusCode;
-use serde_json::json;
+use crate::framework::prelude::*;
 
 #[chisel_macros::test(modules = Node)]
 pub async fn header_auth(mut c: TestContext) {
     c.chisel.apply().await.unwrap();
 
     // Can't access users without auth header
-    assert_eq!(
-        c.chisel.get_status("/__chiselstrike/auth/users").await,
-        StatusCode::FORBIDDEN
-    );
+    c.chisel.get("/__chiselstrike/auth/users").send().await.assert_status(403);
 
     c.chisel.write(".env", r##"{ "CHISELD_AUTH_SECRET" : "1234" }"##);
     c.restart_chiseld().await;
 
-    assert_eq!(c.chisel.get_text("/dev/hello").await, "hello world");
-    assert_eq!(
-        c.chisel.get_status_with_headers("/__chiselstrike/auth/users", header("ChiselAuth", "1234")).await,
-        StatusCode::OK
-    );
-    assert_eq!(
-        c.chisel.get_status_with_headers("/__chiselstrike/auth/users", header("ChiselAuth", "12345")).await,
-        StatusCode::FORBIDDEN
-    );
-    assert_eq!(
-        c.chisel.get_status_with_headers("/__chiselstrike/auth/users", header("ChiselAuth", "")).await,
-        StatusCode::FORBIDDEN
-    );
-    assert_eq!(
-        c.chisel.get_status("/__chiselstrike/auth/users").await,
-        StatusCode::FORBIDDEN
-    );
+    c.chisel.get("/dev/hello").send().await.assert_text("hello world");
+    c.chisel.get("/__chiselstrike/auth/users").header("ChiselAuth", "1234").send().await.assert_ok();
+    c.chisel.get("/__chiselstrike/auth/users").header("ChiselAuth", "12345").send().await.assert_status(403);
+    c.chisel.get("/__chiselstrike/auth/users").header("ChiselAuth", "").send().await.assert_status(403);
+    c.chisel.get("/__chiselstrike/auth/users").send().await.assert_status(403);
 }
 
 #[chisel_macros::test(modules = Node)]
@@ -47,26 +30,13 @@ pub async fn token_auth(mut c: TestContext) {
     c.chisel.apply().await.unwrap();
 
     // Can't access /dev/hello without the required header.
-    assert_eq!(
-        c.chisel.get_status("/dev/hello").await,
-        StatusCode::FORBIDDEN
-    );
+    c.chisel.get("/dev/hello").send().await.assert_status(403);
 
     // But with the right header, you can.
-    assert_eq!(
-        c.chisel
-            .get_text_with_headers("/dev/hello", header("header33", "s3cr3t"))
-            .await,
-        "hello world"
-    );
+    c.chisel.get("/dev/hello").header("header33", "s3cr3t").send().await.assert_text("hello world");
 
     // Wrong header value.
-    assert_eq!(
-        c.chisel
-            .get_status_with_headers("/dev/hello", header("header33", "wrong"))
-            .await,
-        StatusCode::FORBIDDEN
-    );
+    c.chisel.get("/dev/hello").header("header33", "wrong").send().await.assert_status(403);
 
     // Header spec references non-existing secret.
     c.chisel.write_unindent(
@@ -76,12 +46,7 @@ pub async fn token_auth(mut c: TestContext) {
             mandatory_header: { name: header33, secret_value_ref: WXYZ }"##,
     );
     c.chisel.apply().await.unwrap();
-    assert_eq!(
-        c.chisel
-            .get_status_with_headers("/dev/hello", header("header33", "s3cr3t"))
-            .await,
-        StatusCode::FORBIDDEN
-    );
+    c.chisel.get("/dev/hello").header("header33", "s3cr3t").send().await.assert_status(403);
 
     // Repeated path for header auth.
     c.chisel.write_unindent(
@@ -149,18 +114,24 @@ pub async fn token_auth(mut c: TestContext) {
             mandatory_header: { name: header33, secret_value_ref: TOKEN33, only_for_methods: [ PUT, GET ] } "##,
     );
     c.chisel.apply().await.unwrap();
-    assert_eq!(
-        c.chisel.get_status("/dev/hello").await,
-        StatusCode::FORBIDDEN
+    c.chisel.get("/dev/hello").send().await.assert_status(403);
+    c.chisel.get("/dev/hello").header("header33", "s3cr3t").send().await.assert_text("hello world");
+    c.chisel.post("/dev/hello").json(&json!(122333)).send().await.assert_text("122333");
+}
+
+#[chisel_macros::test(modules = Node)]
+pub async fn endpoints_backcompat(mut c: TestContext) {
+    c.chisel.write_unindent(
+        "policies/p.yaml", r##"
+        endpoints:
+          - path: /
+            mandatory_header: { name: header33, secret_value_ref: TOKEN33 }"##,
     );
-    assert_eq!(
-        c.chisel
-            .get_text_with_headers("/dev/hello", header("header33", "s3cr3t"))
-            .await,
-        "hello world"
-    );
-    assert_eq!(
-        c.chisel.post_json_text("/dev/hello", json!(122333)).await,
-        "122333"
-    );
+    c.chisel.write(".env", r##"{ "TOKEN33" : "s3cr3t" }"##);
+    c.restart_chiseld().await;
+    c.chisel.apply().await.unwrap();
+
+    // the policy is applied when we use `endpoints:` instead of `routes:`
+    c.chisel.get("/dev/hello").send().await.assert_status(403);
+    c.chisel.get("/dev/hello").header("header33", "s3cr3t").send().await.assert_status(200);
 }

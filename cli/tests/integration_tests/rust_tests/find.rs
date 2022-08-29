@@ -298,17 +298,16 @@ pub async fn find_by(mut c: TestContext) {
         "Glauber Costa 666 true 10.01 Jan Plhak -666 true 10.02 Pekka Enberg 888 false 12.2 "
     );
 
-    let resp = c
+    c
         .chisel
-        .post_json(
-            "/dev/find_by",
-            json!({
-                "field_name":"misspelled_field_name",
-                "value":10.01
-            }),
-        )
-        .await;
-    assert!(resp.status().is_server_error());
+        .post("/dev/find_by")
+        .json(json!({
+            "field_name":"misspelled_field_name",
+            "value":10.01
+        }))
+        .send()
+        .await
+        .assert_status(500);
 
     c.chiseld
         .stderr

@@ -1,7 +1,6 @@
 use crate::database::Database;
 use anyhow::{anyhow, Context, Result};
 use bytes::{Bytes, BytesMut};
-use reqwest::header::HeaderMap;
 use std::borrow::Borrow;
 use std::path::{Path, PathBuf};
 use std::pin::Pin;
@@ -14,7 +13,7 @@ use tempdir::TempDir;
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWriteExt};
 
 pub mod prelude {
-    pub use super::{Chisel, TestContext};
+    pub use super::{json_is_subset, Chisel, TestContext};
     pub use bytes::Bytes;
     pub use chisel_macros::test;
     pub use reqwest::Method;
@@ -387,237 +386,183 @@ impl Chisel {
             .unwrap_or_else(|_| panic!("failed to remove file {:?}", path))
     }
 
-    /// Sends a HTTP request to a relative `url` on the running `chiseld`, using the given request
-    /// `method` and `body`. Does not check that the response is successful. Panics if there was an error while
-    /// handling the request.
-    pub async fn request_with_headers<B>(
-        &self,
-        method: reqwest::Method,
-        url: &str,
-        body: B,
-        headers: HeaderMap,
-    ) -> reqwest::Response
-    where
-        B: Into<reqwest::Body>,
-    {
-        let full_url = url::Url::parse(&format!("http://{}", self.api_address))
-            .unwrap()
-            .join(url)
-            .unwrap();
-        self.client
-            .request(method.clone(), full_url)
-            .body(body)
-            .headers(headers)
-            .timeout(core::time::Duration::from_secs(5))
-            .send()
-            .await
-            .unwrap_or_else(|e| panic!("HTTP error in {} {}: {}", method, url, e))
+    pub fn request(&self, method: reqwest::Method, url: &str) -> RequestBuilder {
+        let chisel_url = reqwest::Url::parse(&format!("http://{}", self.api_address)).unwrap();
+        let url = chisel_url.join(url).unwrap();
+        RequestBuilder {
+            client: self.client.clone(),
+            builder: self.client.request(method, url),
+        }
     }
 
-    pub async fn request<B>(&self, method: reqwest::Method, url: &str, body: B) -> reqwest::Response
-    where
-        B: Into<reqwest::Body>,
-    {
-        self.request_with_headers(method, url, body, HeaderMap::new())
-            .await
+    pub fn get(&self, url: &str) -> RequestBuilder {
+        self.request(reqwest::Method::GET, url)
     }
 
-    /// Same as `request()`, but reads the response status and body as bytes.
-    pub async fn request_body<B>(&self, method: reqwest::Method, url: &str, body: B) -> (u16, Bytes)
-    where
-        B: Into<reqwest::Body>,
-    {
-        self.request_body_with_headers(method, url, body, HeaderMap::new())
-            .await
+    pub fn post(&self, url: &str) -> RequestBuilder {
+        self.request(reqwest::Method::POST, url)
     }
 
-    pub async fn request_body_with_headers<B>(
-        &self,
-        method: reqwest::Method,
-        url: &str,
-        body: B,
-        headers: HeaderMap,
-    ) -> (u16, Bytes)
-    where
-        B: Into<reqwest::Body>,
-    {
+    pub async fn get_text(&self, url: &str) -> String {
+        self.get(url).send().await.text()
+    }
+
+    pub async fn get_json(&self, url: &str) -> serde_json::Value {
+        self.get(url).send().await.json()
+    }
+
+    pub async fn post_json_ok<V: Borrow<serde_json::Value>>(&self, url: &str, data: V) {
+        self.post(url).json(data).send().await.assert_ok();
+    }
+
+    pub async fn post_json_status<V: Borrow<serde_json::Value>>(&self, url: &str, data: V) -> u16 {
+        self.post(url).json(data).send().await.status()
+    }
+
+    pub async fn post_json_text<V: Borrow<serde_json::Value>>(&self, url: &str, data: V) -> String {
+        self.post(url).json(data).send().await.text()
+    }
+}
+
+#[must_use]
+pub struct RequestBuilder {
+    client: reqwest::Client,
+    builder: reqwest::RequestBuilder,
+}
+
+impl RequestBuilder {
+    fn map<F: FnOnce(reqwest::RequestBuilder) -> reqwest::RequestBuilder>(self, f: F) -> Self {
+        Self {
+            client: self.client,
+            builder: f(self.builder),
+        }
+    }
+
+    pub fn json<V: Borrow<serde_json::Value>>(self, data: V) -> Self {
+        self.map(|b| b.json(data.borrow()))
+    }
+
+    pub fn header(self, name: &str, value: &str) -> Self {
+        self.map(|b| b.header(name, value))
+    }
+
+    pub async fn send(self) -> Response {
+        let request = self.builder.build().unwrap();
+        let (method, url) = (request.method().clone(), request.url().clone());
         let response = self
-            .request_with_headers(method.clone(), url, body, headers)
-            .await;
-        let status = response.status().as_u16();
-        match response.bytes().await {
-            Ok(response_body) => (status, response_body),
-            Err(err) => panic!(
-                "HTTP error in {} {} while reading response: {}",
-                method, url, err
-            ),
+            .client
+            .execute(request)
+            .await
+            .unwrap_or_else(|err| panic!("HTTP error for {} {}: {}", method, url, err));
+
+        let status = response.status();
+        let body = response.bytes().await.unwrap_or_else(|err| {
+            panic!(
+                "HTTP error for {} {} while reading response {}: {}",
+                method, url, status, err
+            )
+        });
+
+        Response {
+            method,
+            url,
+            status,
+            body,
         }
     }
+}
 
-    /// Same as `request()`, but returns the response body as text
-    pub async fn request_text<B>(&self, method: reqwest::Method, url: &str, body: B) -> String
-    where
-        B: Into<reqwest::Body>,
-    {
-        self.request_text_with_headers(method, url, body, HeaderMap::new())
-            .await
+#[must_use]
+pub struct Response {
+    method: reqwest::Method,
+    url: reqwest::Url,
+    status: reqwest::StatusCode,
+    body: Bytes,
+}
+
+impl Response {
+    pub fn status(&self) -> u16 {
+        self.status.as_u16()
     }
 
-    /// Same as `request_text()`, but with headers
-    pub async fn request_text_with_headers<B>(
-        &self,
-        method: reqwest::Method,
-        url: &str,
-        body: B,
-        headers: HeaderMap,
-    ) -> String
-    where
-        B: Into<reqwest::Body>,
-    {
-        let (status, response_body) = self
-            .request_body_with_headers(method.clone(), url, body, headers)
-            .await;
-        match str::from_utf8(&response_body) {
-            Ok(text) => text.into(),
-            Err(err) => panic!(
-                "HTTP response for {} {} is not UTF-8: {}\nResponse status {}, body {:?}",
-                method, url, err, status, response_body
-            ),
-        }
+    pub fn assert_ok(&self) -> &Self {
+        assert!(
+            self.status.is_success(),
+            "HTTP error response for {} {}: {}\nResponse body {:?}",
+            self.method,
+            self.url,
+            self.status,
+            self.body,
+        );
+        self
     }
 
-    /// Same as `request()`, but returns the response body as JSON.
-    pub async fn request_json<B>(
-        &self,
-        method: reqwest::Method,
-        url: &str,
-        body: B,
-    ) -> serde_json::Value
-    where
-        B: Into<reqwest::Body>,
-    {
-        let (status, response_body) = self.request_body(method.clone(), url, body).await;
-        match serde_json::from_slice(&response_body) {
-            Ok(json) => json,
-            Err(err) => panic!(
-                "HTTP response for {} {} is not JSON: {}\nResponse status {}, body {:?}",
-                method, url, err, status, response_body,
-            ),
-        }
-    }
-
-    /// Same as `request()`, but returns the response status.
-    pub async fn request_status<B>(&self, method: reqwest::Method, url: &str, body: B) -> u16
-    where
-        B: Into<reqwest::Body>,
-    {
-        self.request_status_with_headers(method, url, body, HeaderMap::new())
-            .await
-    }
-
-    /// Same as `request()`, but returns the response status.
-    pub async fn request_status_with_headers<B>(
-        &self,
-        method: reqwest::Method,
-        url: &str,
-        body: B,
-        headers: HeaderMap,
-    ) -> u16
-    where
-        B: Into<reqwest::Body>,
-    {
-        self.request_with_headers(method, url, body, headers)
-            .await
-            .status()
-            .as_u16()
+    pub fn assert_status(&self, expected: u16) -> &Self {
+        assert!(
+            self.status.as_u16() == expected,
+            "Expected status {}, got {} for HTTP {} {}: {}\nResponse body {:?}",
+            expected,
+            self.status,
+            self.method,
+            self.url,
+            self.status,
+            self.body,
+        );
+        self
     }
 
     /*
-    /// Same as `request()`, but sends GET with no request body.
-    pub async fn get(&self, url: &str) -> reqwest::Response {
-        self.request(reqwest::Method::GET, url, "").await
+    pub fn body(&self) -> Bytes {
+        self.body.clone()
     }
     */
 
-    /// Same as `request_body()`, but sends GET with no request body.
-    pub async fn get_body(&self, url: &str) -> (u16, Bytes) {
-        self.request_body(reqwest::Method::GET, url, "").await
+    pub fn text(&self) -> String {
+        match str::from_utf8(&self.body) {
+            Ok(text) => text.into(),
+            Err(err) => panic!(
+                "HTTP response for {} {} is not UTF-8: {}\nResponse status {}, body {:?}",
+                self.method, self.url, err, self.status, self.body,
+            ),
+        }
     }
 
-    /// Same as `request_text()`, but sends GET with no request body.
-    pub async fn get_text(&self, url: &str) -> String {
-        self.request_text(reqwest::Method::GET, url, "").await
+    pub fn assert_text(&self, expected: &str) -> &Self {
+        let actual = self.text();
+        assert!(
+            actual == expected,
+            "Unexpected text response for HTTP {} {}\nResponse status {}, body {:?}, expected {:?}",
+            self.method,
+            self.url,
+            self.status,
+            actual,
+            expected,
+        );
+        self
     }
 
-    /// Same as `request_text_with_headers()`, but sends GET with no request body.
-    pub async fn get_text_with_headers(&self, url: &str, headers: HeaderMap) -> String {
-        self.request_text_with_headers(reqwest::Method::GET, url, "", headers)
-            .await
+    pub fn json(&self) -> serde_json::Value {
+        match serde_json::from_slice(&self.body) {
+            Ok(json) => json,
+            Err(err) => panic!(
+                "HTTP response for {} {} is not JSON: {}\nResponse status {}, body {:?}",
+                self.method, self.url, err, self.status, self.body,
+            ),
+        }
     }
 
-    /// Same as `request_json()`, but sends GET with no request body.
-    pub async fn get_json(&self, url: &str) -> serde_json::Value {
-        self.request_json(reqwest::Method::GET, url, "").await
-    }
-
-    /// Same as `request_status()`, but sends GET with no request body.
-    pub async fn get_status(&self, url: &str) -> u16 {
-        self.get_status_with_headers(url, HeaderMap::new()).await
-    }
-
-    pub async fn get_status_with_headers(&self, url: &str, headers: HeaderMap) -> u16 {
-        self.request_status_with_headers(reqwest::Method::GET, url, "", headers)
-            .await
-    }
-
-    /// Same as `request()`, but sends POST with JSON request payload.
-    pub async fn post_json<Value>(&self, url: &str, data: Value) -> reqwest::Response
-    where
-        Value: Borrow<serde_json::Value>,
-    {
-        self.request(
-            reqwest::Method::POST,
-            url,
-            serde_json::to_string(data.borrow()).unwrap(),
-        )
-        .await
-    }
-
-    /// Same as `post_json()`, but asserts that the response was a success.
-    pub async fn post_json_ok<Value>(&self, url: &str, data: Value)
-    where
-        Value: Borrow<serde_json::Value>,
-    {
-        self.post_json(url, data)
-            .await
-            .error_for_status()
-            .unwrap_or_else(|e| panic!("HTTP error response in POST {}: {}", url, e));
-    }
-
-    /// Same as `request_text()`, but sends POST with JSON request payload.
-    pub async fn post_json_text<Value>(&self, url: &str, data: Value) -> String
-    where
-        Value: Borrow<serde_json::Value>,
-    {
-        self.request_text(
-            reqwest::Method::POST,
-            url,
-            serde_json::to_string(data.borrow()).unwrap(),
-        )
-        .await
-    }
-
-    /// Same as `request_status()`, but sends POST with JSON request payload.
-    pub async fn post_json_status<Value>(&self, url: &str, data: Value) -> u16
-    where
-        Value: Borrow<serde_json::Value>,
-    {
-        self.request_status(
-            reqwest::Method::POST,
-            url,
-            serde_json::to_string(data.borrow()).unwrap(),
-        )
-        .await
+    pub fn assert_json<V: Borrow<serde_json::Value>>(&self, expected: V) -> &Self {
+        let actual = self.json();
+        assert!(
+            &actual == expected.borrow(),
+            "Unexpected JSON response for HTTP {} {}\nResponse status {}, body {}, expected {}",
+            self.method,
+            self.url,
+            self.status,
+            actual,
+            expected.borrow(),
+        );
+        self
     }
 }
 
@@ -649,17 +594,7 @@ pub async fn wait_for_chiseld_startup(chiseld: &mut GuardedChild, chisel: &Chise
     }
 }
 
-pub fn header(name: &'static str, value: &str) -> HeaderMap {
-    let mut headers = HeaderMap::new();
-    headers.insert(name, value.parse().unwrap());
-    headers
-}
-
-pub fn json_is_subset<V1, V2>(val: V1, subset: V2) -> Result<()>
-where
-    V1: Borrow<serde_json::Value>,
-    V2: Borrow<serde_json::Value>,
-{
+pub fn json_is_subset(val: &serde_json::Value, subset: &serde_json::Value) -> Result<()> {
     use serde_json::Value;
     let val = val.borrow();
     let subset = subset.borrow();

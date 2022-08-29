@@ -664,6 +664,7 @@ dependencies = [
  "handlebars",
  "inventory",
  "itertools 0.10.3",
+ "lazy_static",
  "lit",
  "nix 0.22.3",
  "notify",
