@@ -412,6 +412,10 @@ impl Chisel {
         self.request(reqwest::Method::DELETE, url)
     }
 
+    pub fn options(&self, url: &str) -> RequestBuilder {
+        self.request(reqwest::Method::OPTIONS, url)
+    }
+
     pub async fn get_text(&self, url: &str) -> String {
         self.get(url).send().await.text()
     }
@@ -463,7 +467,7 @@ impl RequestBuilder {
             .execute(request)
             .await
             .unwrap_or_else(|err| panic!("HTTP error for {} {}: {}", method, url, err));
-
+        let headers = response.headers().clone();
         let status = response.status();
         let body = response.bytes().await.unwrap_or_else(|err| {
             panic!(
@@ -475,6 +479,7 @@ impl RequestBuilder {
         Response {
             method,
             url,
+            headers,
             status,
             body,
         }
@@ -485,8 +490,9 @@ impl RequestBuilder {
 pub struct Response {
     method: reqwest::Method,
     url: reqwest::Url,
-    status: reqwest::StatusCode,
-    body: Bytes,
+    pub headers: reqwest::header::HeaderMap,
+    pub status: reqwest::StatusCode,
+    pub body: Bytes,
 }
 
 impl Response {

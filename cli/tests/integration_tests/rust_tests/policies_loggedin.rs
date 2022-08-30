@@ -1,3 +1,5 @@
+use reqwest::header::HeaderMap;
+
 use crate::framework::prelude::*;
 
 static TEST_ROUTE: &str = r##"
@@ -331,4 +333,95 @@ async fn transform_match_login_related_entities(c: TestContext) {
         .await
         .assert_status(200)
         .assert_json(json!(["first blog post by al", "second blog post by al",]));
+}
+
+fn contains_one_chisel_uid_header(header_map: &HeaderMap) -> bool {
+    let aca_headers = header_map
+        .get(reqwest::header::ACCESS_CONTROL_ALLOW_HEADERS)
+        .unwrap();
+    let uids_count = aca_headers
+        .to_str()
+        .unwrap()
+        .split(',')
+        .filter(|v| *v == "ChiselUID")
+        .count();
+    uids_count == 1
+}
+
+#[self::test(modules = Deno, optimize = Both)]
+async fn allow_chisel_uid_header(mut c: TestContext) {
+    c.chisel.write(
+        "routes/foo.ts",
+        r#"
+        export default async function chisel(req: Request) {
+            return "foo";
+        }
+    "#,
+    );
+    c.chisel.apply_ok().await;
+
+    let resp = c.chisel.get("/dev/foo").send().await;
+    resp.assert_ok();
+    assert!(contains_one_chisel_uid_header(&resp.headers));
+
+    let resp = c.chisel.options("/dev/foo").send().await;
+    resp.assert_ok();
+    assert!(contains_one_chisel_uid_header(&resp.headers));
+
+    c.chisel.write(".env", r#"{"CHISELD_AUTH_SECRET": "u"}"#);
+    c.restart_chiseld().await;
+
+    let resp = c
+        .chisel
+        .get("/__chiselstrike/auth/users")
+        .header("ChiselAuth", "u")
+        .header("ChiselUID", "1234")
+        .send()
+        .await;
+    resp.assert_ok();
+    assert!(contains_one_chisel_uid_header(&resp.headers));
+}
+
+#[self::test(modules = Deno, optimize = Both)]
+async fn use_chisel_uid_header(mut c: TestContext) {
+    c.chisel.write(".env", r#"{"CHISELD_AUTH_SECRET": "u"}"#);
+    c.restart_chiseld().await;
+
+    let resp = c
+        .chisel
+        .get("/__chiselstrike/auth/users")
+        .header("ChiselAuth", "u")
+        .header("ChiselUID", "1234")
+        .send()
+        .await;
+    resp.assert_ok();
+    assert!(contains_one_chisel_uid_header(&resp.headers));
+
+    // Store auth user and save uid
+    let resp = c
+        .chisel
+        .post("/__chiselstrike/auth/users")
+        .json(json!({"name":"Al"}))
+        .header("ChiselAuth", "u")
+        .send()
+        .await
+        .json();
+    let id = resp.get("id").unwrap().as_str().unwrap();
+
+    // Use the user ID to authenticate
+    let resp = c
+        .chisel
+        .get("/__chiselstrike/auth/users")
+        .header("ChiselAuth", "u")
+        .header("ChiselUID", id)
+        .send()
+        .await;
+    resp.assert_ok();
+    assert!(contains_one_chisel_uid_header(&resp.headers));
+
+    json_is_subset(
+        &resp.json(),
+        &json!({"results": [{"id": id, "name": "Al"}]}),
+    )
+    .unwrap();
 }
