@@ -86,11 +86,11 @@ impl ParserContext {
     }
 }
 
-pub fn compile(
+pub fn compile<W: Write>(
     code: String,
     symbols: Symbols,
     target: Target,
-    mut output: Box<dyn Write>,
+    mut output: W,
 ) -> Result<()> {
     let ctx = ParserContext::new();
     // FIXME: We probably need a name for better error messages.
@@ -125,7 +125,7 @@ pub fn compile(
             emitter.emit_module(&module).unwrap();
         }
         Target::FilterProperties => {
-            println!("{}", serde_json::to_string(&rewriter.indexes)?);
+            writeln!(&mut output, "{}", serde_json::to_string(&rewriter.indexes)?)?;
         }
     }
     Ok(())

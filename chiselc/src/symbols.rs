@@ -2,15 +2,14 @@
 use std::collections::HashSet;
 
 /// Symbol table.
+#[derive(Clone, Default)]
 pub struct Symbols {
     entities: HashSet<String>,
 }
 
 impl Symbols {
     pub fn new() -> Self {
-        Self {
-            entities: HashSet::new(),
-        }
+        Self::default()
     }
 
     pub fn register_entity(&mut self, type_name: &str) {

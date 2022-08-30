@@ -351,5 +351,6 @@ async fn main() -> Result<()> {
             populate(server_url, version, from).await?;
         }
     }
+
     Ok(())
 }
