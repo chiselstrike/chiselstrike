@@ -252,10 +252,9 @@ export class BlogComment extends ChiselEntity {
 }
 ```
 
-You can observe that the `author` field is of type `User` which is another entity. This is a way we can define a relationship between entities.
+You can observe that the `author` field is of type `User`, which is another entity. This is a way we can define a relationship between entities.
 
-Entity fields are eagerly loaded. This means that when you load a `BlogComment` instance, the author field entity is loaded with it. Same goes for saving - when you save `BlogComment` with an author which doesn't yet exist, a new `User` instance will be created in the database and reference to it will be associated with stored `BlogComment`. If it's an already existing `User`, we will store a reference in this instance update the existing `User` if there are any changes.
-In other words, we will always upsert related entities.
+Entity fields are eagerly loaded. This means that when you load a `BlogComment` instance, the author field entity is loaded with it. Same goes for saving -- when you save a `BlogComment` with an author, a `User` instance will be upserted in the database and reference to it will be associated with the stored `BlogComment`. (So if this `User` already existed in the database, it will be updated with the value provided.)
 
 
 ## See Also: Cursors
