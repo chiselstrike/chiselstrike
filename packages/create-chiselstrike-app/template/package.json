@@ -9,9 +9,7 @@
     "author": "",
     "license": "ISC",
     "dependencies": {
-        "@chiselstrike/api": "{{chiselVersion}}",
-        "esbuild": "^0.14.14",
-        "typescript": "4.6.2"
+        "@chiselstrike/api": "{{chiselVersion}}"
     },
     "devDependencies": {
         "@chiselstrike/cli": "{{chiselVersion}}"
