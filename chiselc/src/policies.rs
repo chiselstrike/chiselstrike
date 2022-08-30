@@ -71,7 +71,7 @@ impl Policies {
 #[derive(Debug, Clone)]
 pub struct Policy {
     pub actions: Actions,
-    pub where_conds: Cond,
+    pub where_conds: Option<Cond>,
     pub predicates: Predicates,
 }
 
@@ -81,8 +81,7 @@ impl Policy {
         let actions = builder.infer_rules_from_region(&arrow.d_ir.region, Cond::True);
         let predicates = builder.predicates;
         let actions = actions.simplify(&predicates);
-        let where_conds = generate_where_from_rules(&actions).unwrap();
-        let where_conds = where_conds.simplify(&predicates);
+        let where_conds = generate_where_from_rules(&actions).map(|c| c.simplify(&predicates));
 
         Self {
             actions,
