@@ -15,7 +15,6 @@ Overview of commands
 * [`help`](#chisel-help) - print help
 * [`init`](#chisel-init) - create a new project in current directory
 * [`new`](#chisel-new) - create a new project
-* [`restart`](#chisel-restart) - restart server
 * [`start`](#chisel-start) - start server
 * [`status`](#chisel-status) - show server status
 * [`wait`](#chisel-wait) - wait for server to start
@@ -84,17 +83,6 @@ Created ChiselStrike project in hello
 * [`init`](#chisel-init)
 * [`dev`](#chisel-dev)
 * [`apply`](#chisel-dev)
-
-### `chisel restart`
-
-Restarts the ChiselStrike server.
-
-**Example:**
-
-```
-$ chisel restart
-Server restarted successfully.
-```
 
 ### `chisel start`
 

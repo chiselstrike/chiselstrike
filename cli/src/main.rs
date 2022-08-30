@@ -91,8 +91,6 @@ enum Command {
     Start,
     /// Show ChiselStrike server status.
     Status,
-    /// Restart the running ChiselStrike server.
-    Restart,
     /// Wait for the ChiselStrike server to start.
     Wait,
     /// Apply configuration to the ChiselStrike server.
@@ -321,13 +319,6 @@ async fn main() -> Result<()> {
             let request = tonic::Request::new(StatusRequest {});
             let response = execute!(client.get_status(request).await);
             println!("Server status is {}", response.message);
-        }
-        Command::Restart => {
-            let msg = match restart(server_url).await {
-                Ok(_) => "Server restarted successfully.".to_string(),
-                Err(e) => format!("Server failed to restart. {}", e),
-            };
-            println!("{}", msg);
         }
         Command::Wait => {
             wait(server_url).await?;
