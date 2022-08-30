@@ -23,6 +23,7 @@ mod project;
 mod server;
 mod ts;
 
+#[allow(clippy::all)]
 mod proto {
     tonic::include_proto!("chisel");
 }

@@ -553,7 +553,7 @@ fn replace_host_address(mut url: Url, host_address: &Option<String>) -> Result<U
             address_tokens.len() <= 2,
             "unexpected number of tokens in host address"
         );
-        let host = address_tokens.get(0).copied();
+        let host = address_tokens.first().copied();
         let port: Option<u16> = address_tokens
             .get(1)
             .map(|p| p.parse())

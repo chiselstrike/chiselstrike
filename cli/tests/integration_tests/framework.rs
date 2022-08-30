@@ -77,7 +77,7 @@ impl GuardedChild {
     }
 }
 
-#[derive(PartialEq, Debug, Clone, Copy)]
+#[derive(PartialEq, Debug, Clone, Copy, Eq)]
 pub enum OutputType {
     Stdout,
     Stderr,
