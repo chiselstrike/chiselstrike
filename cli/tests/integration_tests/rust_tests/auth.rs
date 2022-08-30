@@ -6,16 +6,6 @@ pub async fn next_auth_crud(mut c: TestContext) {
         .write(".env", r##"{ "CHISELD_AUTH_SECRET" : "1234" }"##);
 
     c.restart_chiseld().await;
-    c.chisel.apply().await.unwrap();
-
-    // Test that we get forbidden if we provide invalid auth header.
-    c.chisel
-        .post("/__chiselstrike/auth/users")
-        .json(json!({"name":"Foo", "email":"foo@t.co"}))
-        .header("ChiselAuth", "123")
-        .send()
-        .await
-        .assert_status(403);
 
     {
         // Create a new auth user
