@@ -3,10 +3,20 @@
 #![cfg_attr(feature = "must_not_suspend", feature(must_not_suspend))]
 #![cfg_attr(feature = "must_not_suspend", deny(must_not_suspend))]
 
+use once_cell::sync::Lazy;
+
 pub use crate::auth::is_auth_entity_name;
 pub use crate::server::{run_all, DoRepeat, Opt};
 
 pub(crate) type JsonObject = serde_json::Map<String, serde_json::Value>;
+
+pub(crate) static FEATURES: Lazy<Features> = Lazy::new(Features::default);
+
+/// Chiseld experimental features
+#[derive(Default)]
+struct Features {
+    typescript_policies: bool,
+}
 
 macro_rules! send_command {
     ( $code:block ) => {{

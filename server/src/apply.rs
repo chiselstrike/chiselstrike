@@ -10,6 +10,7 @@ use crate::proto::{AddTypeRequest, FieldDefinition, PolicyUpdateRequest};
 use crate::types::{
     DbIndex, Entity, Field, NewField, NewObject, ObjectType, Type, TypeSystem, TypeSystemError,
 };
+use crate::FEATURES;
 use anyhow::{Context, Result};
 use petgraph::graphmap::GraphMap;
 use petgraph::Directed;
@@ -36,7 +37,7 @@ impl ParsedPolicies {
         for p in request {
             let path = PathBuf::from(&p.path);
             match path.extension().and_then(|s| s.to_str()) {
-                Some("ts") => {
+                Some("ts") if FEATURES.typescript_policies => {
                     let entity_name = path
                         .file_name()
                         .and_then(|s| s.to_str())
