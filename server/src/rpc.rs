@@ -283,7 +283,7 @@ impl RpcService {
         let ApplyResult {
             type_names_user_order,
             labels,
-            policy,
+            version_policy,
         } = {
             // help the borrow checker figure out that the borrows below are safe
             let state: &mut GlobalRpcState = &mut state;
@@ -321,7 +321,7 @@ impl RpcService {
                 set_type_system(types_global.clone()).await;
                 let pol_version = api_version.clone();
                 mutate_policies(move |policies| {
-                    policies.versions.insert(pol_version, policy);
+                    policies.versions.insert(pol_version, version_policy);
                 })
                 .await;
 
