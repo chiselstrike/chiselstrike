@@ -341,6 +341,11 @@ impl Chisel {
         self.exec("describe", &[]).await
     }
 
+    /// Runs `chisel describe` awaiting the readiness of chiseld service
+    pub async fn describe_ok(&self) -> ProcessOutput {
+        self.describe().await.expect("chisel describe failed")
+    }
+
     /// Writes given `text` (probably code) into a file on given relative `path`
     /// in ChiselStrike project.
     pub fn write(&self, path: &str, text: &str) {
