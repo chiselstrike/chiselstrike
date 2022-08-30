@@ -550,6 +550,20 @@ impl Response {
         self
     }
 
+    pub fn assert_text_contains(&self, expected: &str) -> &Self {
+        let actual = self.text();
+        assert!(
+            actual.contains(expected),
+            "Unexpected text response for HTTP {} {}\nResponse status {}, body {:?}, expected {:?}",
+            self.method,
+            self.url,
+            self.status,
+            actual,
+            expected,
+        );
+        self
+    }
+
     pub fn json(&self) -> serde_json::Value {
         match serde_json::from_slice(&self.body) {
             Ok(json) => json,
