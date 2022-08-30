@@ -245,17 +245,11 @@ fn json_to_js_value(json: &Value) -> JsValue {
 
 impl Predicate {
     fn is_lit(&self) -> bool {
-        match self {
-            Self::Lit(_) => true,
-            _ => false,
-        }
+        matches!(self, Self::Lit(_))
     }
 
     fn is_var(&self) -> bool {
-        match self {
-            Self::Var(_) => true,
-            _ => false,
-        }
+        matches!(self, Self::Var(_))
     }
 
     fn as_lit(&self) -> Option<&Value> {
@@ -540,10 +534,7 @@ impl<'a> RulesBuilder<'a> {
                 let cons_cond = Cond::And(test_cond.clone(), Box::new(cond.clone()));
                 let cons_rules = self.infer_rules_from_region(cons, cons_cond);
 
-                let alt_cond = Cond::And(
-                    Box::new(Cond::Not(test_cond.clone())),
-                    Box::new(cond.clone()),
-                );
+                let alt_cond = Cond::And(Box::new(Cond::Not(test_cond)), Box::new(cond));
                 let alt_rules = self.infer_rules_from_region(alt, alt_cond);
 
                 cons_rules.merge(&alt_rules)

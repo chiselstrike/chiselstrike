@@ -104,7 +104,7 @@ impl fmt::Display for Node {
         match self {
             Node::Op(op) => op.fmt(f),
             Node::Lit => f.write_str("lit"),
-            Node::Ident(ident) => f.write_str(&*ident),
+            Node::Ident(ident) => f.write_str(ident),
             Node::Project => f.write_str("."),
             Node::Cond => f.write_str("cond"),
             Node::Call => f.write_str("call"),
@@ -453,8 +453,8 @@ impl<'a> Builder<'a> {
         let mut ve_map = VeMap::default();
 
         for idx in idxs.iter() {
-            let mut ve_map_temp = self.build_simple_statement(*idx, &mut ctx_temp);
-            self.merge(ctx, &ve_map, &mut ctx_temp, &mut ve_map_temp);
+            let ve_map_temp = self.build_simple_statement(*idx, &mut ctx_temp);
+            self.merge(ctx, &ve_map, &ctx_temp, &ve_map_temp);
             std::mem::swap(ctx, &mut ctx_temp);
             ctx_temp.clear();
 

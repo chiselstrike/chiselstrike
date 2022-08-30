@@ -41,7 +41,7 @@ impl fmt::Debug for ArrowFunction<'_> {
         writeln!(f, "{}", self.cfg.dot())?;
 
         for sym in self.d_ir.syms() {
-            writeln!(f, "eedag for {}", &*sym)?;
+            writeln!(f, "eedag for {}", sym)?;
             writeln!(f, "{}", self.d_ir.dot(self.d_ir.get_root(sym).unwrap()))?;
         }
 
