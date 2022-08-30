@@ -256,7 +256,7 @@ async fn persistence_after_restart(mut c: TestContext) {
     );
     c.chisel.apply_ok().await;
     c.restart_chiseld().await;
-    let mut stdout = c.chisel.describe().await.unwrap().stdout;
+    let mut stdout = c.chisel.describe_ok().await.stdout;
     stdout
         .read(r##"@labels("a", "b") one: string;"##)
         .read(r##"@labels("a") two: string;"##)

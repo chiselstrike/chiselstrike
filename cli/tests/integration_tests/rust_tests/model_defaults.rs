@@ -189,12 +189,9 @@ pub async fn describe(c: TestContext) {
     c.chisel.write("models/default.ts", DEFAULTED_MODEL);
     c.chisel.apply_ok().await;
 
-    let mut output = c
-        .chisel
-        .describe()
+    c.chisel
+        .describe_ok()
         .await
-        .expect("failed to describe defaulted fields");
-    output
         .stdout
         .read("num1: number = +1;")
         .read("num2: number = 0;")
