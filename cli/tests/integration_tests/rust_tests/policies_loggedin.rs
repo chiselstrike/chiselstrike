@@ -11,7 +11,8 @@ async fn store_user(chisel: &Chisel, name: &str, email: &str) -> String {
         .post("/__chiselstrike/auth/users")
         .header("ChiselAuth", "dud")
         .json(json!({"name": name, "email": email}))
-        .send().await
+        .send()
+        .await
         .json();
 
     user_json["id"].as_str().unwrap().into()
@@ -20,8 +21,10 @@ async fn store_user(chisel: &Chisel, name: &str, email: &str) -> String {
 #[self::test(modules = Deno, optimize = Yes)]
 async fn basic(mut c: TestContext) {
     c.chisel.write_unindent("routes/test.ts", TEST_ROUTE);
-    c.chisel.write_unindent("routes/a/b/c/testc1.ts", TEST_ROUTE);
-    c.chisel.write_unindent("routes/a/b/c/testc2.ts", TEST_ROUTE);
+    c.chisel
+        .write_unindent("routes/a/b/c/testc1.ts", TEST_ROUTE);
+    c.chisel
+        .write_unindent("routes/a/b/c/testc2.ts", TEST_ROUTE);
     c.chisel.write_unindent(
         "policies/pol.yaml",
         r##"
@@ -34,7 +37,8 @@ async fn basic(mut c: TestContext) {
               users: ^a
         "##,
     );
-    c.chisel.write(".env", r#"{ "CHISELD_AUTH_SECRET": "dud" }"#);
+    c.chisel
+        .write(".env", r#"{ "CHISELD_AUTH_SECRET": "dud" }"#);
     c.chisel.apply_ok().await;
 
     let id_al = store_user(&c.chisel, "Al", "al").await;
@@ -44,26 +48,66 @@ async fn basic(mut c: TestContext) {
     c.restart_chiseld().await;
 
     c.chisel.get("/dev/test").send().await.assert_status(403);
-    c.chisel.get("/dev/test").header("ChiselUID", &id_al).send().await.assert_status(200);
-    c.chisel.get("/dev/test").header("ChiselUID", "invalid_id").send().await.assert_status(403);
+    c.chisel
+        .get("/dev/test")
+        .header("ChiselUID", &id_al)
+        .send()
+        .await
+        .assert_status(200);
+    c.chisel
+        .get("/dev/test")
+        .header("ChiselUID", "invalid_id")
+        .send()
+        .await
+        .assert_status(403);
 
-    c.chisel.get("/dev/a/b/c/testc1")
-        .send().await.assert_status(403);
-    c.chisel.get("/dev/a/b/c/testc1").header("ChiselUID", "invalid_id")
-        .send().await.assert_status(403);
-    c.chisel.get("/dev/a/b/c/testc1").header("ChiselUID", &id_al)
-        .send().await.assert_status(200);
-    c.chisel.get("/dev/a/b/c/testc1").header("ChiselUID", &id_als)
-        .send().await.assert_status(403);
+    c.chisel
+        .get("/dev/a/b/c/testc1")
+        .send()
+        .await
+        .assert_status(403);
+    c.chisel
+        .get("/dev/a/b/c/testc1")
+        .header("ChiselUID", "invalid_id")
+        .send()
+        .await
+        .assert_status(403);
+    c.chisel
+        .get("/dev/a/b/c/testc1")
+        .header("ChiselUID", &id_al)
+        .send()
+        .await
+        .assert_status(200);
+    c.chisel
+        .get("/dev/a/b/c/testc1")
+        .header("ChiselUID", &id_als)
+        .send()
+        .await
+        .assert_status(403);
 
-    c.chisel.get("/dev/a/b/c/testc2")
-        .send().await.assert_status(403);
-    c.chisel.get("/dev/a/b/c/testc2").header("ChiselUID", "invalid_id")
-        .send().await.assert_status(403);
-    c.chisel.get("/dev/a/b/c/testc2").header("ChiselUID", &id_al)
-        .send().await.assert_status(200);
-    c.chisel.get("/dev/a/b/c/testc2").header("ChiselUID", &id_als)
-        .send().await.assert_status(200);
+    c.chisel
+        .get("/dev/a/b/c/testc2")
+        .send()
+        .await
+        .assert_status(403);
+    c.chisel
+        .get("/dev/a/b/c/testc2")
+        .header("ChiselUID", "invalid_id")
+        .send()
+        .await
+        .assert_status(403);
+    c.chisel
+        .get("/dev/a/b/c/testc2")
+        .header("ChiselUID", &id_al)
+        .send()
+        .await
+        .assert_status(200);
+    c.chisel
+        .get("/dev/a/b/c/testc2")
+        .header("ChiselUID", &id_als)
+        .send()
+        .await
+        .assert_status(200);
 }
 
 #[self::test(modules = Deno, optimize = Yes)]
@@ -95,7 +139,9 @@ async fn repeated_path(c: TestContext) {
               users: ^als$
         "##,
     );
-    c.chisel.apply_err().await
+    c.chisel
+        .apply_err()
+        .await
         .stderr
         .read("Error: Repeated path in user authorization: \"/find\"");
 }
@@ -131,10 +177,12 @@ static ROUTE_POSTS: &str = r##"
 "##;
 
 async fn store_post(chisel: &Chisel, uid: &str, text: &str) {
-    chisel.post("/dev/posts")
+    chisel
+        .post("/dev/posts")
         .header("ChiselUID", uid)
-        .json(json!({"text": text}))
-        .send().await
+        .json(json!({ "text": text }))
+        .send()
+        .await
         .assert_ok();
 }
 
@@ -151,8 +199,11 @@ async fn logged_in_user_post(c: TestContext) {
     store_post(&c.chisel, &id_als, "first post by als").await;
     store_post(&c.chisel, &id_al, "second post by al").await;
 
-    c.chisel.get("/dev/posts").header("ChiselUID", &id_al)
-        .send().await
+    c.chisel
+        .get("/dev/posts")
+        .header("ChiselUID", &id_al)
+        .send()
+        .await
         .assert_json(json!([
             {"text": "first post by al"},
             {"text": "first post by als"},
@@ -181,8 +232,14 @@ async fn transform_match_login(c: TestContext) {
     store_post(&c.chisel, &id_als, "first post by als").await;
     store_post(&c.chisel, &id_al, "second post by al").await;
 
-    let resp = c.chisel.get("/dev/posts").header("ChiselUID", &id_al)
-        .send().await.assert_ok().json();
+    let resp = c
+        .chisel
+        .get("/dev/posts")
+        .header("ChiselUID", &id_al)
+        .send()
+        .await
+        .assert_ok()
+        .json();
     assert_eq!(resp.as_array().unwrap().len(), 2);
 }
 
@@ -205,10 +262,12 @@ static ROUTE_BLOGS: &str = r##"
 "##;
 
 async fn store_blog_post(chisel: &Chisel, uid: &str, text: &str) {
-    chisel.post("/dev/blogs")
+    chisel
+        .post("/dev/blogs")
         .header("ChiselUID", uid)
         .json(json!({"post1": {"text": text}}))
-        .send().await
+        .send()
+        .await
         .assert_status(200)
         .assert_text("saved post successfully");
 }
@@ -223,25 +282,31 @@ async fn transform_match_login_related_entities(c: TestContext) {
     let id_al = store_user(&c.chisel, "Al", "al").await;
     let id_als = store_user(&c.chisel, "Als", "als").await;
 
-    c.chisel.post("/dev/posts")
+    c.chisel
+        .post("/dev/posts")
         .json(json!({"text": "first post by al"}))
-        .send().await
+        .send()
+        .await
         .assert_status(401)
         .assert_text("Must be logged in");
 
-    c.chisel.post("/dev/blogs")
+    c.chisel
+        .post("/dev/blogs")
         .json(json!({"post1": {"text": "first post by al"}}))
-        .send().await
+        .send()
+        .await
         .assert_status(401)
         .assert_text("Must be logged in");
 
     store_blog_post(&c.chisel, &id_al, "first blog post by al").await;
     store_blog_post(&c.chisel, &id_als, "first blog post by als").await;
     store_blog_post(&c.chisel, &id_al, "second blog post by al").await;
-    
-    c.chisel.get("/dev/blogs")
+
+    c.chisel
+        .get("/dev/blogs")
         .header("ChiselUID", &id_al)
-        .send().await
+        .send()
+        .await
         .assert_status(200)
         .assert_json(json!([
             "first blog post by al",
@@ -259,12 +324,11 @@ async fn transform_match_login_related_entities(c: TestContext) {
     );
     c.chisel.apply_ok().await;
 
-    c.chisel.get("/dev/blogs")
+    c.chisel
+        .get("/dev/blogs")
         .header("ChiselUID", &id_al)
-        .send().await
+        .send()
+        .await
         .assert_status(200)
-        .assert_json(json!([
-            "first blog post by al",
-            "second blog post by al",
-        ]));
+        .assert_json(json!(["first blog post by al", "second blog post by al",]));
 }
