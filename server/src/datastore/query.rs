@@ -141,16 +141,14 @@ struct Join {
 }
 
 /// SortKey specifies a `field_name` and ordering in which sorting should be done.
-#[cfg_attr(test, derive(PartialEq))]
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
 pub struct SortKey {
     #[serde(rename = "fieldName")]
     pub field_name: String,
     pub ascending: bool,
 }
 
-#[cfg_attr(test, derive(PartialEq))]
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
 pub struct SortBy {
     pub keys: Vec<SortKey>,
 }
@@ -904,8 +902,7 @@ pub mod tests {
     async fn init_query_engine(db_file: &NamedTempFile) -> QueryEngine {
         let db_uri = format!("sqlite://{}?mode=rwc", db_file.path().to_string_lossy());
         let data_db = DbConnection::connect(&db_uri, 1).await.unwrap();
-        let query_engine = QueryEngine::local_connection(&data_db, 1).await.unwrap();
-        query_engine
+        QueryEngine::local_connection(&data_db, 1).await.unwrap()
     }
 
     async fn init_database(query_engine: &QueryEngine, entities: &[Entity]) {

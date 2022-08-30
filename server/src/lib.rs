@@ -35,6 +35,7 @@ pub(crate) mod server;
 pub(crate) mod types;
 pub(crate) mod vecmap;
 
+#[allow(clippy::all)]
 pub(crate) mod proto {
     tonic::include_proto!("chisel");
 }

@@ -104,8 +104,7 @@ pub struct PropertyAccess {
 }
 
 /// A binary operator.
-#[cfg_attr(test, derive(PartialEq))]
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub enum BinaryOp {
     Eq,
     NotEq,

@@ -365,7 +365,7 @@ impl PartialEq for ObjectType {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DbIndex {
     /// Id of this index in the meta database. Before it's creation, it will be None.
     pub meta_id: Option<i32>,
@@ -523,7 +523,7 @@ impl<'a> FieldDescriptor for NewField<'a> {
     }
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Field {
     pub id: Option<i32>,
     pub name: String,
@@ -599,7 +599,7 @@ impl Field {
     }
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct FieldAttrDelta {
     pub type_id: TypeId,
     pub default: Option<String>,
@@ -607,14 +607,14 @@ pub struct FieldAttrDelta {
     pub is_unique: bool,
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct FieldDelta {
     pub id: i32,
     pub attrs: Option<FieldAttrDelta>,
     pub labels: Option<Vec<String>>,
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ObjectDelta {
     pub added_fields: Vec<Field>,
     pub removed_fields: Vec<Field>,
