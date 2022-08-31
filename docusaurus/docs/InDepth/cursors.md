@@ -12,14 +12,15 @@ for building queries.
 For example, the `findOne()` example could be written using the cursor-based API as:
 
 ```typescript title="my-backend/routes/find-one-cursor.ts"
-import { responseFromJson } from "@chiselstrike/api"
+import { RouteMap, responseFromJson } from "@chiselstrike/api"
 import { User } from "../models/models"
 
-export default async function (req) {
-  const payload = await req.json();
-  const users = await User.cursor().filter(payload).take(1).toArray();
-  return responseFromJson('Found ' + users.map(user => user.username));
-}
+export default new RouteMap()
+    .post("/", async function (req) {
+        const payload = await req.json();
+        const users = await User.cursor().filter(payload).take(1).toArray();
+        return responseFromJson('Found ' + users.map(user => user.username));
+    });
 ```
 
 You can invoke the `POST /dev/find-one-cursor` endpoint with:
@@ -60,22 +61,21 @@ The `ChiselCursor` interface is still evolving. For example, methods such as `sk
 ChiselCursor supports two versions of the `filter` method. The first accepts a predicate identifying elements to be kept or ignored. As an example, let's find all Gmail users:
 
 ```typescript
-  const gmailUsers = await User.cursor()
-      .filter((user: User) => user.email.endsWith("@gmail.com"));
+const gmailUsers = await User.cursor()
+    .filter((user: User) => user.email.endsWith("@gmail.com"));
 ```
 
 The second overload takes a restrictions-object parameter. It allows you to filter by *equality* based on an object whose keys correspond to attributes of an Entity matching on respective values. For example, let's find Alice by email:
 
 ```typescript
-  const users = await User.cursor().filter({"email": "alice@mit.edu"});
+const users = await User.cursor().filter({"email": "alice@mit.edu"});
 ```
 
 ## Notes On Transactions
 
 ChiselStrke currently implements implicit transactional evaluation. A transaction is created before ChiselStrike
 starts evaluating your request handler and is automatically committed after your handler ends and we generate
-the HTTP response. If your handler returns a stream, any database-related operation done within
-stream-generation code will happen outside of the transaction and can result in a crash.
+the HTTP response.
 
 If your code crashes or explicitly throws an exception that is not caught, ChiselStrike rolls back the
 transaction automatically.

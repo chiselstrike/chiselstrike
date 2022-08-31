@@ -33,12 +33,16 @@ export type CRUDCreateResponse = (
  *  - `getAll`: should we generate `GET /` route that returns all entities according to filters in the URL
  *    query parameters? Defaults to true.
  *  - `getOne`: should we generate `GET /:id` route that returns one entity by id? Defaults to true.
- *  - `post`: should we generate `POST /` route that creates a new entity? Defaults to true.
- *  - `put`: should we generate `PUT /:id` route that creates or updates an entity? Defaults to true.
- *  - `patch`: should we generate `PATCH /:id` route that modifies an entity? Defaults to true.
+ *  - `write`: should we generate the routes that write to the database? Defaults to true, and it can be
+ *    overriden on a per-route basis.
+ *  - `post`: should we generate `POST /` route that creates a new entity? Defaults to the value of `write`.
+ *  - `put`: should we generate `PUT /:id` route that creates or updates an entity? Defaults to the
+ *    value of `write`.
+ *  - `patch`: should we generate `PATCH /:id` route that modifies an entity? Defaults to the value of `write`.
  *  - `deleteAll`: should we generate `DELETE /` route that deletes all entities according to filters in the
- *    URL query parameters? Defaults to true.
- *  - `deleteOne`: should we generate `DELETE /:id` route that deletes one entity by id? Defaults to true.
+ *    URL query parameters? Defaults to the value of `write`.
+ *  - `deleteOne`: should we generate `DELETE /:id` route that deletes one entity by id? Defaults to the
+ *    value of `write`.
  * @returns A route map suitable as a default export in a route file.
  */
 export function crud<
@@ -50,6 +54,7 @@ export function crud<
         createResponse?: CRUDCreateResponse;
         getAll?: boolean;
         getOne?: boolean;
+        write?: boolean;
         post?: boolean;
         put?: boolean;
         patch?: boolean;
@@ -92,7 +97,7 @@ export function crud<
         await u.save();
         return createResponse(u, 200);
     }
-    if (config?.post ?? true) {
+    if (config?.post ?? config?.write ?? true) {
         routeMap.post("/", post);
     }
 
@@ -103,7 +108,7 @@ export function crud<
         await u.save();
         return createResponse(u, 200);
     }
-    if (config?.put ?? true) {
+    if (config?.put ?? config?.write ?? true) {
         routeMap.put("/:id", put);
     }
 
@@ -123,7 +128,7 @@ export function crud<
         await orig.save();
         return createResponse(orig, 200);
     }
-    if (config?.patch ?? true) {
+    if (config?.patch ?? config?.write ?? true) {
         routeMap.patch("/:id", patch);
     }
 
@@ -135,7 +140,7 @@ export function crud<
             200,
         );
     }
-    if (config?.deleteAll ?? true) {
+    if (config?.deleteAll ?? config?.write ?? true) {
         routeMap.delete("/", deleteAll);
     }
 
@@ -145,7 +150,7 @@ export function crud<
         await entity.delete({ id });
         return createResponse(`Deleted ID ${id}`, 200);
     }
-    if (config?.deleteOne ?? true) {
+    if (config?.deleteOne ?? config?.write ?? true) {
         routeMap.delete("/:id", deleteOne);
     }
 

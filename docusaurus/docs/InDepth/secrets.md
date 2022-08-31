@@ -30,18 +30,18 @@ This must be explicitly named ".env", it's not a file with a ".env" suffix.
 Now those values are available as objects from your typescript code:
 
 ```typescript title="my-backend/routes/secrets.ts"
-import { getSecret, responseFromJson } from "@chiselstrike/api"
+import { RouteMap, getSecret, responseFromJson } from "@chiselstrike/api"
 
-export default async function (req) {
-    const url = new URL(req.url);
-    const arg = url.searchParams.get("secret");
-    if (!arg) {
-        return new Response("ask for a secret");
-    } else{
-        const secret = getSecret(arg) ?? {};
-        return responseFromJson(secret);
-    }
-}
+export default new RouteMap()
+    .get("/", async function (req: ChiselRequest) {
+        const arg = req.query.get("secret");
+        if (!arg) {
+            return new Response("ask for a secret");
+        } else{
+            const secret = getSecret(arg) ?? {};
+            return responseFromJson(secret);
+        }
+    });
 ```
 
 Of course, this is an insecure demo, as we should never make an endpoint that just offers up

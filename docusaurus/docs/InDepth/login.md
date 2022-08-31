@@ -52,14 +52,16 @@ example:
 
 ```typescript title="my-backend/routes/example.ts"
 import { BlogComment } from '../models/models.ts';
-import { loggedInUser, responseFromJson } from '@chiselstrike/api';
-export default async function (req) {
-    let c = BlogComment.build(await req.json());
-    c.author = await loggedInUser();
-    if (c.author === undefined) { return responseFromJson('Must be logged in', 401) }
-    await c.save();
-    return responseFromJson('saved successfully');
-}
+import { RouteMap, loggedInUser, responseFromJson } from '@chiselstrike/api';
+
+export default new RouteMap()
+    .post("/", async function (req) {
+        let c = BlogComment.build(await req.json());
+        c.author = await loggedInUser();
+        if (c.author === undefined) { return responseFromJson('Must be logged in', 401) }
+        await c.save();
+        return responseFromJson('saved successfully');
+    });
 ```
 
 You can even restrict a user's access to only their own comments;

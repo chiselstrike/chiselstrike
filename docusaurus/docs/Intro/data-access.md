@@ -41,18 +41,19 @@ Here is an example endpoint demo:
 
 <!-- FIXME : update the example below to return JSON -->
 ```typescript title="my-backend/routes/create.ts"
-import { responseFromJson } from "@chiselstrike/api"
+import { RouteMap, responseFromJson } from "@chiselstrike/api"
 import { User } from "../models/User"
 
-export default async function (req) {
-  const payload = await req.json();
-  const username = payload["username"] || "";
-  const email = payload["email"] || "";
-  const city = payload["city"] || "";
-  const user = User.build({ username, email, city });
-  await user.save();
-  return user;
-}
+export default new RouteMap()
+    .post("/", async function (req) {
+        const payload = await req.json();
+        const username = payload["username"] || "";
+        const email = payload["email"] || "";
+        const city = payload["city"] || "";
+        const user = User.build({ username, email, city });
+        await user.save();
+        return user;
+    });
 ```
 
 We can now create a user using a POST request:
@@ -77,28 +78,29 @@ As discussed in the [Getting Started](Intro/first.md) section, the ChiselStrike 
 Still, you are not technically limited to making every HTTP route follow REST principles by using ids. For example, you could write the following 'update' route that recieves the same JSON, but finds the `User` entity based on the provided `username`:
 
 ```typescript title="my-backend/routes/update.ts"
-import { responseFromJson } from "@chiselstrike/api";
+import { RouteMap, responseFromJson } from "@chiselstrike/api";
 import { User } from "../models/User";
 
-export default async function (req) {
-  const payload = await req.json();
-  const username = payload["username"] || "";
-  const email = payload["email"] || "";
-  const city = payload["city"] || "";
-  const id = payload["id"];
-  let user = id
-    ? User.build({ id, username, email, city })
-    : await User.findOne({ username });
+export default new RouteMap()
+    .post("/", async function (req) {
+        const payload = await req.json();
+        const username = payload["username"] || "";
+        const email = payload["email"] || "";
+        const city = payload["city"] || "";
+        const id = payload["id"];
+        let user = id
+            ? User.build({ id, username, email, city })
+            : await User.findOne({ username });
 
-  if (!user) {
-    return new Response("id not provided and user " + username + " not found");
-  } else {
-    user.email = email;
-    user.city = city;
-    await user.save();
-    return responseFromJson("Updated " + user.username + " id " + user.id);
-  }
-}
+        if (!user) {
+            return new Response("id not provided and user " + username + " not found");
+        } else {
+            user.email = email;
+            user.city = city;
+            await user.save();
+            return responseFromJson("Updated " + user.username + " id " + user.id);
+        }
+    });
 ```
 
 ## Querying Single Objects
@@ -110,14 +112,15 @@ There are two search methods `findOne()` and `findMany()` for querying.
 For example, to query one entity with a given `username`, we could use the following code:
 
 ```typescript title="my-backend/routes/find-one.ts"
-import { responseFromJson } from "@chiselstrike/api"
+import { RouteMap, responseFromJson } from "@chiselstrike/api"
 import { User } from "../models/User"
 
-export default async function (req) {
-  const payload = await req.json();
-  const user = await User.findOne(payload) ?? "Not found";
-  return responseFromJson(user);
-}
+export default new RouteMap()
+    .post("/", async function (req) {
+        const payload = await req.json();
+        const user = await User.findOne(payload) ?? "Not found";
+        return responseFromJson(user);
+    });
 ```
 
 and query it with `POST /dev/find-one`:
@@ -137,14 +140,15 @@ and see `curl` report:
 To find multiple entities, use the `findMany()` method:
 
 ```typescript title="my-backend/routes/find-many.ts"
-import { responseFromJson } from "@chiselstrike/api"
+import { RouteMap, responseFromJson } from "@chiselstrike/api"
 import { User } from "../models/User"
 
-export default async function (req) {
-  const payload = await req.json();
-  const user = await User.findMany(payload);
-  return responseFromJson('Found ' + user.map(user => user.username));
-}
+export default new RouteMap()
+    .post("/", async function (req) {
+        const payload = await req.json();
+        const user = await User.findMany(payload);
+        return responseFromJson('Found ' + user.map(user => user.username));
+    });
 ```
 
 and query it with `POST /dev/find-many`:
@@ -181,13 +185,14 @@ which returns additional results:
 `findMany` can be called with a predicate lambda as well:
 
 ```typescript title="my-backend/routes/find-many.ts"
-import { responseFromJson } from "@chiselstrike/api"
+import { RouteMap, responseFromJson } from "@chiselstrike/api"
 import { User } from "../models/User"
 
-export default async function (req) {
-  const user = await User.findMany(user => user.city == "Cambridge");
-  return responseFromJson('Found ' + user.map(user => user.username));
-}
+export default new RouteMap()
+    .post("/", async function (req) {
+        const user = await User.findMany(user => user.city == "Cambridge");
+        return responseFromJson('Found ' + user.map(user => user.username));
+    });
 ```
 :::
 
@@ -215,6 +220,18 @@ and pagination in result sets will be available for REST-API consumers.
 
 <!-- FIXME: expand explanation here, possibly a different page even -->
 
+## Arrays
+
+We support arrays of primitive types (`string`, `number`, `boolean`) and nested arrays (`number[][]`, `string[][][]` etc.). For example, we could define a `BlogPost` that contains an array of keywords:
+
+```typescript title="my-backend/models/BlogPost.ts"
+export class BlogPost extends ChiselEntity {
+    text: string = "";
+    by: Person;
+    keywords: string[] = [];
+}
+```
+
 ## Updating Objects
 
 The documentation robots are at work. Examples coming soon!
@@ -225,14 +242,16 @@ Entities are deleted using the `ChiselEntity.delete(restriction)` method. For
 example, with the `User` entity defined earlier, you delete an entity as follows:
 
 ```typescript title="my-backend/routes/delete.ts"
+import { RouteMap } from "@chiselstrike/api";
 import { User } from "../models/User.ts"
 
-export default async function (req: Request) {
-    const payload = await req.json()
-    const email = payload.email;
-    await User.delete({ email });
-    return new Response("Deleted " + email);
-}
+export default new RouteMap()
+    .post("/", async function (req: Request) {
+        const payload = await req.json()
+        const email = payload.email;
+        await User.delete({ email });
+        return new Response("Deleted " + email);
+    });
 ```
 
 In this example, we delete an user by their email address.

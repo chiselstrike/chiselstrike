@@ -7,32 +7,25 @@ In this section we'll show how to move beyond simple CRUD requests, as shown in 
 <!-- FIXME: move into extra chapter? -->
 
 CRUD generation is customizable; more detail and syntax around this and also security policy is coming soon but
-here is a lower-level example that forbids DELETE, POST, and PUT while wrapping the GET result
-with either `{"data": VALUE}` or `{"error": "message"}` depending on the result.
+here is a lower-level example that does not expose the writing endpoints (POST, PUT, PATCH, DELETE) while
+wrapping the result with either `{"data": VALUE}` or `{"error": "message"}`, depending on the result.
 
 <!-- FIXME: replace with class based alternates once available -->
 
-```typescript title="my-backend/endpoints/comments-readonly.ts"
-import { crud, standardCRUDMethods, responseFromJson } from "@chiselstrike/api";
+```typescript title="my-backend/routes/comments-readonly.ts"
+import { crud, responseFromJson } from "@chiselstrike/api";
 import { BlogComment } from "../models/BlogComment";
+
+function createResponse(body: unknown, status: number): Response {
+    if (status < 400) {
+        return responseFromJson({ data: body["results"] }, status);
+    }
+    return responseFromJson({ error: body }, status);
+}
+
 export default crud(
     BlogComment,
-    ":id", /* :id can be explicitly provided */
-    {
-        customMethods: {
-            DELETE: standardCRUDMethods.methodNotAllowed,
-            POST: standardCRUDMethods.methodNotAllowed,
-            PUT: standardCRUDMethods.methodNotAllowed,
-        },
-        createResponses: {
-            GET: (body: unknown, status: number) => {
-                if (status < 400) {
-                    return responseFromJson({ data: body["results"] }, status);
-                }
-                return responseFromJson({ error: body }, status);
-            },
-        }
-    },
+    { write: false, createResponse }
 );
 ```
 
@@ -46,33 +39,47 @@ that don't fit neatly into REST workflows. This is a big advantage of ChiselStri
 be able to express complex logic, sometimes dealing with multiple models and queries, with a single
 roundtrip.
 
-ChiselStrike requires each `routes` file to export a default function implementing your custom logic for handling a HTTP request. You can return any type you want, either an existing model or a user-defined type, and it will be converted to JSON automatically.
+ChiselStrike uses a two-tiered approach to routing. First, we perform file-based routing, so for example the
+file `routes/comments.ts` will receive all HTTP requests under the path "/comments". Second, we look at the
+`RouteMap` object that is `default export`-ed from the file to see whether any of the given routes matches the
+remainder of the path.
+
+The first route that matches will handle the request. This means that we will call the request handler
+function, passing a `ChiselRequest` (a subclass of
+[Request](https://developer.mozilla.org/en-US/docs/Web/API/Request)) to it as argument. The function may be
+async and it should return a [Response](https://developer.mozilla.org/en-US/docs/Web/API/Response). If you
+return a string, we will return it in the response as-is, other values will be first converted to JSON using
+`responseFromJson`.
 
 For example, here's how you can have a specialized endpoint that returns all posts:
 
 ```typescript title="my-backend/routes/allcomments.ts"
+import { RouteMap } from "@chiselstrike/api";
 import { BlogComment } from "../models/BlogComment"
 
-export default async function() : Promise<Array<BlogComment>> {
-    return BlogComment.findAll()
+export default new RouteMap()
+    .get("/", async function() : Promise<Array<BlogComment>> {
+        return BlogComment.findAll()
+    });
+```
+
+You can also define dynamic routes, which take parameters in the URL path, using the `:parameter` syntax:
+
+```typescript title="my-backend/routes/onecomment.ts"
+import { BlogComment } from "../models/BlogComment"
+import { ChiselRequest, RouteMap } from "@chiselstrike/api"
+
+export default new RouteMap()
+    .get("/:id", async function (req: ChiselRequest) : Promise<BlogComment> {
+        const id = req.params.get("id");
+        return BlogComment.findOne({id});
+    });
 }
 ```
 
-Optionally, your function can take a [Request](https://developer.mozilla.org/en-US/docs/Web/API/Request) as a parameter, or it can take the specialized `ChiselRequest`, a subclass with a few convenience fields added. In the following example, we can use the `pathComponents()` method of `ChiselRequest` to implement path-based finding:
-
-```typescript title="my-backend/endpoints/onecomment.ts"
-import { BlogComment } from "../models/BlogComment"
-import { ChiselRequest } from "@chiselstrike/api"
-
-export default async function (req: ChiselRequest) : Promise<BlogComment> {
-    const id = req.pathComponents()[0]; // first parameter is id, others are ignored
-    return BlogComment.findOne({id})
-}
-```
-
-Ultimately, you can code request handlers of arbitrary complexity. For example, having a single function that handles multiple methods, returning either one of your types or an HTTP [Response](https://developer.mozilla.org/en-US/docs/Web/API/Response). You can then add whatever logic you want!
-
-This is a lower level mechanism and is pretty raw -- we are working on syntax features that will make this much more powerful.
+In fact, we support the full syntax of the [URL Pattern
+API](https://developer.mozilla.org/en-US/docs/Web/API/URL_Pattern_API), so you can use advanced features like
+regex matching.
 
 :::tip
 You can't change data during a `GET` request. Make sure that if you are making changes to the backend state,
@@ -82,34 +89,34 @@ they happen under `PUT`, `POST`, or `DELETE`!
 Now let's edit our code to show off a "full customization" example.
 
 ```typescript title="my-backend/routes/comments.ts"
-import { ChiselRequest, responseFromJson } from "@chiselstrike/api"
+import { ChiselRequest, RouteMap, responseFromJson } from "@chiselstrike/api"
 import { BlogComment } from "../models/BlogComment"
 
-type Return = Array<BlogComment> | BlogComment | Response;
-
-export default async function (req: ChiselRequest) : Promise<Return> {
-    if (req.method == 'POST') {
-        const payload = await req.json();
-        const by = payload["by"] || "anonymous";
-        const content = payload["content"];
-        // no await needed, this is Promise<BlogComment>
-        return BlogComment.create({ content, by });
-    } else if (req.method == 'GET') {
-        // if we have a parameter, treat it as an id, otherwise get all
-        const id = req.pathComponents()[0]
-        if (id) {
-           const comment = await BlogComment.findOne({id})
-           const status = comment ? 200 : 404;
-           // notice how now we had to await findOne, as we wanted to build a Response
-           return responseFromJson(comment, status)
-        } else {
-           // no await needed, this is Promise<Array<BlogComment>>
-           return BlogComment.findAll();
-        }
-    } else {
-        return new Response("Wrong method", { status: 405});
-    }
+async function handlePost(req: ChiselRequest): Promise<BlogComment> {
+    const payload = await req.json();
+    const by = payload["by"] || "anonymous";
+    const content = payload["content"];
+    // no await needed, this is Promise<BlogComment>
+    return BlogComment.create({ content, by });
 }
+
+async function handleGetOne(req: ChiselRequest): Promise<Response> {
+    const id = req.params.get("id");
+    const comment = await BlogComment.findOne({id})
+    const status = comment ? 200 : 404;
+    // notice how now we had to await findOne, as we wanted to build a Response
+    return responseFromJson(comment, status)
+}
+
+async function handleGetAll(req: ChiselRequest): Promise<Array<BlogComment>> {
+    // no await needed, this is Promise<Array<BlogComment>>
+    return BlogComment.findAll();
+}
+
+export default new RouteMap()
+    .post("/", handlePost)
+    .get("/:id", handleGetOne)
+    .get("/", handleGetAll);
 ```
 
 :::tip
@@ -192,11 +199,11 @@ the common code is already published as module, the module can be
 imported directly:
 
 ```typescript title="my-backend/routes/indented.ts"
+import { RouteMap } from '@chiselstrike/api';
 import indent from 'https://deno.land/x/text_indent@v0.1.0/mod.ts';
 
-export default async function (req: Request) {
-    return new Response("the following is indented" + indent("foo", 16));
-}
+export default new RouteMap()
+    .get("/", (req: Request) => "the following is indented" + indent("foo", 16));
 ```
 
 But for code that is specific to a project and not publicly available,
@@ -205,18 +212,20 @@ convention that directory is named lib, but any other name would
 work. For example:
 
 ```typescript title="my-backend/lib/hello.ts"
-export function hello() {
+export function hello(): string {
     return "Welcome to ChiselStrike";
 }
 ```
 
 ```typescript title="my-backend/routes/day.ts"
+import { RouteMap } from "@chiselstrike/api";
 import { hello } from "../lib/hello.ts";
 
-export default async function (req: Request) {
-    const msg = hello();
-    return new Response(`${msg}\n Have a nice day.`);
-}
+export default new RouteMap()
+    .get("/", async function (req: Request) {
+        const msg = hello();
+        return new Response(`${msg}\n Have a nice day.`);
+    });
 ```
 
 ## CRUD paging
@@ -246,7 +255,7 @@ which gives us
             "by": "Jill"
         }
     ],
-    "next_page": "localhost:8080/dev/comments?.by~like=Ji%25&page_size=2&cursor=eyJheGV..."
+    "next_page": "/dev/comments?.by~like=Ji%25&page_size=2&cursor=eyJheGV..."
 }
 ```
 
@@ -273,7 +282,7 @@ curl -g localhost:8080/dev/comments?.by~like=Ji%25&page_size=2&cursor=eyJheGV...
             "by": "Jim"
         },
     ],
-    "prev_page": "localhost:8080/dev/comments?.by~like=Ji%25&page_size=2&cursor=GVzIjpe..."
+    "prev_page": "/dev/comments?.by~like=Ji%25&page_size=2&cursor=GVzIjpe..."
 }
 ```
 
@@ -298,12 +307,3 @@ filling the page.
 Cursor-based paging on the other hand leverages the user-specified sort (primary key sorting is used
 if no sort is specified) and uses the elements as pivots. This way we can directly jump to the pivot
 using index and start filling the page from there.
-
-### `Host` header
-
-To construct the next/prev page links, we need to know what host and possibly port to use. It's not
-trivial to retrieve it automatically due to proxies etc., hence we utilize the `Host` HTTP header
-from your request. For example `curl` sets it automatically and many HTTP libraries do the same.
-
-If `Host` header is not specified, we will try to guess it, but it's highly recomended that it's
-provided.

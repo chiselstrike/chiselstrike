@@ -1,7 +1,8 @@
 // SPDX-FileCopyrightText: © 2021 ChiselStrike <info@chiselstrike.com>
+import { RouteMap } from "@chiselstrike/api";
 import { Person } from "../models/person.ts";
 
-export default async function chisel(req: Request) {
+async function handleGet(req: Request) {
     const lines = (await req.text()).split('\n');
     for (const line of lines) {
         const r = line.split(',');
@@ -17,3 +18,6 @@ export default async function chisel(req: Request) {
     }
     return new Response('ok');
 }
+
+export default new RouteMap()
+    .get("/", handleGet);

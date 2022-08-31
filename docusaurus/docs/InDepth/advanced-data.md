@@ -34,10 +34,10 @@ have unique URLs:
 
 ```typescript title="my-backend/routes/post.ts"
 import { BlogPost } from "../models/BlogPost";
-import { responseFromJson } from "@chiselstrike/api";
+import { RouteMap, responseFromJson } from "@chiselstrike/api";
 
-export default async function (req) {
-    if (req.method == 'POST') {
+export default new RouteMap()
+    .post("/", async function (req: Request) {
         const payload = await req.json();
         const content = payload["content"] ?? "";
         // mandatory!
@@ -48,13 +48,11 @@ export default async function (req) {
         const created = BlogPost.build({content, relUrl});
         await created.save();
         return created;
-    } else if (req.method == 'GET') {
+    })
+    .get("/", async function () {
         const comments = await BlogPost.findMany(b => true);
         return comments;
-    } else {
-        return new Response("Wrong method", { status: 405 });
-    }
-}
+    });
 ```
 
 And as you can see, we can add a post:

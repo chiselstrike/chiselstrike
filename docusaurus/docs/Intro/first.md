@@ -78,8 +78,9 @@ You will see output like this:
 
 For any question, concerns, or early feedback, please contact us via email or Discord!
 
-INFO - ChiselStrike is ready 🚀 - URL: http://localhost:8080
-End point defined: /dev/hello
+INFO - ChiselStrike server is ready 🚀
+INFO - URL: http://127.0.0.1:8080
+INFO - Version "dev" is ready
 ```
 
 ...tip:
@@ -88,20 +89,22 @@ For more about `chisel` command usage, please see [the CLI reference](InDepth/ch
 
 ## Our First HTTP Route
 
-To handle HTTP requests on "/dev/comments", we create a TypeScript file
+To handle HTTP requests for `GET /dev/comments`, we create a TypeScript file
 in the `my-backend/routes` directory.  Here is one:
 
 ```typescript title="my-backend/routes/comments.ts"
-export default async function (req: Request) {
-    return "Comments go here!";
-}
-```
+import { RouteMap } from "@chiselstrike/api";
+export default new RouteMap()
+    .get("/", async function (req: Request) {
+        return "Comments go here!";
+    });
+  ```
 
-Once you save this file, you'll see output in the `chisel dev`
+Once you save this file, you'll see the following in the `chisel dev`
 output:
 
 ```
-Route defined: /dev/comments
+INFO - Version "dev" is ready
 ```
 
 That's all it takes to handle an HTTP request!  It is now ready for use,
@@ -114,20 +117,17 @@ curl localhost:8080/dev/comments
 and should see the following output:
 
 ```
-"Comments go here!"
+Comments go here!
 ```
 
-In the next step, we'll make our requesthandler connect to some data.
+In the next step, we'll connect our request handler to some data.
 
-What happened in the above example? The first
-thing you'll notice is that the route file `comments.ts` exports a function with
-a single parameter.  This function handles the HTTP request.  It takes a
-[Request](https://developer.mozilla.org/en-US/docs/Web/API/Request)
-and returns the corresponding
-[Response](https://developer.mozilla.org/en-US/docs/Web/API/Response).
-In the example above, we simply return a string wrapped as a JSON value. Where it is obvious
-that an object is being returned (this will be explained soon), explicit calls to `responseFromJson`
-are not needed.
+What happened in the above example? The first thing you'll notice is that the route file `comments.ts` exports
+an instance of `RouteMap`. The route map routes HTTP requests (such as `GET /dev/comments`) to functions.
+These functions are called _request handlers_ and they take a
+[Request](https://developer.mozilla.org/en-US/docs/Web/API/Request) and return a
+[Response](https://developer.mozilla.org/en-US/docs/Web/API/Response). In the example above, we simply return
+a string.
 
 ## Our First Model
 
@@ -169,14 +169,15 @@ Once you save this file, you should see new output from the `chisel dev` command
 compile your work and serve up your endpoints:
 
 ```
-Model defined: BlogComment
+Applied:
+  1 models
 ```
 
 Now you are able to store `BlogComment` objects!  However, we still need to surface those entities in the HTTP
 API.
 That comes next!
 
-## Combining Request Handlers And Models
+## CRUD
 
 We're big fans of [REST](https://en.wikipedia.org/wiki/Representational_state_transfer), but don't strictly require it in ChiselStrike.
 
@@ -275,9 +276,9 @@ curl localhost:8080/dev/comments/a4ca3ab3-2e26-4da6-a5de-418c1e6b9b83
 }
 ```
 
-# Built-In Search
+### Built-In Search
 
-The API allows you to filter by object properties. For example:
+The CRUD API allows you to filter by object properties. For example:
 
 ```bash
 curl -g "localhost:8080/dev/comments?.by=Jack"
@@ -300,7 +301,7 @@ curl -g "localhost:8080/dev/comments?.by=Jack"
 }
 ```
 
-will return all comments where field `by` is equal to `Jack`. Our API supports other comparison operators as well. For example
+will return all comments where field `by` is equal to `Jack`. Our CRUD API supports other comparison operators as well. For example
 `curl -g "localhost:8080/dev/comments?.by~like=Ji%25"` will in our example return all comments by Jim and Jill (`%25` is encoded wildcard `%`). We support the following comparators:
 
 | symbol  | Description                                                       |
@@ -413,8 +414,9 @@ If both `limit` and `offset` are used, they are applied in traditional order - w
 The order in which you specify CRUD parameters *does not* matter. For example `?sort=by&limit=2&sort=content` will yield the same results as `?sort=content&limit=2`.
 ...
 
-### Relationships
-Relationships are supported as well. Let's modify our models and add an additional `Person` entity:
+### Relations
+
+Relations are supported as well. Let's modify our models and add an additional `Person` entity:
 
 ```typescript title="my-backend/models/Person.ts"
 export class Person extends ChiselEntity {
@@ -430,26 +432,15 @@ export class BlogComment extends ChiselEntity {
 }
 ```
 
-In such a scenario, to get all comments that were written byt authors under 40 and are named John, we would do:
+In such a scenario, to get all comments that were written by authors under 40 named John, we would do:
 
 ```bash
 curl -g "localhost:8080/dev/comments?.by.age~lt=40&.by.name=John&sort=by.name"
 ```
 
-### Arrays
-We currently support arrays of primitive types (`string`, `number`, `boolean`) and nesting of arrays (`number[][]`, `string[][][]` etc.). For example, we could add a keywords array to our `BlogPost`:
+### PUT and DELETE
 
-```typescript title="my-backend/models/BlogPost.ts"
-export class BlogPost extends ChiselEntity {
-    text: string = "";
-    by: Person;
-    keywords: string[] = [];
-}
-```
-
-## PUT and DELETE
-
-We can also amend an object with `PUT`:
+We can also replace an object with `PUT`:
 
 ```
 curl -X PUT -d '{"content": "Right Comment", "by": "Right Author"}' localhost:8080/dev/comments/d419e629-4304-44d5-b534-9ce446f25e9d
@@ -463,7 +454,7 @@ and ultimately `DELETE` it:
 curl -X DELETE localhost:8080/dev/comments/d419e629-4304-44d5-b534-9ce446f25e9d
 ```
 
-Alternatively, you can delete by specifying the same filters as for GET method. So for example, to delete all Comments written by Jack, we can write:
+Alternatively, you can delete by specifying the same filters as for GET method. So for example, to delete all comments written by Jack, we can write:
 
 ```
 curl -X DELETE "localhost:8080/dev/comments/?.by=Jack"
