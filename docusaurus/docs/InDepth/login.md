@@ -65,3 +65,8 @@ export default async function (req) {
 You can even restrict a user's access to only their own comments;
 please see ["Restricting Data Access to Matching
 User"](pol#restricting-data-access-to-matching-user).
+
+:::note
+AuthUser instances are managed by ChiselStrike.  Trying to create or destroy
+them in your code will faill with an error.
+:::
