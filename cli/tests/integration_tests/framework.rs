@@ -413,6 +413,10 @@ impl Chisel {
         self.request(reqwest::Method::POST, url)
     }
 
+    pub fn put(&self, url: &str) -> RequestBuilder {
+        self.request(reqwest::Method::PUT, url)
+    }
+
     pub fn delete(&self, url: &str) -> RequestBuilder {
         self.request(reqwest::Method::DELETE, url)
     }
