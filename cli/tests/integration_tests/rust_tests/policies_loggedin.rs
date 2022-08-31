@@ -1,5 +1,3 @@
-use reqwest::header::HeaderMap;
-
 use crate::framework::prelude::*;
 
 static TEST_ROUTE: &str = r##"
@@ -335,14 +333,13 @@ async fn transform_match_login_related_entities(c: TestContext) {
         .assert_json(json!(["first blog post by al", "second blog post by al",]));
 }
 
-fn contains_one_chisel_uid_header(header_map: &HeaderMap) -> bool {
-    let aca_headers = header_map
-        .get(reqwest::header::ACCESS_CONTROL_ALLOW_HEADERS)
-        .unwrap();
-    let uids_count = aca_headers
-        .to_str()
-        .unwrap()
-        .split(',')
+// NOTE: we add the CORS headers to every response, even though it should be used only in
+// response to a CORS preflight request (using method OPTIONS)
+//
+// https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Access-Control-Allow-Headers
+fn check_cors_header(response: &Response) -> bool {
+    let cors_allow_headers = response.header("access-control-allow-headers");
+    let uids_count = cors_allow_headers.split(',')
         .filter(|v| *v == "ChiselUID")
         .count();
     uids_count == 1
@@ -362,11 +359,11 @@ async fn allow_chisel_uid_header(mut c: TestContext) {
 
     let resp = c.chisel.get("/dev/foo").send().await;
     resp.assert_ok();
-    assert!(contains_one_chisel_uid_header(&resp.headers));
+    assert!(check_cors_header(&resp));
 
     let resp = c.chisel.options("/dev/foo").send().await;
     resp.assert_ok();
-    assert!(contains_one_chisel_uid_header(&resp.headers));
+    assert!(check_cors_header(&resp));
 
     c.chisel.write(".env", r#"{"CHISELD_AUTH_SECRET": "u"}"#);
     c.restart_chiseld().await;
@@ -379,7 +376,7 @@ async fn allow_chisel_uid_header(mut c: TestContext) {
         .send()
         .await;
     resp.assert_ok();
-    assert!(contains_one_chisel_uid_header(&resp.headers));
+    assert!(check_cors_header(&resp));
 }
 
 #[self::test(modules = Deno, optimize = Both)]
@@ -395,7 +392,7 @@ async fn use_chisel_uid_header(mut c: TestContext) {
         .send()
         .await;
     resp.assert_ok();
-    assert!(contains_one_chisel_uid_header(&resp.headers));
+    assert!(check_cors_header(&resp));
 
     // Store auth user and save uid
     let resp = c
@@ -417,7 +414,7 @@ async fn use_chisel_uid_header(mut c: TestContext) {
         .send()
         .await;
     resp.assert_ok();
-    assert!(contains_one_chisel_uid_header(&resp.headers));
+    assert!(check_cors_header(&resp));
 
     json_is_subset(
         &resp.json(),
