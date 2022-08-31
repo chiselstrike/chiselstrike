@@ -87,7 +87,7 @@ pub async fn cant_save_auth_from_user_route(mut c: TestContext) {
         .assert_status(500)
         .assert_text_contains("Error: Cannot save into type AuthUser.");
     c.chisel
-        .post("/dev/auth_users/abcd-1234-eeee-5678")
+        .put("/dev/auth_users/abcd-1234-eeee-5678")
         .json(json!({"name":"Foo", "email":"foo@t.co"}))
         .send()
         .await
