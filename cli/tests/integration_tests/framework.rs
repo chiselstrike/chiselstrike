@@ -248,6 +248,7 @@ impl AsyncTestableOutput {
     /// position (cursor). If given `pattern` is found, the function will store the
     /// position of the end of its first occurrence by updating the cursor. If the pattern
     /// is not found until 1s timeout expires, the function will panic.
+    #[allow(dead_code)]
     pub async fn read(&mut self, pattern: &str) {
         self.read_with_timeout(pattern, Duration::from_secs(1))
             .await
