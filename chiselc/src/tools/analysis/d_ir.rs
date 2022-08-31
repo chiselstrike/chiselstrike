@@ -1,3 +1,4 @@
+///! This module contains the code for the D_IR described in [this paper](https://www.cse.iitb.ac.in/~venkateshek/p1781-emani.pdf). This representation gives us algebraic equations for all variables in a program, and is useful for some code transformation, especially from imperative code to SQL.
 use std::collections::{HashMap, HashSet};
 use std::fmt;
 
@@ -20,6 +21,8 @@ use super::stmt_map::StmtMap;
 
 type Graph = StableDiGraph<Node, Edge>;
 
+/// The `VeMap` contains pointer from symbols to nodes of the Eedag,
+/// representing the algebraic computation for the value of this symbol.
 #[derive(Default, Debug, Clone)]
 pub(crate) struct VeMap {
     map: HashMap<Symbol, NodeIndex>,
@@ -192,6 +195,8 @@ pub struct EnrichedRegion {
     pub inner: Box<EnrichedRegionInner>,
 }
 
+/// The d_ir of a program, as described in https://www.cse.iitb.ac.in/~venkateshek/p1781-emani.pdf.
+/// The DIr is comprised of nested region, each their own `VeMap`.
 #[derive(Debug)]
 pub struct DIr {
     graph: Graph,
@@ -226,6 +231,8 @@ impl DIr {
 struct Builder<'a> {
     stmt_map: &'a StmtMap<'a>,
     graph: Graph,
+    /// The blackbox is a sink node for anything that cannot be analyzed statically. Usually it
+    /// means that we won't be abel to optimize this code.
     blackbox: NodeIndex,
 }
 
