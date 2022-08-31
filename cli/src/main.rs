@@ -5,10 +5,10 @@ use crate::cmd::dev::cmd_dev;
 use crate::project::{create_project, CreateProjectOptions};
 use crate::proto::chisel_rpc_client::ChiselRpcClient;
 use crate::proto::{
-    type_msg::TypeEnum, DeleteRequest, DescribeRequest, PopulateRequest, RestartRequest,
+    type_msg::TypeEnum, DeleteRequest, DescribeRequest, PopulateRequest,
     StatusRequest,
 };
-use crate::server::{start_server, wait, wait_with_cond};
+use crate::server::{start_server, wait};
 use anyhow::{anyhow, Result};
 use futures::{pin_mut, Future, FutureExt};
 use std::env;
@@ -147,17 +147,6 @@ async fn populate(
             .await
     );
     println!("{}", msg.message);
-    Ok(())
-}
-
-pub(crate) async fn restart(server_url: String) -> Result<()> {
-    let mut client = ChiselRpcClient::connect(server_url.clone()).await?;
-    let response = execute!(client.restart(tonic::Request::new(RestartRequest {})).await);
-    anyhow::ensure!(response.ok);
-    wait_with_cond(server_url.clone(), |status| {
-        status.server_id != response.server_id
-    })
-    .await?;
     Ok(())
 }
 

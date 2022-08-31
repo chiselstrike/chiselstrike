@@ -2,7 +2,7 @@
 
 pub use crate::auth::is_auth_entity_name;
 pub use crate::opt::Opt;
-pub use crate::server::{run, Restart};
+pub use crate::server::run;
 
 pub(crate) type JsonObject = serde_json::Map<String, serde_json::Value>;
 

@@ -5,8 +5,8 @@ use crate::policies::PolicySystem;
 use crate::proto::chisel_rpc_server::{ChiselRpc, ChiselRpcServer};
 use crate::proto::{
     ApplyRequest, ApplyResponse, DeleteRequest, DeleteResponse, DescribeRequest, DescribeResponse,
-    FieldDefinition, LabelPolicyDefinition, PopulateRequest, PopulateResponse, RestartRequest,
-    RestartResponse, StatusRequest, StatusResponse, TypeDefinition, VersionDefinition,
+    FieldDefinition, LabelPolicyDefinition, PopulateRequest, PopulateResponse, StatusRequest,
+    StatusResponse, TypeDefinition, VersionDefinition,
 };
 use crate::server::Server;
 use crate::types::TypeSystem;
@@ -110,15 +110,6 @@ impl ChiselRpc for RpcService {
         _request: Request<DescribeRequest>,
     ) -> Result<Response<DescribeResponse>, Status> {
         Ok(Response::new(describe(&self.server)))
-    }
-
-    async fn restart(
-        &self,
-        _request: Request<RestartRequest>,
-    ) -> Result<Response<RestartResponse>, Status> {
-        let server_id = self.id.to_string();
-        let ok = nix::sys::signal::raise(nix::sys::signal::Signal::SIGUSR1).is_ok();
-        Ok(Response::new(RestartResponse { server_id, ok }))
     }
 }
 

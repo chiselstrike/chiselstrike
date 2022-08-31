@@ -70,13 +70,6 @@ message DescribeResponse {
   repeated VersionDefinition version_defs = 1;
 }
 
-message RestartRequest { }
-
-message RestartResponse {
-  string server_id = 2;
-  bool ok = 1;
-}
-
 message PolicyUpdateRequest {
   string policy_config = 1;
 }
@@ -143,5 +136,4 @@ service ChiselRpc {
   rpc Populate (PopulateRequest) returns (PopulateResponse);
   rpc Delete (DeleteRequest) returns (DeleteResponse);
   rpc Describe (DescribeRequest) returns (DescribeResponse);
-  rpc Restart (RestartRequest) returns (RestartResponse);
 }

@@ -35,13 +35,7 @@ pub struct Server {
     pub trunk: Trunk,
 }
 
-#[derive(Debug, Copy, Clone)]
-pub enum Restart {
-    Yes,
-    No,
-}
-
-pub async fn run(opt: Opt) -> Result<Restart> {
+pub async fn run(opt: Opt) -> Result<()> {
     // Note that we spawn many tasks, but we .await them all at the end; we never leave a task
     // running in the background. This ensures that we handle all errors and panics and also that
     // we abort the tasks when they are no longer needed (e.g. if other task has failed).
@@ -71,7 +65,7 @@ pub async fn run(opt: Opt) -> Result<Restart> {
 
     let kafka_task = match server.opt.kafka_connection.clone() {
         Some(connection) => {
-            kafka::spawn(server.clone(), connection, &server.opt.kafka_topics).fuse()
+            kafka::spawn(server.clone(), connection, &server.opt.kafka_topics).await?.fuse()
         }
         None => Fuse::terminated(),
     };
@@ -98,7 +92,7 @@ pub async fn run(opt: Opt) -> Result<Restart> {
         )
     };
     tokio::select! {
-        res = all_tasks => res.map(|_| Restart::No),
+        res = all_tasks => res.map(|_| ()),
         res = signal_task => res,
     }
 }
@@ -265,7 +259,7 @@ async fn refresh_secrets(server: Arc<Server>) -> Result<()> {
     }
 }
 
-async fn wait_for_signals() -> Result<Restart> {
+async fn wait_for_signals() -> Result<()> {
     let default_hook = panic::take_hook();
     panic::set_hook(Box::new(move |info| {
         default_hook(info);
@@ -276,16 +270,14 @@ async fn wait_for_signals() -> Result<Restart> {
     let mut sigterm = signal(SignalKind::terminate())?;
     let mut sigint = signal(SignalKind::interrupt())?;
     let mut sighup = signal(SignalKind::hangup())?;
-    let mut sigusr1 = signal(SignalKind::user_defined1())?;
 
-    let restart = tokio::select! {
-        Some(_) = sigterm.recv() => { debug!("Got SIGTERM"); Restart::No },
-        Some(_) = sigint.recv() => { debug!("Got SIGINT"); Restart::No },
-        Some(_) = sighup.recv() => { debug!("Got SIGHUP"); Restart::No },
-        Some(_) = sigusr1.recv() => { debug!("Got SIGUSR1"); Restart::Yes },
+    tokio::select! {
+        Some(_) = sigterm.recv() => { debug!("Got SIGTERM") },
+        Some(_) = sigint.recv() => { debug!("Got SIGINT") },
+        Some(_) = sighup.recv() => { debug!("Got SIGHUP") },
     };
     mark_not_ready();
-    Ok(restart)
+    Ok(())
 }
 
 async fn start_inspector(
