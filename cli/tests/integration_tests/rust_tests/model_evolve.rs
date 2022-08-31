@@ -278,3 +278,58 @@ pub async fn remove_field_with_index(c: TestContext) {
     );
     c.chisel.apply_ok().await;
 }
+
+#[chisel_macros::test(modules = Deno, optimize = Yes)]
+pub async fn add_unique_constraint(c: TestContext) {
+    write_crud_route(&c.chisel);
+    c.chisel.write(
+        "models/model.ts",
+        r#"
+        import { ChiselEntity } from "@chiselstrike/api";
+        export class Evolving extends ChiselEntity {
+            a: string = "";
+        }"#,
+    );
+    c.chisel.apply_ok().await;
+    c.chisel
+        .post_json_ok("/dev/evolving", json!({"a": "Hello World"}))
+        .await;
+
+    c.chisel.write(
+        "models/model.ts",
+        r#"
+        import { ChiselEntity, unique } from "@chiselstrike/api";
+        export class Evolving extends ChiselEntity {
+            @unique a: string = "";
+        }"#,
+    );
+    c.chisel.apply_err().await.stderr
+    .read("Error: unsafe to replace type: Evolving. Reason: adding uniqueness to field a. Incompatible change");
+}
+
+#[chisel_macros::test(modules = Deno, optimize = Yes)]
+pub async fn remove_unique_constraint(c: TestContext) {
+    write_crud_route(&c.chisel);
+    c.chisel.write(
+        "models/model.ts",
+        r#"
+        import { ChiselEntity, unique } from "@chiselstrike/api";
+        export class Evolving extends ChiselEntity {
+            @unique a: string = "";
+        }"#,
+    );
+    c.chisel.apply_ok().await;
+    c.chisel
+        .post_json_ok("/dev/evolving", json!({"a": "Hello World"}))
+        .await;
+
+    c.chisel.write(
+        "models/model.ts",
+        r#"
+        import { ChiselEntity } from "@chiselstrike/api";
+        export class Evolving extends ChiselEntity {
+            a: string = "";
+        }"#,
+    );
+    c.chisel.apply_ok().await;
+}

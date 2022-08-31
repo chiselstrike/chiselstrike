@@ -1,8 +1,13 @@
 use crate::framework::prelude::*;
 
 async fn store_person(chisel: &Chisel, person: &serde_json::Value) -> String {
-    let resp = chisel.post("/dev/persons").json(person).send().await
-        .assert_ok().json();
+    let resp = chisel
+        .post("/dev/persons")
+        .json(person)
+        .send()
+        .await
+        .assert_ok()
+        .json();
     resp["id"].as_str().unwrap().into()
 }
 
@@ -64,7 +69,8 @@ async fn no_policy(c: TestContext) {
 #[self::test(modules = Deno, optimize = Both)]
 async fn transform_anonymize(c: TestContext) {
     c.chisel.write_unindent("routes/persons.ts", PERSONS_ROUTE);
-    c.chisel.write_unindent("models/person.ts", PERSON_WITH_LABELS);
+    c.chisel
+        .write_unindent("models/person.ts", PERSON_WITH_LABELS);
     c.chisel.apply_ok().await;
     let pekka_id = store_person(&c.chisel, &PEKKA).await;
 
@@ -144,7 +150,8 @@ async fn transform_anonymize(c: TestContext) {
 #[self::test(modules = Deno, optimize = Both)]
 async fn transform_omit(c: TestContext) {
     c.chisel.write_unindent("routes/persons.ts", PERSONS_ROUTE);
-    c.chisel.write_unindent("models/person.ts", PERSON_WITH_LABELS);
+    c.chisel
+        .write_unindent("models/person.ts", PERSON_WITH_LABELS);
     c.chisel.apply_ok().await;
     let pekka_id = store_person(&c.chisel, &PEKKA).await;
 
@@ -230,4 +237,29 @@ async fn transform_anonymize_related_entities(c: TestContext) {
         }),
     )
     .unwrap();
+}
+
+#[self::test(modules = Deno, optimize = Both)]
+async fn persistence_after_restart(mut c: TestContext) {
+    c.chisel.write(
+        "models/models.ts",
+        r##"
+        export class TestLabelsPersist1 extends ChiselEntity {
+            @labels("a", "b") one: string;
+            @labels("a") two: string;
+        }
+        export class TestLabelsPersist2 extends ChiselEntity {
+            @labels("c", "b") three: string;
+            @labels("a") four: string;
+        }
+    "##,
+    );
+    c.chisel.apply_ok().await;
+    c.restart_chiseld().await;
+    let mut stdout = c.chisel.describe_ok().await.stdout;
+    stdout
+        .read(r##"@labels("a", "b") one: string;"##)
+        .read(r##"@labels("a") two: string;"##)
+        .read(r##"@labels("c", "b") three: string;"##)
+        .read(r##"@labels("a") four: string;"##);
 }

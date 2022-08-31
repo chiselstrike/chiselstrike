@@ -140,16 +140,14 @@ struct Join {
 }
 
 /// SortKey specifies a `field_name` and ordering in which sorting should be done.
-#[cfg_attr(test, derive(PartialEq))]
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
 pub struct SortKey {
     #[serde(rename = "fieldName")]
     pub field_name: String,
     pub ascending: bool,
 }
 
-#[cfg_attr(test, derive(PartialEq))]
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
 pub struct SortBy {
     pub keys: Vec<SortKey>,
 }
@@ -457,13 +455,19 @@ impl QueryPlan {
         let mut column_string = String::new();
         for c in &self.columns {
             let col = match c.field.default_value() {
-                Some(dfl) => format!(
-                    "coalesce(\"{}\".\"{}\",'{}') AS \"{}\",",
-                    c.table_name,
-                    c.name,
-                    dfl,
-                    c.alias()
-                ),
+                Some(dfl) => {
+                    let sql_default = match c.field.type_id {
+                        TypeId::String => format!("'{}'", dfl),
+                        _ => dfl.to_string(),
+                    };
+                    format!(
+                        "coalesce(\"{}\".\"{}\",{}) AS \"{}\",",
+                        c.table_name,
+                        c.name,
+                        sql_default,
+                        c.alias()
+                    )
+                }
                 None => format!("\"{}\".\"{}\" AS \"{}\",", c.table_name, c.name, c.alias()),
             };
             column_string += &col;

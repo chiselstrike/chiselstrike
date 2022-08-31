@@ -92,3 +92,26 @@ pub async fn periodic_reread(mut c: TestContext) {
     // Verify that the secret wasn't updated.
     assert_eq!(c.chisel.get_json("/dev/secret").await, json!("no secret"));
 }
+
+#[chisel_macros::test(modules = Deno)]
+pub async fn load_secret_out_of_function(mut c: TestContext) {
+    c.chisel.write_unindent(
+        "routes/secret.ts",
+        r##"
+        import { getSecret } from "@chiselstrike/api"
+
+        const issue728 = getSecret("secret");
+        function foo() {
+            return issue728;
+        }
+
+        export default async function chisel(req: Request) {
+            return foo();
+        }"##,
+    );
+    c.chisel.apply().await.unwrap();
+
+    c.chisel.write(".env", r##"{"secret": "728 is fixed"}"##);
+    c.restart_chiseld().await;
+    assert_eq!(c.chisel.get_text("/dev/secret").await, "728 is fixed");
+}

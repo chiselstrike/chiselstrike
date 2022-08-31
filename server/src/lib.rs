@@ -27,6 +27,7 @@ pub(crate) mod types;
 pub(crate) mod version;
 pub(crate) mod worker;
 
+#[allow(clippy::all)]
 pub(crate) mod proto {
     tonic::include_proto!("chisel");
 }

@@ -77,7 +77,7 @@ impl GuardedChild {
     }
 }
 
-#[derive(PartialEq, Debug, Clone, Copy)]
+#[derive(PartialEq, Debug, Clone, Copy, Eq)]
 pub enum OutputType {
     Stdout,
     Stderr,
@@ -186,7 +186,7 @@ impl TestableOutput {
 
     /// Tries to find `pattern` in the output starting from the last successfully read
     /// position (cursor). If not found, the function will panic.
-    pub fn peek(self, pattern: &str) -> Self {
+    pub fn peek(&self, pattern: &str) -> &Self {
         if !self.output[self.cursor..].contains(pattern) {
             let out_type = self.output_type.as_str();
             let output = &self.output;
@@ -336,6 +336,16 @@ impl Chisel {
         self.exec("wait", &[]).await
     }
 
+    /// Runs `chisel describe` awaiting the readiness of chiseld service
+    pub async fn describe(&self) -> Result<ProcessOutput, ProcessOutput> {
+        self.exec("describe", &[]).await
+    }
+
+    /// Runs `chisel describe` awaiting the readiness of chiseld service
+    pub async fn describe_ok(&self) -> ProcessOutput {
+        self.describe().await.expect("chisel describe failed")
+    }
+
     /// Writes given `text` (probably code) into a file on given relative `path`
     /// in ChiselStrike project.
     pub fn write(&self, path: &str, text: &str) {
@@ -403,6 +413,14 @@ impl Chisel {
         self.request(reqwest::Method::POST, url)
     }
 
+    pub fn delete(&self, url: &str) -> RequestBuilder {
+        self.request(reqwest::Method::DELETE, url)
+    }
+
+    pub fn options(&self, url: &str) -> RequestBuilder {
+        self.request(reqwest::Method::OPTIONS, url)
+    }
+
     pub async fn get_text(&self, url: &str) -> String {
         self.get(url).send().await.text()
     }
@@ -454,7 +472,7 @@ impl RequestBuilder {
             .execute(request)
             .await
             .unwrap_or_else(|err| panic!("HTTP error for {} {}: {}", method, url, err));
-
+        let headers = response.headers().clone();
         let status = response.status();
         let body = response.bytes().await.unwrap_or_else(|err| {
             panic!(
@@ -466,6 +484,7 @@ impl RequestBuilder {
         Response {
             method,
             url,
+            headers,
             status,
             body,
         }
@@ -476,8 +495,9 @@ impl RequestBuilder {
 pub struct Response {
     method: reqwest::Method,
     url: reqwest::Url,
-    status: reqwest::StatusCode,
-    body: Bytes,
+    pub headers: reqwest::header::HeaderMap,
+    pub status: reqwest::StatusCode,
+    pub body: Bytes,
 }
 
 impl Response {
@@ -531,6 +551,20 @@ impl Response {
         let actual = self.text();
         assert!(
             actual == expected,
+            "Unexpected text response for HTTP {} {}\nResponse status {}, body {:?}, expected {:?}",
+            self.method,
+            self.url,
+            self.status,
+            actual,
+            expected,
+        );
+        self
+    }
+
+    pub fn assert_text_contains(&self, expected: &str) -> &Self {
+        let actual = self.text();
+        assert!(
+            actual.contains(expected),
             "Unexpected text response for HTTP {} {}\nResponse status {}, body {:?}, expected {:?}",
             self.method,
             self.url,

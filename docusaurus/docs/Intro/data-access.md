@@ -8,18 +8,7 @@ Models represent the domain objects of your application.
 
 For example, in a blogging platform, you will have entities such as `BlogPost`, `BlogComment`, `Author`, and so on.
 
-To define a `BlogComment`, you can add the following TypeScript class to a file in the `models/` directory:
-
-```typescript title="my-backend/models/models.ts"
-import { ChiselEntity, labels } from "@chiselstrike/api"
-
-export class BlogComment extends ChiselEntity {
-    content: string = "";
-    by: string = "";
-}
-```
-
-and another example:
+To define a `User`, you can add the following TypeScript class to a file in the `models/` directory:
 
 ```typescript  title="my-backend/models/User.ts"
 import { ChiselEntity } from "@chiselstrike/api"
@@ -28,6 +17,18 @@ export class User extends ChiselEntity {
     username: string;
     email: string;
     city: string;
+}
+```
+
+and another example:
+
+```typescript title="my-backend/models/models.ts"
+import { ChiselEntity, labels } from "@chiselstrike/api"
+import { User } from "../models/User"
+
+export class BlogComment extends ChiselEntity {
+    content: string = "";
+    author: User = new User();
 }
 ```
 
@@ -255,6 +256,25 @@ export default new RouteMap()
 ```
 
 In this example, we delete an user by their email address.
+
+## Relationships
+
+Let's look closer at the BlogComment example we gave earlier:
+
+```typescript title="my-backend/models/models.ts"
+import { ChiselEntity, labels } from "@chiselstrike/api"
+import { User } from "../models/User"
+
+export class BlogComment extends ChiselEntity {
+    content: string = "";
+    author: User = new User();
+}
+```
+
+You can observe that the `author` field is of type `User`, which is another entity. This is a way we can define a relationship between entities.
+
+Entity fields are eagerly loaded. This means that when you load a `BlogComment` instance, the author field entity is loaded with it. Same goes for saving -- when you save a `BlogComment` with an author, a `User` instance will be upserted in the database and reference to it will be associated with the stored `BlogComment`. (So if this `User` already existed in the database, it will be updated with the value provided.)
+
 
 ## See Also: Cursors
 

@@ -11,10 +11,13 @@ use std::sync::atomic::{AtomicBool, AtomicU16, Ordering};
 use std::sync::{Arc, Mutex};
 
 pub(crate) fn run_tests(opt: &Opt) -> bool {
-    if opt.optimize.unwrap_or(true) && !run_tests_inner(opt, true) {
+    // ports to use for each service. Low ports will conflict with all
+    // kinds of services, so go high.
+    let ports = Arc::new(AtomicU16::new(32000));
+    if opt.optimize.unwrap_or(true) && !run_tests_inner(opt, &ports, true) {
         return false;
     }
-    if !opt.optimize.unwrap_or(false) && !run_tests_inner(opt, false) {
+    if !opt.optimize.unwrap_or(false) && !run_tests_inner(opt, &ports, false) {
         return false;
     }
     true
@@ -24,7 +27,7 @@ fn chisel() -> String {
     bin_dir().join("chisel").to_str().unwrap().to_string()
 }
 
-fn run_tests_inner(opt: &Opt, optimize: bool) -> bool {
+fn run_tests_inner(opt: &Opt, ports: &AtomicU16, optimize: bool) -> bool {
     if optimize {
         eprintln!("Running tests with optimization");
     } else {
@@ -82,9 +85,6 @@ fn run_tests_inner(opt: &Opt, optimize: bool) -> bool {
     let event_handler = Arc::new(Mutex::new(lit::event_handler::Default::default()));
     let passed = Arc::new(AtomicBool::new(true));
 
-    // ports to use for each service. Low ports will conflict with all
-    // kinds of services, so go high.
-    let ports = Arc::new(AtomicU16::new(30000));
     lit_files
         .par_iter()
         .map(|test_path| -> Result<()> {
@@ -95,9 +95,9 @@ fn run_tests_inner(opt: &Opt, optimize: bool) -> bool {
                 },
                 |config| {
                     // Add one to avoid conflict with local instances of chisel.
-                    let rpc = get_free_port(&ports);
-                    let internal = get_free_port(&ports);
-                    let api = get_free_port(&ports);
+                    let rpc = get_free_port(ports);
+                    let internal = get_free_port(ports);
+                    let api = get_free_port(ports);
 
                     config.test_paths = vec![test_path.clone()];
                     config.truncate_output_context_to_number_of_lines = Some(500);

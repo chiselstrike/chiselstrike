@@ -1,19 +1,13 @@
-mod filtering;
-mod parse;
-mod query;
-mod rewrite;
-mod symbols;
-mod transforms;
-mod utils;
-
-use crate::parse::compile;
-use crate::rewrite::Target;
-use crate::symbols::Symbols;
-use anyhow::{Context, Result};
 use std::fs::File;
 use std::io::{self, Read, Write};
 use std::path::PathBuf;
+
+use anyhow::{Context, Result};
 use structopt::StructOpt;
+
+use chiselc::parse::compile;
+use chiselc::rewrite::Target;
+use chiselc::symbols::Symbols;
 
 #[derive(StructOpt)]
 #[structopt(name = "chiselc")]

@@ -9,13 +9,13 @@
 //! This module implements a filter splitting optimization that allows the following
 //! piece of code, for example:
 //!
-//! ```ignore
+//! ```typescript
 //! Person.cursor().filter(person => person.age > 40 && fetch("https://example.com"))
 //! ```
 //!
 //! can be transformed into the semantic equivalent of:
 //!
-//! ```ignore
+//! ```typescript
 //! Person.cursor()
 //!       .filter(person => person.age > 40)
 //!       .filter(person => fetch("https://example.com"))
@@ -62,25 +62,25 @@ pub fn split_and_convert_expr(expr: &Expr) -> (Option<(Expr, QExpr)>, Option<Exp
 ///
 /// For example, consider the following:
 ///
-/// ```ignore
+/// ```typescript
 /// Person.cursor().filter(person => person.age < 4 && fetch("www.example.com"))
 /// ```
 ///
 /// the _arrow_ part is:
 ///
-/// ```
+/// ```typescript
 /// person => person.age < 4 && fetch("www.example.com")
 /// ```
 ///
 /// after filter splitting is performed we need two new arrows:
 ///
-/// ```
+/// ```typescript
 /// person => person.age < 4
 /// ```
 ///
 /// and
 ///
-/// ```
+/// ```typescript
 /// person => fetch("www.example.com")
 /// ```
 ///
