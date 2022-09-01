@@ -2,7 +2,7 @@
 import { RouteMap } from "@chiselstrike/api";
 import { Person } from "../models/person.ts";
 
-async function handleGet(req: Request) {
+async function handlePost(req: Request) {
     const lines = (await req.text()).split('\n');
     for (const line of lines) {
         const r = line.split(',');
@@ -20,4 +20,4 @@ async function handleGet(req: Request) {
 }
 
 export default new RouteMap()
-    .get("/", handleGet);
+    .post("/", handlePost);

@@ -5,8 +5,7 @@ use crate::cmd::dev::cmd_dev;
 use crate::project::{create_project, CreateProjectOptions};
 use crate::proto::chisel_rpc_client::ChiselRpcClient;
 use crate::proto::{
-    type_msg::TypeEnum, DeleteRequest, DescribeRequest, PopulateRequest,
-    StatusRequest,
+    type_msg::TypeEnum, DeleteRequest, DescribeRequest, PopulateRequest, StatusRequest,
 };
 use crate::server::{start_server, wait};
 use anyhow::{anyhow, Result};

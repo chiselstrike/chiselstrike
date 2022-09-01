@@ -98,7 +98,7 @@ async fn transform_anonymize(c: TestContext) {
         })
     );
 
-    // except_uri - exact match
+    // except_uri - simple regex match
     c.chisel.write_unindent(
         "policies/pol.yaml",
         r##"
@@ -111,14 +111,14 @@ async fn transform_anonymize(c: TestContext) {
     c.chisel.apply_ok().await;
     assert_eq!(fetch_person(&c.chisel, &pekka_id).await, *PEKKA);
 
-    // except_uri - regex match
+    // except_uri - advanced regex match
     c.chisel.write_unindent(
         "policies/pol.yaml",
         r##"
         labels:
           - name: L2
             transform: anonymize
-            except_uri: sons$
+            except_uri: 'sons/[0-9a-f-]+$'
         "##,
     );
     c.chisel.apply_ok().await;

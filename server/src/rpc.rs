@@ -8,7 +8,7 @@ use crate::proto::{
     FieldDefinition, LabelPolicyDefinition, PopulateRequest, PopulateResponse, StatusRequest,
     StatusResponse, TypeDefinition, VersionDefinition,
 };
-use crate::server::Server;
+use crate::server::{self, Server};
 use crate::types::TypeSystem;
 use crate::version::{VersionInfo, VersionInit};
 use crate::{apply, version};
@@ -228,6 +228,13 @@ async fn apply(server: Arc<Server>, request: ApplyRequest) -> Result<ApplyRespon
             "The version did not start up correcly, but the database has already been modified",
         )?;
     server.trunk.add_version(version, job_tx, version_task);
+
+    // try to update the secrets, so that if the user edited `.env`, the updated version will see
+    // the new secrets immediately (this is in particular importance for tests).
+    //
+    // if an error happens, let's just ignore it: the `refresh_secrets()` task, which is
+    // responsible for periodic updating of the secrets, will show the error
+    let _: Result<()> = server::update_secrets(&server).await;
 
     Ok(ApplyResponse {
         types: result.type_names_user_order,

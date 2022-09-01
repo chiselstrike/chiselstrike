@@ -64,9 +64,9 @@ pub async fn run(opt: Opt) -> Result<()> {
     .context("Could not start an internal HTTP server")?;
 
     let kafka_task = match server.opt.kafka_connection.clone() {
-        Some(connection) => {
-            kafka::spawn(server.clone(), connection, &server.opt.kafka_topics).await?.fuse()
-        }
+        Some(connection) => kafka::spawn(server.clone(), connection, &server.opt.kafka_topics)
+            .await?
+            .fuse(),
         None => Fuse::terminated(),
     };
 
@@ -244,19 +244,20 @@ async fn start_chiselstrike_version(server: Arc<Server>) -> Result<()> {
 async fn refresh_secrets(server: Arc<Server>) -> Result<()> {
     let mut last_try_was_failure = false;
     loop {
-        match secrets::get_secrets(&server.opt).await {
-            Ok(secrets) => {
-                *server.secrets.write() = secrets;
+        if let Err(err) = update_secrets(&server).await {
+            if !last_try_was_failure {
+                log::warn!("Could not re-read secrets: {:?}", err);
             }
-            Err(err) => {
-                if !last_try_was_failure {
-                    log::warn!("Could not re-read secrets: {:?}", err);
-                }
-                last_try_was_failure = true;
-            }
+            last_try_was_failure = true;
         }
         tokio::time::sleep(Duration::from_millis(1000)).await;
     }
+}
+
+pub async fn update_secrets(server: &Server) -> Result<()> {
+    let secrets = secrets::get_secrets(&server.opt).await?;
+    *server.secrets.write() = secrets;
+    Ok(())
 }
 
 async fn wait_for_signals() -> Result<()> {

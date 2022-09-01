@@ -41,23 +41,16 @@ async fn basic(c: TestContext) {
 
     c.chisel.apply_ok().await;
 
-    assert_eq!(
-        c.chisel.get_text("/dev/person").await,
-        "GET index.ts /person"
-    );
-    assert_eq!(c.chisel.get_text("/dev/user").await, "GET user.ts /");
-    assert_eq!(
-        c.chisel.get_text("/dev/user/alice").await,
-        "GET user.ts /alice"
-    );
-    assert_eq!(
-        c.chisel.get_text("/dev/user/bob").await,
-        "GET user/index.ts /bob"
-    );
-    assert_eq!(
-        c.chisel.get_text("/dev/user/helen").await,
-        "GET user/helen.ts /"
-    );
+    c.chisel.get("/dev/person").send().await
+        .assert_text("GET index.ts /person");
+    c.chisel.get("/dev/user").send().await
+        .assert_text("GET user.ts /");
+    c.chisel.get("/dev/user/alice").send().await
+        .assert_text("GET user.ts /alice");
+    c.chisel.get("/dev/user/bob").send().await
+        .assert_text("GET user/index.ts /bob");
+    c.chisel.get("/dev/user/helen").send().await
+        .assert_text("GET user/helen.ts /");
 }
 
 #[test(modules = Deno)]
@@ -78,25 +71,17 @@ async fn params_in_code(c: TestContext) {
 
     c.chisel.apply_ok().await;
 
-    assert_eq!(
-        c.chisel.get_json("/dev/route1/xyz").await,
-        json!([1, "xyz"])
-    );
-    assert_eq!(
-        c.chisel.get_json("/dev/route1/!@$^").await,
-        json!([1, "!@$^"])
-    );
-    assert_eq!(c.chisel.get_status("/dev/route1/").await, 404);
-    assert_eq!(c.chisel.get_status("/dev/route1/xyz/abc").await, 404);
+    c.chisel.get("/dev/route1/xyz").send().await
+        .assert_json(json!([1, "xyz"]));
+    c.chisel.get("/dev/route1/!@$^").send().await
+        .assert_json(json!([1, "!@$^"]));
+    c.chisel.get("/dev/route1/").send().await.assert_status(404);
+    c.chisel.get("/dev/route1/xyz/abc").send().await.assert_status(404);
 
-    assert_eq!(
-        c.chisel.get_json("/dev/route2/abc/xyz").await,
-        json!([2, "abc", "xyz"])
-    );
-    assert_eq!(
-        c.chisel.get_json("/dev/abc/route3/xyz").await,
-        json!([3, "abc", "xyz"])
-    );
+    c.chisel.get("/dev/route2/abc/xyz").send().await
+        .assert_json(json!([2, "abc", "xyz"]));
+    c.chisel.get("/dev/abc/route3/xyz").send().await
+        .assert_json(json!([3, "abc", "xyz"]));
 }
 
 #[test(modules = Both)]
@@ -130,18 +115,12 @@ async fn params_in_files(c: TestContext) {
 
     c.chisel.apply_ok().await;
 
-    assert_eq!(
-        c.chisel.get_json("/dev/route1/xyz").await,
-        json!([1, "xyz"])
-    );
-    assert_eq!(
-        c.chisel.get_json("/dev/route2/abc/xyz").await,
-        json!([2, "abc", "xyz"])
-    );
-    assert_eq!(
-        c.chisel.get_json("/dev/abc/route3/xyz").await,
-        json!([3, "abc", "xyz"])
-    );
+    c.chisel.get("/dev/route1/xyz").send().await
+        .assert_json(json!([1, "xyz"]));
+    c.chisel.get("/dev/route2/abc/xyz").send().await
+        .assert_json(json!([2, "abc", "xyz"]));
+    c.chisel.get("/dev/abc/route3/xyz").send().await
+        .assert_json(json!([3, "abc", "xyz"]));
 }
 
 #[test(modules = Deno)]
@@ -160,88 +139,34 @@ async fn params_get_typed(c: TestContext) {
 
     c.chisel.apply_ok().await;
 
-    assert_eq!(
-        c.chisel.get_json("/dev/string/abc").await,
-        json!(["string", "abc"])
-    );
-    assert_eq!(
-        c.chisel.get_json("/dev/string/null").await,
-        json!(["string", "null"])
-    );
-    assert_eq!(
-        c.chisel.get_json("/dev/string/123").await,
-        json!(["string", "123"])
-    );
+    c.chisel.get("/dev/string/abc").send().await.assert_json(json!(["string", "abc"]));
+    c.chisel.get("/dev/string/null").send().await.assert_json(json!(["string", "null"]));
+    c.chisel.get("/dev/string/123").send().await.assert_json(json!(["string", "123"]));
 
-    assert_eq!(
-        c.chisel.get_json("/dev/number/10").await,
-        json!(["number", 10])
-    );
-    assert_eq!(
-        c.chisel.get_json("/dev/number/0.125").await,
-        json!(["number", 0.125])
-    );
-    assert_eq!(
-        c.chisel.get_json("/dev/number/-10.5").await,
-        json!(["number", -10.5])
-    );
-    assert_eq!(
-        c.chisel.get_json("/dev/number/3e2").await,
-        json!(["number", 300])
-    );
-    assert_eq!(
-        c.chisel.get_json("/dev/number/0.5foo").await,
-        json!(["number", 0.5])
-    );
-    assert_eq!(
-        c.chisel.get_json("/dev/number/foo").await,
-        json!(["number", null])
-    );
-    assert_eq!(
-        c.chisel.get_json("/dev/number/infinity").await,
-        json!(["number", null])
-    );
+    c.chisel.get("/dev/number/10").send().await.assert_json(json!(["number", 10]));
+    c.chisel.get("/dev/number/0.125").send().await.assert_json(json!(["number", 0.125]));
+    c.chisel.get("/dev/number/-10.5").send().await.assert_json(json!(["number", -10.5]));
+    c.chisel.get("/dev/number/3e2").send().await.assert_json(json!(["number", 300]));
+    c.chisel.get("/dev/number/0.5foo").send().await.assert_json(json!(["number", 0.5]));
+    c.chisel.get("/dev/number/foo").send().await.assert_json(json!(["number", null]));
+    c.chisel.get("/dev/number/infinity").send().await.assert_json(json!(["number", null]));
 
-    assert_eq!(c.chisel.get_json("/dev/int/10").await, json!(["int", 10]));
-    assert_eq!(
-        c.chisel.get_json("/dev/int/1234567").await,
-        json!(["int", 1234567])
-    );
-    assert_eq!(c.chisel.get_json("/dev/int/-42").await, json!(["int", -42]));
-    assert_eq!(c.chisel.get_json("/dev/int/+42").await, json!(["int", 42]));
-    assert_eq!(c.chisel.get_json("/dev/int/010").await, json!(["int", 10]));
-    assert_eq!(c.chisel.get_json("/dev/int/0x10").await, json!(["int", 0]));
-    assert_eq!(
-        c.chisel.get_json("/dev/int/foo").await,
-        json!(["int", null])
-    );
-    assert_eq!(
-        c.chisel.get_json("/dev/int/42foo").await,
-        json!(["int", 42])
-    );
-    assert_eq!(c.chisel.get_json("/dev/int/42.5").await, json!(["int", 42]));
-    assert_eq!(c.chisel.get_json("/dev/int/3e2").await, json!(["int", 3]));
+    c.chisel.get("/dev/int/10").send().await.assert_json(json!(["int", 10]));
+    c.chisel.get("/dev/int/1234567").send().await.assert_json(json!(["int", 1234567]));
+    c.chisel.get("/dev/int/-42").send().await.assert_json(json!(["int", -42]));
+    c.chisel.get("/dev/int/+42").send().await.assert_json(json!(["int", 42]));
+    c.chisel.get("/dev/int/010").send().await.assert_json(json!(["int", 10]));
+    c.chisel.get("/dev/int/0x10").send().await.assert_json(json!(["int", 0]));
+    c.chisel.get("/dev/int/foo").send().await.assert_json(json!(["int", null]));
+    c.chisel.get("/dev/int/42foo").send().await.assert_json(json!(["int", 42]));
+    c.chisel.get("/dev/int/42.send().5").send().await.assert_json(json!(["int", 42]));
+    c.chisel.get("/dev/int/3e2").send().await.assert_json(json!(["int", 3]));
 
-    assert_eq!(
-        c.chisel.get_json("/dev/bool/true").await,
-        json!(["bool", true])
-    );
-    assert_eq!(
-        c.chisel.get_json("/dev/bool/1").await,
-        json!(["bool", true])
-    );
-    assert_eq!(
-        c.chisel.get_json("/dev/bool/false").await,
-        json!(["bool", false])
-    );
-    assert_eq!(
-        c.chisel.get_json("/dev/bool/0").await,
-        json!(["bool", false])
-    );
-    assert_eq!(
-        c.chisel.get_json("/dev/bool/something").await,
-        json!(["bool", true])
-    );
+    c.chisel.get("/dev/bool/true").send().await.assert_json(json!(["bool", true]));
+    c.chisel.get("/dev/bool/1").send().await.assert_json(json!(["bool", true]));
+    c.chisel.get("/dev/bool/false").send().await.assert_json(json!(["bool", false]));
+    c.chisel.get("/dev/bool/0").send().await.assert_json(json!(["bool", false]));
+    c.chisel.get("/dev/bool/something").send().await.assert_json(json!(["bool", true]));
 }
 
 #[test(modules = Deno)]
@@ -348,28 +273,11 @@ async fn method_shorthands(c: TestContext) {
 
     c.chisel.apply_ok().await;
 
-    assert_eq!(
-        c.chisel.request_json(Method::GET, "/dev/route", "").await,
-        json!(["GET"])
-    );
-    assert_eq!(
-        c.chisel.request_json(Method::POST, "/dev/route", "").await,
-        json!(["POST"])
-    );
-    assert_eq!(
-        c.chisel.request_json(Method::PUT, "/dev/route", "").await,
-        json!(["PUT"])
-    );
-    assert_eq!(
-        c.chisel
-            .request_json(Method::DELETE, "/dev/route", "")
-            .await,
-        json!(["DELETE"])
-    );
-    assert_eq!(
-        c.chisel.request_json(Method::PATCH, "/dev/route", "").await,
-        json!(["PATCH"])
-    );
+    c.chisel.request(Method::GET, "/dev/route").send().await.assert_json(json!(["GET"]));
+    c.chisel.request(Method::POST, "/dev/route").send().await.assert_json(json!(["POST"]));
+    c.chisel.request(Method::PUT, "/dev/route").send().await.assert_json(json!(["PUT"]));
+    c.chisel.request(Method::DELETE, "/dev/route").send().await.assert_json(json!(["DELETE"]));
+    c.chisel.request(Method::PATCH, "/dev/route").send().await.assert_json(json!(["PATCH"]));
 }
 
 #[test(modules = Deno)]
@@ -393,69 +301,21 @@ async fn method_manual(c: TestContext) {
 
     c.chisel.apply_ok().await;
 
-    assert_eq!(
-        c.chisel.request_json(Method::GET, "/dev/route1", "").await,
-        json!([1, "get"])
-    );
-    assert_eq!(
-        c.chisel.request_json(Method::POST, "/dev/route1", "").await,
-        json!([1, "post"])
-    );
-    assert_eq!(
-        c.chisel
-            .request_status(Method::DELETE, "/dev/route1", "")
-            .await,
-        405
-    );
+    c.chisel.request(Method::GET, "/dev/route1").send().await.assert_json(json!([1, "get"]));
+    c.chisel.request(Method::POST, "/dev/route1").send().await.assert_json(json!([1, "post"]));
+    c.chisel.request(Method::DELETE, "/dev/route1").send().await.assert_status(405);
 
-    assert_eq!(
-        c.chisel.request_json(Method::GET, "/dev/route2", "").await,
-        json!([2])
-    );
-    assert_eq!(
-        c.chisel.request_json(Method::POST, "/dev/route2", "").await,
-        json!([2])
-    );
-    assert_eq!(
-        c.chisel
-            .request_status(Method::DELETE, "/dev/route2", "")
-            .await,
-        405
-    );
+    c.chisel.request(Method::GET, "/dev/route2").send().await.assert_json(json!([2]));
+    c.chisel.request(Method::POST, "/dev/route2").send().await.assert_json(json!([2]));
+    c.chisel.request(Method::DELETE, "/dev/route2").send().await.assert_status(405);
 
-    assert_eq!(
-        c.chisel
-            .request_json(Method::DELETE, "/dev/route3", "")
-            .await,
-        json!([3, "delete"])
-    );
-    assert_eq!(
-        c.chisel
-            .request_json(Method::PATCH, "/dev/route3", "")
-            .await,
-        json!([3, "patch"])
-    );
-    assert_eq!(
-        c.chisel
-            .request_status(Method::GET, "/dev/route3", "")
-            .await,
-        405
-    );
+    c.chisel.request(Method::DELETE, "/dev/route3").send().await.assert_json(json!([3, "delete"]));
+    c.chisel.request(Method::PATCH, "/dev/route3").send().await.assert_json(json!([3, "patch"]));
+    c.chisel.request(Method::GET, "/dev/route3").send().await.assert_status(405);
 
-    assert_eq!(
-        c.chisel.request_json(Method::GET, "/dev/route4", "").await,
-        json!([4])
-    );
-    assert_eq!(
-        c.chisel.request_json(Method::POST, "/dev/route4", "").await,
-        json!([4])
-    );
-    assert_eq!(
-        c.chisel
-            .request_json(Method::PATCH, "/dev/route4", "")
-            .await,
-        json!([4])
-    );
+    c.chisel.request(Method::GET, "/dev/route4").send().await.assert_json(json!([4]));
+    c.chisel.request(Method::POST, "/dev/route4").send().await.assert_json(json!([4]));
+    c.chisel.request(Method::PATCH, "/dev/route4").send().await.assert_json(json!([4]));
 }
 
 #[test(modules = Deno)]
@@ -492,69 +352,21 @@ async fn object(c: TestContext) {
 
     c.chisel.apply_ok().await;
 
-    assert_eq!(
-        c.chisel.request_json(Method::GET, "/dev/route1", "").await,
-        json!([1, "get"])
-    );
-    assert_eq!(
-        c.chisel.request_json(Method::POST, "/dev/route1", "").await,
-        json!([1, "post"])
-    );
-    assert_eq!(
-        c.chisel
-            .request_status(Method::DELETE, "/dev/route1", "")
-            .await,
-        405
-    );
+    c.chisel.request(Method::GET, "/dev/route1").send().await.assert_json(json!([1, "get"]));
+    c.chisel.request(Method::POST, "/dev/route1").send().await.assert_json(json!([1, "post"]));
+    c.chisel.request(Method::DELETE, "/dev/route1").send().await.assert_status(405);
 
-    assert_eq!(
-        c.chisel.request_json(Method::GET, "/dev/route2", "").await,
-        json!([2])
-    );
-    assert_eq!(
-        c.chisel.request_json(Method::POST, "/dev/route2", "").await,
-        json!([2])
-    );
-    assert_eq!(
-        c.chisel
-            .request_status(Method::DELETE, "/dev/route2", "")
-            .await,
-        405
-    );
+    c.chisel.request(Method::GET, "/dev/route2").send().await.assert_json(json!([2]));
+    c.chisel.request(Method::POST, "/dev/route2").send().await.assert_json(json!([2]));
+    c.chisel.request(Method::DELETE, "/dev/route2").send().await.assert_status(405);
 
-    assert_eq!(
-        c.chisel
-            .request_json(Method::DELETE, "/dev/route3", "")
-            .await,
-        json!([3, "delete"])
-    );
-    assert_eq!(
-        c.chisel
-            .request_json(Method::PATCH, "/dev/route3", "")
-            .await,
-        json!([3, "patch"])
-    );
-    assert_eq!(
-        c.chisel
-            .request_status(Method::GET, "/dev/route3", "")
-            .await,
-        405
-    );
+    c.chisel.request(Method::DELETE, "/dev/route3").send().await.assert_json(json!([3, "delete"]));
+    c.chisel.request(Method::PATCH, "/dev/route3").send().await.assert_json(json!([3, "patch"]));
+    c.chisel.request(Method::GET, "/dev/route3").send().await.assert_status(405);
 
-    assert_eq!(
-        c.chisel.request_json(Method::GET, "/dev/route4", "").await,
-        json!([4])
-    );
-    assert_eq!(
-        c.chisel.request_json(Method::POST, "/dev/route4", "").await,
-        json!([4])
-    );
-    assert_eq!(
-        c.chisel
-            .request_json(Method::PATCH, "/dev/route4", "")
-            .await,
-        json!([4])
-    );
+    c.chisel.request(Method::GET, "/dev/route4").send().await.assert_json(json!([4]));
+    c.chisel.request(Method::POST, "/dev/route4").send().await.assert_json(json!([4]));
+    c.chisel.request(Method::PATCH, "/dev/route4").send().await.assert_json(json!([4]));
 }
 
 #[test(modules = Deno)]
@@ -573,26 +385,19 @@ async fn errors(c: TestContext) {
 
     c.chisel.apply_ok().await;
 
-    let (status, body) = c.chisel.get_body("/dev/route1").await;
-    assert_eq!(status, 500);
-    assert!(
-        body.starts_with("Error in GET /dev/route1: Error: it blew up".as_bytes()),
-        "{:?}", body,
-    );
+    c.chisel.get("/dev/route1").send().await
+        .assert_status(500)
+        .assert_text_contains("Error in GET /dev/route1: Error: it blew up");
 
-    let (status, body) = c.chisel.get_body("/dev/route2").await;
-    assert_eq!(status, 500);
-    assert!(
-        body.starts_with("Error in GET /dev/route2: ReferenceError: nonexistent is not defined".as_bytes()),
-        "{:?}", body,
-    );
+    c.chisel.get("/dev/route2").send().await
+        .assert_status(500)
+        .assert_text_contains("Error in GET /dev/route2: ReferenceError: nonexistent is not defined");
 
-    assert_eq!(
-        c.chisel.get_body("/dev/route3").await,
-        (405, Bytes::from(""))
-    );
-    assert_eq!(
-        c.chisel.get_body("/dev/nonexistent").await,
-        (404, Bytes::from(""))
-    );
+    c.chisel.get("/dev/route3").send().await
+        .assert_status(405)
+        .assert_text("");
+
+    c.chisel.get("/dev/nonexistent").send().await
+        .assert_status(404)
+        .assert_text("");
 }
