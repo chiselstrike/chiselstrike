@@ -89,7 +89,7 @@ fn walk_dir_entry(
     let entry_name = entry_name
         .to_str()
         .with_context(|| format!("Cannot convert file name {:?} to UTF-8", entry.file_name()))?;
-    if entry_name.starts_with('_') {
+    if entry_name.starts_with('_') || entry_name.starts_with('.') {
         return Ok(());
     }
 
