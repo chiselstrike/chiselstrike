@@ -17,7 +17,9 @@ type AcceptedJob =
 
 // This is the entry point into the TypeScript runtime, called from `main.js`
 // with structures that describe the user-defined behavior (such as how to
-// handle HTTP requests)
+// handle HTTP requests).
+//
+// The async function returns when there are no more jobs to handle.
 export default async function (
     userRouteMap: RouteMapLike,
     userTopicMap: TopicMap | undefined,

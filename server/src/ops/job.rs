@@ -8,7 +8,7 @@ use anyhow::{bail, Context, Result};
 use serde::Serialize;
 use std::cell::RefCell;
 use std::rc::Rc;
-use tokio::sync::oneshot;
+use tokio::sync::{mpsc, oneshot};
 
 /// A job that will be handled in JavaScript.
 #[derive(Debug, Serialize)]
@@ -31,25 +31,25 @@ struct HttpResponseResource {
 impl deno_core::Resource for HttpResponseResource {}
 
 #[deno_core::op]
-// yes, we really *do* want to hold a `RefCell` across `.await`
-#[allow(clippy::await_holding_refcell_ref)]
 async fn op_chisel_accept_job(
     state: Rc<RefCell<deno_core::OpState>>,
 ) -> Result<Option<AcceptedJob>> {
     let job_rx: Rc<RefCell<_>> = state.borrow().borrow::<WorkerState>().job_rx.clone();
-    let job = match job_rx.try_borrow_mut() {
-        Ok(mut job_rx) => match job_rx.recv().await {
-            Some(job) => job,
-            None => return Ok(None),
-        },
-        Err(_) => bail!("op_chisel_accept_job cannot be called while another call is pending"),
-    };
 
-    let accepted_job = match job {
-        VersionJob::Http(HttpRequestResponse {
-            request,
-            response_tx,
-        }) => {
+    #[allow(clippy::await_holding_refcell_ref)]
+    async fn recv_job(job_rx: &RefCell<mpsc::Receiver<VersionJob>>) -> Result<Option<VersionJob>> {
+        // yes, we really *do* want to hold a `RefMut` across `.await` ...
+        match job_rx.try_borrow_mut() {
+            Ok(mut job_rx) => Ok(job_rx.recv().await),
+            // ... if somebody else tries to borrow this `RefCell` while we are `.await`-ing, they will
+            // get this error
+            Err(_) => bail!("op_chisel_accept_job cannot be called while another call is pending"),
+        }
+    }
+
+    let accepted_job = match recv_job(&job_rx).await? {
+        Some(VersionJob::Http(request_response)) => {
+            let HttpRequestResponse { request, response_tx } = request_response;
             let response_rid = {
                 let response_res = HttpResponseResource {
                     response_tx: RefCell::new(Some(response_tx)),
@@ -61,7 +61,8 @@ async fn op_chisel_accept_job(
                 response_rid,
             }
         }
-        VersionJob::Kafka(event) => AcceptedJob::Kafka { event },
+        Some(VersionJob::Kafka(event)) => AcceptedJob::Kafka { event },
+        None => return Ok(None),
     };
 
     Ok(Some(accepted_job))

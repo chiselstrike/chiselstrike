@@ -41,7 +41,7 @@ pub(crate) async fn apply(
     let mut modules = Vec::new();
     let mut index_candidates = Vec::new();
     for (url, mut code, _is_dts) in compiled.into_iter() {
-        let mut url = Url::parse(&url.to_string()).unwrap();
+        let mut url = Url::parse(url.as_str()).unwrap();
         if url == root_url {
             url = Url::parse("file:///__root.ts").unwrap();
         }
