@@ -20,7 +20,7 @@ export type CRUDCreateResponse = (
 /**
  * Generates a route map to handle REST methods GET/PUT/POST/DELETE for this entity.
  * @example
- * Put this in the file 'endpoints/comments.ts':
+ * Put this in the file 'routes/comments.ts':
  * ```typescript
  * import { Comment } from "../models/comment";
  * export default crud(Comment);

@@ -18,17 +18,21 @@ enum AcceptedJob {
     #[serde(rename_all = "camelCase")]
     Http {
         request: HttpRequest,
-        response_rid: deno_core::ResourceId,
+        response_tx_rid: deno_core::ResourceId,
     },
     #[serde(rename_all = "camelCase")]
     Kafka { event: KafkaEvent },
 }
 
-struct HttpResponseResource {
+/// A Deno resource that wraps a sender that is used to send response for an HTTP request.
+///
+/// This is passed to JavaScript along with the request (in `AcceptedJob::Http`), and JavaScript
+/// then passes the response back to us by calling `op_chisel_http_respond`.
+struct HttpResponseTxResource {
     response_tx: RefCell<Option<oneshot::Sender<HttpResponse>>>,
 }
 
-impl deno_core::Resource for HttpResponseResource {}
+impl deno_core::Resource for HttpResponseTxResource {}
 
 #[deno_core::op]
 async fn op_chisel_accept_job(
@@ -50,15 +54,15 @@ async fn op_chisel_accept_job(
     let accepted_job = match recv_job(&job_rx).await? {
         Some(VersionJob::Http(request_response)) => {
             let HttpRequestResponse { request, response_tx } = request_response;
-            let response_rid = {
-                let response_res = HttpResponseResource {
+            let response_tx_rid = {
+                let response_tx_res = HttpResponseTxResource {
                     response_tx: RefCell::new(Some(response_tx)),
                 };
-                state.borrow_mut().resource_table.add(response_res)
+                state.borrow_mut().resource_table.add(response_tx_res)
             };
             AcceptedJob::Http {
                 request,
-                response_rid,
+                response_tx_rid,
             }
         }
         Some(VersionJob::Kafka(event)) => AcceptedJob::Kafka { event },
@@ -71,16 +75,16 @@ async fn op_chisel_accept_job(
 #[deno_core::op]
 fn op_chisel_http_respond(
     state: Rc<RefCell<deno_core::OpState>>,
-    response_rid: deno_core::ResourceId,
+    response_tx_rid: deno_core::ResourceId,
     response: HttpResponse,
 ) -> Result<()> {
     let response_tx = {
-        let response_res: Rc<HttpResponseResource> =
-            state.borrow_mut().resource_table.take(response_rid)?;
-        let response_tx: &mut Option<_> = &mut response_res.response_tx.borrow_mut();
+        let response_tx_res: Rc<HttpResponseTxResource> =
+            state.borrow_mut().resource_table.take(response_tx_rid)?;
+        let response_tx: &mut Option<_> = &mut response_tx_res.response_tx.borrow_mut();
         response_tx
             .take()
-            .context("Response was already sent on this response resource")?
+            .context("Response was already sent on this response tx resource")?
     };
     let _: Result<_, _> = response_tx.send(response);
     Ok(())

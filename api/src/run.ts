@@ -12,7 +12,7 @@ import { opAsync, opSync } from "./utils.ts";
 
 // A generic job that we receive from Rust
 type AcceptedJob =
-    | { type: "http"; request: HttpRequest; responseRid: number }
+    | { type: "http"; request: HttpRequest; responseTxRid: number }
     | { type: "kafka"; event: KafkaEvent };
 
 // This is the entry point into the TypeScript runtime, called from `main.js`
@@ -44,7 +44,7 @@ export default async function (
             break;
         } else if (job.type == "http") {
             const httpResponse = await handleHttpRequest(router, job.request);
-            opSync("op_chisel_http_respond", job.responseRid, httpResponse);
+            opSync("op_chisel_http_respond", job.responseTxRid, httpResponse);
         } else if (job.type == "kafka") {
             await handleKafkaEvent(topicMap, job.event);
         } else {
