@@ -319,57 +319,6 @@ async fn method_manual(c: TestContext) {
 }
 
 #[test(modules = Deno)]
-async fn object(c: TestContext) {
-    c.chisel.write(
-        "routes/route1.ts",
-        r#"export default {
-            get: () => [1, 'get'],
-            post: () => [1, 'post'],
-        }"#,
-    );
-
-    c.chisel.write(
-        "routes/route2.ts",
-        r#"export default {
-            'get|post': () => [2],
-        }"#,
-    );
-
-    c.chisel.write(
-        "routes/route3.ts",
-        r#"export default {
-            'DELETE': () => [3, "delete"],
-            'patch': () => [3, "patch"],
-        }"#,
-    );
-
-    c.chisel.write(
-        "routes/route4.ts",
-        r#"export default {
-            '*': () => [4],
-        }"#,
-    );
-
-    c.chisel.apply_ok().await;
-
-    c.chisel.request(Method::GET, "/dev/route1").send().await.assert_json(json!([1, "get"]));
-    c.chisel.request(Method::POST, "/dev/route1").send().await.assert_json(json!([1, "post"]));
-    c.chisel.request(Method::DELETE, "/dev/route1").send().await.assert_status(405);
-
-    c.chisel.request(Method::GET, "/dev/route2").send().await.assert_json(json!([2]));
-    c.chisel.request(Method::POST, "/dev/route2").send().await.assert_json(json!([2]));
-    c.chisel.request(Method::DELETE, "/dev/route2").send().await.assert_status(405);
-
-    c.chisel.request(Method::DELETE, "/dev/route3").send().await.assert_json(json!([3, "delete"]));
-    c.chisel.request(Method::PATCH, "/dev/route3").send().await.assert_json(json!([3, "patch"]));
-    c.chisel.request(Method::GET, "/dev/route3").send().await.assert_status(405);
-
-    c.chisel.request(Method::GET, "/dev/route4").send().await.assert_json(json!([4]));
-    c.chisel.request(Method::POST, "/dev/route4").send().await.assert_json(json!([4]));
-    c.chisel.request(Method::PATCH, "/dev/route4").send().await.assert_json(json!([4]));
-}
-
-#[test(modules = Deno)]
 async fn errors(c: TestContext) {
     c.chisel.write(
         "routes/index.ts",

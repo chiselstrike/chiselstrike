@@ -167,10 +167,6 @@ export class RouteMap {
                 legacyFileName,
             };
             routeMap.routes.push(route);
-        } else if (typeof routes === "object") {
-            for (const method in routes) {
-                routeMap.route(method, "*", routes[method]);
-            }
         } else {
             throw new TypeError(
                 `Cannot convert ${typeof routes} into a RouteMap`,
@@ -202,9 +198,13 @@ export type Handler = (
  */
 export type ResponseLike = Response | string | unknown;
 
+/** Anything that we can convert to a `RouteMap`:
+ *
+ * - `RouteMap` is used as-is
+ * - `Handler` handles requests for all methods and all paths
+ */
 export type RouteMapLike =
     | RouteMap
-    | Record<string, Handler>
     | Handler;
 
 export type Middleware = {
