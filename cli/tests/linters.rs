@@ -15,7 +15,7 @@ mod tests {
     }
 
     fn nightly<'a, T: IntoIterator<Item = &'a str>>(args: T) -> Command {
-        let mut ret = cargo(itertools::chain(["+nightly-2022-03-15"], args));
+        let mut ret = cargo(itertools::chain(["+nightly-2022-08-29"], args));
         ret.env("CARGO_TARGET_DIR", "./target/nightly");
         ret
     }
