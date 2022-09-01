@@ -14,7 +14,7 @@ env:
   CARGO_TERM_COLOR: always
   REGISTRY: ghcr.io
   IMAGE_NAME: ${{ github.repository }}
-  nightly-version: nightly-2022-03-15
+  nightly-version: nightly-2022-08-29
   POSTGRES_PASSWORD: postgres
 
 jobs:
