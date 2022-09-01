@@ -3,7 +3,7 @@
 import { loggedInUser, requestContext } from "./datastore.ts";
 import { ChiselRequest } from "./request.ts";
 import { Handler, Middleware, Router, RouterMatch } from "./routing.ts";
-import { opAsync, opSync, responseFromJson } from "./utils.ts";
+import { opAsync, opSync, responseFromJson, HTTP_STATUS } from "./utils.ts";
 
 // HTTP request that we receive from Rust
 export type HttpRequest = {
@@ -34,9 +34,9 @@ export async function handleHttpRequest(
         httpRequest.routingPath,
     );
     if (routerMatch === "not_found") {
-        return emptyResponse(404);
+        return emptyResponse(HTTP_STATUS.NOT_FOUND);
     } else if (routerMatch === "method_not_allowed") {
-        return emptyResponse(405);
+        return emptyResponse(HTTP_STATUS.METHOD_NOT_ALLOWED);
     }
 
     // the HTTP request usually specifies only path and query, but we need a full URL; so we resolve the URL
@@ -106,9 +106,9 @@ export async function handleHttpRequest(
 
         console.error(message);
         if (isDebug) {
-            return textResponse(500, message);
+            return textResponse(HTTP_STATUS.INTERNAL_SERVER_ERROR, message);
         } else {
-            return emptyResponse(500);
+            return emptyResponse(HTTP_STATUS.INTERNAL_SERVER_ERROR);
         }
     }
 }

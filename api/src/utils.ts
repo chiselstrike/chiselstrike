@@ -69,8 +69,8 @@ export function getSecret(key: string): JSONValue | undefined {
 /** Converts a JSON value into a `Response`. */
 export function responseFromJson(body: unknown, status = 200) {
     // https://fetch.spec.whatwg.org/#null-body-status
-    const isNullBody = status == 101 || status == 204 || status == 205 ||
-        status == 304;
+    const isNullBody = status == 101 || status == 103 || 
+        status == 204 || status == 205 || status == 304;
 
     const json = isNullBody ? null : JSON.stringify(body, null, 2);
     return new Response(json, {
@@ -80,3 +80,10 @@ export function responseFromJson(body: unknown, status = 200) {
         ],
     });
 }
+
+/** HTTP status codes */
+export const HTTP_STATUS = {
+    NOT_FOUND: 404,
+    METHOD_NOT_ALLOWED: 405,
+    INTERNAL_SERVER_ERROR: 500,
+};
