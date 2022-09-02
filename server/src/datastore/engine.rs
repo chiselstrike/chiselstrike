@@ -1,4 +1,4 @@
-// SPDX-FileCopyrightText: © 2022 ChiselStrike <info@chiselstrike.com>
+// SPDX-FileCopyrightText: © 2021 ChiselStrike <info@chiselstrike.com>
 
 use crate::datastore::query::{
     KeepOrOmitField, Mutation, QueriedEntity, QueryField, QueryPlan, SqlValue, TargetDatabase,

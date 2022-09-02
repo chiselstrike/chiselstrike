@@ -1,4 +1,4 @@
-// SPDX-FileCopyrightText: © 2022 ChiselStrike <info@chiselstrike.com>
+// SPDX-FileCopyrightText: © 2021 ChiselStrike <info@chiselstrike.com>
 
 use crate::events::{build_file_topic_map, FileTopicMap};
 use crate::routes::{build_file_route_map, FileRouteMap};

@@ -1,4 +1,4 @@
-// SPDX-FileCopyrightText: © 2021 ChiselStrike <info@chiselstrike.com>
+// SPDX-FileCopyrightText: © 2022 ChiselStrike <info@chiselstrike.com>
 
 pub use self::builtin::BuiltinTypes;
 pub use self::type_system::TypeSystem;
