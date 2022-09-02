@@ -13,7 +13,7 @@ use tempdir::TempDir;
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWriteExt};
 
 pub mod prelude {
-    pub use super::{json_is_subset, Chisel, TestContext};
+    pub use super::{json_is_subset, Chisel, Response, TestContext};
     pub use bytes::Bytes;
     pub use chisel_macros::test;
     pub use reqwest::Method;
@@ -499,9 +499,9 @@ impl RequestBuilder {
 pub struct Response {
     method: reqwest::Method,
     url: reqwest::Url,
-    pub headers: reqwest::header::HeaderMap,
-    pub status: reqwest::StatusCode,
-    pub body: Bytes,
+    headers: reqwest::header::HeaderMap,
+    status: reqwest::StatusCode,
+    body: Bytes,
 }
 
 impl Response {
@@ -601,6 +601,32 @@ impl Response {
             expected.borrow(),
         );
         self
+    }
+
+    pub fn header(&self, name: &str) -> String {
+        let value = self.headers.get(name).unwrap_or_else(|| {
+            panic!(
+                "Expected header {:?} in response for HTTP {} {}\nResponse status {}, body {:?}",
+                name, self.method, self.url, self.status, self.body,
+            )
+        });
+
+        let count = self.headers.get_all(name).iter().count();
+        if count != 1 {
+            panic!(
+                "Header {:?} appears {} times in response for HTTP {} {}\nResponse status {}, body {:?}",
+                name, count, self.method, self.url, self.status, self.body,
+            )
+        }
+
+        let value = value.to_str().unwrap_or_else(|e| {
+            panic!(
+                "Header {:?} in response for HTTP {} {} contains non-ASCII characters: {}",
+                name, self.method, self.url, e,
+            )
+        });
+
+        value.into()
     }
 }
 
