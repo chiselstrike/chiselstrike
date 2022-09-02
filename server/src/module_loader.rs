@@ -8,6 +8,7 @@ use std::sync::Arc;
 /// The loader is used by Deno when V8 resolves and loads modules.
 #[derive(Debug)]
 pub struct ModuleLoader {
+    /// Maps fully qualified module specifiers (absolute URLs) to transpiled JavaScript sources.
     modules: Arc<HashMap<String, String>>,
 }
 

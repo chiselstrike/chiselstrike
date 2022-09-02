@@ -29,6 +29,9 @@ struct TrunkState {
 #[derive(Clone)]
 pub struct TrunkVersion {
     pub version: Arc<Version>,
+    /// NOTE: this sender cannot be stored in the `Version`, because the version terminates only
+    /// after this sender (and its clones) are dropped. If the sender was in `Version`, it would
+    /// never get dropped and the version would never terminate.
     pub job_tx: mpsc::Sender<VersionJob>,
 }
 

@@ -19,6 +19,7 @@ pub struct VersionInit {
     pub version_id: String,
     pub info: VersionInfo,
     pub server: Arc<Server>,
+    /// Module map (see `ModuleLoader`).
     pub modules: Arc<HashMap<String, String>>,
     pub type_system: Arc<TypeSystem>,
     pub policy_system: Arc<PolicySystem>,
@@ -117,6 +118,7 @@ async fn run(
     let version_id = version.version_id.clone();
     let job_task = TaskHandle(task::spawn(async move {
         // distribute jobs among workers in a round-robin fashion
+        // TODO: we should perhaps be more clever than round-robin
         let mut worker_i = 0;
         while let Some(job) = job_rx.recv().await {
             if job_txs[worker_i].send(job).await.is_err() {

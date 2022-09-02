@@ -53,7 +53,10 @@ async fn op_chisel_accept_job(
 
     let accepted_job = match recv_job(&job_rx).await? {
         Some(VersionJob::Http(request_response)) => {
-            let HttpRequestResponse { request, response_tx } = request_response;
+            let HttpRequestResponse {
+                request,
+                response_tx,
+            } = request_response;
             let response_tx_rid = {
                 let response_tx_res = HttpResponseTxResource {
                     response_tx: RefCell::new(Some(response_tx)),

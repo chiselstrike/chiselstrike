@@ -22,16 +22,22 @@ use std::time::Duration;
 use tokio::sync::oneshot;
 use utils::TaskHandle;
 
-/// Global state of `chiseld`.
+/// Global state of the server.
 pub struct Server {
     pub opt: Opt,
     pub db: Arc<DbConnection>,
     pub query_engine: QueryEngine,
     pub meta_service: MetaService,
+    /// Global builtin types such as `string` and `AuthUser`, shared for all versions.
     pub builtin_types: Arc<BuiltinTypes>,
+    /// Type system for each version (key is version id), should reflect the state of the "meta"
+    /// database.
     pub type_systems: tokio::sync::Mutex<HashMap<String, TypeSystem>>,
+    /// Current secrets, they are periodically refreshed and rewritten.
     pub secrets: RwLock<JsonObject>,
+    /// Handle to an inspector server that allows debugging of JavaScript code from Chrome.
     pub inspector: Option<Arc<deno_runtime::inspector_server::InspectorServer>>,
+    /// Trunk with versions ("branches").
     pub trunk: Trunk,
 }
 

@@ -89,7 +89,10 @@ async fn try_handle_request(
             let routing_path = routing_path.into();
             return handle_version_request(server, version, job_tx, request, routing_path).await;
         } else {
-            return Ok(handle_not_found(format!("Unknown version {:?}", version_id)));
+            return Ok(handle_not_found(format!(
+                "Unknown version {:?}",
+                version_id
+            )));
         }
     }
 
@@ -180,7 +183,12 @@ async fn handle_version_request(
         request: http_request,
         response_tx,
     });
+    // ignore the error that `send()` returns if the corresponding `mpsc::Receiver` was dropped.
+    // even if `send()` returns an `Ok`, it does not in fact guarantee that the job is received or
+    // processed, so we _still_ must handle the case when the job is dropped ...
     let _: Result<_, _> = job_tx.send(job).await;
+    // ... which happens here: when the `job` is dropped, `job.response_tx` is also dropped, so the
+    // `.await` returns an error
     let http_response = response_rx.await.context("Request was aborted")?;
 
     // TODO: unnecessary copy from `ZeroCopyBuf` to `Vec<u8>`

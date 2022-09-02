@@ -1,6 +1,7 @@
 // SPDX-FileCopyrightText: © 2022 ChiselStrike <info@chiselstrike.com>
 
 use crate::datastore::engine::TransactionStatic;
+use crate::module_loader::ModuleLoader;
 use crate::ops;
 use crate::server::Server;
 use crate::version::{Version, VersionJob};
@@ -19,14 +20,15 @@ use std::task::{Context, Poll};
 use tokio::sync::{mpsc, oneshot};
 use utils::TaskHandle;
 
-mod loader;
-
 pub struct WorkerInit {
     pub worker_idx: usize,
     pub server: Arc<Server>,
     pub version: Arc<Version>,
+    /// Module map (see `ModuleLoader`).
     pub modules: Arc<HashMap<String, String>>,
+    /// The worker will signal on this channel when it is ready to accept jobs.
     pub ready_tx: oneshot::Sender<()>,
+    /// The worker will receive jobs from this channel.
     pub job_rx: mpsc::Receiver<VersionJob>,
 }
 
@@ -43,8 +45,8 @@ pub struct WorkerJoinHandle {
 
 /// State of one worker (JavaScript runtime).
 ///
-/// This struct is stored in the `op_state` in the Deno runtime. Every worker runs on its own
-/// thread and runs code for a single version.
+/// This struct is stored in the `op_state` in the Deno runtime, from where we can obtain it in
+/// Deno ops. Every worker runs on its own thread and runs code for a single version.
 pub struct WorkerState {
     pub server: Arc<Server>,
     pub version: Arc<Version>,
@@ -63,7 +65,7 @@ pub struct WorkerState {
 
     /// Channel for receiving jobs.
     ///
-    /// We can get await with `Rc<RefCell<>>`, because the worker runs on a single thread.
+    /// We can get away with `Rc<RefCell<>>`, because the worker runs on a single thread.
     pub job_rx: Rc<RefCell<mpsc::Receiver<VersionJob>>>,
 }
 
@@ -103,7 +105,7 @@ async fn run(init: WorkerInit) -> Result<()> {
     };
 
     let extensions = vec![ops::extension()];
-    let module_loader = Rc::new(loader::ModuleLoader::new(init.modules));
+    let module_loader = Rc::new(ModuleLoader::new(init.modules));
     let create_web_worker_cb = Arc::new(|_| panic!("Web workers are not supported"));
     let web_worker_preload_module_cb = Arc::new(|_| panic!("Web workers are not supported"));
 
