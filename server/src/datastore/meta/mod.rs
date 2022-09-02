@@ -515,10 +515,7 @@ impl MetaService {
                     let indexes = self.load_type_indexes(type_id, backing_table).await?;
 
                     let ty = ObjectType::new(&desc, fields, indexes)?;
-                    ts.add_custom_type(Entity::Custom {
-                        object: Arc::new(ty),
-                        policy: None,
-                    })?;
+                    ts.add_custom_type(Entity::Custom(Arc::new(ty)))?;
                 }
                 Err(_) => {
                     failures.push(row);
@@ -543,10 +540,7 @@ impl MetaService {
             let indexes = self.load_type_indexes(type_id, backing_table).await?;
 
             let ty = ObjectType::new(&desc, fields, indexes)?;
-            ts.add_custom_type(Entity::Custom {
-                object: Arc::new(ty),
-                policy: None,
-            })?;
+            ts.add_custom_type(Entity::Custom(Arc::new(ty)))?;
         }
 
         Ok(ts)

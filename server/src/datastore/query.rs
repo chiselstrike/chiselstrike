@@ -894,10 +894,7 @@ pub mod tests {
 
     pub fn make_entity(name: &str, fields: Vec<Field>) -> Entity {
         let desc = types::NewObject::new(name, VERSION);
-        Entity::Custom {
-            object: Arc::new(ObjectType::new(&desc, fields, vec![]).unwrap()),
-            policy: None,
-        }
+        Entity::Custom(Arc::new(ObjectType::new(&desc, fields, vec![]).unwrap()))
     }
 
     pub fn make_field(name: &str, ty: Type) -> Field {

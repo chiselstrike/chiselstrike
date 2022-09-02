@@ -24,6 +24,7 @@ pub struct ApplyResult {
     pub version_policy: VersionPolicy,
 }
 
+#[allow(dead_code)]
 pub struct ParsedPolicies {
     version_policy: (VersionPolicy, String),
     entity_policies: HashMap<String, EntityPolicy>,
@@ -104,10 +105,7 @@ pub async fn apply(
         }
     }
 
-    let ParsedPolicies {
-        version_policy,
-        mut entity_policies,
-    } = ParsedPolicies::parse(&apply_request.policies)?;
+    let ParsedPolicies { version_policy, .. } = ParsedPolicies::parse(&apply_request.policies)?;
 
     if !to_remove_has_data.is_empty() && !apply_request.allow_type_deletion {
         let s = to_remove_has_data
@@ -180,14 +178,7 @@ or
             ty_indexes,
         )?);
 
-        let policy = dbg!(&mut entity_policies).remove(&name);
-        new_types.insert(
-            name.to_owned(),
-            dbg!(Entity::Custom {
-                object: ty.clone(),
-                policy,
-            }),
-        );
+        new_types.insert(name.to_owned(), Entity::Custom(ty.clone()));
 
         match version_types.lookup_custom_type(&name) {
             Ok(old_type) => {
