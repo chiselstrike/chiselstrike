@@ -1,13 +1,15 @@
+use std::borrow::Cow;
 use std::collections::HashMap;
 use std::fmt;
 use std::ops::{Deref, DerefMut};
 
+use anyhow::{bail, Result};
 use boa::{Context, JsString, JsValue};
 use quine_mc_cluskey::Bool;
 use serde_json::Value;
 use swc_ecmascript::ast::{
-    BinaryOp, Expr, Lit, MemberProp, Module, ModuleDecl, ModuleItem, Prop, PropName, PropOrSpread,
-    Stmt, UnaryOp,
+    BinaryOp, Expr, Ident, Lit, MemberProp, Module, ModuleDecl, ModuleItem, Prop, PropName,
+    PropOrSpread, Stmt, UnaryOp,
 };
 
 use crate::tools::analysis::control_flow::Idx;
@@ -21,8 +23,17 @@ pub struct Policies {
     pub write: Option<Policy>,
 }
 
+pub trait Type<'a> {
+    fn get_field_ty(&self, field_name: &str) -> Option<Box<dyn Type<'a> + 'a>>;
+    fn name(&self) -> Cow<str>;
+}
+
+pub trait TypeSystem {
+    fn get_type<'a>(&'a self, name: &str) -> Box<dyn Type<'a> + 'a>;
+}
+
 impl Policies {
-    pub fn parse(module: &Module) -> Self {
+    pub fn parse(module: &Module, ts: &impl TypeSystem) -> Self {
         let mut read = None;
         let mut write = None;
 
@@ -37,7 +48,7 @@ impl Policies {
                                         let body = match &*kv.value {
                                             Expr::Arrow(arrow) => {
                                                 let arrow_func = ArrowFunction::parse(arrow);
-                                                Policy::from_arrow(&arrow_func)
+                                                Policy::from_arrow(&arrow_func, ts)
                                             }
                                             _ => todo!(),
                                         };
@@ -69,16 +80,61 @@ impl Policies {
 }
 
 #[derive(Debug, Clone)]
+pub struct PolicyParams {
+    names: Vec<String>,
+    types: Vec<String>,
+}
+
+impl PolicyParams {
+    pub fn get_positional_param_name(&self, pos: usize) -> &str {
+        &self.names[pos]
+    }
+
+    fn try_from_names_types(names_types: &[(&Ident, Option<&Ident>)]) -> Result<Self> {
+        let mut names = Vec::new();
+        let mut types = Vec::new();
+        for (name, ty) in names_types {
+            match ty {
+                Some(ty_name) => {
+                    names.push(name.sym.to_string());
+                    types.push(ty_name.sym.to_string());
+                }
+                None => bail!("all paramameters for a policy must have a type."),
+            }
+        }
+
+        Ok(Self { names, types })
+    }
+
+    /// Returns an iterator over the (param_name, param_ty)
+    fn iter(&self) -> impl Iterator<Item = (&str, &str)> {
+        self.names
+            .iter()
+            .map(Deref::deref)
+            .zip(self.types.iter().map(Deref::deref))
+    }
+}
+
+#[derive(Debug, Clone)]
 pub struct Policy {
     pub actions: Actions,
     pub where_conds: Option<Cond>,
     pub predicates: Predicates,
+    params: PolicyParams,
 }
 
 impl Policy {
-    fn from_arrow(arrow: &ArrowFunction) -> Self {
-        let mut builder = RulesBuilder::new(&arrow.stmt_map);
-        let actions = builder.infer_rules_from_region(&arrow.d_ir.region, Cond::True);
+    fn from_arrow(arrow: &ArrowFunction, ts: &impl TypeSystem) -> Self {
+        let params: Vec<_> = arrow.params().collect();
+        let params = PolicyParams::try_from_names_types(&params).unwrap();
+        let mut env = TypeContext::new();
+
+        for (param, ty) in params.iter() {
+            env.bind(param.to_string(), ty.to_string());
+        }
+
+        let mut builder = RulesBuilder::new(&arrow.stmt_map, env);
+        let actions = builder.infer_rules_from_region(&arrow.d_ir.region, Cond::True, ts);
         let predicates = builder.predicates;
         let actions = actions.simplify(&predicates);
         let where_conds = generate_where_from_rules(&actions).map(|c| c.simplify(&predicates));
@@ -87,12 +143,17 @@ impl Policy {
             actions,
             where_conds,
             predicates,
+            params,
         }
+    }
+
+    pub fn params(&self) -> &PolicyParams {
+        &self.params
     }
 }
 
 #[derive(Debug, Clone, Copy)]
-enum LogicOp {
+pub enum LogicOp {
     /// ==
     Eq,
     ///
@@ -123,13 +184,13 @@ pub enum Cond {
 }
 
 impl Cond {
-    fn simplify(&self, preds: &Predicates) -> Self {
+    pub fn simplify(&self, preds: &Predicates) -> Self {
         // FIXME: if there are too many predicates, we might need to use another algorithm.
 
         let mut mapping = Vec::new();
         let b = self.to_bool(preds, &mut mapping);
         // FIXME: why exactly is this method returning a vec?
-        let simp = &dbg!(b.simplify())[0];
+        let simp = &b.simplify()[0];
 
         Self::from_bool(simp, &mapping)
     }
@@ -189,19 +250,7 @@ impl Cond {
 }
 
 #[derive(Clone, Debug)]
-enum Predicate {
-    Bin {
-        op: LogicOp,
-        lhs: Box<Self>,
-        rhs: Box<Self>,
-    },
-    Not(Box<Self>),
-    Lit(Value),
-    Var(Var),
-}
-
-#[derive(Clone, Debug)]
-enum Var {
+pub enum Var {
     Ident(String),
     Member(Box<Var>, String),
 }
@@ -214,6 +263,10 @@ pub struct Values {
 impl Values {
     pub fn new() -> Self {
         Self::default()
+    }
+
+    pub fn insert(&mut self, name: String, value: Value) {
+        self.values.insert(name, value);
     }
 
     pub fn from_json(values: serde_json::Map<String, Value>) -> Self {
@@ -240,6 +293,18 @@ fn json_to_js_value(json: &Value) -> JsValue {
         Value::Object(_) => todo!(),
         _ => unreachable!(),
     }
+}
+
+#[derive(Clone, Debug)]
+pub enum Predicate {
+    Bin {
+        op: LogicOp,
+        lhs: Box<Self>,
+        rhs: Box<Self>,
+    },
+    Not(Box<Self>),
+    Lit(Value),
+    Var(Var),
 }
 
 impl Predicate {
@@ -323,10 +388,10 @@ impl Predicate {
         }
     }
 
-    fn parse_expr(expr: &Expr) -> Self {
+    fn parse_expr(expr: &Expr, env: &TypeContext, ts: &impl TypeSystem) -> Self {
         match expr {
             Expr::Unary(u) => match u.op {
-                UnaryOp::Bang => Self::Not(Box::new(Self::parse_expr(&u.arg))),
+                UnaryOp::Bang => Self::Not(Box::new(Self::parse_expr(&u.arg, env, ts))),
                 _ => panic!("unsupported op: {}", u.op),
             },
             Expr::Bin(bin) => {
@@ -343,8 +408,8 @@ impl Predicate {
                 };
                 Self::Bin {
                     op,
-                    lhs: Box::new(Self::parse_expr(&bin.left)),
-                    rhs: Box::new(Self::parse_expr(&bin.right)),
+                    lhs: Box::new(Self::parse_expr(&bin.left, env, ts)),
+                    rhs: Box::new(Self::parse_expr(&bin.right, env, ts)),
                 }
             }
             Expr::Lit(lit) => match lit {
@@ -356,12 +421,20 @@ impl Predicate {
                 Lit::Regex(_) => todo!(),
                 Lit::JSXText(_) => todo!(),
             },
-            Expr::Ident(s) => Self::Var(Var::Ident(s.sym.to_string())),
+            Expr::Ident(s) => {
+                let var = Var::Ident(s.sym.to_string());
+                // we check that this variable is valid
+                env.get_var_ty(&var, ts).unwrap();
+                Self::Var(var)
+            }
             Expr::Paren(_) => todo!(),
-            Expr::Member(m) => match Self::parse_expr(&m.obj) {
+            Expr::Member(m) => match Self::parse_expr(&m.obj, env, ts) {
                 Predicate::Var(v) => match &m.prop {
                     MemberProp::Ident(id) => {
-                        Self::Var(Var::Member(Box::new(v), id.sym.to_string()))
+                        let var = Var::Member(Box::new(v), id.sym.to_string());
+                        // we check that this variable is valid
+                        env.get_var_ty(&var, ts).unwrap();
+                        Self::Var(var)
                     }
                     _ => panic!("invalid member expression"),
                 },
@@ -372,7 +445,7 @@ impl Predicate {
     }
 }
 
-#[derive(Clone, Default)]
+#[derive(Default, Clone)]
 pub struct Actions {
     actions: HashMap<Action, Cond>,
 }
@@ -413,7 +486,7 @@ impl Predicates {
         id
     }
 
-    fn get(&self, id: PredicateId) -> &Predicate {
+    pub fn get(&self, id: PredicateId) -> &Predicate {
         self.0.get(id).expect("invalid predicate id!")
     }
 
@@ -427,8 +500,8 @@ impl Predicates {
         Self(substitued)
     }
 
-    pub fn eval(&self, ctx: &mut Context) -> Self {
-        Self(self.0.iter().map(|p| p.eval(ctx)).collect())
+    pub fn eval(&self, ctx: &mut PolicyEvalContext) -> Self {
+        Self(self.0.iter().map(|p| p.eval(&mut ctx.boa_ctx)).collect())
     }
 }
 
@@ -483,6 +556,7 @@ impl Actions {
 struct RulesBuilder<'a> {
     stmt_map: &'a StmtMap<'a>,
     predicates: Predicates,
+    type_context: TypeContext,
 }
 
 #[derive(PartialEq, Debug, Eq, Hash, Clone, Copy)]
@@ -493,17 +567,57 @@ pub enum Action {
     Skip,
 }
 
-const ACTIONS: &[Action] = &[Action::Allow, Action::Skip, Action::Deny, Action::Log];
+// TODO: handle scoping.
+/// Associate variable identifiers with their type
+struct TypeContext {
+    bindings: HashMap<String, String>,
+}
 
-impl<'a> RulesBuilder<'a> {
-    fn new(stmt_map: &'a StmtMap<'a>) -> Self {
+impl TypeContext {
+    fn new() -> Self {
         Self {
-            stmt_map,
-            predicates: Predicates::new(),
+            bindings: Default::default(),
         }
     }
 
-    fn extract_cond_from_test(&mut self, region: &EnrichedRegion) -> Cond {
+    fn bind(&mut self, name: String, ty_name: String) {
+        self.bindings.insert(name, ty_name);
+    }
+
+    fn get_var_ty<'a, T: TypeSystem>(&'a self, var: &Var, ts: &'a T) -> Result<Box<dyn Type + 'a>> {
+        match var {
+            Var::Ident(id) => match self.bindings.get(id) {
+                Some(ty_name) => Ok(ts.get_type(ty_name)),
+                None => bail!("unknown binding `{id}`"),
+            },
+            Var::Member(obj, prop) => {
+                let ty = self.get_var_ty(obj, ts)?;
+                let field_ty = ty.get_field_ty(prop);
+                match field_ty {
+                    Some(ty) => {
+                        let name = ty.name();
+                        let ty = ts.get_type(&name);
+                        Ok(ty)
+                    }
+                    None => bail!("unknown property `{prop} for type `{}`", ty.name()),
+                }
+            }
+        }
+    }
+}
+
+const ACTIONS: &[Action] = &[Action::Allow, Action::Skip, Action::Deny, Action::Log];
+
+impl<'a> RulesBuilder<'a> {
+    fn new(stmt_map: &'a StmtMap<'a>, type_context: TypeContext) -> Self {
+        Self {
+            stmt_map,
+            predicates: Predicates::new(),
+            type_context,
+        }
+    }
+
+    fn extract_cond_from_test(&mut self, region: &EnrichedRegion, ts: &impl TypeSystem) -> Cond {
         match &*region.inner {
             EnrichedRegionInner::Basic(stmts) => {
                 assert_eq!(
@@ -514,7 +628,7 @@ impl<'a> RulesBuilder<'a> {
 
                 match self.stmt_map[stmts[0]].stmt {
                     Stmt::If(stmt) => {
-                        let predicate = Predicate::parse_expr(&stmt.test);
+                        let predicate = Predicate::parse_expr(&stmt.test, &self.type_context, ts);
                         let id = self.predicates.insert(predicate);
                         Cond::Predicate(id)
                     }
@@ -525,16 +639,21 @@ impl<'a> RulesBuilder<'a> {
         }
     }
 
-    fn infer_rules_from_region(&mut self, region: &EnrichedRegion, cond: Cond) -> Actions {
+    fn infer_rules_from_region(
+        &mut self,
+        region: &EnrichedRegion,
+        cond: Cond,
+        ts: &impl TypeSystem,
+    ) -> Actions {
         match &*region.inner {
             EnrichedRegionInner::Cond { test, cons, alt } => {
-                let test_cond = Box::new(self.extract_cond_from_test(test));
+                let test_cond = Box::new(self.extract_cond_from_test(test, ts));
 
                 let cons_cond = Cond::And(test_cond.clone(), Box::new(cond.clone()));
-                let cons_rules = self.infer_rules_from_region(cons, cons_cond);
+                let cons_rules = self.infer_rules_from_region(cons, cons_cond, ts);
 
                 let alt_cond = Cond::And(Box::new(Cond::Not(test_cond)), Box::new(cond));
-                let alt_rules = self.infer_rules_from_region(alt, alt_cond);
+                let alt_rules = self.infer_rules_from_region(alt, alt_cond, ts);
 
                 cons_rules.merge(&alt_rules)
             }
@@ -594,4 +713,15 @@ fn generate_where_from_rules(actions: &Actions) -> Option<Cond> {
         .get(&Action::Skip)
         .cloned()
         .map(|c| Cond::Not(Box::new(c)))
+}
+
+#[derive(Default)]
+pub struct PolicyEvalContext {
+    boa_ctx: Context,
+}
+
+impl PolicyEvalContext {
+    pub fn new() -> Self {
+        Self::default()
+    }
 }

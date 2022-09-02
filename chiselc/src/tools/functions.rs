@@ -34,7 +34,6 @@ impl<'a> ArrowFunction<'a> {
     }
 
     /// Returns an iterator over the param name and type of the function.
-    #[allow(dead_code)]
     pub fn params(&self) -> impl Iterator<Item = (&Ident, Option<&Ident>)> {
         self.orig.params.iter().map(|p| match p {
             Pat::Ident(ident) => {

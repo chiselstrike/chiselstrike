@@ -2,7 +2,7 @@
 
 use crate::api::ApiInfo;
 use crate::datastore::{MetaService, QueryEngine};
-use crate::policies::{EntityPolicy, Policies, VersionPolicy};
+use crate::policies::{Policies, VersionPolicy};
 use crate::proto::{
     type_msg::TypeEnum, ChiselApplyRequest, ContainerType, IndexCandidate, TypeMsg,
 };
@@ -27,27 +27,26 @@ pub struct ApplyResult {
 #[allow(dead_code)]
 pub struct ParsedPolicies {
     version_policy: (VersionPolicy, String),
-    entity_policies: HashMap<String, EntityPolicy>,
 }
 
 impl ParsedPolicies {
     fn parse(request: &[PolicyUpdateRequest]) -> Result<Self> {
         let mut version_policy = None;
-        let mut entity_policies = HashMap::new();
 
         for p in request {
             let path = PathBuf::from(&p.path);
             match path.extension().and_then(|s| s.to_str()) {
                 Some("ts") if FEATURES.typescript_policies => {
-                    let entity_name = path
-                        .file_name()
-                        .and_then(|s| s.to_str())
-                        .and_then(|s| s.strip_suffix(".ts"))
-                        .context("invalid policy path")?
-                        .to_owned();
+                    // let entity_name = path
+                    //     .file_name()
+                    //     .and_then(|s| s.to_str())
+                    //     .and_then(|s| s.strip_suffix(".ts"))
+                    //     .context("invalid policy path")?
+                    //     .to_owned();
 
-                    let policy = EntityPolicy::from_policy_code(p.policy_config.clone())?;
-                    entity_policies.insert(entity_name, policy);
+                    todo!();
+                    // let policy = EntityPolicy::from_policy_code(p.policy_config.clone())?;
+                    // entity_policies.insert(entity_name, policy);
                 }
                 _ => {
                     if version_policy.is_none() {
@@ -64,7 +63,6 @@ impl ParsedPolicies {
 
         Ok(Self {
             version_policy: version_policy.unwrap_or_default(),
-            entity_policies,
         })
     }
 }
