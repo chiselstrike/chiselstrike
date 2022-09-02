@@ -576,6 +576,7 @@ mod tests {
     };
     use crate::deno::ChiselRequestContext;
     use crate::policies::Policies;
+    use crate::policy::engine::PolicyEngine;
     use crate::types::{FieldDescriptor, ObjectDescriptor};
     use crate::JsonObject;
 
@@ -781,10 +782,12 @@ mod tests {
             headers,
             _method: "GET".into(),
         };
+        let type_policies = PolicyEngine::default();
         super::run_query(
             &RequestContext {
                 policies: &Policies::default(),
                 ts: &make_type_system(&*ENTITIES),
+                type_policies: &type_policies,
                 inner,
             },
             QueryParams {
@@ -1108,6 +1111,7 @@ mod tests {
                     policies: &Policies::default(),
                     ts: &make_type_system(&*ENTITIES),
                     inner,
+                    type_policies: &Default::default(),
                 },
                 entity_name,
                 url,

@@ -10,7 +10,9 @@ pub use crate::server::{run_all, DoRepeat, Opt};
 
 pub(crate) type JsonObject = serde_json::Map<String, serde_json::Value>;
 
-pub(crate) static FEATURES: Lazy<Features> = Lazy::new(Features::default);
+pub(crate) static FEATURES: Lazy<Features> = Lazy::new(|| Features {
+    typescript_policies: false,
+});
 
 /// Chiseld experimental features
 #[derive(Default)]
@@ -36,6 +38,7 @@ pub(crate) mod internal;
 pub(crate) mod introspect;
 pub(crate) mod kafka;
 pub(crate) mod policies;
+pub(crate) mod policy;
 pub(crate) mod prefix_map;
 pub(crate) mod rcmut;
 pub(crate) mod rpc;

@@ -1,4 +1,6 @@
+use chiselc::policies::LogicOp;
 use serde_derive::{Deserialize, Serialize};
+use serde_json::Value as JsonValue;
 
 /// An expression.
 #[cfg_attr(test, derive(PartialEq))]
@@ -6,13 +8,18 @@ use serde_derive::{Deserialize, Serialize};
 #[serde(tag = "exprType")]
 pub enum Expr {
     /// A value expression.
-    Value { value: Value },
+    Value {
+        value: Value,
+    },
     /// Expression for addressing function parameters of the current expression
-    Parameter { position: usize },
+    Parameter {
+        position: usize,
+    },
     /// Expression for addressing entity property
     Property(PropertyAccess),
     /// A binary expression.
     Binary(BinaryExpr),
+    Not(Box<Self>),
 }
 
 impl From<Value> for Expr {
@@ -91,6 +98,23 @@ impl From<Option<Value>> for Value {
     }
 }
 
+impl From<&JsonValue> for Value {
+    fn from(json: &JsonValue) -> Self {
+        match json {
+            JsonValue::Null => Value::Null,
+            JsonValue::Bool(b) => Value::Bool(*b),
+            JsonValue::Number(n) if n.is_i64() => Value::I64(n.as_i64().unwrap()),
+            JsonValue::Number(n) if n.is_u64() => Value::U64(n.as_u64().unwrap()),
+            JsonValue::Number(n) if n.is_f64() => Value::F64(n.as_f64().unwrap()),
+            JsonValue::String(s) => Value::String(s.clone()),
+            JsonValue::Array(_) | JsonValue::Object(_) => {
+                unimplemented!("object and arrays not part of the data model.")
+            }
+            _ => unreachable!(),
+        }
+    }
+}
+
 /// Expression of a property access on an Entity
 #[cfg_attr(test, derive(PartialEq))]
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -116,6 +140,21 @@ pub enum BinaryOp {
     Or,
     Like,
     NotLike,
+}
+
+impl From<LogicOp> for BinaryOp {
+    fn from(op: LogicOp) -> Self {
+        match op {
+            LogicOp::Eq => BinaryOp::Eq,
+            LogicOp::Neq => BinaryOp::NotEq,
+            LogicOp::Gt => BinaryOp::Gt,
+            LogicOp::Gte => BinaryOp::GtEq,
+            LogicOp::Lt => BinaryOp::Lt,
+            LogicOp::Lte => BinaryOp::LtEq,
+            LogicOp::And => BinaryOp::And,
+            LogicOp::Or => BinaryOp::Or,
+        }
+    }
 }
 
 impl BinaryOp {

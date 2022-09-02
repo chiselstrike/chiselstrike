@@ -3,6 +3,8 @@
 use crate::api::ApiInfo;
 use crate::datastore::{MetaService, QueryEngine};
 use crate::policies::{Policies, VersionPolicy};
+use crate::policy::store::TypePolicyStore;
+use crate::policy::type_policy::TypePolicy;
 use crate::proto::{
     type_msg::TypeEnum, ChiselApplyRequest, ContainerType, IndexCandidate, TypeMsg,
 };
@@ -22,31 +24,34 @@ pub struct ApplyResult {
     pub type_names_user_order: Vec<String>,
     pub labels: Vec<String>,
     pub version_policy: VersionPolicy,
+    pub type_policies: TypePolicyStore,
 }
 
 #[allow(dead_code)]
 pub struct ParsedPolicies {
     version_policy: (VersionPolicy, String),
+    type_policies: TypePolicyStore,
 }
 
 impl ParsedPolicies {
-    fn parse(request: &[PolicyUpdateRequest]) -> Result<Self> {
+    fn parse(request: &[PolicyUpdateRequest], ts: &TypeSystem, version: String) -> Result<Self> {
         let mut version_policy = None;
+        let mut type_policies = TypePolicyStore::new();
 
         for p in request {
             let path = PathBuf::from(&p.path);
             match path.extension().and_then(|s| s.to_str()) {
                 Some("ts") if FEATURES.typescript_policies => {
-                    // let entity_name = path
-                    //     .file_name()
-                    //     .and_then(|s| s.to_str())
-                    //     .and_then(|s| s.strip_suffix(".ts"))
-                    //     .context("invalid policy path")?
-                    //     .to_owned();
+                    let entity_name = path
+                        .file_name()
+                        .and_then(|s| s.to_str())
+                        .and_then(|s| s.strip_suffix(".ts"))
+                        .context("invalid policy path")?
+                        .to_owned();
 
-                    todo!();
-                    // let policy = EntityPolicy::from_policy_code(p.policy_config.clone())?;
-                    // entity_policies.insert(entity_name, policy);
+                    let policy =
+                        TypePolicy::from_policy_code(p.policy_config.clone(), ts, version.clone())?;
+                    type_policies.insert(entity_name, policy);
                 }
                 _ => {
                     if version_policy.is_none() {
@@ -63,6 +68,7 @@ impl ParsedPolicies {
 
         Ok(Self {
             version_policy: version_policy.unwrap_or_default(),
+            type_policies,
         })
     }
 }
@@ -103,7 +109,10 @@ pub async fn apply(
         }
     }
 
-    let ParsedPolicies { version_policy, .. } = ParsedPolicies::parse(&apply_request.policies)?;
+    let ParsedPolicies {
+        version_policy,
+        type_policies,
+    } = ParsedPolicies::parse(&apply_request.policies, type_system, api_version.clone())?;
 
     if !to_remove_has_data.is_empty() && !apply_request.allow_type_deletion {
         let s = to_remove_has_data
@@ -266,6 +275,7 @@ or
         type_names_user_order,
         labels,
         version_policy: version_policy.0,
+        type_policies,
     })
 }
 

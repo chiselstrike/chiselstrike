@@ -4,6 +4,7 @@ use crate::auth::AUTH_USER_NAME;
 use crate::datastore::expr::{BinaryExpr, Expr, PropertyAccess, Value as ExprValue};
 use crate::deno::ChiselRequestContext;
 use crate::policies::{FieldPolicies, Policies};
+use crate::policy::engine::PolicyEngine;
 use crate::types::{Entity, Field, ObjectType, Type, TypeId, TypeSystem};
 
 use anyhow::{anyhow, Context, Result};
@@ -37,6 +38,7 @@ pub struct RequestContext<'a> {
     pub policies: &'a Policies,
     /// Type system to be used of version `api_version`
     pub ts: &'a TypeSystem,
+    pub type_policies: &'a PolicyEngine,
 }
 
 impl Deref for RequestContext<'_> {
@@ -356,6 +358,7 @@ impl QueryPlan {
         context: &RequestContext,
         ty: &Entity,
     ) -> anyhow::Result<QueriedEntity> {
+        self.add_type_filters(context, ty)?;
         self.add_login_filters_recursive(context, ty, Expr::Parameter { position: 0 })?;
         self.load_entity_recursive(context, ty, ty.backing_table())
     }
@@ -420,6 +423,16 @@ impl QueryPlan {
             table_alias: current_table.to_owned(),
             joins,
         })
+    }
+
+    fn add_type_filters(&mut self, ctx: &RequestContext, ty: &Entity) -> anyhow::Result<()> {
+        if let Some(expression) = ctx
+            .type_policies
+            .read_fitlers(ty.name(), &ty.api_version, ctx)?
+        {
+            self.operators.push(dbg!(QueryOp::Filter { expression }));
+        }
+        Ok(())
     }
 
     /// Adds filters that ensure login constrains are satisfied for a type
@@ -535,6 +548,7 @@ impl QueryPlan {
             }
             Expr::Property(property) => self.property_expr_to_string(property)?,
             Expr::Parameter { .. } => anyhow::bail!("unexpected standalone parameter usage"),
+            Expr::Not(expr) => format!("NOT ({})", self.filter_expr_to_string(expr)?),
         };
         Ok(expr_str)
     }
@@ -999,6 +1013,7 @@ pub mod tests {
                     policies: &Policies::default(),
                     ts: &make_type_system(&*ENTITIES),
                     inner,
+                    type_policies: &Default::default(),
                 },
                 op_chain,
             )
@@ -1071,6 +1086,7 @@ pub mod tests {
                     policies: &Policies::default(),
                     ts: &make_type_system(&*ENTITIES),
                     inner,
+                    type_policies: &Default::default(),
                 },
                 entity_name,
                 &Some(expr),

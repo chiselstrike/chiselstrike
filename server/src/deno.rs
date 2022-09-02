@@ -13,6 +13,8 @@ use crate::datastore::query::{Mutation, QueryOpChain, QueryPlan, RequestContext}
 use crate::datastore::MetaService;
 use crate::datastore::QueryEngine;
 use crate::policies::Policies;
+use crate::policy::engine::PolicyEngine;
+use crate::policy::store::TypePolicyStore;
 use crate::rcmut::RcMut;
 use crate::types::Type;
 use crate::types::TypeSystem;
@@ -64,8 +66,8 @@ use once_cell::unsync::OnceCell;
 use pin_project::pin_project;
 use serde_derive::Deserialize;
 use serde_derive::Serialize;
-use std::cell::Cell;
 use std::cell::RefCell;
+use std::cell::{Cell, RefMut};
 use std::collections::HashMap;
 use std::collections::HashSet;
 use std::convert::TryInto;
@@ -91,8 +93,13 @@ enum WorkerMsg {
     RemoveTypeVersion(String),
     SetQueryEngine(Arc<QueryEngine>),
     SetPolicies(Policies),
+    SetVersionTypePolicies {
+        version: String,
+        policies: TypePolicyStore,
+    },
     MutatePolicies(Box<dyn FnOnce(&mut Policies) + Send>),
     SetCurrentSecrets(JsonObject),
+    InitTypePolicies(crate::policy::store::Store),
 }
 
 /// A v8 isolate doesn't want to be moved between or used from
@@ -523,10 +530,12 @@ impl RequestContext<'_> {
         policies: &'a Policies,
         ts: &'a TypeSystem,
         inner: ChiselRequestContext,
+        type_policies: &'a PolicyEngine,
     ) -> RequestContext<'a> {
         RequestContext {
             policies,
             ts,
+            type_policies,
             inner,
         }
     }
@@ -599,6 +608,7 @@ async fn op_chisel_entity_delete(
                 current_policies(&state),
                 current_type_system(&state),
                 context,
+                policy_engine(&state),
             ),
             &params.type_name,
             &params.filter_expr,
@@ -640,6 +650,7 @@ async fn op_chisel_crud_delete(
                 current_policies(&state),
                 current_type_system(&state),
                 context,
+                policy_engine(&state),
             ),
             &params.type_name,
             &params.url,
@@ -716,6 +727,7 @@ async fn op_chisel_crud_query(
                 current_policies(op_state),
                 current_type_system(op_state),
                 context,
+                policy_engine(op_state),
             ),
             params,
             query_engine,
@@ -736,6 +748,7 @@ fn op_chisel_relational_query_create(
             current_policies(op_state),
             current_type_system(op_state),
             context,
+            policy_engine(op_state),
         ),
         op_chain,
     )?;
@@ -826,9 +839,23 @@ async fn op_chisel_read_worker_channel(state: Rc<RefCell<OpState>>) -> Result<()
         WorkerMsg::SetPolicies(policies) => state.put(policies),
         WorkerMsg::MutatePolicies(func) => func(state.borrow_mut()),
         WorkerMsg::SetCurrentSecrets(secretes) => state.put(secretes),
+        WorkerMsg::SetVersionTypePolicies { version, policies } => {
+            put_type_policies_version(state, version, policies)
+        }
+        WorkerMsg::InitTypePolicies(store) => state.put(PolicyEngine::new(store)),
     }
 
     Ok(())
+}
+
+fn put_type_policies_version(
+    state: &mut RefMut<OpState>,
+    version: String,
+    policies: TypePolicyStore,
+) {
+    assert!(state.has::<PolicyEngine>(), "uninitialized policy engine!");
+    let engine = state.borrow_mut::<PolicyEngine>();
+    engine.store_mut().insert(version, policies);
 }
 
 thread_local! {
@@ -1136,6 +1163,10 @@ pub fn query_engine_arc(st: &OpState) -> Arc<QueryEngine> {
     st.borrow::<Arc<QueryEngine>>().clone()
 }
 
+pub fn policy_engine(st: &OpState) -> &PolicyEngine {
+    st.borrow()
+}
+
 pub async fn set_query_engine(query_engine: Arc<QueryEngine>) {
     to_worker(WorkerMsg::SetQueryEngine(query_engine)).await;
 }
@@ -1170,6 +1201,14 @@ async fn to_worker(msg: WorkerMsg) {
 
 pub async fn set_type_system(type_system: TypeSystem) {
     to_worker(WorkerMsg::SetTypeSystem(type_system)).await;
+}
+
+pub async fn set_version_type_policies(version: String, policies: TypePolicyStore) {
+    to_worker(WorkerMsg::SetVersionTypePolicies { version, policies }).await;
+}
+
+pub async fn init_type_policies(store: crate::policy::store::Store) {
+    to_worker(WorkerMsg::InitTypePolicies(store)).await;
 }
 
 pub async fn update_secrets(secrets: JsonObject) {

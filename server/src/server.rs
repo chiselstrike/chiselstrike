@@ -3,15 +3,16 @@
 use crate::api::ApiService;
 use crate::datastore::{DbConnection, MetaService, QueryEngine};
 use crate::deno;
-use crate::deno::init_deno;
 use crate::deno::set_meta;
 use crate::deno::set_policies;
 use crate::deno::set_query_engine;
 use crate::deno::set_type_system;
 use crate::deno::update_secrets;
 use crate::deno::{activate_endpoint, activate_event_handler, compile_endpoints};
+use crate::deno::{init_deno, init_type_policies};
 use crate::internal::mark_not_ready;
 use crate::kafka;
+use crate::policy::store::Store;
 use crate::rpc::InitState;
 use crate::rpc::{GlobalRpcState, RpcService};
 use crate::runtime;
@@ -260,6 +261,7 @@ async fn run(state: SharedState, init: InitState, mut cmd: ExecutorChannel) -> R
     set_query_engine(query_engine).await;
     set_policies(policies).await;
     set_meta(meta).await;
+    init_type_policies(Store::default()).await;
 
     // add_endpoints expects a HashMap, not a PrefixMap
     let hashmap = sources

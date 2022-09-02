@@ -3,11 +3,11 @@
 use crate::api::{ApiInfo, RequestPath};
 use crate::apply::{self, ApplyResult};
 use crate::datastore::{MetaService, QueryEngine};
-use crate::deno;
 use crate::deno::endpoint_path_from_source_path;
 use crate::deno::mutate_policies;
 use crate::deno::remove_type_version;
 use crate::deno::set_type_system;
+use crate::deno::{self, set_version_type_policies};
 use crate::internal::mark_ready;
 use crate::policies::Policies;
 use crate::prefix_map::PrefixMap;
@@ -284,6 +284,7 @@ impl RpcService {
             type_names_user_order,
             labels,
             version_policy,
+            type_policies,
         } = {
             // help the borrow checker figure out that the borrows below are safe
             let state: &mut GlobalRpcState = &mut state;
@@ -324,6 +325,8 @@ impl RpcService {
                     policies.versions.insert(pol_version, version_policy);
                 })
                 .await;
+
+                set_version_type_policies(api_version.clone(), type_policies).await;
 
                 let runtime = runtime::get();
                 runtime.api.remove_routes(&prefix);
