@@ -33,4 +33,5 @@ export function specialBefore(routeMap: RouteMap) {
 }
 
 export function specialAfter(_routeMap: RouteMap) {
+    // there are no special routes to be added after user routes, yet
 }

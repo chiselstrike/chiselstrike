@@ -18,6 +18,7 @@ module.exports = {
         "/target",
         "/packages/chiselstrike-api/lib",
         "/packages/create-chiselstrike-app/dist",
+        "/packages/create-chiselstrike-app/template",
         "/tsc_compile/tests",
     ],
     rules: {
