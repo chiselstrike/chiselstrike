@@ -69,7 +69,7 @@ export function getSecret(key: string): JSONValue | undefined {
 /** Converts a JSON value into a `Response`. */
 export function responseFromJson(body: unknown, status = 200) {
     // https://fetch.spec.whatwg.org/#null-body-status
-    const isNullBody = status == 101 || status == 103 || 
+    const isNullBody = status == 101 || status == 103 ||
         status == 204 || status == 205 || status == 304;
 
     const json = isNullBody ? null : JSON.stringify(body, null, 2);

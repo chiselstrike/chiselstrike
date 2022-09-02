@@ -88,10 +88,12 @@ async fn try_handle_request(
             let job_tx = trunk_version.job_tx;
             let routing_path = routing_path.into();
             return handle_version_request(server, version, job_tx, request, routing_path).await;
+        } else {
+            return Ok(handle_not_found(format!("Unknown version {:?}", version_id)));
         }
     }
 
-    Ok(handle_not_found())
+    Ok(handle_not_found("Invalid URL path".into()))
 }
 
 #[derive(Debug)]
@@ -251,10 +253,10 @@ fn handle_options() -> hyper::Response<hyper::Body> {
         .unwrap()
 }
 
-fn handle_not_found() -> hyper::Response<hyper::Body> {
+fn handle_not_found(msg: String) -> hyper::Response<hyper::Body> {
     hyper::Response::builder()
         .status(hyper::StatusCode::NOT_FOUND)
-        .body(hyper::Body::empty())
+        .body(hyper::Body::from(msg))
         .unwrap()
 }
 
@@ -309,7 +311,7 @@ fn redirect_to_path(uri: &hyper::Uri, path: &str) -> hyper::Response<hyper::Body
     hyper::Response::builder()
         .status(hyper::StatusCode::PERMANENT_REDIRECT)
         .header("location", redirect_uri.to_string())
-        .body(hyper::Body::empty())
+        .body(hyper::Body::from(format!("Redirected to {}", redirect_uri)))
         .unwrap()
 }
 

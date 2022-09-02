@@ -3,7 +3,7 @@
 import { loggedInUser, requestContext } from "./datastore.ts";
 import { ChiselRequest } from "./request.ts";
 import { Handler, Middleware, Router, RouterMatch } from "./routing.ts";
-import { opAsync, opSync, responseFromJson, HTTP_STATUS } from "./utils.ts";
+import { HTTP_STATUS, opAsync, opSync, responseFromJson } from "./utils.ts";
 
 // HTTP request that we receive from Rust
 export type HttpRequest = {
@@ -34,9 +34,17 @@ export async function handleHttpRequest(
         httpRequest.routingPath,
     );
     if (routerMatch === "not_found") {
-        return emptyResponse(HTTP_STATUS.NOT_FOUND);
+        return textResponse(
+            HTTP_STATUS.NOT_FOUND,
+            `There is no route for ${JSON.stringify(httpRequest.routingPath)}`,
+        );
     } else if (routerMatch === "method_not_allowed") {
-        return emptyResponse(HTTP_STATUS.METHOD_NOT_ALLOWED);
+        return textResponse(
+            HTTP_STATUS.METHOD_NOT_ALLOWED,
+            `Method ${httpRequest.method} is not supported for ${
+                JSON.stringify(httpRequest.routingPath)
+            }`,
+        );
     }
 
     // the HTTP request usually specifies only path and query, but we need a full URL; so we resolve the URL

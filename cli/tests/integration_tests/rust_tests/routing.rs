@@ -344,9 +344,9 @@ async fn errors(c: TestContext) {
 
     c.chisel.get("/dev/route3").send().await
         .assert_status(405)
-        .assert_text("");
+        .assert_text("Method GET is not supported for \"/route3\"");
 
     c.chisel.get("/dev/nonexistent").send().await
         .assert_status(404)
-        .assert_text("");
+        .assert_text("There is no route for \"/nonexistent\"");
 }
