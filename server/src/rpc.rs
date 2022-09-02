@@ -217,7 +217,7 @@ async fn apply(server: Arc<Server>, request: ApplyRequest) -> Result<ApplyRespon
         modules,
         type_system: Arc::new(result.type_system),
         policy_system: Arc::new(result.policy_system),
-        worker_count: 1,
+        worker_count: server.opt.worker_threads,
         ready_tx,
     };
 

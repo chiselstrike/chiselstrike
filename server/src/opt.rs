@@ -49,9 +49,10 @@ pub struct Opt {
     /// size of database connection pool.
     #[structopt(short, long, default_value = "10")]
     pub nr_connections: usize,
-    /// How many executor threads to create
-    #[structopt(short, long, default_value = "1")]
-    pub executor_threads: usize,
+    /// How many worker threads to create for every version.
+    /// (The `executor_threads` alias is DEPRECATED)
+    #[structopt(short, long, default_value = "1", alias = "executor-threads")]
+    pub worker_threads: usize,
     /// If on, serve a web UI on an internal route.
     #[structopt(long)]
     pub webui: bool,

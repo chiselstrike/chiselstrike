@@ -195,7 +195,7 @@ async fn start_versions(server: Arc<Server>) -> Result<()> {
             modules: Arc::new(modules),
             type_system: Arc::new(type_system),
             policy_system: Arc::new(policy_system),
-            worker_count: 1,
+            worker_count: server.opt.worker_threads,
             ready_tx,
         };
 
