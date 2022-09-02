@@ -80,9 +80,6 @@ pub struct Opt {
     /// How many executor threads to create
     #[structopt(short, long, default_value = "1")]
     executor_threads: usize,
-    /// If on, serve a web UI on an internal route.
-    #[structopt(long)]
-    webui: bool,
     /// V8 flags.
     #[structopt(long)]
     v8_flags: Vec<String>,
@@ -464,11 +461,7 @@ async fn run_shared_state(
     let rpc_task = crate::rpc::spawn(rpc, opt.rpc_listen_addr, start_wait, shutdown);
     info!("RPC is ready. URL: {}", opt.rpc_listen_addr);
 
-    crate::internal::init(
-        opt.internal_routes_listen_addr,
-        opt.webui,
-        opt.rpc_listen_addr,
-    );
+    crate::internal::init(opt.internal_routes_listen_addr);
     debug!(
         "Internal HTTP server is ready. URL: {}",
         opt.internal_routes_listen_addr

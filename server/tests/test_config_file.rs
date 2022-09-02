@@ -74,7 +74,6 @@ executor_threads = 21
         "debug": false,
         "nr_connections": 10,
         "executor_threads": 21,
-        "webui": false,
         "chisel_secret_location": Value::Null,
         "chisel_secret_key_location": Value::Null,
     });
@@ -115,7 +114,6 @@ executor_threads = 21
         "debug": false,
         "nr_connections": 10,
         "executor_threads": 21,
-        "webui": false,
         "chisel_secret_location": Value::Null,
         "chisel_secret_key_location": Value::Null,
     });
@@ -154,7 +152,6 @@ executor_threads = 21
         "debug": false,
         "nr_connections": 10,
         "executor_threads": 21,
-        "webui": false,
         "chisel_secret_location": Value::Null,
         "chisel_secret_key_location": Value::Null,
     });
@@ -203,7 +200,6 @@ executor_threads = 21
         "debug": false,
         "nr_connections":10,
         "executor_threads":21,
-        "webui":false,
         "chisel_secret_location": Value::Null,
         "chisel_secret_key_location": Value::Null,
     });
