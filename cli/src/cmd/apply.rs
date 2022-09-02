@@ -114,7 +114,8 @@ pub(crate) async fn apply(
 
     for p in &policies {
         policy_req.push(PolicyUpdateRequest {
-            policy_config: read_to_string(p)?,
+            policy_config: read_to_string(&p)?,
+            path: p.display().to_string(),
         });
     }
 

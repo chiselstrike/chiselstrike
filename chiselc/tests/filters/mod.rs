@@ -7,8 +7,8 @@ macro_rules! assert_ast_eq {
         use swc_common::EqIgnoreSpan;
 
         let parser = chiselc::parse::ParserContext::new();
-        let ast1 = parser.parse($c1.clone().into()).unwrap();
-        let ast2 = parser.parse($c2.clone().into()).unwrap();
+        let ast1 = parser.parse($c1.clone().into(), false).unwrap();
+        let ast2 = parser.parse($c2.clone().into(), false).unwrap();
 
         assert!(
             ast1.eq_ignore_span(&ast2),
