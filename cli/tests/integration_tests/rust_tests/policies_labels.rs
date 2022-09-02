@@ -56,6 +56,16 @@ lazy_static::lazy_static! {
     });
 }
 
+lazy_static::lazy_static! {
+    static ref GLAUBER: serde_json::Value = json!({
+        "first_name":"Glauber",
+        "last_name":"Costa",
+        "age": 666,
+        "human": true,
+        "height": 10.01
+    });
+}
+
 #[self::test(modules = Deno, optimize = Yes)]
 async fn no_policy(c: TestContext) {
     c.chisel.write_unindent("routes/persons.ts", PERSONS_ROUTE);
@@ -262,4 +272,57 @@ async fn persistence_after_restart(mut c: TestContext) {
         .read(r##"@labels("a") two: string;"##)
         .read(r##"@labels("c", "b") three: string;"##)
         .read(r##"@labels("a") four: string;"##);
+}
+
+#[self::test(modules = Deno, optimize = Both)]
+async fn anonymize_and_filter(c: TestContext) {
+    c.chisel.write("routes/persons.ts", PERSONS_ROUTE);
+    c.chisel.write("models/person.ts", PERSON);
+    // anonymize last_name
+    c.chisel.write_unindent(
+        "policies/pol.yaml",
+        r#"
+        labels:
+          - name: pii
+            transform: anonymize
+        "#,
+    );
+
+    c.chisel.apply_ok().await;
+
+    store_person(&c.chisel, &PEKKA).await;
+    store_person(&c.chisel, &GLAUBER).await;
+
+    json_is_subset(
+        &c.chisel.get_json("/dev/persons?sort=first_name").await,
+        &json!({"results": [
+            {"first_name": "Glauber", "last_name": "xxxxx"},
+            {"first_name": "Pekka", "last_name": "xxxxx"}
+        ]}),
+    )
+    .unwrap();
+
+    let r = c
+        .chisel
+        .get_json("/dev/persons?sort=first_name&.first_name=Pekka")
+        .await;
+    assert!(r["results"].as_array().unwrap().len() == 1);
+    json_is_subset(
+        &r,
+        &json!({"results": [
+            {"first_name": "Pekka", "last_name": "xxxxx"}
+        ]}),
+    )
+    .unwrap();
+
+    // TODO: Is this correct? We are leaking the presence of Costa in the data.
+    json_is_subset(
+        &c.chisel
+            .get_json("/dev/persons?sort=first_name&.last_name=Costa")
+            .await,
+        &json!({"results": [
+            {"first_name": "Glauber", "last_name": "xxxxx"},
+        ]}),
+    )
+    .unwrap();
 }
