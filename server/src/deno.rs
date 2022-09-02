@@ -501,36 +501,33 @@ async fn op_chisel_read_body(
 }
 
 /// RequestContext corresponds to `requestContext` structure used in datastore.ts.
-#[derive(Deserialize)]
-struct ChiselRequestContext {
+#[derive(Deserialize, Serialize)]
+pub struct ChiselRequestContext {
     /// Current URL path.
-    path: String,
+    pub path: String,
     /// Current HTTP method.
     #[serde(rename = "method")]
-    _method: String,
+    pub _method: String,
     /// Current HTTP request headers.
-    headers: HashMap<String, String>,
+    pub headers: HashMap<String, String>,
     /// Schema version to be used with the request.
     #[serde(rename = "apiVersion")]
-    api_version: String,
+    pub api_version: String,
     /// Current user ID.
     #[serde(rename = "userId")]
-    user_id: Option<String>,
+    pub user_id: Option<String>,
 }
 
 impl RequestContext<'_> {
     fn new<'a>(
         policies: &'a Policies,
         ts: &'a TypeSystem,
-        context: ChiselRequestContext,
+        inner: ChiselRequestContext,
     ) -> RequestContext<'a> {
         RequestContext {
             policies,
             ts,
-            api_version: context.api_version,
-            user_id: context.user_id,
-            path: context.path,
-            headers: context.headers,
+            inner,
         }
     }
 }

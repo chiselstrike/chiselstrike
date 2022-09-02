@@ -2,6 +2,7 @@
 
 use crate::auth::AUTH_USER_NAME;
 use crate::datastore::expr::{BinaryExpr, Expr, PropertyAccess, Value as ExprValue};
+use crate::deno::ChiselRequestContext;
 use crate::policies::{FieldPolicies, Policies};
 use crate::types::{Entity, Field, ObjectType, Type, TypeId, TypeSystem};
 
@@ -13,6 +14,7 @@ use std::collections::HashMap;
 use std::collections::HashSet;
 use std::fmt;
 use std::fmt::Write;
+use std::ops::Deref;
 
 #[derive(Debug, Clone, EnumAsInner)]
 pub enum SqlValue {
@@ -30,18 +32,19 @@ impl From<&str> for SqlValue {
 /// RequestContext bears a mix of contextual variables used by QueryPlan
 /// and Mutations.
 pub struct RequestContext<'a> {
+    pub inner: ChiselRequestContext,
     /// Policies to be applied on the query.
     pub policies: &'a Policies,
     /// Type system to be used of version `api_version`
     pub ts: &'a TypeSystem,
-    /// Schema version to be used.
-    pub api_version: String,
-    /// Id of user making the request.
-    pub user_id: Option<String>,
-    /// Current URL path from which this request originated.
-    pub path: String,
-    /// Current HTTP headers.
-    pub headers: HashMap<String, String>,
+}
+
+impl Deref for RequestContext<'_> {
+    type Target = ChiselRequestContext;
+
+    fn deref(&self) -> &Self::Target {
+        &self.inner
+    }
 }
 
 impl RequestContext<'_> {
@@ -987,14 +990,18 @@ pub mod tests {
     #[tokio::test]
     async fn test_query_plan() {
         let fetch_names = |qe: QueryEngine, op_chain: QueryOpChain| async move {
+            let inner = ChiselRequestContext {
+                api_version: VERSION.to_owned(),
+                user_id: None,
+                path: "".to_string(),
+                headers: Default::default(),
+                _method: "GET".into(),
+            };
             let query_plan = QueryPlan::from_op_chain(
                 &RequestContext {
                     policies: &Policies::default(),
                     ts: &make_type_system(&*ENTITIES),
-                    api_version: VERSION.to_owned(),
-                    user_id: None,
-                    path: "".to_string(),
-                    headers: HashMap::default(),
+                    inner,
                 },
                 op_chain,
             )
@@ -1055,14 +1062,18 @@ pub mod tests {
     #[tokio::test]
     async fn test_delete_with_expr() {
         let delete_with_expr = |entity_name: &str, expr: Expr| {
+            let inner = ChiselRequestContext {
+                api_version: VERSION.to_owned(),
+                user_id: None,
+                path: "".to_string(),
+                headers: Default::default(),
+                _method: "GET".into(),
+            };
             Mutation::delete_from_expr(
                 &RequestContext {
                     policies: &Policies::default(),
                     ts: &make_type_system(&*ENTITIES),
-                    api_version: VERSION.to_owned(),
-                    user_id: None,
-                    path: "".to_string(),
-                    headers: HashMap::default(),
+                    inner,
                 },
                 entity_name,
                 &Some(expr),

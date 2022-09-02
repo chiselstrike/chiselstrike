@@ -574,6 +574,7 @@ mod tests {
         add_row, binary, fetch_rows, make_entity, make_field, make_type_system, setup_clear_db,
         VERSION,
     };
+    use crate::deno::ChiselRequestContext;
     use crate::policies::Policies;
     use crate::types::{FieldDescriptor, ObjectDescriptor};
     use crate::JsonObject;
@@ -773,14 +774,18 @@ mod tests {
     ) -> Result<JsonObject> {
         let qe = Arc::new(qe.clone());
         let tr = qe.clone().begin_transaction_static().await.unwrap();
+        let inner = ChiselRequestContext {
+            api_version: VERSION.to_owned(),
+            user_id: None,
+            path: "".to_string(),
+            headers,
+            _method: "GET".into(),
+        };
         super::run_query(
             &RequestContext {
                 policies: &Policies::default(),
                 ts: &make_type_system(&*ENTITIES),
-                api_version: VERSION.to_owned(),
-                user_id: None,
-                path: "".to_string(),
-                headers,
+                inner,
             },
             QueryParams {
                 type_name: entity_name.to_owned(),
@@ -1091,14 +1096,18 @@ mod tests {
         }
 
         let delete_from_url = |entity_name: &str, url: &str| {
+            let inner = ChiselRequestContext {
+                path: "".to_string(),
+                _method: "GET".into(),
+                api_version: VERSION.to_owned(),
+                user_id: None,
+                headers: HashMap::default(),
+            };
             delete_from_url(
                 &RequestContext {
                     policies: &Policies::default(),
                     ts: &make_type_system(&*ENTITIES),
-                    api_version: VERSION.to_owned(),
-                    user_id: None,
-                    path: "".to_string(),
-                    headers: HashMap::default(),
+                    inner,
                 },
                 entity_name,
                 url,
