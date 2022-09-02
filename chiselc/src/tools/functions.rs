@@ -1,6 +1,6 @@
 use std::fmt;
 
-use swc_ecmascript::ast::{ArrowExpr, BlockStmtOrExpr};
+use swc_ecmascript::ast::{ArrowExpr, BlockStmtOrExpr, Ident, Pat, TsEntityName, TsType};
 
 use super::analysis::control_flow::ControlFlow;
 use super::analysis::d_ir::DIr;
@@ -31,6 +31,28 @@ impl<'a> ArrowFunction<'a> {
             }
             BlockStmtOrExpr::Expr(_) => todo!(),
         }
+    }
+
+    /// Returns an iterator over the param name and type of the function.
+    #[allow(dead_code)]
+    pub fn params(&self) -> impl Iterator<Item = (&Ident, Option<&Ident>)> {
+        self.orig.params.iter().map(|p| match p {
+            Pat::Ident(ident) => {
+                let name = &ident.id;
+                let ty = ident.type_ann.as_ref().map(|ty| match &*ty.type_ann {
+                    TsType::TsTypeRef(ty) => match &ty.type_name {
+                        TsEntityName::Ident(ref id) => id,
+                        TsEntityName::TsQualifiedName(_) => {
+                            unimplemented!("unsupported type name")
+                        }
+                    },
+                    _ => unimplemented!("unsupported type annotation"),
+                });
+
+                (name, ty)
+            }
+            _ => panic!("unsupported function argument"),
+        })
     }
 }
 
