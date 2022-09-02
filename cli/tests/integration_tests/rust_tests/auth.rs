@@ -2,6 +2,27 @@ use crate::framework::prelude::*;
 
 #[chisel_macros::test(modules = Node)]
 pub async fn next_auth_crud(mut c: TestContext) {
+    // If CHISELD_AUTH_SECRET isn't set, any access is forbidden.
+    c.chisel
+        .get("/__chiselstrike/auth/users")
+        .send()
+        .await
+        .assert_status(403);
+    c.chisel
+        .post("/__chiselstrike/auth/users")
+        .json(json!({}))
+        .header("ChiselAuth", "0")
+        .send()
+        .await
+        .assert_status(403);
+    c.chisel
+        .put("/__chiselstrike/auth/users/1")
+        .json(json!({}))
+        .header("ChiselAuth", "")
+        .send()
+        .await
+        .assert_status(403);
+
     c.chisel
         .write(".env", r##"{ "CHISELD_AUTH_SECRET" : "1234" }"##);
 

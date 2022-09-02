@@ -1271,10 +1271,8 @@ async fn special_response(
             .get("CHISELD_AUTH_SECRET")
             .cloned();
         match (expected_secret, auth_header) {
-            (Some(serde_json::Value::String(s)), Some(h)) if s != *h => {
-                return Ok(Some(ApiService::forbidden("Fundamental auth")?))
-            }
-            _ => (),
+            (Some(serde_json::Value::String(s)), Some(h)) if s == *h => (),
+            _ => return Ok(Some(ApiService::forbidden("Fundamental auth")?)),
         }
     } else {
         let username = get_username_from_id(state.clone(), userid.clone()).await;
