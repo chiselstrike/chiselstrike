@@ -249,7 +249,7 @@ impl From<&dyn FieldDescriptor> for TypeId {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct ObjectType {
     /// id of this object in the meta-database. Will be None for objects that are not persisted yet
     pub meta_id: Option<i32>,
@@ -340,6 +340,31 @@ impl ObjectType {
         &self.backing_table
     }
 
+    pub fn add_field(&mut self, field: Field) {
+        assert!(self.fields.iter().all(|f| f.name != field.name));
+        self.fields.push(field);
+    }
+
+    pub fn remove_field(&mut self, field_name: &str) {
+        self.fields.retain(|f| f.name != field_name);
+    }
+
+    pub fn apply_field_delta(&mut self, delta: FieldDelta) {
+        let id = delta.id;
+        if let Some(field) = self.fields.iter_mut().find(|f| f.id == Some(id)) {
+            if let Some(labels) = delta.labels {
+                field.labels = labels;
+            }
+
+            if let Some(attr) = delta.attrs {
+                field.type_id = attr.type_id;
+                field.default = attr.default;
+                field.is_optional = attr.is_optional;
+                field.is_unique = attr.is_unique;
+            }
+        }
+    }
+
     pub fn name(&self) -> &str {
         &self.name
     }
@@ -356,6 +381,19 @@ impl ObjectType {
 
     pub fn indexes(&self) -> &Vec<DbIndex> {
         &self.indexes
+    }
+
+    pub fn remove_indexes(&mut self, indexes: &[DbIndex]) {
+        self.indexes.retain(|lhs| {
+            indexes
+                .iter()
+                .map(|i| i.meta_id)
+                .all(|rhs| lhs.meta_id != rhs)
+        });
+    }
+
+    pub fn add_indexes(&mut self, indexes: &[DbIndex]) {
+        self.indexes.extend_from_slice(indexes);
     }
 }
 

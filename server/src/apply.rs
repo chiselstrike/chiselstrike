@@ -34,7 +34,7 @@ pub struct ParsedPolicies {
 }
 
 impl ParsedPolicies {
-    fn parse(request: &[PolicyUpdateRequest], ts: &TypeSystem, version: String) -> Result<Self> {
+    fn parse(request: &[PolicyUpdateRequest], ts: &TypeSystem, version: &str) -> Result<Self> {
         let mut version_policy = None;
         let mut type_policies = TypePolicyStore::new();
 
@@ -49,8 +49,11 @@ impl ParsedPolicies {
                         .context("invalid policy path")?
                         .to_owned();
 
-                    let policy =
-                        TypePolicy::from_policy_code(p.policy_config.clone(), ts, version.clone())?;
+                    let policy = TypePolicy::from_policy_code(
+                        p.policy_config.clone(),
+                        ts,
+                        version.to_string(),
+                    )?;
                     type_policies.insert(entity_name, policy);
                 }
                 _ => {
@@ -108,11 +111,6 @@ pub async fn apply(
             }
         }
     }
-
-    let ParsedPolicies {
-        version_policy,
-        type_policies,
-    } = ParsedPolicies::parse(&apply_request.policies, type_system, api_version.clone())?;
 
     if !to_remove_has_data.is_empty() && !apply_request.allow_type_deletion {
         let s = to_remove_has_data
@@ -200,25 +198,34 @@ or
         }
     }
 
-    meta.persist_policy_version(&mut transaction, &api_version, &version_policy.1)
-        .await?;
-
     meta.persist_api_info(&mut transaction, &api_version, api_info)
         .await?;
 
     for ty in to_insert.iter() {
         // FIXME: Consistency between metadata and backing store updates.
         meta.insert_type(&mut transaction, ty).await?;
+        type_system.add_custom_type(Entity::Custom(ty.clone()))?;
     }
 
     for (old, delta) in to_update.iter() {
-        meta.update_type(&mut transaction, old, delta.clone())
+        let updated_ty = meta
+            .update_type(&mut transaction, old, delta.clone())
             .await?;
+        type_system.replace_custom_type(Entity::Custom(Arc::new(updated_ty)))?;
     }
 
     for ty in to_remove.iter() {
         meta.remove_type(&mut transaction, ty).await?;
+        type_system.remove_custom_type(ty)?;
     }
+
+    let ParsedPolicies {
+        version_policy,
+        type_policies,
+    } = ParsedPolicies::parse(&apply_request.policies, type_system, &api_version)?;
+
+    meta.persist_policy_version(&mut transaction, &api_version, &version_policy.1)
+        .await?;
 
     MetaService::commit_transaction(transaction).await?;
 
@@ -228,6 +235,7 @@ or
         .keys()
         .map(|x| x.to_owned())
         .collect();
+
     *type_system = meta.load_type_system().await?;
 
     policies

@@ -63,6 +63,30 @@ impl VersionTypes {
         self.custom_types.insert(ty.name.to_owned(), ty);
         Ok(())
     }
+
+    fn replace_custom_type(&mut self, ty: Entity) -> Result<(), TypeSystemError> {
+        if let Entity::Auth(_) = ty {
+            return Err(TypeSystemError::NotACustomType(ty.name().into()));
+        }
+
+        if self.lookup_custom_type(&ty.name).is_err() {
+            return Err(TypeSystemError::NoSuchType(ty.name().to_string()));
+        }
+
+        self.custom_types.insert(ty.name.to_owned(), ty);
+
+        Ok(())
+    }
+
+    fn remove_custom_type(&mut self, ty: &Entity) -> Result<(), TypeSystemError> {
+        if let Entity::Auth(_) = ty {
+            return Err(TypeSystemError::NotACustomType(ty.name().into()));
+        }
+
+        self.custom_types.remove(&ty.name);
+
+        Ok(())
+    }
 }
 
 impl Default for TypeSystem {
@@ -83,6 +107,10 @@ impl TypeSystem {
         self.versions
             .entry(api_version.to_string())
             .or_insert_with(VersionTypes::default)
+    }
+
+    pub fn try_get_version_mut(&mut self, api_version: &str) -> Option<&mut VersionTypes> {
+        self.versions.get_mut(api_version)
     }
 
     /// Returns a read-only reference to all types from a specific version.
@@ -107,6 +135,20 @@ impl TypeSystem {
     pub fn add_custom_type(&mut self, ty: Entity) -> Result<(), TypeSystemError> {
         let version = self.get_version_mut(&ty.api_version);
         version.add_custom_type(ty)
+    }
+
+    pub fn replace_custom_type(&mut self, ty: Entity) -> Result<(), TypeSystemError> {
+        let version = self
+            .try_get_version_mut(&ty.api_version)
+            .ok_or_else(|| TypeSystemError::NoSuchVersion(ty.api_version.clone()))?;
+        version.replace_custom_type(ty)
+    }
+
+    pub fn remove_custom_type(&mut self, ty: &Entity) -> Result<(), TypeSystemError> {
+        let version = self
+            .try_get_version_mut(&ty.api_version)
+            .ok_or_else(|| TypeSystemError::NoSuchVersion(ty.api_version.clone()))?;
+        version.remove_custom_type(ty)
     }
 
     /// Generate an [`ObjectDelta`] with the necessary information to evolve a specific type.

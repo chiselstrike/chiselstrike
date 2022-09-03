@@ -490,7 +490,7 @@ impl MetaService {
     }
 
     /// Load the type system from metadata store.
-    pub async fn load_type_system<'r>(&self) -> anyhow::Result<TypeSystem> {
+    pub async fn load_type_system(&self) -> anyhow::Result<TypeSystem> {
         let query = sqlx::query(
             r#"
             SELECT
@@ -655,20 +655,25 @@ impl MetaService {
         transaction: &mut Transaction<'_, Any>,
         ty: &ObjectType,
         delta: ObjectDelta,
-    ) -> anyhow::Result<()> {
+    ) -> anyhow::Result<ObjectType> {
+        let mut new_ty = ty.clone();
         for field in delta.added_fields.iter() {
             insert_field_query(transaction, ty, None, field).await?;
+            new_ty.add_field(field.clone());
         }
 
         for field in delta.removed_fields.iter() {
             remove_field_query(transaction, field).await?;
+            new_ty.remove_field(&field.name);
         }
 
-        for field in delta.updated_fields.iter() {
-            update_field_query(transaction, field).await?;
+        for delta in delta.updated_fields {
+            update_field_query(transaction, &delta).await?;
+            new_ty.apply_field_delta(delta);
         }
 
         Self::delete_indexes(transaction, &delta.removed_indexes).await?;
+        new_ty.remove_indexes(&delta.removed_indexes);
 
         Self::insert_indexes(
             transaction,
@@ -677,7 +682,10 @@ impl MetaService {
             &delta.added_indexes,
         )
         .await?;
-        Ok(())
+
+        new_ty.add_indexes(&delta.added_indexes);
+
+        Ok(new_ty)
     }
 
     pub async fn begin_transaction(&self) -> anyhow::Result<Transaction<'_, Any>> {
