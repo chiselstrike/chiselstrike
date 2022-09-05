@@ -234,10 +234,21 @@ fn parse_class_prop(x: &ClassProp, class_name: &str, handler: &Handler) -> Resul
     let (field_name, is_optional) = get_field_info(handler, &x.key)?;
     anyhow::ensure!(field_name != "id", "Creating a field with the name `id` is not supported. 😟\nBut don't worry! ChiselStrike creates an id field automatically, and you can access it in your endpoints as {}.id 🤩", class_name);
 
-    let (default_value, field_type) = match get_field_value(handler, &x.value)? {
-        None => (None, get_field_type(handler, &x.type_ann)?),
-        Some((val, val_ty)) => (Some(val), val_ty),
+    let field_type = get_field_type(handler, &x.type_ann)?;
+    let field_value = get_field_value(handler, &x.value)?;
+    let default_value = if let Some((default_value, value_type)) = field_value {
+        anyhow::ensure!(field_type == value_type, swc_err(
+            handler,
+            x,
+            &format!(
+                "field `{field_name}` is of type {field_type} but is default initialized by a value of type {value_type}"
+            ),
+        ));
+        Some(default_value)
+    } else {
+        None
     };
+
     let (labels, is_unique) = get_type_decorators(handler, &x.decorators)?;
 
     match &field_type {
