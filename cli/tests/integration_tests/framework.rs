@@ -426,14 +426,14 @@ impl Chisel {
     }
 
     pub async fn get_text(&self, url: &str) -> String {
-        self.get(url).send().await.text()
+        self.get(url).send().await.assert_ok().text()
     }
 
     pub async fn get_json(&self, url: &str) -> serde_json::Value {
-        self.get(url).send().await.json()
+        self.get(url).send().await.assert_ok().json()
     }
 
-    pub async fn post_json_ok<V: Borrow<serde_json::Value>>(&self, url: &str, data: V) {
+    pub async fn post_json<V: Borrow<serde_json::Value>>(&self, url: &str, data: V) {
         self.post(url).json(data).send().await.assert_ok();
     }
 
@@ -442,7 +442,7 @@ impl Chisel {
     }
 
     pub async fn post_json_text<V: Borrow<serde_json::Value>>(&self, url: &str, data: V) -> String {
-        self.post(url).json(data).send().await.text()
+        self.post(url).json(data).send().await.assert_ok().text()
     }
 }
 

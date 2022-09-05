@@ -48,7 +48,7 @@ pub async fn basic(c: TestContext) {
     c.chisel.write("models/default.ts", DEFAULTED_MODEL);
     c.chisel.apply_ok().await;
 
-    c.chisel.post_json_ok("/dev/defaults", json!({})).await;
+    c.chisel.post_json("/dev/defaults", json!({})).await;
     json_is_subset(&c.chisel.get_json("dev/defaults").await, &DEFAULTED_RESULTS).unwrap();
 }
 
@@ -63,7 +63,7 @@ pub async fn add_defaulted_fields(c: TestContext) {
     "##,
     );
     c.chisel.apply_ok().await;
-    c.chisel.post_json_ok("/dev/defaults", json!({})).await;
+    c.chisel.post_json("/dev/defaults", json!({})).await;
 
     c.chisel.write("models/default.ts", DEFAULTED_MODEL);
     c.chisel.apply_ok().await;
@@ -95,7 +95,7 @@ pub async fn filtering(c: TestContext) {
     "##,
     );
     c.chisel.apply_ok().await;
-    c.chisel.post_json_ok("/dev/defaults", json!({})).await;
+    c.chisel.post_json("/dev/defaults", json!({})).await;
 
     json_is_subset(
         &c.chisel
@@ -117,7 +117,7 @@ pub async fn crud_filtering(c: TestContext) {
     c.chisel.write("models/default.ts", DEFAULTED_MODEL);
     c.chisel.apply_ok().await;
 
-    c.chisel.post_json_ok("/dev/defaults", json!({})).await;
+    c.chisel.post_json("/dev/defaults", json!({})).await;
 
     json_is_subset(
         &c.chisel.get_json("dev/defaults?.num1=1").await,
@@ -154,7 +154,7 @@ pub async fn crud_filtering_added_fields(c: TestContext) {
     "##,
     );
     c.chisel.apply_ok().await;
-    c.chisel.post_json_ok("/dev/defaults", json!({})).await;
+    c.chisel.post_json("/dev/defaults", json!({})).await;
 
     c.chisel.write("models/default.ts", DEFAULTED_MODEL);
     c.chisel.apply_ok().await;
@@ -216,7 +216,7 @@ pub async fn non_trivial_defaults(c: TestContext) {
     );
     c.chisel.apply_ok().await;
 
-    c.chisel.post_json_ok("/dev/defaults", json!({})).await;
+    c.chisel.post_json("/dev/defaults", json!({})).await;
 
     json_is_subset(
         &c.chisel.get_json("dev/defaults").await,
@@ -247,7 +247,7 @@ pub async fn complex_optional_defaults(c: TestContext) {
     );
     c.chisel.apply_ok().await;
 
-    c.chisel.post_json_ok("/dev/defaults", json!({})).await;
+    c.chisel.post_json("/dev/defaults", json!({})).await;
     json_is_subset(
         &c.chisel.get_json("dev/defaults").await,
         &json!({
@@ -259,4 +259,82 @@ pub async fn complex_optional_defaults(c: TestContext) {
         }),
     )
     .unwrap();
+}
+
+#[chisel_macros::test(modules = Deno)]
+pub async fn field_type_and_value_type_mismatch(c: TestContext) {
+    c.chisel.write(
+        "models/default.ts",
+        r##"
+        import { ChiselEntity } from "@chiselstrike/api";
+
+        export class Defaulted extends ChiselEntity {
+            a: string = 1;
+        }"##,
+    );
+    c.chisel
+        .apply_err()
+        .await
+        .stderr
+        .read("field `a` is of type string but is default initialized by a value of type number");
+
+    c.chisel.write(
+        "models/default.ts",
+        r##"
+        import { ChiselEntity } from "@chiselstrike/api";
+
+        export class Defaulted extends ChiselEntity {
+            a: string = true;
+        }"##,
+    );
+    c.chisel
+        .apply_err()
+        .await
+        .stderr
+        .read("field `a` is of type string but is default initialized by a value of type boolean");
+
+    c.chisel.write(
+        "models/default.ts",
+        r##"
+        import { ChiselEntity } from "@chiselstrike/api";
+
+        export class Defaulted extends ChiselEntity {
+            a: number = "10";
+        }"##,
+    );
+    c.chisel
+        .apply_err()
+        .await
+        .stderr
+        .read("field `a` is of type number but is default initialized by a value of type string");
+
+    c.chisel.write(
+        "models/default.ts",
+        r##"
+        import { ChiselEntity } from "@chiselstrike/api";
+
+        export class Defaulted extends ChiselEntity {
+            a: boolean = "true";
+        }"##,
+    );
+    c.chisel
+        .apply_err()
+        .await
+        .stderr
+        .read("field `a` is of type boolean but is default initialized by a value of type string");
+
+    c.chisel.write(
+        "models/default.ts",
+        r##"
+        import { ChiselEntity } from "@chiselstrike/api";
+
+        export class Defaulted extends ChiselEntity {
+            a: boolean = 10;
+        }"##,
+    );
+    c.chisel
+        .apply_err()
+        .await
+        .stderr
+        .read("field `a` is of type boolean but is default initialized by a value of type number");
 }

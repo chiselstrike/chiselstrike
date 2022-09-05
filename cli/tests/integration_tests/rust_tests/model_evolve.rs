@@ -26,7 +26,7 @@ pub async fn add_field(mut c: TestContext) {
     );
     c.chisel.apply_ok().await;
 
-    c.chisel.post_json_ok("/dev/evolving", json!({})).await;
+    c.chisel.post_json("/dev/evolving", json!({})).await;
 
     c.chisel.write(
         "models/model.ts",
@@ -75,7 +75,7 @@ pub async fn remove_field(c: TestContext) {
     c.chisel.apply_ok().await;
 
     c.chisel
-        .post_json_ok("/dev/evolving", json!({"a": "Heracles", "b": "is cool"}))
+        .post_json("/dev/evolving", json!({"a": "Heracles", "b": "is cool"}))
         .await;
 
     c.chisel.write(
@@ -115,7 +115,7 @@ pub async fn change_default(c: TestContext) {
         }"##,
     );
     c.chisel.apply_ok().await;
-    c.chisel.post_json_ok("/dev/evolving", json!({})).await;
+    c.chisel.post_json("/dev/evolving", json!({})).await;
 
     // Then update it so that there is a defaulted field
     c.chisel.write(
@@ -172,7 +172,7 @@ pub async fn add_field_with_complex_default(c: TestContext) {
         }"##,
     );
     c.chisel.apply_ok().await;
-    c.chisel.post_json_ok("/dev/evolving", json!({})).await;
+    c.chisel.post_json("/dev/evolving", json!({})).await;
 
     c.chisel.write(
         "models/model.ts",
@@ -211,7 +211,7 @@ pub async fn add_and_remove_optional_field(c: TestContext) {
         }"##,
     );
     c.chisel.apply_ok().await;
-    c.chisel.post_json_ok("/dev/evolving", json!({})).await;
+    c.chisel.post_json("/dev/evolving", json!({})).await;
 
     c.chisel.write(
         "models/model.ts",
@@ -292,7 +292,7 @@ pub async fn add_unique_constraint(c: TestContext) {
     );
     c.chisel.apply_ok().await;
     c.chisel
-        .post_json_ok("/dev/evolving", json!({"a": "Hello World"}))
+        .post_json("/dev/evolving", json!({"a": "Hello World"}))
         .await;
 
     c.chisel.write(
@@ -320,7 +320,7 @@ pub async fn remove_unique_constraint(c: TestContext) {
     );
     c.chisel.apply_ok().await;
     c.chisel
-        .post_json_ok("/dev/evolving", json!({"a": "Hello World"}))
+        .post_json("/dev/evolving", json!({"a": "Hello World"}))
         .await;
 
     c.chisel.write(

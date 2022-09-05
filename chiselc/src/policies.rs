@@ -129,7 +129,7 @@ impl Cond {
         let mut mapping = Vec::new();
         let b = self.to_bool(preds, &mut mapping);
         // FIXME: why exactly is this method returning a vec?
-        let simp = &dbg!(b.simplify())[0];
+        let simp = &b.simplify()[0];
 
         Self::from_bool(simp, &mapping)
     }

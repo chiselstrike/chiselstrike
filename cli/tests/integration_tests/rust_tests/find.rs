@@ -2,7 +2,7 @@ use crate::framework::prelude::*;
 
 async fn store_people(chisel: &Chisel) {
     chisel
-        .post_json_ok(
+        .post_json(
             "dev/store",
             json!({
                 "first_name":"Glauber",
@@ -14,7 +14,7 @@ async fn store_people(chisel: &Chisel) {
         )
         .await;
     chisel
-        .post_json_ok(
+        .post_json(
             "dev/store",
             json!({
                 "first_name":"Jan",
@@ -26,7 +26,7 @@ async fn store_people(chisel: &Chisel) {
         )
         .await;
     chisel
-        .post_json_ok(
+        .post_json(
             "dev/store",
             json!({
                 "first_name":"Pekka",
@@ -298,8 +298,7 @@ pub async fn find_by(mut c: TestContext) {
         "Glauber Costa 666 true 10.01 Jan Plhak -666 true 10.02 Pekka Enberg 888 false 12.2 "
     );
 
-    c
-        .chisel
+    c.chisel
         .post("/dev/find_by")
         .json(json!({
             "field_name":"misspelled_field_name",

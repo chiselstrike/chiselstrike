@@ -47,9 +47,7 @@ pub async fn test(c: TestContext) {
 
     c.chisel.apply().await.expect("chisel apply failed");
 
-    c.chisel
-        .post_json_ok("/dev/store", json!({}))
-        .await;
+    c.chisel.post_json("/dev/store", json!({})).await;
 
     {
         let data = c.chisel.get_json("/dev/get").await;
@@ -69,7 +67,7 @@ pub async fn test(c: TestContext) {
     }
 
     c.chisel
-        .post_json_ok(
+        .post_json(
             "/dev/crud_foos",
             json!({
                 "order": 1,
@@ -95,7 +93,8 @@ pub async fn test(c: TestContext) {
     }
 
     {
-        let status = c.chisel
+        let status = c
+            .chisel
             .post_json_status(
                 "/dev/crud_foos",
                 json!({
@@ -108,7 +107,8 @@ pub async fn test(c: TestContext) {
             .await;
         assert_eq!(status, 500);
 
-        let status = c.chisel
+        let status = c
+            .chisel
             .post_json_status(
                 "/dev/crud_foos",
                 json!({
@@ -121,7 +121,8 @@ pub async fn test(c: TestContext) {
             .await;
         assert_eq!(status, 500);
 
-        let status = c.chisel
+        let status = c
+            .chisel
             .post_json_status(
                 "/dev/crud_foos",
                 json!({
