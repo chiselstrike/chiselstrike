@@ -32,7 +32,7 @@ fn filter() {
 
 #[test]
 fn find_many() {
-    let compiled: Value = dbg!(compile!(
+    let compiled: Value = compile!(
         r#"
         await Person.findMany({ name: "Pekka", age: 39 });
         await Person.findMany({ });
@@ -44,7 +44,7 @@ fn find_many() {
         "#,
         "Person";
         Target::FilterProperties
-    ))
+    )
     .parse()
     .unwrap();
 
@@ -59,7 +59,7 @@ fn find_many() {
 
 #[test]
 fn find_one() {
-    let compiled: Value = dbg!(compile!(
+    let compiled: Value = compile!(
         r#"
         await Person.findOne({ name: "Pekka", age: 39 });
         await Person.findOne({ });
@@ -70,7 +70,7 @@ fn find_one() {
         await Person.findOne({ [property]: "Pekka" });"#,
         "Person";
         Target::FilterProperties
-    ))
+    )
     .parse()
     .unwrap();
 

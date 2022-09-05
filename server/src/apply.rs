@@ -180,13 +180,13 @@ or
             ty_indexes,
         )?);
 
-        let policy = dbg!(&mut entity_policies).remove(&name);
+        let policy = entity_policies.remove(&name);
         new_types.insert(
             name.to_owned(),
-            dbg!(Entity::Custom {
+            Entity::Custom {
                 object: ty.clone(),
                 policy,
-            }),
+            },
         );
 
         match version_types.lookup_custom_type(&name) {
