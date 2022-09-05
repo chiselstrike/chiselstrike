@@ -7,15 +7,16 @@ use swc_common::{
     sync::Lrc,
     Globals, Mark, SourceMap, GLOBALS,
 };
-use swc_ecmascript::ast::Module;
-use swc_ecmascript::codegen::{text_writer::JsWriter, Emitter};
 use swc_ecmascript::parser::{lexer::Lexer, Parser, StringInput, Syntax};
-use swc_ecmascript::visit::FoldWith;
-
-use crate::{
-    rewrite::{Rewriter, Target},
-    symbols::Symbols,
+use swc_ecmascript::visit::{FoldWith, VisitMut};
+use swc_ecmascript::{ast::Module, transforms::resolver};
+use swc_ecmascript::{
+    codegen::{text_writer::JsWriter, Emitter},
+    transforms::hygiene,
 };
+
+use crate::rewrite::{Rewriter, Target};
+use crate::symbols::Symbols;
 
 #[derive(Clone, Default)]
 struct ErrorBuffer {
@@ -39,6 +40,17 @@ impl std::io::Write for ErrorBuffer {
     }
 }
 
+fn canonical_transforms(module: &mut Module) {
+    let globals = Globals::new();
+    GLOBALS.set(&globals, || {
+        let mut resolver = resolver(Mark::new(), Mark::new(), true);
+        resolver.visit_mut_module(module);
+
+        let mut hygiene = hygiene();
+        hygiene.visit_mut_module(module);
+    })
+}
+
 #[derive(Default)]
 pub struct ParserContext {
     sm: Lrc<SourceMap>,
@@ -50,7 +62,7 @@ impl ParserContext {
         Self::default()
     }
 
-    pub fn parse(&self, code: String) -> Result<Module> {
+    pub fn parse(&self, code: String, apply_transforms: bool) -> Result<Module> {
         let emitter = Box::new(emitter::EmitterWriter::new(
             Box::new(self.error_buffer.clone()),
             Some(self.sm.clone()),
@@ -76,11 +88,15 @@ impl ParserContext {
             e.into_diagnostic(&handler).emit();
         }
 
-        let module = parser.parse_typescript_module().map_err(|e| {
+        let mut module = parser.parse_typescript_module().map_err(|e| {
             // Unrecoverable fatal error occurred
             e.into_diagnostic(&handler).emit();
             anyhow!("Parse failed: {}", self.error_buffer.get())
         })?;
+
+        if apply_transforms {
+            canonical_transforms(&mut module);
+        }
 
         Ok(module)
     }
@@ -94,7 +110,7 @@ pub fn compile<W: Write>(
 ) -> Result<()> {
     let ctx = ParserContext::new();
     // FIXME: We probably need a name for better error messages.
-    let module = ctx.parse(code)?;
+    let module = ctx.parse(code, false)?;
 
     let mut rewriter = Rewriter::new(symbols);
     let module = rewriter.rewrite(module);

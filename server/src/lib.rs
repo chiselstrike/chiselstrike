@@ -1,10 +1,20 @@
 // SPDX-FileCopyrightText: © 2021 ChiselStrike <info@chiselstrike.com>
 
+use once_cell::sync::Lazy;
+
 pub use crate::auth::is_auth_entity_name;
 pub use crate::opt::Opt;
 pub use crate::server::run;
 
 pub(crate) type JsonObject = serde_json::Map<String, serde_json::Value>;
+
+pub(crate) static FEATURES: Lazy<Features> = Lazy::new(Features::default);
+
+/// Chiseld experimental features
+#[derive(Default)]
+struct Features {
+    typescript_policies: bool,
+}
 
 #[macro_use]
 extern crate log;

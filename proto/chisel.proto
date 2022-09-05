@@ -72,6 +72,7 @@ message DescribeResponse {
 
 message PolicyUpdateRequest {
   string policy_config = 1;
+  string path = 3;
 }
 
 message Module {

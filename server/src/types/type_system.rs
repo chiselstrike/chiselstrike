@@ -63,7 +63,7 @@ impl TypeSystem {
         }
 
         let mut old_fields = FieldMap::from(old_type);
-        let new_fields = FieldMap::from(&*new_type);
+        let new_fields = FieldMap::from(new_type.as_ref());
 
         let mut added_fields = Vec::new();
         let mut removed_fields = Vec::new();
