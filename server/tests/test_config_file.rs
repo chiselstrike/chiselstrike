@@ -72,7 +72,7 @@ api_listen_addr = "localhost:12345"
         "inspect_brk": false,
         "debug": false,
         "nr_connections": 10,
-        "webui": false,
+        "worker_threads": 21,
         "chisel_secret_location": Value::Null,
         "chisel_secret_key_location": Value::Null,
     });
@@ -111,7 +111,7 @@ api_listen_addr = "localhost:12345"
         "inspect_brk": false,
         "debug": false,
         "nr_connections": 10,
-        "webui": false,
+        "worker_threads": 21,
         "chisel_secret_location": Value::Null,
         "chisel_secret_key_location": Value::Null,
     });
@@ -148,7 +148,7 @@ api_listen_addr = "localhost:12345"
         "inspect_brk": false,
         "debug": false,
         "nr_connections": 10,
-        "webui": false,
+        "worker_threads": 21,
         "chisel_secret_location": Value::Null,
         "chisel_secret_key_location": Value::Null,
     });
@@ -194,7 +194,7 @@ api_listen_addr = "localhost:12346"
         "inspect_brk":false,
         "debug": false,
         "nr_connections":10,
-        "webui":false,
+        "worker_threads": 21,
         "chisel_secret_location": Value::Null,
         "chisel_secret_key_location": Value::Null,
     });

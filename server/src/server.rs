@@ -61,13 +61,9 @@ pub async fn run(opt: Opt) -> Result<()> {
         .await
         .context("Could not start HTTP API server")?;
 
-    let (internal_addr, internal_task) = internal::spawn(
-        server.opt.internal_routes_listen_addr,
-        server.opt.webui,
-        rpc_addr,
-    )
-    .await
-    .context("Could not start an internal HTTP server")?;
+    let (internal_addr, internal_task) = internal::spawn(server.opt.internal_routes_listen_addr)
+        .await
+        .context("Could not start an internal HTTP server")?;
 
     let kafka_task = match server.opt.kafka_connection.clone() {
         Some(connection) => kafka::spawn(server.clone(), connection, &server.opt.kafka_topics)

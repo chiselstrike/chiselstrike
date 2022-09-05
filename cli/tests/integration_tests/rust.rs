@@ -98,7 +98,6 @@ async fn setup_test_context(
 
     let mut cmd = tokio::process::Command::new(chiseld());
     cmd.args([
-        "--webui",
         "--debug",
         "--db-uri",
         &db.url(),

@@ -53,9 +53,6 @@ pub struct Opt {
     /// (The `executor_threads` alias is DEPRECATED)
     #[structopt(short, long, default_value = "1", alias = "executor-threads")]
     pub worker_threads: usize,
-    /// If on, serve a web UI on an internal route.
-    #[structopt(long)]
-    pub webui: bool,
     /// V8 flags.
     #[structopt(long)]
     pub v8_flags: Vec<String>,
