@@ -87,7 +87,7 @@ pub async fn unique_constraint(mut c: TestContext) {
         .read("@unique relUrl: string;");
 
     c.chisel
-        .post_json_ok(
+        .post_json(
             "/dev/posts",
             json!({"relUrl": "post.html", "content": "Hello World"}),
         )

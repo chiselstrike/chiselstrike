@@ -433,7 +433,7 @@ impl Chisel {
         self.get(url).send().await.assert_ok().json()
     }
 
-    pub async fn post_json_ok<V: Borrow<serde_json::Value>>(&self, url: &str, data: V) {
+    pub async fn post_json<V: Borrow<serde_json::Value>>(&self, url: &str, data: V) {
         self.post(url).json(data).send().await.assert_ok();
     }
 

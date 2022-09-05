@@ -20,7 +20,7 @@ static PEOPLE_CRUD: &str = r#"
 
 async fn store_people(chisel: &Chisel) {
     chisel
-        .post_json_ok(
+        .post_json(
             "dev/people",
             json!({
                 "first_name":"Glauber",
@@ -32,7 +32,7 @@ async fn store_people(chisel: &Chisel) {
         )
         .await;
     chisel
-        .post_json_ok(
+        .post_json(
             "dev/people",
             json!({
                 "first_name":"Jan",
@@ -44,7 +44,7 @@ async fn store_people(chisel: &Chisel) {
         )
         .await;
     chisel
-        .post_json_ok(
+        .post_json(
             "dev/people",
             json!({
                 "first_name":"Pekka",
@@ -184,20 +184,21 @@ pub async fn take_and_filter_permutation(c: TestContext) {
             await Foo.build({ f1: "x", f2: 1 }).save();
             await Foo.build({ f1: "y", f2: 2 }).save();
             await Foo.build({ f1: "z", f2: 3 }).save();
+            await Foo.build({ f1: "z", f2: 4 }).save();
             let c = await Foo.cursor().sortBy("f2");
 
-            const simple_take = await c
+            const simpleTake = await c
                 .take(1)
                 .toArray();
-            const take_filter = await c
-                .take(1)
+            const takeFilter = await c
+                .take(3)
                 .filter({ f1: "z" })
                 .toArray();
-            const filter_take = await c
+            const filterTake = await c
                 .filter({ f1: "z" })
                 .take(1)
                 .toArray();
-            return {simple_take, take_filter, filter_take};
+            return {simpleTake, takeFilter, filterTake};
         }"#,
     );
     c.chisel.apply_ok().await;
@@ -205,9 +206,9 @@ pub async fn take_and_filter_permutation(c: TestContext) {
     json_is_subset(
         &c.chisel.post("/dev/query").send().await.assert_ok().json(),
         &json!({
-            "simple_take": [{"f1": "x", "f2": 1}],
-            "take_filter": [],
-            "filter_take": [{"f1": "z", "f2": 3}],
+            "simpleTake": [{"f1": "x", "f2": 1}],
+            "takeFilter": [{"f1": "z", "f2": 3}],
+            "filterTake": [{"f1": "z", "f2": 3}],
         }),
     )
     .unwrap();
