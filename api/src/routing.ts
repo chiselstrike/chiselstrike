@@ -211,6 +211,7 @@ export type Middleware = {
     handler: MiddlewareHandler;
 };
 
+// The middleware handler "wraps" the existing handler (which is passed as the `next` callback).
 export type MiddlewareHandler = (
     request: ChiselRequest,
     next: MiddlewareNext,
@@ -223,7 +224,7 @@ export class Router {
 
     constructor(routeMap: RouteMap) {
         this.routes = routeMap.routes.map((route) =>
-            new RouterRoute(route, routeMap)
+            new RouterRoute(route, routeMap.middlewares)
         );
     }
 
@@ -239,7 +240,7 @@ export class Router {
         }
 
         for (const route of this.routes) {
-            if (route.testNoMethod(path)) {
+            if (route.testPathOnly(path)) {
                 return "method_not_allowed";
             }
         }
@@ -257,12 +258,12 @@ export type RouterMatch = {
 
 class RouterRoute {
     pattern: URLPattern;
-    noMethodPattern: URLPattern;
+    pathOnlyPattern: URLPattern;
     handler: Handler;
     middlewares: Middleware[];
     legacyFileName: string | undefined;
 
-    constructor(route: Route, routeMap: RouteMap) {
+    constructor(route: Route, routeMapMiddlewares: Middleware[]) {
         // HACK: we use the hostname part of the URL Pattern to match the method
         const methodPattern = route.methods
             .map((method) => method == "*" ? ".*" : method)
@@ -271,12 +272,12 @@ class RouterRoute {
             route.pathPattern,
             `http://(${methodPattern})`,
         );
-        this.noMethodPattern = new URLPattern(
+        this.pathOnlyPattern = new URLPattern(
             route.pathPattern,
             "http://dummy-host",
         );
         this.handler = route.handler;
-        this.middlewares = route.middlewares.concat(routeMap.middlewares);
+        this.middlewares = route.middlewares.concat(routeMapMiddlewares);
         this.legacyFileName = route.legacyFileName;
     }
 
@@ -299,11 +300,11 @@ class RouterRoute {
         };
     }
 
-    testNoMethod(path: string): boolean {
+    testPathOnly(path: string): boolean {
         const baseUrl = "http://dummy-host";
-        let matches = this.noMethodPattern.test(path, baseUrl);
+        let matches = this.pathOnlyPattern.test(path, baseUrl);
         if (!matches && path[path.length - 1] !== "/") {
-            matches = this.noMethodPattern.test(path + "/", baseUrl);
+            matches = this.pathOnlyPattern.test(path + "/", baseUrl);
         }
         return matches;
     }
