@@ -177,10 +177,10 @@ impl TypePolicy {
         let module = ctx.parse(code.clone(), false)?;
         let ts = PolicyTypeSystem { version, ts };
         let policies = chiselc::policies::Policies::parse(&module, &ts);
-        dbg!(Ok(Self {
+        Ok(Self {
             policies,
-            source: code
-        }))
+            source: code,
+        })
     }
 
     pub fn compute_read_filter(
