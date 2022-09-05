@@ -133,7 +133,7 @@ pub async fn cant_save_auth_from_user_route_via_relation(mut c: TestContext) {
         .assert_status(500)
         .assert_text_contains("Error: Cannot save into type AuthUser.");
     c.chisel
-        .post_json_ok(
+        .post_json(
             "/dev/some_models",
             json!({"author":{"id":"ID123", "email": "foo@t.co"}}),
         )

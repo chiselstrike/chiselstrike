@@ -224,7 +224,7 @@ async fn transform_anonymize_related_entities(c: TestContext) {
     c.chisel.apply_ok().await;
 
     c.chisel
-        .post_json_ok(
+        .post_json(
             "dev/companies",
             json!({
                 "name": "Chiselstrike",
