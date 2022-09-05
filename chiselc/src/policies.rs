@@ -345,15 +345,11 @@ impl Predicate {
                 ctx,
             ),
             Predicate::Bin { lhs, rhs, .. } if lhs.is_var() || rhs.is_var() => self.clone(),
-            Predicate::Bin { op, lhs, rhs } => {
-                let new_pred = Predicate::Bin {
-                    op: *op,
-                    lhs: Box::new(lhs.eval(ctx)),
-                    rhs: Box::new(rhs.eval(ctx)),
-                };
-
-                new_pred.eval(ctx)
-            }
+            Predicate::Bin { op, lhs, rhs } => Predicate::Bin {
+                op: *op,
+                lhs: Box::new(lhs.eval(ctx)),
+                rhs: Box::new(rhs.eval(ctx)),
+            },
             Predicate::Not(p) if p.is_lit() => {
                 let js_value = json_to_js_value(p.as_lit().unwrap());
                 Predicate::Lit(Value::Bool(!js_value.as_boolean().unwrap()))
