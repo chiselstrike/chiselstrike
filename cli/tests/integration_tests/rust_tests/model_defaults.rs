@@ -260,3 +260,81 @@ pub async fn complex_optional_defaults(c: TestContext) {
     )
     .unwrap();
 }
+
+#[chisel_macros::test(modules = Deno)]
+pub async fn field_type_and_value_type_mismatch(c: TestContext) {
+    c.chisel.write(
+        "models/default.ts",
+        r##"
+        import { ChiselEntity } from "@chiselstrike/api";
+
+        export class Defaulted extends ChiselEntity {
+            a: string = 1;
+        }"##,
+    );
+    c.chisel
+        .apply_err()
+        .await
+        .stderr
+        .read("field `a` is of type string but is default initialized by a value of type number");
+
+    c.chisel.write(
+        "models/default.ts",
+        r##"
+        import { ChiselEntity } from "@chiselstrike/api";
+
+        export class Defaulted extends ChiselEntity {
+            a: string = true;
+        }"##,
+    );
+    c.chisel
+        .apply_err()
+        .await
+        .stderr
+        .read("field `a` is of type string but is default initialized by a value of type boolean");
+
+    c.chisel.write(
+        "models/default.ts",
+        r##"
+        import { ChiselEntity } from "@chiselstrike/api";
+
+        export class Defaulted extends ChiselEntity {
+            a: number = "10";
+        }"##,
+    );
+    c.chisel
+        .apply_err()
+        .await
+        .stderr
+        .read("field `a` is of type number but is default initialized by a value of type string");
+
+    c.chisel.write(
+        "models/default.ts",
+        r##"
+        import { ChiselEntity } from "@chiselstrike/api";
+
+        export class Defaulted extends ChiselEntity {
+            a: boolean = "true";
+        }"##,
+    );
+    c.chisel
+        .apply_err()
+        .await
+        .stderr
+        .read("field `a` is of type boolean but is default initialized by a value of type string");
+
+    c.chisel.write(
+        "models/default.ts",
+        r##"
+        import { ChiselEntity } from "@chiselstrike/api";
+
+        export class Defaulted extends ChiselEntity {
+            a: boolean = 10;
+        }"##,
+    );
+    c.chisel
+        .apply_err()
+        .await
+        .stderr
+        .read("field `a` is of type boolean but is default initialized by a value of type number");
+}
