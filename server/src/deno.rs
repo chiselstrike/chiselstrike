@@ -537,6 +537,7 @@ impl RequestContext<'_> {
             ts,
             type_policies,
             inner,
+            policy_instances: Default::default(),
         }
     }
 }
@@ -604,7 +605,7 @@ async fn op_chisel_entity_delete(
     let mutation = {
         let state = state.borrow_mut();
         Mutation::delete_from_expr(
-            &RequestContext::new(
+            &mut RequestContext::new(
                 current_policies(&state),
                 current_type_system(&state),
                 context,
@@ -646,7 +647,7 @@ async fn op_chisel_crud_delete(
     let mutation = {
         let state = state.borrow_mut();
         crud::delete_from_url(
-            &RequestContext::new(
+            &mut RequestContext::new(
                 current_policies(&state),
                 current_type_system(&state),
                 context,
@@ -723,7 +724,7 @@ async fn op_chisel_crud_query(
         let query_engine = query_engine_arc(op_state);
 
         crud::run_query(
-            &RequestContext::new(
+            &mut RequestContext::new(
                 current_policies(op_state),
                 current_type_system(op_state),
                 context,
@@ -744,7 +745,7 @@ fn op_chisel_relational_query_create(
     context: ChiselRequestContext,
 ) -> Result<ResourceId> {
     let query_plan = QueryPlan::from_op_chain(
-        &RequestContext::new(
+        &mut RequestContext::new(
             current_policies(op_state),
             current_type_system(op_state),
             context,

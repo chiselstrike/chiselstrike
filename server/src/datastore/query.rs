@@ -4,13 +4,14 @@ use crate::auth::AUTH_USER_NAME;
 use crate::datastore::expr::{BinaryExpr, Expr, PropertyAccess, Value as ExprValue};
 use crate::deno::ChiselRequestContext;
 use crate::policies::{FieldPolicies, Policies};
-use crate::policy::engine::PolicyEngine;
+use crate::policy::engine::{PolicyEngine, PolicyEvalInstance};
 use crate::types::{Entity, Field, ObjectType, Type, TypeId, TypeSystem};
 
 use anyhow::{anyhow, Context, Result};
 use enum_as_inner::EnumAsInner;
 use serde_derive::{Deserialize, Serialize};
 use serde_json::value::Value as JsonValue;
+use std::collections::hash_map::Entry;
 use std::collections::HashMap;
 use std::collections::HashSet;
 use std::fmt;
@@ -39,6 +40,7 @@ pub struct RequestContext<'a> {
     /// Type system to be used of version `api_version`
     pub ts: &'a TypeSystem,
     pub type_policies: &'a PolicyEngine,
+    pub policy_instances: HashMap<String, PolicyEvalInstance>,
 }
 
 impl Deref for RequestContext<'_> {
@@ -54,6 +56,21 @@ impl RequestContext<'_> {
     fn make_field_policies(&self, ty: &ObjectType) -> FieldPolicies {
         self.policies
             .make_field_policies(&self.user_id, &self.path, ty)
+    }
+
+    fn get_or_create_policy_instance(
+        &mut self,
+        ty: &Entity,
+    ) -> Result<Option<&PolicyEvalInstance>> {
+        match self.policy_instances.entry(ty.name().to_owned()) {
+            Entry::Occupied(e) => Ok(Some(e.into_mut())),
+            Entry::Vacant(e) => {
+                let instance =
+                    self.type_policies
+                        .instantiate(ty.name(), &ty.api_version, &self.inner)?;
+                Ok(instance.map(|i| &*e.insert(i)))
+            }
+        }
     }
 }
 
@@ -277,7 +294,7 @@ impl QueryPlan {
         builder
     }
 
-    fn from_entity_name(c: &RequestContext, entity_name: &str) -> Result<Self> {
+    fn from_entity_name(c: &mut RequestContext, entity_name: &str) -> Result<Self> {
         let ty = c
             .ts
             .lookup_entity(entity_name, &c.api_version)
@@ -292,7 +309,7 @@ impl QueryPlan {
 
     /// Constructs QueryPlan from type `ty` and application of given
     /// `operators.
-    pub fn from_ops(c: &RequestContext, ty: &Entity, operators: Vec<QueryOp>) -> Result<Self> {
+    pub fn from_ops(c: &mut RequestContext, ty: &Entity, operators: Vec<QueryOp>) -> Result<Self> {
         let mut query_plan = Self::new(ty.clone());
         query_plan.entity = query_plan.load_entity(c, ty)?;
         query_plan.extend_operators(operators);
@@ -302,7 +319,7 @@ impl QueryPlan {
     /// Constructs a query plan from a query `op_chain` and
     /// additional helper data like `policies`, `api_version`,
     /// `userid` and `path` (url path used for policy evaluation).
-    pub fn from_op_chain(context: &RequestContext, op_chain: QueryOpChain) -> Result<Self> {
+    pub fn from_op_chain(context: &mut RequestContext, op_chain: QueryOpChain) -> Result<Self> {
         let (entity_name, operators) = convert_ops(op_chain)?;
         let mut builder = Self::from_entity_name(context, &entity_name)?;
 
@@ -355,7 +372,7 @@ impl QueryPlan {
     /// ensures login restrictions are respected.
     fn load_entity(
         &mut self,
-        context: &RequestContext,
+        context: &mut RequestContext,
         ty: &Entity,
     ) -> anyhow::Result<QueriedEntity> {
         self.add_type_filters(context, ty)?;
@@ -425,13 +442,13 @@ impl QueryPlan {
         })
     }
 
-    fn add_type_filters(&mut self, ctx: &RequestContext, ty: &Entity) -> anyhow::Result<()> {
-        if let Some(expression) = ctx
-            .type_policies
-            .read_fitlers(ty.name(), &ty.api_version, ctx)?
-        {
-            self.operators.push(dbg!(QueryOp::Filter { expression }));
+    fn add_type_filters(&mut self, ctx: &mut RequestContext, ty: &Entity) -> anyhow::Result<()> {
+        if let Some(instance) = ctx.get_or_create_policy_instance(ty)? {
+            if let Some(expression) = instance.make_read_filter_expr()? {
+                self.operators.push(QueryOp::Filter { expression });
+            }
         }
+
         Ok(())
     }
 
@@ -829,7 +846,7 @@ pub struct Mutation {
 impl Mutation {
     /// Constructs delete from filter expression.
     pub fn delete_from_expr(
-        c: &RequestContext,
+        c: &mut RequestContext,
         type_name: &str,
         filter_expr: &Option<Expr>,
     ) -> Result<Self> {
@@ -1009,11 +1026,12 @@ pub mod tests {
                 _method: "GET".into(),
             };
             let query_plan = QueryPlan::from_op_chain(
-                &RequestContext {
+                &mut RequestContext {
                     policies: &Policies::default(),
                     ts: &make_type_system(&*ENTITIES),
                     inner,
                     type_policies: &Default::default(),
+                    policy_instances: Default::default(),
                 },
                 op_chain,
             )
@@ -1082,11 +1100,12 @@ pub mod tests {
                 _method: "GET".into(),
             };
             Mutation::delete_from_expr(
-                &RequestContext {
+                &mut RequestContext {
                     policies: &Policies::default(),
                     ts: &make_type_system(&*ENTITIES),
                     inner,
                     type_policies: &Default::default(),
+                    policy_instances: Default::default(),
                 },
                 entity_name,
                 &Some(expr),

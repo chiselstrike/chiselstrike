@@ -20,7 +20,7 @@ pub struct QueryParams {
 
 /// Parses CRUD `params` and runs the query with provided `query_engine`.
 pub fn run_query(
-    context: &RequestContext<'_>,
+    context: &mut RequestContext<'_>,
     params: QueryParams,
     query_engine: Arc<QueryEngine>,
     tr: TransactionStatic,
@@ -30,7 +30,7 @@ pub fn run_query(
 }
 
 fn run_query_impl(
-    context: &RequestContext<'_>,
+    context: &mut RequestContext<'_>,
     params: QueryParams,
     query_engine: Arc<QueryEngine>,
     tr: TransactionStatic,
@@ -172,7 +172,7 @@ fn make_page_url(url: &Url, host: &Option<String>, cursor: &Cursor) -> Result<Ur
 }
 
 /// Constructs Delete Mutation from CRUD url.
-pub fn delete_from_url(c: &RequestContext, type_name: &str, url: &str) -> Result<Mutation> {
+pub fn delete_from_url(c: &mut RequestContext, type_name: &str, url: &str) -> Result<Mutation> {
     let base_entity = match c.ts.lookup_type(type_name, &c.api_version) {
         Ok(Type::Entity(ty)) => ty,
         Ok(ty) => anyhow::bail!("Cannot delete scalar type {type_name} ({})", ty.name()),
@@ -784,11 +784,12 @@ mod tests {
         };
         let type_policies = PolicyEngine::default();
         super::run_query(
-            &RequestContext {
+            &mut RequestContext {
                 policies: &Policies::default(),
                 ts: &make_type_system(&*ENTITIES),
                 type_policies: &type_policies,
                 inner,
+                policy_instances: Default::default(),
             },
             QueryParams {
                 type_name: entity_name.to_owned(),
@@ -1107,11 +1108,12 @@ mod tests {
                 headers: HashMap::default(),
             };
             delete_from_url(
-                &RequestContext {
+                &mut RequestContext {
                     policies: &Policies::default(),
                     ts: &make_type_system(&*ENTITIES),
                     inner,
                     type_policies: &Default::default(),
+                    policy_instances: Default::default(),
                 },
                 entity_name,
                 url,
