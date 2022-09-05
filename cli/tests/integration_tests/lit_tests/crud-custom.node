@@ -65,15 +65,24 @@ function createResponse(body: unknown, status: number) {
     }
     return responseFromYAML({ error: body, status }, status);
 }
-
-export default crud(Person, {
-        createResponse,
-        deleteAll: false,
-        deleteOne: false,
-        put: false,
-    })
-    .delete('*', (req) => createResponse("Method Not Allowed", 405))
-    .put('*', (req) => createResponse("Forbidden", 403));
+export default crud(
+    Person,
+    ":id", /* :id can be explicitly provided */
+    {
+        customMethods: {
+            "DELETE": standardCRUDMethods.methodNotAllowed,
+            "PUT": standardCRUDMethods.forbidden,
+        },
+        createResponses: {
+            "DELETE": createResponse,
+            "GET": createResponse,
+            "POST": createResponse,
+        },
+        defaultCreateResponse: (body: unknown, status: number) => { // used by PUT
+            return responseFromYAML({ body: body }, status);
+        },
+    },
+);
 EOF
 
 cd "$TEMPDIR"
@@ -203,9 +212,9 @@ $CURL $CHISELD_HOST/dev/persons | grep first_name
 $CURL -X PUT -d '{"age":98422}' $CHISELD_HOST/dev/persons/cef5d492-d7e3-4c45-9a55-5929b9ab8292
 # CHECK: HTTP/1.1 403 Forbidden
 # CHECK: content-type: text/yaml
-# CHECK: error: "Forbidden"
+# CHECK: body: "Forbidden"
 
 $CURL -X PUT -d '{"age":98422}' $CHISELD_HOST/dev/persons/ # PUT without ID.
 # CHECK: HTTP/1.1 403 Forbidden
 # CHECK: content-type: text/yaml
-# CHECK: error: "Forbidden"
+# CHECK: body: "Forbidden"

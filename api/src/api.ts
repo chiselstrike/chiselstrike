@@ -1,7 +1,13 @@
 // SPDX-FileCopyrightText: © 2022 ChiselStrike <info@chiselstrike.com>
 
-export { crud } from "./crud.ts";
-export type { CRUDCreateResponse } from "./crud.ts";
+export { crud, createPathParser, createURLPathParser, standardCRUDMethods } from "./crud.ts";
+export type {
+    CRUDCreateResponse,
+    CRUDBaseParams,
+    CRUDMethodSignature,
+    CRUDMethods,
+    CRUDCreateResponses,
+} from "./crud.ts";
 export {
     AuthUser,
     ChiselCursor,
