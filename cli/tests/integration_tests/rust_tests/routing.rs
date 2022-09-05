@@ -192,22 +192,14 @@ async fn params_get_wrong(c: TestContext) {
 
     c.chisel.apply_ok().await;
 
-    assert_eq!(
-        c.chisel.get_text("/dev/missing/string").await,
-        "Error: Undefined parameter 'x'"
-    );
-    assert_eq!(
-        c.chisel.get_text("/dev/missing/number").await,
-        "Error: Undefined parameter 'x'"
-    );
-    assert_eq!(
-        c.chisel.get_text("/dev/missing/int").await,
-        "Error: Undefined parameter 'x'"
-    );
-    assert_eq!(
-        c.chisel.get_text("/dev/missing/bool").await,
-        "Error: Undefined parameter 'x'"
-    );
+    c.chisel.get("/dev/missing/string").send().await
+        .assert_text_contains("Error: Undefined parameter 'x'");
+    c.chisel.get("/dev/missing/number").send().await
+        .assert_text_contains("Error: Undefined parameter 'x'");
+    c.chisel.get("/dev/missing/int").send().await
+        .assert_text_contains("Error: Undefined parameter 'x'");
+    c.chisel.get("/dev/missing/bool").send().await
+        .assert_text_contains("Error: Undefined parameter 'x'");
 }
 
 #[test(modules = Deno)]

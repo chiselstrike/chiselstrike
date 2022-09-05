@@ -44,9 +44,7 @@ async fn route(req: Request<Body>) -> Result<Response<Body>> {
 /// Unlike the API server, it is strictly bound to 127.0.0.1. This is enough
 /// for the Kubernetes checks to work, and it is one less thing for us to secure
 /// and prevent DDoS attacks again - which is why this is a different server
-pub async fn spawn(
-    listen_addr: SocketAddr,
-) -> Result<(SocketAddr, TaskHandle<Result<()>>)> {
+pub async fn spawn(listen_addr: SocketAddr) -> Result<(SocketAddr, TaskHandle<Result<()>>)> {
     let make_svc = make_service_fn(|_conn| async {
         // service_fn converts our function into a `Service`
         Ok::<_, anyhow::Error>(service_fn(route))

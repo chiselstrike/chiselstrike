@@ -4,14 +4,15 @@ use crate::datastore::{MetaService, QueryEngine};
 use crate::policies::{EntityPolicy, PolicySystem};
 use crate::proto::type_msg::TypeEnum;
 use crate::proto::{
-    AddTypeRequest, ApplyRequest, ContainerType, FieldDefinition, IndexCandidate, PolicyUpdateRequest, TypeMsg,
+    AddTypeRequest, ApplyRequest, ContainerType, FieldDefinition, IndexCandidate,
+    PolicyUpdateRequest, TypeMsg,
 };
 use crate::server::Server;
 use crate::types::{
     DbIndex, Entity, Field, NewField, NewObject, ObjectType, Type, TypeSystem, TypeSystemError,
 };
-use crate::FEATURES;
 use crate::version::VersionInfo;
+use crate::FEATURES;
 use anyhow::{anyhow, bail, Context, Result};
 use petgraph::graphmap::GraphMap;
 use petgraph::Directed;
@@ -228,11 +229,7 @@ or
 
     MetaService::commit_transaction(transaction).await?;
 
-    let labels: Vec<String> = policy_system
-        .labels
-        .keys()
-        .map(|x| x.to_owned())
-        .collect();
+    let labels: Vec<String> = policy_system.labels.keys().map(|x| x.to_owned()).collect();
 
     // Reload the type system so that we have new ids
     *type_system = meta
