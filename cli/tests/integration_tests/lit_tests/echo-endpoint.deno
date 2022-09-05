@@ -39,7 +39,7 @@ $CURL --data foobar -o - $CHISELD_HOST/dev/echo
 
 # CHECK: {
 # CHECK:     "method": "POST",
-# CHECK:     "url": "http://chiselstrike.com/dev/echo",
+# CHECK:     "url": "https://chiselstrike.com/dev/echo",
 # CHECK:     "headers": {
 # CHECK:         "accept": "*/*",
 # CHECK:         "content-length": "6",
@@ -63,7 +63,7 @@ $CURL -H 'Expect: 100-continue' --data foobar -o - $CHISELD_HOST/dev/echo
 
 # CHECK: {
 # CHECK:     "method": "POST",
-# CHECK:     "url": "http://chiselstrike.com/dev/echo",
+# CHECK:     "url": "https://chiselstrike.com/dev/echo",
 # CHECK:     "headers": {
 # CHECK:         "accept": "*/*",
 # CHECK:         "content-length": "6",

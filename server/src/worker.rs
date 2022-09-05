@@ -102,7 +102,7 @@ async fn run(init: WorkerInit) -> Result<()> {
         enable_testing_features: false,
         is_tty: false,
         // FIXME: make location a configuration parameter
-        location: Some(Url::parse("http://chiselstrike.com").unwrap()),
+        location: Some(Url::parse("https://chiselstrike.com").unwrap()),
         no_color: true,
         runtime_version: "x".to_string(),
         ts_version: "x".to_string(),

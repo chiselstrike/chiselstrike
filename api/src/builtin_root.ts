@@ -19,10 +19,10 @@ export const routeMap = new RouteMap()
     .prefix(
         "/auth",
         new RouteMap()
-            .prefix("/users", RouteMap.convert(AuthUser.crud()))
-            .prefix("/sessions", RouteMap.convert(AuthSession.crud()))
-            .prefix("/tokens", RouteMap.convert(AuthToken.crud()))
-            .prefix("/accounts", RouteMap.convert(AuthAccount.crud()))
+            .prefix("/users", AuthUser.crud())
+            .prefix("/sessions", AuthSession.crud())
+            .prefix("/tokens", AuthToken.crud())
+            .prefix("/accounts", AuthAccount.crud())
             .middleware(authMiddleware),
     );
 
