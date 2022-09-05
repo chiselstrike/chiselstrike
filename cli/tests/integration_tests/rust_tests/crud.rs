@@ -384,7 +384,7 @@ pub async fn put_with_id(c: TestContext) {
         .json(&*GLAUBER)
         .send()
         .await
-        .assert_status(400);
+        .assert_status(405);
 }
 
 #[chisel_macros::test(modules = Deno)]
@@ -416,7 +416,7 @@ pub async fn patch_with_id(c: TestContext) {
         .json(json!({"height": 34.56}))
         .send()
         .await
-        .assert_status(400);
+        .assert_status(405);
 
     c.chisel
         .patch("/dev/people/foobar")

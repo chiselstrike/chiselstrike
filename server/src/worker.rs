@@ -103,7 +103,7 @@ async fn run(init: WorkerInit) -> Result<()> {
         is_tty: false,
         inspect: init.server.opt.inspect || init.server.opt.inspect_brk,
         // FIXME: make location a configuration parameter
-        location: Some(Url::parse("http://chiselstrike.com").unwrap()),
+        location: Some(Url::parse("https://chiselstrike.com").unwrap()),
         no_color: true,
         runtime_version: "x".to_string(),
         ts_version: "x".to_string(),

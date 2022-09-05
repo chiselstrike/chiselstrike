@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: © 2022 ChiselStrike <info@chiselstrike.com>
 
 import { crud } from "./crud.ts";
-import type { Handler } from "./routing.ts";
+import type { RouteMap } from "./routing.ts";
 import { mergeDeep, opAsync, opSync } from "./utils.ts";
 import { SimpleTypeSystem, TypeSystem } from "./type_system.ts";
 
@@ -993,10 +993,10 @@ export class ChiselEntity {
      *
      * If you need more control over which method to generate and their behavior, see the top-level `crud()` function
      *
-     * @returns A function suitable as a default export in a route.
+     * @returns A route map suitable as a default export in a route.
      */
-    static crud(): Handler {
-        return crud(this, "");
+    static crud(): RouteMap {
+        return crud(this);
     }
 
     /**
