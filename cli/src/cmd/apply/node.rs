@@ -43,11 +43,10 @@ pub(crate) async fn apply(
     }
 
     let cwd = env::current_dir()?;
-    let gen_dir = cwd.join(".gen");
-    fs::create_dir_all(&gen_dir)?;
 
     let mut chiselc_futures = vec![];
-    for endpoint in endpoints.iter().chain(events.iter()) {
+
+    let mut handle_code = |endpoint: &PathBuf, gen_dir: &PathBuf| {
         if optimize {
             let endpoint_file_path = endpoint.clone();
             let mut components = endpoint_file_path.components();
@@ -84,6 +83,21 @@ pub(crate) async fn apply(
             let path = endpoint.to_owned();
             chiselc_futures.push((None, path.clone(), path))
         };
+        Ok(())
+    };
+
+    let route_gen_dir = cwd.join(".routegen");
+    fs::create_dir_all(&route_gen_dir)?;
+
+    let event_gen_dir = cwd.join(".eventgen");
+    fs::create_dir_all(&event_gen_dir)?;
+
+    for route in endpoints.iter() {
+        handle_code(route, &route_gen_dir)?
+    }
+
+    for event in events.iter() {
+        handle_code(event, &event_gen_dir)?
     }
 
     let mut bundler_file_mapping = vec![];
