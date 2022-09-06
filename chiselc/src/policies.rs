@@ -2,6 +2,7 @@ use std::borrow::Cow;
 use std::collections::HashMap;
 use std::fmt;
 use std::ops::{Deref, DerefMut};
+use std::sync::Arc;
 
 use anyhow::{bail, Result};
 use boa::{Context, JsString, JsValue};
@@ -117,7 +118,7 @@ impl PolicyParams {
 
 #[derive(Debug, Clone)]
 pub struct Policy {
-    pub actions: Actions,
+    pub actions: Arc<Actions>,
     pub where_conds: Option<Cond>,
     pub predicates: Predicates,
     params: PolicyParams,
@@ -136,7 +137,7 @@ impl Policy {
         let mut builder = RulesBuilder::new(&arrow.stmt_map, env);
         let actions = builder.infer_rules_from_region(&arrow.d_ir.region, Cond::True, ts);
         let predicates = builder.predicates;
-        let actions = actions.simplify(&predicates);
+        let actions = Arc::new(actions.simplify(&predicates));
         let where_conds = generate_where_from_rules(&actions).map(|c| c.simplify(&predicates));
 
         Self {
@@ -255,7 +256,7 @@ pub enum Var {
     Member(Box<Var>, String),
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct Values {
     values: serde_json::Map<String, Value>,
 }
@@ -312,10 +313,6 @@ impl Predicate {
         matches!(self, Self::Lit(_))
     }
 
-    fn is_var(&self) -> bool {
-        matches!(self, Self::Var(_))
-    }
-
     fn as_lit(&self) -> Option<&Value> {
         match self {
             Self::Lit(ref l) => Some(l),
@@ -331,8 +328,21 @@ impl Predicate {
             LogicOp::Gte => Predicate::Lit(Value::Bool(lhs.ge(rhs, ctx).unwrap())),
             LogicOp::Lt => Predicate::Lit(Value::Bool(lhs.lt(rhs, ctx).unwrap())),
             LogicOp::Lte => Predicate::Lit(Value::Bool(lhs.le(rhs, ctx).unwrap())),
-            LogicOp::And => todo!(),
-            LogicOp::Or => todo!(),
+            LogicOp::And => Predicate::Lit(Value::Bool(
+                lhs.as_boolean().unwrap() && rhs.as_boolean().unwrap(),
+            )),
+            LogicOp::Or => Predicate::Lit(Value::Bool(
+                lhs.as_boolean().unwrap() || rhs.as_boolean().unwrap(),
+            )),
+        }
+    }
+
+    fn is_reducible(&self) -> bool {
+        match self {
+            Predicate::Bin { lhs, rhs, .. } => lhs.is_reducible() && rhs.is_reducible(),
+            Predicate::Not(inner) => inner.is_reducible(),
+            Predicate::Lit(_) => true,
+            Predicate::Var(_) => false,
         }
     }
 
@@ -344,17 +354,15 @@ impl Predicate {
                 &json_to_js_value(rhs.as_lit().unwrap()),
                 ctx,
             ),
-            Predicate::Bin { lhs, rhs, .. } if lhs.is_var() || rhs.is_var() => self.clone(),
-            Predicate::Bin { op, lhs, rhs } => Predicate::Bin {
-                op: *op,
-                lhs: Box::new(lhs.eval(ctx)),
-                rhs: Box::new(rhs.eval(ctx)),
-            },
-            Predicate::Not(p) if p.is_lit() => {
-                let js_value = json_to_js_value(p.as_lit().unwrap());
-                Predicate::Lit(Value::Bool(!js_value.as_boolean().unwrap()))
+            Predicate::Bin { op, lhs, rhs } if lhs.is_reducible() && rhs.is_reducible() => {
+                Predicate::Bin {
+                    op: *op,
+                    lhs: Box::new(lhs.eval(ctx)),
+                    rhs: Box::new(rhs.eval(ctx)),
+                }
+                .eval(ctx)
             }
-            Predicate::Not(p) if !p.is_var() => {
+            Predicate::Not(p) if p.is_reducible() => {
                 let p_eval = p.eval(ctx);
                 match p_eval {
                     Predicate::Lit(l) => {
@@ -444,6 +452,12 @@ impl Predicate {
 #[derive(Default, Clone)]
 pub struct Actions {
     actions: HashMap<Action, Cond>,
+}
+
+impl Actions {
+    pub fn iter(&self) -> impl Iterator<Item = (&Action, &Cond)> {
+        self.actions.iter()
+    }
 }
 
 impl fmt::Debug for Actions {

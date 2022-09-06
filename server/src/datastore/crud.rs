@@ -1,15 +1,19 @@
-use crate::datastore::engine::{QueryEngine, TransactionStatic};
-use crate::datastore::expr::{BinaryExpr, BinaryOp, Expr, PropertyAccess, Value as ExprValue};
-use crate::datastore::query::{Mutation, QueryOp, QueryPlan, RequestContext, SortBy, SortKey};
-use crate::types::{Entity, Type, TypeSystem};
-use crate::JsonObject;
+use std::sync::Arc;
+
 use anyhow::{Context, Result};
 use deno_core::futures;
 use deno_core::url::Url;
 use futures::{Future, StreamExt};
 use serde_derive::{Deserialize, Serialize};
 use serde_json::json;
-use std::sync::Arc;
+
+use crate::datastore::engine::{QueryEngine, TransactionStatic};
+use crate::datastore::expr::{BinaryExpr, BinaryOp, Expr, PropertyAccess, Value as ExprValue};
+use crate::datastore::query::{Mutation, QueryOp, QueryPlan, RequestContext, SortBy, SortKey};
+use crate::types::{Entity, Type, TypeSystem};
+use crate::JsonObject;
+
+use super::EntityStream;
 
 #[derive(Clone, Serialize, Deserialize)]
 pub struct QueryParams {
@@ -36,15 +40,21 @@ fn run_query_impl(
     tr: TransactionStatic,
 ) -> Result<impl Future<Output = Result<JsonObject>>> {
     let host = context.headers.get("host").cloned();
-    let base_type = &context
+    let base_type = context
         .ts
         .lookup_entity(&params.type_name, &context.api_version)
         .context("unexpected type name as crud query base type")?;
 
-    let query = Query::from_url(base_type, &params.url, context.ts)?;
+    let query = Query::from_url(&base_type, &params.url, context.ts)?;
     let ops = query.make_query_ops()?;
-    let query_plan = QueryPlan::from_ops(context, base_type, ops)?;
+    let query_plan = QueryPlan::from_ops(context, &base_type, ops)?;
     let stream = query_engine.query(tr.clone(), query_plan)?;
+
+    let stream = EntityStream {
+        base_type,
+        inner: stream,
+        policy_instances: std::mem::take(&mut context.policy_instances),
+    };
 
     Ok(async move {
         let mut results = stream

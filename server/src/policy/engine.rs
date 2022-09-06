@@ -1,17 +1,40 @@
 use std::cell::RefCell;
 use std::rc::Rc;
+use std::sync::Arc;
 
 use anyhow::{bail, Result};
-use chiselc::policies::{Cond, Policy, PolicyEvalContext, Predicate, Predicates, Values, Var};
+use chiselc::policies::{
+    Actions, Cond, Policy, PolicyEvalContext, Predicate, Predicates, Values, Var,
+};
+use serde_json::Value as JsonValue;
 
 use super::store::Store;
 use crate::datastore::expr::{BinaryExpr, BinaryOp, Expr, PropertyAccess, Value};
 use crate::deno::ChiselRequestContext;
+use crate::types::Entity;
 
 #[derive(Default)]
 pub struct PolicyEngine {
     eval_context: Rc<RefCell<PolicyEvalContext>>,
     store: Store,
+}
+
+pub enum Action {
+    Allow,
+    Deny,
+    Skip,
+    Log,
+}
+
+impl From<chiselc::policies::Action> for Action {
+    fn from(other: chiselc::policies::Action) -> Self {
+        match other {
+            chiselc::policies::Action::Allow => Self::Allow,
+            chiselc::policies::Action::Log => Self::Log,
+            chiselc::policies::Action::Deny => Self::Deny,
+            chiselc::policies::Action::Skip => Self::Skip,
+        }
+    }
 }
 
 /// An evaluation context instance for a given type, in a given request context.
@@ -21,6 +44,9 @@ pub struct PolicyEvalInstance {
     predicates: Predicates,
     where_conds: Option<Cond>,
     entity_param_name: String,
+    read_actions: Arc<Actions>,
+    env: Values,
+    eval_ctx: Rc<RefCell<PolicyEvalContext>>,
 }
 
 impl PolicyEvalInstance {
@@ -34,21 +60,27 @@ impl PolicyEvalInstance {
 
         let mut env = Values::new();
         let ctx_json = serde_json::to_value(chisel_ctx)?;
-        env.insert(ctx_param_name.clone(), ctx_json);
+        env.insert(ctx_param_name, ctx_json);
 
         let predicates = read_policy.predicates.substitute(&env);
-        let mut eval_ctx = eval_ctx.borrow_mut();
-        let predicates = predicates.eval(&mut eval_ctx);
+        let mut ctx = eval_ctx.borrow_mut();
+        let predicates = predicates.eval(&mut ctx);
+        drop(ctx);
 
         let where_conds = read_policy
             .where_conds
             .as_ref()
             .map(|conds| conds.simplify(&predicates));
 
+        let read_actions = read_policy.actions.clone();
+
         Ok(Self {
             predicates,
             where_conds,
             entity_param_name,
+            read_actions,
+            env,
+            eval_ctx,
         })
     }
 
@@ -57,6 +89,38 @@ impl PolicyEvalInstance {
             .as_ref()
             .map(|w| Self::cond_to_expr(w, &self.predicates, &self.entity_param_name))
             .transpose()
+    }
+
+    pub fn get_read_action(
+        &self,
+        _entity: &Entity,
+        val: &serde_json::Map<String, JsonValue>,
+    ) -> Result<Action> {
+        // TODO: this clone is not necessary, but we need to abstact a bit the evaluation
+        // environment.
+        // TODO: typecheck value
+        // TODO: reccursive check
+        let mut env = self.env.clone();
+        env.insert(
+            self.entity_param_name.clone(),
+            JsonValue::Object(val.clone()),
+        );
+
+        let predicates = self.predicates.substitute(&env);
+        let mut eval_ctx = self.eval_ctx.borrow_mut();
+        let predicates = predicates.eval(&mut eval_ctx);
+
+        for (action, cond) in self.read_actions.iter() {
+            match cond.simplify(&predicates) {
+                Cond::True => return Ok((*action).into()),
+                Cond::False => continue,
+                _ => bail!(
+                    "invalid policy: all variables should be determined in the current context"
+                ),
+            }
+        }
+
+        bail!("at least one policy rule must match!");
     }
 
     fn cond_to_expr(cond: &Cond, preds: &Predicates, entity_param_name: &str) -> Result<Expr> {

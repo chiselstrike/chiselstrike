@@ -58,7 +58,7 @@ impl RequestContext<'_> {
             .make_field_policies(&self.user_id, &self.path, ty)
     }
 
-    fn get_or_create_policy_instance(
+    pub fn get_or_create_policy_instance(
         &mut self,
         ty: &Entity,
     ) -> Result<Option<&PolicyEvalInstance>> {

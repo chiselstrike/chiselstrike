@@ -719,21 +719,17 @@ async fn op_chisel_crud_query(
 ) -> Result<JsonObject> {
     // Contextualize stream creation to prevent state RC borrow living across await
     {
-        let op_state = &state.borrow();
-        let transaction = current_transaction(op_state);
-        let query_engine = query_engine_arc(op_state);
+        let op_state = state.borrow();
+        let transaction = current_transaction(&op_state);
+        let query_engine = query_engine_arc(&op_state);
+        let mut ctx = RequestContext::new(
+            current_policies(&op_state),
+            current_type_system(&op_state),
+            context,
+            policy_engine(&op_state),
+        );
 
-        crud::run_query(
-            &mut RequestContext::new(
-                current_policies(op_state),
-                current_type_system(op_state),
-                context,
-                policy_engine(op_state),
-            ),
-            params,
-            query_engine,
-            transaction,
-        )
+        crud::run_query(&mut ctx, params, query_engine, transaction)
     }
     .await
 }
