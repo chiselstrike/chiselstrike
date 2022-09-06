@@ -661,7 +661,7 @@ impl QueryEngine {
             (str, $value:expr) => {{
                 $value
             }};
-            ($fallback:ident, $value:expr) => {{
+            ($fallback:ty, $value:expr) => {{
                 let value: $fallback = $value
                     .as_str()
                     .parse()
@@ -670,7 +670,7 @@ impl QueryEngine {
             }};
         }
         macro_rules! convert_json_value {
-            ($as_type:ident, $fallback:ident) => {{
+            ($as_type:ident, $fallback:ty) => {{
                 match ty_value.get(&field.name) {
                     Some(value_json) => value_json
                         .$as_type()
@@ -686,7 +686,7 @@ impl QueryEngine {
 
         let arg = match &field.type_id {
             TypeId::String | TypeId::Id | TypeId::Entity { .. } => {
-                SqlValue::String(convert_json_value!(as_str, str))
+                SqlValue::String(convert_json_value!(as_str, String))
             }
             TypeId::Float => SqlValue::F64(convert_json_value!(as_f64, f64)),
             TypeId::Boolean => SqlValue::Bool(convert_json_value!(as_bool, bool)),
