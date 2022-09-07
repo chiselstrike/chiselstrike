@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: © 2022 ChiselStrike <info@chiselstrike.com>
 
 use crate::common::get_free_port;
-use crate::database::{generate_database_config, Database, DatabaseConfig, PostgresDb, SqliteDb};
+use crate::database::{Database, DatabaseConfig, PostgresDb, SqliteDb};
 use crate::framework::{
     execute_async, wait_for_chiseld_startup, Chisel, GuardedChild, TestContext,
 };
@@ -40,11 +40,9 @@ fn generate_chiseld_config(ports_counter: &AtomicU16) -> ChiseldConfig {
 }
 
 async fn setup_test_context(
-    opt: &Opt,
     ports_counter: &AtomicU16,
     instance: &TestInstance,
 ) -> TestContext {
-    let db_config = generate_database_config(opt);
     let chiseld_config = generate_chiseld_config(ports_counter);
     let tmp_dir = Arc::new(TempDir::new("chiseld_test").expect("Could not create tempdir"));
     let chisel_path = bin_dir().join("chisel");
@@ -89,29 +87,47 @@ async fn setup_test_context(
         client: reqwest::Client::new(),
     };
 
-    let db: Database = match db_config {
-        DatabaseConfig::Postgres(config) => Database::Postgres(PostgresDb::new(config)),
-        DatabaseConfig::Sqlite => Database::Sqlite(SqliteDb {
-            tmp_dir: tmp_dir.clone(),
-        }),
-    };
-
     let mut cmd = tokio::process::Command::new(chiseld());
     cmd.args([
         "--debug",
-        "--db-uri",
-        &db.url(),
         "--api-listen-addr",
         &chiseld_config.api_address.to_string(),
         "--internal-routes-listen-addr",
         &chiseld_config.internal_address.to_string(),
         "--rpc-listen-addr",
         &chiseld_config.rpc_address.to_string(),
-    ])
-    .current_dir(tmp_dir.path());
+    ]);
+    cmd.current_dir(tmp_dir.path());
+
+    let db = match &instance.db_config {
+        DatabaseConfig::Postgres(config) => {
+            let db = PostgresDb::new(config.clone());
+            cmd.args(["--db-uri", &db.url()]);
+            Database::Postgres(db)
+        },
+        DatabaseConfig::Sqlite => {
+            let db = SqliteDb::new(tmp_dir.clone(), ".chiseld.db");
+            cmd.args(["--db-uri", &db.url()]);
+            Database::Sqlite(db)
+        },
+        DatabaseConfig::LegacySplitSqlite => {
+            let meta = SqliteDb::new(tmp_dir.clone(), "chiseld-meta.db");
+            let data = SqliteDb::new(tmp_dir.clone(), "chiseld-data.db");
+            cmd.args([
+                "--metadata-db-uri",
+                &meta.url(),
+                "--data-db-uri",
+                &data.url(),
+            ]);
+            Database::LegacySplitSqlite { meta, data }
+        },
+    };
 
     let mut chiseld = GuardedChild::new(cmd);
-    wait_for_chiseld_startup(&mut chiseld, &chisel).await;
+    if instance.spec.start_chiseld {
+        chiseld.start().await;
+        wait_for_chiseld_startup(&mut chiseld, &chisel).await;
+    }
 
     TestContext {
         chiseld,
@@ -195,8 +211,8 @@ pub(crate) async fn run_tests(opt: Arc<Opt>) -> bool {
     while !instances.is_empty() || !futures.is_empty() {
         if !instances.is_empty() && futures.len() < parallel {
             let instance = Arc::new(instances.pop().unwrap());
-            let future = enclose! {(instance, opt, ports_counter) async move {
-                let ctx = setup_test_context(&opt, &ports_counter, &instance).await;
+            let future = enclose! {(instance, ports_counter) async move {
+                let ctx = setup_test_context(&ports_counter, &instance).await;
                 instance.spec.test_fn.call(ctx).await;
             }};
             let task = tokio::task::spawn(future);

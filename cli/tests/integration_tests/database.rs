@@ -1,7 +1,6 @@
 // SPDX-FileCopyrightText: © 2022 ChiselStrike <info@chiselstrike.com>
 
 use crate::framework::execute;
-use crate::{DatabaseKind, Opt};
 use rand::{distributions::Alphanumeric, Rng};
 use std::process::Command;
 use std::sync::Arc;
@@ -11,6 +10,7 @@ use tempdir::TempDir;
 pub enum DatabaseConfig {
     Postgres(PostgresConfig),
     Sqlite,
+    LegacySplitSqlite,
 }
 
 #[derive(Debug, Clone)]
@@ -56,15 +56,7 @@ impl PostgresConfig {
 pub enum Database {
     Postgres(PostgresDb),
     Sqlite(SqliteDb),
-}
-
-impl Database {
-    pub fn url(&self) -> String {
-        match self {
-            Database::Postgres(db) => db.url(),
-            Database::Sqlite(db) => db.url(),
-        }
-    }
+    LegacySplitSqlite { meta: SqliteDb, data: SqliteDb },
 }
 
 pub struct PostgresDb {
@@ -105,22 +97,16 @@ impl Drop for PostgresDb {
 
 pub struct SqliteDb {
     pub tmp_dir: Arc<TempDir>,
+    pub file_name: String,
 }
 
 impl SqliteDb {
-    pub fn url(&self) -> String {
-        let path = self.tmp_dir.path().join(".chiseld.db");
-        format!("sqlite://{}?mode=rwc", path.display())
+    pub fn new(tmp_dir: Arc<TempDir>, file_name: &str) -> Self {
+        Self { tmp_dir, file_name: file_name.into() }
     }
-}
 
-pub fn generate_database_config(opt: &Opt) -> DatabaseConfig {
-    match opt.database {
-        DatabaseKind::Sqlite => DatabaseConfig::Sqlite,
-        DatabaseKind::Postgres => DatabaseConfig::Postgres(PostgresConfig::new(
-            opt.database_host.clone(),
-            opt.database_user.clone(),
-            opt.database_password.clone(),
-        )),
+    pub fn url(&self) -> String {
+        let path = self.tmp_dir.path().join(&self.file_name);
+        format!("sqlite://{}?mode=rwc", path.display())
     }
 }

@@ -29,7 +29,7 @@ impl DbConnection {
         Ok(Self { pool })
     }
 
-    pub fn query_builder(&self) -> &dyn SchemaBuilder {
+    pub fn query_builder(&self) -> &'static dyn SchemaBuilder {
         match self.pool.any_kind() {
             AnyKind::Postgres => &PostgresQueryBuilder,
             AnyKind::Sqlite => &SqliteQueryBuilder,

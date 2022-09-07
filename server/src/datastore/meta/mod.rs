@@ -1,6 +1,7 @@
 // SPDX-FileCopyrightText: © 2021 ChiselStrike <info@chiselstrike.com>
 
-pub mod schema;
+mod migrate;
+mod schema;
 
 use crate::datastore::DbConnection;
 use crate::policies::PolicySystem;
@@ -218,20 +219,25 @@ impl MetaService {
         Self { db }
     }
 
-    async fn get_version(transaction: &mut Transaction<'_, Any>) -> Result<String> {
+    async fn get_schema_version(&self, transaction: &mut Transaction<'_, Any>) -> Result<String> {
         let query = sqlx::query(
             "SELECT version FROM chisel_version WHERE version_id = 'chiselstrike' LIMIT 1",
         );
-        match fetch_all(transaction, query).await {
-            Err(_) => Ok("0".to_string()),
-            Ok(rows) => {
-                if let Some(row) = rows.into_iter().next() {
-                    let v: &str = row.get("version");
-                    Ok(v.to_string())
-                } else {
-                    Ok("0".into())
-                }
+
+        if let Ok(rows) = fetch_all(&mut *transaction, query).await {
+            if let Some(row) = rows.into_iter().next() {
+                let v: &str = row.get("version");
+                return Ok(v.to_string());
             }
+        }
+
+        // the database does not store a version, it may mean one of two things:
+        // - the database is empty
+        // - the database comes from a server that did not use schema versioning
+        if self.count_tables(transaction).await? == 0 {
+            Ok("empty".into())
+        } else {
+            Ok("0".into())
         }
     }
 
@@ -241,7 +247,7 @@ impl MetaService {
     /// For Postgres this is a lot more complex because it is not possible to
     /// do cross-database transactions. But this handles the local dev case,
     /// which is what is most relevant at the moment.
-    pub async fn maybe_migrate_sqlite_database(&self, sources: &[PathBuf], to: &str) -> Result<()> {
+    pub async fn maybe_migrate_split_sqlite_database(&self, sources: &[PathBuf], to: &str) -> Result<()> {
         match self.db.pool.any_kind() {
             AnyKind::Sqlite => {}
             _ => anyhow::bail!("Can't migrate postgres tables yet"),
@@ -270,7 +276,7 @@ impl MetaService {
 
         let mut transaction = self.begin_transaction().await?;
         match self
-            .maybe_migrate_sqlite_database_inner(&mut transaction, sources)
+            .maybe_migrate_split_sqlite_database_inner(&mut transaction, sources)
             .await
         {
             Err(x) => Err(x),
@@ -293,7 +299,7 @@ impl MetaService {
         Ok(())
     }
 
-    async fn maybe_migrate_sqlite_database_inner(
+    async fn maybe_migrate_split_sqlite_database_inner(
         &self,
         transaction: &mut Transaction<'_, Any>,
         sources: &[PathBuf],
@@ -355,54 +361,35 @@ impl MetaService {
     }
 
     /// Create the schema of the underlying metadata store.
-    pub async fn create_schema(&self) -> Result<()> {
+    pub async fn migrate_schema(&self) -> Result<()> {
         let query_builder = self.db.query_builder();
-        let tables = schema::tables();
-
         let mut transaction = self.begin_transaction().await?;
-        // The chisel_version table is relatively new, so if it doesn't exist
-        // it could be that this is either a new installation, or an upgrade. So
-        // we query something that was with us from the beginning to tell those apart
-        let new_install = self.count_tables(&mut transaction).await? == 0;
 
-        for table in tables {
-            let query = table.build_any(query_builder);
-            let query = sqlx::query(&query);
-            execute(&mut transaction, query).await?;
-        }
-
-        if new_install {
-            let query =
-                sqlx::query("INSERT INTO chisel_version (version, version_id) VALUES ($1, $2)")
-                    .bind(schema::CURRENT_VERSION)
-                    .bind("chiselstrike");
-            execute(&mut transaction, query).await?;
-        }
-
-        let mut version = Self::get_version(&mut transaction).await?;
-
-        while version != schema::CURRENT_VERSION {
-            let (statements, new_version) = schema::evolve_from(&version).await?;
-
-            for statement in statements {
-                let query = statement.build_any(query_builder);
-                let query = sqlx::query(&query);
-                execute(&mut transaction, query).await?;
+        let mut version = self.get_schema_version(&mut transaction).await?;
+        {
+            let mut ctx = migrate::MigrateContext {
+                query_builder,
+                transaction: &mut transaction,
+            };
+            // migrate the database to the latest version, step by step
+            while let Some(new_version) = migrate::migrate_schema_step(&mut ctx, &version).await? {
+                log::info!("Migrated database from version {:?} to version {:?}", version, new_version);
+                version = new_version.into();
             }
+        };
 
-            let query = sqlx::query(
+        // upsert the version in the database
+        execute(&mut transaction,
+            sqlx::query(
                 r#"
                 INSERT INTO chisel_version (version, version_id)
                 VALUES ($1, $2)
                 ON CONFLICT(version_id) DO UPDATE SET version = $1
                 WHERE chisel_version.version_id = $2"#,
             )
-            .bind(new_version.as_str())
-            .bind("chiselstrike");
-
-            execute(&mut transaction, query).await?;
-            version = new_version;
-        }
+            .bind(version.as_str())
+            .bind("chiselstrike"),
+        ).await?;
 
         Self::commit_transaction(transaction).await?;
         Ok(())
@@ -810,41 +797,6 @@ mod tests {
     use crate::datastore::{query::tests::*, QueryEngine};
     use tempdir::TempDir;
 
-    // test that we can open and successfully evolve 0.6 to the current version
-    #[tokio::test]
-    async fn evolve_0_6() -> Result<()> {
-        let tmp_dir = TempDir::new("evolve_0_6")?;
-        let file_path = tmp_dir.path().join("chisel.db");
-        tokio::fs::copy("./test_files/chiseld-0.6.db", &file_path)
-            .await
-            .unwrap();
-
-        let conn_str = format!("sqlite://{}?mode=rwc", file_path.display());
-
-        let meta_conn = DbConnection::connect(&conn_str, 1).await?;
-        let meta = MetaService::new(Arc::new(meta_conn));
-
-        let mut transaction = meta.begin_transaction().await.unwrap();
-        let version = MetaService::get_version(&mut transaction).await.unwrap();
-        MetaService::commit_transaction(transaction).await.unwrap();
-        assert_eq!(version, "0");
-
-        meta.create_schema().await.unwrap();
-        let mut transaction = meta.begin_transaction().await.unwrap();
-        let version = MetaService::get_version(&mut transaction).await.unwrap();
-        MetaService::commit_transaction(transaction).await.unwrap();
-        assert_eq!(version, schema::CURRENT_VERSION);
-
-        // evolving again works (idempotency, we don't fail)
-        meta.create_schema().await.unwrap();
-        let mut transaction = meta.begin_transaction().await.unwrap();
-        let version = MetaService::get_version(&mut transaction).await.unwrap();
-        MetaService::commit_transaction(transaction).await.unwrap();
-        assert_eq!(version, schema::CURRENT_VERSION);
-
-        Ok(())
-    }
-
     #[tokio::test]
     // test that we can join a split meta and data db into one
     async fn migrate_split_db() -> Result<()> {
@@ -865,7 +817,7 @@ mod tests {
 
         let conn = Arc::new(DbConnection::connect(&conn_str, 1).await?);
         let meta = MetaService::new(conn.clone());
-        meta.maybe_migrate_sqlite_database(
+        meta.maybe_migrate_split_sqlite_database(
             &[meta_path, data_path],
             &new_path.display().to_string(),
         )
@@ -900,7 +852,7 @@ mod tests {
 
         let conn = Arc::new(DbConnection::connect(&conn_str, 1).await?);
         let meta = MetaService::new(conn.clone());
-        meta.maybe_migrate_sqlite_database(
+        meta.maybe_migrate_split_sqlite_database(
             &[meta_path.clone(), data_path],
             &new_path.display().to_string(),
         )
@@ -929,7 +881,7 @@ mod tests {
 
         let conn = Arc::new(DbConnection::connect(&conn_str, 1).await?);
         let meta = MetaService::new(conn.clone());
-        meta.maybe_migrate_sqlite_database(
+        meta.maybe_migrate_split_sqlite_database(
             &[meta_path.clone(), data_path.clone()],
             &new_path.display().to_string(),
         )
@@ -967,7 +919,7 @@ mod tests {
 
         let conn = Arc::new(DbConnection::connect(&conn_str, 1).await?);
         let meta = MetaService::new(conn.clone());
-        meta.maybe_migrate_sqlite_database(
+        meta.maybe_migrate_split_sqlite_database(
             &[meta_path.clone(), data_path.clone()],
             &new_path.display().to_string(),
         )

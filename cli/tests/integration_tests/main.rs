@@ -18,7 +18,7 @@ mod rust;
 mod rust_tests;
 mod suite;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy)]
 pub enum DatabaseKind {
     Postgres,
     Sqlite,

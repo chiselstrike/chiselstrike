@@ -108,11 +108,13 @@ async fn make_server(opt: Opt) -> Result<(Arc<Server>, TaskHandle<Result<()>>)> 
     let legacy_dbs = find_legacy_sqlite_dbs(&opt);
     if extract_sqlite_file(&opt.db_uri).is_some() && legacy_dbs.len() == 2 {
         meta_service
-            .maybe_migrate_sqlite_database(&legacy_dbs, &opt.db_uri)
-            .await?;
+            .maybe_migrate_split_sqlite_database(&legacy_dbs, &opt.db_uri)
+            .await
+            .context("Could not migrate split sqlite databases into a single database")?;
     }
 
-    meta_service.create_schema().await?;
+    meta_service.migrate_schema().await
+        .context("Could not migrate database schema to the latest version")?;
 
     let builtin_types = Arc::new(BuiltinTypes::new());
     builtin_types.create_backing_tables(&query_engine).await?;
