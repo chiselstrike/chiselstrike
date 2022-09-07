@@ -78,26 +78,26 @@ async fn run(
     version: Arc<Version>,
     mut job_rx: mpsc::Receiver<VersionJob>,
 ) -> Result<()> {
-    let ready_rxs = FuturesUnordered::new();
-    let mut job_txs = Vec::new();
+    let worker_ready_rxs = FuturesUnordered::new();
+    let mut worker_job_txs = Vec::new();
     let worker_handles = FuturesUnordered::new();
 
     // spawn all workers for this version
     for worker_idx in 0..init.worker_count {
-        let (ready_tx, ready_rx) = oneshot::channel();
-        let (job_tx, job_rx) = mpsc::channel(1);
+        let (worker_ready_tx, worker_ready_rx) = oneshot::channel();
+        let (worker_job_tx, worker_job_rx) = mpsc::channel(1);
         let worker_handle = worker::spawn(WorkerInit {
             worker_idx,
             server: init.server.clone(),
             version: version.clone(),
             modules: init.modules.clone(),
-            ready_tx,
-            job_rx,
+            ready_tx: worker_ready_tx,
+            job_rx: worker_job_rx,
         })
         .await?;
 
-        ready_rxs.push(ready_rx);
-        job_txs.push(job_tx);
+        worker_ready_rxs.push(worker_ready_rx);
+        worker_job_txs.push(worker_job_tx);
         worker_handles.push(worker_handle);
     }
 
@@ -108,7 +108,7 @@ async fn run(
         // if some worker drops its `ready_tx`, we ignore the error and never signal that the
         // version is ready. the worker will most likely return an error from its `worker_handle`
         // anyway, so it is better if we propagate _that_ error
-        if ready_rxs.try_collect::<()>().await.is_ok() {
+        if worker_ready_rxs.try_collect::<()>().await.is_ok() {
             let _ = ready_tx.send(());
             info!("Version {:?} is ready", version_id);
         }
@@ -121,14 +121,14 @@ async fn run(
         // TODO: we should perhaps be more clever than round-robin
         let mut worker_i = 0;
         while let Some(job) = job_rx.recv().await {
-            if job_txs[worker_i].send(job).await.is_err() {
+            if worker_job_txs[worker_i].send(job).await.is_err() {
                 bail!(
                     "Worker {:?} {} is unable to accept jobs",
                     version_id,
                     worker_i
                 );
             }
-            worker_i = (worker_i + 1) % job_txs.len();
+            worker_i = (worker_i + 1) % worker_job_txs.len();
         }
         Ok(())
     }));

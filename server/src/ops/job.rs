@@ -42,8 +42,8 @@ async fn op_chisel_accept_job(
 
     #[allow(clippy::await_holding_refcell_ref)]
     async fn recv_job(job_rx: &RefCell<mpsc::Receiver<VersionJob>>) -> Result<Option<VersionJob>> {
-        // yes, we really *do* want to hold a `RefMut` across `.await` ...
         match job_rx.try_borrow_mut() {
+            // yes, we really *do* want to hold a `RefMut` across `.await` ...
             Ok(mut job_rx) => Ok(job_rx.recv().await),
             // ... if somebody else tries to borrow this `RefCell` while we are `.await`-ing, they will
             // get this error
