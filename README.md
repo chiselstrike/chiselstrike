@@ -7,9 +7,43 @@
 [![Discord](https://img.shields.io/discord/933071162680958986?color=5865F2&label=discord&logo=discord&logoColor=8a9095)](https://discord.gg/GHNN9CNAZe)
 [![Twitter](https://img.shields.io/twitter/follow/chiselstrike?style=plastic)](https://twitter.com/chiselstrike)
 
+## What is ChiselStrike?
+
+ChiselStrike is a complete backend bundled in one piece. Your one stop-shop for all
+your backend needs, powered by TypeScript.
+
 ## Why ChiselStrike?
 
-ChiselStrike provides everything you need to handle your backend, from the data layer to the business logic, allowing you to focus on what you care about – your code, rather than worrying about databases schemas, migrations, or even operations.
+Putting together a backend is hard work. Databases? ORM? Business logic? Data
+access policies? And how to offer all of that through an API?
+
+Learning all that, plus figuring out the interactions between all the
+components can be a drain on an application developer's time. Low-code
+based approaches allow for super fast prototypes, but as you need to scale and
+evolve, the time you saved on the prototype is now owed with interest in refactorings,
+migrations, etc.
+
+ChiselStrike provides everything you need to handle and evolve your backend,
+from the data layer to the business logic, allowing you to focus on what you
+care about – your code, rather than worrying about databases schemas,
+migrations, or even database operations.
+
+All driven by TypeScript, so your backend can evolve as your code evolves.
+
+## How does that work?
+
+ChiselStrike keeps things as close as possible to pure TypeScript, and a
+[translation
+layer](https://blog.chiselstrike.com/my-other-database-is-a-compiler-10fd527a4d78)
+takes care of index creation, database query generation, and even communicating
+with external systems like Kafka.
+
+Internally, ChiselStrike uses a SQLite database so there's no need to set up
+any external data layer (although it is possible to hook up an external
+Postgres-compatible database).  ChiselStrike also abstract other concepts
+common to complex backends, like
+[Kafka-compatible](https://blog.chiselstrike.com/dear-application-developer-how-far-can-you-really-go-without-a-message-queue-d9e5385fab64)
+streaming platforms.
 
 ![](imgs/diagram.png)
 
@@ -55,14 +89,18 @@ curl -X POST -d '{"content": "First comment", "by": "Jill"}' localhost:8080/dev/
 ### Is ChiselStrike a database?
 
 No. The [founding team at ChiselStrike](https://www.chiselstrike.com/about) have written databases from scratch before and
-we believe there are better things to do in life, like pretty much anything else. ChiselStrike wraps around
-existing databases, providing developers with a *relational-like abstraction* that allows one to think of backends
+we believe there are better things to do in life, like pretty much anything else. ChiselStrike comes bundled with SQLite,
+providing developers with a zero-conf *relational-like abstraction* that allows one to think of backends
 from the business needs down, instead of from the database up.
 
 Instead, you can think of ChiselStrike as a big pool of global shared memory.
 The data access API is an integral part of ChiselStrike and offers developers a way to just code, without
 worrying about the underlying database (anymore than you worry about what happens in each level of the memory hierarchy,
 meaning some people do, but most people don't have to!).
+
+In production, ChiselStrike can also hook up into a
+[Kafka-compatible](https://blog.chiselstrike.com/dear-application-developer-how-far-can-you-really-go-without-a-message-queue-d9e5385fab64)
+streaming platform when available, and transparently drive both that and the database from a unified TypeScript/JavaScript abstraction.
 
 ### Is ChiselStrike an ORM?
 
@@ -71,7 +109,8 @@ in your programming language. However, in traditional ORMs you start from the da
 are done to the database schema, which is then bubbled up through *migrations*, and elements of the database invariably leak
 to the API.
 
-ChiselStrike, on the other hand, starts from your code and automates the decisions needed to implement that into the database.
+ChiselStrike, on the other hand, starts from your code and automates the decisions needed to implement that into the database, much
+like what a [compiler](https://blog.chiselstrike.com/my-other-database-is-a-compiler-10fd527a4d78) would do.
 
 Let's look at [ChiselStrike's documentation](https://docs.chiselstrike.com/Intro/first) for an example of what's needed to create a comment on a blog post:
 
@@ -151,7 +190,7 @@ ChiselStrike provides everything you need to handle your backend, from the data 
 
 It allows you to declaratively specify compliance policies around who can access the data and under which circumstances.
 
-Your ChiselStrike files can go into their own repo, or even better, into a subdirectory of your existing frontend repo. You can code your presentation and data layer together, and turn any frontend framework into a full-stack (including the database layer!) framework in no time.
+Your ChiselStrike files can go into their own repo, or even better, into a subdirectory of your existing frontend repo. You can code your presentation and data layer together, and turn any frontend framework into a full-stack (including the database layer!) framework in minutes.
 
 ## Contributing
 
@@ -189,6 +228,8 @@ Also, consider:
 ## Next steps?
 
 Our documentation (including a quick tutorial) is available at [docs.chiselstrike.com](https://docs.chiselstrike.com)
+
+Don't want the hassle of deploying and managing this yourself?
 
 Our hosted version is available [here](https://www.chiselstrike.com/login) and is now in beta. You can deploy your project
 straight from your git repository and see your backend materializing in front of your eyes.
