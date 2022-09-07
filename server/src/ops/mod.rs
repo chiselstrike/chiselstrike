@@ -7,6 +7,7 @@ use deno_core::{serde_v8, v8};
 
 mod datastore;
 mod job;
+mod type_system;
 
 pub fn extension() -> deno_core::Extension {
     deno_core::Extension::builder()
@@ -28,6 +29,7 @@ pub fn extension() -> deno_core::Extension {
             datastore::op_chisel_query_next::decl(),
             job::op_chisel_accept_job::decl(),
             job::op_chisel_http_respond::decl(),
+            type_system::op_chisel_get_version_type_system::decl(),
         ])
         .build()
 }

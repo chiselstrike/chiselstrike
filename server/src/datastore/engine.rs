@@ -97,7 +97,7 @@ impl TryFrom<&Field> for ColumnDef {
         match field.type_id {
             TypeId::String => column_def.text(),
             TypeId::Id => column_def.text().primary_key(),
-            TypeId::Float => column_def.double(),
+            TypeId::Float | TypeId::JsDate => column_def.double(),
             TypeId::Boolean => column_def.boolean(),
             TypeId::Entity { .. } => column_def.text(), // Foreign key, must the be same type as Type::Id
             TypeId::Array(_) => column_def.text(),      // Arrays are stored as serialized JSONs.
@@ -396,7 +396,7 @@ impl QueryEngine {
                         }};
                     }
                     let mut val = match type_id {
-                        TypeId::Float => {
+                        TypeId::Float | TypeId::JsDate => {
                             // https://github.com/launchbadge/sqlx/issues/1596
                             // sqlx gets confused if the float doesn't have decimal points.
                             let val: f64 = row.get_unchecked(column_idx);
@@ -687,7 +687,7 @@ impl QueryEngine {
             TypeId::String | TypeId::Id | TypeId::Entity { .. } => {
                 SqlValue::String(convert_json_value!(as_str, str))
             }
-            TypeId::Float => SqlValue::F64(convert_json_value!(as_f64, f64)),
+            TypeId::Float | TypeId::JsDate => SqlValue::F64(convert_json_value!(as_f64, f64)),
             TypeId::Boolean => SqlValue::Bool(convert_json_value!(as_bool, bool)),
             TypeId::Array(element_type) => {
                 let val = match ty_value.get(&field.name) {
@@ -719,7 +719,7 @@ impl QueryEngine {
                 }
                 match element_type {
                     TypeId::String | TypeId::Id => maybe_bail!(is_string),
-                    TypeId::Float => maybe_bail!(is_number),
+                    TypeId::Float | TypeId::JsDate => maybe_bail!(is_number),
                     TypeId::Boolean => maybe_bail!(is_boolean),
                     TypeId::Array(inner_element) => self
                         .validate_array(inner_element, e)

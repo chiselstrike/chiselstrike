@@ -3,6 +3,7 @@
 import { crud } from "./crud.ts";
 import type { Handler } from "./routing.ts";
 import { mergeDeep, opAsync, opSync } from "./utils.ts";
+import { SimpleTypeSystem, TypeSystem } from "./type_system.ts";
 
 /**
  * Base class for various Operators applicable on `ChiselCursor`. An
@@ -13,7 +14,7 @@ import { mergeDeep, opAsync, opSync } from "./utils.ts";
  */
 abstract class Operator<Input, Output> {
     // Read by rust
-    readonly type;
+    readonly type: string;
     constructor(
         public readonly inner: Operator<unknown, Input> | undefined,
     ) {
@@ -90,8 +91,66 @@ class BaseEntity<T> extends Operator<never, T> {
     recordToOutput(rawRecord: unknown): T {
         const result = new this.baseConstructor();
         type RecordType = Record<string, unknown>;
-        mergeDeep(result as RecordType, rawRecord as RecordType);
+        this.populateEntity(
+            this.name,
+            result as RecordType,
+            rawRecord as RecordType,
+        );
         return result;
+    }
+
+    private populateEntity(
+        entityName: string,
+        result: Record<string, unknown>,
+        jsonResult: Record<string, unknown>,
+    ) {
+        const entity = requestContext.typeSystem.findEntity(entityName)!;
+        for (const field of entity.fields) {
+            if (!(field.name in jsonResult)) {
+                continue;
+            }
+            const fieldValue = jsonResult[field.name];
+            switch (field.type.name) {
+                case "string":
+                case "number":
+                case "boolean":
+                case "array":
+                    result[field.name] = fieldValue;
+                    break;
+                case "jsDate":
+                    result[field.name] = new Date(
+                        fieldValue as number | string,
+                    );
+                    break;
+                case "entity":
+                    if (fieldValue === undefined) {
+                        if (field.isOptional) {
+                            result[field.name] = fieldValue;
+                            continue;
+                        } else {
+                            throw new Error(
+                                `field ${field.name} of entity ${entityName} is not optional but backend returned no value`,
+                            );
+                        }
+                    }
+
+                    if (result[field.name] === undefined) {
+                        result[field.name] = new ChiselEntity();
+                    }
+                    type RecordType = Record<string, unknown>;
+                    this.populateEntity(
+                        field.type.entityName,
+                        result[field.name] as RecordType,
+                        fieldValue as RecordType,
+                    );
+                    break;
+                default:
+                    throw new Error(
+                        `field ${field.name} of entity ${entityName} has unexpected type ${field
+                            .type as unknown}`,
+                    );
+            }
+        }
     }
 
     public eval(): undefined {
@@ -1059,6 +1118,7 @@ export const requestContext: {
     path: string;
     routingPath: string;
     userId: string | undefined;
+    typeSystem: TypeSystem;
 } = {
     versionId: opSync("op_chisel_get_version_id") as string,
     method: "",
@@ -1066,6 +1126,9 @@ export const requestContext: {
     path: "",
     routingPath: "",
     userId: undefined,
+    typeSystem: new TypeSystem(
+        opSync("op_chisel_get_version_type_system") as SimpleTypeSystem,
+    ),
 };
 
 function ensureNotGet() {

@@ -18,6 +18,7 @@ pub enum Type {
     String,
     Float,
     Boolean,
+    JsDate,
     Entity(Entity),
     Array(Box<Type>),
 }
@@ -28,6 +29,7 @@ impl Type {
             Type::Float => "number".to_string(),
             Type::String => "string".to_string(),
             Type::Boolean => "boolean".to_string(),
+            Type::JsDate => "jsDate".to_string(),
             Type::Entity(ty) => ty.name.to_string(),
             Type::Array(ty) => format!("Array<{}>", ty.name()),
         }
@@ -56,6 +58,13 @@ impl Entity {
     /// Checks whether `Entity` is Auth builtin type.
     pub fn is_auth(&self) -> bool {
         matches!(self, Entity::Auth(_))
+    }
+
+    pub fn object_type(&self) -> &Arc<ObjectType> {
+        match self {
+            Entity::Custom { object, .. } => object,
+            Entity::Auth(object) => object,
+        }
     }
 }
 
@@ -224,8 +233,13 @@ pub enum TypeId {
     String,
     Float,
     Boolean,
+    /// Represents JavaScript Date class
+    JsDate,
     Id,
-    Entity { name: String, version_id: String },
+    Entity {
+        name: String,
+        version_id: String,
+    },
     Array(Box<TypeId>),
 }
 
@@ -235,6 +249,7 @@ impl TypeId {
             TypeId::Id | TypeId::String => "string".to_string(),
             TypeId::Float => "number".to_string(),
             TypeId::Boolean => "boolean".to_string(),
+            TypeId::JsDate => "jsDate".to_string(),
             TypeId::Entity { ref name, .. } => name.to_string(),
             TypeId::Array(elem_type) => format!("Array<{}>", elem_type.name()),
         }
@@ -247,6 +262,7 @@ impl From<Type> for TypeId {
             Type::String => Self::String,
             Type::Float => Self::Float,
             Type::Boolean => Self::Boolean,
+            Type::JsDate => Self::JsDate,
             Type::Entity(e) => Self::Entity {
                 name: e.name().to_string(),
                 version_id: e.version_id.clone(),

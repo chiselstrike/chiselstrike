@@ -363,7 +363,9 @@ impl ContainerType {
 impl TypeEnum {
     fn is_builtin(&self, ts: &TypeSystem) -> Result<bool> {
         let is_builtin = match self {
-            TypeEnum::String(_) | TypeEnum::Number(_) | TypeEnum::Bool(_) => true,
+            TypeEnum::String(_) | TypeEnum::Number(_) | TypeEnum::Bool(_) | TypeEnum::JsDate(_) => {
+                true
+            }
             TypeEnum::Entity(name) => ts.lookup_builtin_type(name).is_ok(),
             TypeEnum::Array(inner) => inner.value_type()?.is_builtin(ts)?,
         };
@@ -375,6 +377,7 @@ impl TypeEnum {
             TypeEnum::String(_) => Type::String,
             TypeEnum::Number(_) => Type::Float,
             TypeEnum::Bool(_) => Type::Boolean,
+            TypeEnum::JsDate(_) => Type::JsDate,
             TypeEnum::Entity(name) => ts.lookup_builtin_type(name)?,
             TypeEnum::Array(inner) => Type::Array(Box::new(inner.value_type()?.get_builtin(ts)?)),
         };
@@ -388,6 +391,7 @@ impl From<Type> for TypeMsg {
             Type::Float => TypeEnum::Number(true),
             Type::String => TypeEnum::String(true),
             Type::Boolean => TypeEnum::Bool(true),
+            Type::JsDate => TypeEnum::JsDate(true),
             Type::Entity(entity) => TypeEnum::Entity(entity.name().to_owned()),
             Type::Array(elem_type) => {
                 let inner_msg = (*elem_type).into();
