@@ -47,6 +47,7 @@ async fn main() -> Result<()> {
     compile("routing").await?;
     compile("run").await?;
     compile("special").await?;
+    compile("type_system").await?;
     compile("utils").await?;
 
     Ok(())

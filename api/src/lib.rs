@@ -33,6 +33,7 @@ lazy_static! {
         source_js!("routing"),
         source_js!("run"),
         source_js!("special"),
+        source_js!("type_system"),
         source_js!("utils"),
         ("main.js", include_str!("main.js")),
     ]
@@ -49,6 +50,7 @@ lazy_static! {
         source_d_ts!("routing"),
         source_d_ts!("run"),
         source_d_ts!("special"),
+        source_d_ts!("type_system"),
         source_d_ts!("utils"),
     ]
     .into_iter()
