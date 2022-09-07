@@ -17,6 +17,7 @@ impl BuiltinTypes {
         types.insert("string".into(), Type::String);
         types.insert("number".into(), Type::Float);
         types.insert("boolean".into(), Type::Boolean);
+        types.insert("jsDate".into(), Type::JsDate);
         add_auth_entity(
             &mut types,
             AUTH_USER_NAME,
