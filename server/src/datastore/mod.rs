@@ -59,7 +59,7 @@ pub mod expr;
 pub mod meta;
 pub mod query;
 
-use std::collections::HashMap;
+use std::rc::Rc;
 use std::task::Poll;
 
 pub use dbconn::DbConnection;
@@ -70,30 +70,34 @@ use deno_core::futures::{self, StreamExt};
 use serde_json::Value as JsonValue;
 
 use self::engine::QueryResults;
-use crate::policy::engine::{Action, PolicyEvalInstance};
+use self::query::PolicyInstancesCache;
+use crate::policy::engine::{Action, PolicyEngine};
 use crate::types::Entity;
 
 struct EntityStream {
     base_type: Entity,
     inner: QueryResults,
-    policy_instances: HashMap<String, PolicyEvalInstance>,
+    policy_instances: PolicyInstancesCache,
+    engine: Rc<PolicyEngine>,
 }
 
 impl EntityStream {
     fn validate(
-        &self,
+        &mut self,
         value: serde_json::Map<String, JsonValue>,
     ) -> anyhow::Result<Option<serde_json::Map<String, JsonValue>>> {
-        match self.policy_instances.get(self.base_type.name()) {
-            Some(instance) => match instance.get_read_action(&self.base_type, &value)? {
-                Action::Allow => Ok(Some(value)),
-                Action::Deny => Err(anyhow::anyhow!("access denied")),
-                Action::Skip => Ok(None),
-                Action::Log => {
-                    info!("json value: {:?}", value);
-                    Ok(Some(value))
+        match self.policy_instances.get_mut(self.base_type.name()) {
+            Some(instance) => {
+                match instance.get_read_action(&self.engine, &self.base_type, &value)? {
+                    Some(Action::Allow) | None => Ok(Some(value)),
+                    Some(Action::Deny) => Err(anyhow::anyhow!("access denied")),
+                    Some(Action::Skip) => Ok(None),
+                    Some(Action::Log) => {
+                        info!("json value: {:?}", value);
+                        Ok(Some(value))
+                    }
                 }
-            },
+            }
             // no policy, don't do anything.
             None => Ok(Some(value)),
         }

@@ -54,6 +54,7 @@ fn run_query_impl(
         base_type,
         inner: stream,
         policy_instances: std::mem::take(&mut context.policy_instances),
+        engine: context.type_policies.clone(),
     };
 
     Ok(async move {
@@ -792,12 +793,12 @@ mod tests {
             headers,
             _method: "GET".into(),
         };
-        let type_policies = PolicyEngine::default();
+        let type_policies = PolicyEngine::default().into();
         super::run_query(
             &mut RequestContext {
                 policies: &Policies::default(),
                 ts: &make_type_system(&*ENTITIES),
-                type_policies: &type_policies,
+                type_policies,
                 inner,
                 policy_instances: Default::default(),
             },
@@ -1122,7 +1123,7 @@ mod tests {
                     policies: &Policies::default(),
                     ts: &make_type_system(&*ENTITIES),
                     inner,
-                    type_policies: &Default::default(),
+                    type_policies: Default::default(),
                     policy_instances: Default::default(),
                 },
                 entity_name,

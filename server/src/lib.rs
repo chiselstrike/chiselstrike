@@ -11,7 +11,7 @@ pub use crate::server::{run_all, DoRepeat, Opt};
 pub(crate) type JsonObject = serde_json::Map<String, serde_json::Value>;
 
 pub(crate) static FEATURES: Lazy<Features> = Lazy::new(|| Features {
-    typescript_policies: false,
+    typescript_policies: true,
 });
 
 /// Chiseld experimental features

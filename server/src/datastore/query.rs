@@ -17,6 +17,7 @@ use std::collections::HashSet;
 use std::fmt;
 use std::fmt::Write;
 use std::ops::Deref;
+use std::rc::Rc;
 
 #[derive(Debug, Clone, EnumAsInner)]
 pub enum SqlValue {
@@ -39,8 +40,34 @@ pub struct RequestContext<'a> {
     pub policies: &'a Policies,
     /// Type system to be used of version `api_version`
     pub ts: &'a TypeSystem,
-    pub type_policies: &'a PolicyEngine,
-    pub policy_instances: HashMap<String, PolicyEvalInstance>,
+    pub type_policies: Rc<PolicyEngine>,
+    pub policy_instances: PolicyInstancesCache,
+}
+
+#[derive(Default)]
+pub struct PolicyInstancesCache {
+    inner: HashMap<String, PolicyEvalInstance>,
+}
+
+impl PolicyInstancesCache {
+    pub fn get_or_create_policy_instance_mut(
+        &mut self,
+        ty: &Entity,
+        ctx: &ChiselRequestContext,
+    ) -> &mut PolicyEvalInstance {
+        match self.inner.entry(ty.name().to_owned()) {
+            Entry::Occupied(e) => e.into_mut(),
+            Entry::Vacant(e) => {
+                let instance =
+                    PolicyEvalInstance::new(ty.name().into(), ty.api_version.clone(), ctx.clone());
+                e.insert(instance)
+            }
+        }
+    }
+
+    pub fn get_mut(&mut self, name: &str) -> Option<&mut PolicyEvalInstance> {
+        self.inner.get_mut(name)
+    }
 }
 
 impl Deref for RequestContext<'_> {
@@ -56,21 +83,6 @@ impl RequestContext<'_> {
     fn make_field_policies(&self, ty: &ObjectType) -> FieldPolicies {
         self.policies
             .make_field_policies(&self.user_id, &self.path, ty)
-    }
-
-    pub fn get_or_create_policy_instance(
-        &mut self,
-        ty: &Entity,
-    ) -> Result<Option<&PolicyEvalInstance>> {
-        match self.policy_instances.entry(ty.name().to_owned()) {
-            Entry::Occupied(e) => Ok(Some(e.into_mut())),
-            Entry::Vacant(e) => {
-                let instance =
-                    self.type_policies
-                        .instantiate(ty.name(), &ty.api_version, &self.inner)?;
-                Ok(instance.map(|i| &*e.insert(i)))
-            }
-        }
     }
 }
 
@@ -443,10 +455,11 @@ impl QueryPlan {
     }
 
     fn add_type_filters(&mut self, ctx: &mut RequestContext, ty: &Entity) -> anyhow::Result<()> {
-        if let Some(instance) = ctx.get_or_create_policy_instance(ty)? {
-            if let Some(expression) = instance.make_read_filter_expr()? {
-                self.operators.push(QueryOp::Filter { expression });
-            }
+        let instance = ctx
+            .policy_instances
+            .get_or_create_policy_instance_mut(ty, &ctx.inner);
+        if let Some(expression) = instance.make_read_filter_expr(&ctx.type_policies)? {
+            self.operators.push(QueryOp::Filter { expression });
         }
 
         Ok(())
@@ -1030,7 +1043,7 @@ pub mod tests {
                     policies: &Policies::default(),
                     ts: &make_type_system(&*ENTITIES),
                     inner,
-                    type_policies: &Default::default(),
+                    type_policies: Default::default(),
                     policy_instances: Default::default(),
                 },
                 op_chain,
@@ -1104,7 +1117,7 @@ pub mod tests {
                     policies: &Policies::default(),
                     ts: &make_type_system(&*ENTITIES),
                     inner,
-                    type_policies: &Default::default(),
+                    type_policies: Default::default(),
                     policy_instances: Default::default(),
                 },
                 entity_name,

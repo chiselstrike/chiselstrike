@@ -508,7 +508,7 @@ async fn op_chisel_read_body(
 }
 
 /// RequestContext corresponds to `requestContext` structure used in datastore.ts.
-#[derive(Deserialize, Serialize)]
+#[derive(Deserialize, Serialize, Clone)]
 pub struct ChiselRequestContext {
     /// Current URL path.
     pub path: String,
@@ -530,7 +530,7 @@ impl RequestContext<'_> {
         policies: &'a Policies,
         ts: &'a TypeSystem,
         inner: ChiselRequestContext,
-        type_policies: &'a PolicyEngine,
+        type_policies: Rc<PolicyEngine>,
     ) -> RequestContext<'a> {
         RequestContext {
             policies,
@@ -839,7 +839,7 @@ async fn op_chisel_read_worker_channel(state: Rc<RefCell<OpState>>) -> Result<()
         WorkerMsg::SetVersionTypePolicies { version, policies } => {
             put_type_policies_version(state, version, policies)
         }
-        WorkerMsg::InitTypePolicies(store) => state.put(PolicyEngine::new(store)),
+        WorkerMsg::InitTypePolicies(store) => state.put(Rc::new(PolicyEngine::new(store))),
     }
 
     Ok(())
@@ -850,9 +850,12 @@ fn put_type_policies_version(
     version: String,
     policies: TypePolicyStore,
 ) {
-    assert!(state.has::<PolicyEngine>(), "uninitialized policy engine!");
-    let engine = state.borrow_mut::<PolicyEngine>();
-    engine.store_mut().insert(version, policies);
+    assert!(
+        state.has::<Rc<PolicyEngine>>(),
+        "uninitialized policy engine!"
+    );
+    let engine = policy_engine(state);
+    engine.with_store_mut(|s| s.insert(version, policies));
 }
 
 thread_local! {
@@ -1160,8 +1163,8 @@ pub fn query_engine_arc(st: &OpState) -> Arc<QueryEngine> {
     st.borrow::<Arc<QueryEngine>>().clone()
 }
 
-pub fn policy_engine(st: &OpState) -> &PolicyEngine {
-    st.borrow()
+pub fn policy_engine(st: &OpState) -> Rc<PolicyEngine> {
+    st.borrow::<Rc<PolicyEngine>>().clone()
 }
 
 pub async fn set_query_engine(query_engine: Arc<QueryEngine>) {

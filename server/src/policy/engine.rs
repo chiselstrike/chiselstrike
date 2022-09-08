@@ -1,4 +1,4 @@
-use std::cell::RefCell;
+use std::cell::{Ref, RefCell};
 use std::rc::Rc;
 use std::sync::Arc;
 
@@ -9,6 +9,7 @@ use chiselc::policies::{
 use serde_json::Value as JsonValue;
 
 use super::store::Store;
+use super::type_policy::TypePolicy;
 use crate::datastore::expr::{BinaryExpr, BinaryOp, Expr, PropertyAccess, Value};
 use crate::deno::ChiselRequestContext;
 use crate::types::Entity;
@@ -16,7 +17,7 @@ use crate::types::Entity;
 #[derive(Default)]
 pub struct PolicyEngine {
     eval_context: Rc<RefCell<PolicyEvalContext>>,
-    store: Store,
+    store: RefCell<Store>,
 }
 
 pub enum Action {
@@ -37,10 +38,7 @@ impl From<chiselc::policies::Action> for Action {
     }
 }
 
-/// An evaluation context instance for a given type, in a given request context.
-/// This instance allows to build the filter expression, or to test the filters against an entity
-/// instance.
-pub struct PolicyEvalInstance {
+struct Filter {
     predicates: Predicates,
     where_conds: Option<Cond>,
     entity_param_name: String,
@@ -49,7 +47,7 @@ pub struct PolicyEvalInstance {
     eval_ctx: Rc<RefCell<PolicyEvalContext>>,
 }
 
-impl PolicyEvalInstance {
+impl Filter {
     fn new(
         chisel_ctx: &ChiselRequestContext,
         read_policy: &Policy,
@@ -84,17 +82,18 @@ impl PolicyEvalInstance {
         })
     }
 
-    pub fn make_read_filter_expr(&self) -> Result<Option<Expr>> {
+    /// Returns the filter Expr for that Filter.
+    fn get_fitler_expr(&self) -> Result<Option<Expr>> {
         self.where_conds
             .as_ref()
             .map(|w| Self::cond_to_expr(w, &self.predicates, &self.entity_param_name))
             .transpose()
     }
 
-    pub fn get_read_action(
+    fn get_action(
         &self,
         _entity: &Entity,
-        val: &serde_json::Map<String, JsonValue>,
+        value: &serde_json::Map<String, JsonValue>,
     ) -> Result<Action> {
         // TODO: this clone is not necessary, but we need to abstact a bit the evaluation
         // environment.
@@ -103,7 +102,7 @@ impl PolicyEvalInstance {
         let mut env = self.env.clone();
         env.insert(
             self.entity_param_name.clone(),
-            JsonValue::Object(val.clone()),
+            JsonValue::Object(value.clone()),
         );
 
         let predicates = self.predicates.substitute(&env);
@@ -201,35 +200,83 @@ impl PolicyEvalInstance {
     }
 }
 
+/// An evaluation context instance for a given type, in a given request context.
+/// This instance allows to build the filter expression, or to test the filters against an entity
+/// instance.
+#[allow(dead_code)]
+pub struct PolicyEvalInstance {
+    read_filter: Option<Filter>,
+    write_filter: Option<Filter>,
+    chisel_ctx: ChiselRequestContext,
+    ty_name: String,
+    version: String,
+}
+
+impl PolicyEvalInstance {
+    pub fn new(ty_name: String, version: String, chisel_ctx: ChiselRequestContext) -> Self {
+        Self {
+            read_filter: None,
+            write_filter: None,
+            chisel_ctx,
+            ty_name,
+            version,
+        }
+    }
+
+    fn get_or_load_read_filter(&mut self, engine: &PolicyEngine) -> Result<Option<&Filter>> {
+        match self.read_filter {
+            Some(ref filter) => Ok(Some(filter)),
+            None => {
+                if let Some(tp) = engine.get_policy(&self.version, &self.ty_name) {
+                    if let Some(ref p) = tp.policies.read {
+                        let filter = Filter::new(&self.chisel_ctx, p, engine.eval_context.clone())?;
+                        self.read_filter.replace(filter);
+                        return Ok(self.read_filter.as_ref());
+                    }
+                }
+                Ok(None)
+            }
+        }
+    }
+
+    pub fn make_read_filter_expr(&mut self, engine: &PolicyEngine) -> Result<Option<Expr>> {
+        self.get_or_load_read_filter(engine)?
+            .and_then(|f| f.get_fitler_expr().transpose())
+            .transpose()
+    }
+
+    pub fn get_read_action(
+        &mut self,
+        engine: &PolicyEngine,
+        entity: &Entity,
+        val: &serde_json::Map<String, JsonValue>,
+    ) -> Result<Option<Action>> {
+        self.get_or_load_read_filter(engine)?
+            .map(|f| f.get_action(entity, val))
+            .transpose()
+    }
+}
+
 impl PolicyEngine {
     pub fn new(store: Store) -> Self {
         Self {
             eval_context: Default::default(),
-            store,
+            store: store.into(),
         }
     }
 
-    pub fn store_mut(&mut self) -> &mut Store {
-        &mut self.store
+    pub fn with_store_mut(&self, f: impl FnOnce(&mut Store)) {
+        let mut store = self.store.borrow_mut();
+        f(&mut store);
     }
 
-    /// Create an evaluation environment instance with the given parameters
-    pub fn instantiate(
-        &self,
-        ty_name: &str,
-        version: &str,
-        ctx: &ChiselRequestContext,
-    ) -> Result<Option<PolicyEvalInstance>> {
-        match self.store.get_policy(version, ty_name) {
-            Some(policy) => match &policy.policies.read {
-                Some(read_policy) => {
-                    let instance =
-                        PolicyEvalInstance::new(ctx, read_policy, self.eval_context.clone())?;
-                    Ok(Some(instance))
-                }
-                None => Ok(None),
-            },
-            None => Ok(None),
+    pub fn get_policy(&self, version: &str, ty: &str) -> Option<Ref<TypePolicy>> {
+        let store = self.store.borrow();
+        // this is a trick to get an Option<Ref<T>> from a Option<&T>
+        if store.get_policy(version, ty).is_some() {
+            Some(Ref::map(store, |s| s.get_policy(version, ty).unwrap()))
+        } else {
+            None
         }
     }
 }
