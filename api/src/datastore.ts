@@ -42,7 +42,7 @@ abstract class Operator<Input, Output> {
             opAsync(
                 "op_chisel_relational_query_create",
                 this,
-                ctxId(),
+                requestContext.rid,
             ) as Promise<number>;
         const recordToOutput = (rawRecord: unknown) => {
             return this.recordToOutput(rawRecord);
@@ -722,7 +722,7 @@ export class ChiselEntity {
         const jsonIds = await opAsync("op_chisel_store", {
             name: this.constructor.name,
             value: this,
-        }, ctxId()) as IdsJson;
+        }, requestContext.rid) as IdsJson;
         function backfillIds(this_: ChiselEntity, jsonIds: IdsJson) {
             this_.id = jsonIds.id;
             for (const [fieldName, value] of Object.entries(jsonIds.children)) {
@@ -891,7 +891,7 @@ export class ChiselEntity {
         await opAsync("op_chisel_delete", {
             typeName: this.name,
             filterExpr: restrictionsToFilterExpr(restrictions),
-        }, ctxId());
+        }, requestContext.rid);
     }
 
     /**
@@ -1061,14 +1061,6 @@ export const requestContext: {
     method: "",
     userId: undefined,
 };
-
-export function ctxId(): number {
-    if (requestContext.rid === undefined) {
-        throw new Error("undefined request context");
-    }
-
-    return requestContext.rid;
-}
 
 function ensureNotGet() {
     if (requestContext.method === "GET") {

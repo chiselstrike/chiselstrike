@@ -1,6 +1,5 @@
 // SPDX-FileCopyrightText: © 2022 ChiselStrike <info@chiselstrike.com>
 
-use crate::datastore::engine::TransactionStatic;
 use crate::module_loader::ModuleLoader;
 use crate::ops;
 use crate::server::Server;
@@ -49,13 +48,6 @@ pub struct WorkerJoinHandle {
 pub struct WorkerState {
     pub server: Arc<Server>,
     pub version: Arc<Version>,
-
-    /// The implicit global transaction for all data operations.
-    ///
-    /// TODO: the existence of this transaction means that the worker can only handle a single
-    /// job at a time. Unfortunately, to get rid of this, we have to significantly rework the
-    /// TypeScript API.
-    pub transaction: Option<TransactionStatic>,
 
     /// Channel for signaling that the worker is ready to handle jobs.
     ///
@@ -155,7 +147,6 @@ async fn run(init: WorkerInit) -> Result<()> {
     let worker_state = WorkerState {
         server: init.server,
         version: init.version.clone(),
-        transaction: None,
         ready_tx: Some(init.ready_tx),
         job_rx: Some(init.job_rx),
     };

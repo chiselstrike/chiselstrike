@@ -7,6 +7,7 @@ use deno_core::{serde_v8, v8};
 
 mod datastore;
 mod job;
+mod request_context;
 
 pub fn extension() -> deno_core::Extension {
     deno_core::Extension::builder()

@@ -1,5 +1,4 @@
-import { ctxId } from "./datastore.ts";
-import { ChiselCursor, ChiselEntity } from "./datastore.ts";
+import { ChiselCursor, ChiselEntity, requestContext } from "./datastore.ts";
 import { ChiselRequest } from "./request.ts";
 import { mergeDeep, opAsync, responseFromJson } from "./utils.ts";
 
@@ -180,7 +179,7 @@ async function fetchEntitiesCrud<T extends ChiselEntity>(
             typeName: type.name,
             url,
         },
-        ctxId(),
+        requestContext.rid,
     );
     return results as T[];
 }
@@ -195,7 +194,7 @@ async function deleteEntitiesCrud<T extends ChiselEntity>(
             typeName: type.name,
             url,
         },
-        ctxId(),
+        requestContext.rid,
     );
 }
 

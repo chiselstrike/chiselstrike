@@ -59,6 +59,65 @@ pub mod expr;
 pub mod meta;
 pub mod query;
 
+use std::collections::HashMap;
+
 pub use dbconn::DbConnection;
 pub use engine::QueryEngine;
 pub use meta::MetaService;
+
+use crate::policies::{FieldPolicies, PolicySystem};
+use crate::types::{ObjectType, TypeSystem};
+
+pub trait DataContext {
+    fn type_system(&self) -> &TypeSystem;
+    fn policy_system(&self) -> &PolicySystem;
+    fn make_field_policies(&self, ty: &ObjectType) -> FieldPolicies;
+    fn request_headers(&self) -> Option<&HashMap<String, String>>;
+    fn request_path(&self) -> Option<&str>;
+    fn version_id(&self) -> &str;
+}
+
+#[cfg(test)]
+mod test {
+    use std::collections::HashMap;
+    use std::sync::Arc;
+
+    use crate::policies::{FieldPolicies, PolicySystem};
+    use crate::types::{ObjectType, TypeSystem};
+
+    use super::DataContext;
+
+    pub struct TestDataContext {
+        pub ts: Arc<TypeSystem>,
+        pub ps: Arc<PolicySystem>,
+        pub version: String,
+        pub headers: HashMap<String, String>,
+        pub path: String,
+    }
+
+    impl DataContext for TestDataContext {
+        fn type_system(&self) -> &TypeSystem {
+            &self.ts
+        }
+
+        fn policy_system(&self) -> &PolicySystem {
+            &self.ps
+        }
+
+        fn make_field_policies(&self, _ty: &ObjectType) -> FieldPolicies {
+            todo!()
+        }
+
+        fn request_headers(&self) -> Option<&HashMap<String, String>> {
+            Some(&self.headers)
+        }
+
+        fn request_path(&self) -> Option<&str> {
+            Some(&self.path)
+        }
+
+        fn version_id(&self) -> &str {
+            &self.version
+        }
+    }
+}

@@ -52,11 +52,13 @@ export async function handleHttpRequest(
     // from the request with respect to an arbitrary base
     const url = new URL(httpRequest.uri, location.href);
 
+    // initialize the legacy global request context
+    // note that this means that we can only handle a single request at a time!
     requestContext.method = httpRequest.method;
     requestContext.userId = httpRequest.userId;
 
     // we must start the transaction before reading the logged-in user
-    await opAsync("op_chisel_begin_transaction");
+    await opAsync("op_chisel_begin_transaction", requestContext.rid);
     const user = await loggedInUser(); // reads `requestContext.userId`
 
     // convert the internal `httpRequest` to the request that is visible to user code
@@ -85,7 +87,7 @@ export async function handleHttpRequest(
         // code might still be running while the response is streaming
         const responseBody = await response.arrayBuffer();
 
-        await opAsync("op_chisel_commit_transaction");
+        await opAsync("op_chisel_commit_transaction", requestContext.rid);
 
         return {
             status: response.status,
@@ -103,7 +105,7 @@ export async function handleHttpRequest(
             `Error in ${httpRequest.method} ${httpRequest.uri}: ${description}`;
 
         try {
-            opSync("op_chisel_rollback_transaction");
+            opSync("op_chisel_rollback_transaction", requestContext.rid);
         } catch (e) {
             message += `\nError when rolling back transaction: ${e}`;
         }

@@ -2,22 +2,18 @@
 
 use crate::auth::AUTH_USER_NAME;
 use crate::datastore::expr::{BinaryExpr, Expr, PropertyAccess, Value as ExprValue};
-use crate::http::HttpResponse;
-use crate::policies::{FieldPolicies, PolicySystem};
-use crate::types::{Entity, Field, ObjectType, Type, TypeId, TypeSystem};
-use crate::worker::WorkerState;
+use crate::types::{Entity, Field, Type, TypeId};
 
 use anyhow::{anyhow, Context, Result};
 use enum_as_inner::EnumAsInner;
 use serde_derive::{Deserialize, Serialize};
 use serde_json::value::Value as JsonValue;
-use std::cell::{Ref, RefCell, RefMut};
 use std::collections::HashMap;
 use std::collections::HashSet;
 use std::fmt;
 use std::fmt::Write;
-use std::sync::Arc;
-use tokio::sync::oneshot;
+
+use super::DataContext;
 
 #[derive(Debug, Clone, EnumAsInner)]
 pub enum SqlValue {
@@ -29,119 +25,6 @@ pub enum SqlValue {
 impl From<&str> for SqlValue {
     fn from(f: &str) -> Self {
         Self::String(f.to_string())
-    }
-}
-
-/// A wrapper around RequestContext, to register it as a mutable resource in deno's resource table.
-pub struct RequestContextCell(RefCell<RequestContext>);
-
-impl RequestContextCell {
-    pub fn new(r: RequestContext) -> Self {
-        Self(RefCell::new(r))
-    }
-
-    pub fn borrow_mut(&self) -> RefMut<RequestContext> {
-        self.0.borrow_mut()
-    }
-
-    pub fn borrow(&self) -> Ref<RequestContext> {
-        self.0.borrow()
-    }
-}
-
-impl deno_core::Resource for RequestContextCell {}
-
-/// RequestContext bears a mix of contextual variables used by QueryPlan
-/// and Mutations.
-pub struct RequestContext {
-    /// Policies to be applied on the query.
-    pub ps: Arc<PolicySystem>,
-    /// Type system to be used of version `version_id`
-    pub ts: Arc<TypeSystem>,
-    /// Version to be used.
-    pub version_id: String,
-    pub inner: RequestContextKind,
-}
-
-impl RequestContext {
-    pub fn new(
-        ts: Arc<TypeSystem>,
-        ps: Arc<PolicySystem>,
-        version_id: String,
-        inner: RequestContextKind,
-    ) -> Self {
-        Self {
-            ps,
-            ts,
-            version_id,
-            inner,
-        }
-    }
-
-    pub fn from_state(st: &WorkerState, inner: RequestContextKind) -> Self {
-        Self::new(
-            st.version.type_system.clone(),
-            st.version.policy_system.clone(),
-            st.version.version_id.clone(),
-            inner,
-        )
-    }
-
-    pub fn path_name(&self) -> Option<&str> {
-        match self.inner {
-            RequestContextKind::UserRequest(UserRequest { ref path, .. }) => Some(path),
-            RequestContextKind::KafkaEvent => None,
-        }
-    }
-
-    fn user_id(&self) -> Option<&str> {
-        match self.inner {
-            RequestContextKind::UserRequest(UserRequest { ref user_id, .. }) => user_id.as_deref(),
-            RequestContextKind::KafkaEvent => None,
-        }
-    }
-
-    pub fn user_request_mut(&mut self) -> Option<&mut UserRequest> {
-        match self.inner {
-            RequestContextKind::UserRequest(ref mut r) => Some(r),
-            RequestContextKind::KafkaEvent => None,
-        }
-    }
-
-    pub fn headers(&self) -> Option<&HashMap<String, String>> {
-        match self.inner {
-            RequestContextKind::UserRequest(UserRequest { ref headers, .. }) => Some(headers),
-            RequestContextKind::KafkaEvent => None,
-        }
-    }
-}
-
-pub struct UserRequest {
-    /// Id of user making the request.
-    pub user_id: Option<String>,
-    /// Current URL path from which this request originated.
-    pub path: String,
-    /// Current HTTP headers.
-    pub headers: HashMap<String, String>,
-    pub response_tx: Option<oneshot::Sender<HttpResponse>>,
-}
-
-pub enum RequestContextKind {
-    UserRequest(UserRequest),
-    KafkaEvent,
-}
-
-impl From<UserRequest> for RequestContextKind {
-    fn from(r: UserRequest) -> Self {
-        Self::UserRequest(r)
-    }
-}
-
-impl RequestContext {
-    /// Calculates field policies for the request being processed.
-    fn make_field_policies(&self, ty: &ObjectType) -> FieldPolicies {
-        self.ps
-            .make_field_policies(self.user_id(), self.path_name().unwrap_or(""), ty)
     }
 }
 
@@ -365,10 +248,13 @@ impl QueryPlan {
         builder
     }
 
-    fn from_entity_name(c: &RequestContext, entity_name: &str) -> Result<Self> {
-        let ty = c.ts.lookup_entity(entity_name).with_context(|| {
-            format!("unable to construct QueryPlan from an unknown entity name `{entity_name}`")
-        })?;
+    fn from_entity_name(c: &dyn DataContext, entity_name: &str) -> Result<Self> {
+        let ty = c
+            .type_system()
+            .lookup_entity(entity_name)
+            .with_context(|| {
+                format!("unable to construct QueryPlan from an unknown entity name `{entity_name}`")
+            })?;
 
         let mut builder = Self::new(ty.clone());
         builder.entity = builder.load_entity(c, &ty)?;
@@ -377,7 +263,7 @@ impl QueryPlan {
 
     /// Constructs QueryPlan from type `ty` and application of given
     /// `operators.
-    pub fn from_ops(c: &RequestContext, ty: &Entity, operators: Vec<QueryOp>) -> Result<Self> {
+    pub fn from_ops(c: &dyn DataContext, ty: &Entity, operators: Vec<QueryOp>) -> Result<Self> {
         let mut query_plan = Self::new(ty.clone());
         query_plan.entity = query_plan.load_entity(c, ty)?;
         query_plan.extend_operators(operators);
@@ -387,7 +273,7 @@ impl QueryPlan {
     /// Constructs a query plan from a query `op_chain` and
     /// additional helper data like `ps`, `version_id`,
     /// `userid` and `path` (url path used for policy evaluation).
-    pub fn from_op_chain(context: &RequestContext, op_chain: QueryOpChain) -> Result<Self> {
+    pub fn from_op_chain(context: &dyn DataContext, op_chain: QueryOpChain) -> Result<Self> {
         let (entity_name, operators) = convert_ops(op_chain)?;
         let mut builder = Self::from_entity_name(context, &entity_name)?;
 
@@ -440,7 +326,7 @@ impl QueryPlan {
     /// ensures login restrictions are respected.
     fn load_entity(
         &mut self,
-        context: &RequestContext,
+        context: &dyn DataContext,
         ty: &Entity,
     ) -> anyhow::Result<QueriedEntity> {
         self.add_login_filters_recursive(context, ty, Expr::Parameter { position: 0 })?;
@@ -452,7 +338,7 @@ impl QueryPlan {
     /// generated and we attempt to retrieve them recursively as well.
     fn load_entity_recursive(
         &mut self,
-        context: &RequestContext,
+        context: &dyn DataContext,
         ty: &Entity,
         current_table: &str,
     ) -> anyhow::Result<QueriedEntity> {
@@ -467,7 +353,7 @@ impl QueryPlan {
                 _ => KeepOrOmitField::Keep,
             };
 
-            let ty = context.ts.get(&field.type_id)?;
+            let ty = context.type_system().get(&field.type_id)?;
 
             let query_field = if let Type::Entity(nested_ty) = &ty {
                 let nested_table = format!(
@@ -513,7 +399,7 @@ impl QueryPlan {
     /// `ty` that is to be retrieved from the database.
     fn add_login_filters_recursive(
         &mut self,
-        context: &RequestContext,
+        context: &dyn DataContext,
         ty: &Entity,
         property_chain: Expr,
     ) -> anyhow::Result<()> {
@@ -525,7 +411,7 @@ impl QueryPlan {
         .into();
 
         for field in ty.all_fields() {
-            let ty = context.ts.get(&field.type_id)?;
+            let ty = context.type_system().get(&field.type_id)?;
             if let Type::Entity(nested_ty) = &ty {
                 let property_access = PropertyAccess {
                     property: field.name.to_owned(),
@@ -902,11 +788,11 @@ pub struct Mutation {
 impl Mutation {
     /// Constructs delete from filter expression.
     pub fn delete_from_expr(
-        c: &RequestContext,
+        c: &dyn DataContext,
         type_name: &str,
         filter_expr: &Option<Expr>,
     ) -> Result<Self> {
-        let base_entity = match c.ts.lookup_type(type_name) {
+        let base_entity = match c.type_system().lookup_type(type_name) {
             Ok(Type::Entity(ty)) => ty,
             Ok(ty) => anyhow::bail!("Cannot delete scalar type {type_name} ({})", ty.name()),
             Err(_) => anyhow::bail!("Cannot delete from type `{type_name}`, type not found"),
@@ -952,8 +838,9 @@ pub mod tests {
     use tempfile::NamedTempFile;
 
     use crate::datastore::expr::BinaryOp;
+    use crate::datastore::test::TestDataContext;
     use crate::datastore::{DbConnection, QueryEngine};
-    use crate::types;
+    use crate::types::{self, ObjectType, TypeSystem};
     use crate::JsonObject;
 
     pub const VERSION: &str = "version_1";
@@ -1078,20 +965,14 @@ pub mod tests {
     #[tokio::test]
     async fn test_query_plan() {
         let fetch_names = |qe: QueryEngine, op_chain: QueryOpChain| async move {
-            let (sender, _) = oneshot::channel();
             let query_plan = QueryPlan::from_op_chain(
-                &RequestContext::new(
-                    make_type_system(&*ENTITIES).into(),
-                    Default::default(),
-                    VERSION.to_owned(),
-                    UserRequest {
-                        user_id: None,
-                        path: "".to_string(),
-                        headers: Default::default(),
-                        response_tx: sender.into(),
-                    }
-                    .into(),
-                ),
+                &TestDataContext {
+                    ts: make_type_system(&*ENTITIES).into(),
+                    ps: Default::default(),
+                    version: VERSION.to_owned(),
+                    headers: Default::default(),
+                    path: "".to_string(),
+                },
                 op_chain,
             )
             .unwrap();
@@ -1151,20 +1032,14 @@ pub mod tests {
     #[tokio::test]
     async fn test_delete_with_expr() {
         let delete_with_expr = |entity_name: &str, expr: Expr| {
-            let (sender, _) = oneshot::channel();
             Mutation::delete_from_expr(
-                &RequestContext::new(
-                    make_type_system(&*ENTITIES).into(),
-                    Default::default(),
-                    VERSION.to_owned(),
-                    UserRequest {
-                        user_id: None,
-                        path: "".to_string(),
-                        headers: Default::default(),
-                        response_tx: sender.into(),
-                    }
-                    .into(),
-                ),
+                &TestDataContext {
+                    ts: make_type_system(&*ENTITIES).into(),
+                    ps: Default::default(),
+                    version: VERSION.to_owned(),
+                    headers: Default::default(),
+                    path: "".to_string(),
+                },
                 entity_name,
                 &Some(expr),
             )
