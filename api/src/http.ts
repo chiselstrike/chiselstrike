@@ -52,12 +52,7 @@ export async function handleHttpRequest(
     // from the request with respect to an arbitrary base
     const url = new URL(httpRequest.uri, location.href);
 
-    // initialize the legacy global request context
-    // note that this means that we can only handle a single request at a time!
     requestContext.method = httpRequest.method;
-    requestContext.headers = httpRequest.headers;
-    requestContext.path = url.pathname;
-    requestContext.routingPath = httpRequest.routingPath;
     requestContext.userId = httpRequest.userId;
 
     // we must start the transaction before reading the logged-in user

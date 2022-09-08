@@ -1,5 +1,8 @@
 // SPDX-FileCopyrightText: © 2022 ChiselStrike <info@chiselstrike.com>
 
+use crate::datastore::query::{
+    RequestContext, RequestContextCell, RequestContextKind, UserRequest,
+};
 use crate::http::{HttpRequest, HttpRequestResponse, HttpResponse};
 use crate::kafka::KafkaEvent;
 use crate::version::VersionJob;
@@ -9,7 +12,6 @@ use guard::guard;
 use serde::Serialize;
 use std::cell::RefCell;
 use std::rc::Rc;
-use tokio::sync::oneshot;
 
 /// A job that will be handled in JavaScript.
 #[derive(Debug, Serialize)]
@@ -19,26 +21,15 @@ enum AcceptedJob {
     #[serde(rename_all = "camelCase")]
     Http {
         request: HttpRequest,
-        response_tx_rid: deno_core::ResourceId,
+        ctx: deno_core::ResourceId,
     },
     #[serde(rename_all = "camelCase")]
-    Kafka { event: KafkaEvent },
+    Kafka {
+        event: KafkaEvent,
+        ctx: deno_core::ResourceId,
+    },
 }
 
-/// A Deno resource that wraps a sender that is used to send response for an HTTP request.
-///
-/// This is passed to JavaScript along with the request (in `AcceptedJob::Http`), and JavaScript
-/// then passes the response back to us by calling `op_chisel_http_respond`.
-struct HttpResponseTxResource {
-    response_tx: RefCell<Option<oneshot::Sender<HttpResponse>>>,
-}
-
-impl deno_core::Resource for HttpResponseTxResource {}
-
-// Waits for the next job that should be handled by this worker. Returns `null` when there are no
-// more jobs and the worker should terminate.
-//
-// This function must not be called concurrently (it will throw an exception otherwise).
 #[deno_core::op]
 async fn op_chisel_accept_job(
     state: Rc<RefCell<deno_core::OpState>>,
@@ -58,16 +49,33 @@ async fn op_chisel_accept_job(
                 request,
                 response_tx,
             } = request_response;
-            let response_tx_res = HttpResponseTxResource {
-                response_tx: RefCell::new(Some(response_tx)),
+
+            let ctx = {
+                let mut state = state.borrow_mut();
+                let user_id = request.user_id.clone();
+                let path = request.routing_path.clone();
+                let headers = request.headers.iter().cloned().collect();
+                let inner = UserRequest {
+                    user_id,
+                    path,
+                    headers,
+                    response_tx: Some(response_tx),
+                };
+                let ctx = RequestContext::from_state(state.borrow(), inner.into());
+                state.resource_table.add(RequestContextCell::new(ctx))
             };
-            let response_tx_rid = state.borrow_mut().resource_table.add(response_tx_res);
-            AcceptedJob::Http {
-                request,
-                response_tx_rid,
-            }
+
+            AcceptedJob::Http { request, ctx }
         }
-        Some(VersionJob::Kafka(event)) => AcceptedJob::Kafka { event },
+        Some(VersionJob::Kafka(event)) => {
+            let ctx = {
+                let mut state = state.borrow_mut();
+                let ctx =
+                    RequestContext::from_state(state.borrow(), RequestContextKind::KafkaEvent);
+                state.resource_table.add(RequestContextCell::new(ctx))
+            };
+            AcceptedJob::Kafka { event, ctx }
+        }
         None => return Ok(None),
     };
 
@@ -77,14 +85,17 @@ async fn op_chisel_accept_job(
 #[deno_core::op]
 fn op_chisel_http_respond(
     state: Rc<RefCell<deno_core::OpState>>,
-    response_tx_rid: deno_core::ResourceId,
+    ctx: deno_core::ResourceId,
     response: HttpResponse,
 ) -> Result<()> {
     let response_tx = {
-        let response_tx_res: Rc<HttpResponseTxResource> =
-            state.borrow_mut().resource_table.take(response_tx_rid)?;
-        let response_tx: &mut Option<_> = &mut response_tx_res.response_tx.borrow_mut();
-        response_tx
+        let ctx = state
+            .borrow_mut()
+            .resource_table
+            .get::<RequestContextCell>(ctx)?;
+        let mut ctx = ctx.borrow_mut();
+        let ureq = ctx.user_request_mut().context("invalid request type!")?;
+        ureq.response_tx
             .take()
             .context("Response was already sent on this response sender")?
     };

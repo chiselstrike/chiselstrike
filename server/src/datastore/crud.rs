@@ -19,7 +19,7 @@ pub struct QueryParams {
 
 /// Parses CRUD `params` and runs the query with provided `query_engine`.
 pub fn run_query(
-    context: &RequestContext<'_>,
+    context: &RequestContext,
     params: QueryParams,
     query_engine: QueryEngine,
     tr: TransactionStatic,
@@ -29,18 +29,18 @@ pub fn run_query(
 }
 
 fn run_query_impl(
-    context: &RequestContext<'_>,
+    context: &RequestContext,
     params: QueryParams,
     query_engine: QueryEngine,
     tr: TransactionStatic,
 ) -> Result<impl Future<Output = Result<JsonObject>>> {
-    let host = context.headers.get("host").cloned();
+    let host = context.headers().and_then(|h| h.get("host").cloned());
     let base_type = &context
         .ts
         .lookup_entity(&params.type_name)
         .context("unexpected type name as crud query base type")?;
 
-    let query = Query::from_url(base_type, &params.url, context.ts)?;
+    let query = Query::from_url(base_type, &params.url, &context.ts)?;
     let ops = query.make_query_ops()?;
     let query_plan = QueryPlan::from_ops(context, base_type, ops)?;
     let stream = query_engine.query(tr.clone(), query_plan)?;
@@ -177,7 +177,7 @@ pub fn delete_from_url(c: &RequestContext, type_name: &str, url: &str) -> Result
         Ok(ty) => anyhow::bail!("Cannot delete scalar type {type_name} ({})", ty.name()),
         Err(_) => anyhow::bail!("Cannot delete from type `{type_name}`, type not found"),
     };
-    let filter_expr = url_to_filter(&base_entity, url, c.ts)
+    let filter_expr = url_to_filter(&base_entity, url, &c.ts)
         .context("failed to convert crud URL to filter expression")?;
     if filter_expr.is_none() {
         let q = Url::parse(url).with_context(|| format!("failed to parse query string '{url}'"))?;
@@ -573,7 +573,7 @@ mod tests {
         add_row, binary, fetch_rows, make_entity, make_field, make_type_system, setup_clear_db,
         VERSION,
     };
-    use crate::policies::PolicySystem;
+    use crate::datastore::query::UserRequest;
     use crate::types::{FieldDescriptor, ObjectDescriptor};
     use crate::JsonObject;
 
@@ -581,6 +581,7 @@ mod tests {
     use once_cell::sync::Lazy;
     use serde_json::json;
     use std::collections::HashMap;
+    use tokio::sync::oneshot;
     use url::Url;
 
     pub struct FakeField {
@@ -772,15 +773,20 @@ mod tests {
         headers: HashMap<String, String>,
     ) -> Result<JsonObject> {
         let tr = qe.begin_transaction_static().await.unwrap();
+        let (sender, _) = oneshot::channel();
         super::run_query(
-            &RequestContext {
-                ps: &PolicySystem::default(),
-                ts: &make_type_system(&*ENTITIES),
-                version_id: VERSION.to_owned(),
-                user_id: None,
-                path: "".to_string(),
-                headers,
-            },
+            &RequestContext::new(
+                make_type_system(&*ENTITIES).into(),
+                Default::default(),
+                VERSION.to_owned(),
+                UserRequest {
+                    user_id: None,
+                    path: "".to_string(),
+                    headers,
+                    response_tx: sender.into(),
+                }
+                .into(),
+            ),
             QueryParams {
                 type_name: entity_name.to_owned(),
                 url,
@@ -1090,15 +1096,20 @@ mod tests {
         }
 
         let delete_from_url = |entity_name: &str, url: &str| {
+            let (sender, _) = oneshot::channel();
             delete_from_url(
-                &RequestContext {
-                    ps: &PolicySystem::default(),
-                    ts: &make_type_system(&*ENTITIES),
-                    version_id: VERSION.to_owned(),
-                    user_id: None,
-                    path: "".to_string(),
-                    headers: HashMap::default(),
-                },
+                &RequestContext::new(
+                    make_type_system(&*ENTITIES).into(),
+                    Default::default(),
+                    VERSION.to_owned(),
+                    UserRequest {
+                        user_id: None,
+                        path: "".to_string(),
+                        headers: Default::default(),
+                        response_tx: sender.into(),
+                    }
+                    .into(),
+                ),
                 entity_name,
                 url,
             )

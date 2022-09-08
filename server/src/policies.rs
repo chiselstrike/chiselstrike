@@ -149,12 +149,12 @@ impl PolicySystem {
     /// For field of type `ty` creates field policies.
     pub fn make_field_policies(
         &self,
-        user_id: &Option<String>,
+        user_id: Option<&str>,
         current_path: &str,
         ty: &ObjectType,
     ) -> FieldPolicies {
         let mut field_policies = FieldPolicies {
-            current_userid: user_id.clone(),
+            current_userid: user_id.map(Into::into),
             ..Default::default()
         };
 

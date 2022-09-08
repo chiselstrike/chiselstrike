@@ -2,17 +2,22 @@
 
 use crate::auth::AUTH_USER_NAME;
 use crate::datastore::expr::{BinaryExpr, Expr, PropertyAccess, Value as ExprValue};
+use crate::http::HttpResponse;
 use crate::policies::{FieldPolicies, PolicySystem};
 use crate::types::{Entity, Field, ObjectType, Type, TypeId, TypeSystem};
+use crate::worker::WorkerState;
 
 use anyhow::{anyhow, Context, Result};
 use enum_as_inner::EnumAsInner;
 use serde_derive::{Deserialize, Serialize};
 use serde_json::value::Value as JsonValue;
+use std::cell::{Ref, RefCell, RefMut};
 use std::collections::HashMap;
 use std::collections::HashSet;
 use std::fmt;
 use std::fmt::Write;
+use std::sync::Arc;
+use tokio::sync::oneshot;
 
 #[derive(Debug, Clone, EnumAsInner)]
 pub enum SqlValue {
@@ -27,27 +32,116 @@ impl From<&str> for SqlValue {
     }
 }
 
+/// A wrapper around RequestContext, to register it as a mutable resource in deno's resource table.
+pub struct RequestContextCell(RefCell<RequestContext>);
+
+impl RequestContextCell {
+    pub fn new(r: RequestContext) -> Self {
+        Self(RefCell::new(r))
+    }
+
+    pub fn borrow_mut(&self) -> RefMut<RequestContext> {
+        self.0.borrow_mut()
+    }
+
+    pub fn borrow(&self) -> Ref<RequestContext> {
+        self.0.borrow()
+    }
+}
+
+impl deno_core::Resource for RequestContextCell {}
+
 /// RequestContext bears a mix of contextual variables used by QueryPlan
 /// and Mutations.
-pub struct RequestContext<'a> {
+pub struct RequestContext {
     /// Policies to be applied on the query.
-    pub ps: &'a PolicySystem,
+    pub ps: Arc<PolicySystem>,
     /// Type system to be used of version `version_id`
-    pub ts: &'a TypeSystem,
+    pub ts: Arc<TypeSystem>,
     /// Version to be used.
     pub version_id: String,
+    pub inner: RequestContextKind,
+}
+
+impl RequestContext {
+    pub fn new(
+        ts: Arc<TypeSystem>,
+        ps: Arc<PolicySystem>,
+        version_id: String,
+        inner: RequestContextKind,
+    ) -> Self {
+        Self {
+            ps,
+            ts,
+            version_id,
+            inner,
+        }
+    }
+
+    pub fn from_state(st: &WorkerState, inner: RequestContextKind) -> Self {
+        Self::new(
+            st.version.type_system.clone(),
+            st.version.policy_system.clone(),
+            st.version.version_id.clone(),
+            inner,
+        )
+    }
+
+    pub fn path_name(&self) -> Option<&str> {
+        match self.inner {
+            RequestContextKind::UserRequest(UserRequest { ref path, .. }) => Some(path),
+            RequestContextKind::KafkaEvent => None,
+        }
+    }
+
+    fn user_id(&self) -> Option<&str> {
+        match self.inner {
+            RequestContextKind::UserRequest(UserRequest { ref user_id, .. }) => user_id.as_deref(),
+            RequestContextKind::KafkaEvent => None,
+        }
+    }
+
+    pub fn user_request_mut(&mut self) -> Option<&mut UserRequest> {
+        match self.inner {
+            RequestContextKind::UserRequest(ref mut r) => Some(r),
+            RequestContextKind::KafkaEvent => None,
+        }
+    }
+
+    pub fn headers(&self) -> Option<&HashMap<String, String>> {
+        match self.inner {
+            RequestContextKind::UserRequest(UserRequest { ref headers, .. }) => Some(headers),
+            RequestContextKind::KafkaEvent => None,
+        }
+    }
+}
+
+pub struct UserRequest {
     /// Id of user making the request.
     pub user_id: Option<String>,
     /// Current URL path from which this request originated.
     pub path: String,
     /// Current HTTP headers.
     pub headers: HashMap<String, String>,
+    pub response_tx: Option<oneshot::Sender<HttpResponse>>,
 }
 
-impl RequestContext<'_> {
+pub enum RequestContextKind {
+    UserRequest(UserRequest),
+    KafkaEvent,
+}
+
+impl From<UserRequest> for RequestContextKind {
+    fn from(r: UserRequest) -> Self {
+        Self::UserRequest(r)
+    }
+}
+
+impl RequestContext {
     /// Calculates field policies for the request being processed.
     fn make_field_policies(&self, ty: &ObjectType) -> FieldPolicies {
-        self.ps.make_field_policies(&self.user_id, &self.path, ty)
+        self.ps
+            .make_field_policies(self.user_id(), self.path_name().unwrap_or(""), ty)
     }
 }
 
@@ -984,15 +1078,20 @@ pub mod tests {
     #[tokio::test]
     async fn test_query_plan() {
         let fetch_names = |qe: QueryEngine, op_chain: QueryOpChain| async move {
+            let (sender, _) = oneshot::channel();
             let query_plan = QueryPlan::from_op_chain(
-                &RequestContext {
-                    ps: &PolicySystem::default(),
-                    ts: &make_type_system(&*ENTITIES),
-                    version_id: VERSION.to_owned(),
-                    user_id: None,
-                    path: "".to_string(),
-                    headers: HashMap::default(),
-                },
+                &RequestContext::new(
+                    make_type_system(&*ENTITIES).into(),
+                    Default::default(),
+                    VERSION.to_owned(),
+                    UserRequest {
+                        user_id: None,
+                        path: "".to_string(),
+                        headers: Default::default(),
+                        response_tx: sender.into(),
+                    }
+                    .into(),
+                ),
                 op_chain,
             )
             .unwrap();
@@ -1052,15 +1151,20 @@ pub mod tests {
     #[tokio::test]
     async fn test_delete_with_expr() {
         let delete_with_expr = |entity_name: &str, expr: Expr| {
+            let (sender, _) = oneshot::channel();
             Mutation::delete_from_expr(
-                &RequestContext {
-                    ps: &PolicySystem::default(),
-                    ts: &make_type_system(&*ENTITIES),
-                    version_id: VERSION.to_owned(),
-                    user_id: None,
-                    path: "".to_string(),
-                    headers: HashMap::default(),
-                },
+                &RequestContext::new(
+                    make_type_system(&*ENTITIES).into(),
+                    Default::default(),
+                    VERSION.to_owned(),
+                    UserRequest {
+                        user_id: None,
+                        path: "".to_string(),
+                        headers: Default::default(),
+                        response_tx: sender.into(),
+                    }
+                    .into(),
+                ),
                 entity_name,
                 &Some(expr),
             )

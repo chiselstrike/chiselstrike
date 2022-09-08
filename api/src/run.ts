@@ -9,11 +9,12 @@ import { RouteMap } from "./routing.ts";
 import type { RouteMapLike } from "./routing.ts";
 import { specialAfter, specialBefore } from "./special.ts";
 import { opAsync, opSync } from "./utils.ts";
+import { ctxId, requestContext } from "./datastore.ts";
 
 // A generic job that we receive from Rust
 type AcceptedJob =
-    | { type: "http"; request: HttpRequest; responseTxRid: number }
-    | { type: "kafka"; event: KafkaEvent };
+    | { type: "http"; request: HttpRequest; ctx: number }
+    | { type: "kafka"; event: KafkaEvent; ctx: number };
 
 // This is the entry point into the TypeScript runtime, called from `main.js`
 // with structures that describe the user-defined behavior (such as how to
@@ -40,21 +41,29 @@ export default async function run(
         const job = await opAsync(
             "op_chisel_accept_job",
         ) as (AcceptedJob | null);
-
         // at the moment, it is impossible to handle multiple jobs concurrently, because the data layer
         // requires some global state (the `requestContext` variable in JavaScript and the transaction in
         // Rust)
 
-        if (job === null) {
-            break;
-        } else if (job.type == "http") {
-            const httpResponse = await handleHttpRequest(router, job.request);
-            opSync("op_chisel_http_respond", job.responseTxRid, httpResponse);
-        } else if (job.type == "kafka") {
-            await handleKafkaEvent(topicMap, job.event);
-        } else {
-            throw new Error("Unknown type of AcceptedJob");
-        }
+            if (job === null) {
+                break;
+            } else if (job.type == "http") {
+                requestContext.rid = job.ctx;
+                const httpResponse = await handleHttpRequest(
+                    router,
+                    job.request,
+                );
+                opSync("op_chisel_http_respond", ctxId(), httpResponse);
+            } else if (job.type == "kafka") {
+                requestContext.rid = job.ctx;
+                await handleKafkaEvent(topicMap, job.event);
+            } else {
+                throw new Error("Unknown type of AcceptedJob");
+            }
+            if (requestContext.rid !== undefined) {
+                Deno.core.close(requestContext.rid);
+                requestContext.rid = undefined;
+            }
     }
 }
 

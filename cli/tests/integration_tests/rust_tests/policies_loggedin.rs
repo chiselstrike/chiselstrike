@@ -345,7 +345,8 @@ async fn transform_match_login_related_entities(c: TestContext) {
 // https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Access-Control-Allow-Headers
 fn check_cors_header(response: &Response) -> bool {
     let cors_allow_headers = response.header("access-control-allow-headers");
-    let uids_count = cors_allow_headers.split(',')
+    let uids_count = cors_allow_headers
+        .split(',')
         .filter(|v| *v == "ChiselUID")
         .count();
     uids_count == 1

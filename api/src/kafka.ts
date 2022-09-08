@@ -41,9 +41,6 @@ export async function handleKafkaEvent(
 
     // fake a global request context, so that the datastore operations work in event handler
     requestContext.method = "POST";
-    requestContext.headers = [];
-    requestContext.path = "";
-    requestContext.routingPath = "";
     requestContext.userId = undefined;
 
     // create the `ChiselEvent` object

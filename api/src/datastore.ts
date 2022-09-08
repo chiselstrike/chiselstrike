@@ -2,7 +2,7 @@
 
 import { crud } from "./crud.ts";
 import type { Handler } from "./routing.ts";
-import { mergeDeep, opAsync, opSync } from "./utils.ts";
+import { mergeDeep, opAsync } from "./utils.ts";
 
 /**
  * Base class for various Operators applicable on `ChiselCursor`. An
@@ -42,7 +42,7 @@ abstract class Operator<Input, Output> {
             opAsync(
                 "op_chisel_relational_query_create",
                 this,
-                requestContext,
+                ctxId(),
             ) as Promise<number>;
         const recordToOutput = (rawRecord: unknown) => {
             return this.recordToOutput(rawRecord);
@@ -722,7 +722,7 @@ export class ChiselEntity {
         const jsonIds = await opAsync("op_chisel_store", {
             name: this.constructor.name,
             value: this,
-        }, requestContext) as IdsJson;
+        }, ctxId()) as IdsJson;
         function backfillIds(this_: ChiselEntity, jsonIds: IdsJson) {
             this_.id = jsonIds.id;
             for (const [fieldName, value] of Object.entries(jsonIds.children)) {
@@ -891,7 +891,7 @@ export class ChiselEntity {
         await opAsync("op_chisel_delete", {
             typeName: this.name,
             filterExpr: restrictionsToFilterExpr(restrictions),
-        }, requestContext);
+        }, ctxId());
     }
 
     /**
@@ -1053,20 +1053,22 @@ export function unique(_target: unknown, _name: string): void {
 }
 
 export const requestContext: {
-    versionId: string;
+    rid: number | undefined;
     method: string;
-    headers: [string, string][];
-    path: string;
-    routingPath: string;
     userId: string | undefined;
 } = {
-    versionId: opSync("op_chisel_get_version_id") as string,
+    rid: undefined,
     method: "",
-    headers: [],
-    path: "",
-    routingPath: "",
     userId: undefined,
 };
+
+export function ctxId(): number {
+    if (requestContext.rid === undefined) {
+        throw new Error("undefined request context");
+    }
+
+    return requestContext.rid;
+}
 
 function ensureNotGet() {
     if (requestContext.method === "GET") {

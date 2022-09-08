@@ -4,11 +4,9 @@ use super::WorkerState;
 use crate::datastore::crud;
 use crate::datastore::engine::{IdTree, QueryEngine, QueryResults, ResultRow, TransactionStatic};
 use crate::datastore::expr::Expr;
-use crate::datastore::query::{Mutation, QueryOpChain, QueryPlan, RequestContext};
-use crate::policies::PolicySystem;
+use crate::datastore::query::{Mutation, QueryOpChain, QueryPlan, RequestContextCell};
 use crate::server::Server;
-use crate::types::{Type, TypeSystem};
-use crate::version::Version;
+use crate::types::Type;
 use crate::JsonObject;
 use anyhow::{anyhow, bail, ensure, Context as _, Result};
 use deno_core::CancelFuture;
@@ -19,18 +17,6 @@ use std::pin::Pin;
 use std::rc::{Rc, Weak};
 use std::sync::Arc;
 use std::task::{Context, Poll};
-
-/// ChiselRequestContext corresponds to `requestContext` structure used in chisel.ts.
-#[derive(Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct ChiselRequestContext {
-    version_id: String,
-    //method: String,
-    headers: Vec<(String, String)>,
-    path: String,
-    routing_path: String,
-    user_id: Option<String>,
-}
 
 #[deno_core::op]
 pub async fn op_chisel_begin_transaction(state: Rc<RefCell<deno_core::OpState>>) -> Result<()> {
@@ -91,21 +77,25 @@ pub fn op_chisel_rollback_transaction(state: &mut deno_core::OpState) -> Result<
     Ok(())
 }
 
-async fn with_transaction<F, Fut, T>(state: Rc<RefCell<deno_core::OpState>>, f: F) -> Result<T>
+async fn with_transaction<F, Fut, T>(
+    state: Rc<RefCell<deno_core::OpState>>,
+    ctx: deno_core::ResourceId,
+    f: F,
+) -> Result<T>
 where
-    F: FnOnce(Arc<Server>, Arc<Version>, TransactionStatic) -> Fut,
+    F: FnOnce(Arc<Server>, Rc<RequestContextCell>, TransactionStatic) -> Fut,
     Fut: Future<Output = Result<T>>,
 {
     let fut = {
         let state = state.borrow();
         let worker_state = state.borrow::<WorkerState>();
         let server = worker_state.server.clone();
-        let version = worker_state.version.clone();
         let transaction = worker_state
             .transaction
             .clone()
             .context("Cannot perform a data operation because no transaction is in progress")?;
-        f(server, version, transaction)
+        let ctx = state.resource_table.get::<RequestContextCell>(ctx)?;
+        f(server, ctx, transaction)
     };
     fut.await
 }
@@ -120,28 +110,33 @@ pub struct StoreParams {
 pub async fn op_chisel_store(
     state: Rc<RefCell<deno_core::OpState>>,
     params: StoreParams,
-    context: ChiselRequestContext,
+    context: deno_core::ResourceId,
 ) -> Result<IdTree> {
-    with_transaction(state, move |server, version, transaction| async move {
-        let ty = match version.type_system.lookup_type(&params.name) {
-            Ok(Type::Entity(ty)) => ty,
-            _ => bail!("Cannot save into type {}", params.name),
-        };
-        if ty.is_auth() && !is_auth_path(&context.version_id, &context.routing_path) {
-            bail!("Cannot save into auth type {}", params.name);
-        }
+    with_transaction(
+        state,
+        context,
+        move |server, context, transaction| async move {
+            let (ts, ty) = {
+                let context = context.borrow();
+                let ty = match context.ts.lookup_type(&params.name) {
+                    Ok(Type::Entity(ty)) => ty,
+                    _ => bail!("Cannot save into type {}", params.name),
+                };
+                if ty.is_auth()
+                    && !is_auth_path(&context.version_id, context.path_name().unwrap_or(""))
+                {
+                    bail!("Cannot save into auth type {}", params.name);
+                }
+                (context.ts.clone(), ty)
+            };
 
-        let mut transaction = transaction.lock().await;
-        server
-            .query_engine
-            .add_row(
-                &ty,
-                &params.value,
-                Some(&mut transaction),
-                &version.type_system,
-            )
-            .await
-    })
+            let mut transaction = transaction.lock().await;
+            server
+                .query_engine
+                .add_row(&ty, &params.value, Some(&mut transaction), &ts)
+                .await
+        },
+    )
     .await
 }
 
@@ -160,23 +155,28 @@ pub struct DeleteParams {
 pub async fn op_chisel_delete(
     state: Rc<RefCell<deno_core::OpState>>,
     params: DeleteParams,
-    context: ChiselRequestContext,
+    context: deno_core::ResourceId,
 ) -> Result<()> {
-    with_transaction(state, move |server, version, transaction| async move {
-        let mutation = Mutation::delete_from_expr(
-            &RequestContext::new(&version.policy_system, &version.type_system, context),
-            &params.type_name,
-            &params.filter_expr,
-        )
-        .context("failed to construct delete expression from JSON passed to `op_chisel_delete`")?;
+    with_transaction(
+        state,
+        context,
+        move |server, context, transaction| async move {
+            let mutation = {
+                let context = context.borrow();
+                Mutation::delete_from_expr(&context, &params.type_name, &params.filter_expr)
+                    .context(
+                    "failed to construct delete expression from JSON passed to `op_chisel_delete`",
+                )?
+            };
 
-        let mut transaction = transaction.lock().await;
-        server
-            .query_engine
-            .mutate_with_transaction(mutation, &mut transaction)
-            .await?;
-        Ok(())
-    })
+            let mut transaction = transaction.lock().await;
+            server
+                .query_engine
+                .mutate_with_transaction(mutation, &mut transaction)
+                .await?;
+            Ok(())
+        },
+    )
     .await
 }
 
@@ -191,25 +191,27 @@ pub struct CrudDeleteParams {
 pub async fn op_chisel_crud_delete(
     state: Rc<RefCell<deno_core::OpState>>,
     params: CrudDeleteParams,
-    context: ChiselRequestContext,
+    context: deno_core::ResourceId,
 ) -> Result<()> {
-    with_transaction(state, move |server, version, transaction| async move {
-        let mutation = crud::delete_from_url(
-            &RequestContext::new(&version.policy_system, &version.type_system, context),
-            &params.type_name,
-            &params.url,
-        )
-        .context(
-            "failed to construct delete expression from JSON passed to `op_chisel_crud_delete`",
-        )?;
+    with_transaction(
+        state,
+        context,
+        move |server, context, transaction| async move {
+            let mutation = {
+                let context = context.borrow();
+                crud::delete_from_url(&context, &params.type_name, &params.url).context(
+                "failed to construct delete expression from JSON passed to `op_chisel_crud_delete`",
+            )?
+            };
 
-        let mut transaction = transaction.lock().await;
-        server
-            .query_engine
-            .mutate_with_transaction(mutation, &mut transaction)
-            .await?;
-        Ok(())
-    })
+            let mut transaction = transaction.lock().await;
+            server
+                .query_engine
+                .mutate_with_transaction(mutation, &mut transaction)
+                .await?;
+            Ok(())
+        },
+    )
     .await
 }
 
@@ -217,17 +219,19 @@ pub async fn op_chisel_crud_delete(
 pub async fn op_chisel_crud_query(
     state: Rc<RefCell<deno_core::OpState>>,
     params: crud::QueryParams,
-    context: ChiselRequestContext,
+    context: deno_core::ResourceId,
 ) -> Result<JsonObject> {
-    with_transaction(state, move |server, version, transaction| async move {
-        crud::run_query(
-            &RequestContext::new(&version.policy_system, &version.type_system, context),
-            params,
-            server.query_engine.clone(),
-            transaction,
-        )
-        .await
-    })
+    with_transaction(
+        state,
+        context,
+        move |server, context, transaction| async move {
+            {
+                let context = context.borrow();
+                crud::run_query(&context, params, server.query_engine.clone(), transaction)
+            }
+            .await
+        },
+    )
     .await
 }
 
@@ -235,15 +239,14 @@ pub async fn op_chisel_crud_query(
 pub async fn op_chisel_relational_query_create(
     state: Rc<RefCell<deno_core::OpState>>,
     op_chain: QueryOpChain,
-    context: ChiselRequestContext,
+    context: deno_core::ResourceId,
 ) -> Result<deno_core::ResourceId> {
     with_transaction(
         state.clone(),
-        move |server, version, transaction| async move {
-            let query_plan = QueryPlan::from_op_chain(
-                &RequestContext::new(&version.policy_system, &version.type_system, context),
-                op_chain,
-            )?;
+        context,
+        move |server, context, transaction| async move {
+            let context = context.borrow();
+            let query_plan = QueryPlan::from_op_chain(&context, op_chain)?;
 
             let stream = server.query_engine.query(transaction, query_plan)?;
             let resource = QueryStreamResource {
@@ -251,6 +254,7 @@ pub async fn op_chisel_relational_query_create(
                 cancel: Default::default(),
             };
             let rid = state.borrow_mut().resource_table.add(resource);
+
             Ok(rid)
         },
     )
@@ -305,22 +309,5 @@ pub async fn op_chisel_query_next(
         Ok(Some(row?))
     } else {
         Ok(None)
-    }
-}
-
-impl RequestContext<'_> {
-    fn new<'a>(
-        ps: &'a PolicySystem,
-        ts: &'a TypeSystem,
-        context: ChiselRequestContext,
-    ) -> RequestContext<'a> {
-        RequestContext {
-            ps,
-            ts,
-            version_id: context.version_id,
-            user_id: context.user_id,
-            path: context.path,
-            headers: context.headers.into_iter().collect(),
-        }
     }
 }
