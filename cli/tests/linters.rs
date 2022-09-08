@@ -2,8 +2,7 @@
 
 mod common;
 
-#[cfg(test)]
-mod tests {
+mod linters {
     use crate::common::{repo_dir, run, Command, CHISEL_BIN_DIR};
     use regex::Regex;
     use std::fs::{create_dir_all, File};
