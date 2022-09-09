@@ -56,6 +56,9 @@ impl Trunk {
         state.versions.get(version_id).map(|v| v.version.clone())
     }
 
+    // Adds a new version to the trunk.
+    // `job_tx` is the channel that will receive all jobs for this version from now on, and `task`
+    // is the task that runs the version.
     pub fn add_version(
         &self,
         version: Arc<Version>,
@@ -97,6 +100,7 @@ pub async fn spawn() -> Result<(Trunk, TaskHandle<Result<()>>)> {
     Ok((trunk, task))
 }
 
+// Polls the trunk for completion.
 fn poll(state: &mut TrunkState, cx: &mut Context) -> Poll<Result<()>> {
     while let Poll::Ready(Some(task_res)) = Pin::new(&mut state.tasks).poll_next(cx) {
         if let Some(Err(task_err)) = task_res {

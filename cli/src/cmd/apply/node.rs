@@ -46,10 +46,7 @@ pub(crate) async fn apply(
     let mut preprocess_source = |file_path: &mut PathBuf, gen_dir: &Path| -> Result<()> {
         if optimize {
             let file_rel_path = file_path.strip_prefix(&cwd).with_context(|| {
-                format!(
-                    "File {} is not a part of this project",
-                    file_path.display(),
-                )
+                format!("File {} is not a part of this project", file_path.display(),)
             })?;
 
             // NOTE: this a horrible hack to make relative imports work

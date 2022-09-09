@@ -139,5 +139,5 @@ fn migrate_source(version_id: &str, source: Source) -> ModuleRow {
 }
 
 fn path_to_url(path: &str) -> String {
-    format!("file://{}", path)
+    format!("file:///{}", path)
 }
