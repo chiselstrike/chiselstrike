@@ -190,7 +190,8 @@ async fn store_post(chisel: &Chisel, uid: &str, text: &str) {
 async fn logged_in_user_post(c: TestContext) {
     c.chisel.write_unindent("models/post.ts", MODEL_POST);
     c.chisel.write_unindent("routes/posts.ts", ROUTE_POSTS);
-    c.chisel.write(".env", r#"{ "CHISELD_AUTH_SECRET": "dud" }"#);
+    c.chisel
+        .write(".env", r#"{ "CHISELD_AUTH_SECRET": "dud" }"#);
     c.chisel.apply_ok().await;
 
     let id_al = store_user(&c.chisel, "Al", "al").await;
@@ -224,7 +225,8 @@ async fn transform_match_login(c: TestContext) {
               transform: match_login
         "##,
     );
-    c.chisel.write(".env", r#"{ "CHISELD_AUTH_SECRET": "dud" }"#);
+    c.chisel
+        .write(".env", r#"{ "CHISELD_AUTH_SECRET": "dud" }"#);
     c.chisel.apply_ok().await;
 
     let id_al = store_user(&c.chisel, "Al", "al").await;
@@ -279,7 +281,8 @@ async fn transform_match_login_related_entities(c: TestContext) {
     c.chisel.write_unindent("models/post.ts", MODEL_POST);
     c.chisel.write_unindent("routes/posts.ts", ROUTE_POSTS);
     c.chisel.write_unindent("routes/blogs.ts", ROUTE_BLOGS);
-    c.chisel.write(".env", r#"{ "CHISELD_AUTH_SECRET": "dud" }"#);
+    c.chisel
+        .write(".env", r#"{ "CHISELD_AUTH_SECRET": "dud" }"#);
     c.chisel.apply_ok().await;
 
     let id_al = store_user(&c.chisel, "Al", "al").await;
