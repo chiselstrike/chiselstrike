@@ -22,8 +22,8 @@ export class TopicMap {
 }
 
 export type ChiselEvent = {
-    key: ArrayBuffer;
-    value: ArrayBuffer;
+    key: Blob;
+    value: Blob;
 };
 
 export type EventHandler = (event: ChiselEvent) => Promise<void>;
@@ -46,22 +46,10 @@ export async function handleKafkaEvent(
     requestContext.routingPath = "";
     requestContext.userId = undefined;
 
-    // we use `serde_v8::ZeroCopyBuf` to pass data from Rust to JavaScript, which is materialized as
-    // `Uint8Array` in JavaScript, but we want to give an `ArrayBuffer` to our users
-    function toBuffer(array: Uint8Array): ArrayBuffer {
-        const buffer = array.buffer;
-        if (array.byteOffset != 0 || array.byteLength != buffer.byteLength) {
-            throw new Error(
-                "Internal error, could not convert Uint8Array to ArrayBuffer losslessly",
-            );
-        }
-        return buffer;
-    }
-
     // create the `ChiselEvent` object
     const chiselEvent = {
-        key: toBuffer(event.key),
-        value: toBuffer(event.value),
+        key: new Blob([event.key]),
+        value: new Blob([event.value]),
     };
 
     await opAsync("op_chisel_begin_transaction");
