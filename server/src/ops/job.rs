@@ -9,7 +9,7 @@ use guard::guard;
 use serde::Serialize;
 use std::cell::RefCell;
 use std::rc::Rc;
-use tokio::sync::{mpsc, oneshot};
+use tokio::sync::oneshot;
 
 /// A job that will be handled in JavaScript.
 #[derive(Debug, Serialize)]
@@ -44,13 +44,13 @@ async fn op_chisel_accept_job(
     state: Rc<RefCell<deno_core::OpState>>,
 ) -> Result<Option<AcceptedJob>> {
     // temporarily move `job_rx` out of the `WorkerState`...
-    guard! {let Some(job_rx) = state.borrow().borrow_mut::<WorkerState>().job_rx.take() else {
+    guard! {let Some(mut job_rx) = state.borrow_mut().borrow_mut::<WorkerState>().job_rx.take() else {
         bail!("op_chisel_accept_job cannot be called while another call is pending")
     }};
     // ... wait for the job ...
     let received_job = job_rx.recv().await;
     // ... and move the `job_rx` back
-    state.borrow().borrow_mut::<WorkerState>().job_rx = Some(job_rx);
+    state.borrow_mut().borrow_mut::<WorkerState>().job_rx = Some(job_rx);
 
     let accepted_job = match received_job {
         Some(VersionJob::Http(request_response)) => {

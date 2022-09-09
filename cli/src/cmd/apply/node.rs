@@ -10,7 +10,7 @@ use crate::proto::{IndexCandidate, Module};
 use crate::routes::FileRouteMap;
 use anyhow::{anyhow, bail, Context, Result};
 use std::ffi::{OsStr, OsString};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::{env, fs};
 
 pub(crate) async fn apply(
@@ -71,7 +71,7 @@ pub(crate) async fn apply(
                 format!("Could not create directory {}", gen_parent_path.display())
             })?;
 
-            let chiselc_proc = chiselc_spawn(&file_path, &gen_file_path, entities)
+            let chiselc_proc = chiselc_spawn(file_path, &gen_file_path, entities)
                 .context("Could not start `chiselc`")?;
 
             // use the chiselc-processed file instead of the original file in the route map
@@ -100,10 +100,10 @@ pub(crate) async fn apply(
 
     // TODO: we need to preprocess all source files with chiselc, not just routes and events
     for route in route_map.routes.iter_mut() {
-        preprocess_source(&mut route.file_path, route_gen_dir)?;
+        preprocess_source(&mut route.file_path, &route_gen_dir)?;
     }
     for topic in topic_map.topics.iter_mut() {
-        preprocess_source(&mut topic.file_path, event_gen_dir)?;
+        preprocess_source(&mut topic.file_path, &event_gen_dir)?;
     }
 
     for proc in chiselc_procs.into_iter() {

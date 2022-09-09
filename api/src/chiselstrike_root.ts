@@ -6,7 +6,7 @@ import { ChiselEntity } from "./datastore.ts";
 import { TopicMap } from "./kafka.ts";
 import { ChiselRequest } from "./request.ts";
 import { MiddlewareNext, RouteMap } from "./routing.ts";
-import { getSecret } from "./utils.ts";
+import { getSecret, opSync } from "./utils.ts";
 
 class AuthUser extends ChiselEntity {}
 class AuthSession extends ChiselEntity {}
@@ -35,8 +35,10 @@ async function authMiddleware(
 ): Promise<Response> {
     const expectedSecret = getSecret("CHISELD_AUTH_SECRET");
     if (expectedSecret === undefined && isDebug) {
-        return forbidden("To access this route, please configure the secret `CHISELD_AUTH_SECRET` " +
-            "and then pass its value in the `ChiselAuth` header");
+        return forbidden(
+            "To access this route, please configure the secret `CHISELD_AUTH_SECRET` " +
+                "and then pass its value in the `ChiselAuth` header",
+        );
     }
 
     const authHeader = request.headers.get("ChiselAuth");

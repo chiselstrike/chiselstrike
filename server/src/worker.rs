@@ -8,7 +8,6 @@ use crate::version::{Version, VersionJob};
 use anyhow::{bail, Context as _, Result};
 use deno_core::url::Url;
 use futures::ready;
-use std::cell::RefCell;
 use std::collections::HashMap;
 use std::future::Future;
 use std::iter::once;
@@ -158,7 +157,7 @@ async fn run(init: WorkerInit) -> Result<()> {
         version: init.version.clone(),
         transaction: None,
         ready_tx: Some(init.ready_tx),
-        job_rx: Rc::new(RefCell::new(init.job_rx)),
+        job_rx: Some(init.job_rx),
     };
     worker.js_runtime.op_state().borrow_mut().put(worker_state);
 
