@@ -70,6 +70,7 @@ pub struct Opt {
     /// Number of Rust tests to run in parallel (does not apply to lit).
     #[structopt(short, long)]
     pub parallel: Option<usize>,
+    test_arg: Option<Regex>,
 }
 
 fn main() -> ExitCode {

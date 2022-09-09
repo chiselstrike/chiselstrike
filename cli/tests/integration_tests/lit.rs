@@ -70,7 +70,7 @@ fn run_tests_inner(opt: &Opt, ports: &AtomicU16, optimize: bool) -> bool {
         .map(|path| std::fs::canonicalize(path.unwrap()).unwrap())
         .collect::<Vec<_>>();
 
-    if let Some(name_regex) = opt.test.as_ref() {
+    if let Some(name_regex) = opt.test.as_ref().or(opt.test_arg.as_ref()) {
         lit_files = lit_files
             .into_iter()
             .filter(|path| name_regex.is_match(path.to_str().unwrap()))

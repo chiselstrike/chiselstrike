@@ -43,7 +43,7 @@ impl TestSuite {
             [true, false]
         )
         .filter_map(|(test_spec, modules, optimize)| {
-            if let Some(name_regex) = opt.test.as_ref() {
+            if let Some(name_regex) = opt.test.as_ref().or(opt.test_arg.as_ref()) {
                 if !name_regex.is_match(test_spec.name) {
                     return None;
                 }
