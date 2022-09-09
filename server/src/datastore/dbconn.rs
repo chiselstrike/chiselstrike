@@ -2,7 +2,7 @@
 
 use anyhow::Context;
 use anyhow::Result;
-use sea_query::{PostgresQueryBuilder, SchemaBuilder, SqliteQueryBuilder};
+use sea_query::{PostgresQueryBuilder, QueryBuilder, SchemaBuilder, SqliteQueryBuilder};
 use sqlx::any::{AnyKind, AnyPool, AnyPoolOptions};
 use sqlx::Executor;
 
@@ -29,7 +29,18 @@ impl DbConnection {
         Ok(Self { pool })
     }
 
-    pub fn query_builder(&self) -> &'static dyn SchemaBuilder {
+    // TODO: replace `query_builder()` and `schema_builder()` with a single method that returns
+    // `&dyn sea_query::GenericBulder`, once trait upcasting coercion is stabilized:
+    // https://github.com/rust-lang/rust/issues/65991
+
+    pub fn query_builder(&self) -> &'static dyn QueryBuilder {
+        match self.pool.any_kind() {
+            AnyKind::Postgres => &PostgresQueryBuilder,
+            AnyKind::Sqlite => &SqliteQueryBuilder,
+        }
+    }
+
+    pub fn schema_builder(&self) -> &'static dyn SchemaBuilder {
         match self.pool.any_kind() {
             AnyKind::Postgres => &PostgresQueryBuilder,
             AnyKind::Sqlite => &SqliteQueryBuilder,

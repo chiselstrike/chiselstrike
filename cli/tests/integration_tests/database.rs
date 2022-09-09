@@ -102,7 +102,10 @@ pub struct SqliteDb {
 
 impl SqliteDb {
     pub fn new(tmp_dir: Arc<TempDir>, file_name: &str) -> Self {
-        Self { tmp_dir, file_name: file_name.into() }
+        Self {
+            tmp_dir,
+            file_name: file_name.into(),
+        }
     }
 
     pub fn url(&self) -> String {

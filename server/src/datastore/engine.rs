@@ -210,7 +210,7 @@ impl QueryEngine {
         let drop_table = Table::drop()
             .table(Alias::new(ty.backing_table()))
             .to_owned();
-        let drop_table = drop_table.build_any(self.db.query_builder());
+        let drop_table = drop_table.build_any(self.db.schema_builder());
         let drop_table = sqlx::query(&drop_table);
         transaction.execute(drop_table).await?;
 
@@ -250,7 +250,7 @@ impl QueryEngine {
             let mut column_def = ColumnDef::try_from(field)?;
             create_table.col(&mut column_def);
         }
-        let create_table = create_table.build_any(self.db.query_builder());
+        let create_table = create_table.build_any(self.db.schema_builder());
 
         let create_table = sqlx::query(&create_table);
         transaction.execute(create_table).await?;

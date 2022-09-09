@@ -4211,9 +4211,9 @@ dependencies = [
 
 [[package]]
 name = "sea-query"
-version = "0.17.3"
+version = "0.26.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "da897c0e21be8ef61cf8705bb286072f5c006090f1d4ce3c12ecea2b39f9b2d9"
+checksum = "a6a1de9d0334895f7eb51bd1603c3c9f6737413f905a134001f1e198f43bfd70"
 dependencies = [
  "sea-query-derive",
 ]
@@ -4386,6 +4386,7 @@ dependencies = [
  "form_urlencoded 1.0.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "format-sql-query",
  "futures",
+ "guard",
  "http",
  "hyper",
  "itertools 0.10.3",

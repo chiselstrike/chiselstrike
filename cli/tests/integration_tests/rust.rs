@@ -39,10 +39,7 @@ fn generate_chiseld_config(ports_counter: &AtomicU16) -> ChiseldConfig {
     }
 }
 
-async fn setup_test_context(
-    ports_counter: &AtomicU16,
-    instance: &TestInstance,
-) -> TestContext {
+async fn setup_test_context(ports_counter: &AtomicU16, instance: &TestInstance) -> TestContext {
     let chiseld_config = generate_chiseld_config(ports_counter);
     let tmp_dir = Arc::new(TempDir::new("chiseld_test").expect("Could not create tempdir"));
     let chisel_path = bin_dir().join("chisel");
@@ -104,12 +101,12 @@ async fn setup_test_context(
             let db = PostgresDb::new(config.clone());
             cmd.args(["--db-uri", &db.url()]);
             Database::Postgres(db)
-        },
+        }
         DatabaseConfig::Sqlite => {
             let db = SqliteDb::new(tmp_dir.clone(), ".chiseld.db");
             cmd.args(["--db-uri", &db.url()]);
             Database::Sqlite(db)
-        },
+        }
         DatabaseConfig::LegacySplitSqlite => {
             let meta = SqliteDb::new(tmp_dir.clone(), "chiseld-meta.db");
             let data = SqliteDb::new(tmp_dir.clone(), "chiseld-data.db");
@@ -120,7 +117,7 @@ async fn setup_test_context(
                 &data.url(),
             ]);
             Database::LegacySplitSqlite { meta, data }
-        },
+        }
     };
 
     let mut chiseld = GuardedChild::new(cmd);

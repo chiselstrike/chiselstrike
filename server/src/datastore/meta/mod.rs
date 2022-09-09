@@ -1,6 +1,7 @@
 // SPDX-FileCopyrightText: © 2021 ChiselStrike <info@chiselstrike.com>
 
 mod migrate;
+mod migrate_to_0_13;
 mod schema;
 
 use crate::datastore::DbConnection;
@@ -247,7 +248,11 @@ impl MetaService {
     /// For Postgres this is a lot more complex because it is not possible to
     /// do cross-database transactions. But this handles the local dev case,
     /// which is what is most relevant at the moment.
-    pub async fn maybe_migrate_split_sqlite_database(&self, sources: &[PathBuf], to: &str) -> Result<()> {
+    pub async fn maybe_migrate_split_sqlite_database(
+        &self,
+        sources: &[PathBuf],
+        to: &str,
+    ) -> Result<()> {
         match self.db.pool.any_kind() {
             AnyKind::Sqlite => {}
             _ => anyhow::bail!("Can't migrate postgres tables yet"),
@@ -362,24 +367,29 @@ impl MetaService {
 
     /// Create the schema of the underlying metadata store.
     pub async fn migrate_schema(&self) -> Result<()> {
-        let query_builder = self.db.query_builder();
         let mut transaction = self.begin_transaction().await?;
 
         let mut version = self.get_schema_version(&mut transaction).await?;
         {
             let mut ctx = migrate::MigrateContext {
-                query_builder,
+                query_builder: self.db.query_builder(),
+                schema_builder: self.db.schema_builder(),
                 transaction: &mut transaction,
             };
             // migrate the database to the latest version, step by step
             while let Some(new_version) = migrate::migrate_schema_step(&mut ctx, &version).await? {
-                log::info!("Migrated database from version {:?} to version {:?}", version, new_version);
+                log::info!(
+                    "Migrated database from version {:?} to version {:?}",
+                    version,
+                    new_version
+                );
                 version = new_version.into();
             }
         };
 
         // upsert the version in the database
-        execute(&mut transaction,
+        execute(
+            &mut transaction,
             sqlx::query(
                 r#"
                 INSERT INTO chisel_version (version, version_id)
@@ -389,7 +399,8 @@ impl MetaService {
             )
             .bind(version.as_str())
             .bind("chiselstrike"),
-        ).await?;
+        )
+        .await?;
 
         Self::commit_transaction(transaction).await?;
         Ok(())

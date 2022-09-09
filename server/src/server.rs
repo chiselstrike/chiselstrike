@@ -113,7 +113,9 @@ async fn make_server(opt: Opt) -> Result<(Arc<Server>, TaskHandle<Result<()>>)> 
             .context("Could not migrate split sqlite databases into a single database")?;
     }
 
-    meta_service.migrate_schema().await
+    meta_service
+        .migrate_schema()
+        .await
         .context("Could not migrate database schema to the latest version")?;
 
     let builtin_types = Arc::new(BuiltinTypes::new());

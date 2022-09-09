@@ -30,7 +30,8 @@ pub struct GuardedChild {
 
 impl GuardedChild {
     pub fn new(mut command: tokio::process::Command) -> Self {
-        command.stdout(Stdio::piped())
+        command
+            .stdout(Stdio::piped())
             .stderr(Stdio::piped())
             .kill_on_drop(true);
         Self {
@@ -222,7 +223,10 @@ impl AsyncTestableOutput {
     }
 
     fn dummy(output_type: OutputType) -> Self {
-        Self::new(output_type, Box::pin("(dummy AsyncTestableOutput)".as_bytes() as &'static [u8]))
+        Self::new(
+            output_type,
+            Box::pin("(dummy AsyncTestableOutput)".as_bytes() as &'static [u8]),
+        )
     }
 
     /// Tries to find `pattern` in the output starting from the last successfully read

@@ -24,6 +24,7 @@ env_logger = "0.9.0"
 form_urlencoded = "1.0"
 format-sql-query = "0.4.0"
 futures = "0.3"
+guard = "0.5"
 http = "0.2.6"
 hyper = { version = "0.14.16", features = ["server", "tcp", "http1"] }
 itertools = "0.10.1"
@@ -41,7 +42,7 @@ regex = "1"
 rsa = "0.7.0-pre"
 rskafka = "0.3.0"
 rustls = "0.20.6"
-sea-query = { version = "0.17.1", features = ["thread-safe"] }
+sea-query = { version = "0.26", features = ["thread-safe"] }
 serde = "1.0.137"
 serde_derive = "1.0.137"
 serde_json = "1.0.81"

@@ -76,8 +76,8 @@ pub enum Endpoints {
 #[derive(Iden)]
 pub enum Sources {
     Table,
-    //Path,
-    //Code,
+    Path,
+    Code,
 }
 
 #[derive(Iden)]

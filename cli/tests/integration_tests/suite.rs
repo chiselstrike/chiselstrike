@@ -2,7 +2,7 @@
 
 use crate::database::{DatabaseConfig, PostgresConfig};
 use crate::framework::TestContext;
-use crate::{Opt, DatabaseKind};
+use crate::{DatabaseKind, Opt};
 use futures::future::BoxFuture;
 use itertools::iproduct;
 
@@ -64,20 +64,21 @@ impl TestSuite {
             }
 
             let db_config = match (test_spec.db, opt.database) {
-                (DatabaseSpec::Any | DatabaseSpec::Sqlite, DatabaseKind::Sqlite) =>
-                    DatabaseConfig::Sqlite,
-                (DatabaseSpec::Any, DatabaseKind::Postgres) =>
+                (DatabaseSpec::Any | DatabaseSpec::Sqlite, DatabaseKind::Sqlite) => {
+                    DatabaseConfig::Sqlite
+                }
+                (DatabaseSpec::Any, DatabaseKind::Postgres) => {
                     DatabaseConfig::Postgres(PostgresConfig::new(
                         opt.database_host.clone(),
                         opt.database_user.clone(),
                         opt.database_password.clone(),
-                    )),
-                (DatabaseSpec::LegacySplitSqlite, DatabaseKind::Sqlite) =>
-                    DatabaseConfig::LegacySplitSqlite,
-                (DatabaseSpec::Sqlite, DatabaseKind::Postgres) =>
-                    return None,
-                (DatabaseSpec::LegacySplitSqlite, DatabaseKind::Postgres) =>
-                    return None,
+                    ))
+                }
+                (DatabaseSpec::LegacySplitSqlite, DatabaseKind::Sqlite) => {
+                    DatabaseConfig::LegacySplitSqlite
+                }
+                (DatabaseSpec::Sqlite, DatabaseKind::Postgres) => return None,
+                (DatabaseSpec::LegacySplitSqlite, DatabaseKind::Postgres) => return None,
             };
 
             Some(TestInstance {
