@@ -1,6 +1,6 @@
 use crate::framework::prelude::*;
 
-#[chisel_macros::test(modules = Deno)]
+#[self::test(modules = Deno)]
 pub async fn unknown_type(c: TestContext) {
     c.chisel.write(
         "models/model.ts",
@@ -16,7 +16,7 @@ pub async fn unknown_type(c: TestContext) {
         .read(r##"Error: field 'a' in class 'Bad' is of unknown entity type 'SomeType'"##);
 }
 
-#[chisel_macros::test(modules = Deno)]
+#[self::test(modules = Deno)]
 pub async fn malformed_field_type(c: TestContext) {
     c.chisel.write(
         "models/model.ts",
@@ -33,7 +33,7 @@ pub async fn malformed_field_type(c: TestContext) {
         .read(r##"export class Malformed extends ChiselEntity { name: string(); }"##);
 }
 
-#[chisel_macros::test(modules = Deno)]
+#[self::test(modules = Deno)]
 pub async fn missing_field_type(c: TestContext) {
     c.chisel.write(
         "models/model.ts",
@@ -47,10 +47,10 @@ pub async fn missing_field_type(c: TestContext) {
         .await
         .stderr
         .read(r##"error: While parsing class Malformed"##)
-        .read(r##"Error: type annotation is temporarily mandatory"##);
+        .read(r##"Error: field `name` needs a type annotation or a default value"##);
 }
 
-#[chisel_macros::test(modules = Deno)]
+#[self::test(modules = Deno)]
 pub async fn duplicate_fields(c: TestContext) {
     c.chisel.write(
         "models/model.ts",
@@ -62,7 +62,7 @@ pub async fn duplicate_fields(c: TestContext) {
     c.chisel.apply_err().await;
 }
 
-#[chisel_macros::test(modules = Deno)]
+#[self::test(modules = Deno)]
 pub async fn unique_constraint(mut c: TestContext) {
     c.chisel.write(
         "routes/posts.ts",
@@ -111,3 +111,28 @@ pub async fn unique_constraint(mut c: TestContext) {
         .stdout
         .read("@unique relUrl: string;");
 }
+
+#[self::test(modules = Deno)]
+pub async fn field_type_from_initializer(c: TestContext) {
+    c.chisel.write(
+        "models/book.ts",
+        r#"
+        import { ChiselEntity } from "@chiselstrike/api";
+        export class Book extends ChiselEntity {
+            author = 'Austen';
+        }"#,
+    );
+    c.chisel.write(
+        "routes/test.ts",
+        r#"
+        import { responseFromJson } from "@chiselstrike/api";
+        import { Book } from '../models/book.ts';
+        export default function () {
+            const book = new Book();
+            return responseFromJson(book.author === 'Austen');
+        }"#,
+    );
+    c.chisel.apply_ok().await;
+    c.chisel.get("/dev/test").send().await.assert_json(json!(true));
+}
+
