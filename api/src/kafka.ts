@@ -28,6 +28,7 @@ export type ChiselEvent = {
 
 export type EventHandler = (event: ChiselEvent) => Promise<void>;
 
+// Handle a Kafka event. This should only be called from `run.ts`, see the `run()` function from details.
 export async function handleKafkaEvent(
     topicMap: TopicMap,
     event: KafkaEvent,

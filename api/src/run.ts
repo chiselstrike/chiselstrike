@@ -20,7 +20,7 @@ type AcceptedJob =
 // handle HTTP requests).
 //
 // The async function returns when there are no more jobs to handle.
-export default async function (
+export default async function run(
     userRouteMap: RouteMapLike,
     userTopicMap: TopicMap | undefined,
 ): Promise<void> {
@@ -40,6 +40,11 @@ export default async function (
         const job = await opAsync(
             "op_chisel_accept_job",
         ) as (AcceptedJob | null);
+
+        // at the moment, it is impossible to handle multiple jobs concurrently, because the data layer
+        // requires some global state (the `requestContext` variable in JavaScript and the transaction in
+        // Rust)
+
         if (job === null) {
             break;
         } else if (job.type == "http") {

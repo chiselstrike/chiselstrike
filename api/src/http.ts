@@ -25,6 +25,7 @@ export type HttpResponse = {
 const versionId = opSync("op_chisel_get_version_id") as string;
 const isDebug = opSync("op_chisel_is_debug") as boolean;
 
+// Handle an HTTP request. This should only be called from `run.ts`, see the `run()` function from details.
 export async function handleHttpRequest(
     router: Router,
     httpRequest: HttpRequest,

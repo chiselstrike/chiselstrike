@@ -65,8 +65,8 @@ pub struct WorkerState {
 
     /// Channel for receiving jobs.
     ///
-    /// We can get away with `Rc<RefCell<>>`, because the worker runs on a single thread.
-    pub job_rx: Rc<RefCell<mpsc::Receiver<VersionJob>>>,
+    /// To wait on this channel, we temporarily move out of the `Option`.
+    pub job_rx: Option<mpsc::Receiver<VersionJob>>,
 }
 
 pub async fn spawn(init: WorkerInit) -> Result<WorkerJoinHandle> {
