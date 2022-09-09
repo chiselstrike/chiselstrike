@@ -16,6 +16,7 @@ pub mod prelude {
     pub use super::{json_is_subset, Chisel, Response, TestContext};
     pub use bytes::Bytes;
     pub use chisel_macros::test;
+    pub use once_cell::sync::Lazy;
     pub use reqwest::Method;
     pub use serde_json::json;
 }
@@ -415,6 +416,10 @@ impl Chisel {
 
     pub fn put(&self, url: &str) -> RequestBuilder {
         self.request(reqwest::Method::PUT, url)
+    }
+
+    pub fn patch(&self, url: &str) -> RequestBuilder {
+        self.request(reqwest::Method::PATCH, url)
     }
 
     pub fn delete(&self, url: &str) -> RequestBuilder {
