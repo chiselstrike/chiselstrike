@@ -2,3 +2,5 @@
 
 const { run } = require("./binary");
 run();
+
+process.send("ready");
