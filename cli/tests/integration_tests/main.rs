@@ -71,6 +71,10 @@ pub struct Opt {
     #[structopt(short, long)]
     pub parallel: Option<usize>,
     test_arg: Option<Regex>,
+
+    /// don't capture stdout/stderr of each task, allow printing directly
+    #[structopt(long)]
+    nocapture: bool,
 }
 
 fn main() -> ExitCode {

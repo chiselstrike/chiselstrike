@@ -110,7 +110,7 @@ async fn setup_test_context(
     ])
     .current_dir(tmp_dir.path());
 
-    let mut chiseld = GuardedChild::new(cmd);
+    let mut chiseld = GuardedChild::new(cmd, !opt.nocapture);
     wait_for_chiseld_startup(&mut chiseld, &chisel).await;
 
     TestContext {
