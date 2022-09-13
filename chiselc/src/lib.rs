@@ -1,3 +1,5 @@
+// SPDX-FileCopyrightText: © 2022 ChiselStrike <info@chiselstrike.com>
+
 pub mod parse;
 pub mod policies;
 pub mod rewrite;

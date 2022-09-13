@@ -1,3 +1,5 @@
+// SPDX-FileCopyrightText: © 2022 ChiselStrike <info@chiselstrike.com>
+
 use std::env;
 use std::ffi::OsString;
 use std::ops::{Deref, DerefMut};

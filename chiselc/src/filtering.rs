@@ -1,3 +1,5 @@
+// SPDX-FileCopyrightText: © 2022 ChiselStrike <info@chiselstrike.com>
+
 use crate::query::Filter;
 use indexmap::IndexSet;
 use serde::Serialize;

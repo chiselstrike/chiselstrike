@@ -1,4 +1,5 @@
 #!/bin/bash
+# SPDX-FileCopyrightText: © 2022 ChiselStrike <info@chiselstrike.com>
 
 # FIXME: Use default job-level parallelism when the "bad archive" problem discussed in https://github.com/chiselstrike/chiselstrike/issues/777 is resolved.
 

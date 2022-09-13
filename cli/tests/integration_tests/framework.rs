@@ -1,3 +1,5 @@
+// SPDX-FileCopyrightText: © 2022 ChiselStrike <info@chiselstrike.com>
+
 use crate::database::Database;
 use anyhow::{anyhow, Context, Result};
 use bytes::{Buf, Bytes, BytesMut};

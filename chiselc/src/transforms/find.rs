@@ -1,3 +1,5 @@
+// SPDX-FileCopyrightText: © 2022 ChiselStrike <info@chiselstrike.com>
+
 use crate::filtering::FilterProperties;
 use crate::query::Operator as QOperator;
 use crate::symbols::Symbols;

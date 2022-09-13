@@ -1,3 +1,5 @@
+// SPDX-FileCopyrightText: © 2022 ChiselStrike <info@chiselstrike.com>
+
 import { User } from "../models/user";
 import { validate } from "email-validator";
 

@@ -1,3 +1,5 @@
+// SPDX-FileCopyrightText: © 2022 ChiselStrike <info@chiselstrike.com>
+
 pub const JS_FILES: [(&str, &str); 2] = [
     (
         "00_typescript.js",
