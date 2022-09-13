@@ -225,6 +225,13 @@ fn validate_type_vec(type_vec: &[AddTypeRequest], valid_entities: &BTreeSet<Stri
 }
 
 fn parse_class_prop(x: &ClassProp, class_name: &str, handler: &Handler) -> Result<FieldDefinition> {
+    macro_rules! swc_err {
+        ($span:ident, $msg:literal, $($args:tt)*) => {{
+            let formatted_msg = format!($msg, $($args)*);
+            swc_err(handler, $span, &formatted_msg)
+        }};
+    }
+
     let (field_name, is_optional) = get_field_info(handler, &x.key)?;
     anyhow::ensure!(field_name != "id", "Creating a field with the name `id` is not supported. 😟\nBut don't worry! ChiselStrike creates an id field automatically, and you can access it in your endpoints as {}.id 🤩", class_name);
 
@@ -234,12 +241,8 @@ fn parse_class_prop(x: &ClassProp, class_name: &str, handler: &Handler) -> Resul
             let default_value = if let Some((default_value, value_type)) =
                 get_field_value(handler, value)?
             {
-                anyhow::ensure!(field_type == value_type, swc_err(
-                    handler,
-                    x,
-                    &format!(
-                        "field `{field_name}` is of type {field_type} but is default initialized by a value of type {value_type}"
-                    ),
+                anyhow::ensure!(field_type == value_type, swc_err!(x,
+                    "field `{field_name}` is of type {field_type} but is default initialized by a value of type {value_type}",
                 ));
                 Some(default_value)
             } else {
@@ -256,10 +259,16 @@ fn parse_class_prop(x: &ClassProp, class_name: &str, handler: &Handler) -> Resul
             if let Some((default_value, value_type)) = get_field_value(handler, value)? {
                 (value_type, Some(default_value))
             } else {
-                bail!("field `{field_name}` needs an explicit type annotation")
+                bail!(swc_err!(
+                    x,
+                    "field `{field_name}` needs an explicit type annotation",
+                ))
             }
         }
-        (None, None) => bail!("field `{field_name}` needs a type annotation or a default value"),
+        (None, None) => bail!(swc_err!(
+            x,
+            "field `{field_name}` needs a type annotation or a default value",
+        )),
     };
 
     let (labels, is_unique) = get_type_decorators(handler, &x.decorators)?;
@@ -275,12 +284,9 @@ fn parse_class_prop(x: &ClassProp, class_name: &str, handler: &Handler) -> Resul
             }
             Some(k) => match &**k {
                 Expr::New(_) => {}
-                x => anyhow::bail!(swc_err(
-                    handler,
+                x => anyhow::bail!(swc_err!(
                     x,
-                    &format!(
-                        "field `{field_name}` of entity type `{name}` has unexpected initializer"
-                    ),
+                    "field `{field_name}` of entity type `{name}` has unexpected initializer",
                 )),
             },
         },
