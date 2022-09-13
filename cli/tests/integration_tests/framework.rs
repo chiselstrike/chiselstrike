@@ -1,12 +1,9 @@
 // SPDX-FileCopyrightText: © 2022 ChiselStrike <info@chiselstrike.com>
 
-use crate::database::Database;
-use anyhow::{anyhow, Context, Result};
-use bytes::{Buf, Bytes, BytesMut};
-use futures::future::poll_fn;
-use futures::{pin_mut, ready, Future, FutureExt};
 use std::borrow::Borrow;
+use std::fs;
 use std::io::{stdout, Write};
+use std::net::SocketAddr;
 use std::path::{Path, PathBuf};
 use std::pin::Pin;
 use std::process::{ExitStatus, Stdio};
@@ -14,9 +11,15 @@ use std::sync::Arc;
 use std::task::Poll;
 use std::time::Duration;
 use std::{error, fmt, io, str};
-use std::{fs, net::SocketAddr};
+
+use anyhow::{anyhow, Context, Result};
+use bytes::{Buf, Bytes, BytesMut};
+use futures::future::Fuse;
+use futures::{pin_mut, Future, FutureExt};
 use tempdir::TempDir;
 use tokio::io::{duplex, AsyncRead, AsyncReadExt, AsyncWriteExt, DuplexStream};
+
+use crate::database::Database;
 
 pub mod prelude {
     pub use super::{json_is_subset, Chisel, Response, TestContext};
@@ -28,43 +31,88 @@ pub mod prelude {
 }
 
 struct Tee {
-    reader_handle: tokio::task::JoinHandle<io::Result<()>>,
+    reader_handle: Fuse<tokio::task::JoinHandle<io::Result<()>>>,
     input: DuplexStream,
 }
 
-impl Tee {
-    fn new<R>(mut reader: R) -> Self
-    where
-        R: AsyncRead + Unpin + Send + 'static,
-    {
-        let (input, mut output) = duplex(16384);
+struct TeeReader<R> {
+    output: DuplexStream,
+    buffer: BytesMut,
+    reader: R,
+    eof: bool,
+}
 
-        let reader_handle = tokio::spawn(async move {
-            let mut buffer = BytesMut::new();
-            loop {
-                match reader.read_buf(&mut buffer).await {
-                    Ok(0) => break Ok(()),
+impl<R> Future for TeeReader<R>
+where
+    R: AsyncRead + Unpin + Send,
+{
+    type Output = io::Result<()>;
+
+    fn poll(mut self: Pin<&mut Self>, cx: &mut std::task::Context<'_>) -> Poll<Self::Output> {
+        let this = &mut *self;
+        let buffer = &mut this.buffer;
+        let output = &mut this.output;
+        let reader = &mut this.reader;
+        let eof = &mut this.eof;
+
+        for _ in 0..32 {
+            let mut all_pending = true;
+            let read = reader.read_buf(buffer);
+            pin_mut!(read);
+            if let Poll::Ready(read_res) = read.poll(cx) {
+                match read_res {
+                    Ok(0) => {
+                        *eof = true;
+                        all_pending = false;
+                    }
                     Ok(count) => {
                         let new_bytes = &buffer[buffer.len() - count..];
                         stdout().write_all(new_bytes).unwrap();
-                        // we don't want to block when no one is consuming our bytes...
-                        poll_fn(|cx| {
-                            while buffer.has_remaining() {
-                                let fut = output.write_buf(&mut buffer);
-                                pin_mut!(fut);
-                                match fut.poll(cx) {
-                                    Poll::Ready(_) => continue,
-                                    Poll::Pending => return Poll::Ready(()),
-                                }
-                            }
-                            Poll::Ready(())
-                        })
-                        .await;
+                        all_pending = false;
                     }
-                    Err(e) => break Err(e),
+                    Err(e) => return Poll::Ready(Err(e)),
                 }
             }
-        });
+
+            if buffer.has_remaining() {
+                let fut = output.write_all_buf(buffer);
+                pin_mut!(fut);
+                if let Poll::Ready(res) = fut.poll(cx) {
+                    match res {
+                        Ok(_) => all_pending = false,
+                        Err(e) => return Poll::Ready(Err(e)),
+                    }
+                }
+            }
+
+            if *eof && !buffer.has_remaining() {
+                return Poll::Ready(Ok(()));
+            }
+
+            if all_pending {
+                return Poll::Pending;
+            }
+        }
+
+        cx.waker().wake_by_ref();
+        Poll::Pending
+    }
+}
+
+impl Tee {
+    fn new<R>(reader: R) -> Self
+    where
+        R: AsyncRead + Unpin + Send + 'static,
+    {
+        let (input, output) = duplex(16384);
+
+        let reader_handle = tokio::spawn(TeeReader {
+            output,
+            buffer: Default::default(),
+            reader,
+            eof: false,
+        })
+        .fuse();
 
         Self {
             reader_handle,
@@ -79,24 +127,17 @@ impl AsyncRead for Tee {
         cx: &mut std::task::Context<'_>,
         buf: &mut tokio::io::ReadBuf<'_>,
     ) -> Poll<io::Result<()>> {
+        if let Poll::Ready(res) = self.reader_handle.poll_unpin(cx) {
+            match res {
+                Ok(Ok(_)) => (),
+                Ok(Err(e)) => return Poll::Ready(Err(e)),
+                Err(e) => return Poll::Ready(Err(io::Error::new(io::ErrorKind::Other, e))),
+            }
+        }
+
         let input = &mut self.input;
         pin_mut!(input);
-        let remainign_before = buf.remaining();
-        match ready!(input.poll_read(cx, buf)) {
-            Ok(_) => {
-                let remaining_after = buf.remaining();
-                if remainign_before == remaining_after {
-                    // get output from reader task
-                    match ready!(self.reader_handle.poll_unpin(cx)) {
-                        Ok(ret) => return Poll::Ready(ret),
-                        Err(e) => return Poll::Ready(Err(io::Error::new(io::ErrorKind::Other, e))),
-                    }
-                }
-
-                Poll::Ready(Ok(()))
-            }
-            Err(e) => Poll::Ready(Err(e)),
-        }
+        input.poll_read(cx, buf)
     }
 }
 
