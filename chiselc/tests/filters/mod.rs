@@ -1,3 +1,5 @@
+// SPDX-FileCopyrightText: © 2022 ChiselStrike <info@chiselstrike.com>
+
 mod filter_properties;
 mod filter_splitting;
 mod transform_filter;

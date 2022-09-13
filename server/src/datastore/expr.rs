@@ -1,3 +1,5 @@
+// SPDX-FileCopyrightText: © 2022 ChiselStrike <info@chiselstrike.com>
+
 use serde_derive::{Deserialize, Serialize};
 
 /// An expression.

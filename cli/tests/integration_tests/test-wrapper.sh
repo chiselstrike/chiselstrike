@@ -1,4 +1,5 @@
 #!/bin/bash
+# SPDX-FileCopyrightText: © 2022 ChiselStrike <info@chiselstrike.com>
 
 set -e
 

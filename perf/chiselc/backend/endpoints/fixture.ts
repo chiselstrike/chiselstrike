@@ -1,3 +1,5 @@
+// SPDX-FileCopyrightText: © 2022 ChiselStrike <info@chiselstrike.com>
+
 import { faker } from "@faker-js/faker";
 
 import { User } from "../models/user";

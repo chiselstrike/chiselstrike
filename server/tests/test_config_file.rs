@@ -1,3 +1,5 @@
+// SPDX-FileCopyrightText: © 2022 ChiselStrike <info@chiselstrike.com>
+
 use std::fs::create_dir_all;
 use std::io::Write;
 use std::path::PathBuf;

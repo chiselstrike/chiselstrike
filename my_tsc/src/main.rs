@@ -1,3 +1,5 @@
+// SPDX-FileCopyrightText: © 2022 ChiselStrike <info@chiselstrike.com>
+
 use deno_runtime::inspector_server::InspectorServer;
 use endpoint_tsc::Compiler;
 use std::net::SocketAddr;

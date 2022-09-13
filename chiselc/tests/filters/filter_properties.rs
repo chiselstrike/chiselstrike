@@ -1,3 +1,5 @@
+// SPDX-FileCopyrightText: © 2022 ChiselStrike <info@chiselstrike.com>
+
 use super::*;
 use chiselc::rewrite::Target;
 use serde_json::Value;

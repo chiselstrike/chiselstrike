@@ -1,3 +1,5 @@
+// SPDX-FileCopyrightText: © 2022 ChiselStrike <info@chiselstrike.com>
+
 use crate::symbols::Symbols;
 use swc_ecmascript::ast::{Expr, MemberProp, Pat};
 

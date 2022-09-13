@@ -1,3 +1,5 @@
+// SPDX-FileCopyrightText: © 2022 ChiselStrike <info@chiselstrike.com>
+
 //! Query intermediate representation.
 //!
 //! The compiler parses TypeScripts to identify fragments in the code that

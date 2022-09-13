@@ -1,3 +1,5 @@
+// SPDX-FileCopyrightText: © 2022 ChiselStrike <info@chiselstrike.com>
+
 use std::collections::HashMap;
 use std::fmt;
 use std::ops::{Deref, DerefMut};

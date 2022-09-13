@@ -1,3 +1,5 @@
+// SPDX-FileCopyrightText: © 2022 ChiselStrike <info@chiselstrike.com>
+
 use file_mode::ModePath;
 use serde_json::json;
 use std::time::Duration;
