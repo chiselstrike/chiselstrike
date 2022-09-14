@@ -145,7 +145,6 @@ pub async fn find_many_invalid_argument(c: TestContext) {
         .read("Argument of type '{ foo: string; }' is not assignable to parameter of type 'Partial<Person>'");
 }
 
-
 #[chisel_macros::test(modules = Deno, optimize = Both)]
 pub async fn find_one(c: TestContext) {
     c.chisel.copy_to_dir("examples/person.ts", "models");
@@ -228,7 +227,7 @@ pub async fn find_one(c: TestContext) {
 }
 
 #[chisel_macros::test(modules = Deno, optimize = Both)]
-pub async fn find_by(mut c: TestContext) {
+pub async fn find_by(c: TestContext) {
     c.chisel.copy_to_dir("examples/person.ts", "models");
     c.chisel.copy_to_dir("examples/find_by.ts", "routes");
     c.chisel.copy_to_dir("examples/store.ts", "routes");
@@ -326,7 +325,8 @@ pub async fn find_by(mut c: TestContext) {
         "Glauber Costa 666 true 10.01 Jan Plhak -666 true 10.02 Pekka Enberg 888 false 12.2 "
     );
 
-    c.chisel
+    let resp_text = c
+        .chisel
         .post("/dev/find_by")
         .json(json!({
             "field_name":"misspelled_field_name",
@@ -334,10 +334,9 @@ pub async fn find_by(mut c: TestContext) {
         }))
         .send()
         .await
-        .assert_status(500);
-
-    c.chiseld
-        .stderr
-        .read("Error: expression error: entity 'Person' doesn't have field 'misspelled_field_name'")
-        .await;
+        .assert_status(500)
+        .text();
+    assert!(resp_text.contains(
+        "Error: expression error: entity 'Person' doesn't have field 'misspelled_field_name'"
+    ));
 }
