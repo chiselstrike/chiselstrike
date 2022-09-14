@@ -1,4 +1,5 @@
 #!/bin/sh
+# SPDX-FileCopyrightText: © 2022 ChiselStrike <info@chiselstrike.com>
 #
 # A test for comparing `chiselc` output to the source file for testing that
 # the TypeScript backend ("pretty printer") generates code that is

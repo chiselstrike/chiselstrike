@@ -1,3 +1,5 @@
+// SPDX-FileCopyrightText: © 2022 ChiselStrike <info@chiselstrike.com>
+
 use std::path::PathBuf;
 
 use proc_macro::TokenStream;

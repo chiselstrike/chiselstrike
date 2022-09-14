@@ -1,3 +1,5 @@
+// SPDX-FileCopyrightText: © 2022 ChiselStrike <info@chiselstrike.com>
+
 //! AST rewriter that transforms TypeScript code into query expressions.
 
 use crate::filtering::FilterProperties;

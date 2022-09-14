@@ -1,3 +1,5 @@
+// SPDX-FileCopyrightText: © 2022 ChiselStrike <info@chiselstrike.com>
+
 use crate::framework::prelude::*;
 
 async fn store_people(chisel: &Chisel) {

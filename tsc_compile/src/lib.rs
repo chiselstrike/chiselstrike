@@ -586,7 +586,7 @@ mod tests {
         assert!(err.starts_with(
             "The module's source code could not be parsed: Expected ';', '}' or <eof> at file:///"
         ));
-        assert!(err.contains("/test4.ts:1:6"));
+        assert!(err.contains("/test4.ts:3:6"));
     }
 
     fn opts_lib1() -> CompileOptions<'static> {
@@ -805,7 +805,7 @@ export default foo;
             .to_string();
         let err = console::strip_ansi_codes(&err);
         assert!(err.contains(
-            "tests/wrong_type.ts:1:14 - error TS2322: Type 'number' is not assignable to type 'string'."
+            "tests/wrong_type.ts:3:14 - error TS2322: Type 'number' is not assignable to type 'string'."
         ));
     }
 
@@ -818,7 +818,7 @@ export default foo;
             .to_string();
         let err = console::strip_ansi_codes(&err);
         assert!(err.contains(
-            "tests/wrong_type.ts:1:14 - error TS2322: Type 'number' is not assignable to type 'string'"
+            "tests/wrong_type.ts:3:14 - error TS2322: Type 'number' is not assignable to type 'string'"
         ));
     }
 

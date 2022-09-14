@@ -1,3 +1,4 @@
+// SPDX-FileCopyrightText: © 2022 ChiselStrike <info@chiselstrike.com>
 import { ChiselCursor, ChiselEntity, requestContext } from "./datastore.ts";
 import { ChiselRequest } from "./request.ts";
 import { mergeDeep, opAsync, responseFromJson } from "./utils.ts";
