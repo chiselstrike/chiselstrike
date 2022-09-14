@@ -109,3 +109,19 @@ pub async fn routes_nonarray(c: TestContext) {
     c.chisel.write("policies/p.yaml", "routes: {}");
     c.chisel.apply_err().await.stderr.read("value for routes");
 }
+
+#[chisel_macros::test(modules = Node)]
+pub async fn route_pathless(c: TestContext) {
+    c.chisel.write("policies/p.yaml", "routes: [{}]");
+    c.chisel
+        .apply_err()
+        .await
+        .stderr
+        .read("route without a path");
+}
+
+#[chisel_macros::test(modules = Node)]
+pub async fn route_invalid_path(c: TestContext) {
+    c.chisel.write("policies/p.yaml", "routes: [{ path: [] }]");
+    c.chisel.apply_err().await.stderr.read("route path isn't a string");
+}
