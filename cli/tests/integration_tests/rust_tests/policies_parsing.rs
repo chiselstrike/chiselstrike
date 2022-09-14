@@ -35,6 +35,17 @@ pub async fn labels_nonarray(c: TestContext) {
 }
 
 #[chisel_macros::test(modules = Node)]
+pub async fn label_nameless(c: TestContext) {
+    c.chisel
+        .write("policies/p.yaml", "labels: [{ transform: omit }]");
+    c.chisel
+        .apply_err()
+        .await
+        .stderr
+        .read("label without a name");
+}
+
+#[chisel_macros::test(modules = Node)]
 pub async fn routes_nonarray(c: TestContext) {
     c.chisel.write("policies/p.yaml", "routes: {}");
     c.chisel.apply_err().await.stderr.read("value for routes");
