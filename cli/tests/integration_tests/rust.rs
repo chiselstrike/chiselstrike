@@ -120,7 +120,7 @@ async fn setup_test_context(ports_counter: &AtomicU16, instance: &TestInstance) 
         }
     };
 
-    let mut chiseld = GuardedChild::new(cmd);
+    let mut chiseld = GuardedChild::new(cmd, !opt.nocapture);
     if instance.spec.start_chiseld {
         chiseld.start().await;
         wait_for_chiseld_startup(&mut chiseld, &chisel).await;

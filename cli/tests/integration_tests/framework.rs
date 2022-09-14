@@ -1,24 +1,102 @@
 use crate::database::Database;
 use anyhow::{anyhow, Context, Result};
-use bytes::{Bytes, BytesMut};
+use bytes::{Buf, Bytes, BytesMut};
+use futures::future::poll_fn;
+use futures::{pin_mut, ready, Future, FutureExt};
 use std::borrow::Borrow;
+use std::io::{stdout, Write};
 use std::path::{Path, PathBuf};
 use std::pin::Pin;
 use std::process::{ExitStatus, Stdio};
 use std::sync::Arc;
+use std::task::Poll;
 use std::time::Duration;
-use std::{error, fmt, str};
+use std::{error, fmt, io, str};
 use std::{fs, net::SocketAddr};
 use tempdir::TempDir;
-use tokio::io::{AsyncRead, AsyncReadExt, AsyncWriteExt};
+use tokio::io::{duplex, AsyncRead, AsyncReadExt, AsyncWriteExt, DuplexStream};
 
 pub mod prelude {
     pub use super::{json_is_subset, Chisel, Response, TestContext};
     pub use bytes::Bytes;
     pub use chisel_macros::test;
+    pub use once_cell::sync::Lazy;
     pub use reqwest::Method;
     pub use serde_json::json;
     pub use std::time::Duration;
+}
+
+struct Tee {
+    reader_handle: tokio::task::JoinHandle<io::Result<()>>,
+    input: DuplexStream,
+}
+
+impl Tee {
+    fn new<R>(mut reader: R) -> Self
+    where
+        R: AsyncRead + Unpin + Send + 'static,
+    {
+        let (input, mut output) = duplex(16384);
+
+        let reader_handle = tokio::spawn(async move {
+            let mut buffer = BytesMut::new();
+            loop {
+                match reader.read_buf(&mut buffer).await {
+                    Ok(0) => break Ok(()),
+                    Ok(count) => {
+                        let new_bytes = &buffer[buffer.len() - count..];
+                        stdout().write_all(new_bytes).unwrap();
+                        // we don't want to block when no one is consuming our bytes...
+                        poll_fn(|cx| {
+                            while buffer.has_remaining() {
+                                let fut = output.write_buf(&mut buffer);
+                                pin_mut!(fut);
+                                match fut.poll(cx) {
+                                    Poll::Ready(_) => continue,
+                                    Poll::Pending => return Poll::Ready(()),
+                                }
+                            }
+                            Poll::Ready(())
+                        })
+                        .await;
+                    }
+                    Err(e) => break Err(e),
+                }
+            }
+        });
+
+        Self {
+            reader_handle,
+            input,
+        }
+    }
+}
+
+impl AsyncRead for Tee {
+    fn poll_read(
+        mut self: Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+        buf: &mut tokio::io::ReadBuf<'_>,
+    ) -> Poll<io::Result<()>> {
+        let input = &mut self.input;
+        pin_mut!(input);
+        let remainign_before = buf.remaining();
+        match ready!(input.poll_read(cx, buf)) {
+            Ok(_) => {
+                let remaining_after = buf.remaining();
+                if remainign_before == remaining_after {
+                    // get output from reader task
+                    match ready!(self.reader_handle.poll_unpin(cx)) {
+                        Ok(ret) => return Poll::Ready(ret),
+                        Err(e) => return Poll::Ready(Err(io::Error::new(io::ErrorKind::Other, e))),
+                    }
+                }
+
+                Poll::Ready(Ok(()))
+            }
+            Err(e) => Poll::Ready(Err(e)),
+        }
+    }
 }
 
 pub struct GuardedChild {
@@ -26,12 +104,23 @@ pub struct GuardedChild {
     child: Option<tokio::process::Child>,
     pub stdout: AsyncTestableOutput,
     pub stderr: AsyncTestableOutput,
+    capture: bool,
+}
+
+fn wrap_tee<R>(r: R, capture: bool) -> Pin<Box<dyn AsyncRead + Send>>
+where
+    R: AsyncRead + Send + Unpin + 'static,
+{
+    if capture {
+        Box::pin(r)
+    } else {
+        Box::pin(Tee::new(r))
+    }
 }
 
 impl GuardedChild {
-    pub fn new(mut command: tokio::process::Command) -> Self {
-        command
-            .stdout(Stdio::piped())
+    pub fn new(mut command: tokio::process::Command, capture: bool) -> Self {
+        command.stdout(Stdio::piped())
             .stderr(Stdio::piped())
             .kill_on_drop(true);
         Self {
@@ -73,11 +162,11 @@ impl GuardedChild {
     pub async fn start(&mut self) {
         assert!(self.child.is_none());
         let mut child = self.command.spawn().expect("failed to spawn GuardedChild");
-        let stdout = child.stdout.take().unwrap();
-        let stderr = child.stderr.take().unwrap();
+        let stdout = wrap_tee(child.stdout.take().unwrap(), self.capture);
+        let stderr = wrap_tee(child.stderr.take().unwrap(), self.capture);
         self.child = Some(child);
-        self.stdout = AsyncTestableOutput::new(OutputType::Stdout, Box::pin(stdout));
-        self.stderr = AsyncTestableOutput::new(OutputType::Stderr, Box::pin(stderr));
+        self.stdout = AsyncTestableOutput::new(OutputType::Stdout, stdout);
+        self.stderr = AsyncTestableOutput::new(OutputType::Stderr, stderr);
     }
 }
 
@@ -431,6 +520,10 @@ impl Chisel {
 
     pub fn put(&self, url: &str) -> RequestBuilder {
         self.request(reqwest::Method::PUT, url)
+    }
+
+    pub fn patch(&self, url: &str) -> RequestBuilder {
+        self.request(reqwest::Method::PATCH, url)
     }
 
     pub fn delete(&self, url: &str) -> RequestBuilder {

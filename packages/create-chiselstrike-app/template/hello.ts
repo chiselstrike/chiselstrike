@@ -3,7 +3,6 @@
 // To access the route, run:
 //
 // curl -d '{"hello": "world"}' localhost:8080/dev/hello
-
 import { ChiselRequest, RouteMap } from "@chiselstrike/api";
 
 export default new RouteMap()
