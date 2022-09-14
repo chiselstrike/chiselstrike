@@ -27,7 +27,7 @@ jobs:
     - name: checkout repo
       uses: actions/checkout@v3
       with:
-        submodules: true
+        submodules: recursive
 
     - name: Install rust toolchain
       uses: actions-rs/toolchain@v1
@@ -103,7 +103,7 @@ jobs:
     - name: Checkout repository
       uses: actions/checkout@v3
       with:
-        submodules: true
+        submodules: recursive
 
     - name: Install Rust toolchain
       uses: actions-rs/toolchain@v1

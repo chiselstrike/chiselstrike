@@ -45,7 +45,7 @@ use deno_core::ResourceId;
 use deno_core::ZeroCopyBuf;
 use deno_runtime::inspector_server::InspectorServer;
 use deno_runtime::ops::worker_host::CreateWebWorkerCb;
-use deno_runtime::ops::worker_host::PreloadModuleCb;
+use deno_runtime::ops::worker_host::WorkerEventCb;
 use deno_runtime::permissions::Permissions;
 use deno_runtime::web_worker::WebWorker;
 use deno_runtime::web_worker::WebWorkerOptions;
@@ -223,7 +223,8 @@ fn build_extensions() -> Vec<Extension> {
 
 fn create_web_worker(
     bootstrap: BootstrapOptions,
-    preload_module_cb: Arc<PreloadModuleCb>,
+    preload_module_cb: Arc<WorkerEventCb>,
+    pre_execute_module_cb: Arc<WorkerEventCb>,
     maybe_inspector_server: Option<Arc<InspectorServer>>,
     module_loader_inner: Arc<std::sync::Mutex<ModuleLoaderInner>>,
 ) -> Arc<CreateWebWorkerCb> {
@@ -231,6 +232,7 @@ fn create_web_worker(
         let create_web_worker_cb = create_web_worker(
             bootstrap.clone(),
             preload_module_cb.clone(),
+            pre_execute_module_cb.clone(),
             maybe_inspector_server.clone(),
             module_loader_inner.clone(),
         );
@@ -254,6 +256,7 @@ fn create_web_worker(
             module_loader,
             create_web_worker_cb,
             preload_module_cb: preload_module_cb.clone(),
+            pre_execute_module_cb: pre_execute_module_cb.clone(),
             worker_type: args.worker_type,
             maybe_inspector_server: maybe_inspector_server.clone(),
             get_error_class_fn: Some(&get_error_class_name),
@@ -261,6 +264,7 @@ fn create_web_worker(
             broadcast_channel: Default::default(),
             shared_array_buffer_store: None,
             compiled_wasm_module_store: None,
+            npm_resolver: None,
         };
         WebWorker::bootstrap_from_options(
             args.name,
@@ -285,6 +289,8 @@ thread_local! {
 impl DenoService {
     pub async fn new(inspect: bool, inspect_brk: bool) -> (Self, v8::Global<v8::Function>) {
         let web_worker_preload_module_cb =
+            Arc::new(|worker| LocalFutureObj::new(Box::new(future::ready(Ok(worker)))));
+        let web_worker_pre_execute_module_cb =
             Arc::new(|worker| LocalFutureObj::new(Box::new(future::ready(Ok(worker)))));
         let inner = Arc::new(std::sync::Mutex::new(ModuleLoaderInner {
             code_map: HashMap::new(),
@@ -317,6 +323,7 @@ impl DenoService {
         let create_web_worker_cb = create_web_worker(
             bootstrap.clone(),
             web_worker_preload_module_cb.clone(),
+            web_worker_pre_execute_module_cb.clone(),
             inspector.clone(),
             inner.clone(),
         );
@@ -340,16 +347,18 @@ impl DenoService {
             shared_array_buffer_store: None,
             compiled_wasm_module_store: None,
             web_worker_preload_module_cb,
+            web_worker_pre_execute_module_cb,
+            npm_resolver: None,
         };
 
         let path = "file:///no/such/file";
 
         let permissions = Permissions {
-            read: Permissions::new_read(&Some(vec![path.into()]), false),
+            read: Permissions::new_read(&Some(vec![path.into()]), false).unwrap(),
             // FIXME: Temporary hack to allow easier testing for
             // now. Which network access is allowed should be a
             // configured with the endpoint.
-            net: Permissions::new_net(&Some(vec![]), false),
+            net: Permissions::new_net(&Some(vec![]), false).unwrap(),
             ..Permissions::default()
         };
 
