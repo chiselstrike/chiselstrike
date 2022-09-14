@@ -130,6 +130,7 @@ impl GuardedChild {
             command,
             stdout: AsyncTestableOutput::dummy(OutputType::Stdout),
             stderr: AsyncTestableOutput::dummy(OutputType::Stderr),
+            capture,
         }
     }
 

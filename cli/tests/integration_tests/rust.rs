@@ -39,7 +39,11 @@ fn generate_chiseld_config(ports_counter: &AtomicU16) -> ChiseldConfig {
     }
 }
 
-async fn setup_test_context(ports_counter: &AtomicU16, instance: &TestInstance) -> TestContext {
+async fn setup_test_context(
+    instance: &TestInstance,
+    opt: &Opt,
+    ports_counter: &AtomicU16,
+) -> TestContext {
     let chiseld_config = generate_chiseld_config(ports_counter);
     let tmp_dir = Arc::new(TempDir::new("chiseld_test").expect("Could not create tempdir"));
     let chisel_path = bin_dir().join("chisel");
@@ -208,8 +212,8 @@ pub(crate) async fn run_tests(opt: Arc<Opt>) -> bool {
     while !instances.is_empty() || !futures.is_empty() {
         if !instances.is_empty() && futures.len() < parallel {
             let instance = Arc::new(instances.pop().unwrap());
-            let future = enclose! {(instance, ports_counter) async move {
-                let ctx = setup_test_context(&ports_counter, &instance).await;
+            let future = enclose! {(instance, opt, ports_counter) async move {
+                let ctx = setup_test_context(&instance, &opt, &ports_counter).await;
                 instance.spec.test_fn.call(ctx).await;
             }};
             let task = tokio::task::spawn(future);
