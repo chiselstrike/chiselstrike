@@ -107,33 +107,36 @@ async fn run(init: WorkerInit) -> Result<()> {
     let module_loader = Rc::new(ModuleLoader::new(init.modules));
     let create_web_worker_cb = Arc::new(|_| panic!("Web workers are not supported"));
     let web_worker_preload_module_cb = Arc::new(|_| panic!("Web workers are not supported"));
+    let web_worker_pre_execute_module_cb = Arc::new(|_| panic!("Web workers are not supported"));
 
     let options = deno_runtime::worker::WorkerOptions {
-        format_js_error_fn: None,
-        source_map_getter: None,
-        stdio: Default::default(),
         bootstrap,
         extensions,
         unsafely_ignore_certificate_errors: None,
         root_cert_store: None,
         seed: None,
+        module_loader,
+        npm_resolver: None,
         create_web_worker_cb,
+        web_worker_preload_module_cb,
+        web_worker_pre_execute_module_cb,
+        format_js_error_fn: None,
+        source_map_getter: None,
         maybe_inspector_server: init.server.inspector.clone(),
         should_break_on_first_statement: init.server.opt.inspect_brk,
-        module_loader,
         get_error_class_fn: Some(&get_error_class_name),
         origin_storage_dir: None,
         blob_store: Default::default(),
         broadcast_channel: Default::default(),
         shared_array_buffer_store: None,
         compiled_wasm_module_store: None,
-        web_worker_preload_module_cb,
+        stdio: Default::default(),
     };
 
     use deno_runtime::permissions::Permissions;
     let permissions = Permissions {
         // FIXME: Temporary hack to allow easier testing for now
-        net: Permissions::new_net(&Some(vec![]), false),
+        net: Permissions::new_net(&Some(vec![]), false).unwrap(),
         ..Permissions::default()
     };
 

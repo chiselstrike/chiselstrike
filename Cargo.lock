@@ -1615,7 +1615,7 @@ dependencies = [
  "anyhow",
  "api",
  "tsc_compile",
- "url 2.2.2 (registry+https://github.com/rust-lang/crates.io-index)",
+ "url 2.3.1",
 ]
 
 [[package]]
@@ -3001,7 +3001,7 @@ dependencies = [
  "endpoint_tsc",
  "structopt",
  "tokio",
- "url 2.2.2 (registry+https://github.com/rust-lang/crates.io-index)",
+ "url 2.3.1",
 ]
 
 [[package]]
@@ -4379,13 +4379,13 @@ dependencies = [
  "enclose",
  "enum-as-inner 0.3.4",
  "env_logger",
- "form_urlencoded 1.0.1 (registry+https://github.com/rust-lang/crates.io-index)",
+ "form_urlencoded 1.1.0",
  "format-sql-query",
  "futures",
  "guard",
  "http",
  "hyper",
- "itertools 0.10.3",
+ "itertools 0.10.4",
  "lazy_static",
  "libc",
  "log",
@@ -4418,7 +4418,7 @@ dependencies = [
  "tonic",
  "tonic-build",
  "tracing",
- "url 2.2.2 (registry+https://github.com/rust-lang/crates.io-index)",
+ "url 2.3.1",
  "utils",
  "uuid 0.8.2",
  "vergen",
