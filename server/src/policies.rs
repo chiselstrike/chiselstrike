@@ -199,8 +199,6 @@ impl Policies {
 impl VersionPolicy {
     pub fn from_yaml(config: &str) -> Result<Self> {
         let mut policies = Self::default();
-        let mut labels = vec![];
-
         let docs = YamlLoader::load_from_str(config)?;
         for config in docs.iter() {
             match config {
@@ -220,49 +218,6 @@ impl VersionPolicy {
                     }
                 }
                 _ => anyhow::bail!("top-level policies yaml isn't a dictionary: {config:?}"),
-            }
-            for label in config["labels"].as_vec().get_or_insert(&[].into()).iter() {
-                let name = label["name"].as_str().ok_or_else(|| {
-                    anyhow::anyhow!("couldn't parse yaml: label without a name: {:?}", label)
-                })?;
-
-                labels.push(name.to_owned());
-                debug!("Applying policy for label {:?}", name);
-                let pattern = label["except_uri"].as_str().unwrap_or("^$"); // ^$ never matches; each path has at least a '/' in it.
-
-                match label["transform"].as_str() {
-                    Some("anonymize") => {
-                        policies.labels.insert(
-                            name.to_owned(),
-                            Policy {
-                                kind: Kind::Transform(crate::policies::anonymize),
-                                except_uri: regex::Regex::new(pattern)?,
-                            },
-                        );
-                    }
-                    Some("omit") => {
-                        policies.labels.insert(
-                            name.to_owned(),
-                            Policy {
-                                kind: Kind::Omit,
-                                except_uri: regex::Regex::new(pattern)?,
-                            },
-                        );
-                    }
-                    Some("match_login") => {
-                        policies.labels.insert(
-                            name.to_owned(),
-                            Policy {
-                                kind: Kind::MatchLogin,
-                                except_uri: regex::Regex::new(pattern)?,
-                            },
-                        );
-                    }
-                    Some(x) => {
-                        anyhow::bail!("unknown transform: {} for label {}", x, name);
-                    }
-                    None => {}
-                };
             }
 
             #[allow(clippy::or_fun_call)]
@@ -316,8 +271,49 @@ impl VersionPolicy {
         Ok(policies)
     }
 
-    // TODO: move `labels` processing here from above.
-    fn add_labels(&self, _labels: &[Yaml]) -> Result<()> {
+    fn add_labels(&mut self, labels: &[Yaml]) -> Result<()> {
+        for label in labels.iter() {
+            let name = label["name"].as_str().ok_or_else(|| {
+                anyhow::anyhow!("couldn't parse yaml: label without a name: {:?}", label)
+            })?;
+
+            debug!("Applying policy for label {:?}", name);
+            let pattern = label["except_uri"].as_str().unwrap_or("^$"); // ^$ never matches; each path has at least a '/' in it.
+
+            match label["transform"].as_str() {
+                Some("anonymize") => {
+                    self.labels.insert(
+                        name.to_owned(),
+                        Policy {
+                            kind: Kind::Transform(crate::policies::anonymize),
+                            except_uri: regex::Regex::new(pattern)?,
+                        },
+                    );
+                }
+                Some("omit") => {
+                    self.labels.insert(
+                        name.to_owned(),
+                        Policy {
+                            kind: Kind::Omit,
+                            except_uri: regex::Regex::new(pattern)?,
+                        },
+                    );
+                }
+                Some("match_login") => {
+                    self.labels.insert(
+                        name.to_owned(),
+                        Policy {
+                            kind: Kind::MatchLogin,
+                            except_uri: regex::Regex::new(pattern)?,
+                        },
+                    );
+                }
+                Some(x) => {
+                    anyhow::bail!("unknown transform: {} for label {}", x, name);
+                }
+                None => {}
+            };
+        }
         Ok(())
     }
 
