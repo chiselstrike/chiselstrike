@@ -229,9 +229,11 @@ impl VersionPolicy {
                 anyhow::bail!("label not a dictionary: {label:?}");
             }
 
-            let name = label["name"].as_str().ok_or_else(|| {
-                anyhow::anyhow!("couldn't parse yaml: label without a name: {:?}", label)
-            })?;
+            let name = match &label["name"] {
+                Yaml::String(s) => s,
+                Yaml::BadValue => anyhow::bail!("label without a name: {label:?}"),
+                x => anyhow::bail!("label name isn't a string: {x:?}"),
+            };
 
             debug!("Applying policy for label {:?}", name);
             let pattern = label["except_uri"].as_str().unwrap_or("^$"); // ^$ never matches; each path has at least a '/' in it.

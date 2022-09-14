@@ -46,6 +46,16 @@ pub async fn label_nameless(c: TestContext) {
 }
 
 #[chisel_macros::test(modules = Node)]
+pub async fn label_invalid_name(c: TestContext) {
+    c.chisel.write("policies/p.yaml", "labels: [{ name: {} }]");
+    c.chisel
+        .apply_err()
+        .await
+        .stderr
+        .read("label name isn't a string");
+}
+
+#[chisel_macros::test(modules = Node)]
 pub async fn label_not_dict(c: TestContext) {
     c.chisel.write("policies/p.yaml", "labels: [abc]");
     c.chisel
