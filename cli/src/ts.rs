@@ -231,7 +231,9 @@ fn parse_class_prop(x: &ClassProp, class_name: &str, handler: &Handler) -> Resul
     let (field_type, default_value) = match (&x.type_ann, &x.value) {
         (Some(type_ann), Some(value)) => {
             let field_type = get_field_type(handler, type_ann)?;
-            let default_value = if let Some((default_value, value_type)) = get_field_value(handler, value)? {
+            let default_value = if let Some((default_value, value_type)) =
+                get_field_value(handler, value)?
+            {
                 anyhow::ensure!(field_type == value_type, swc_err(
                     handler,
                     x,
@@ -245,20 +247,19 @@ fn parse_class_prop(x: &ClassProp, class_name: &str, handler: &Handler) -> Resul
             };
 
             (field_type, default_value)
-        },
+        }
         (Some(type_ann), None) => {
             let field_type = get_field_type(handler, type_ann)?;
             (field_type, None)
-        },
+        }
         (None, Some(value)) => {
             if let Some((default_value, value_type)) = get_field_value(handler, value)? {
                 (value_type, Some(default_value))
             } else {
                 bail!("field `{field_name}` needs an explicit type annotation")
             }
-        },
-        (None, None) =>
-            bail!("field `{field_name}` needs a type annotation or a default value"),
+        }
+        (None, None) => bail!("field `{field_name}` needs a type annotation or a default value"),
     };
 
     let (labels, is_unique) = get_type_decorators(handler, &x.decorators)?;
