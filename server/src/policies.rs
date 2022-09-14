@@ -219,54 +219,6 @@ impl VersionPolicy {
                 }
                 _ => anyhow::bail!("top-level policies yaml isn't a dictionary: {config:?}"),
             }
-
-            #[allow(clippy::or_fun_call)]
-            let routes = config["routes"]
-                .as_vec()
-                .or(config["endpoints"].as_vec())
-                .map(|vec| vec.iter())
-                .into_iter()
-                .flatten();
-
-            for route in routes {
-                if let Some(path) = route["path"].as_str() {
-                    if let Some(users) = route["users"].as_str() {
-                        policies
-                            .user_authorization
-                            .add(path, regex::Regex::new(users)?)?;
-                    }
-                    let header = &route["mandatory_header"];
-                    match header {
-                        Yaml::BadValue => {}
-                        Yaml::Hash(_) => {
-                            let kv = (&header["name"], &header["secret_value_ref"]);
-                            match kv {
-                                (Yaml::String(name), Yaml::String(value)) => {
-                                    let methods = &header["only_for_methods"];
-                                    let methods = match methods {
-                                        Yaml::BadValue => None,
-                                        Yaml::String(_) => Some(parse_methods(&vec![methods.clone()])?),
-                                        Yaml::Array(a) => Some(parse_methods(a)?),
-                                        _ => {
-                                            warn!("only_for_methods must be a list of strings, instead got {methods:?}");
-                                            None
-                                        }
-                                    };
-                                    policies.secret_authorization.add(path, RequiredHeader {
-                                        header_name: name.clone(),
-                                        secret_name: value.clone(),
-                                        methods,
-                                    })?;
-                                }
-                                _ => anyhow::bail!(
-                                    "Header must have string values for keys 'name' and 'secret_value_ref'. Instead got: {header:?}"
-                                ),
-                            }
-                        }
-                        x => anyhow::bail!("Unparsable header: {x:?}"),
-                    }
-                }
-            }
         }
         Ok(policies)
     }
@@ -317,8 +269,45 @@ impl VersionPolicy {
         Ok(())
     }
 
-    // TODO: move `routes` processing here from above.
-    fn add_routes(&self, _routes: &[Yaml]) -> Result<()> {
+    fn add_routes(&mut self, routes: &[Yaml]) -> Result<()> {
+        for route in routes {
+            if let Some(path) = route["path"].as_str() {
+                if let Some(users) = route["users"].as_str() {
+                    self.user_authorization
+                        .add(path, regex::Regex::new(users)?)?;
+                }
+                let header = &route["mandatory_header"];
+                match header {
+                    Yaml::BadValue => {}
+                    Yaml::Hash(_) => {
+                        let kv = (&header["name"], &header["secret_value_ref"]);
+                        match kv {
+                                (Yaml::String(name), Yaml::String(value)) => {
+                                    let methods = &header["only_for_methods"];
+                                    let methods = match methods {
+                                        Yaml::BadValue => None,
+                                        Yaml::String(_) => Some(parse_methods(&vec![methods.clone()])?),
+                                        Yaml::Array(a) => Some(parse_methods(a)?),
+                                        _ => {
+                                            warn!("only_for_methods must be a list of strings, instead got {methods:?}");
+                                            None
+                                        }
+                                    };
+                                    self.secret_authorization.add(path, RequiredHeader {
+                                        header_name: name.clone(),
+                                        secret_name: value.clone(),
+                                        methods,
+                                    })?;
+                                }
+                                _ => anyhow::bail!(
+                                    "Header must have string values for keys 'name' and 'secret_value_ref'. Instead got: {header:?}"
+                                ),
+                            }
+                    }
+                    x => anyhow::bail!("Unparsable header: {x:?}"),
+                }
+            }
+        }
         Ok(())
     }
 }
