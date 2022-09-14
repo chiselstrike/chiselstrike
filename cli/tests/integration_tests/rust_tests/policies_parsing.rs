@@ -56,6 +56,19 @@ pub async fn label_invalid_name(c: TestContext) {
 }
 
 #[chisel_macros::test(modules = Node)]
+pub async fn label_invalid_excepturi(c: TestContext) {
+    c.chisel.write(
+        "policies/p.yaml",
+        "labels: [{ name: a, except_uri: [a, b] }]",
+    );
+    c.chisel
+        .apply_err()
+        .await
+        .stderr
+        .read("except_uri isn't a string");
+}
+
+#[chisel_macros::test(modules = Node)]
 pub async fn label_not_dict(c: TestContext) {
     c.chisel.write("policies/p.yaml", "labels: [abc]");
     c.chisel

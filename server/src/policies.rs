@@ -236,7 +236,11 @@ impl VersionPolicy {
             };
 
             debug!("Applying policy for label {:?}", name);
-            let pattern = label["except_uri"].as_str().unwrap_or("^$"); // ^$ never matches; each path has at least a '/' in it.
+            let pattern = match &label["except_uri"] {
+                Yaml::String(s) => s,
+                Yaml::BadValue => "^$", // ^$ never matches; each path has at least a '/' in it.
+                x => anyhow::bail!("except_uri isn't a string: {x:?}"),
+            };
 
             match label["transform"].as_str() {
                 Some("anonymize") => {
