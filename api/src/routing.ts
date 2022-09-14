@@ -266,16 +266,10 @@ class RouterRoute {
     constructor(route: Route, routeMapMiddlewares: Middleware[]) {
         // HACK: we use the hostname part of the URL Pattern to match the method
         const methodPattern = route.methods
-            .map((method) => method == "*" ? ".*" : method)
+            .map((method) => method == "*" ? ".*" : method.toLowerCase())
             .join("|");
-        this.pattern = new URLPattern(
-            route.pathPattern,
-            `http://(${methodPattern})`,
-        );
-        this.pathOnlyPattern = new URLPattern(
-            route.pathPattern,
-            "http://dummy-host",
-        );
+        this.pattern = new URLPattern(`http://(${methodPattern})${route.pathPattern}`);
+        this.pathOnlyPattern = new URLPattern(`http://dummy-host${route.pathPattern}`);
         this.handler = route.handler;
         this.middlewares = route.middlewares.concat(routeMapMiddlewares);
         this.legacyFileName = route.legacyFileName;
