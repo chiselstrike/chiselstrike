@@ -51,7 +51,7 @@ pub async fn run(opt: Opt) -> Result<()> {
 
     let (server, trunk_task) = make_server(opt).await?;
     start_versions(server.clone()).await?;
-    start_chiselstrike_version(server.clone()).await?;
+    start_builtin_version(server.clone()).await?;
 
     let (rpc_addr, rpc_task) = rpc::spawn(server.clone(), server.opt.rpc_listen_addr)
         .await
@@ -211,7 +211,7 @@ async fn start_versions(server: Arc<Server>) -> Result<()> {
     Ok(())
 }
 
-async fn start_chiselstrike_version(server: Arc<Server>) -> Result<()> {
+async fn start_builtin_version(server: Arc<Server>) -> Result<()> {
     let version_id = "__chiselstrike".to_string();
     let info = VersionInfo {
         name: "ChiselStrike Internal API".into(),
@@ -224,7 +224,7 @@ async fn start_chiselstrike_version(server: Arc<Server>) -> Result<()> {
     modules.insert(
         "file:///__root.ts".into(),
         r"
-        export * from 'chisel:///chiselstrike_root.ts';
+        export * from 'chisel:///builtin_root.ts';
         "
         .into(),
     );

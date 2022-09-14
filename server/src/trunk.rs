@@ -82,7 +82,7 @@ impl Trunk {
     pub fn remove_version(&self, version_id: &str) -> Option<Arc<Version>> {
         let mut state = self.state.write();
         // if there is still a task in `state.tasks` for this version, we just leave it alone. it
-        // should terminate on its own when all `Arc<Version>`s are dropped
+        // should terminate on its own when its `mpsc::Sender<VersionJob>` is dropped.
         state
             .versions
             .remove(version_id)
