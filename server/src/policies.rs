@@ -225,6 +225,10 @@ impl VersionPolicy {
 
     fn add_labels(&mut self, labels: &[Yaml]) -> Result<()> {
         for label in labels.iter() {
+            if label.as_hash().is_none() {
+                anyhow::bail!("label not a dictionary: {label:?}");
+            }
+
             let name = label["name"].as_str().ok_or_else(|| {
                 anyhow::anyhow!("couldn't parse yaml: label without a name: {:?}", label)
             })?;

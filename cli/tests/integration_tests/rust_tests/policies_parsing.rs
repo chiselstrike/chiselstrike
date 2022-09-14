@@ -46,6 +46,16 @@ pub async fn label_nameless(c: TestContext) {
 }
 
 #[chisel_macros::test(modules = Node)]
+pub async fn label_not_dict(c: TestContext) {
+    c.chisel.write("policies/p.yaml", "labels: [abc]");
+    c.chisel
+        .apply_err()
+        .await
+        .stderr
+        .read("label not a dictionary");
+}
+
+#[chisel_macros::test(modules = Node)]
 pub async fn routes_nonarray(c: TestContext) {
     c.chisel.write("policies/p.yaml", "routes: {}");
     c.chisel.apply_err().await.stderr.read("value for routes");
