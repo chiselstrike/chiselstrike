@@ -294,16 +294,21 @@ impl VersionPolicy {
                 Yaml::BadValue => anyhow::bail!("route without a path: {route:?}"),
                 x => anyhow::bail!("route path isn't a string: {x:?}"),
             };
-            if let Some(users) = route["users"].as_str() {
-                self.user_authorization
-                    .add(path, regex::Regex::new(users)?)?;
-            }
-            let header = &route["mandatory_header"];
-            match header {
-                Yaml::BadValue => {}
-                Yaml::Hash(_) => {
-                    let kv = (&header["name"], &header["secret_value_ref"]);
-                    match kv {
+
+            for (key, value) in route
+                .as_hash()
+                .ok_or_else(|| anyhow::anyhow!("invalid route: {route:?}"))?
+            {
+                match (key.as_str(), &value) {
+                    (Some("users"), Yaml::String(pattern)) => self
+                        .user_authorization
+                        .add(path, regex::Regex::new(pattern)?)?,
+                    (Some("users"), _) => anyhow::bail!("route users isn't a string: {value:?}"),
+
+                    (Some("mandatory_header"), Yaml::Hash(_)) => {
+                        let header = value;
+                        let kv = (&header["name"], &header["secret_value_ref"]);
+                        match kv {
                                 (Yaml::String(name), Yaml::String(value)) => {
                                     let methods = &header["only_for_methods"];
                                     let methods = match methods {
@@ -325,8 +330,12 @@ impl VersionPolicy {
                                     "Header must have string values for keys 'name' and 'secret_value_ref'. Instead got: {header:?}"
                                 ),
                             }
+                    }
+                    (Some("mandatory_header"), x) => anyhow::bail!("Unparsable header: {x:?}"),
+
+                    (Some("path"), _) => {}
+                    _ => anyhow::bail!("unexpected route key: {key:?}"),
                 }
-                x => anyhow::bail!("Unparsable header: {x:?}"),
             }
         }
         Ok(())

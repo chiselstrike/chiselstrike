@@ -125,3 +125,25 @@ pub async fn route_invalid_path(c: TestContext) {
     c.chisel.write("policies/p.yaml", "routes: [{ path: [] }]");
     c.chisel.apply_err().await.stderr.read("route path isn't a string");
 }
+
+#[chisel_macros::test(modules = Node)]
+pub async fn route_invalid_users(c: TestContext) {
+    c.chisel
+        .write("policies/p.yaml", "routes: [{ path: /, users: false }]");
+    c.chisel
+        .apply_err()
+        .await
+        .stderr
+        .read("route users isn't a string");
+}
+
+#[chisel_macros::test(modules = Node)]
+pub async fn route_unknown_key(c: TestContext) {
+    c.chisel
+        .write("policies/p.yaml", "routes: [{ path: /, randomxyz: 0 }]");
+    c.chisel.apply_err().await.stderr.read("randomxyz");
+
+    c.chisel
+        .write("policies/p.yaml", "routes: [{ path: /, 84390232: 0 }]");
+    c.chisel.apply_err().await.stderr.read("84390232");
+}
