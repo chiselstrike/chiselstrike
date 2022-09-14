@@ -127,14 +127,16 @@ pub async fn field_type_from_initializer(c: TestContext) {
     c.chisel.write(
         "routes/test.ts",
         r#"
-        import { responseFromJson } from "@chiselstrike/api";
         import { Book } from '../models/book.ts';
         export default function () {
             const book = new Book();
-            return responseFromJson(book.author === 'Austen');
+            return book.author === 'Austen';
         }"#,
     );
     c.chisel.apply_ok().await;
-    c.chisel.get("/dev/test").send().await.assert_json(json!(true));
+    c.chisel
+        .get("/dev/test")
+        .send()
+        .await
+        .assert_json(json!(true));
 }
-
