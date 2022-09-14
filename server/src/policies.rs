@@ -3,7 +3,7 @@
 use crate::prefix_map::PrefixMap;
 use crate::types::ObjectType;
 use crate::JsonObject;
-use anyhow::Result;
+use anyhow::{anyhow, bail, Result};
 use chiselc::parse::ParserContext;
 use hyper::Request;
 use serde_json::{json, Value};
@@ -67,7 +67,7 @@ impl UserAuthorization {
     /// prefixes.  Error if this same path has already been added.
     pub fn add(&mut self, path: &str, users: regex::Regex) -> Result<()> {
         if self.paths.insert(path.into(), users).is_some() {
-            anyhow::bail!("Repeated path in user authorization: {:?}", path);
+            bail!("Repeated path in user authorization: {:?}", path);
         }
         Ok(())
     }
@@ -124,7 +124,7 @@ impl SecretAuthorization {
     /// this same path has already been added.
     fn add(&mut self, path: &str, header: RequiredHeader) -> Result<()> {
         if self.paths.insert(path.into(), header).is_some() {
-            anyhow::bail!("Repeated path in header authorization: {path}");
+            bail!("Repeated path in header authorization: {path}");
         }
         Ok(())
     }
@@ -211,13 +211,13 @@ impl VersionPolicy {
                                 policies.add_routes(routes)?
                             }
                             ("labels" | "routes" | "endpoints", _) => {
-                                anyhow::bail!("incorrect value for {skey}: {value:?}")
+                                bail!("incorrect value for {skey}: {value:?}")
                             }
-                            _ => anyhow::bail!("unexpected yaml key: {key:?}"),
+                            _ => bail!("unexpected yaml key: {key:?}"),
                         }
                     }
                 }
-                _ => anyhow::bail!("top-level policies yaml isn't a dictionary: {config:?}"),
+                _ => bail!("top-level policies yaml isn't a dictionary: {config:?}"),
             }
         }
         Ok(policies)
@@ -226,20 +226,20 @@ impl VersionPolicy {
     fn add_labels(&mut self, labels: &[Yaml]) -> Result<()> {
         for label in labels.iter() {
             if label.as_hash().is_none() {
-                anyhow::bail!("label not a dictionary: {label:?}");
+                bail!("label not a dictionary: {label:?}");
             }
 
             let name = match &label["name"] {
                 Yaml::String(s) => s,
-                Yaml::BadValue => anyhow::bail!("label without a name: {label:?}"),
-                x => anyhow::bail!("label name isn't a string: {x:?}"),
+                Yaml::BadValue => bail!("label without a name: {label:?}"),
+                x => bail!("label name isn't a string: {x:?}"),
             };
 
             debug!("Applying policy for label {:?}", name);
             let pattern = match &label["except_uri"] {
                 Yaml::String(s) => s,
                 Yaml::BadValue => "^$", // ^$ never matches; each path has at least a '/' in it.
-                x => anyhow::bail!("except_uri isn't a string: {x:?}"),
+                x => bail!("except_uri isn't a string: {x:?}"),
             };
 
             for (key, value) in label.as_hash().unwrap().iter() {
@@ -275,12 +275,12 @@ impl VersionPolicy {
                     }
 
                     (Some("transform"), _) => {
-                        anyhow::bail!("unknown transform: {value:?} for label {name}")
+                        bail!("unknown transform: {value:?} for label {name}")
                     }
 
                     (Some("except_uri" | "name"), _) => {}
 
-                    _ => anyhow::bail!("unexpected label key: {key:?}"),
+                    _ => bail!("unexpected label key: {key:?}"),
                 }
             }
         }
@@ -291,19 +291,19 @@ impl VersionPolicy {
         for route in routes {
             let path = match &route["path"] {
                 Yaml::String(s) => s,
-                Yaml::BadValue => anyhow::bail!("route without a path: {route:?}"),
-                x => anyhow::bail!("route path isn't a string: {x:?}"),
+                Yaml::BadValue => bail!("route without a path: {route:?}"),
+                x => bail!("route path isn't a string: {x:?}"),
             };
 
             for (key, value) in route
                 .as_hash()
-                .ok_or_else(|| anyhow::anyhow!("invalid route: {route:?}"))?
+                .ok_or_else(|| anyhow!("invalid route: {route:?}"))?
             {
                 match (key.as_str(), &value) {
                     (Some("users"), Yaml::String(pattern)) => self
                         .user_authorization
                         .add(path, regex::Regex::new(pattern)?)?,
-                    (Some("users"), _) => anyhow::bail!("route users isn't a string: {value:?}"),
+                    (Some("users"), _) => bail!("route users isn't a string: {value:?}"),
 
                     (Some("mandatory_header"), Yaml::Hash(_)) => {
                         let header = value;
@@ -326,15 +326,15 @@ impl VersionPolicy {
                                         methods,
                                     })?;
                                 }
-                                _ => anyhow::bail!(
+                                _ => bail!(
                                     "Header must have string values for keys 'name' and 'secret_value_ref'. Instead got: {header:?}"
                                 ),
                             }
                     }
-                    (Some("mandatory_header"), x) => anyhow::bail!("Unparsable header: {x:?}"),
+                    (Some("mandatory_header"), x) => bail!("Unparsable header: {x:?}"),
 
                     (Some("path"), _) => {}
-                    _ => anyhow::bail!("unexpected route key: {key:?}"),
+                    _ => bail!("unexpected route key: {key:?}"),
                 }
             }
         }
@@ -356,7 +356,7 @@ fn parse_methods(v: &Vec<Yaml>) -> Result<Vec<hyper::Method>> {
             Yaml::String(s) => methods.push(
                 hyper::Method::from_str(s).with_context(|| format!("Error parsing method {s}"))?,
             ),
-            _ => anyhow::bail!("String method expected in only_for_methods, instead got {e:?}"),
+            _ => bail!("String method expected in only_for_methods, instead got {e:?}"),
         }
     }
     Ok(methods)
