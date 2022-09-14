@@ -79,6 +79,32 @@ pub async fn label_not_dict(c: TestContext) {
 }
 
 #[chisel_macros::test(modules = Node)]
+pub async fn label_unknown_key(c: TestContext) {
+    c.chisel
+        .write("policies/p.yaml", "labels: [{ name: a, randomxyz: 0 }]");
+    c.chisel.apply_err().await.stderr.read("randomxyz");
+
+    c.chisel
+        .write("policies/p.yaml", "labels: [{ name: a, 84390232: 0 }]");
+    c.chisel.apply_err().await.stderr.read("84390232");
+}
+
+#[chisel_macros::test(modules = Node)]
+pub async fn label_unknown_transform(c: TestContext) {
+    c.chisel.write(
+        "policies/p.yaml",
+        "labels: [{ name: a, transform: rrraaannnddd }]",
+    );
+    c.chisel.apply_err().await.stderr.read("rrraaannnddd");
+
+    c.chisel.write(
+        "policies/p.yaml",
+        "labels: [{ name: a, transform: 309842 }]",
+    );
+    c.chisel.apply_err().await.stderr.read("309842");
+}
+
+#[chisel_macros::test(modules = Node)]
 pub async fn routes_nonarray(c: TestContext) {
     c.chisel.write("policies/p.yaml", "routes: {}");
     c.chisel.apply_err().await.stderr.read("value for routes");

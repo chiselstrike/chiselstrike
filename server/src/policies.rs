@@ -242,39 +242,47 @@ impl VersionPolicy {
                 x => anyhow::bail!("except_uri isn't a string: {x:?}"),
             };
 
-            match label["transform"].as_str() {
-                Some("anonymize") => {
-                    self.labels.insert(
-                        name.to_owned(),
-                        Policy {
-                            kind: Kind::Transform(crate::policies::anonymize),
-                            except_uri: regex::Regex::new(pattern)?,
-                        },
-                    );
+            for (key, value) in label.as_hash().unwrap().iter() {
+                match (key.as_str(), value.as_str()) {
+                    (Some("transform"), Some("anonymize")) => {
+                        self.labels.insert(
+                            name.to_owned(),
+                            Policy {
+                                kind: Kind::Transform(crate::policies::anonymize),
+                                except_uri: regex::Regex::new(pattern)?,
+                            },
+                        );
+                    }
+
+                    (Some("transform"), Some("omit")) => {
+                        self.labels.insert(
+                            name.to_owned(),
+                            Policy {
+                                kind: Kind::Omit,
+                                except_uri: regex::Regex::new(pattern)?,
+                            },
+                        );
+                    }
+
+                    (Some("transform"), Some("match_login")) => {
+                        self.labels.insert(
+                            name.to_owned(),
+                            Policy {
+                                kind: Kind::MatchLogin,
+                                except_uri: regex::Regex::new(pattern)?,
+                            },
+                        );
+                    }
+
+                    (Some("transform"), _) => {
+                        anyhow::bail!("unknown transform: {value:?} for label {name}")
+                    }
+
+                    (Some("except_uri" | "name"), _) => {}
+
+                    _ => anyhow::bail!("unexpected label key: {key:?}"),
                 }
-                Some("omit") => {
-                    self.labels.insert(
-                        name.to_owned(),
-                        Policy {
-                            kind: Kind::Omit,
-                            except_uri: regex::Regex::new(pattern)?,
-                        },
-                    );
-                }
-                Some("match_login") => {
-                    self.labels.insert(
-                        name.to_owned(),
-                        Policy {
-                            kind: Kind::MatchLogin,
-                            except_uri: regex::Regex::new(pattern)?,
-                        },
-                    );
-                }
-                Some(x) => {
-                    anyhow::bail!("unknown transform: {} for label {}", x, name);
-                }
-                None => {}
-            };
+            }
         }
         Ok(())
     }
