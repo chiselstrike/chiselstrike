@@ -203,6 +203,24 @@ impl VersionPolicy {
 
         let docs = YamlLoader::load_from_str(config)?;
         for config in docs.iter() {
+            match config {
+                Yaml::Hash(h) => {
+                    for (key, value) in h.iter() {
+                        let skey = key.as_str().unwrap_or("");
+                        match (skey, value) {
+                            ("labels", Yaml::Array(labels)) => policies.add_labels(labels)?,
+                            ("routes" | "endpoints", Yaml::Array(routes)) => {
+                                policies.add_routes(routes)?
+                            }
+                            ("labels" | "routes" | "endpoints", _) => {
+                                anyhow::bail!("incorrect value for {skey}: {value:?}")
+                            }
+                            _ => anyhow::bail!("unexpected yaml key: {key:?}"),
+                        }
+                    }
+                }
+                _ => anyhow::bail!("top-level policies yaml isn't a dictionary: {config:?}"),
+            }
             for label in config["labels"].as_vec().get_or_insert(&[].into()).iter() {
                 let name = label["name"].as_str().ok_or_else(|| {
                     anyhow::anyhow!("couldn't parse yaml: label without a name: {:?}", label)
@@ -296,6 +314,16 @@ impl VersionPolicy {
             }
         }
         Ok(policies)
+    }
+
+    // TODO: move `labels` processing here from above.
+    fn add_labels(&self, _labels: &[Yaml]) -> Result<()> {
+        Ok(())
+    }
+
+    // TODO: move `routes` processing here from above.
+    fn add_routes(&self, _routes: &[Yaml]) -> Result<()> {
+        Ok(())
     }
 }
 
