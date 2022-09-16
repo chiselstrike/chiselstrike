@@ -53,8 +53,9 @@ abstract class Operator<Input, Output> {
                 const rid = await getRid();
                 try {
                     while (true) {
-                        const properties = await opAsync(
-                            "op_chisel_query_next",
+                        await opAsync("op_chisel_query_next", rid);
+                        const properties = opSync(
+                            "op_chisel_query_get_value",
                             rid,
                         );
 

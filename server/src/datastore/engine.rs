@@ -3,9 +3,9 @@
 use crate::datastore::query::{
     KeepOrOmitField, Mutation, QueriedEntity, QueryField, QueryPlan, SqlValue, TargetDatabase,
 };
+use crate::datastore::value::{EntityMap, EntityValue};
 use crate::datastore::DbConnection;
 use crate::types::{DbIndex, Field, ObjectDelta, ObjectType, Type, TypeId, TypeSystem};
-use crate::JsonObject;
 use anyhow::{anyhow, Context as AnyhowContext, Result};
 use async_lock::Mutex;
 use async_lock::MutexGuardArc;
@@ -18,7 +18,6 @@ use itertools::Itertools;
 use pin_project::pin_project;
 use sea_query::{Alias, ColumnDef, Index, PostgresQueryBuilder, Table};
 use serde::Serialize;
-use serde_json::json;
 use sqlx::any::{Any, AnyArguments, AnyKind, AnyRow};
 use sqlx::{Executor, Row, Transaction, ValueRef};
 use std::collections::{HashMap, HashSet};
@@ -29,11 +28,8 @@ use std::sync::Arc;
 use std::task::{Context, Poll};
 use uuid::Uuid;
 
-/// A query row is a JSON object that represent the queried entities.
-pub type ResultRow = JsonObject;
-
 /// A query results is a stream of query rows after policies have been applied.
-pub type QueryResults = BoxStream<'static, Result<ResultRow>>;
+pub type QueryResults = BoxStream<'static, Result<EntityMap>>;
 
 pub type TransactionStatic = Arc<Mutex<Transaction<'static, Any>>>;
 
@@ -372,8 +368,12 @@ impl QueryEngine {
         Ok(())
     }
 
-    fn row_to_json(db_kind: AnyKind, entity: &QueriedEntity, row: &AnyRow) -> Result<ResultRow> {
-        let mut ret = JsonObject::default();
+    fn row_to_entity_value(
+        db_kind: AnyKind,
+        entity: &QueriedEntity,
+        row: &AnyRow,
+    ) -> Result<EntityMap> {
+        let mut ret = EntityMap::default();
         for s_field in &entity.fields {
             match s_field {
                 QueryField::Scalar {
@@ -389,36 +389,37 @@ impl QueryEngine {
                     if omit_field || (*is_optional && column_is_null(row, *column_idx)) {
                         continue;
                     }
-                    macro_rules! to_json {
-                        ($value_type:ty) => {{
-                            let val = row.get::<$value_type, _>(column_idx);
-                            json!(val)
-                        }};
-                    }
                     let mut val = match type_id {
-                        TypeId::Float | TypeId::JsDate => {
+                        TypeId::Float => {
                             // https://github.com/launchbadge/sqlx/issues/1596
                             // sqlx gets confused if the float doesn't have decimal points.
                             let val: f64 = row.get_unchecked(column_idx);
-                            json!(val)
+                            EntityValue::Float64(val)
                         }
-                        TypeId::String => to_json!(&str),
-                        TypeId::Id => to_json!(&str),
+                        TypeId::JsDate => {
+                            let val: f64 = row.get_unchecked(column_idx);
+                            EntityValue::JsDate(val)
+                        }
+                        TypeId::String | TypeId::Id => {
+                            let val = row.get::<&str, _>(column_idx);
+                            EntityValue::String(val.to_owned())
+                        }
                         TypeId::Boolean => {
                             // Similarly to the float issue, type information is not filled in
                             // *if* this value was put in as a result of coalesce() (default).
-                            match db_kind {
+                            let v = match db_kind {
                                 AnyKind::Sqlite => {
                                     let val: String = row.get_unchecked(column_idx);
-                                    json!(val == "1" || val.to_lowercase() == "true")
+                                    val == "1" || val.to_lowercase() == "true"
                                 }
-                                _ => to_json!(bool),
-                            }
+                                _ => row.get::<bool, _>(column_idx),
+                            };
+                            EntityValue::Boolean(v)
                         }
                         TypeId::Entity { .. } => anyhow::bail!("object is not a scalar"),
                         TypeId::Array(_) => {
                             let array_str = row.get::<&str, _>(column_idx);
-                            serde_json::from_str(array_str)
+                            serde_json::from_str::<EntityValue>(array_str)
                                 .context("failed to deserialize array from raw JSON string")?
                         }
                     };
@@ -439,7 +440,8 @@ impl QueryEngine {
                     if omit_field || (*is_optional && column_is_null(row, id_idx(child_entity))) {
                         continue;
                     }
-                    let mut val = json!(Self::row_to_json(db_kind, child_entity, row)?);
+                    let val = Self::row_to_entity_value(db_kind, child_entity, row)?;
+                    let mut val = EntityValue::Map(val);
                     if let Some(tr) = transform {
                         // Apply policy transformation
                         val = tr(val);
@@ -452,9 +454,9 @@ impl QueryEngine {
     }
 
     fn project(
-        o: Result<ResultRow>,
+        o: Result<EntityMap>,
         allowed_fields: &Option<HashSet<String>>,
-    ) -> Result<JsonObject> {
+    ) -> Result<EntityMap> {
         let mut o = o?;
         if let Some(allowed_fields) = &allowed_fields {
             let removed_keys = o
@@ -480,7 +482,8 @@ impl QueryEngine {
         let db_kind = self.db.pool.any_kind();
 
         let stream = new_query_results(query.raw_sql, tr);
-        let stream = stream.map(move |row| Self::row_to_json(db_kind, &query.entity, &row?));
+        let stream =
+            stream.map(move |row| Self::row_to_entity_value(db_kind, &query.entity, &row?));
         let stream = Box::pin(stream.map(move |o| Self::project(o, &allowed_fields)));
         Ok(stream)
     }
@@ -521,11 +524,11 @@ impl QueryEngine {
     pub fn add_row<'a>(
         &'a self,
         ty: &ObjectType,
-        ty_value: &JsonObject,
+        record: &EntityMap,
         transaction: Option<&'a mut Transaction<'static, Any>>,
         ts: &TypeSystem,
     ) -> impl Future<Output = Result<IdTree>> + 'a {
-        let res = self.prepare_insertion(ty, ty_value, ts);
+        let res = self.prepare_insertion(ty, record, ts);
         async {
             let (inserts, id_tree) = res?;
             self.run_sql_queries(&inserts, transaction).await?;
@@ -533,8 +536,8 @@ impl QueryEngine {
         }
     }
 
-    pub async fn add_row_shallow(&self, ty: &ObjectType, ty_value: &JsonObject) -> Result<()> {
-        let query = self.prepare_insertion_shallow(ty, ty_value)?;
+    pub async fn add_row_shallow(&self, ty: &ObjectType, fields_map: &EntityMap) -> Result<()> {
+        let query = self.prepare_insertion_shallow(ty, fields_map)?;
         self.run_sql_queries(&[query], None).await?;
         Ok(())
     }
@@ -577,7 +580,7 @@ impl QueryEngine {
     fn prepare_insertion(
         &self,
         ty: &ObjectType,
-        ty_value: &JsonObject,
+        fields_map: &EntityMap,
         ts: &TypeSystem,
     ) -> Result<(Vec<SqlWithArguments>, IdTree)> {
         let mut child_ids = HashMap::<String, IdTree>::new();
@@ -586,7 +589,7 @@ impl QueryEngine {
         let mut inserts = Vec::<SqlWithArguments>::new();
 
         for field in ty.all_fields() {
-            let field_value = ty_value.get(&field.name);
+            let field_value = fields_map.get(&field.name);
             if (field_value.is_none() || field_value.unwrap().is_null()) && field.is_optional {
                 continue;
             }
@@ -596,7 +599,7 @@ impl QueryEngine {
                     let nested_value = field_value
                         .context("json object doesn't have required field")
                         .with_context(incompatible_data)?
-                        .as_object()
+                        .as_map()
                         .context("unexpected json type (expected an object)")
                         .with_context(incompatible_data)?;
 
@@ -607,7 +610,7 @@ impl QueryEngine {
                             // problems, as that row can be modified by another thread after our check but before
                             // this save completes.  Better to check at compilation time that the endpoint code
                             // doesn't attempt to modify auth types.
-                            Some(serde_json::Value::String(id)) => id.clone(),
+                            Some(EntityValue::String(id)) => id.clone(),
                             _ => anyhow::bail!(
                                 "Cannot save into nested type {}.",
                                 nested_type.name()
@@ -624,7 +627,7 @@ impl QueryEngine {
                     SqlValue::String(nested_id)
                 }
                 _ => self
-                    .convert_to_argument(field, ty_value)
+                    .convert_to_argument(field, fields_map)
                     .with_context(incompatible_data)?,
             };
 
@@ -639,7 +642,7 @@ impl QueryEngine {
         }
 
         inserts.push(SqlWithArguments {
-            sql: self.make_insert_query(ty, ty_value)?,
+            sql: self.make_insert_query(ty, fields_map)?,
             args: query_args,
         });
         let obj_id = obj_id
@@ -655,7 +658,7 @@ impl QueryEngine {
 
     /// Converts `field` with value `ty_value` into SqlValue while ensuring the
     /// generation of default and generable values.
-    fn convert_to_argument(&self, field: &Field, ty_value: &JsonObject) -> Result<SqlValue> {
+    fn convert_to_argument(&self, field: &Field, fields: &EntityMap) -> Result<SqlValue> {
         macro_rules! parse_default_value {
             (str, $value:expr) => {{
                 $value
@@ -670,7 +673,7 @@ impl QueryEngine {
         }
         macro_rules! convert_json_value {
             ($as_type:ident, $fallback:ty) => {{
-                match ty_value.get(&field.name) {
+                match fields.get(&field.name) {
                     Some(value_json) => value_json
                         .$as_type()
                         .context("failed to convert json to specific type")?
@@ -690,11 +693,11 @@ impl QueryEngine {
             TypeId::Float | TypeId::JsDate => SqlValue::F64(convert_json_value!(as_f64, f64)),
             TypeId::Boolean => SqlValue::Bool(convert_json_value!(as_bool, bool)),
             TypeId::Array(element_type) => {
-                let val = match ty_value.get(&field.name) {
-                    Some(value_json) => {
-                        self.validate_array(element_type, value_json)
+                let val = match fields.get(&field.name) {
+                    Some(field) => {
+                        self.validate_array(element_type, field)
                             .context("provided value for array has invalid type")?;
-                        serde_json::to_string(value_json)?
+                        serde_json::to_string(field)?
                     }
                     None => field.generate_value().context("failed to generate value")?,
                 };
@@ -707,37 +710,35 @@ impl QueryEngine {
 
     /// `validate_array` ensures that given JSON `value` is an array and it's elements are of
     /// compliant type with `element_type`.
-    fn validate_array(&self, element_type: &TypeId, value: &serde_json::Value) -> Result<()> {
-        if let Some(elements) = value.as_array() {
-            for (i, e) in elements.iter().enumerate() {
-                macro_rules! maybe_bail {
+    fn validate_array(&self, element_type: &TypeId, value: &EntityValue) -> Result<()> {
+        let elements = value.as_array()?;
+        for (i, e) in elements.iter().enumerate() {
+            macro_rules! maybe_bail {
                     ($is_type:ident) => {{
                         if !e.$is_type() {
                             anyhow::bail!("stored array should have elements of type '{}', but found '{:?}' at position {i}", element_type.name(), e)
                         }
                     }};
                 }
-                match element_type {
-                    TypeId::String | TypeId::Id => maybe_bail!(is_string),
-                    TypeId::Float | TypeId::JsDate => maybe_bail!(is_number),
-                    TypeId::Boolean => maybe_bail!(is_boolean),
-                    TypeId::Array(inner_element) => self
-                        .validate_array(inner_element, e)
-                        .context("failed to validate inner array at position {i}")?,
-                    TypeId::Entity { .. } => {
-                        unreachable!("entity can't be a contained within an array")
-                    }
+            match element_type {
+                TypeId::String | TypeId::Id => maybe_bail!(is_string),
+                TypeId::Float => maybe_bail!(is_f64),
+                TypeId::JsDate => maybe_bail!(is_date),
+                TypeId::Boolean => maybe_bail!(is_boolean),
+                TypeId::Array(inner_element) => self
+                    .validate_array(inner_element, e)
+                    .context("failed to validate inner array at position {i}")?,
+                TypeId::Entity { .. } => {
+                    unreachable!("entity can't be a contained within an array")
                 }
             }
-        } else {
-            anyhow::bail!("provided json value is not an array")
         }
         Ok(())
     }
 
     /// For given object of type `ty` and its value `ty_value` computes a string
     /// representing SQL query which inserts the object into database.
-    fn make_insert_query(&self, ty: &ObjectType, ty_value: &JsonObject) -> Result<String> {
+    fn make_insert_query(&self, ty: &ObjectType, fields_map: &EntityMap) -> Result<String> {
         let mut field_binds = String::new();
         let mut field_names = vec![];
         let mut id_name = String::new();
@@ -746,7 +747,7 @@ impl QueryEngine {
 
         let mut i = 0;
         for f in ty.all_fields() {
-            let val = ty_value.get(&f.name);
+            let val = fields_map.get(&f.name);
             if val.is_none() && f.is_optional {
                 continue;
             }
@@ -775,7 +776,7 @@ impl QueryEngine {
         field_binds.pop();
         update_binds.pop();
 
-        for v in ty_value.keys() {
+        for v in fields_map.keys() {
             anyhow::ensure!(
                 field_names.contains(v),
                 "field {} not present in {}",
@@ -800,21 +801,21 @@ impl QueryEngine {
     fn prepare_insertion_shallow(
         &self,
         ty: &ObjectType,
-        ty_value: &JsonObject,
+        fields_map: &EntityMap,
     ) -> Result<SqlWithArguments> {
         let mut query_args = Vec::<SqlValue>::new();
         for field in ty.all_fields() {
-            if ty_value.get(&field.name).is_none() && field.is_optional {
+            if fields_map.get(&field.name).is_none() && field.is_optional {
                 continue;
             }
             let arg = self
-                .convert_to_argument(field, ty_value)
+                .convert_to_argument(field, fields_map)
                 .with_context(|| QueryEngine::incompatible(field, ty))?;
             query_args.push(arg);
         }
 
         Ok(SqlWithArguments {
-            sql: self.make_insert_query(ty, ty_value)?,
+            sql: self.make_insert_query(ty, fields_map)?,
             args: query_args,
         })
     }

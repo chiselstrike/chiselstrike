@@ -3,11 +3,13 @@
 use crate::datastore::engine::{QueryEngine, TransactionStatic};
 use crate::datastore::expr::{BinaryExpr, BinaryOp, Expr, PropertyAccess, Value as ExprValue};
 use crate::datastore::query::{Mutation, QueryOp, QueryPlan, RequestContext, SortBy, SortKey};
+use crate::datastore::value::EntityMap;
 use crate::types::{Entity, Type, TypeSystem};
 use crate::JsonObject;
 use anyhow::{Context, Result};
 use deno_core::futures;
 use futures::{Future, StreamExt};
+use guard::guard;
 use serde_derive::{Deserialize, Serialize};
 use serde_json::json;
 use url::Url;
@@ -52,7 +54,7 @@ fn run_query_impl(
             .collect::<Vec<_>>()
             .await
             .into_iter()
-            .collect::<Result<Vec<_>>>()
+            .collect::<Result<Vec<EntityMap>>>()
             .context("failed to collect result rows from the database")?;
 
         // When backwards cursor is specified, the sort is reversed, hence we
@@ -62,9 +64,16 @@ fn run_query_impl(
                 results.reverse();
             }
         }
+        let results: Vec<_> = results
+            .iter()
+            .map(|entity_fields: &EntityMap| {
+                let v = serde_json::to_value(entity_fields).unwrap();
+                guard! {let serde_json::Value::Object(map) = v else { panic!("expected json object") }}
+                map
+            })
+            .collect();
 
         let mut ret = JsonObject::new();
-
         let next_page = get_next_page(&params, &query, &host, &results)?;
         if let Some(next_page) = next_page {
             ret.insert("next_page".into(), json!(next_page));

@@ -33,6 +33,7 @@ pub fn extension() -> deno_core::Extension {
             env::op_env::decl(),
             env::op_get_env::decl(),
             env::op_delete_env::decl(),
+            datastore::op_chisel_query_get_value::decl(),
             job::op_chisel_accept_job::decl(),
             job::op_chisel_http_respond::decl(),
             type_system::op_chisel_get_type_system::decl(),

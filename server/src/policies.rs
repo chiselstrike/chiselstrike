@@ -1,12 +1,12 @@
 // SPDX-FileCopyrightText: © 2021 ChiselStrike <info@chiselstrike.com>
 
+use crate::datastore::value::EntityValue;
 use crate::prefix_map::PrefixMap;
 use crate::types::ObjectType;
 use crate::JsonObject;
 use anyhow::Result;
 use chiselc::parse::ParserContext;
 use hyper::http;
-use serde_json::{json, Value};
 use std::collections::{HashMap, HashSet};
 use yaml_rust::{Yaml, YamlLoader};
 
@@ -14,7 +14,7 @@ use yaml_rust::{Yaml, YamlLoader};
 #[derive(Clone)]
 pub enum Kind {
     /// How this policy transforms values read from storage.
-    Transform(fn(Value) -> Value),
+    Transform(fn(EntityValue) -> EntityValue),
     /// Field is of AuthUser type and must match the user currently logged in.
     MatchLogin,
     /// Field will not be in a query's resulting json object.
@@ -32,7 +32,7 @@ pub struct Policy {
 #[derive(Clone, Default, Debug)]
 pub struct FieldPolicies {
     /// Maps a field name to the transformation we apply to that field's values.
-    pub transforms: HashMap<String, fn(Value) -> Value>,
+    pub transforms: HashMap<String, fn(EntityValue) -> EntityValue>,
     /// Names of fields that must equal the currently logged-in user.
     pub match_login: HashSet<String>,
     /// ID of the currently logged-in user.
@@ -282,9 +282,9 @@ impl PolicySystem {
     }
 }
 
-pub fn anonymize(_: Value) -> Value {
+pub fn anonymize(_: EntityValue) -> EntityValue {
     // TODO: use type-specific anonymization.
-    json!("xxxxx")
+    EntityValue::String("xxxxx".to_owned())
 }
 
 fn parse_methods(v: &Vec<Yaml>) -> Result<Vec<hyper::Method>> {
