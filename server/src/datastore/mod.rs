@@ -58,6 +58,7 @@ pub mod engine;
 pub mod expr;
 pub mod meta;
 pub mod query;
+pub mod value;
 
 pub use dbconn::DbConnection;
 pub use engine::QueryEngine;

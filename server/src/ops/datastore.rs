@@ -2,16 +2,17 @@
 
 use super::WorkerState;
 use crate::datastore::crud;
-use crate::datastore::engine::{IdTree, QueryEngine, QueryResults, ResultRow, TransactionStatic};
+use crate::datastore::engine::{IdTree, QueryEngine, QueryResults, TransactionStatic};
 use crate::datastore::expr::Expr;
 use crate::datastore::query::{Mutation, QueryOpChain, QueryPlan, RequestContext};
+use crate::datastore::value::EntityValue;
 use crate::policies::PolicySystem;
 use crate::server::Server;
 use crate::types::{Type, TypeSystem};
 use crate::version::Version;
 use crate::JsonObject;
 use anyhow::{anyhow, bail, ensure, Context as _, Result};
-use deno_core::CancelFuture;
+use deno_core::{error::AnyError, serde_v8, v8, CancelFuture};
 use serde_derive::Deserialize;
 use std::cell::RefCell;
 use std::future::Future;
@@ -111,38 +112,44 @@ where
 }
 
 #[derive(Deserialize)]
-pub struct StoreParams {
+pub struct StoreParams<'a> {
     name: String,
-    value: JsonObject,
+    value: serde_v8::Value<'a>,
 }
 
-#[deno_core::op]
-pub async fn op_chisel_store(
+#[deno_core::op(v8)]
+pub fn op_chisel_store<'a>(
+    scope: &mut v8::HandleScope<'a>,
     state: Rc<RefCell<deno_core::OpState>>,
-    params: StoreParams,
+    params: StoreParams<'a>,
     context: ChiselRequestContext,
-) -> Result<IdTree> {
-    with_transaction(state, move |server, version, transaction| async move {
-        let ty = match version.type_system.lookup_type(&params.name) {
-            Ok(Type::Entity(ty)) => ty,
-            _ => bail!("Cannot save into type {}", params.name),
-        };
-        if ty.is_auth() && !is_auth_path(&context.version_id, &context.routing_path) {
-            bail!("Cannot save into auth type {}", params.name);
-        }
+) -> Result<impl Future<Output = Result<IdTree, AnyError>> + 'static, AnyError> {
+    let v8_value = &params.value.v8_value;
+    let value = EntityValue::from_v8(v8_value, scope)?;
 
-        let mut transaction = transaction.lock().await;
-        server
-            .query_engine
-            .add_row(
-                &ty,
-                &params.value,
-                Some(&mut transaction),
-                &version.type_system,
-            )
-            .await
+    Ok(async move {
+        with_transaction(state, move |server, version, transaction| async move {
+            let ty = match version.type_system.lookup_type(&params.name) {
+                Ok(Type::Entity(ty)) => ty,
+                _ => bail!("Cannot save into type {}", params.name),
+            };
+            if ty.is_auth() && !is_auth_path(&context.version_id, &context.routing_path) {
+                bail!("Cannot save into auth type {}", params.name);
+            }
+
+            let mut transaction = transaction.lock().await;
+            server
+                .query_engine
+                .add_row(
+                    &ty,
+                    value.as_map()?,
+                    Some(&mut transaction),
+                    &version.type_system,
+                )
+                .await
+        })
+        .await
     })
-    .await
 }
 
 fn is_auth_path(version_id: &str, routing_path: &str) -> bool {
@@ -249,6 +256,7 @@ pub async fn op_chisel_relational_query_create(
             let resource = QueryStreamResource {
                 stream: RefCell::new(stream),
                 cancel: Default::default(),
+                next: RefCell::new(None),
             };
             let rid = state.borrow_mut().resource_table.add(resource);
             Ok(rid)
@@ -262,6 +270,7 @@ type DbStream = RefCell<QueryResults>;
 struct QueryStreamResource {
     stream: DbStream,
     cancel: deno_core::CancelHandle,
+    next: RefCell<Option<EntityValue>>,
 }
 
 impl deno_core::Resource for QueryStreamResource {
@@ -276,15 +285,23 @@ struct QueryNextFuture {
 }
 
 impl Future for QueryNextFuture {
-    type Output = Option<Result<ResultRow>>;
+    type Output = Result<()>;
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         match self.resource.upgrade() {
             Some(rc) => {
                 let mut stream = rc.stream.borrow_mut();
                 let stream: &mut QueryResults = &mut stream;
-                stream.as_mut().poll_next(cx)
+                match stream.as_mut().poll_next(cx) {
+                    Poll::Ready(Some(Ok(next))) => {
+                        *rc.next.borrow_mut() = Some(EntityValue::Map(next));
+                        Poll::Ready(Ok(()))
+                    }
+                    Poll::Ready(Some(Err(e))) => Poll::Ready(Err(e)),
+                    Poll::Ready(None) => Poll::Ready(Ok(())),
+                    Poll::Pending => Poll::Pending,
+                }
             }
-            None => Poll::Ready(Some(Err(anyhow!("Closed resource")))),
+            None => Poll::Ready(Err(anyhow!("Closed resource"))),
         }
     }
 }
@@ -293,19 +310,31 @@ impl Future for QueryNextFuture {
 pub async fn op_chisel_query_next(
     state: Rc<RefCell<deno_core::OpState>>,
     query_stream_rid: deno_core::ResourceId,
-) -> Result<Option<ResultRow>> {
+) -> Result<()> {
     let (resource, cancel) = {
         let rc: Rc<QueryStreamResource> = state.borrow().resource_table.get(query_stream_rid)?;
         let cancel = deno_core::RcRef::map(&rc, |r| &r.cancel);
         (Rc::downgrade(&rc), cancel)
     };
+
     let fut = QueryNextFuture { resource };
     let fut = fut.or_cancel(cancel);
-    if let Some(row) = fut.await? {
-        Ok(Some(row?))
-    } else {
-        Ok(None)
-    }
+    fut.await?
+}
+
+#[deno_core::op(v8)]
+pub fn op_chisel_query_get_value<'a>(
+    scope: &mut v8::HandleScope<'a>,
+    state: Rc<RefCell<deno_core::OpState>>,
+    query_stream_rid: deno_core::ResourceId,
+) -> Result<serde_v8::Value<'a>> {
+    let query_stream: Rc<QueryStreamResource> =
+        state.borrow().resource_table.get(query_stream_rid)?;
+    let v8_value = match query_stream.next.borrow_mut().take() {
+        Some(v) => v.to_v8(scope)?,
+        None => v8::null(scope).into(),
+    };
+    Ok(serde_v8::Value::from(v8_value))
 }
 
 impl RequestContext<'_> {

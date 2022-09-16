@@ -2,13 +2,13 @@
 
 use crate::auth::AUTH_USER_NAME;
 use crate::datastore::expr::{BinaryExpr, Expr, PropertyAccess, Value as ExprValue};
+use crate::datastore::value::EntityValue;
 use crate::policies::{FieldPolicies, PolicySystem};
 use crate::types::{Entity, Field, ObjectType, Type, TypeId, TypeSystem};
 
 use anyhow::{anyhow, Context, Result};
 use enum_as_inner::EnumAsInner;
 use serde_derive::{Deserialize, Serialize};
-use serde_json::value::Value as JsonValue;
 use std::collections::HashMap;
 use std::collections::HashSet;
 use std::fmt;
@@ -70,7 +70,7 @@ pub enum QueryField {
         /// the database.
         column_idx: usize,
         /// Policy transformation to be applied on the resulting JSON value.
-        transform: Option<fn(JsonValue) -> JsonValue>,
+        transform: Option<fn(EntityValue) -> EntityValue>,
         /// Do not include field in return json
         keep_or_omit: KeepOrOmitField,
     },
@@ -79,7 +79,7 @@ pub enum QueryField {
         name: String,
         is_optional: bool,
         /// Policy transformation to be applied on the resulting JSON value.
-        transform: Option<fn(JsonValue) -> JsonValue>,
+        transform: Option<fn(EntityValue) -> EntityValue>,
         /// Do not include field in return json
         keep_or_omit: KeepOrOmitField,
     },
@@ -322,7 +322,7 @@ impl QueryPlan {
         &mut self,
         field: &Field,
         table_name: &str,
-        transform: Option<fn(JsonValue) -> JsonValue>,
+        transform: Option<fn(EntityValue) -> EntityValue>,
         keep_or_omit: &KeepOrOmitField,
     ) -> QueryField {
         let column_idx = self.columns.len();
@@ -858,9 +858,9 @@ pub mod tests {
     use tempfile::NamedTempFile;
 
     use crate::datastore::expr::BinaryOp;
+    use crate::datastore::value::EntityMap;
     use crate::datastore::{DbConnection, QueryEngine};
     use crate::types;
-    use crate::JsonObject;
 
     pub const VERSION: &str = "version_1";
 
@@ -923,17 +923,18 @@ pub mod tests {
     pub async fn add_row(
         query_engine: &QueryEngine,
         entity: &Entity,
-        values: &serde_json::Value,
+        entity_value: &serde_json::Value,
         ts: &TypeSystem,
     ) {
-        let ins_row = values.as_object().unwrap();
+        let entity_value = EntityValue::from_json(entity_value).unwrap();
+        let entity_fields = entity_value.as_map().unwrap();
         query_engine
-            .add_row(entity, ins_row, None, ts)
+            .add_row(entity, entity_fields, None, ts)
             .await
             .unwrap();
         let rows = fetch_rows(query_engine, entity).await;
         assert!(rows.iter().any(|row| {
-            ins_row.iter().all(|(key, value)| {
+            entity_fields.iter().all(|(key, value)| {
                 if let TypeId::Entity { .. } = entity.get_field(key).unwrap().type_id {
                     true
                 } else {
@@ -943,19 +944,19 @@ pub mod tests {
         }));
     }
 
-    pub async fn fetch_rows(qe: &QueryEngine, entity: &Entity) -> Vec<JsonObject> {
+    pub async fn fetch_rows(qe: &QueryEngine, entity: &Entity) -> Vec<EntityMap> {
         let query_plan = QueryPlan::from_type(entity);
         fetch_rows_with_plan(qe, query_plan).await
     }
 
-    async fn fetch_rows_with_plan(qe: &QueryEngine, query_plan: QueryPlan) -> Vec<JsonObject> {
+    async fn fetch_rows_with_plan(qe: &QueryEngine, query_plan: QueryPlan) -> Vec<EntityMap> {
         let qe = Arc::new(qe.clone());
         let tr = qe.clone().begin_transaction_static().await.unwrap();
         let row_streams = qe.query(tr, query_plan).unwrap();
 
         row_streams
             .map(|row| row.unwrap())
-            .collect::<Vec<JsonObject>>()
+            .collect::<Vec<EntityMap>>()
             .await
     }
 
