@@ -203,9 +203,9 @@ cargo build
 
 That will build the `chiseld` server and `chisel` utility.
 
-You can now use `npx` to install a local version of the API:
+You can now use `create-chiselstrike-app` to install a local version of the API:
 ```console
-npx ./packages/create-chiselstrike-app --chisel-version="file:../packages/chiselstrike-api" my-backend
+node ./packages/create-chiselstrike-app --chisel-version="file:../packages/chiselstrike-api" my-backend
 ```
 
 And then replace instances of `npm run` with direct calls to the new binaries. For example, instead of
