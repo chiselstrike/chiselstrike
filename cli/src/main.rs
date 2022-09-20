@@ -2,6 +2,7 @@
 
 use crate::cmd::apply::apply;
 use crate::cmd::dev::cmd_dev;
+use crate::cmd::generate::cmd_generate;
 use crate::project::{create_project, CreateProjectOptions};
 use crate::proto::chisel_rpc_client::ChiselRpcClient;
 use crate::proto::{
@@ -14,7 +15,7 @@ use futures::{pin_mut, Future, FutureExt};
 use std::env;
 use std::fs;
 use std::io::ErrorKind;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use tokio::process::Child;
 
 mod cmd;
@@ -74,6 +75,13 @@ enum Command {
         /// Activate inspector and let a debugger attach at any time.
         #[arg(long)]
         inspect: bool,
+    },
+    /// Generate a ChiselStrike client API for this project.
+    Generate {
+        /// Output file
+        output: PathBuf,
+        #[arg(long, default_value = DEFAULT_API_VERSION, value_parser = parse_version)]
+        version: String,
     },
     /// Create a new ChiselStrike project.
     New {
@@ -267,6 +275,9 @@ async fn main() -> Result<()> {
                 chiseld_args.push("--inspect".to_string());
             }
             spawn_server(chiseld_args, fut, cb).await?;
+        }
+        Command::Generate { output, version } => {
+            cmd_generate(server_url, output, version).await?;
         }
         Command::New {
             path,
