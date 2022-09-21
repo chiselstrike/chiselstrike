@@ -2,17 +2,17 @@
 
 # RUN: sh -e @file
 
-# Test that we can have multiple end points, that they can use the
+# Test that we can have multiple routes, that they can use the
 # same function name and that that name is arbitrary.
 
-cat << EOF > "$TEMPDIR/routes/foo.js"
-export default async function my_req_func(req) {
+cat << EOF > "$TEMPDIR/routes/foo.ts"
+export default function my_req_func(req: Request): Response {
     return new Response("foo");
 }
 EOF
 
-cat << EOF > "$TEMPDIR/routes/bar.js"
-export default async function my_req_func(req) {
+cat << EOF > "$TEMPDIR/routes/bar.ts"
+export default function my_req_func(req: Request): Response {
     return new Response("bar");
 }
 EOF

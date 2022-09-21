@@ -5,7 +5,9 @@
         "target": "ESnext",
         "allowJs": true,
         "module": "ESnext",
-        "moduleResolution": "node"
+        "moduleResolution": "node",
+        "isolatedModules": true,
+        "noEmit": true
     },
     "exclude": [".webpack"]
 }

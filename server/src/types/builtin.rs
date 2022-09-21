@@ -108,7 +108,7 @@ fn string_field(name: &str) -> Field {
         default: None,
         effective_default: None,
         is_optional: false,
-        api_version: "__chiselstrike".into(),
+        version_id: "__chiselstrike".into(),
         is_unique: false,
     }
 }
@@ -128,7 +128,7 @@ fn optional_number_field(name: &str) -> Field {
         default: None,
         effective_default: None,
         is_optional: true,
-        api_version: "__chiselstrike".into(),
+        version_id: "__chiselstrike".into(),
         is_unique: false,
     }
 }

@@ -1,40 +1,78 @@
 // SPDX-FileCopyrightText: © 2022 ChiselStrike <info@chiselstrike.com>
 
+#![allow(unused_imports)]
+
 use crate::cmd::apply::chiselc_output;
 use crate::cmd::apply::parse_indexes;
-use crate::cmd::apply::SourceMap;
-use crate::proto::IndexCandidate;
-use anyhow::{anyhow, Context, Result};
-use endpoint_tsc::compile_endpoints;
-use std::path::PathBuf;
+use crate::codegen::codegen_root_module;
+use crate::events::FileTopicMap;
+use crate::proto::{IndexCandidate, Module};
+use crate::routes::FileRouteMap;
+use anyhow::{anyhow, bail, Context, Result};
+use endpoint_tsc::Compiler;
+use std::collections::HashMap;
+use std::io::Write;
+use std::path::{Path, PathBuf};
+use url::Url;
 
 pub(crate) async fn apply(
-    endpoints: &[PathBuf],
-    events: &[PathBuf],
+    route_map: FileRouteMap,
+    topic_map: FileTopicMap,
     entities: &[String],
     optimize: bool,
     auto_index: bool,
-) -> Result<(SourceMap, Vec<IndexCandidate>)> {
-    let mut index_candidates = vec![];
-    let modules = endpoints.iter().chain(events.iter());
-    let paths: Result<Vec<_>> = modules
-        .clone()
-        .map(|f| f.to_str().ok_or_else(|| anyhow!("Path is not UTF8")))
-        .collect();
-    let mut output = compile_endpoints(&paths?)
+) -> Result<(Vec<Module>, Vec<IndexCandidate>)> {
+    let import_fn = |path: &Path| -> Result<String> {
+        Url::from_file_path(path)
+            .map(|url| url.to_string())
+            .map_err(|_| anyhow!("Cannot convert file path {} to import URL", path.display()))
+    };
+
+    let root_code = codegen_root_module(&route_map, &topic_map, &import_fn)
+        .context("Could not generate code for file-based routing and event topics")?;
+    let (_root_file, root_url) = temporary_source_file("__root.", &root_code)?;
+
+    let mut compiler = Compiler::new(true);
+    let compiled = compiler
+        .compile(root_url.clone())
         .await
         .context("Could not compile routes (using deno-style modules)")?;
-    for f in modules {
-        let path = f.to_str().unwrap();
-        let orig = output.get_mut(path).unwrap();
+
+    let mut modules = Vec::new();
+    let mut index_candidates = Vec::new();
+    for (url, mut code, _is_dts) in compiled.into_iter() {
+        let mut url = Url::parse(url.as_str()).unwrap();
+        if url == root_url {
+            url = Url::parse("file:///__root.ts").unwrap();
+        }
+
         if optimize {
-            *orig = chiselc_output(orig.to_string(), "js", entities)?;
+            code = chiselc_output(code, "js", entities)?;
         }
 
         if auto_index {
-            let mut indexes = parse_indexes(orig.clone(), entities)?;
-            index_candidates.append(&mut indexes);
+            let mut candidates = parse_indexes(code.clone(), entities)?;
+            index_candidates.append(&mut candidates);
         }
+
+        modules.push(Module {
+            url: url.to_string(),
+            code,
+        });
     }
-    Ok((output, index_candidates))
+
+    Ok((modules, index_candidates))
+}
+
+fn temporary_source_file(name_prefix: &str, code: &str) -> Result<(tempfile::NamedTempFile, Url)> {
+    let mut file = tempfile::Builder::new()
+        .suffix(".ts")
+        .prefix(name_prefix)
+        .tempfile()
+        .context("Could not create a temporary file")?;
+    file.write_all(code.as_bytes())
+        .context("Could not write to a temporary file")?;
+    file.flush().context("Could not flush a temporary file")?;
+    let url = Url::from_file_path(file.path()).unwrap();
+    Ok((file, url))
 }

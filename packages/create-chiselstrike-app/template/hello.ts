@@ -1,10 +1,14 @@
-// Example ChiselStrike endpoint.
+// Example ChiselStrike route
 //
-// To access the endpoint, run:
+// To access the route, run:
 //
 // curl -d '{"hello": "world"}' localhost:8080/dev/hello
-import { ChiselRequest } from "@chiselstrike/api";
+import { ChiselRequest, RouteMap } from "@chiselstrike/api";
 
-export default async function (req: ChiselRequest): Promise<string> {
-    return await req.text() || "hello world";
-}
+export default new RouteMap()
+    .get("/", function (): string {
+        return "hello world";
+    })
+    .post("/", async function (req: ChiselRequest): Promise<unknown> {
+        return await req.json();
+    });

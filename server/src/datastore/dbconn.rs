@@ -2,20 +2,19 @@
 
 use anyhow::Context;
 use anyhow::Result;
-use sea_query::{PostgresQueryBuilder, SchemaBuilder, SqliteQueryBuilder};
+use sea_query::{PostgresQueryBuilder, QueryBuilder, SchemaBuilder, SqliteQueryBuilder};
 use sqlx::any::{AnyKind, AnyPool, AnyPoolOptions};
 use sqlx::Executor;
 
 #[derive(Debug, Clone)]
 pub struct DbConnection {
     pub pool: AnyPool,
-    pub conn_uri: String,
 }
 
 impl DbConnection {
-    pub async fn connect(uri: &str, nr_conn: usize) -> Result<Self> {
+    pub async fn connect(uri: &str, max_connections: usize) -> Result<Self> {
         let pool = AnyPoolOptions::new()
-            .max_connections(nr_conn as _)
+            .max_connections(max_connections as u32)
             .after_connect(move |conn, _meta| {
                 Box::pin(async move {
                     if matches!(conn.kind(), AnyKind::Sqlite) {
@@ -27,20 +26,21 @@ impl DbConnection {
             .connect(uri)
             .await
             .with_context(|| format!("failed to connect to {}", uri))?;
-
-        let conn_uri = uri.to_owned();
-
-        Ok(Self { pool, conn_uri })
+        Ok(Self { pool })
     }
 
-    pub async fn local_connection(&self, nr_conn: usize) -> Result<Self> {
+    // TODO: replace `query_builder()` and `schema_builder()` with a single method that returns
+    // `&dyn sea_query::GenericBulder`, once trait upcasting coercion is stabilized:
+    // https://github.com/rust-lang/rust/issues/65991
+
+    pub fn query_builder(&self) -> &'static dyn QueryBuilder {
         match self.pool.any_kind() {
-            AnyKind::Postgres => Self::connect(&self.conn_uri, nr_conn).await,
-            AnyKind::Sqlite => Ok(self.clone()),
+            AnyKind::Postgres => &PostgresQueryBuilder,
+            AnyKind::Sqlite => &SqliteQueryBuilder,
         }
     }
 
-    pub fn query_builder(&self) -> &dyn SchemaBuilder {
+    pub fn schema_builder(&self) -> &'static dyn SchemaBuilder {
         match self.pool.any_kind() {
             AnyKind::Postgres => &PostgresQueryBuilder,
             AnyKind::Sqlite => &SqliteQueryBuilder,

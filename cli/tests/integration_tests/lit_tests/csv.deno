@@ -17,6 +17,7 @@ terry,stone
 jill,lasalle
 ' $CHISELD_HOST/dev/csv
 
+# CHECK: HTTP/1.1 200 OK
 # CHECK: ok
 
 $CURL -o - $CHISELD_HOST/dev/find

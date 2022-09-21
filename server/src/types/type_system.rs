@@ -2,48 +2,29 @@
 
 use super::{
     BuiltinTypes, DbIndex, Entity, FieldAttrDelta, FieldDelta, FieldMap, ObjectDelta, ObjectType,
-    Type, TypeId,
+    QueryEngine, QueryPlan, Type, TypeId, TypeSystemError,
 };
-use crate::datastore::query::QueryPlan;
-use crate::datastore::QueryEngine;
 use anyhow::Context;
-use deno_core::futures;
-use derive_new::new;
 use futures::StreamExt;
 use std::collections::HashMap;
 use std::sync::Arc;
 
-#[derive(thiserror::Error, Debug)]
-pub enum TypeSystemError {
-    #[error["type already exists"]]
-    CustomTypeExists(Entity),
-    #[error["no such type: {0}"]]
-    NoSuchType(String),
-    #[error["no such API version: {0}"]]
-    NoSuchVersion(String),
-    #[error["builtin type expected, got `{0}` instead"]]
-    NotABuiltinType(String),
-    #[error["user defined custom type expected, got `{0}` instead"]]
-    NotACustomType(String),
-    #[error["unsafe to replace type: {0}. Reason: {1}"]]
-    UnsafeReplacement(String, String),
-    #[error["Error while trying to manipulate types: {0}"]]
-    InternalServerError(String),
-}
-
-#[derive(Debug, Default, Clone, new)]
-pub struct VersionTypes {
-    #[new(default)]
-    pub custom_types: HashMap<String, Entity>,
-}
-
 #[derive(Debug, Clone)]
 pub struct TypeSystem {
-    pub versions: HashMap<String, VersionTypes>,
+    pub custom_types: HashMap<String, Entity>,
     pub builtin: Arc<BuiltinTypes>,
+    pub version_id: String,
 }
 
-impl VersionTypes {
+impl TypeSystem {
+    pub fn new(builtin: Arc<BuiltinTypes>, version_id: String) -> Self {
+        Self {
+            custom_types: HashMap::new(),
+            builtin,
+            version_id,
+        }
+    }
+
     pub fn lookup_custom_type(&self, type_name: &str) -> Result<Entity, TypeSystemError> {
         match self.custom_types.get(type_name) {
             Some(ty) => Ok(ty.to_owned()),
@@ -51,7 +32,7 @@ impl VersionTypes {
         }
     }
 
-    fn add_custom_type(&mut self, ty: Entity) -> Result<(), TypeSystemError> {
+    pub fn add_custom_type(&mut self, ty: Entity) -> Result<(), TypeSystemError> {
         if let Entity::Auth(_) = ty {
             return Err(TypeSystemError::NotACustomType(ty.name().into()));
         }
@@ -63,57 +44,12 @@ impl VersionTypes {
         self.custom_types.insert(ty.name.to_owned(), ty);
         Ok(())
     }
-}
-
-impl Default for TypeSystem {
-    fn default() -> Self {
-        let builtin = Arc::new(BuiltinTypes::new());
-        Self {
-            versions: HashMap::new(),
-            builtin,
-        }
-    }
-}
-
-impl TypeSystem {
-    /// Returns a mutable reference to all types from a specific version.
-    ///
-    /// If there are no types for this version, the version is created.
-    pub fn get_version_mut(&mut self, api_version: &str) -> &mut VersionTypes {
-        self.versions
-            .entry(api_version.to_string())
-            .or_insert_with(VersionTypes::default)
-    }
-
-    /// Returns a read-only reference to all types from a specific version.
-    ///
-    /// If there are no types for this version, an error is returned
-    pub fn get_version(&self, api_version: &str) -> Result<&VersionTypes, TypeSystemError> {
-        self.versions
-            .get(api_version)
-            .ok_or_else(|| TypeSystemError::NoSuchVersion(api_version.to_owned()))
-    }
-
-    /// Adds a custom type to the type system.
-    ///
-    /// # Arguments
-    ///
-    /// * `ty` type to add
-    ///
-    /// # Errors
-    ///
-    /// If type `ty` already exists in the type system isn't Entity::Custom type,
-    /// the function returns `TypeSystemError`.
-    pub fn add_custom_type(&mut self, ty: Entity) -> Result<(), TypeSystemError> {
-        let version = self.get_version_mut(&ty.api_version);
-        version.add_custom_type(ty)
-    }
 
     /// Generate an [`ObjectDelta`] with the necessary information to evolve a specific type.
     pub fn generate_type_delta(
+        &self,
         old_type: &ObjectType,
         new_type: Arc<ObjectType>,
-        ts: &TypeSystem,
         allow_unsafe_replacement: bool,
     ) -> Result<ObjectDelta, TypeSystemError> {
         if *old_type != *new_type {
@@ -145,9 +81,9 @@ impl TypeSystem {
                     // Important: we can only issue this get() here, after we know this model is
                     // pre-existing. Otherwise this breaks in the case where we're adding a
                     // property that is itself a custom model.
-                    let field_ty = ts.get(&field.type_id)?;
+                    let field_ty = self.get(&field.type_id)?;
 
-                    let old_ty = ts.get(&old.type_id)?;
+                    let old_ty = self.get(&old.type_id)?;
                     if !allow_unsafe_replacement && field_ty != old_ty {
                         // FIXME: it should be almost always possible to evolve things into
                         // strings.
@@ -253,25 +189,6 @@ impl TypeSystem {
             .collect()
     }
 
-    /// Looks up a custom type with name `type_name` across API versions
-    ///
-    /// # Arguments
-    ///
-    /// * `type_name` name of custom type to look up.
-    /// * `version` the API version this objects belongs to
-    ///
-    /// # Errors
-    ///
-    /// If the looked up type does not exists, the function returns a `TypeSystemError`.
-    pub fn lookup_custom_type(
-        &self,
-        type_name: &str,
-        api_version: &str,
-    ) -> Result<Entity, TypeSystemError> {
-        let version = self.get_version(api_version)?;
-        version.lookup_custom_type(type_name)
-    }
-
     /// Looks up a builtin type with name `type_name`.
     pub fn lookup_builtin_type(&self, type_name: &str) -> Result<Type, TypeSystemError> {
         if let Some(element_type_str) = type_name.strip_prefix("Array<") {
@@ -292,60 +209,35 @@ impl TypeSystem {
     /// # Errors
     ///
     /// If the looked up type does not exists, the function returns a `NoSuchType`.
-    pub fn lookup_type(&self, type_name: &str, api_version: &str) -> Result<Type, TypeSystemError> {
+    pub fn lookup_type(&self, type_name: &str) -> Result<Type, TypeSystemError> {
         if let Ok(ty) = self.lookup_builtin_type(type_name) {
             Ok(ty)
+        } else if let Ok(ty) = self.lookup_custom_type(type_name) {
+            Ok(ty.into())
         } else {
-            let version = self.get_version(api_version)?;
-            if let Ok(ty) = version.lookup_custom_type(type_name) {
-                Ok(ty.into())
-            } else {
-                Err(TypeSystemError::NoSuchType(type_name.to_owned()))
-            }
+            Err(TypeSystemError::NoSuchType(type_name.to_owned()))
         }
     }
 
-    /// Tries to lookup a type of name `type_name` of version `api_version` that
-    /// is an Entity. That means it's either a built-in Entity::Auth type like
-    /// `AuthUser` or a Entity::Custom.
+    /// Tries to lookup a type of name `type_name` is an Entity. That means it's either a built-in
+    /// Entity::Auth type like `AuthUser` or a Entity::Custom.
     ///
     /// # Errors
     ///
     /// If the looked up type does not exists, the function returns a `NoSuchType`.
-    pub fn lookup_entity(
-        &self,
-        type_name: &str,
-        api_version: &str,
-    ) -> Result<Entity, TypeSystemError> {
+    pub fn lookup_entity(&self, type_name: &str) -> Result<Entity, TypeSystemError> {
         match self.lookup_builtin_type(type_name) {
             Ok(Type::Entity(ty)) => Ok(ty),
-            Err(TypeSystemError::NotABuiltinType(_)) => {
-                self.lookup_custom_type(type_name, api_version)
-            }
+            Err(TypeSystemError::NotABuiltinType(_)) => self.lookup_custom_type(type_name),
             _ => Err(TypeSystemError::NoSuchType(type_name.to_owned())),
         }
     }
 
-    pub async fn populate_types<T: AsRef<str>, F: AsRef<str>>(
-        &self,
-        engine: Arc<QueryEngine>,
-        api_version_to: T,
-        api_version_from: F,
+    pub async fn populate_types(
+        engine: &QueryEngine,
+        to: &TypeSystem,
+        from: &TypeSystem,
     ) -> anyhow::Result<()> {
-        let to = match self.versions.get(api_version_to.as_ref()) {
-            Some(x) => Ok(x),
-            None => Err(TypeSystemError::NoSuchVersion(
-                api_version_to.as_ref().to_owned(),
-            )),
-        }?;
-
-        let from = match self.versions.get(api_version_from.as_ref()) {
-            Some(x) => Ok(x),
-            None => Err(TypeSystemError::NoSuchVersion(
-                api_version_from.as_ref().to_owned(),
-            )),
-        }?;
-
         for (ty_name, ty_obj) in from.custom_types.iter() {
             if let Some(ty_obj_to) = to.custom_types.get(ty_name) {
                 // Either the TO type is a safe replacement of FROM, of we need to have a lens
@@ -354,13 +246,11 @@ impl TypeSystem {
                     .with_context(|| {
                         format!(
                             "Not possible to evolve type {} ({} -> {})",
-                            ty_name,
-                            api_version_from.as_ref(),
-                            api_version_to.as_ref()
+                            ty_name, from.version_id, to.version_id,
                         )
                     })?;
 
-                let tr = engine.clone().begin_transaction_static().await?;
+                let tr = engine.begin_transaction_static().await?;
                 let query_plan = QueryPlan::from_type(ty_obj);
                 let mut row_streams = engine.query(tr.clone(), query_plan)?;
 
@@ -382,8 +272,13 @@ impl TypeSystem {
             TypeId::String | TypeId::Float | TypeId::Boolean | TypeId::Id | TypeId::Array(_) => {
                 self.lookup_builtin_type(&ty.name())
             }
-            TypeId::Entity { name, api_version } => {
-                self.lookup_entity(name, api_version).map(Type::Entity)
+            TypeId::Entity { name, version_id } => {
+                if version_id == "__chiselstrike" {
+                    self.lookup_builtin_type(name)
+                } else {
+                    assert_eq!(*version_id, self.version_id);
+                    self.lookup_entity(name).map(Type::Entity)
+                }
             }
         }
     }

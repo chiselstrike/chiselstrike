@@ -8,6 +8,7 @@ edition = "2021"
 tsc_compile = { path = "../tsc_compile" }
 anyhow = "1.0"
 api = { path = "../api" }
+url = "2.2"
 
 [lib]
 name = "endpoint_tsc"

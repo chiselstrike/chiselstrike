@@ -1,19 +1,20 @@
 // SPDX-FileCopyrightText: © 2021 ChiselStrike <info@chiselstrike.com>
 
-use anyhow::Result;
+use anyhow::{Context, Result};
+use hyper::server::conn::AddrIncoming;
 use hyper::service::{make_service_fn, service_fn};
 use hyper::{Body, Request, Response, Server};
 use std::net::SocketAddr;
 use std::sync::atomic::{AtomicU16, Ordering};
+use utils::TaskHandle;
 
-/// If set, serve the web UI using this address for gRPC calls.
 static HEALTH_READY: AtomicU16 = AtomicU16::new(404);
 
-pub fn mark_ready() {
+pub(crate) fn mark_ready() {
     HEALTH_READY.store(200, Ordering::Relaxed);
 }
 
-pub fn mark_not_ready() {
+pub(crate) fn mark_not_ready() {
     HEALTH_READY.store(400, Ordering::Relaxed);
 }
 
@@ -38,19 +39,22 @@ async fn route(req: Request<Body>) -> Result<Response<Body>> {
     .or_else(|e| response(&format!("{:?}", e), 500))
 }
 
-/// Initialize ChiselStrike's internal routes.
+/// Spawn a server that handles ChiselStrike's internal routes.
 ///
 /// Unlike the API server, it is strictly bound to 127.0.0.1. This is enough
 /// for the Kubernetes checks to work, and it is one less thing for us to secure
 /// and prevent DDoS attacks again - which is why this is a different server
-pub fn init(addr: SocketAddr) {
+pub async fn spawn(listen_addr: SocketAddr) -> Result<(SocketAddr, TaskHandle<Result<()>>)> {
     let make_svc = make_service_fn(|_conn| async {
         // service_fn converts our function into a `Service`
         Ok::<_, anyhow::Error>(service_fn(route))
     });
 
-    tokio::task::spawn(async move {
-        let server = Server::bind(&addr).serve(make_svc);
-        server.await
-    });
+    let incoming = AddrIncoming::bind(&listen_addr)?;
+    let listen_addr = incoming.local_addr();
+    let server = Server::builder(incoming).serve(make_svc);
+
+    let task = tokio::task::spawn(async move { server.await.context("Internal server failed") });
+
+    Ok((listen_addr, TaskHandle(task)))
 }

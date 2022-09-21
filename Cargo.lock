@@ -689,6 +689,7 @@ dependencies = [
  "fs_extra",
  "futures",
  "glob",
+ "guard",
  "handlebars",
  "inventory",
  "itertools 0.10.4",
@@ -1446,17 +1447,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "derive-new"
-version = "0.5.9"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3418329ca0ad70234b9735dc4ceed10af4df60eff9c8e7b06cb5e520d92c3535"
-dependencies = [
- "proc-macro2 1.0.43",
- "quote 1.0.21",
- "syn 1.0.99",
-]
-
-[[package]]
 name = "derive_more"
 version = "0.99.17"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1625,6 +1615,7 @@ dependencies = [
  "anyhow",
  "api",
  "tsc_compile",
+ "url 2.3.1",
 ]
 
 [[package]]
@@ -2198,6 +2189,12 @@ dependencies = [
  "rand_core 0.6.3",
  "subtle",
 ]
+
+[[package]]
+name = "guard"
+version = "0.5.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ff893cc51ea04f8a3b73fbaf4376c06ebc5a0ccbe86d460896f805d9417c93ea"
 
 [[package]]
 name = "h2"
@@ -3004,6 +3001,7 @@ dependencies = [
  "endpoint_tsc",
  "structopt",
  "tokio",
+ "url 2.3.1",
 ]
 
 [[package]]
@@ -3232,19 +3230,6 @@ name = "opaque-debug"
 version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "624a8340c38c1b80fd549087862da4ba43e08858af025b236e509b6649fc13d5"
-
-[[package]]
-name = "openapi"
-version = "0.1.5"
-source = "git+https://github.com/chiselstrike/openapi.git?rev=fee4da81f6591e4e6e4a37d5b2b67840471566c0#fee4da81f6591e4e6e4a37d5b2b67840471566c0"
-dependencies = [
- "semver 0.11.0",
- "serde",
- "serde_json",
- "serde_yaml",
- "thiserror",
- "url 2.3.1",
-]
 
 [[package]]
 name = "openssl"
@@ -4221,9 +4206,9 @@ dependencies = [
 
 [[package]]
 name = "sea-query"
-version = "0.17.3"
+version = "0.26.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "da897c0e21be8ef61cf8705bb286072f5c006090f1d4ce3c12ecea2b39f9b2d9"
+checksum = "a6a1de9d0334895f7eb51bd1603c3c9f6737413f905a134001f1e198f43bfd70"
 dependencies = [
  "sea-query-derive",
 ]
@@ -4284,16 +4269,7 @@ version = "0.9.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1d7eb9ef2c18661902cc47e535f9bc51b78acd254da71d375c2f6720d9a40403"
 dependencies = [
- "semver-parser 0.7.0",
-]
-
-[[package]]
-name = "semver"
-version = "0.11.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f301af10236f6df4160f7c3f04eec6dbc70ace82d23326abad5edee88801c6b6"
-dependencies = [
- "semver-parser 0.10.2",
+ "semver-parser",
 ]
 
 [[package]]
@@ -4310,15 +4286,6 @@ name = "semver-parser"
 version = "0.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "388a1df253eca08550bef6c72392cfe7c30914bf41df5269b68cbd6ff8f570a3"
-
-[[package]]
-name = "semver-parser"
-version = "0.10.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "00b0bef5b7f9e0df16536d3961cfb6e84331c065b4066afb39768d0e319411f7"
-dependencies = [
- "pest",
-]
 
 [[package]]
 name = "serde"
@@ -4397,44 +4364,34 @@ dependencies = [
 ]
 
 [[package]]
-name = "serde_yaml"
-version = "0.8.26"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "578a7433b776b56a35785ed5ce9a7e777ac0598aac5a6dd1b4b18a307c7fc71b"
-dependencies = [
- "indexmap",
- "ryu",
- "serde",
- "yaml-rust",
-]
-
-[[package]]
 name = "server"
 version = "0.13.0-dev.0"
 dependencies = [
  "aes-gcm 0.9.4",
  "anyhow",
  "api",
- "async-channel",
  "async-lock",
  "base64 0.13.0",
  "chiselc",
  "deno_core",
  "deno_runtime",
- "derive-new",
  "dirs 4.0.0",
  "enclose",
  "enum-as-inner 0.3.4",
  "env_logger",
+ "form_urlencoded 1.1.0",
  "format-sql-query",
+ "futures",
+ "guard",
  "http",
  "hyper",
  "itertools 0.10.4",
+ "lazy_static",
  "libc",
  "log",
  "nix 0.22.3",
  "once_cell",
- "openapi",
+ "parking_lot 0.12.1",
  "permutation",
  "petgraph 0.6.2",
  "pin-project",
@@ -4457,9 +4414,11 @@ dependencies = [
  "tempfile",
  "thiserror",
  "tokio",
+ "tokio-stream",
  "tonic",
  "tonic-build",
  "tracing",
+ "url 2.3.1",
  "utils",
  "uuid 0.8.2",
  "vergen",
@@ -6117,8 +6076,10 @@ version = "0.13.0-dev.0"
 dependencies = [
  "anyhow",
  "async-channel",
+ "futures-core",
  "nix 0.22.3",
  "reqwest",
+ "tokio",
 ]
 
 [[package]]

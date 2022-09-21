@@ -6,8 +6,8 @@ cp examples/person.ts "$TEMPDIR/models"
 cp examples/csv.ts examples/find.ts "$TEMPDIR/routes"
 
 cd "$TEMPDIR"
-cat << EOF > "routes/foo.js"
-export default async function my_req_func(req) {
+cat << EOF > "routes/foo.ts"
+export default function my_req_func(req: Request): Response {
     return new Response("v0");
 }
 EOF
@@ -34,8 +34,8 @@ $CHISEL apply --version v0-_
 # CHECK: Applied:
 
 
-cat << EOF > "routes/foo.js"
-export default async function my_req_func(req) {
+cat << EOF > "routes/foo.ts"
+export default function my_req_func(req: Request): Response {
     return new Response("v1");
 }
 EOF

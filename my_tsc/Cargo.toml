@@ -9,6 +9,7 @@ deno_runtime = { path = "../third_party/deno/runtime" }
 endpoint_tsc = { path = "../endpoint_tsc" }
 structopt = "0.3.23"
 tokio = "1.11.0"
+url = "2.2"
 
 [[bin]]
 name = "my_tsc"

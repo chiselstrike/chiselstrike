@@ -1,17 +1,19 @@
 // SPDX-FileCopyrightText: © 2022 ChiselStrike <info@chiselstrike.com>
 
-use crate::api::ApiInfo;
 use crate::datastore::{MetaService, QueryEngine};
-use crate::policies::{EntityPolicy, Policies, VersionPolicy};
+use crate::policies::{EntityPolicy, PolicySystem};
+use crate::proto::type_msg::TypeEnum;
 use crate::proto::{
-    type_msg::TypeEnum, ChiselApplyRequest, ContainerType, IndexCandidate, TypeMsg,
+    AddTypeRequest, ApplyRequest, ContainerType, FieldDefinition, IndexCandidate,
+    PolicyUpdateRequest, TypeMsg,
 };
-use crate::proto::{AddTypeRequest, FieldDefinition, PolicyUpdateRequest};
+use crate::server::Server;
 use crate::types::{
     DbIndex, Entity, Field, NewField, NewObject, ObjectType, Type, TypeSystem, TypeSystemError,
 };
+use crate::version::VersionInfo;
 use crate::FEATURES;
-use anyhow::{Context, Result};
+use anyhow::{anyhow, bail, Context, Result};
 use petgraph::graphmap::GraphMap;
 use petgraph::Directed;
 use std::collections::{BTreeSet, HashMap};
@@ -19,19 +21,22 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 pub struct ApplyResult {
+    pub type_system: TypeSystem,
+    pub policy_system: PolicySystem,
     pub type_names_user_order: Vec<String>,
     pub labels: Vec<String>,
-    pub version_policy: VersionPolicy,
 }
 
 pub struct ParsedPolicies {
-    version_policy: (VersionPolicy, String),
+    policy_system: PolicySystem,
+    policy_system_text: String,
     entity_policies: HashMap<String, EntityPolicy>,
 }
 
 impl ParsedPolicies {
     fn parse(request: &[PolicyUpdateRequest]) -> Result<Self> {
-        let mut version_policy = None;
+        let mut policy_system = None;
+        let mut policy_system_text = String::new();
         let mut entity_policies = HashMap::new();
 
         for p in request {
@@ -49,33 +54,31 @@ impl ParsedPolicies {
                     entity_policies.insert(entity_name, policy);
                 }
                 _ => {
-                    if version_policy.is_none() {
-                        version_policy.replace((
-                            VersionPolicy::from_yaml(&p.policy_config)?,
-                            p.policy_config.clone(),
-                        ));
+                    if policy_system.is_none() {
+                        policy_system = Some(PolicySystem::from_yaml(&p.policy_config)?);
+                        policy_system_text = p.policy_config.clone();
                     } else {
-                        anyhow::bail!("Currently only one policy file supported");
+                        anyhow::bail!("Currently only one policy file is supported");
                     }
                 }
             }
         }
 
         Ok(Self {
-            version_policy: version_policy.unwrap_or_default(),
+            policy_system: policy_system.unwrap_or_default(),
+            policy_system_text,
             entity_policies,
         })
     }
 }
 
 pub async fn apply(
-    query_engine: &QueryEngine,
-    meta: &MetaService,
+    server: Arc<Server>,
+    apply_request: &ApplyRequest,
     type_system: &mut TypeSystem,
-    policies: &mut Policies,
-    apply_request: &ChiselApplyRequest,
-    api_version: String,
-    api_info: &ApiInfo,
+    version_id: String,
+    version_info: &VersionInfo,
+    modules: &HashMap<String, String>,
 ) -> Result<ApplyResult> {
     let mut type_names = BTreeSet::new();
     let mut type_names_user_order = vec![];
@@ -90,13 +93,11 @@ pub async fn apply(
     let mut to_insert = vec![];
     let mut to_update = vec![];
 
-    type_system.get_version_mut(&api_version);
-    let version_types = type_system.get_version(&api_version)?;
-
+    let meta = &server.meta_service;
     let mut transaction = meta.begin_transaction().await?;
 
-    for (existing, removed) in version_types.custom_types.iter() {
-        if type_names.get(existing).is_none() {
+    for (existing, removed) in type_system.custom_types.iter() {
+        if !type_names.contains(existing) {
             match meta.count_rows(&mut transaction, removed).await? {
                 0 => to_remove.push(removed.clone()),
                 cnt => to_remove_has_data.push((removed.clone(), cnt)),
@@ -105,7 +106,8 @@ pub async fn apply(
     }
 
     let ParsedPolicies {
-        version_policy,
+        policy_system,
+        policy_system_text,
         mut entity_policies,
     } = ParsedPolicies::parse(&apply_request.policies)?;
 
@@ -114,7 +116,7 @@ pub async fn apply(
             .iter()
             .map(|x| format!("{} ({} elements)", x.0.name(), x.1))
             .fold("\t".to_owned(), |acc, x| format!("{}\n\t{}", acc, x));
-        anyhow::bail!(
+        bail!(
             r"Trying to remove models from the models file, but the following models still have data:
 {}
 
@@ -141,7 +143,7 @@ or
     for type_def in sort_custom_types(type_system, apply_request.types.clone())? {
         let name = type_def.name;
         if type_system.lookup_builtin_type(&name).is_ok() {
-            anyhow::bail!("custom type expected, got `{}` instead", name);
+            bail!("custom type expected, got `{}` instead", name);
         }
 
         let mut fields = Vec::new();
@@ -156,16 +158,16 @@ or
             } else if let TypeEnum::Entity(entity_name) = field_ty {
                 match new_types.get(entity_name) {
                     Some(ty) => Type::Entity(ty.clone()),
-                    None => anyhow::bail!(
-                        "field type `{entity_name}` is neither a built-in nor a custom type",
-                    ),
+                    None => {
+                        bail!("field type `{entity_name}` is neither a built-in nor a custom type",)
+                    }
                 }
             } else {
-                anyhow::bail!("field type must either contain an entity or be a builtin");
+                bail!("field type must either contain an entity or be a builtin");
             };
 
             fields.push(Field::new(
-                &NewField::new(&field.name, field_ty, &api_version)?,
+                &NewField::new(&field.name, field_ty, &version_id)?,
                 field.labels,
                 field.default_value,
                 field.is_optional,
@@ -175,7 +177,7 @@ or
         let ty_indexes = indexes.get(&name).cloned().unwrap_or_default();
 
         let ty = Arc::new(ObjectType::new(
-            &NewObject::new(&name, &api_version),
+            &NewObject::new(&name, &version_id),
             fields,
             ty_indexes,
         )?);
@@ -189,23 +191,26 @@ or
             },
         );
 
-        match version_types.lookup_custom_type(&name) {
+        match type_system.lookup_custom_type(&name) {
             Ok(old_type) => {
                 let is_empty = meta.count_rows(&mut transaction, &old_type).await? == 0;
-                let delta = TypeSystem::generate_type_delta(&old_type, ty, type_system, is_empty)?;
+                let delta = type_system.generate_type_delta(&old_type, ty, is_empty)?;
                 to_update.push((old_type.clone(), delta));
             }
-            Err(TypeSystemError::NoSuchType(_) | TypeSystemError::NoSuchVersion(_)) => {
+            Err(TypeSystemError::NoSuchType(_)) => {
                 to_insert.push(ty.clone());
             }
-            Err(e) => anyhow::bail!(e),
+            Err(e) => bail!(e),
         }
     }
 
-    meta.persist_policy_version(&mut transaction, &api_version, &version_policy.1)
+    meta.persist_policy_version(&mut transaction, &version_id, &policy_system_text)
         .await?;
 
-    meta.persist_api_info(&mut transaction, &api_version, api_info)
+    meta.persist_version_info(&mut transaction, &version_id, version_info)
+        .await?;
+
+    meta.persist_modules(&mut transaction, &version_id, modules)
         .await?;
 
     for ty in to_insert.iter() {
@@ -224,17 +229,14 @@ or
 
     MetaService::commit_transaction(transaction).await?;
 
-    let labels: Vec<String> = version_policy
-        .0
-        .labels
-        .keys()
-        .map(|x| x.to_owned())
-        .collect();
-    *type_system = meta.load_type_system().await?;
+    let labels: Vec<String> = policy_system.labels.keys().map(|x| x.to_owned()).collect();
 
-    policies
-        .versions
-        .insert(api_version.to_owned(), version_policy.0.clone());
+    // Reload the type system so that we have new ids
+    *type_system = meta
+        .load_type_systems(&server.builtin_types)
+        .await?
+        .remove(&version_id)
+        .unwrap_or_else(|| TypeSystem::new(server.builtin_types.clone(), version_id.clone()));
 
     // FIXME: Now that we have --db-uri, this is the reason we still have to drop
     // the transaction on meta, and acquire on query_engine: we need to reload the
@@ -246,17 +248,18 @@ or
     // need their meta id to be created in the storage database).
     let to_insert = to_insert
         .iter()
-        .map(|ty| type_system.lookup_custom_type(ty.name(), &api_version))
+        .map(|ty| type_system.lookup_custom_type(ty.name()))
         .collect::<Result<Vec<_>, _>>()?;
 
     let to_update = to_update
         .into_iter()
         .map(|(ty, delta)| {
-            let updated_ty = type_system.lookup_custom_type(ty.name(), &api_version);
+            let updated_ty = type_system.lookup_custom_type(ty.name());
             updated_ty.map(|ty| (ty, delta))
         })
         .collect::<Result<Vec<_>, _>>()?;
 
+    let query_engine = &server.query_engine;
     let mut transaction = query_engine.begin_transaction().await?;
     for ty in to_insert.into_iter() {
         query_engine.create_table(&mut transaction, &ty).await?;
@@ -274,9 +277,10 @@ or
     QueryEngine::commit_transaction(transaction).await?;
 
     Ok(ApplyResult {
+        type_system: type_system.clone(),
+        policy_system,
         type_names_user_order,
         labels,
-        version_policy: version_policy.0,
     })
 }
 
@@ -296,7 +300,7 @@ fn aggregate_indexes(indexes: &Vec<IndexCandidate>) -> HashMap<String, Vec<DbInd
 fn sort_custom_types(
     ts: &TypeSystem,
     mut types: Vec<AddTypeRequest>,
-) -> anyhow::Result<Vec<AddTypeRequest>> {
+) -> Result<Vec<AddTypeRequest>> {
     let mut graph: GraphMap<&str, (), Directed> = GraphMap::new();
     // map the type name to its position in the types array
     let mut ty_pos = HashMap::new();
@@ -316,16 +320,16 @@ fn sort_custom_types(
     }
 
     let order = petgraph::algo::toposort(&graph, None)
-        .map_err(|_| anyhow::anyhow!("cycle detected in models"))?
+        .map_err(|_| anyhow!("cycle detected in models"))?
         .iter()
         .map(|ty| {
             ty_pos
                 .get(ty)
                 .copied()
                 // this error should be caught earlier, the check is just an extra safety
-                .ok_or_else(|| anyhow::anyhow!("unknown type {ty}"))
+                .ok_or_else(|| anyhow!("unknown type {ty}"))
         })
-        .collect::<anyhow::Result<Vec<_>>>()?;
+        .collect::<Result<Vec<_>>>()?;
 
     let mut permutation = permutation::Permutation::oneline(order);
 

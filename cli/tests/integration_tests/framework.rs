@@ -25,6 +25,7 @@ pub mod prelude {
     pub use once_cell::sync::Lazy;
     pub use reqwest::Method;
     pub use serde_json::json;
+    pub use std::time::Duration;
 }
 
 struct Tee {
@@ -101,8 +102,8 @@ impl AsyncRead for Tee {
 }
 
 pub struct GuardedChild {
-    child: tokio::process::Child,
     command: tokio::process::Command,
+    child: Option<tokio::process::Child>,
     pub stdout: AsyncTestableOutput,
     pub stderr: AsyncTestableOutput,
     capture: bool,
@@ -120,27 +121,24 @@ where
 }
 
 impl GuardedChild {
-    pub fn new(mut cmd: tokio::process::Command, capture: bool) -> Self {
-        cmd.stdout(Stdio::piped())
+    pub fn new(mut command: tokio::process::Command, capture: bool) -> Self {
+        command
+            .stdout(Stdio::piped())
             .stderr(Stdio::piped())
             .kill_on_drop(true);
-
-        let mut child = cmd.spawn().expect("failed to spawn GuardedChild");
-
-        let stdout = wrap_tee(child.stdout.take().unwrap(), capture);
-        let stderr = wrap_tee(child.stderr.take().unwrap(), capture);
-
         Self {
-            child,
-            command: cmd,
-            stdout: AsyncTestableOutput::new(OutputType::Stdout, stdout),
-            stderr: AsyncTestableOutput::new(OutputType::Stderr, stderr),
+            child: None,
+            command,
+            stdout: AsyncTestableOutput::dummy(OutputType::Stdout),
+            stderr: AsyncTestableOutput::dummy(OutputType::Stderr),
             capture,
         }
     }
 
-    pub async fn wait(&mut self) -> ExitStatus {
+    async fn wait(&mut self) -> ExitStatus {
         self.child
+            .as_mut()
+            .unwrap()
             .wait()
             .await
             .expect("wait() on a child process failed")
@@ -152,20 +150,25 @@ impl GuardedChild {
         self.stderr.show().await;
     }
 
-    async fn restart(&mut self) {
+    pub async fn stop(&mut self) {
         use nix::sys::signal;
         use nix::unistd::Pid;
 
-        let pid = Pid::from_raw(self.child.id().unwrap().try_into().unwrap());
+        let child = self.child.as_ref().unwrap();
+        let pid = Pid::from_raw(child.id().unwrap().try_into().unwrap());
         signal::kill(pid, signal::Signal::SIGTERM).unwrap();
         tokio::time::timeout(Duration::from_secs(10), self.wait())
             .await
             .expect("child process failed to respond to SIGTERM");
+        self.child = None;
+    }
 
-        self.child = self.command.spawn().expect("failed to spawn GuardedChild");
-
-        let stdout = wrap_tee(self.child.stdout.take().unwrap(), self.capture);
-        let stderr = wrap_tee(self.child.stderr.take().unwrap(), self.capture);
+    pub async fn start(&mut self) {
+        assert!(self.child.is_none());
+        let mut child = self.command.spawn().expect("failed to spawn GuardedChild");
+        let stdout = wrap_tee(child.stdout.take().unwrap(), self.capture);
+        let stderr = wrap_tee(child.stderr.take().unwrap(), self.capture);
+        self.child = Some(child);
         self.stdout = AsyncTestableOutput::new(OutputType::Stdout, stdout);
         self.stderr = AsyncTestableOutput::new(OutputType::Stderr, stderr);
     }
@@ -312,6 +315,13 @@ impl AsyncTestableOutput {
         }
     }
 
+    fn dummy(output_type: OutputType) -> Self {
+        Self::new(
+            output_type,
+            Box::pin("(dummy AsyncTestableOutput)".as_bytes() as &'static [u8]),
+        )
+    }
+
     /// Tries to find `pattern` in the output starting from the last successfully read
     /// position (cursor). If given `pattern` is found, the function will store the
     /// position of the end of its first occurrence by updating the cursor. If the pattern
@@ -441,21 +451,26 @@ impl Chisel {
         self.describe().await.expect("chisel describe failed")
     }
 
-    /// Writes given `text` (probably code) into a file on given relative `path`
-    /// in ChiselStrike project.
-    pub fn write(&self, path: &str, text: &str) {
+    /// Writes given `bytes` into a file on given relative `path` in ChiselStrike project.
+    pub fn write_bytes(&self, path: &str, bytes: &[u8]) {
         let full_path = self.tmp_dir.path().join(path);
         fs::create_dir_all(full_path.parent().unwrap())
             .unwrap_or_else(|e| panic!("Unable to create directory for {:?}: {}", path, e));
-        fs::write(full_path, text)
+        fs::write(full_path, bytes)
             .unwrap_or_else(|e| panic!("Unable to write to {:?}: {}", path, e));
+    }
+
+    /// Writes given `text` (probably code) into a file on given relative `path`
+    /// in ChiselStrike project.
+    pub fn write(&self, path: &str, text: &str) {
+        self.write_bytes(path, text.as_bytes());
     }
 
     /// Writes given `text` (probably code) into a file on given relative `path`
     /// in ChiselStrike project while unindenting everything as left as possible.
     pub fn write_unindent(&self, path: &str, text: &str) {
-        let unindent_text = unindent::unindent(text);
-        self.write(path, &unindent_text);
+        let unindented_text = unindent::unindent(text);
+        self.write(path, &unindented_text);
     }
 
     /// Copies given `file` to a relative directory path `to` inside ChiselStrike project.
@@ -738,9 +753,20 @@ pub struct TestContext {
 }
 
 impl TestContext {
-    /// Restarts the chiseld service and waits for it to come back online.
+    /// Restarts the chiseld process and waits for it to come back online.
     pub async fn restart_chiseld(&mut self) {
-        self.chiseld.restart().await;
+        self.stop_chiseld().await;
+        self.start_chiseld().await;
+    }
+
+    /// Terminates the chiseld process.
+    pub async fn stop_chiseld(&mut self) {
+        self.chiseld.stop().await;
+    }
+
+    /// Starts the chiseld process and waits for it to come back online.
+    pub async fn start_chiseld(&mut self) {
+        self.chiseld.start().await;
         wait_for_chiseld_startup(&mut self.chiseld, &self.chisel).await;
     }
 }

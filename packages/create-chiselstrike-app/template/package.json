@@ -3,7 +3,8 @@
     "version": "1.0.0",
     "description": "",
     "scripts": {
-        "dev": "chisel dev"
+        "dev": "chisel dev",
+        "type-check": "tsc"
     },
     "keywords": [],
     "author": "",

@@ -16,15 +16,28 @@ pub static CHISEL_LOCAL_PATH: Lazy<OsString> = Lazy::new(|| {
 });
 
 pub struct Command {
+    pub cmd: String,
+    pub args: Vec<String>,
     pub inner: process::Command,
 }
 
 impl Drop for Command {
     fn drop(&mut self) {
-        let out = self.inner.output().unwrap();
-        let stderr = std::str::from_utf8(&out.stderr).unwrap();
+        let out = self.inner.output().unwrap_or_else(|err| {
+            panic!(
+                "Spawning of command {:?} {:?} failed: {}",
+                self.cmd, self.args, err
+            );
+        });
+        let stderr = String::from_utf8_lossy(&out.stderr);
         eprintln!("{stderr}");
-        assert!(out.status.success());
+        assert!(
+            out.status.success(),
+            "Command {:?} {:?} exited with status {}",
+            self.cmd,
+            self.args,
+            out.status,
+        );
     }
 }
 
@@ -50,12 +63,16 @@ pub fn run_in<'a, T: IntoIterator<Item = &'a str>>(cmd: &str, args: T, dir: Path
         env::current_dir().unwrap()
     );
     assert!(dir.is_dir(), "{:?} is not a directory", dir);
-    let mut inner = process::Command::new(cmd);
-    inner.args(args).current_dir(dir);
+
+    let cmd = cmd.to_string();
+    let args = args.into_iter().map(|arg| arg.to_string()).collect();
+
+    let mut inner = process::Command::new(&cmd);
+    inner.args(&args).current_dir(dir);
 
     inner.env("PATH", &*CHISEL_LOCAL_PATH);
 
-    Command { inner }
+    Command { cmd, args, inner }
 }
 
 #[allow(dead_code)]

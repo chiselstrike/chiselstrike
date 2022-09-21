@@ -1,8 +1,9 @@
 // SPDX-FileCopyrightText: © 2022 ChiselStrike <info@chiselstrike.com>
 
 pub use self::builtin::BuiltinTypes;
-pub use self::type_system::{TypeSystem, TypeSystemError};
-use crate::datastore::query::truncate_identifier;
+pub use self::type_system::TypeSystem;
+use crate::datastore::query::{truncate_identifier, QueryPlan};
+use crate::datastore::QueryEngine;
 use crate::policies::EntityPolicy;
 use std::collections::BTreeMap;
 use std::ops::Deref;
@@ -108,7 +109,7 @@ pub trait ObjectDescriptor {
     fn name(&self) -> String;
     fn id(&self) -> Option<i32>;
     fn backing_table(&self) -> String;
-    fn api_version(&self) -> String;
+    fn version_id(&self) -> String;
 }
 
 pub struct InternalObject {
@@ -129,14 +130,14 @@ impl ObjectDescriptor for InternalObject {
         self.backing_table.to_string()
     }
 
-    fn api_version(&self) -> String {
+    fn version_id(&self) -> String {
         "__chiselstrike".to_string()
     }
 }
 
 pub struct ExistingObject<'a> {
     name: String,
-    api_version: String,
+    version_id: String,
     backing_table: &'a str,
     id: i32,
 }
@@ -150,13 +151,13 @@ impl<'a> ExistingObject<'a> {
             "Expected version information as part of the type name. Got {}. Database corrupted?",
             name
         );
-        let api_version = split[0].to_owned();
+        let version_id = split[0].to_owned();
         let name = split[1].to_owned();
 
         Ok(Self {
             name,
             backing_table,
-            api_version,
+            version_id,
             id,
         })
     }
@@ -175,26 +176,26 @@ impl<'a> ObjectDescriptor for ExistingObject<'a> {
         self.backing_table.to_owned()
     }
 
-    fn api_version(&self) -> String {
-        self.api_version.to_owned()
+    fn version_id(&self) -> String {
+        self.version_id.to_owned()
     }
 }
 
 pub struct NewObject<'a> {
     name: &'a str,
     backing_table: String, // store at object creation time so consecutive calls to backing_table() return the same value
-    api_version: &'a str,
+    version_id: &'a str,
 }
 
 impl<'a> NewObject<'a> {
-    pub fn new(name: &'a str, api_version: &'a str) -> Self {
+    pub fn new(name: &'a str, version_id: &'a str) -> Self {
         let mut buf = Uuid::encode_buffer();
         let uuid = Uuid::new_v4();
         let backing_table = format!("ty_{}_{}", name, uuid.to_simple().encode_upper(&mut buf));
 
         Self {
             name,
-            api_version,
+            version_id,
             backing_table,
         }
     }
@@ -213,8 +214,8 @@ impl<'a> ObjectDescriptor for NewObject<'a> {
         self.backing_table.clone()
     }
 
-    fn api_version(&self) -> String {
-        self.api_version.to_owned()
+    fn version_id(&self) -> String {
+        self.version_id.to_owned()
     }
 }
 
@@ -224,7 +225,7 @@ pub enum TypeId {
     Float,
     Boolean,
     Id,
-    Entity { name: String, api_version: String },
+    Entity { name: String, version_id: String },
     Array(Box<TypeId>),
 }
 
@@ -248,13 +249,22 @@ impl From<Type> for TypeId {
             Type::Boolean => Self::Boolean,
             Type::Entity(e) => Self::Entity {
                 name: e.name().to_string(),
-                api_version: e.api_version.clone(),
+                version_id: e.version_id.clone(),
             },
             Type::Array(elem_type) => {
                 let element_type_id: Self = (*elem_type).into();
                 Self::Array(Box::new(element_type_id))
             }
         }
+    }
+}
+
+impl<T> From<T> for TypeId
+where
+    T: FieldDescriptor,
+{
+    fn from(other: T) -> Self {
+        other.ty().into()
     }
 }
 
@@ -279,7 +289,7 @@ pub struct ObjectType {
     /// Name of the backing table for this type.
     backing_table: String,
 
-    pub api_version: String,
+    pub version_id: String,
 }
 
 impl ObjectType {
@@ -289,14 +299,14 @@ impl ObjectType {
         indexes: Vec<DbIndex>,
     ) -> anyhow::Result<Self> {
         let backing_table = desc.backing_table();
-        let api_version = desc.api_version();
+        let version_id = desc.version_id();
 
         for field in fields.iter() {
             anyhow::ensure!(
-                api_version == field.api_version,
-                "API version of fields don't match: Got {} and {}",
-                api_version,
-                field.api_version
+                version_id == field.version_id,
+                "Versions of fields don't match: Got {} and {}",
+                version_id,
+                field.version_id
             );
         }
         for index in &indexes {
@@ -320,14 +330,14 @@ impl ObjectType {
             default: None,
             effective_default: None,
             is_optional: false,
-            api_version: "__chiselstrike".into(),
+            version_id: "__chiselstrike".into(),
             is_unique: true,
         };
 
         Ok(Self {
             meta_id: desc.id(),
             name: desc.name(),
-            api_version,
+            version_id,
             backing_table,
             fields,
             indexes,
@@ -360,7 +370,7 @@ impl ObjectType {
     }
 
     pub fn persisted_name(&self) -> String {
-        format!("{}.{}", self.api_version, self.name)
+        format!("{}.{}", self.version_id, self.name)
     }
 
     fn check_if_safe_to_populate(&self, source_type: &ObjectType) -> anyhow::Result<()> {
@@ -376,15 +386,15 @@ impl ObjectType {
 
 impl PartialEq for ObjectType {
     fn eq(&self, another: &Self) -> bool {
-        self.name == another.name && self.api_version == another.api_version
+        self.name == another.name && self.version_id == another.version_id
     }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DbIndex {
-    /// Id of this index in the meta database. Before it's creation, it will be None.
+    /// Id of this index in the meta database. Before its creation, it will be None.
     pub meta_id: Option<i32>,
-    /// Name of the index in database. Before it's creation, it will be None.
+    /// Name of the index in database. Before its creation, it will be None.
     backing_table: Option<String>,
     pub fields: Vec<String>,
 }
@@ -469,23 +479,23 @@ pub trait FieldDescriptor {
     fn name(&self) -> String;
     fn id(&self) -> Option<i32>;
     fn ty(&self) -> Type;
-    fn api_version(&self) -> String;
+    fn version_id(&self) -> String;
 }
 
 pub struct ExistingField {
     name: String,
     ty_: Type,
     id: i32,
-    version: String,
+    version_id: String,
 }
 
 impl ExistingField {
-    pub fn new(name: &str, ty_: Type, id: i32, version: &str) -> Self {
+    pub fn new(name: &str, ty_: Type, id: i32, version_id: &str) -> Self {
         Self {
             name: name.to_owned(),
             ty_,
             id,
-            version: version.to_owned(),
+            version_id: version_id.to_owned(),
         }
     }
 }
@@ -503,20 +513,24 @@ impl FieldDescriptor for ExistingField {
         self.ty_.clone()
     }
 
-    fn api_version(&self) -> String {
-        self.version.to_owned()
+    fn version_id(&self) -> String {
+        self.version_id.to_owned()
     }
 }
 
 pub struct NewField<'a> {
     name: &'a str,
     ty_: Type,
-    version: &'a str,
+    version_id: &'a str,
 }
 
 impl<'a> NewField<'a> {
-    pub fn new(name: &'a str, ty_: Type, version: &'a str) -> anyhow::Result<Self> {
-        Ok(Self { name, ty_, version })
+    pub fn new(name: &'a str, ty_: Type, version_id: &'a str) -> anyhow::Result<Self> {
+        Ok(Self {
+            name,
+            ty_,
+            version_id,
+        })
     }
 }
 
@@ -533,8 +547,8 @@ impl<'a> FieldDescriptor for NewField<'a> {
         self.ty_.clone()
     }
 
-    fn api_version(&self) -> String {
-        self.version.to_owned()
+    fn version_id(&self) -> String {
+        self.version_id.to_owned()
     }
 }
 
@@ -556,7 +570,7 @@ pub struct Field {
     // 0 or 1 in sqlite.
     default: Option<String>,
     effective_default: Option<String>,
-    api_version: String,
+    version_id: String,
 }
 
 impl Field {
@@ -579,7 +593,7 @@ impl Field {
         Self {
             id: desc.id(),
             name: desc.name(),
-            api_version: desc.api_version(),
+            version_id: desc.version_id(),
             type_id: desc.into(),
             labels,
             default,
@@ -607,7 +621,7 @@ impl Field {
     pub fn persisted_name(&self, parent_type_name: &ObjectType) -> String {
         format!(
             "{}.{}.{}",
-            self.api_version,
+            self.version_id,
             parent_type_name.name(),
             self.name
         )
@@ -636,4 +650,20 @@ pub struct ObjectDelta {
     pub updated_fields: Vec<FieldDelta>,
     pub added_indexes: Vec<DbIndex>,
     pub removed_indexes: Vec<DbIndex>,
+}
+
+#[derive(thiserror::Error, Debug)]
+pub enum TypeSystemError {
+    #[error["type already exists"]]
+    CustomTypeExists(Entity),
+    #[error["no such type: {0}"]]
+    NoSuchType(String),
+    #[error["builtin type expected, got `{0}` instead"]]
+    NotABuiltinType(String),
+    #[error["user defined custom type expected, got `{0}` instead"]]
+    NotACustomType(String),
+    #[error["unsafe to replace type: {0}. Reason: {1}"]]
+    UnsafeReplacement(String, String),
+    #[error["Error while trying to manipulate types: {0}"]]
+    InternalServerError(String),
 }

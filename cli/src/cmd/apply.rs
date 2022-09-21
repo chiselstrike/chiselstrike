@@ -5,12 +5,13 @@ pub mod node;
 
 use crate::project::{read_manifest, read_to_string, AutoIndex, Module, Optimize};
 use crate::proto::chisel_rpc_client::ChiselRpcClient;
-use crate::proto::{ChiselApplyRequest, IndexCandidate, PolicyUpdateRequest};
+use crate::proto::{ApplyRequest, IndexCandidate, PolicyUpdateRequest};
 use anyhow::{anyhow, Context, Result};
 use serde_json::Value;
-use std::collections::HashMap;
+use std::env;
+use std::ffi::OsStr;
 use std::io::Write;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::Stdio;
 
 static DEFAULT_APP_NAME: &str = "ChiselStrike Application";
@@ -62,26 +63,18 @@ impl From<bool> for TypeChecking {
     }
 }
 
-/// A map of source file paths to the source code.
-///
-/// The apply phase performs bunch of processing on the source files. This
-/// map contains the final processed source files with the full path name
-/// to be shipped to the server. For example, endpoints have a `routes/`
-/// prefix in the path for the server in cases the server needs to do
-/// something special depending on the source file type.
-pub(crate) type SourceMap = HashMap<String, String>;
-
 pub(crate) async fn apply(
     server_url: String,
-    version: String,
+    version_id: String,
     allow_type_deletion: AllowTypeDeletion,
     type_check: TypeChecking,
 ) -> Result<()> {
-    let manifest = read_manifest().context("Could not read manifest file")?;
-    let models = manifest.models()?;
-    let endpoints = manifest.endpoints()?;
-    let events = manifest.events()?;
-    let policies = manifest.policies()?;
+    let cwd = env::current_dir()?;
+    let manifest = read_manifest(&cwd).context("Could not read manifest file")?;
+    let models = manifest.models(&cwd)?;
+    let route_map = manifest.route_map(&cwd)?;
+    let topic_map = manifest.topic_map(&cwd)?;
+    let policies = manifest.policies(&cwd)?;
 
     let types_req = crate::ts::parse_types(&models)?;
     let mut policy_req = vec![];
@@ -93,24 +86,25 @@ pub(crate) async fn apply(
     let chiselc_available = is_chiselc_available();
     if !chiselc_available {
         println!(
-            "Warning: no ChiselStrike compiler (`chiselc`) found. Some your queries might be slow."
+            "Warning: no ChiselStrike compiler (`chiselc`) found. Some of your queries might be slow."
         );
     }
     let optimize = chiselc_available && manifest.optimize == Optimize::Yes;
     let auto_index = chiselc_available && manifest.auto_index == AutoIndex::Yes;
-    let (sources, index_candidates) = if manifest.modules == Module::Node {
-        node::apply(
-            &endpoints,
-            &events,
-            &entities,
-            optimize,
-            auto_index,
-            &type_check,
-        )
-        .await
-    } else {
-        deno::apply(&endpoints, &events, &entities, optimize, auto_index).await
-    }?;
+    let (modules, index_candidates) = match manifest.modules {
+        Module::Node => {
+            node::apply(
+                route_map,
+                topic_map,
+                &entities,
+                optimize,
+                auto_index,
+                &type_check,
+            )
+            .await?
+        }
+        Module::Deno => deno::apply(route_map, topic_map, &entities, optimize, auto_index).await?,
+    };
 
     for p in &policies {
         policy_req.push(PolicyUpdateRequest {
@@ -150,41 +144,22 @@ pub(crate) async fn apply(
     };
 
     let mut client = ChiselRpcClient::connect(server_url.clone()).await?;
-    let mut req = ChiselApplyRequest {
+    let req = ApplyRequest {
         types: types_req,
-        sources: Default::default(),
+        modules,
         index_candidates,
         policies: policy_req,
         allow_type_deletion: allow_type_deletion.into(),
-        version,
+        version_id,
         version_tag,
         app_name,
     };
-
-    // According to the spec
-    // (https://html.spec.whatwg.org/multipage/webappapis.html#module-map),
-    // "Module maps are used to ensure that imported module scripts
-    // are only fetched, parsed, and evaluated once per Document or
-    // worker."
-    //
-    // Since we want to change the modules, we need the server to have
-    // a Worker that has never imported them. Do this by first
-    // clearing the sources from the server and then restarting it.
-    //
-    // FIXME: We should have a more fine gained way to recreate just
-    // the worker without loading the sources from the DB.
-    execute!(client.apply(tonic::Request::new(req.clone())).await);
-    req.sources = sources;
-    crate::restart(server_url).await?;
 
     let msg = execute!(client.apply(tonic::Request::new(req)).await);
 
     println!("Applied:");
     if !msg.types.is_empty() {
         println!("  {} models", msg.types.len());
-    }
-    if !msg.endpoints.is_empty() {
-        println!("  {} routes", msg.endpoints.len());
     }
     if !msg.event_handlers.is_empty() {
         println!("  {} event handlers", msg.event_handlers.len());
@@ -249,12 +224,22 @@ fn is_chiselc_available() -> bool {
 }
 
 /// Spawn `chiselc` and return a reference to the child process.
-fn chiselc_spawn(input: &str, output: &str, entities: &[String]) -> Result<tokio::process::Child> {
-    let mut args: Vec<&str> = vec![input, "--output", output, "--target", "js"];
+fn chiselc_spawn(
+    input: &Path,
+    output: &Path,
+    entities: &[String],
+) -> Result<tokio::process::Child> {
+    let mut args: Vec<&OsStr> = vec![
+        input.as_ref(),
+        "--output".as_ref(),
+        output.as_ref(),
+        "--target".as_ref(),
+        "js".as_ref(),
+    ];
     if !entities.is_empty() {
-        args.push("-e");
+        args.push("-e".as_ref());
         for entity in entities.iter() {
-            args.push(entity);
+            args.push(entity.as_ref());
         }
     }
     let cmd = tokio::process::Command::new(chiselc_cmd()?)

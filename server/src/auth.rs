@@ -1,17 +1,12 @@
 // SPDX-FileCopyrightText: © 2021 ChiselStrike <info@chiselstrike.com>
 
-use crate::api::ApiService;
 use crate::datastore::engine::SqlWithArguments;
 use crate::datastore::query::SqlValue;
-use crate::deno::lookup_builtin_type;
-use crate::deno::query_engine_arc;
+use crate::server::Server;
 use crate::types::{Entity, Type};
+use crate::version::Version;
 use anyhow::Result;
-use deno_core::OpState;
 use sqlx::Row;
-use std::cell::RefCell;
-use std::collections::HashMap;
-use std::rc::Rc;
 
 pub const AUTH_USER_NAME: &str = "AuthUser";
 pub const AUTH_SESSION_NAME: &str = "AuthSession";
@@ -29,51 +24,23 @@ pub fn is_auth_entity_name(entity_name: &str) -> bool {
     AUTH_ENTITY_NAMES.contains(&entity_name)
 }
 
-fn get_auth_user_type(state: &OpState) -> Result<Entity> {
-    match lookup_builtin_type(state, AUTH_USER_NAME) {
+fn get_auth_user_type(version: &Version) -> Result<Entity> {
+    match version.type_system.lookup_builtin_type(AUTH_USER_NAME) {
         Ok(Type::Entity(t)) => Ok(t),
         _ => anyhow::bail!("Internal error: type AuthUser not found"),
     }
 }
 
-async fn add_crud_endpoint_for_type(
-    type_name: &str,
-    endpoint_name: &str,
-    api: &mut ApiService,
-) -> Result<()> {
-    let mut sources = HashMap::new();
-    sources.insert(
-        format!("/__chiselstrike/routes/auth/{}", endpoint_name),
-        format!(
-            r#"
-import {{ ChiselEntity }} from "@chiselstrike/api"
-class {type_name} extends ChiselEntity {{}}
-export default {type_name}.crud()"#
-        ),
-    );
-
-    crate::server::add_endpoints(sources, api).await
-}
-
-pub async fn init(api: &mut ApiService) -> Result<()> {
-    add_crud_endpoint_for_type(AUTH_USER_NAME, "users", api).await?;
-    add_crud_endpoint_for_type(AUTH_SESSION_NAME, "sessions", api).await?;
-    add_crud_endpoint_for_type(AUTH_TOKEN_NAME, "tokens", api).await?;
-    add_crud_endpoint_for_type(AUTH_ACCOUNT_NAME, "accounts", api).await
-}
-
 /// Extracts the username of the logged-in user, or None if there was no login.
 pub async fn get_username_from_id(
-    state: Rc<RefCell<OpState>>,
-    userid: Option<String>,
+    server: &Server,
+    version: &Version,
+    user_id: Option<&str>,
 ) -> Option<String> {
-    let (qeng, user_type) = {
-        let state = state.borrow();
-        let qeng = query_engine_arc(&state);
-        let user_type = get_auth_user_type(&state);
-        (qeng, user_type)
-    };
-    match (userid, user_type) {
+    let qeng = server.query_engine.clone();
+    let user_type = get_auth_user_type(version);
+
+    match (user_id, user_type) {
         (None, _) => None,
         (Some(_), Err(e)) => {
             warn!("{:?}", e);
@@ -86,12 +53,12 @@ pub async fn get_username_from_id(
                         "SELECT email FROM \"{}\" WHERE id=$1", // For now, let's pretend email is username.
                         user_type.backing_table()
                     ),
-                    args: vec![SqlValue::String(id)],
+                    args: vec![SqlValue::String(id.into())],
                 })
                 .await
             {
-                Err(e) => {
-                    warn!("Username query error: {:?}", e);
+                Err(_e) => {
+                    //warn!("Username query error: {:?}", e);
                     None
                 }
                 Ok(row) => row.get("email"),

@@ -20,10 +20,11 @@ export {
     chiselIterator,
     labels,
     loggedInUser,
-    requestContext,
     unique,
 } from "./datastore.ts";
-export type { ChiselEvent } from "./event.ts";
-export { ChiselRequest, Query } from "./request.ts";
+export type { ChiselEvent } from "./kafka.ts";
+export { ChiselRequest, Params, Query } from "./request.ts";
+export { RouteMap } from "./routing.ts";
+export type { Handler, MiddlewareHandler, MiddlewareNext } from "./routing.ts";
 export { getSecret, responseFromJson } from "./utils.ts";
 export type { JSONValue } from "./utils.ts";

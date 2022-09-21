@@ -35,7 +35,7 @@ use std::path::Component;
 use std::path::Path;
 use std::path::PathBuf;
 use std::sync::Arc;
-use url::Url as FixedUrl;
+pub use url::Url as FixedUrl;
 use utils::without_extension;
 
 #[derive(Debug)]
@@ -67,7 +67,7 @@ impl DownloadMap {
     }
 }
 
-fn fetch_impl(map: &mut DownloadMap, path: String, base: String) -> Result<String> {
+fn resolve_impl(map: &mut DownloadMap, path: String, base: String) -> Result<String> {
     if base == ROOT_URL {
         return Ok(path);
     }
@@ -92,8 +92,8 @@ where
 }
 
 #[op]
-fn fetch(s: &mut OpState, path: String, base: String) -> Result<String> {
-    with_map(fetch_impl, s, path, base)
+fn resolve(s: &mut OpState, path: String, base: String) -> Result<String> {
+    with_map(resolve_impl, s, path, base)
 }
 
 fn read_impl(map: &mut DownloadMap, path: String) -> Result<String> {
@@ -302,7 +302,7 @@ impl Compiler {
     pub fn new(use_snapshot: bool) -> Compiler {
         let ext = Extension::builder()
             .ops(vec![
-                fetch::decl(),
+                resolve::decl(),
                 read::decl(),
                 write::decl(),
                 get_cwd::decl(),
@@ -332,7 +332,7 @@ impl Compiler {
         Compiler { runtime }
     }
 
-    async fn compile_urls(
+    pub async fn compile_urls(
         &mut self,
         urls: Vec<Url>,
         opts: CompileOptions<'_>,
@@ -342,7 +342,7 @@ impl Compiler {
         let mut extra_libs = HashMap::new();
         let mut to_url = HashMap::new();
         for (k, v) in &opts.extra_libs {
-            let url = Url::parse(&("chisel:///".to_string() + k + ".ts")).unwrap();
+            let url = Url::parse(&format!("chisel://api/{}.ts", k)).unwrap();
             extra_libs.insert(url.clone(), v.clone());
             to_url.insert(k.clone(), url);
         }

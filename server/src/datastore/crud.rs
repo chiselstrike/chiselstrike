@@ -7,15 +7,14 @@ use crate::types::{Entity, Type, TypeSystem};
 use crate::JsonObject;
 use anyhow::{Context, Result};
 use deno_core::futures;
-use deno_core::url::Url;
 use futures::{Future, StreamExt};
 use serde_derive::{Deserialize, Serialize};
 use serde_json::json;
-use std::sync::Arc;
+use url::Url;
 
 #[derive(Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct QueryParams {
-    #[serde(rename = "typeName")]
     type_name: String,
     url: Url,
 }
@@ -24,7 +23,7 @@ pub struct QueryParams {
 pub fn run_query(
     context: &RequestContext<'_>,
     params: QueryParams,
-    query_engine: Arc<QueryEngine>,
+    query_engine: QueryEngine,
     tr: TransactionStatic,
 ) -> impl Future<Output = Result<JsonObject>> {
     let fut = run_query_impl(context, params, query_engine, tr);
@@ -34,13 +33,13 @@ pub fn run_query(
 fn run_query_impl(
     context: &RequestContext<'_>,
     params: QueryParams,
-    query_engine: Arc<QueryEngine>,
+    query_engine: QueryEngine,
     tr: TransactionStatic,
 ) -> Result<impl Future<Output = Result<JsonObject>>> {
     let host = context.headers.get("host").cloned();
     let base_type = &context
         .ts
-        .lookup_entity(&params.type_name, &context.api_version)
+        .lookup_entity(&params.type_name)
         .context("unexpected type name as crud query base type")?;
 
     let query = Query::from_url(base_type, &params.url, context.ts)?;
@@ -175,7 +174,7 @@ fn make_page_url(url: &Url, host: &Option<String>, cursor: &Cursor) -> Result<Ur
 
 /// Constructs Delete Mutation from CRUD url.
 pub fn delete_from_url(c: &RequestContext, type_name: &str, url: &str) -> Result<Mutation> {
-    let base_entity = match c.ts.lookup_type(type_name, &c.api_version) {
+    let base_entity = match c.ts.lookup_type(type_name) {
         Ok(Type::Entity(ty)) => ty,
         Ok(ty) => anyhow::bail!("Cannot delete scalar type {type_name} ({})", ty.name()),
         Err(_) => anyhow::bail!("Cannot delete from type `{type_name}`, type not found"),
@@ -576,7 +575,7 @@ mod tests {
         add_row, binary, fetch_rows, make_entity, make_field, make_type_system, setup_clear_db,
         VERSION,
     };
-    use crate::policies::Policies;
+    use crate::policies::PolicySystem;
     use crate::types::{FieldDescriptor, ObjectDescriptor};
     use crate::JsonObject;
 
@@ -584,6 +583,7 @@ mod tests {
     use once_cell::sync::Lazy;
     use serde_json::json;
     use std::collections::HashMap;
+    use url::Url;
 
     pub struct FakeField {
         name: &'static str,
@@ -600,7 +600,7 @@ mod tests {
         fn ty(&self) -> Type {
             self.ty.clone()
         }
-        fn api_version(&self) -> String {
+        fn version_id(&self) -> String {
             "whatever".to_string()
         }
     }
@@ -619,7 +619,7 @@ mod tests {
         fn backing_table(&self) -> String {
             "whatever".to_string()
         }
-        fn api_version(&self) -> String {
+        fn version_id(&self) -> String {
             "whatever".to_string()
         }
     }
@@ -773,13 +773,12 @@ mod tests {
         qe: &QueryEngine,
         headers: HashMap<String, String>,
     ) -> Result<JsonObject> {
-        let qe = Arc::new(qe.clone());
-        let tr = qe.clone().begin_transaction_static().await.unwrap();
+        let tr = qe.begin_transaction_static().await.unwrap();
         super::run_query(
             &RequestContext {
-                policies: &Policies::default(),
+                ps: &PolicySystem::default(),
                 ts: &make_type_system(&*ENTITIES),
-                api_version: VERSION.to_owned(),
+                version_id: VERSION.to_owned(),
                 user_id: None,
                 path: "".to_string(),
                 headers,
@@ -788,7 +787,7 @@ mod tests {
                 type_name: entity_name.to_owned(),
                 url,
             },
-            qe,
+            qe.clone(),
             tr,
         )
         .await
@@ -1095,9 +1094,9 @@ mod tests {
         let delete_from_url = |entity_name: &str, url: &str| {
             delete_from_url(
                 &RequestContext {
-                    policies: &Policies::default(),
+                    ps: &PolicySystem::default(),
                     ts: &make_type_system(&*ENTITIES),
-                    api_version: VERSION.to_owned(),
+                    version_id: VERSION.to_owned(),
                     user_id: None,
                     path: "".to_string(),
                     headers: HashMap::default(),
