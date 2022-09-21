@@ -48,12 +48,12 @@ async fn deno_land_module(mut c: TestContext) {
     );
 }
 
-#[self::test(modules = Both)]
-async fn builtin_std(c: TestContext) {
+#[self::test(modules = Node)]
+async fn builtin_deno_std(c: TestContext) {
     c.chisel.write(
         "routes/semver.ts",
         r##"
-        import semver from 'chisel://std/semver/mod.ts';
+        import * as semver from 'chisel://deno-std/semver/mod.ts';
         export default async function () {
             return semver.gt("1.13.1", "1.9.9");
         }"##,
@@ -62,7 +62,7 @@ async fn builtin_std(c: TestContext) {
     c.chisel.write(
         "routes/node_buffer.ts",
         r##"
-        import { Buffer } from 'chisel://std/node/buffer.ts';
+        import { Buffer } from 'chisel://deno-std/node/buffer.ts';
         export default async function () {
             return Buffer.alloc(100).byteLength;
         }"##,
@@ -76,12 +76,12 @@ async fn builtin_std(c: TestContext) {
 }
 
 #[self::test(modules = Node)]
-async fn nodestd(c: TestContext) {
+async fn node(c: TestContext) {
     c.chisel.write(
         "routes/import.ts",
         r##"
         import { Buffer } from 'buffer';
-        import assert, { AssertionError } from 'assert';
+        import * as assert, { AssertionError } from 'assert';
         import { StringDecoder } from 'string_decoder';
 
         export default async function () {
@@ -106,7 +106,7 @@ async fn nodestd(c: TestContext) {
 }
 
 #[self::test(modules = Node)]
-async fn nodestd_dynamic_import(c: TestContext) {
+async fn node_dynamic_import(c: TestContext) {
     c.chisel.write(
         "routes/import.ts",
         r##"
@@ -123,7 +123,7 @@ async fn nodestd_dynamic_import(c: TestContext) {
 }
 
 #[self::test(modules = Node)]
-async fn nodestd_require(c: TestContext) {
+async fn node_require(c: TestContext) {
     c.chisel.write(
         "routes/import.ts",
         r##"

@@ -60,11 +60,20 @@ impl deno_core::ModuleLoader for ModuleLoader {
 
 fn load_chisel_module(url: Url) -> Result<deno_core::ModuleSource> {
     // note that the module URL may end with ".ts", but we must return the transpiled JavaScript
-    if url.domain() == Some("api") {
-        let path = url.path().trim_start_matches('/').trim_end_matches(".ts");
-        if let Some(code) = api::SOURCES_JS.get(path) {
-            return Ok(source_from_code(&url, code));
+    match url.domain() {
+        Some("api") => {
+            let path = url.path().trim_start_matches('/').trim_end_matches(".ts");
+            if let Some(code) = api::SOURCES_JS.get(path) {
+                return Ok(source_from_code(&url, code));
+            }
         }
+        Some("deno-std") => {
+            let path = url.path().trim_start_matches('/');
+            if let Some(code) = deno_std::SOURCES_JS.get(path) {
+                return Ok(source_from_code(&url, code));
+            }
+        }
+        _ => {}
     }
     bail!("Undefined internal chisel module {}", url)
 }

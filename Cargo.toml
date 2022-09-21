@@ -6,6 +6,7 @@ members = [
     "chiselc",
     "cli",
     "dbgarc",
+    "deno_std",
     "my_tsc",
     "packages",
     "server",
