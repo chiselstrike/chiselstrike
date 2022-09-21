@@ -25,6 +25,11 @@ fn response(body: &str, status: u16) -> Result<Response<Body>> {
         .unwrap())
 }
 
+fn collect_metrics() -> Result<Response<Body>> {
+    let s = crate::metrics::GLOBAL_METRICS.gather();
+    Ok(Response::builder().body(Body::from(s)).unwrap())
+}
+
 async fn route(req: Request<Body>) -> Result<Response<Body>> {
     match req.uri().path() {
         // Conceptually those checks are different and could eventually become
@@ -34,6 +39,7 @@ async fn route(req: Request<Body>) -> Result<Response<Body>> {
         "/status" => response("ok", 200),
         "/readiness" => response("ready", HEALTH_READY.load(Ordering::Relaxed)),
         "/liveness" => response("alive", 200),
+        "/metrics" => collect_metrics(),
         _ => response("not found", 404),
     }
     .or_else(|e| response(&format!("{:?}", e), 500))

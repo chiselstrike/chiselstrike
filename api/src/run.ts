@@ -49,9 +49,10 @@ export default async function run(
             break;
         } else if (job.type == "http") {
             const httpResponse = await handleHttpRequest(router, job.request);
-            opSync("op_chisel_http_respond", job.responseTxRid, httpResponse);
+            opSync("op_chisel_http_respond", job.responseTxRid, { response: httpResponse, uri: job.request.uri });
         } else if (job.type == "kafka") {
             await handleKafkaEvent(topicMap, job.event);
+            opSync("op_chisel_count_kafka_event", job.event.topic);
         } else {
             throw new Error("Unknown type of AcceptedJob");
         }
