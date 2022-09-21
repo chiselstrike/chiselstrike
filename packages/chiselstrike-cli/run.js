@@ -1,6 +1,9 @@
 #!/usr/bin/env node
 
 const { run } = require("./binary");
-run();
 
-process.send("ready");
+if (process) {
+  process.send("ready"); 
+}
+
+run();
