@@ -4,6 +4,7 @@ use crate::version::VersionInfo;
 use crate::worker::WorkerState;
 use anyhow::{bail, Result};
 use deno_core::{serde_v8, v8};
+use serde::Deserialize;
 
 mod datastore;
 mod env;
@@ -20,6 +21,8 @@ pub fn extension() -> deno_core::Extension {
             op_chisel_get_version_info::decl(),
             op_chisel_is_debug::decl(),
             op_format_file_name::decl(),
+            op_chisel_register_app_counter::decl(),
+            op_chisel_inc_by_app_counter::decl(),
             datastore::op_chisel_begin_transaction::decl(),
             datastore::op_chisel_commit_transaction::decl(),
             datastore::op_chisel_rollback_transaction::decl(),
@@ -92,4 +95,30 @@ fn op_chisel_is_debug(state: &mut deno_core::OpState) -> bool {
 #[deno_core::op]
 fn op_format_file_name(file_name: String) -> Result<String> {
     Ok(file_name)
+}
+
+#[derive(Deserialize)]
+pub struct RegisterCounterParams {
+    name: String,
+    help: String,
+    labels: Vec<String>,
+}
+
+#[deno_core::op]
+fn op_chisel_register_app_counter(params: RegisterCounterParams) -> Result<()> {
+    let labels: Vec<&str> = params.labels.iter().map(AsRef::as_ref).collect();
+    crate::metrics::GLOBAL_METRICS.register(&params.name, &params.help, &labels)
+}
+
+#[derive(Deserialize)]
+pub struct IncByCounterParams {
+    name: String,
+    labels: Vec<String>,
+    value: f64,
+}
+
+#[deno_core::op]
+fn op_chisel_inc_by_app_counter(params: IncByCounterParams) -> Result<()> {
+    let labels: Vec<&str> = params.labels.iter().map(AsRef::as_ref).collect();
+    crate::metrics::GLOBAL_METRICS.inc_by(&params.name, &labels, params.value)
 }

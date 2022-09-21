@@ -15,6 +15,7 @@ pub(crate) mod datastore;
 pub(crate) mod http;
 pub(crate) mod internal;
 pub(crate) mod kafka;
+pub(crate) mod metrics;
 pub(crate) mod module_loader;
 pub mod ops;
 pub(crate) mod opt;
