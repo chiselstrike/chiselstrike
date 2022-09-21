@@ -286,6 +286,7 @@ impl TypeSystem {
             | TypeId::Boolean
             | TypeId::Id
             | TypeId::JsDate
+            | TypeId::ArrayBuffer
             | TypeId::Array(_) => self.lookup_builtin_type(&ty.name()),
             TypeId::Entity { name, version_id } => {
                 if version_id == "__chiselstrike" {

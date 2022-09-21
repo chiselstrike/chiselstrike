@@ -60,6 +60,7 @@ impl fmt::Display for TypeEnum {
             TypeEnum::Number(_) => f.write_str("number"),
             TypeEnum::Bool(_) => f.write_str("boolean"),
             TypeEnum::JsDate(_) => f.write_str("jsDate"),
+            TypeEnum::ArrayBuffer(_) => f.write_str("ArrayBuffer"),
             TypeEnum::Entity(name) => name.fmt(f),
             TypeEnum::EntityId(entity_name) => write!(f, "Id<{entity_name}>"),
             TypeEnum::Array(inner) => {
@@ -141,6 +142,7 @@ fn map_type(handler: &Handler, x: &TsType) -> Result<TypeEnum> {
                 let ident_name = ident_to_string(id);
                 match ident_name.as_str() {
                     "Date" => Ok(TypeEnum::JsDate(true)),
+                    "ArrayBuffer" => Ok(TypeEnum::ArrayBuffer(true)),
                     "Id" => map_entity_id(handler, tr),
                     _ => Ok(TypeEnum::Entity(ident_name)),
                 }

@@ -4,7 +4,6 @@ import { crud } from "./crud.ts";
 import type { RouteMap } from "./routing.ts";
 import { opAsync, opSync } from "./utils.ts";
 import { SimpleTypeSystem, TypeSystem } from "./type_system.ts";
-
 /**
  * Base class for various Operators applicable on `ChiselCursor`. An
  * implementation of Operator<T> processes an AsyncIterable<T> and
@@ -1212,6 +1211,18 @@ function mergeSourceIntoEntity(
             } else {
                 throw err("boolean");
             }
+        } else if (typeName == "arrayBuffer") {
+            // This covers the CRUD path where we get the value in form of a
+            // base64 encoded string.
+            if (typeof fieldValue == "string") {
+                // TODO: Get rid of this when we have deno imports working.
+                target[field.name] = Uint8Array.from(
+                    atob(fieldValue),
+                    (c) => c.charCodeAt(0),
+                );
+            } else {
+                target[field.name] = fieldValue;
+            }
         } else if (typeName == "jsDate") {
             if (fieldValue instanceof Date) {
                 target[field.name] = fieldValue;
@@ -1225,7 +1236,6 @@ function mergeSourceIntoEntity(
                 );
             }
         } else if (typeName == "array") {
-            console.log();
             if (Array.isArray(fieldValue)) {
                 target[field.name] = fieldValue;
             } else {

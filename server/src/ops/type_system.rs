@@ -53,6 +53,7 @@ enum SimpleTypeId {
     Number,
     Boolean,
     JsDate,
+    ArrayBuffer,
     Entity {
         #[serde(rename = "entityName")]
         entity_name: String,
@@ -90,6 +91,7 @@ fn simplify_type_id(ty: &TypeId) -> SimpleTypeId {
         TypeId::Boolean => SimpleTypeId::Boolean,
         TypeId::JsDate => SimpleTypeId::JsDate,
         TypeId::Id => SimpleTypeId::String,
+        TypeId::ArrayBuffer => SimpleTypeId::ArrayBuffer,
         TypeId::Array(element_ty) => SimpleTypeId::Array {
             element_type: simplify_type_id(element_ty).into(),
         },

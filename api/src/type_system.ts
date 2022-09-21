@@ -9,6 +9,7 @@ export type Type =
     | { name: "number" }
     | { name: "boolean" }
     | { name: "jsDate" }
+    | { name: "arrayBuffer" }
     | { name: "array"; elementType: Type }
     | { name: "entity"; entityName: string }
     | { name: "entityId"; entityName: string };

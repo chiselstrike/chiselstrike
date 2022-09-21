@@ -342,9 +342,11 @@ impl ContainerType {
 impl TypeEnum {
     fn is_builtin(&self, ts: &TypeSystem) -> Result<bool> {
         let is_builtin = match self {
-            TypeEnum::String(_) | TypeEnum::Number(_) | TypeEnum::Bool(_) | TypeEnum::JsDate(_) => {
-                true
-            }
+            TypeEnum::String(_)
+            | TypeEnum::Number(_)
+            | TypeEnum::Bool(_)
+            | TypeEnum::JsDate(_)
+            | TypeEnum::ArrayBuffer(_) => true,
             TypeEnum::Entity(name) | TypeEnum::EntityId(name) => {
                 ts.lookup_builtin_type(name).is_ok()
             }
@@ -359,6 +361,7 @@ impl TypeEnum {
             TypeEnum::Number(_) => Type::Float,
             TypeEnum::Bool(_) => Type::Boolean,
             TypeEnum::JsDate(_) => Type::JsDate,
+            TypeEnum::ArrayBuffer(_) => Type::ArrayBuffer,
             TypeEnum::Entity(name) => ts.lookup_builtin_type(name)?,
             TypeEnum::EntityId(entity_name) => Type::EntityId(entity_name.to_owned()),
             TypeEnum::Array(inner) => Type::Array(Box::new(inner.value_type()?.get_builtin(ts)?)),
@@ -374,6 +377,7 @@ impl From<Type> for TypeMsg {
             Type::String => TypeEnum::String(true),
             Type::Boolean => TypeEnum::Bool(true),
             Type::JsDate => TypeEnum::JsDate(true),
+            Type::ArrayBuffer => TypeEnum::ArrayBuffer(true),
             Type::Entity(entity) => TypeEnum::Entity(entity.name().to_owned()),
             Type::EntityId(entity_name) => TypeEnum::EntityId(entity_name),
             Type::Array(elem_type) => {

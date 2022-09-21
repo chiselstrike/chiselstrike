@@ -18,6 +18,7 @@ pub enum Type {
     Float,
     Boolean,
     JsDate,
+    ArrayBuffer,
     Entity(Entity),
     /// Contains Entity name which this EntityId type refers to
     EntityId(String),
@@ -31,6 +32,7 @@ impl Type {
             Type::String => "string".to_string(),
             Type::Boolean => "boolean".to_string(),
             Type::JsDate => "jsDate".to_string(),
+            Type::ArrayBuffer => "ArrayBuffer".to_string(),
             Type::Entity(ty) => ty.name.to_string(),
             Type::EntityId(entity_name) => format!("Id<{entity_name}>"),
             Type::Array(ty) => format!("Array<{}>", ty.name()),
@@ -223,6 +225,7 @@ pub enum TypeId {
     Boolean,
     /// Represents JavaScript Date class
     JsDate,
+    ArrayBuffer,
     Id,
     /// Contains Entity name which this EntityId type refers to
     EntityId(String),
@@ -240,6 +243,7 @@ impl TypeId {
             TypeId::Float => "number".to_string(),
             TypeId::Boolean => "boolean".to_string(),
             TypeId::JsDate => "jsDate".to_string(),
+            TypeId::ArrayBuffer => "ArrayBuffer".to_string(),
             TypeId::EntityId(entity_name) => format!("Id<{entity_name}>"),
             TypeId::Entity { ref name, .. } => name.to_string(),
             TypeId::Array(elem_type) => format!("Array<{}>", elem_type.name()),
@@ -254,6 +258,7 @@ impl From<Type> for TypeId {
             Type::Float => Self::Float,
             Type::Boolean => Self::Boolean,
             Type::JsDate => Self::JsDate,
+            Type::ArrayBuffer => Self::ArrayBuffer,
             Type::EntityId(entity_name) => Self::EntityId(entity_name),
             Type::Entity(e) => Self::Entity {
                 name: e.name().to_string(),

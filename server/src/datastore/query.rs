@@ -20,6 +20,7 @@ pub enum SqlValue {
     Bool(bool),
     F64(f64),
     String(String),
+    Bytes(Vec<u8>),
 }
 
 impl From<&str> for SqlValue {
