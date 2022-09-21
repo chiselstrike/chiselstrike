@@ -128,6 +128,11 @@ pub(crate) async fn apply(
     fs::write(&root_path, root_code)
         .context(format!("Could not write to file {}", root_path.display()))?;
 
+    let banner = concat!(
+        "import { createRequire as __createRequire } from 'chisel://deno-std/node/module.ts'; ",
+        "var require = __createRequire(import.meta.url);",
+    );
+
     let bundler_args: Vec<OsString> = vec![
         root_path.into(),
         "--bundle".into(),
@@ -144,6 +149,7 @@ pub(crate) async fn apply(
             outdir.push(bundler_output_dir.path());
             outdir
         },
+        format!("--banner:js={}", banner).into(),
     ];
 
     let bundler_output = npx("esbuild", &bundler_args)?

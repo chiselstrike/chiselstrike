@@ -1,6 +1,7 @@
 use anyhow::{anyhow, bail, Result};
 use deno_core::url::Url;
 use futures::FutureExt;
+use lazy_static::lazy_static;
 use std::collections::HashMap;
 use std::pin::Pin;
 use std::sync::Arc;
@@ -20,10 +21,13 @@ impl ModuleLoader {
 
 impl deno_core::ModuleLoader for ModuleLoader {
     fn resolve(&self, specifier: &str, referrer: &str, _is_main: bool) -> Result<Url> {
-        if specifier == "@chiselstrike/api" {
-            return Ok(Url::parse("chisel://api/api.ts")?);
-        }
-        Ok(deno_core::resolve_import(specifier, referrer)?)
+        Ok(if specifier == "@chiselstrike/api" {
+            Url::parse("chisel://api/api.ts").unwrap()
+        } else if let Some(path) = NODE_POLYFILLS.get(specifier) {
+            Url::parse(&format!("chisel://deno-std/{}", path)).unwrap()
+        } else {
+            deno_core::resolve_import(specifier, referrer)?
+        })
     }
 
     fn load(
@@ -85,4 +89,54 @@ fn source_from_code(url: &Url, code: &str) -> deno_core::ModuleSource {
         module_url_specified: url.to_string(),
         module_url_found: url.to_string(),
     }
+}
+
+lazy_static! {
+    static ref NODE_POLYFILLS: HashMap<&'static str, &'static str> = vec![
+        // this list is taken from deno/cli/node/mod.rs
+        ("assert", "node/assert.ts"),
+        ("assert/strict", "node/assert/strict.ts"),
+        ("async_hooks", "node/async_hooks.ts"),
+        ("buffer", "node/buffer.ts"),
+        ("child_process", "node/child_process.ts"),
+        ("cluster", "node/cluster.ts"),
+        ("console", "node/console.ts"),
+        ("constants", "node/constants.ts"),
+        ("crypto", "node/crypto.ts"),
+        ("dgram", "node/dgram.ts"),
+        ("dns", "node/dns.ts"),
+        ("domain", "node/domain.ts"),
+        ("events", "node/events.ts"),
+        ("fs", "node/fs.ts"),
+        ("fs/promises", "node/fs/promises.ts"),
+        ("http", "node/http.ts"),
+        ("https", "node/https.ts"),
+        ("net", "node/net.ts"),
+        ("os", "node/os.ts"),
+        ("path", "node/path.ts"),
+        ("path/posix", "node/path/posix.ts"),
+        ("path/win32", "node/path/win32.ts"),
+        ("perf_hooks", "node/perf_hooks.ts"),
+        ("process", "node/process.ts"),
+        ("querystring", "node/querystring.ts"),
+        ("readline", "node/readline.ts"),
+        ("stream", "node/stream.ts"),
+        ("stream/promises", "node/stream/promises.mjs"),
+        ("stream/web", "node/stream/web.ts"),
+        ("string_decoder", "node/string_decoder.ts"),
+        ("sys", "node/sys.ts"),
+        ("timers", "node/timers.ts"),
+        ("timers/promises", "node/timers/promises.ts"),
+        ("tls", "node/tls.ts"),
+        ("tty", "node/tty.ts"),
+        ("url", "node/url.ts"),
+        ("util", "node/util.ts"),
+        ("util/types", "node/util/types.ts"),
+        ("v8", "node/v8.ts"),
+        ("vm", "node/vm.ts"),
+        ("worker_threads", "node/worker_threads.ts"),
+        ("zlib", "node/zlib.ts"),
+    ]
+    .into_iter()
+    .collect();
 }

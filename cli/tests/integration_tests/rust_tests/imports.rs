@@ -81,7 +81,7 @@ async fn node(c: TestContext) {
         "routes/import.ts",
         r##"
         import { Buffer } from 'buffer';
-        import * as assert, { AssertionError } from 'assert';
+        import assert, { AssertionError } from 'assert';
         import { StringDecoder } from 'string_decoder';
 
         export default async function () {
@@ -110,7 +110,7 @@ async fn node_dynamic_import(c: TestContext) {
     c.chisel.write(
         "routes/import.ts",
         r##"
-        const buffer = import("buffer");
+        const buffer = await import("buffer");
 
         export default async function () {
             return buffer.Buffer.alloc(100).byteLength;
