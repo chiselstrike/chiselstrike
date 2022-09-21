@@ -1,6 +1,7 @@
 // SPDX-FileCopyrightText: © 2022 ChiselStrike <info@chiselstrike.com>
 
 import { crud } from "./crud.ts";
+import type { Handler } from "./routing.ts";
 import { mergeDeep, opAsync, opSync } from "./utils.ts";
 
 /**
@@ -38,17 +39,17 @@ abstract class Operator<Input, Output> {
 
     public runChiselQuery(): AsyncIterable<Output> {
         const getRid = () =>
-            opSync(
+            opAsync(
                 "op_chisel_relational_query_create",
                 this,
                 requestContext,
-            ) as number;
+            ) as Promise<number>;
         const recordToOutput = (rawRecord: unknown) => {
             return this.recordToOutput(rawRecord);
         };
         return {
             [Symbol.asyncIterator]: async function* () {
-                const rid = getRid();
+                const rid = await getRid();
                 try {
                     while (true) {
                         const properties = await opAsync(
@@ -62,7 +63,7 @@ abstract class Operator<Input, Output> {
                         yield recordToOutput(properties);
                     }
                 } finally {
-                    Deno.core.tryClose(rid);
+                    Deno.core.close(rid);
                 }
             },
         };
@@ -887,7 +888,7 @@ export class ChiselEntity {
         restrictions: Partial<T>,
     ): Promise<void> {
         ensureNotGet();
-        await opAsync("op_chisel_entity_delete", {
+        await opAsync("op_chisel_delete", {
             typeName: this.name,
             filterExpr: restrictionsToFilterExpr(restrictions),
         }, requestContext);
@@ -927,9 +928,9 @@ export class ChiselEntity {
      *
      * If you need more control over which method to generate and their behavior, see the top-level `crud()` function
      *
-     * @returns A request-handling function suitable as a default export in an endpoint.
+     * @returns A function suitable as a default export in a route.
      */
-    static crud(_ignored?: string) {
+    static crud(): Handler {
         return crud(this, "");
     }
 
@@ -1052,16 +1053,19 @@ export function unique(_target: unknown, _name: string): void {
 }
 
 export const requestContext: {
-    path: string;
+    versionId: string;
     method: string;
-    headers: Record<string, string>;
-    apiVersion: string;
-    userId?: string;
+    headers: [string, string][];
+    path: string;
+    routingPath: string;
+    userId: string | undefined;
 } = {
-    path: "",
+    versionId: opSync("op_chisel_get_version_id") as string,
     method: "",
-    headers: {},
-    apiVersion: "",
+    headers: [],
+    path: "",
+    routingPath: "",
+    userId: undefined,
 };
 
 function ensureNotGet() {

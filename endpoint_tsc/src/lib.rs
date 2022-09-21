@@ -4,6 +4,8 @@ use anyhow::{Context, Result};
 use std::collections::HashMap;
 pub use tsc_compile;
 use tsc_compile::CompileOptions;
+use tsc_compile::FixedUrl;
+use url::Url;
 
 pub struct Compiler {
     pub tsc: tsc_compile::Compiler,
@@ -15,14 +17,12 @@ impl Compiler {
         Compiler { tsc }
     }
 
-    pub async fn compile_endpoints(
-        &mut self,
-        file_names: &[&str],
-    ) -> Result<HashMap<String, String>> {
-        let mut mods = HashMap::from([(
+    pub async fn compile(&mut self, url: Url) -> Result<Vec<(FixedUrl, String, bool)>> {
+        let mut mods = HashMap::new();
+        mods.insert(
             "@chiselstrike/api".to_string(),
-            "export * from 'chisel:///api.ts';".to_string(),
-        )]);
+            "export * from 'chisel://api/api.ts';".to_string(),
+        );
 
         for (name, code) in api::SOURCES_D_TS.iter() {
             mods.insert(name.to_string(), code.to_string());
@@ -34,13 +34,8 @@ impl Compiler {
         };
 
         self.tsc
-            .compile_ts_code(file_names, opts)
+            .compile_urls(vec![url], opts)
             .await
             .context("Could not compile TypeScript")
     }
-}
-
-pub async fn compile_endpoints(file_names: &[&str]) -> Result<HashMap<String, String>> {
-    let mut compiler = Compiler::new(true);
-    compiler.compile_endpoints(file_names).await
 }

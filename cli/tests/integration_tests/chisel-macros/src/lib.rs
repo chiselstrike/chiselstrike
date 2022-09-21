@@ -6,21 +6,28 @@ use proc_macro::TokenStream;
 use proc_macro2::Span;
 use syn::{
     parse::{Parse, ParseStream},
-    parse_macro_input, Ident, ItemFn, LitStr, Token,
+    parse_macro_input, Ident, ItemFn, LitBool, LitStr, Token,
 };
 
 /// Arguments to the test macro
 struct TestArgs {
-    /// Variant of the `ModulesSpec` type.
+    /// Variant of the `ModulesSpec` enum.
     modules: Ident,
-    /// Variant of the `OptimizeSpec` type.
+    /// Variant of the `OptimizeSpec` enum.
     optimize: Option<Ident>,
+    /// Variant of the `DatabaseSpec` enum.
+    db: Option<Ident>,
+    /// A boolean.
+    start_chiseld: Option<LitBool>,
 }
 
 impl Parse for TestArgs {
     fn parse(input: ParseStream) -> syn::Result<Self> {
         let mut modules = None;
         let mut optimize = None;
+        let mut db = None;
+        let mut start_chiseld = None;
+
         // TODO: use `syn::AttributeArgs` or the `darling` crate to parse the arguments
         while !input.is_empty() {
             let key: Ident = input.parse()?;
@@ -32,6 +39,14 @@ impl Parse for TestArgs {
                 "optimize" if optimize.is_none() => {
                     let _: Token!(=) = input.parse()?;
                     optimize = Some(input.parse()?);
+                }
+                "db" if db.is_none() => {
+                    let _: Token!(=) = input.parse()?;
+                    db = Some(input.parse()?);
+                }
+                "start_chiseld" if start_chiseld.is_none() => {
+                    let _: Token!(=) = input.parse()?;
+                    start_chiseld = Some(input.parse()?);
                 }
                 other => {
                     return Err(syn::Error::new(
@@ -50,6 +65,8 @@ impl Parse for TestArgs {
             modules: modules
                 .ok_or_else(|| syn::Error::new(input.span(), "missing modules argument"))?,
             optimize,
+            db,
+            start_chiseld,
         })
     }
 }
@@ -64,6 +81,12 @@ pub fn test(args: TokenStream, input: TokenStream) -> TokenStream {
     let optimize = args
         .optimize
         .unwrap_or_else(|| Ident::new("Yes", Span::call_site()));
+    let db = args
+        .db
+        .unwrap_or_else(|| Ident::new("Any", Span::call_site()));
+    let start_chiseld = args
+        .start_chiseld
+        .unwrap_or_else(|| LitBool::new(true, Span::call_site()));
 
     quote::quote! {
         ::inventory::submit! {
@@ -71,6 +94,8 @@ pub fn test(args: TokenStream, input: TokenStream) -> TokenStream {
                 name: concat!(module_path!(), "::", #fun_name_str),
                 modules: crate::suite::ModulesSpec::#modules,
                 optimize: crate::suite::OptimizeSpec::#optimize,
+                db: crate::suite::DatabaseSpec::#db,
+                start_chiseld: #start_chiseld,
                 test_fn: &#fun_name,
             }
         }

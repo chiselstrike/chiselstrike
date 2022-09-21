@@ -22,19 +22,16 @@ $CHISEL apply
 $CURL $CHISELD_HOST/__chiselstrike/
 # CHECK: HTTP/1.1 200 OK
 # CHECK: "title": "ChiselStrike Internal API",
-# CHECK: "/__chiselstrike/auth/accounts"
-# CHECK: "/__chiselstrike/auth/sessions"
-# CHECK: "/__chiselstrike/auth/tokens"
-# CHECK: "/__chiselstrike/auth/users"
+# CHECK: "/__chiselstrike/auth/users/
+# CHECK: "/__chiselstrike/auth/sessions/
+# CHECK: "/__chiselstrike/auth/tokens/
+# CHECK: "/__chiselstrike/auth/accounts/
 
 $CURL $CHISELD_HOST/
 # CHECK: HTTP/1.1 200 OK
 # CHECK: "title": "ChiselStrike all routes",
-# CHECK: "/__chiselstrike/auth/accounts"
-# CHECK: "/__chiselstrike/auth/sessions"
-# CHECK: "/__chiselstrike/auth/tokens"
-# CHECK: "/__chiselstrike/auth/users"
-# CHECK: "/dev/simple"
+# CHECK: "/__chiselstrike"
+# CHECK: "/dev"
 
 $CURL $CHISELD_HOST/dev
 # CHECK: HTTP/1.1 200 OK

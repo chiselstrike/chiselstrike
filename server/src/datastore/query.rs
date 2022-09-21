@@ -2,7 +2,7 @@
 
 use crate::auth::AUTH_USER_NAME;
 use crate::datastore::expr::{BinaryExpr, Expr, PropertyAccess, Value as ExprValue};
-use crate::policies::{FieldPolicies, Policies};
+use crate::policies::{FieldPolicies, PolicySystem};
 use crate::types::{Entity, Field, ObjectType, Type, TypeId, TypeSystem};
 
 use anyhow::{anyhow, Context, Result};
@@ -31,11 +31,11 @@ impl From<&str> for SqlValue {
 /// and Mutations.
 pub struct RequestContext<'a> {
     /// Policies to be applied on the query.
-    pub policies: &'a Policies,
-    /// Type system to be used of version `api_version`
+    pub ps: &'a PolicySystem,
+    /// Type system to be used of version `version_id`
     pub ts: &'a TypeSystem,
-    /// Schema version to be used.
-    pub api_version: String,
+    /// Version to be used.
+    pub version_id: String,
     /// Id of user making the request.
     pub user_id: Option<String>,
     /// Current URL path from which this request originated.
@@ -47,8 +47,7 @@ pub struct RequestContext<'a> {
 impl RequestContext<'_> {
     /// Calculates field policies for the request being processed.
     fn make_field_policies(&self, ty: &ObjectType) -> FieldPolicies {
-        self.policies
-            .make_field_policies(&self.user_id, &self.path, ty)
+        self.ps.make_field_policies(&self.user_id, &self.path, ty)
     }
 }
 
@@ -273,12 +272,9 @@ impl QueryPlan {
     }
 
     fn from_entity_name(c: &RequestContext, entity_name: &str) -> Result<Self> {
-        let ty = c
-            .ts
-            .lookup_entity(entity_name, &c.api_version)
-            .with_context(|| {
-                format!("unable to construct QueryPlan from an unknown entity name `{entity_name}`")
-            })?;
+        let ty = c.ts.lookup_entity(entity_name).with_context(|| {
+            format!("unable to construct QueryPlan from an unknown entity name `{entity_name}`")
+        })?;
 
         let mut builder = Self::new(ty.clone());
         builder.entity = builder.load_entity(c, &ty)?;
@@ -295,7 +291,7 @@ impl QueryPlan {
     }
 
     /// Constructs a query plan from a query `op_chain` and
-    /// additional helper data like `policies`, `api_version`,
+    /// additional helper data like `ps`, `version_id`,
     /// `userid` and `path` (url path used for policy evaluation).
     pub fn from_op_chain(context: &RequestContext, op_chain: QueryOpChain) -> Result<Self> {
         let (entity_name, operators) = convert_ops(op_chain)?;
@@ -816,7 +812,7 @@ impl Mutation {
         type_name: &str,
         filter_expr: &Option<Expr>,
     ) -> Result<Self> {
-        let base_entity = match c.ts.lookup_type(type_name, &c.api_version) {
+        let base_entity = match c.ts.lookup_type(type_name) {
             Ok(Type::Entity(ty)) => ty,
             Ok(ty) => anyhow::bail!("Cannot delete scalar type {type_name} ({})", ty.name()),
             Err(_) => anyhow::bail!("Cannot delete from type `{type_name}`, type not found"),
@@ -882,7 +878,8 @@ pub mod tests {
     }
 
     pub fn make_type_system(entities: &[Entity]) -> TypeSystem {
-        let mut ts = TypeSystem::default();
+        let builtin = Arc::new(types::BuiltinTypes::new());
+        let mut ts = TypeSystem::new(builtin, VERSION.into());
         for ty in entities {
             ts.add_custom_type(ty.clone()).unwrap();
         }
@@ -905,7 +902,7 @@ pub mod tests {
     async fn init_query_engine(db_file: &NamedTempFile) -> QueryEngine {
         let db_uri = format!("sqlite://{}?mode=rwc", db_file.path().to_string_lossy());
         let data_db = DbConnection::connect(&db_uri, 1).await.unwrap();
-        QueryEngine::local_connection(&data_db, 1).await.unwrap()
+        QueryEngine::new(Arc::new(data_db))
     }
 
     async fn init_database(query_engine: &QueryEngine, entities: &[Entity]) {
@@ -989,9 +986,9 @@ pub mod tests {
         let fetch_names = |qe: QueryEngine, op_chain: QueryOpChain| async move {
             let query_plan = QueryPlan::from_op_chain(
                 &RequestContext {
-                    policies: &Policies::default(),
+                    ps: &PolicySystem::default(),
                     ts: &make_type_system(&*ENTITIES),
-                    api_version: VERSION.to_owned(),
+                    version_id: VERSION.to_owned(),
                     user_id: None,
                     path: "".to_string(),
                     headers: HashMap::default(),
@@ -1057,9 +1054,9 @@ pub mod tests {
         let delete_with_expr = |entity_name: &str, expr: Expr| {
             Mutation::delete_from_expr(
                 &RequestContext {
-                    policies: &Policies::default(),
+                    ps: &PolicySystem::default(),
                     ts: &make_type_system(&*ENTITIES),
-                    api_version: VERSION.to_owned(),
+                    version_id: VERSION.to_owned(),
                     user_id: None,
                     path: "".to_string(),
                     headers: HashMap::default(),

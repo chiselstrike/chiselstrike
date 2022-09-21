@@ -3,14 +3,13 @@
 use crate::cmd::apply::apply;
 use crate::cmd::dev::cmd_dev;
 use crate::project::{create_project, CreateProjectOptions};
-use crate::server::{start_server, wait, wait_with_cond};
+use crate::proto::chisel_rpc_client::ChiselRpcClient;
+use crate::proto::{
+    type_msg::TypeEnum, DeleteRequest, DescribeRequest, PopulateRequest, StatusRequest,
+};
+use crate::server::{start_server, wait};
 use anyhow::{anyhow, Result};
 use futures::{pin_mut, Future, FutureExt};
-use proto::chisel_rpc_client::ChiselRpcClient;
-use proto::{
-    type_msg::TypeEnum, ChiselDeleteRequest, DescribeRequest, PopulateRequest, RestartRequest,
-    StatusRequest,
-};
 use std::env;
 use std::fs;
 use std::io::ErrorKind;
@@ -19,7 +18,10 @@ use structopt::StructOpt;
 use tokio::process::Child;
 
 mod cmd;
+mod codegen;
+mod events;
 mod project;
+mod routes;
 mod server;
 mod ts;
 
@@ -116,42 +118,34 @@ enum Command {
     },
 }
 
-async fn delete<S: ToString>(server_url: String, version: S) -> Result<()> {
-    let version = version.to_string();
+async fn delete(server_url: String, version_id: String) -> Result<()> {
     let mut client = ChiselRpcClient::connect(server_url).await?;
 
     let msg = execute!(
         client
-            .delete(tonic::Request::new(ChiselDeleteRequest { version }))
+            .delete(tonic::Request::new(DeleteRequest { version_id }))
             .await
     );
-    println!("{}", msg.result);
+    println!("{}", msg.message);
     Ok(())
 }
 
-async fn populate(server_url: String, to_version: String, from_version: String) -> Result<()> {
+async fn populate(
+    server_url: String,
+    to_version_id: String,
+    from_version_id: String,
+) -> Result<()> {
     let mut client = ChiselRpcClient::connect(server_url).await?;
 
     let msg = execute!(
         client
             .populate(tonic::Request::new(PopulateRequest {
-                to_version,
-                from_version,
+                to_version_id,
+                from_version_id,
             }))
             .await
     );
-    println!("{}", msg.msg);
-    Ok(())
-}
-
-pub(crate) async fn restart(server_url: String) -> Result<()> {
-    let mut client = ChiselRpcClient::connect(server_url.clone()).await?;
-    let response = execute!(client.restart(tonic::Request::new(RestartRequest {})).await);
-    anyhow::ensure!(response.ok);
-    wait_with_cond(server_url.clone(), |status| {
-        status.server_id != response.server_id
-    })
-    .await?;
+    println!("{}", msg.message);
     Ok(())
 }
 
@@ -210,7 +204,7 @@ async fn main() -> Result<()> {
             let response = execute!(client.describe(request).await);
 
             for version_def in response.version_defs {
-                println!("Version: {} {{", version_def.version);
+                println!("Version: {} {{", version_def.version_id);
                 for def in &version_def.type_defs {
                     println!("  class {} {{", def.name);
                     for field in &def.field_defs {

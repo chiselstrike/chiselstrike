@@ -3,7 +3,9 @@
 use deno_runtime::inspector_server::InspectorServer;
 use endpoint_tsc::Compiler;
 use std::net::SocketAddr;
+use std::path::Path;
 use structopt::StructOpt;
+use url::Url;
 
 #[derive(Debug, StructOpt)]
 struct Opt {
@@ -31,5 +33,6 @@ async fn main() {
             .wait_for_session_and_break_on_next_statement();
     }
 
-    compiler.compile_endpoints(&[&opt.file]).await.unwrap();
+    let url = Url::from_file_path(Path::new(&opt.file)).unwrap();
+    compiler.compile(url).await.unwrap();
 }

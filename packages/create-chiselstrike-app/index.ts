@@ -42,7 +42,6 @@ function run(projectDirectory: string, chiselVersion: string) {
     fs.mkdirSync(path.join(projectDirectory, ".vscode"));
     fs.mkdirSync(routesPath);
     fs.mkdirSync(eventsPath);
-    fs.closeSync(fs.openSync(path.join(eventsPath, ".gitkeep"), "w"));
     fs.mkdirSync(modelsPath);
     fs.closeSync(fs.openSync(path.join(modelsPath, ".gitkeep"), "w"));
     fs.mkdirSync(policiesPath);
@@ -80,10 +79,6 @@ function run(projectDirectory: string, chiselVersion: string) {
     fs.copyFileSync(
         path.join(__dirname, "template", "settings.json"),
         path.join(projectDirectory, ".vscode", "settings.json"),
-    );
-    fs.copyFileSync(
-        path.join(__dirname, "template", "hello.ts"),
-        path.join(projectDirectory, "routes", "hello.ts"),
     );
     fs.copyFileSync(
         path.join(__dirname, "template", "hello.ts"),

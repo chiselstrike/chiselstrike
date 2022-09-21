@@ -1,15 +1,9 @@
 // SPDX-FileCopyrightText: © 2021 ChiselStrike <info@chiselstrike.com>
 
-#[macro_use]
-extern crate log;
-
 use anyhow::Result;
 use chisel_server as server;
 use env_logger::Env;
 use log::LevelFilter;
-use nix::unistd::execv;
-use std::env;
-use std::ffi::CString;
 use std::io::Write;
 use std::path::PathBuf;
 use structopt::StructOpt;
@@ -35,9 +29,6 @@ async fn main() -> Result<()> {
         .filter_module("sqlx::query", LevelFilter::Warn)
         .init();
 
-    let args: Vec<CString> = env::args().map(|x| CString::new(x).unwrap()).collect();
-    let exe = env::current_exe()?.into_os_string().into_string().unwrap();
-
     let opt = {
         let default_path = find_default_config_path();
         let opt = match default_path {
@@ -57,9 +48,5 @@ async fn main() -> Result<()> {
         return Ok(());
     }
 
-    if let server::DoRepeat::Yes = server::run_all(opt).await? {
-        info!("Restarting");
-        execv(&CString::new(exe).unwrap(), &args).unwrap();
-    }
-    Ok(())
+    server::run(opt).await
 }

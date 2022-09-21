@@ -1,15 +1,15 @@
 // SPDX-FileCopyrightText: © 2021 ChiselStrike <info@chiselstrike.com>
 
+use crate::events::{build_file_topic_map, FileTopicMap};
+use crate::routes::{build_file_route_map, FileRouteMap};
 use anyhow::{Context, Result};
 use handlebars::Handlebars;
 use serde_derive::Deserialize;
 use std::collections::BTreeMap;
-use std::env;
 use std::fmt::Write;
 use std::fs;
 use std::io::{stdin, ErrorKind, Read};
 use std::path::{Path, PathBuf};
-use utils::without_extension;
 
 const MANIFEST_FILE: &str = "Chisel.toml";
 const TYPES_DIR: &str = "./models";
@@ -70,15 +70,15 @@ impl Default for AutoIndex {
 #[derive(Deserialize)]
 pub(crate) struct Manifest {
     /// Vector of directories to scan for model definitions.
-    pub(crate) models: Vec<String>,
+    pub(crate) models: Vec<PathBuf>,
     /// Vector of directories to scan for route definitions.
     /// For backwards compatibility, we also support the old-style name `endpoints` here.
     #[serde(alias = "endpoints")]
-    pub(crate) routes: Vec<String>,
+    pub(crate) routes: Vec<PathBuf>,
     /// Vector of directories to scan for event handler definitions.
-    pub(crate) events: Option<Vec<String>>,
+    pub(crate) events: Option<Vec<PathBuf>>,
     /// Vector of directories to scan for policy definitions.
-    pub(crate) policies: Vec<String>,
+    pub(crate) policies: Vec<PathBuf>,
     /// Whether to use deno-style or node-style modules
     #[serde(default)]
     pub(crate) modules: Module,
@@ -91,78 +91,54 @@ pub(crate) struct Manifest {
 }
 
 impl Manifest {
-    pub fn models(&self) -> anyhow::Result<Vec<PathBuf>> {
-        Self::dirs_to_paths(&self.models)
+    pub fn models(&self, base_dir: &Path) -> anyhow::Result<Vec<PathBuf>> {
+        Self::dirs_to_paths(base_dir, &self.models)
     }
 
-    pub fn endpoints(&self) -> anyhow::Result<Vec<PathBuf>> {
-        let ret = Self::dirs_to_paths(&self.routes)?;
-        if let Some((a, b)) = check_duplicates(&ret) {
-            anyhow::bail!("Cannot add both {} and {} as routes. ChiselStrike uses filesystem-based routing, so we don't know what to do. Sorry! 🥺", a, b);
+    pub fn route_map(&self, base_dir: &Path) -> anyhow::Result<FileRouteMap> {
+        build_file_route_map(base_dir, &self.routes)
+            .context("Could not read routes (endpoints) from filesystem")
+    }
+
+    pub fn topic_map(&self, base_dir: &Path) -> anyhow::Result<FileTopicMap> {
+        if let Some(events) = self.events.as_ref() {
+            build_file_topic_map(base_dir, events)
+                .context("Could not read event handlers (Kafka topics) from filesystem")
+        } else {
+            Ok(FileTopicMap::default())
         }
-        Ok(ret)
     }
 
-    pub fn events(&self) -> anyhow::Result<Vec<PathBuf>> {
-        let events = match &self.events {
-            Some(events) => events.to_owned(),
-            None => vec![EVENTS_DIR.into()],
-        };
-        let ret = Self::dirs_to_paths(&events)?;
-        if let Some((a, b)) = check_duplicates(&ret) {
-            anyhow::bail!("Cannot add both {} and {} as event handlers. ChiselStrike uses filesystem-based routing, so we don't know what to do. Sorry! 🥺", a, b);
-        }
-        Ok(ret)
+    pub fn policies(&self, base_dir: &Path) -> anyhow::Result<Vec<PathBuf>> {
+        Self::dirs_to_paths(base_dir, &self.policies)
     }
 
-    pub fn policies(&self) -> anyhow::Result<Vec<PathBuf>> {
-        Self::dirs_to_paths(&self.policies)
-    }
-
-    fn dirs_to_paths(dirs: &[String]) -> anyhow::Result<Vec<PathBuf>> {
-        // sucks to do this for all invocations but keeps things simple
-        let me = Path::new("./").canonicalize()?;
+    fn dirs_to_paths(base_dir: &Path, dirs: &[PathBuf]) -> anyhow::Result<Vec<PathBuf>> {
         let mut paths = vec![];
         for dir in dirs {
-            let p = Path::new(dir);
             anyhow::ensure!(
-                p.is_relative(),
+                dir.is_relative(),
                 "{} is not relative to the current tree",
-                dir
+                dir.display()
             );
-            let p = p.canonicalize().or_else(|x| match x.kind() {
+            let dir = dir.canonicalize().or_else(|x| match x.kind() {
                 ErrorKind::NotFound => Ok(PathBuf::new()),
                 _ => Err(x),
             })?;
 
-            if p.as_os_str().is_empty() {
+            if dir.as_os_str().is_empty() {
                 continue;
             }
             anyhow::ensure!(
-                me != p && p.starts_with(&me),
+                base_dir != dir && dir.starts_with(&base_dir),
                 "{} has to be a subdirectory of the current directory",
-                dir
+                dir.display()
             );
-            dir_to_paths(Path::new(dir), &mut paths)?
+            dir_to_paths(&dir, &mut paths)?
         }
         paths.sort_unstable();
         Ok(paths)
     }
-}
-
-fn check_duplicates(source_files: &[PathBuf]) -> Option<(String, String)> {
-    // Check for duplicated endpoints now since otherwise TSC
-    // reports the issue and we can produce a better diagnostic
-    // than TSC.
-    let i = source_files.iter();
-    for (a, b) in i.clone().zip(i.skip(1)) {
-        let a = &a.display().to_string();
-        let b = &b.display().to_string();
-        if without_extension(a) == without_extension(b) {
-            return Some((a.to_string(), b.to_string()));
-        }
-    }
-    None
 }
 
 fn dir_to_paths(dir: &Path, paths: &mut Vec<PathBuf>) -> anyhow::Result<()> {
@@ -208,7 +184,7 @@ fn read_dir<P: AsRef<Path>>(dir: P) -> anyhow::Result<Vec<std::io::Result<fs::Di
     .with_context(|| format!("Could not open {}", dir.as_ref().display()))
 }
 
-fn read_manifest_from(dir: &Path) -> Result<Manifest> {
+pub(crate) fn read_manifest(dir: &Path) -> Result<Manifest> {
     let file = dir.join(MANIFEST_FILE);
 
     if !file.exists() {
@@ -226,11 +202,6 @@ fn read_manifest_from(dir: &Path) -> Result<Manifest> {
         }
     };
     Ok(manifest)
-}
-
-pub(crate) fn read_manifest() -> Result<Manifest> {
-    let cwd = env::current_dir()?;
-    read_manifest_from(&cwd)
 }
 
 /// Opens and reads an entire file (or stdin, if filename is "-")
@@ -351,22 +322,40 @@ mod tests {
         tmp_dir
     }
 
+    fn check_manifest(d: &TempDir) -> Manifest {
+        let m = read_manifest(d.path()).unwrap();
+        m.models(d.path()).unwrap();
+        m.policies(d.path()).unwrap();
+        m.route_map(d.path()).unwrap();
+        m.topic_map(d.path()).unwrap();
+        m
+    }
+
     #[test]
     fn parse_works() {
         let d = gen_manifest(
             r#"
 models = ["models"]
 routes = ["routes"]
+policies = ["policies"]
+"#,
+        );
+        check_manifest(&d);
+    }
+
+    #[test]
+    fn parse_endpoints_as_routes() {
+        let d = gen_manifest(
+            r#"
+models = ["models"]
+endpoints = ["endpoints"]
 events = ["events"]
 policies = ["policies"]
 "#,
         );
-        println!("reading {:?}", std::env::current_dir());
-        let m = read_manifest_from(d.path()).unwrap();
-        m.models().unwrap();
-        m.policies().unwrap();
-        m.endpoints().unwrap();
-        m.events().unwrap();
+        std::fs::create_dir(d.path().join("./endpoints")).unwrap();
+        let m = check_manifest(&d);
+        assert_eq!(m.routes, vec![PathBuf::from("endpoints")]);
     }
 
     #[should_panic(expected = "is not relative")]
@@ -380,11 +369,7 @@ events = ["events"]
 policies = ["policies"]
 "#,
         );
-        let m = read_manifest_from(d.path()).unwrap();
-        m.models().unwrap();
-        m.policies().unwrap();
-        m.endpoints().unwrap();
-        m.events().unwrap();
+        check_manifest(&d);
     }
 
     #[should_panic(expected = "has to be a subdirectory")]
@@ -398,11 +383,7 @@ events = ["events"]
 policies = ["policies"]
 "#,
         );
-        let m = read_manifest_from(d.path()).unwrap();
-        m.models().unwrap();
-        m.policies().unwrap();
-        m.endpoints().unwrap();
-        m.events().unwrap();
+        check_manifest(&d);
     }
 
     #[should_panic(expected = "has to be a subdirectory")]
@@ -416,10 +397,6 @@ events = ["events"]
 policies = ["policies"]
 "#,
         );
-        let m = read_manifest_from(d.path()).unwrap();
-        m.models().unwrap();
-        m.policies().unwrap();
-        m.endpoints().unwrap();
-        m.events().unwrap();
+        check_manifest(&d);
     }
 }

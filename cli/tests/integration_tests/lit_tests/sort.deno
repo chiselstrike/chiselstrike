@@ -162,6 +162,7 @@ $CHISEL apply
 # CHECK: Applied:
 
 $CURL -o - $CHISELD_HOST/dev/get_sorted
+# CHECK: HTTP/1.1 500 Internal Server Error
 # CHECK: Error: entity 'Person' has no field named 'invalid_field'
 
 

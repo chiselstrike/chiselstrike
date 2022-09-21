@@ -16,15 +16,15 @@ message AddTypeRequest {
   repeated FieldDefinition field_defs = 2;
 }
 
-message AddTypeResponse {
-  string message = 1;
-}
-
 message VersionDefinition {
-  string version = 1;
+  string version_id = 1;
   repeated TypeDefinition type_defs = 2;
-  repeated EndpointDefinition endpoint_defs = 3;
   repeated LabelPolicyDefinition label_policy_defs = 4;
+
+  // deprecated: endpoints/routes can be introspected only from JavaScript
+  //repeated EndpointDefinition endpoint_defs = 3;
+  reserved 3;
+  reserved "endpoint_defs";
 }
 
 message TypeDefinition {
@@ -70,56 +70,60 @@ message DescribeResponse {
   repeated VersionDefinition version_defs = 1;
 }
 
-message RestartRequest { }
-
-message RestartResponse {
-  string server_id = 2;
-  bool ok = 1;
-}
-
 message PolicyUpdateRequest {
   string policy_config = 1;
   string path = 3;
 }
 
-message ChiselApplyRequest {
+message Module {
+  string url = 1;
+  string code = 2;
+}
+
+message ApplyRequest {
+   string version_id = 5;
+
    repeated AddTypeRequest types = 1;
    repeated IndexCandidate index_candidates = 8;
-
-   // Location to code map. Includes all modules compiled into JS. The
-   // endpoints themselves start with "endpoints/"
-   // FIXME: It is missing non-endpoints for now.
-   map<string, string> sources = 2;
-
    repeated PolicyUpdateRequest policies = 3;
+   repeated Module modules = 9;
+
    bool allow_type_deletion = 4;
-   string version = 5;
    string version_tag = 6;
    string app_name = 7;
+
+   // deprecated: source code is passed in `modules`
+   //map<string, string> sources = 2;
+   reserved 2;
+   reserved "sources";
 }
 
-message ChiselApplyResponse {
-   repeated string types = 1;
-   repeated string endpoints = 2;
-   repeated string labels = 3;
-   repeated string event_handlers = 4;
+message ApplyResponse {
+  repeated string types = 1;
+  repeated string labels = 3;
+  repeated string event_handlers = 4;
+
+  // deprecated: endpoints/routes can be introspected only from JavaScript
+  //repeated string endpoints = 2;
+  reserved 2;
+  reserved "endpoints";
 }
 
-message ChiselDeleteRequest {
-   string version = 1;
+message DeleteRequest {
+   string version_id = 1;
 }
 
-message ChiselDeleteResponse {
-   string result = 1;
+message DeleteResponse {
+   string message = 1;
 }
 
 message PopulateRequest {
-    string to_version = 1;
-    string from_version = 2;
+    string to_version_id = 1;
+    string from_version_id = 2;
 }
 
 message PopulateResponse {
-    string msg = 1;
+    string message = 1;
 }
 
 message IndexCandidate {
@@ -129,9 +133,8 @@ message IndexCandidate {
 
 service ChiselRpc {
   rpc GetStatus (StatusRequest) returns (StatusResponse);
-  rpc Apply(ChiselApplyRequest) returns (ChiselApplyResponse);
-  rpc Populate(PopulateRequest) returns (PopulateResponse);
-  rpc Delete(ChiselDeleteRequest) returns (ChiselDeleteResponse);
+  rpc Apply (ApplyRequest) returns (ApplyResponse);
+  rpc Populate (PopulateRequest) returns (PopulateResponse);
+  rpc Delete (DeleteRequest) returns (DeleteResponse);
   rpc Describe (DescribeRequest) returns (DescribeResponse);
-  rpc Restart (RestartRequest) returns (RestartResponse);
 }

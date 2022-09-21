@@ -2,194 +2,182 @@
 
 use crate::cmd::apply::chiselc_spawn;
 use crate::cmd::apply::parse_indexes;
-use crate::cmd::apply::{SourceMap, TypeChecking};
+use crate::cmd::apply::TypeChecking;
+use crate::codegen::codegen_root_module;
+use crate::events::FileTopicMap;
 use crate::project::read_to_string;
-use crate::proto::IndexCandidate;
-use anyhow::{anyhow, Context, Result};
-use std::env;
-use std::ffi::OsStr;
-use std::fs::{self, File};
-use std::io::Write;
-use std::path::PathBuf;
-use tokio::task::{spawn_blocking, JoinHandle};
+use crate::proto::{IndexCandidate, Module};
+use crate::routes::FileRouteMap;
+use anyhow::{anyhow, bail, Context, Result};
+use std::ffi::{OsStr, OsString};
+use std::path::{Path, PathBuf};
+use std::{env, fs};
 
 pub(crate) async fn apply(
-    endpoints: &[PathBuf],
-    events: &[PathBuf],
+    mut route_map: FileRouteMap,
+    mut topic_map: FileTopicMap,
     entities: &[String],
     optimize: bool,
     auto_index: bool,
     type_check: &TypeChecking,
-) -> Result<(SourceMap, Vec<IndexCandidate>)> {
-    let mut sources = SourceMap::new();
-    let mut index_candidates = vec![];
-    let tsc = match type_check {
+) -> Result<(Vec<Module>, Vec<IndexCandidate>)> {
+    let tsc_proc = match type_check {
         TypeChecking::Yes => Some(npx(
             "tsc",
             &["--noemit", "--pretty", "--allowJs", "--checkJs"],
-            None,
-        )),
+        )?),
         TypeChecking::No => None,
     };
+
     // ideally we would call this in parallel with the bundle, but npx doesn't like this very much
     // See #1642
-    if let Some(tsc) = tsc {
-        let tsc_res = tsc.await.unwrap()?;
-        if !tsc_res.status.success() {
-            let out = String::from_utf8(tsc_res.stdout).expect("command output not utf-8");
-            let err = String::from_utf8(tsc_res.stderr).expect("command output not utf-8");
-            anyhow::bail!("{}\n{}", out, err);
-        }
+    if let Some(tsc_proc) = tsc_proc {
+        let tsc_output = tsc_proc
+            .wait_with_output()
+            .await
+            .context("Could not run tsc to type-check the code")?;
+        ensure_success(tsc_output).context("Type-checking with tsc failed")?;
     }
 
     let cwd = env::current_dir()?;
+    let mut index_candidates = vec![];
+    let mut chiselc_procs = vec![];
 
-    let mut chiselc_futures = vec![];
-
-    let mut handle_code = |endpoint: &PathBuf, gen_dir: &PathBuf| {
+    let mut preprocess_source = |file_path: &mut PathBuf, gen_dir: &Path| -> Result<()> {
         if optimize {
-            let endpoint_file_path = endpoint.clone();
-            let mut components = endpoint_file_path.components();
-            components.next();
-            let endpoint_rel_path = components.as_path();
-            anyhow::ensure!(
-                endpoint_file_path.is_relative(),
-                "malformed endpoint name {}. Shouldn't have reached this far",
-                endpoint_file_path.display()
-            );
+            let file_rel_path = file_path.strip_prefix(&cwd).with_context(|| {
+                format!("File {} is not a part of this project", file_path.display(),)
+            })?;
 
-            let gen_file_path = gen_dir.join(&endpoint_rel_path);
-            let base = gen_file_path.parent().ok_or_else(|| {
+            // NOTE: this a horrible hack to make relative imports work
+            // it is common that file "routes/books.ts" imports "models/Book.ts" using
+            // "../models/Book.ts". to make this work with the bundler, we must place the generated
+            // file into ".gen/books.ts".
+            let mut file_rel_components = file_rel_path.components();
+            file_rel_components.next();
+            let file_rel_path = file_rel_components.as_path();
+
+            let gen_file_path = gen_dir.join(file_rel_path);
+            let gen_parent_path = gen_file_path.parent().ok_or_else(|| {
                 anyhow!(
                     "{} doesn't have a parent. Shouldn't have reached this far!",
                     gen_dir.display()
                 )
             })?;
-            fs::create_dir_all(&base)?;
+            fs::create_dir_all(&gen_parent_path).with_context(|| {
+                format!("Could not create directory {}", gen_parent_path.display())
+            })?;
 
-            let chiselc = chiselc_spawn(
-                endpoint.to_str().unwrap(),
-                gen_file_path.to_str().unwrap(),
-                entities,
-            )
-            .unwrap();
-            let future = chiselc;
-            let import_path = gen_file_path
-                .strip_prefix(cwd.clone())
-                .unwrap()
-                .to_path_buf();
-            chiselc_futures.push((Some(Box::new(future)), endpoint_file_path, import_path))
-        } else {
-            let path = endpoint.to_owned();
-            chiselc_futures.push((None, path.clone(), path))
-        };
+            let chiselc_proc = chiselc_spawn(file_path, &gen_file_path, entities)
+                .context("Could not start `chiselc`")?;
+
+            // use the chiselc-processed file instead of the original file in the route map
+            *file_path = gen_file_path;
+            chiselc_procs.push(chiselc_proc);
+        }
+
+        // TODO: we need to generate indexes from all source files, not just routes
+        if auto_index {
+            let code = read_to_string(file_path.clone())
+                .with_context(|| format!("Could not read file {}", file_path.display()))?;
+            let mut indexes = parse_indexes(code, entities).with_context(|| {
+                format!(
+                    "Could not parse auto-indexing information from file {}",
+                    file_path.display()
+                )
+            })?;
+            index_candidates.append(&mut indexes);
+        }
+
         Ok(())
     };
 
     let route_gen_dir = cwd.join(".routegen");
-    fs::create_dir_all(&route_gen_dir)?;
-
     let event_gen_dir = cwd.join(".eventgen");
-    fs::create_dir_all(&event_gen_dir)?;
 
-    for route in endpoints.iter() {
-        handle_code(route, &route_gen_dir)?
+    // TODO: we need to preprocess all source files with chiselc, not just routes and events
+    for route in route_map.routes.iter_mut() {
+        preprocess_source(&mut route.file_path, &route_gen_dir)?;
+    }
+    for topic in topic_map.topics.iter_mut() {
+        preprocess_source(&mut topic.file_path, &event_gen_dir)?;
     }
 
-    for event in events.iter() {
-        handle_code(event, &event_gen_dir)?
+    for proc in chiselc_procs.into_iter() {
+        let chiselc_output = proc
+            .wait_with_output()
+            .await
+            .context("Could not run chiselc")?;
+        ensure_success(chiselc_output).context("chiselc returned errors")?;
     }
 
-    let mut bundler_file_mapping = vec![];
+    let bundler_input_dir =
+        tempfile::tempdir().context("Could not create temporary directory for bundler input")?;
+    let bundler_output_dir =
+        tempfile::tempdir().context("Could not create temporary directory for bundler output")?;
 
-    let mut bundler_cmd_args = vec![];
+    let import_fn = |path: &Path| -> Result<String> {
+        path.to_str()
+            .map(String::from)
+            .context("Path is not valid UTF-8")
+    };
+    let root_code = codegen_root_module(&route_map, &topic_map, &import_fn)
+        .context("Could not generate code for file-based routing and event topics")?;
 
-    let bundler_input_dir = tempfile::tempdir()?;
-    let bundler_output_dir = tempfile::tempdir()?;
+    let root_path = bundler_input_dir.path().join("__root.ts");
+    fs::write(&root_path, root_code)
+        .context(format!("Could not write to file {}", root_path.display()))?;
 
-    let bundler_input_dir_name = bundler_input_dir.path();
-    let bundler_output_dir_name = bundler_output_dir.path();
+    let bundler_args: Vec<OsString> = vec![
+        root_path.into(),
+        "--bundle".into(),
+        "--color=true".into(),
+        "--target=esnext".into(),
+        "--external:@chiselstrike".into(),
+        "--external:chisel://*".into(),
+        "--format=esm".into(),
+        "--tree-shaking=true".into(),
+        "--tsconfig=./tsconfig.json".into(),
+        "--platform=node".into(),
+        {
+            let mut outdir = OsString::from("--outdir=");
+            outdir.push(bundler_output_dir.path());
+            outdir
+        },
+    ];
 
-    let mut idx = 0;
-    for (mut chiselc_future, endpoint_file_path, import_path) in chiselc_futures.into_iter() {
-        idx += 1;
-        if let Some(mut chiselc_future) = chiselc_future.take() {
-            chiselc_future.wait().await?;
-        }
+    let bundler_output = npx("esbuild", &bundler_args)?
+        .wait_with_output()
+        .await
+        .context("Could not run esbuild")?;
+    ensure_success(bundler_output)
+        .context("Could not bundle routes with esbuild (using node-style modules)")?;
 
-        let idx_file_name = format!("{}.ts", idx);
-        let file_path = bundler_input_dir_name.join(&idx_file_name);
-        bundler_file_mapping.push((endpoint_file_path, idx_file_name));
+    let bundled_code = fs::read_to_string(bundler_output_dir.path().join("__root.js"))?;
+    let modules = vec![Module {
+        url: "file:///__root.ts".into(),
+        code: bundled_code,
+    }];
 
-        let mut file = File::create(&file_path)?;
-
-        let mut import_path = import_path.clone();
-        import_path.set_extension("");
-
-        let code = format!(
-            "import fun from \"{}/{}\";\nexport default fun",
-            cwd.display(),
-            import_path.display()
-        );
-        file.write_all(code.as_bytes())?;
-        file.flush()?;
-        let bundler_entry_fname = file_path.to_str().unwrap().to_owned();
-        bundler_cmd_args.push(bundler_entry_fname);
-    }
-
-    bundler_cmd_args.extend_from_slice(&[
-        "--bundle".to_string(),
-        "--color=true".to_string(),
-        "--target=esnext".to_string(),
-        "--external:@chiselstrike".to_string(),
-        "--format=esm".to_string(),
-        "--tree-shaking=true".to_string(),
-        "--tsconfig=./tsconfig.json".to_string(),
-        "--platform=node".to_string(),
-    ]);
-
-    bundler_cmd_args.push(format!("--outdir={}", bundler_output_dir_name.display()));
-    let cmd = npx("esbuild", &bundler_cmd_args, None);
-    let res = cmd.await.unwrap()?;
-
-    if !res.status.success() {
-        let out = String::from_utf8(res.stdout).expect("command output not utf-8");
-        let err = String::from_utf8(res.stderr).expect("command output not utf-8");
-        return Err(anyhow!("{}\n{}", out, err))
-            .context("Could not bundle routes with esbuild (using node-style modules)");
-    }
-
-    for bundler_info in bundler_file_mapping.iter() {
-        let (endpoint_file_path, idx_file_name) = bundler_info;
-        let mut bundler_output_file = bundler_output_dir_name.join(&idx_file_name);
-        bundler_output_file.set_extension("js");
-        let code = read_to_string(bundler_output_file)?;
-
-        sources.insert(endpoint_file_path.display().to_string(), code);
-        if auto_index {
-            let code = read_to_string(endpoint_file_path.clone())?;
-            let mut indexes = parse_indexes(code, entities)?;
-            index_candidates.append(&mut indexes);
-        }
-    }
-
-    Ok((sources, index_candidates))
+    Ok((modules, index_candidates))
 }
 
-fn npx<A: AsRef<OsStr>>(
-    command: &'static str,
-    args: &[A],
-    stdin: Option<std::process::ChildStdout>,
-) -> JoinHandle<Result<std::process::Output>> {
-    let mut cmd = std::process::Command::new("npx");
-    cmd.arg(command).args(args);
+fn npx<A: AsRef<OsStr>>(command: &'static str, args: &[A]) -> Result<tokio::process::Child> {
+    let cmd = tokio::process::Command::new("npx")
+        .arg(command)
+        .args(args)
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .spawn()
+        .context(format!("Could not start `npx {}`", command))?;
+    Ok(cmd)
+}
 
-    if let Some(stdin) = stdin {
-        cmd.stdin(stdin);
+fn ensure_success(output: std::process::Output) -> Result<()> {
+    if !output.status.success() {
+        let out = String::from_utf8_lossy(&output.stdout);
+        let err = String::from_utf8_lossy(&output.stderr);
+        bail!("{}\n{}", out, err);
     }
-
-    spawn_blocking(move || {
-        cmd.output()
-            .with_context(|| format!("could not execute `npx {}`. Is npx on your PATH?", command))
-    })
+    Ok(())
 }

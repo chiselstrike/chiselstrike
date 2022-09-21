@@ -108,13 +108,3 @@ EOF
 $CHISEL apply 2>&1 | $RMCOLOR|| true
 # CHECK: routes/error.ts:4:25 - error TS2322: Type 'string' is not assignable to type 'number'.
 # CHECK:  The expected type comes from property 'height' which is declared here on type 'Partial<Person>'
-
-rm "$TEMPDIR/routes/error.ts"
-cat << EOF > "$TEMPDIR/routes/not-js.js"
-export default async function chisel(req: Request) {
-    return new Response("");
-}
-EOF
-
-$CHISEL apply 2>&1 | $RMCOLOR|| true
-# CHECK: The module's source code could not be parsed: Expected ',', got ':' at file:///[[.*]]/routes/not-js.js:1:41

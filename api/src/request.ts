@@ -4,39 +4,58 @@ import type { AuthUser } from "./datastore.ts";
 
 /** Extends the Request class adding ChiselStrike-specific helpers
  *
- * @property {string} version - The current API Version
- * @property {string} endpoint - The current endpoint being called.
- * @property {string} pathParams - This is essentially the URL's path, but with everything before the endpoint name removed.
+ * @property {string} path - The URL path of this request.
+ * @property {string} versionId - The current API Version.
  * @property {AuthUser} user - The currently logged in user. `undefined` if there isn't one.
- * @property {Query} query - Helper structure containing parsed query string from the URL.
+ * @property {Query} query - Helper class containing parsed query string from the URL.
+ * @property {Params} params - Helper class containing parameters from the URL path.
  */
 export class ChiselRequest extends Request {
-    public query: Query;
+    public readonly path: string;
+    public readonly versionId: string;
+    public readonly user: AuthUser | undefined;
+    public readonly query: Query;
+    public readonly params: Params;
+
+    private readonly legacyFileName: string | undefined;
 
     constructor(
         input: string,
         init: RequestInit,
-        public version: string,
-        public endpoint: string,
-        public pathParams: string,
-        public user?: AuthUser | undefined,
+        path: string,
+        versionId: string,
+        user: AuthUser | undefined,
+        query: URLSearchParams,
+        params: Record<string, string>,
+        legacyFileName: string | undefined,
     ) {
         super(input, init);
-        this.query = new Query(new URL(this.url).searchParams);
+        this.path = path;
+        this.versionId = versionId;
+        this.user = user;
+        this.query = new Query(query);
+        this.params = new Params(params);
+        this.legacyFileName = legacyFileName;
     }
 
-    /**
-     * Returns each component of the arguments part of the path
-     *
-     * While you could call split() on pathParams directly, this
-     * convenience function is useful as it handle empty strings better.
-     *
-     * For example, for the endpoint `/dev/name` this will return an empty
-     * array, while pathParams will be "", and splitting that by "/" returns an
-     * array with one element, the empty string
-     */
+    /** @deprecated */
+    get endpoint(): string {
+        return "/" + (this.legacyFileName ?? "");
+    }
+
+    /** @deprecated */
+    get pathParams(): string {
+        return this.params.get("legacyPathParams");
+    }
+
+    /** @deprecated */
     pathComponents(): string[] {
         return this.pathParams.split("/").filter((n) => n.length != 0);
+    }
+
+    /** @deprecated */
+    get version(): string {
+        return this.versionId;
     }
 }
 
@@ -60,16 +79,16 @@ export class Query {
      * @param paramName query parameter to be retrieved from the URL's query string.
      */
     getNumber(paramName: string): number | undefined {
-        const v = this.get(paramName);
-        if (v !== undefined) {
-            const f = Number.parseFloat(v);
-            if (Number.isNaN(f)) {
-                return undefined;
-            } else {
-                return f;
-            }
-        }
-        return undefined;
+        return getNumber(this.get(paramName));
+    }
+
+    /**
+     * Gets the first query parameter named `paramName` and tries to parse it as an integer. If no such a
+     * parameter exists or the parsing fails, returns `undefined`.
+     * @param paramName query parameter to be retrieved from the URL's query string.
+     */
+    getInt(paramName: string): number | undefined {
+        return getInt(this.get(paramName));
     }
 
     /**
@@ -80,18 +99,7 @@ export class Query {
      * @param paramName query parameter to be retrieved from the URL's query string.
      */
     getBool(paramName: string): boolean | undefined {
-        const v = this.get(paramName);
-        if (v !== undefined) {
-            switch (v.toLowerCase()) {
-                case "false":
-                case "0":
-                case "":
-                    return false;
-                default:
-                    return true;
-            }
-        }
-        return undefined;
+        return getBool(this.get(paramName));
     }
 
     /**
@@ -142,5 +150,82 @@ export class Query {
      */
     [Symbol.iterator](): IterableIterator<[string, string]> {
         return this.entries();
+    }
+
+    /**
+     * The toString() method returns a query string suitable for use in a URL.
+     */
+    toString(): string {
+        return this.params.toString();
+    }
+}
+
+/** Params is a helper class used to access route parameters defined in
+ * `RouteMap`, extracted from the URL path. */
+export class Params {
+    constructor(private params: Record<string, string>) {}
+
+    /**
+     * Gets the parameter named `paramName`. If the parameter does not exist,
+     * throws an error.
+     */
+    get(paramName: string): string {
+        const value = this.params[paramName];
+        if (value === undefined) {
+            throw new Error(`Undefined parameter '${paramName}'`);
+        }
+        return value;
+    }
+
+    /**
+     * Gets the parameter named `paramName` and parses it as a number. If the
+     * parameter does not exist, throws an error. If the parsing fails, returns
+     * `undefined`.
+     */
+    getNumber(paramName: string): number | undefined {
+        return getNumber(this.get(paramName));
+    }
+
+    /**
+     * Gets the parameter named `paramName` and parses it as an integer. If the
+     * parameter does not exist, throws an error. If the parsing fails, returns
+     * `undefined`.
+     */
+    getInt(paramName: string): number | undefined {
+        return getInt(this.get(paramName));
+    }
+
+    /**
+     * Gets the parameter named `paramName` and parses it as an integer. If the
+     * parameter does not exist, throws an error. Parsing a boolean cannot fail,
+     * because all values other than `"false"`, `"0"` and `""` are treated as
+     * `true`.
+     */
+    getBool(paramName: string): boolean {
+        return getBool(this.get(paramName)) ?? false;
+    }
+}
+
+function getNumber(value: string | undefined): number | undefined {
+    const f = Number.parseFloat(value ?? "");
+    return Number.isNaN(f) ? undefined : f;
+}
+
+function getInt(value: string | undefined): number | undefined {
+    const i = Number.parseInt(value ?? "", 10);
+    return Number.isNaN(i) ? undefined : i;
+}
+
+function getBool(value: string | undefined): boolean | undefined {
+    if (value === undefined) {
+        return undefined;
+    }
+    switch (value.toLowerCase()) {
+        case "false":
+        case "0":
+        case "":
+            return false;
+        default:
+            return true;
     }
 }

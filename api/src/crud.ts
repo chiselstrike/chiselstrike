@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: © 2022 ChiselStrike <info@chiselstrike.com>
-
-import { mergeDeep, opAsync, responseFromJson } from "./utils.ts";
 import { ChiselCursor, ChiselEntity, requestContext } from "./datastore.ts";
+import { ChiselRequest } from "./request.ts";
+import { mergeDeep, opAsync, responseFromJson } from "./utils.ts";
 
 // TODO: BEGIN: when module import is fixed:
 //     import { parse as regExParamParse } from "regexparam";
@@ -390,25 +390,26 @@ export function crud<
         defaultCreateResponse?: CRUDCreateResponse;
         parsePath?: (url: URL) => P;
     },
-): (req: Request) => Promise<Response> {
-    const pathTemplateRaw = "/:chiselVersion" + requestContext.path + "/" +
-        (urlTemplateSuffix.includes(":id")
-            ? urlTemplateSuffix
-            : `${urlTemplateSuffix}/:id`);
-
-    const pathTemplate = pathTemplateRaw.replace(/\/+/g, "/"); // in case we end up with foo///bar somehow.
-
+): (req: ChiselRequest) => Promise<Response> {
     const defaultCreateResponse = config?.defaultCreateResponse ||
         responseFromJson;
-    const parsePath = config?.parsePath ||
-        createURLPathParser(pathTemplate);
     const localDefaultCrudMethods =
         defaultCrudMethods as unknown as CRUDMethods<T, E, P>;
     const methods = config?.customMethods
         ? { ...localDefaultCrudMethods, ...config?.customMethods }
         : localDefaultCrudMethods;
 
-    return (req: Request): Promise<Response> => {
+    return (req: ChiselRequest): Promise<Response> => {
+        const pathTemplateRaw = "/:chiselVersion" + req.endpoint + "/" +
+            (urlTemplateSuffix.includes(":id")
+                ? urlTemplateSuffix
+                : `${urlTemplateSuffix}/:id`);
+
+        const pathTemplate = pathTemplateRaw.replace(/\/+/g, "/"); // in case we end up with foo///bar somehow.
+
+        const parsePath = config?.parsePath ||
+            createURLPathParser(pathTemplate);
+
         const methodName = req.method as keyof typeof methods; // assume valid, will be handled gracefully
         const createResponse = config?.createResponses?.[methodName] ||
             defaultCreateResponse;

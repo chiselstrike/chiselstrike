@@ -7,7 +7,9 @@ edition = "2021"
 [dependencies]
 anyhow = "1.0.56"
 async-channel = "1.6.1"
+futures-core = "0.3"
 nix = "0.22.2"
 reqwest = { version = "=0.11.11", features = ["rustls-tls"], default-features = false } # strict = because of https://github.com/seanmonstar/reqwest/issues/1403
+tokio = { version = "1.11", features = ["rt"] }
 
 [lib]

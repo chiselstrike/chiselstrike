@@ -5,7 +5,7 @@ use crate::types::ObjectType;
 use crate::JsonObject;
 use anyhow::Result;
 use chiselc::parse::ParserContext;
-use hyper::Request;
+use hyper::http;
 use serde_json::{json, Value};
 use std::collections::{HashMap, HashSet};
 use yaml_rust::{Yaml, YamlLoader};
@@ -29,9 +29,6 @@ pub struct Policy {
     pub except_uri: regex::Regex,
 }
 
-/// Maps labels to their applicable policies.
-pub type LabelPolicies = HashMap<String, Policy>;
-
 #[derive(Clone, Default, Debug)]
 pub struct FieldPolicies {
     /// Maps a field name to the transformation we apply to that field's values.
@@ -53,12 +50,12 @@ pub struct UserAuthorization {
 
 impl UserAuthorization {
     /// Is this username allowed to execute the endpoint at this path?
-    pub fn is_allowed(&self, username: Option<String>, path: &str) -> bool {
+    pub fn is_allowed(&self, username: Option<&str>, path: &str) -> bool {
         match self.paths.longest_prefix(path) {
             None => true,
             Some((_, u)) => match username {
                 None => false, // Must be logged in if path specified a regex.
-                Some(username) => u.is_match(&username),
+                Some(username) => u.is_match(username),
             },
         }
     }
@@ -83,7 +80,7 @@ pub struct SecretAuthorization {
 
 impl SecretAuthorization {
     /// Is a request with these headers allowed to execute the endpoint at this path?
-    pub fn is_allowed(&self, req: &Request<hyper::Body>, secrets: &JsonObject, path: &str) -> bool {
+    pub fn is_allowed(&self, req: &http::request::Parts, secrets: &JsonObject, path: &str) -> bool {
         match self.paths.longest_prefix(path) {
             None => true,
             Some((
@@ -91,7 +88,7 @@ impl SecretAuthorization {
                 RequiredHeader {
                     methods: Some(v), ..
                 },
-            )) if !v.contains(req.method()) => true,
+            )) if !v.contains(&req.method) => true,
             Some((
                 _,
                 RequiredHeader {
@@ -108,7 +105,7 @@ impl SecretAuthorization {
                         return false;
                     }
                 };
-                match req.headers().get(header_name).map(|v| v.to_str()) {
+                match req.headers.get(header_name).map(|v| v.to_str()) {
                     Some(Ok(header_value)) if header_value == secret_value => true,
                     Some(Err(e)) => {
                         warn!("Weird bytes in header {header_name}: {e}");
@@ -141,24 +138,14 @@ struct RequiredHeader {
 }
 
 #[derive(Clone, Default)]
-pub struct VersionPolicy {
-    pub labels: LabelPolicies,
+pub struct PolicySystem {
+    /// Maps labels to their applicable policies.
+    pub labels: HashMap<String, Policy>,
     pub user_authorization: UserAuthorization,
     pub secret_authorization: SecretAuthorization,
 }
 
-#[derive(Clone, Default)]
-pub struct Policies {
-    pub versions: HashMap<String, VersionPolicy>,
-}
-
-impl Policies {
-    pub fn add_from_yaml(&mut self, version: String, yaml: &str) -> Result<()> {
-        let v = VersionPolicy::from_yaml(yaml)?;
-        self.versions.insert(version, v);
-        Ok(())
-    }
-
+impl PolicySystem {
     /// For field of type `ty` creates field policies.
     pub fn make_field_policies(
         &self,
@@ -171,21 +158,19 @@ impl Policies {
             ..Default::default()
         };
 
-        if let Some(version) = self.versions.get(&ty.api_version) {
-            for fld in ty.user_fields() {
-                for lbl in &fld.labels {
-                    if let Some(p) = version.labels.get(lbl) {
-                        if !p.except_uri.is_match(current_path) {
-                            match p.kind {
-                                Kind::Transform(f) => {
-                                    field_policies.transforms.insert(fld.name.clone(), f);
-                                }
-                                Kind::MatchLogin => {
-                                    field_policies.match_login.insert(fld.name.clone());
-                                }
-                                Kind::Omit => {
-                                    field_policies.omit.insert(fld.name.clone());
-                                }
+        for fld in ty.user_fields() {
+            for lbl in &fld.labels {
+                if let Some(p) = self.labels.get(lbl) {
+                    if !p.except_uri.is_match(current_path) {
+                        match p.kind {
+                            Kind::Transform(f) => {
+                                field_policies.transforms.insert(fld.name.clone(), f);
+                            }
+                            Kind::MatchLogin => {
+                                field_policies.match_login.insert(fld.name.clone());
+                            }
+                            Kind::Omit => {
+                                field_policies.omit.insert(fld.name.clone());
                             }
                         }
                     }
@@ -194,9 +179,7 @@ impl Policies {
         }
         field_policies
     }
-}
 
-impl VersionPolicy {
     pub fn from_yaml(config: &str) -> Result<Self> {
         let mut policies = Self::default();
         let mut labels = vec![];

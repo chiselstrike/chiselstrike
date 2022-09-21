@@ -52,7 +52,7 @@
             const ret = [];
             for (const name of moduleNames) {
                 const fname = Deno.core.opSync(
-                    "fetch",
+                    "resolve",
                     name,
                     containingFile,
                 );
@@ -74,7 +74,7 @@
             for (const name of typeReferenceDirectiveNames) {
                 const strName = typeof name == "string" ? name : name.fileName;
                 const fname = Deno.core.opSync(
-                    "fetch",
+                    "resolve",
                     strName,
                     containingFile,
                 );

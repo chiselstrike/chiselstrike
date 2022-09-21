@@ -15,8 +15,8 @@ set +e
 $CHISEL apply 2>&1
 set -e
 
-# CHECK: Error: Could not apply the provided code
-# CHECK: expected type `v8::data::Function`, got `v8::data::Value`
+# CHECK: Error: Could not compile routes
+# CHECK: has no default export
 
 $CURL -o - $CHISELD_HOST/dev/test
 

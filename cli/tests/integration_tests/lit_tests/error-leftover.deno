@@ -39,7 +39,7 @@ $CHISEL apply
 
 $CURL $CHISELD_HOST/dev/error 2>&1 || true
 
-# CHECK: [[(Empty reply from server)|(transfer closed with outstanding read data remaining)]]
+# CHECK: HTTP/1.1 500 Internal Server Error
 
 $CURL $CHISELD_HOST/dev/ok | tee output
 

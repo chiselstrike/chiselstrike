@@ -189,12 +189,8 @@ pub struct QueryEngine {
 }
 
 impl QueryEngine {
-    fn new(db: Arc<DbConnection>) -> Self {
+    pub fn new(db: Arc<DbConnection>) -> Self {
         Self { db }
-    }
-
-    pub async fn local_connection(conn: &DbConnection, nr_conn: usize) -> Result<Self> {
-        Ok(Self::new(Arc::new(conn.local_connection(nr_conn).await?)))
     }
 
     fn target_db(&self) -> TargetDatabase {
@@ -214,14 +210,14 @@ impl QueryEngine {
         let drop_table = Table::drop()
             .table(Alias::new(ty.backing_table()))
             .to_owned();
-        let drop_table = drop_table.build_any(self.db.query_builder());
+        let drop_table = drop_table.build_any(self.db.schema_builder());
         let drop_table = sqlx::query(&drop_table);
         transaction.execute(drop_table).await?;
 
         Ok(())
     }
 
-    pub async fn begin_transaction_static(self: Arc<Self>) -> Result<TransactionStatic> {
+    pub async fn begin_transaction_static(&self) -> Result<TransactionStatic> {
         Ok(Arc::new(Mutex::new(self.db.pool.begin().await?)))
     }
 
@@ -254,7 +250,7 @@ impl QueryEngine {
             let mut column_def = ColumnDef::try_from(field)?;
             create_table.col(&mut column_def);
         }
-        let create_table = create_table.build_any(self.db.query_builder());
+        let create_table = create_table.build_any(self.db.schema_builder());
 
         let create_table = sqlx::query(&create_table);
         transaction.execute(create_table).await?;
@@ -612,7 +608,10 @@ impl QueryEngine {
                             // this save completes.  Better to check at compilation time that the endpoint code
                             // doesn't attempt to modify auth types.
                             Some(serde_json::Value::String(id)) => id.clone(),
-                            _ => anyhow::bail!("Cannot save into type {}.", nested_type.name()),
+                            _ => anyhow::bail!(
+                                "Cannot save into nested type {}.",
+                                nested_type.name()
+                            ),
                         }
                     } else {
                         let (nested_inserts, nested_ids) =

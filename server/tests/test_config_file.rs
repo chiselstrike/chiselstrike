@@ -56,7 +56,6 @@ fn test_simple_config_file() {
     let conf = write_config(
         r#"
 api_listen_addr = "localhost:12345"
-executor_threads = 21
     "#,
     );
     let out = chiseld_check_config(&["-c", &conf.path().display().to_string()], &[]);
@@ -75,7 +74,7 @@ executor_threads = 21
         "inspect_brk": false,
         "debug": false,
         "nr_connections": 10,
-        "executor_threads": 21,
+        "worker_threads": 1,
         "chisel_secret_location": Value::Null,
         "chisel_secret_key_location": Value::Null,
     });
@@ -88,7 +87,6 @@ fn test_simple_cli_priority() {
     let conf = write_config(
         r#"
 api_listen_addr = "localhost:12345"
-executor_threads = 21
     "#,
     );
     let out = chiseld_check_config(
@@ -115,7 +113,7 @@ executor_threads = 21
         "inspect_brk": false,
         "debug": false,
         "nr_connections": 10,
-        "executor_threads": 21,
+        "worker_threads": 1,
         "chisel_secret_location": Value::Null,
         "chisel_secret_key_location": Value::Null,
     });
@@ -130,7 +128,6 @@ fn test_default_file_location() {
     let conf = write_config_default_path(
         r#"
 api_listen_addr = "localhost:12345"
-executor_threads = 21
     "#,
     );
 
@@ -153,7 +150,7 @@ executor_threads = 21
         "inspect_brk": false,
         "debug": false,
         "nr_connections": 10,
-        "executor_threads": 21,
+        "worker_threads": 1,
         "chisel_secret_location": Value::Null,
         "chisel_secret_key_location": Value::Null,
     });
@@ -168,14 +165,12 @@ fn exlicit_config_file_over_default() {
     let default_conf = write_config_default_path(
         r#"
 api_listen_addr = "localhost:12345"
-executor_threads = 21
     "#,
     );
 
     let explicit_conf = write_config(
         r#"
 api_listen_addr = "localhost:12346"
-executor_threads = 21
     "#,
     );
 
@@ -201,7 +196,7 @@ executor_threads = 21
         "inspect_brk":false,
         "debug": false,
         "nr_connections":10,
-        "executor_threads":21,
+        "worker_threads": 1,
         "chisel_secret_location": Value::Null,
         "chisel_secret_key_location": Value::Null,
     });

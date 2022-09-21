@@ -1,7 +1,8 @@
 // SPDX-FileCopyrightText: © 2022 ChiselStrike <info@chiselstrike.com>
 
+use crate::database::{DatabaseConfig, PostgresConfig};
 use crate::framework::TestContext;
-use crate::Opt;
+use crate::{DatabaseKind, Opt};
 use futures::future::BoxFuture;
 use itertools::iproduct;
 
@@ -14,6 +15,8 @@ pub struct TestSpec {
     pub name: &'static str,
     pub modules: ModulesSpec,
     pub optimize: OptimizeSpec,
+    pub db: DatabaseSpec,
+    pub start_chiseld: bool,
     pub test_fn: &'static (dyn TestFn + Sync),
 }
 
@@ -21,6 +24,7 @@ pub struct TestInstance {
     pub spec: &'static TestSpec,
     pub modules: Modules,
     pub optimize: bool,
+    pub db_config: DatabaseConfig,
 }
 
 inventory::collect!(TestSpec);
@@ -48,7 +52,7 @@ impl TestSuite {
             match (test_spec.modules, modules) {
                 (ModulesSpec::Deno, Modules::Deno) => {}
                 (ModulesSpec::Node, Modules::Node) => {}
-                //(ModulesSpec::Both, _) => {}
+                (ModulesSpec::Both, _) => {}
                 (_, _) => return None,
             }
 
@@ -59,10 +63,29 @@ impl TestSuite {
                 (_, _) => return None,
             }
 
+            let db_config = match (test_spec.db, opt.database) {
+                (DatabaseSpec::Any | DatabaseSpec::Sqlite, DatabaseKind::Sqlite) => {
+                    DatabaseConfig::Sqlite
+                }
+                (DatabaseSpec::Any, DatabaseKind::Postgres) => {
+                    DatabaseConfig::Postgres(PostgresConfig::new(
+                        opt.database_host.clone(),
+                        opt.database_user.clone(),
+                        opt.database_password.clone(),
+                    ))
+                }
+                (DatabaseSpec::LegacySplitSqlite, DatabaseKind::Sqlite) => {
+                    DatabaseConfig::LegacySplitSqlite
+                }
+                (DatabaseSpec::Sqlite, DatabaseKind::Postgres) => return None,
+                (DatabaseSpec::LegacySplitSqlite, DatabaseKind::Postgres) => return None,
+            };
+
             Some(TestInstance {
                 spec: test_spec,
                 modules,
                 optimize,
+                db_config,
             })
         })
         .collect()
@@ -73,7 +96,7 @@ impl TestSuite {
 pub enum ModulesSpec {
     Deno,
     Node,
-    //Both,
+    Both,
 }
 
 #[derive(Copy, Clone, Debug)]
@@ -87,6 +110,13 @@ pub enum OptimizeSpec {
     Yes,
     //No,
     Both,
+}
+
+#[derive(Copy, Clone, Debug)]
+pub enum DatabaseSpec {
+    Any,
+    Sqlite,
+    LegacySplitSqlite,
 }
 
 pub trait TestFn {

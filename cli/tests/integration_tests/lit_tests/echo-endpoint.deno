@@ -35,7 +35,6 @@ $CURL --data foobar -o - $CHISELD_HOST/dev/echo
 
 # CHECK: HTTP/1.1 200 OK
 # CHECK: content-type: text/plain;charset=UTF-8
-# CHECK: transfer-encoding: chunked
 # CHECK: date:
 
 # CHECK: {
@@ -60,7 +59,6 @@ $CURL -H 'Expect: 100-continue' --data foobar -o - $CHISELD_HOST/dev/echo
 
 # CHECK: HTTP/1.1 200 OK
 # CHECK: content-type: text/plain;charset=UTF-8
-# CHECK: transfer-encoding: chunked
 # CHECK: date:
 
 # CHECK: {

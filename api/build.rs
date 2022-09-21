@@ -9,13 +9,12 @@ use tsc_compile::CompileOptions;
 
 // TODO: maybe we can import all .ts files in just a single invocation of tsc?
 
-async fn compile(stem: &str, is_worker: bool) -> Result<()> {
+async fn compile(stem: &str) -> Result<()> {
     let src = &format!("src/{}.ts", stem);
     println!("cargo:rerun-if-changed={}", src);
 
     let opts = CompileOptions {
         emit_declarations: true,
-        is_worker,
         ..Default::default()
     };
     let mut map = compile_ts_code(&[src], opts)
@@ -38,14 +37,17 @@ async fn main() -> Result<()> {
     // should be the only rerun-if-changed that we need.
     println!("cargo:rerun-if-changed=../third_party/deno/core/lib.deno_core.d.ts");
 
-    compile("api", false).await?;
-    compile("crud", false).await?;
-    compile("datastore", false).await?;
-    compile("endpoint", false).await?;
-    compile("event", false).await?;
-    compile("request", false).await?;
-    compile("utils", false).await?;
-    compile("worker", true).await?;
+    compile("api").await?;
+    compile("builtin_root").await?;
+    compile("crud").await?;
+    compile("datastore").await?;
+    compile("http").await?;
+    compile("kafka").await?;
+    compile("request").await?;
+    compile("routing").await?;
+    compile("run").await?;
+    compile("special").await?;
+    compile("utils").await?;
 
     Ok(())
 }
