@@ -93,6 +93,13 @@ fn get_field_info(handler: &Handler, x: &PropName) -> Result<(String, bool)> {
 }
 
 fn map_array_type(handler: &Handler, x: &TsType) -> Result<TypeEnum> {
+    let err = || {
+        Err(swc_err(
+            handler,
+            x,
+            "only arrays of primitive types are supported",
+        ))
+    };
     match x {
         TsType::TsArrayType(array_type) => match &*array_type.elem_type {
             TsType::TsKeywordType(kw) => match kw.kind {
@@ -102,11 +109,17 @@ fn map_array_type(handler: &Handler, x: &TsType) -> Result<TypeEnum> {
                 _ => Err(swc_err(handler, x, "type keyword not supported")),
             },
             TsType::TsArrayType(_) => map_array_type(handler, &*array_type.elem_type),
-            _ => Err(swc_err(
-                handler,
-                x,
-                "only arrays of primitive types are supported",
-            )),
+            TsType::TsTypeRef(tr) => match &tr.type_name {
+                TsEntityName::Ident(id) => {
+                    let ident_name = ident_to_string(id);
+                    match ident_name.as_str() {
+                        "Date" => Ok(TypeEnum::JsDate(true)),
+                        _ => err(),
+                    }
+                }
+                _ => err(),
+            },
+            _ => err(),
         }
         .map(TypeEnum::array),
         _ => panic!("trying to map as array a type which is not an array"),

@@ -592,6 +592,7 @@ impl Chisel {
         self.post(url).json(data).send().await.assert_ok();
     }
 
+    #[allow(dead_code)]
     pub async fn post_json_status<V: Borrow<serde_json::Value>>(&self, url: &str, data: V) -> u16 {
         self.post(url).json(data).send().await.status()
     }

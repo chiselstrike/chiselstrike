@@ -713,17 +713,24 @@ impl QueryEngine {
     fn validate_array(&self, element_type: &TypeId, value: &EntityValue) -> Result<()> {
         let elements = value.as_array()?;
         for (i, e) in elements.iter().enumerate() {
+            macro_rules! bail {
+               () => { anyhow::bail!("stored array should have elements of type '{}', but found '{:?}' at position {i}", element_type.name(), e)}
+            }
             macro_rules! maybe_bail {
-                    ($is_type:ident) => {{
-                        if !e.$is_type() {
-                            anyhow::bail!("stored array should have elements of type '{}', but found '{:?}' at position {i}", element_type.name(), e)
-                        }
-                    }};
-                }
+                ($is_type:ident) => {{
+                    if !e.$is_type() {
+                        bail!();
+                    }
+                }};
+            }
             match element_type {
                 TypeId::String | TypeId::Id => maybe_bail!(is_string),
                 TypeId::Float => maybe_bail!(is_f64),
-                TypeId::JsDate => maybe_bail!(is_date),
+                TypeId::JsDate => {
+                    if !e.is_date() && !e.is_f64() {
+                        bail!();
+                    }
+                }
                 TypeId::Boolean => maybe_bail!(is_boolean),
                 TypeId::Array(inner_element) => self
                     .validate_array(inner_element, e)
