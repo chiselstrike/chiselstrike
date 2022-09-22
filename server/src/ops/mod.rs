@@ -6,6 +6,7 @@ use anyhow::{bail, Result};
 use deno_core::{serde_v8, v8};
 
 mod datastore;
+mod env;
 mod job;
 
 pub fn extension() -> deno_core::Extension {
@@ -17,7 +18,6 @@ pub fn extension() -> deno_core::Extension {
             op_chisel_get_version_info::decl(),
             op_chisel_is_debug::decl(),
             op_format_file_name::decl(),
-            op_cwd::decl(),
             datastore::op_chisel_begin_transaction::decl(),
             datastore::op_chisel_commit_transaction::decl(),
             datastore::op_chisel_rollback_transaction::decl(),
@@ -27,6 +27,11 @@ pub fn extension() -> deno_core::Extension {
             datastore::op_chisel_crud_query::decl(),
             datastore::op_chisel_relational_query_create::decl(),
             datastore::op_chisel_query_next::decl(),
+            env::op_cwd::decl(),
+            env::op_set_env::decl(),
+            env::op_env::decl(),
+            env::op_get_env::decl(),
+            env::op_delete_env::decl(),
             job::op_chisel_accept_job::decl(),
             job::op_chisel_http_respond::decl(),
         ])
@@ -83,12 +88,4 @@ fn op_chisel_is_debug(state: &mut deno_core::OpState) -> bool {
 #[deno_core::op]
 fn op_format_file_name(file_name: String) -> Result<String> {
     Ok(file_name)
-}
-
-// Overrides a Deno op, which requires a filesystem read permissions, with a dummy implementation.
-// This is needed because some Node libraries (such as `memfs`) use `process.cwd` without
-// restraint, even if they don't try to read anything from the filesystem.
-#[deno_core::op]
-fn op_cwd() -> Result<String> {
-    Ok("/".into())
 }
