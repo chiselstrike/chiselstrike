@@ -137,6 +137,8 @@ async fn run(init: WorkerInit) -> Result<()> {
     let permissions = Permissions {
         // FIXME: Temporary hack to allow easier testing for now
         net: Permissions::new_net(&Some(vec![]), false).unwrap(),
+        // TODO: Is it wise to allow access to env?
+        env: Permissions::new_env(&Some(vec![]), false).unwrap(),
         ..Permissions::default()
     };
 

@@ -131,6 +131,7 @@ pub(crate) async fn apply(
     let banner = concat!(
         "import { createRequire as __createRequire } from 'chisel://deno-std/node/module.ts'; ",
         "var require = __createRequire(import.meta.url);",
+        "var __filename = '__root.ts';",
     );
 
     let bundler_args: Vec<OsString> = vec![
