@@ -153,7 +153,7 @@ pub(crate) async fn apply(
         format!("--banner:js={}", banner).into(),
     ];
 
-    let bundler_output = npx("esbuild", &bundler_args)?
+    let bundler_output = esbuild(&bundler_args)?
         .wait_with_output()
         .await
         .context("Could not run esbuild")?;
@@ -167,6 +167,17 @@ pub(crate) async fn apply(
     }];
 
     Ok((modules, index_candidates))
+}
+
+fn esbuild<A: AsRef<OsStr>>(args: &[A]) -> Result<tokio::process::Child> {
+    let command = "./node_modules/esbuild/bin/esbuild";
+    let cmd = tokio::process::Command::new(command)
+        .args(args)
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .spawn()
+        .context(format!("Could not start `{}`", command))?;
+    Ok(cmd)
 }
 
 fn npx<A: AsRef<OsStr>>(command: &'static str, args: &[A]) -> Result<tokio::process::Child> {
