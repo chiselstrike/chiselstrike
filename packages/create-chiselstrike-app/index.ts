@@ -48,6 +48,7 @@ function run(projectDirectory: string, chiselVersion: string) {
     fs.closeSync(fs.openSync(path.join(policiesPath, ".gitkeep"), "w"));
     const rootFiles = [
         "Chisel.toml",
+        "Dockerfile",
         "package.json",
         "tsconfig.json",
     ];
@@ -87,6 +88,10 @@ function run(projectDirectory: string, chiselVersion: string) {
     fs.copyFileSync(
         path.join(__dirname, "template", "gitignore"),
         path.join(projectDirectory, "", ".gitignore"),
+    );
+    fs.copyFileSync(
+        path.join(__dirname, "template", "dockerignore"),
+        path.join(projectDirectory, "", ".dockerignore"),
     );
     console.log("Installing packages. This might take a couple of minutes.");
     process.chdir(projectDirectory);
