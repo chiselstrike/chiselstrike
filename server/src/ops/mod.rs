@@ -6,6 +6,7 @@ use anyhow::{bail, Result};
 use deno_core::{serde_v8, v8};
 
 mod datastore;
+mod env;
 mod job;
 mod type_system;
 
@@ -27,6 +28,11 @@ pub fn extension() -> deno_core::Extension {
             datastore::op_chisel_crud_query::decl(),
             datastore::op_chisel_relational_query_create::decl(),
             datastore::op_chisel_query_next::decl(),
+            env::op_cwd::decl(),
+            env::op_set_env::decl(),
+            env::op_env::decl(),
+            env::op_get_env::decl(),
+            env::op_delete_env::decl(),
             job::op_chisel_accept_job::decl(),
             job::op_chisel_http_respond::decl(),
             type_system::op_chisel_get_type_system::decl(),

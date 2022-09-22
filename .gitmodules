@@ -1,3 +1,6 @@
 [submodule "third_party/deno"]
 	path = third_party/deno
 	url = https://github.com/denoland/deno.git
+[submodule "third_party/deno_std"]
+	path = third_party/deno_std
+	url = https://github.com/denoland/deno_std.git

@@ -66,6 +66,12 @@ pub struct WorkerState {
     ///
     /// To wait on this channel, we temporarily move out of the `Option`.
     pub job_rx: Option<mpsc::Receiver<VersionJob>>,
+
+    /// Fake environment variables.
+    ///
+    /// We don't let the user code read the actual environment variables of this process, but we
+    /// implement `set_env` and `get_env` using this map.
+    pub fake_env: HashMap<String, String>,
 }
 
 pub async fn spawn(init: WorkerInit) -> Result<WorkerJoinHandle> {
@@ -161,6 +167,7 @@ async fn run(init: WorkerInit) -> Result<()> {
         transaction: None,
         ready_tx: Some(init.ready_tx),
         job_rx: Some(init.job_rx),
+        fake_env: HashMap::new(),
     };
     worker.js_runtime.op_state().borrow_mut().put(worker_state);
 

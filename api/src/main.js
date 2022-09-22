@@ -6,6 +6,6 @@
 // apply`. This transitively loads all user code.
 import { routeMap, topicMap } from "file:///__root.ts";
 
-/// Continue in TypeScript.
+// Continue in TypeScript.
 import run from "chisel://api/run.ts";
 await run(routeMap, topicMap);

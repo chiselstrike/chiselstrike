@@ -1,0 +1,17 @@
+[package]
+name = "deno_std"
+version = "0.13.0-dev.0"
+authors = ["ChiselStrike"]
+edition = "2021"
+
+[lib]
+name = "deno_std"
+
+[dependencies]
+lazy_static = "1.4"
+
+[build-dependencies]
+anyhow = "1.0"
+deno_ast = {version = "0.19", features = ["transpiling"]}
+lazy_static = "1.4"
+regex = "1"
