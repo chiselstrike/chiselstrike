@@ -116,6 +116,20 @@ pub fn compile<W: Write>(
 
     let mut rewriter = Rewriter::new(symbols);
     let module = rewriter.rewrite(module);
+
+    if let Target::FilterProperties = target {
+        writeln!(&mut output, "{}", serde_json::to_string(&rewriter.indexes)?)?;
+    }
+
+    emit(module, target, ctx.sm, output)
+}
+
+pub fn emit<W: Write>(
+    module: Module,
+    target: Target,
+    sm: Lrc<SourceMap>,
+    mut output: W,
+) -> Result<()> {
     // If we're emitting JavaScript, get rid of TypeScript types.
     let module = match target {
         Target::JavaScript => {
@@ -136,15 +150,13 @@ pub fn compile<W: Write>(
                 cfg: swc_ecmascript::codegen::Config {
                     ..Default::default()
                 },
-                cm: ctx.sm.clone(),
+                cm: sm.clone(),
                 comments: None,
-                wr: JsWriter::new(ctx.sm, "\n", &mut output, None),
+                wr: JsWriter::new(sm, "\n", &mut output, None),
             };
             emitter.emit_module(&module).unwrap();
         }
-        Target::FilterProperties => {
-            writeln!(&mut output, "{}", serde_json::to_string(&rewriter.indexes)?)?;
-        }
+        _ => (),
     }
     Ok(())
 }
