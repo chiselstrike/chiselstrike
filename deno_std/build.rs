@@ -1,6 +1,6 @@
 // SPDX-FileCopyrightText: © 2022 ChiselStrike <info@chiselstrike.com>
 
-use anyhow::{anyhow, Result};
+use anyhow::{anyhow, ensure, Result};
 use lazy_static::lazy_static;
 use regex::Regex;
 use std::collections::HashSet;
@@ -18,6 +18,11 @@ fn main() -> Result<()> {
 
     let mut modules = Vec::new();
     transpile_dir(&deno_std_dir, &[], &mut modules)?;
+    ensure!(
+        !modules.is_empty(),
+        "No TypeScript/JavaScript source files were found in {}. Did you update the git submodule?",
+        deno_std_dir.display(),
+    );
 
     let mut gen_lines = Vec::<String>::new();
     gen_lines.push("lazy_static! {".into());
@@ -62,6 +67,8 @@ fn transpile_dir(
     dir_path_segments: &[String],
     out_modules: &mut Vec<Module>,
 ) -> Result<()> {
+    println!("cargo:rerun-if-changed={}", dir_path.display());
+
     let dir_url_path = dir_path_segments.join("/");
     if SKIP_DIRS.contains(dir_url_path.as_str()) {
         return Ok(());
