@@ -30,6 +30,7 @@ async fn main() {
             .tsc
             .runtime
             .inspector()
+            .borrow_mut()
             .wait_for_session_and_break_on_next_statement();
     }
 

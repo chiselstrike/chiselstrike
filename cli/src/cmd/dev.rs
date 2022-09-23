@@ -9,7 +9,9 @@ use deno_core::futures;
 use endpoint_tsc::tsc_compile;
 use futures::channel::mpsc::channel;
 use futures::{SinkExt, StreamExt};
-use notify::{event::ModifyKind, Event, EventKind, RecommendedWatcher, RecursiveMode, Watcher};
+use notify::{
+    event::ModifyKind, Config, Event, EventKind, RecommendedWatcher, RecursiveMode, Watcher,
+};
 use std::collections::HashSet;
 use std::env;
 use std::panic;
@@ -41,13 +43,17 @@ pub(crate) async fn cmd_dev(
     wait(server_url.clone()).await?;
     apply_from_dev(server_url.clone(), type_check).await;
     let (mut watcher_tx, mut watcher_rx) = channel(1);
-    let mut apply_watcher = RecommendedWatcher::new(move |res: Result<Event, notify::Error>| {
-        futures::executor::block_on(async {
-            watcher_tx.send(res).await.unwrap();
-        });
-    })?;
-    let watcher_config = notify::Config::OngoingEvents(Some(Duration::from_millis(100)));
-    apply_watcher.configure(watcher_config.clone())?;
+    let config = Config::default()
+        .with_poll_interval(Duration::from_millis(100))
+        .with_compare_contents(true);
+    let mut apply_watcher = RecommendedWatcher::new(
+        move |res: Result<Event, notify::Error>| {
+            futures::executor::block_on(async {
+                watcher_tx.send(res).await.unwrap();
+            });
+        },
+        config,
+    )?;
 
     let mut tracked = HashSet::new();
     let cwd = std::env::current_dir()?;
