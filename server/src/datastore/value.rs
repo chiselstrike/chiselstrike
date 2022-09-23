@@ -46,7 +46,9 @@ impl EntityValue {
             EntityValue::Array(value_vec)
         } else if v.is_object() {
             let obj = v.to_object(scope).unwrap();
-            let prop_names = obj.get_own_property_names(scope).unwrap();
+            let prop_names = obj
+                .get_own_property_names(scope, Default::default())
+                .unwrap();
             let mut record = EntityMap::with_capacity(prop_names.length() as usize);
             for i in 0..prop_names.length() {
                 let raw_key = prop_names.get_index(scope, i).unwrap();

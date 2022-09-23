@@ -101,6 +101,7 @@ async fn run(init: WorkerInit) -> Result<()> {
         debug_flag: false,
         enable_testing_features: false,
         is_tty: false,
+        inspect: init.server.opt.inspect || init.server.opt.inspect_brk,
         // FIXME: make location a configuration parameter
         location: Some(Url::parse("http://chiselstrike.com").unwrap()),
         no_color: true,
