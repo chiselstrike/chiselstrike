@@ -101,8 +101,8 @@ impl TryFrom<&Field> for ColumnDef {
             TypeId::Id => column_def.text().primary_key(),
             TypeId::Float | TypeId::JsDate => column_def.double(),
             TypeId::Boolean => column_def.boolean(),
-            TypeId::Entity { .. } => column_def.text(), // Foreign key, must the be same type as Type::Id
-            TypeId::Array(_) => column_def.text(),      // Arrays are stored as serialized JSONs.
+            TypeId::Entity { .. } | TypeId::EntityId { .. } => column_def.text(), // Foreign key, must the be same type as Type::Id
+            TypeId::Array(_) => column_def.text(), // Arrays are stored as serialized JSONs.
         };
 
         Ok(column_def)
@@ -421,7 +421,7 @@ impl QueryEngine {
                             let val: f64 = row.get_unchecked(column_idx);
                             EntityValue::JsDate(val)
                         }
-                        TypeId::String | TypeId::Id => {
+                        TypeId::String | TypeId::Id | TypeId::EntityId { .. } => {
                             let val = row.get::<&str, _>(column_idx);
                             EntityValue::String(val.to_owned())
                         }
@@ -695,7 +695,7 @@ impl QueryEngine {
         }
 
         let arg = match &field.type_id {
-            TypeId::String | TypeId::Id | TypeId::Entity { .. } => {
+            TypeId::String | TypeId::Id | TypeId::Entity { .. } | TypeId::EntityId { .. } => {
                 SqlValue::String(convert_json_value!(as_str, String))
             }
             TypeId::Float => SqlValue::F64(convert_json_value!(as_f64, f64)),
@@ -733,7 +733,9 @@ impl QueryEngine {
                 }};
             }
             match element_type {
-                TypeId::String | TypeId::Id => maybe_bail!(is_string),
+                TypeId::String | TypeId::Id | TypeId::EntityId { .. } => {
+                    maybe_bail!(is_string)
+                }
                 TypeId::Float => maybe_bail!(is_f64),
                 TypeId::JsDate => {
                     if !e.is_date() && !e.is_f64() {

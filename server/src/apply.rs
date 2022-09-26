@@ -117,7 +117,7 @@ or
     for type_def in sort_custom_types(type_system, apply_request.types.clone())? {
         let name = type_def.name;
         if type_system.lookup_builtin_type(&name).is_ok() {
-            bail!("custom type expected, got `{}` instead", name);
+            bail!("custom type expected, got `{name}` instead");
         }
 
         let mut fields = Vec::new();
@@ -136,8 +136,16 @@ or
                         bail!("field type `{entity_name}` is neither a built-in nor a custom type",)
                     }
                 }
+            } else if let TypeEnum::EntityId(entity_name) = field_ty {
+                if !type_names.contains(entity_name) {
+                    bail!(
+                        "field `{}` of entity `{name}` is of type `Id<{entity_name}>`, but entity `{entity_name}` is undefined",
+                        field.name
+                    );
+                }
+                Type::EntityId(entity_name.to_owned())
             } else {
-                bail!("field type must either contain an entity or be a builtin");
+                bail!("field type must either be entity, entity id or be a builtin");
             };
 
             fields.push(Field::new(
@@ -337,7 +345,9 @@ impl TypeEnum {
             TypeEnum::String(_) | TypeEnum::Number(_) | TypeEnum::Bool(_) | TypeEnum::JsDate(_) => {
                 true
             }
-            TypeEnum::Entity(name) => ts.lookup_builtin_type(name).is_ok(),
+            TypeEnum::Entity(name) | TypeEnum::EntityId(name) => {
+                ts.lookup_builtin_type(name).is_ok()
+            }
             TypeEnum::Array(inner) => inner.value_type()?.is_builtin(ts)?,
         };
         Ok(is_builtin)
@@ -350,6 +360,7 @@ impl TypeEnum {
             TypeEnum::Bool(_) => Type::Boolean,
             TypeEnum::JsDate(_) => Type::JsDate,
             TypeEnum::Entity(name) => ts.lookup_builtin_type(name)?,
+            TypeEnum::EntityId(entity_name) => Type::EntityId(entity_name.to_owned()),
             TypeEnum::Array(inner) => Type::Array(Box::new(inner.value_type()?.get_builtin(ts)?)),
         };
         Ok(ty)
@@ -364,6 +375,7 @@ impl From<Type> for TypeMsg {
             Type::Boolean => TypeEnum::Bool(true),
             Type::JsDate => TypeEnum::JsDate(true),
             Type::Entity(entity) => TypeEnum::Entity(entity.name().to_owned()),
+            Type::EntityId(entity_name) => TypeEnum::EntityId(entity_name),
             Type::Array(elem_type) => {
                 let inner_msg = (*elem_type).into();
                 TypeEnum::Array(Box::new(ContainerType {

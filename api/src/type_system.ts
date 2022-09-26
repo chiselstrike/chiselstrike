@@ -10,7 +10,8 @@ export type Type =
     | { name: "boolean" }
     | { name: "jsDate" }
     | { name: "array"; elementType: Type }
-    | { name: "entity"; entityName: string };
+    | { name: "entity"; entityName: string }
+    | { name: "entityId"; entityName: string };
 
 export type Field = {
     name: string;
