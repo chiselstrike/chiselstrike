@@ -57,6 +57,10 @@ enum SimpleTypeId {
         #[serde(rename = "entityName")]
         entity_name: String,
     },
+    EntityId {
+        #[serde(rename = "entityName")]
+        entity_name: String,
+    },
     Array {
         #[serde(rename = "elementType")]
         element_type: Box<SimpleTypeId>,
@@ -91,6 +95,9 @@ fn simplify_type_id(ty: &TypeId) -> SimpleTypeId {
         },
         TypeId::Entity { name, .. } => SimpleTypeId::Entity {
             entity_name: name.to_owned(),
+        },
+        TypeId::EntityId(entity_name) => SimpleTypeId::EntityId {
+            entity_name: entity_name.to_owned(),
         },
     }
 }

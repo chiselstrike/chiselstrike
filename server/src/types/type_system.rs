@@ -191,11 +191,18 @@ impl TypeSystem {
 
     /// Looks up a builtin type with name `type_name`.
     pub fn lookup_builtin_type(&self, type_name: &str) -> Result<Type, TypeSystemError> {
-        if let Some(element_type_str) = type_name.strip_prefix("Array<") {
-            if let Some(element_type_str) = element_type_str.strip_suffix('>') {
-                let element_type = self.lookup_builtin_type(element_type_str)?;
-                return Ok(Type::Array(Box::new(element_type)));
+        let extract_type = |typ: &str| -> Option<&str> {
+            if let Some(template_type) = type_name.strip_prefix(&format!("{typ}<")) {
+                template_type.strip_suffix('>')
+            } else {
+                None
             }
+        };
+        if let Some(element_type_str) = extract_type("Array") {
+            let element_type = self.lookup_builtin_type(element_type_str)?;
+            return Ok(Type::Array(Box::new(element_type)));
+        } else if let Some(entity_name) = extract_type("Id") {
+            return Ok(Type::EntityId(entity_name.to_owned()));
         }
         self.builtin
             .types
@@ -288,6 +295,7 @@ impl TypeSystem {
                     self.lookup_entity(name).map(Type::Entity)
                 }
             }
+            TypeId::EntityId(entity_name) => Ok(Type::EntityId(entity_name.to_owned())),
         }
     }
 }

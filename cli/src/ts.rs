@@ -17,7 +17,7 @@ use swc_ecma_ast::{
     TsEntityName, TsKeywordTypeKind, TsType, TsTypeAnn,
 };
 use swc_ecma_parser::{lexer::Lexer, Parser, StringInput, Syntax, TsConfig};
-use swc_ecmascript::ast::{self as swc_ecma_ast};
+use swc_ecmascript::ast::{self as swc_ecma_ast, TsTypeRef};
 use swc_ecmascript::parser as swc_ecma_parser;
 
 impl FieldDefinition {
@@ -61,6 +61,7 @@ impl fmt::Display for TypeEnum {
             TypeEnum::Bool(_) => f.write_str("boolean"),
             TypeEnum::JsDate(_) => f.write_str("jsDate"),
             TypeEnum::Entity(name) => name.fmt(f),
+            TypeEnum::EntityId(entity_name) => write!(f, "Id<{entity_name}>"),
             TypeEnum::Array(inner) => {
                 let inner = inner.value_type().unwrap();
                 write!(f, "Array<{inner}>")
@@ -114,6 +115,7 @@ fn map_array_type(handler: &Handler, x: &TsType) -> Result<TypeEnum> {
                     let ident_name = ident_to_string(id);
                     match ident_name.as_str() {
                         "Date" => Ok(TypeEnum::JsDate(true)),
+                        "Id" => map_entity_id(handler, tr),
                         _ => err(),
                     }
                 }
@@ -139,6 +141,7 @@ fn map_type(handler: &Handler, x: &TsType) -> Result<TypeEnum> {
                 let ident_name = ident_to_string(id);
                 match ident_name.as_str() {
                     "Date" => Ok(TypeEnum::JsDate(true)),
+                    "Id" => map_entity_id(handler, tr),
                     _ => Ok(TypeEnum::Entity(ident_name)),
                 }
             }
@@ -147,6 +150,30 @@ fn map_type(handler: &Handler, x: &TsType) -> Result<TypeEnum> {
         TsType::TsArrayType(_) => map_array_type(handler, x),
         t => Err(swc_err(handler, t, "type is not supported")),
     }
+}
+
+fn map_entity_id(handler: &Handler, tr: &TsTypeRef) -> Result<TypeEnum> {
+    let type_params = &tr
+        .type_params
+        .as_ref()
+        .context("type Id must have type parameter")?
+        .params;
+    ensure!(
+        type_params.len() == 1,
+        "type Id requires exactly one type argument"
+    );
+    let param = type_params.get(0).unwrap();
+    if let TsType::TsTypeRef(tr) = &**param {
+        if let TsEntityName::Ident(entity_id) = &tr.type_name {
+            let entity_name = ident_to_string(entity_id);
+            return Ok(TypeEnum::EntityId(entity_name));
+        }
+    }
+    Err(swc_err(
+        handler,
+        tr,
+        "the type argument of type Id must refer to an entity",
+    ))
 }
 
 fn get_field_type(handler: &Handler, t: &TsTypeAnn) -> Result<TypeEnum> {

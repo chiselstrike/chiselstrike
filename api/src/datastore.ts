@@ -877,6 +877,40 @@ export class ChiselEntity {
     }
 
     /**
+     * Returns a single entity of type T that is identified by `entityId`.
+     *
+     * If no such entity is found, an exception is thrown.
+     */
+    static async byId<T extends ChiselEntity>(
+        this: typeof ChiselEntity & { new (): T },
+        entityId: Id<T>,
+    ): Promise<T> {
+        const entity = await this.findById<T>(entityId);
+        if (entity === undefined) {
+            throw Error(`failed to find entity with id '${entityId}'`);
+        }
+        return entity;
+    }
+
+    /**
+     * Returns a single entity of type T that is identified by `entityId`.
+     *
+     * If no such entity is found, returns undefined.
+     */
+    static async findById<T extends ChiselEntity>(
+        this: { new (): T },
+        entityId: Id<T>,
+    ): Promise<T | undefined> {
+        const it = chiselIterator<T>(this).filter(
+            { id: entityId } as Partial<T>,
+        ).take(1);
+        for await (const value of it) {
+            return value;
+        }
+        return undefined;
+    }
+
+    /**
      * Deletes all entities that match the `restrictions` object.
      *
      * @example
@@ -1163,7 +1197,7 @@ function mergeSourceIntoEntity(
                 `field ${field.name} of entity ${entityName} is ${typeName}, but provided value ${fieldValue} is of type ${typeof fieldValue}`,
             );
         };
-        if (field.type.name == "string") {
+        if (field.type.name == "string" || field.type.name == "entityId") {
             if (typeof fieldValue == "string") {
                 target[field.name] = fieldValue;
             } else {
@@ -1226,3 +1260,5 @@ function mergeSourceIntoEntity(
         }
     }
 }
+
+export type Id<Entity extends ChiselEntity> = Entity["id"];
