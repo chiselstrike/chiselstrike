@@ -546,14 +546,14 @@ mod tests {
         expected.sort_unstable();
         assert_eq!(keys, expected);
         let body = written[path].clone();
-        assert!(body.starts_with("import indent from"));
+        assert!(body.contains("import indent from"));
         assert!(!body.contains("undefined"));
     }
 
     async fn check_test2_ts(path: &str) {
         let written = compile_ts_code(&[path], Default::default()).await.unwrap();
         let body = written[path].clone();
-        assert!(body.starts_with("import { zed } from"));
+        assert!(body.contains("import { zed } from"));
     }
 
     #[tokio::test]

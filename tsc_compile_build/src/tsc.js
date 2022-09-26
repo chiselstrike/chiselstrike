@@ -118,7 +118,7 @@
             lib: defaultLibs,
             module: ts.ModuleKind.ESNext,
             noImplicitAny: true,
-            removeComments: true,
+            removeComments: false,
             strictPropertyInitialization: false, // we don't support constructors, so don't be strict about this
             strict: true,
             target: ts.ScriptTarget.ESNext,
