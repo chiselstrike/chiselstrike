@@ -28,6 +28,8 @@ enum AcceptedJob {
         event: KafkaEvent,
         ctx_rid: deno_core::ResourceId,
     },
+    #[serde(rename_all = "camelCase")]
+    Outbox { ctx_rid: deno_core::ResourceId },
 }
 
 #[deno_core::op]
@@ -85,6 +87,16 @@ async fn op_chisel_accept_job(
                 state.resource_table.add(ctx)
             };
             AcceptedJob::Kafka { event, ctx_rid }
+        }
+        Some(VersionJob::Outbox) => {
+            let ctx_rid = {
+                let ctx = JobContext {
+                    job_info: Rc::new(JobInfo::KafkaEvent),
+                    current_data_ctx: None.into(),
+                };
+                state.resource_table.add(ctx)
+            };
+            AcceptedJob::Outbox { ctx_rid }
         }
         None => return Ok(None),
     };

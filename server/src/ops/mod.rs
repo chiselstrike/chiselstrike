@@ -39,6 +39,8 @@ pub fn extension() -> deno_core::Extension {
             datastore::op_chisel_query_get_value::decl(),
             job::op_chisel_accept_job::decl(),
             job::op_chisel_http_respond::decl(),
+            kafka::op_chisel_poll_outbox::decl(),
+            kafka::op_chisel_publish::decl(),
             kafka::op_chisel_subscribe_topic::decl(),
             type_system::op_chisel_get_type_system::decl(),
         ])

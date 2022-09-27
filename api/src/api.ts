@@ -12,6 +12,7 @@ export {
 } from "./datastore.ts";
 export type { Id } from "./datastore.ts";
 export type { ChiselEvent } from "./kafka.ts";
+export { publishEvent } from "./kafka.ts";
 export { ChiselRequest, Params, Query } from "./request.ts";
 export { RouteMap } from "./routing.ts";
 export type { Handler, MiddlewareHandler, MiddlewareNext } from "./routing.ts";

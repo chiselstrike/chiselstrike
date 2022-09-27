@@ -10,13 +10,14 @@ use futures::stream::{FuturesUnordered, StreamExt, TryStreamExt};
 use parking_lot::Mutex;
 use rskafka::client::{
     consumer::{StartOffset, StreamConsumerBuilder},
-    partition::PartitionClient,
+    partition::{Compression, PartitionClient},
     Client, ClientBuilder,
 };
 use rskafka::record::Record;
 use serde::Serialize;
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::sync::Arc;
+use time::OffsetDateTime;
 use utils::TaskHandle;
 
 /// Kafka event that is passed to JavaScript.
@@ -33,6 +34,9 @@ pub struct KafkaService {
     topics: Mutex<HashMap<String, Arc<PartitionClient>>>,
     topic_nursery: Nursery<TaskHandle<Result<()>>>,
     topic_stream: Mutex<Option<NurseryStream<TaskHandle<Result<()>>>>>,
+    // The `outbox_poll_mutex` is used to serialize concurrent calls to outbox
+    // polling to avoid publishing events from outbox multiple times.
+    pub(crate) outbox_poll_mutex: async_lock::Mutex<()>,
 }
 
 impl KafkaService {
@@ -47,7 +51,27 @@ impl KafkaService {
             topics,
             topic_nursery,
             topic_stream: Mutex::new(Some(topic_stream)),
+            outbox_poll_mutex: async_lock::Mutex::new(()),
         })
+    }
+
+    pub async fn publish_event(
+        &self,
+        topic: &str,
+        key: Option<Vec<u8>>,
+        value: Option<Vec<u8>>,
+    ) -> Result<()> {
+        let partition_client = Arc::new(self.client.partition_client(topic.to_owned(), 0)?);
+        let record = Record {
+            key,
+            value,
+            headers: BTreeMap::default(),
+            timestamp: OffsetDateTime::now_utc(),
+        };
+        partition_client
+            .produce(vec![record], Compression::default())
+            .await?;
+        Ok(())
     }
 
     pub fn subscribe_topic(&self, server: Arc<Server>, topic: String) {
@@ -59,6 +83,10 @@ impl KafkaService {
         topics.insert(topic.clone(), partition_client.clone());
         self.topic_nursery
             .spawn(handle_topic(server, partition_client, topic));
+    }
+
+    pub async fn publish(&self, server: Arc<Server>) -> Result<()> {
+        handle_publish(server).await
     }
 }
 
@@ -115,6 +143,23 @@ async fn handle_event(server: &Server, topic: String, record: Record) -> Result<
                     value: value.into(),
                 };
                 let job = VersionJob::Kafka(kafka_event);
+                let _: Result<_, _> = trunk_version.job_tx.send(job).await;
+            }}
+        })
+        .collect::<FuturesUnordered<_>>();
+    send_futs.collect::<()>().await;
+
+    Ok(())
+}
+
+async fn handle_publish(server: Arc<Server>) -> Result<()> {
+    let send_futs = server
+        .trunk
+        .list_trunk_versions()
+        .into_iter()
+        .map(|trunk_version| {
+            enclose! {() async move {
+                let job = VersionJob::Outbox;
                 let _: Result<_, _> = trunk_version.job_tx.send(job).await;
             }}
         })
