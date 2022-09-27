@@ -14,5 +14,5 @@ export type { ChiselEvent } from "./kafka.ts";
 export { ChiselRequest, Params, Query } from "./request.ts";
 export { RouteMap } from "./routing.ts";
 export type { Handler, MiddlewareHandler, MiddlewareNext } from "./routing.ts";
-export { getSecret, responseFromJson } from "./utils.ts";
+export { metricCounter, getSecret, responseFromJson } from "./utils.ts";
 export type { JSONValue } from "./utils.ts";

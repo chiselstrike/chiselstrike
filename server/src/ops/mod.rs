@@ -19,6 +19,8 @@ pub fn extension() -> deno_core::Extension {
             op_chisel_get_version_info::decl(),
             op_chisel_is_debug::decl(),
             op_format_file_name::decl(),
+            op_chisel_count_kafka_event::decl(),
+            op_chisel_app_counter::decl(),
             datastore::op_chisel_begin_transaction::decl(),
             datastore::op_chisel_commit_transaction::decl(),
             datastore::op_chisel_rollback_transaction::decl(),
@@ -91,4 +93,16 @@ fn op_chisel_is_debug(state: &mut deno_core::OpState) -> bool {
 #[deno_core::op]
 fn op_format_file_name(file_name: String) -> Result<String> {
     Ok(file_name)
+}
+
+#[deno_core::op]
+fn op_chisel_app_counter(name: String) -> Result<()> {
+    crate::metrics::GLOBAL_METRICS.app_counter(&name);
+    Ok(())
+}
+
+#[deno_core::op]
+fn op_chisel_count_kafka_event(topic: String) -> Result<()> {
+    crate::metrics::GLOBAL_METRICS.kafka_event(&topic);
+    Ok(())
 }

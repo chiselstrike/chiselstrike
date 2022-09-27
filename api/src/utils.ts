@@ -12,6 +12,10 @@ export function opAsync(
     return Deno.core.opAsync(opName, a, b);
 }
 
+export function metricCounter(name: string) {
+    return opSync("op_chisel_app_counter", name);
+}
+
 /**
  * Acts the same as Object.assign, but performs deep merge instead of a shallow one.
  */

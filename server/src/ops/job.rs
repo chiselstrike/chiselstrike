@@ -6,7 +6,7 @@ use crate::version::VersionJob;
 use crate::worker::WorkerState;
 use anyhow::{bail, Context, Result};
 use guard::guard;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use std::cell::RefCell;
 use std::rc::Rc;
 use tokio::sync::oneshot;
@@ -74,12 +74,21 @@ async fn op_chisel_accept_job(
     Ok(Some(accepted_job))
 }
 
+#[derive(Deserialize)]
+struct HttpResponseInfo {
+    response: HttpResponse,
+    uri: String,
+}
+
 #[deno_core::op]
 fn op_chisel_http_respond(
     state: Rc<RefCell<deno_core::OpState>>,
     response_tx_rid: deno_core::ResourceId,
-    response: HttpResponse,
+    info: HttpResponseInfo,
 ) -> Result<()> {
+    let response = info.response;
+    crate::metrics::GLOBAL_METRICS.http_request(&info.uri, response.status as _);
+
     let response_tx = {
         let response_tx_res: Rc<HttpResponseTxResource> =
             state.borrow_mut().resource_table.take(response_tx_rid)?;
