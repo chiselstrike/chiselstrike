@@ -26,9 +26,12 @@ pub async fn missing_await(c: TestContext) {
     );
     c.chisel.apply_ok().await;
 
-    c.chisel.get("/dev/find")
-        .send()
-        .await
-        .assert_status(500)
-        .assert_text_contains("Cannot commit a transaction because there is an operation in progress that uses this transaction");
+    let response = c.chisel.get("/dev/find").send().await;
+    // Endpoint with a missing `await` can either succeed, if Deno executes
+    // the call immediately, or fail, if Deno defers execution.
+    if response.status() == 500 {
+        response.assert_text_contains("Cannot commit a transaction because there is an operation in progress that uses this transaction");
+    } else {
+        response.assert_status(200).assert_text_contains("Hello");
+    }
 }
