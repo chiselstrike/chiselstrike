@@ -19,38 +19,33 @@ mv package.json pkg.json
 $CHISEL apply
 # CHECK: Applied:
 
-$CURL $CHISELD_HOST/__chiselstrike/
-# CHECK: HTTP/1.1 200 OK
+$CURL --no-include $CHISELD_HOST/__chiselstrike/ | jq
 # CHECK: "title": "ChiselStrike Internal API",
 # CHECK: "/__chiselstrike/auth/users/"
 # CHECK: "/__chiselstrike/auth/sessions/"
 # CHECK: "/__chiselstrike/auth/tokens/"
 # CHECK: "/__chiselstrike/auth/accounts/"
 
-$CURL $CHISELD_HOST/
-# CHECK: HTTP/1.1 200 OK
+$CURL --no-include $CHISELD_HOST/ | jq
 # CHECK: "title": "ChiselStrike all routes",
 # CHECK: "/__chiselstrike"
 # CHECK: "/dev"
 
-$CURL $CHISELD_HOST/dev
-# CHECK: HTTP/1.1 200 OK
+$CURL --no-include $CHISELD_HOST/dev | jq
 # CHECK: "title": "ChiselStrike Application",
 # CHECK: "version": ""
 
 
 jq '.name = "glauber" | .version = "1.0.1"' pkg.json > package.json
 $CHISEL apply
-$CURL $CHISELD_HOST/dev
-# CHECK: HTTP/1.1 200 OK
+$CURL --no-include $CHISELD_HOST/dev | jq
 # CHECK: "title": "glauber",
 # CHECK: "version": "1.0.1"
 
 ## change the version to 1.0.0 and see if it gets reflected
 jq '.name = "glauber" | .version = "1.0.0"' pkg.json > package.json
 $CHISEL apply
-$CURL $CHISELD_HOST/dev
-# CHECK: HTTP/1.1 200 OK
+$CURL --no-include $CHISELD_HOST/dev | jq
 # CHECK: "title": "glauber",
 # CHECK: "version": "1.0.0"
 
@@ -60,7 +55,7 @@ git commit -m "test"
 $CHISEL apply
 $CURL $CHISELD_HOST/dev
 # CHECK: HTTP/1.1 200 OK
-# CHECK: "title": "glauber",
+# CHECK: "title":"glauber",
 
 # jq doesn't like the standard output including headers because it is not json
 TITLE=$($CURL --no-include $CHISELD_HOST/dev | jq '.info.version')
@@ -71,7 +66,6 @@ if [ "$TITLE" = "$EXPECTED" ]; then echo "match"; fi
 
 git tag "foo"
 $CHISEL apply
-$CURL $CHISELD_HOST/dev
-# CHECK: HTTP/1.1 200 OK
+$CURL --no-include $CHISELD_HOST/dev | jq
 # CHECK: "title": "glauber",
 # CHECK: "version": "1.0.0-foo"

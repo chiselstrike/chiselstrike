@@ -29,8 +29,7 @@ EOF
 $CHISEL apply
 
 $CURL $CHISELD_HOST/dev/return
-# CHECK: "a": "x"
-# CHECK: "b": 0
+# CHECK: "a":"x","b":0
 
 $CURL $CHISELD_HOST/dev/undefined && echo "UniqueString"
 # CHECK: HTTP/1.1 200 OK
