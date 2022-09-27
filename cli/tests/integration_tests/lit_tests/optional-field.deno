@@ -47,25 +47,25 @@ $CURL -d '{}' $CHISELD_HOST/dev/save
 # CHECK: "id":
 $CURL -d '{"a":142}' $CHISELD_HOST/dev/save
 # CHECK: HTTP/1.1 200 OK
-# CHECK: "a": 142
+# CHECK: "a":142
 $CURL -d '{"a":null}' $CHISELD_HOST/dev/save
 # CHECK: HTTP/1.1 200 OK
-# CHECK: "a": null
+# CHECK: "a":null
 $CURL -d '{"b":{"c":241}}' $CHISELD_HOST/dev/save
 # CHECK: HTTP/1.1 200 OK
-# CHECK: "c": 241
+# CHECK: "c":241
 $CURL -d '{"a":142, "b":{"c":241}, "d":null}' $CHISELD_HOST/dev/save
 # CHECK: HTTP/1.1 200 OK
-# CHECK: "c": 241
+# CHECK: "c":241
 $CURL $CHISELD_HOST/dev/sum
 # CHECK: HTTP/1.1 200 OK
 # CHECK: the sum is: 766;
 $CURL -d '{"a":null, "b":{"c":304}}' $CHISELD_HOST/dev/save
 # CHECK: HTTP/1.1 200 OK
-# CHECK: "c": 304
+# CHECK: "c":304
 $CURL -d '{"a":30, "b":null, "d":222}' $CHISELD_HOST/dev/save
 # CHECK: HTTP/1.1 200 OK
-# CHECK: "d": 222
+# CHECK: "d":222
 $CURL $CHISELD_HOST/dev/sum
 # CHECK: HTTP/1.1 200 OK
 # CHECK: the sum is: 1100;

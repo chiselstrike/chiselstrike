@@ -29,29 +29,22 @@ $CHISEL apply
 $CURL $CHISELD_HOST/dev//////chisel////arg//
 # CHECK: HTTP/1.1 308
 # CHECK: HTTP/1.1 200
-# CHECK: "path": "arg",
-# CHECK: "version": "dev",
-# CHECK: "endpoint": "/chisel"
-# CHECK: "components": 1
+# CHECK: "path":"arg","version":"dev","endpoint":"/chisel","components":1
 
 $CURL $CHISELD_HOST/dev//////chisel////arg//foo/bar
 # CHECK: HTTP/1.1 308
 # CHECK: HTTP/1.1 200
-# CHECK: "path": "arg/foo/bar",
-# CHECK: "components": 3
+# CHECK: "path":"arg/foo/bar","version":"dev","endpoint":"/chisel","components":3
 
 $CURL $CHISELD_HOST/dev//////chisel////inner//foo/bar
 # CHECK: HTTP/1.1 308
 # CHECK: HTTP/1.1 200
-# CHECK: "path": "foo/bar",
-# CHECK: "components": 2
+# CHECK: "path":"foo/bar","version":"dev","endpoint":"/chisel/inner","components":2
 
 $CURL $CHISELD_HOST/dev/chisel/
 # CHECK: HTTP/1.1 200
-# CHECK: "path": "",
-# CHECK: "components": 0
+# CHECK: "path":"","version":"dev","endpoint":"/chisel","components":0
 
 $CURL $CHISELD_HOST/dev/chisel?query_path="Doesntshow"
 # CHECK: HTTP/1.1 200
-# CHECK: "path": "",
-# CHECK: "components": 0
+# CHECK: "path":"","version":"dev","endpoint":"/chisel","components":0

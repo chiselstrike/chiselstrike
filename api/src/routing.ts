@@ -141,6 +141,11 @@ export class RouteMap {
 
     /** Adds a middleware that will apply to all routes in this route map.
      *
+     * The given middleware `handler` will be called before any request handler:
+     * it might do some work before or after the request handler, or it may
+     * decide not to call the request handler at all. See `MiddlewareHandler`
+     * for more details.
+     *
      * Support for middlewares is experimental and it may change in the future.
      */
     middleware(handler: MiddlewareHandler): this {
@@ -148,7 +153,8 @@ export class RouteMap {
         return this;
     }
 
-    // This is called to convert a default export from a file inside `/routes` into a `RouteMap`.
+    // Convert a default export from a file inside `/routes` into a `RouteMap`.
+    // This is an internal, private API.
     // TODO: remove the `legacyFileName` when we no longer need the legacy properties in `ChiselRequest`.
     static convert(routes: RouteMapLike, legacyFileName?: string): RouteMap {
         if (routes instanceof RouteMap) {
@@ -211,7 +217,18 @@ export type Middleware = {
     handler: MiddlewareHandler;
 };
 
-// The middleware handler "wraps" the existing handler (which is passed as the `next` callback).
+/** A middleware handler that "wraps" the route handlers.
+ *
+ * When a middleware is registered for a `RouteMap`, we call the middleware
+ * handler instead of directly invoking the request handler registered with
+ * `RouteMap.route()`.
+ *
+ * The middleware handler is similar to a normal request handler: it receives a
+ * `ChiselRequest` and must produce a `Response`. However, it also receives a
+ * `next` callback, which can be used to invoke the original request handler.
+ *
+ * Support for middlewares is experimental and it may change in the future.
+ */
 export type MiddlewareHandler = (
     request: ChiselRequest,
     next: MiddlewareNext,

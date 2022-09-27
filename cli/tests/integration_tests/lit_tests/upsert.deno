@@ -37,12 +37,8 @@ $CHISEL apply
 
 $CURL -X POST $CHISELD_HOST/dev/upsert
 # CHECK: HTTP/1.1 200 OK
-# CHECK: "name": "Elizabeth"
-# CHECK: "email": "elizabeth@example.com"
-# CHECK: "isQueen": true
+# CHECK: "name":"Elizabeth","email":"elizabeth@example.com","isQueen":true
 
 $CURL -X POST $CHISELD_HOST/dev/upsert
 # CHECK: HTTP/1.1 200 OK
-# CHECK: "name": "Elizabeth"
-# CHECK: "email": "elizabeth@example.com"
-# CHECK: "isQueen": false
+# CHECK: "name":"Elizabeth","email":"elizabeth@example.com","isQueen":false

@@ -72,13 +72,34 @@ export function responseFromJson(body: unknown, status = 200) {
     const isNullBody = status == 101 || status == 103 ||
         status == 204 || status == 205 || status == 304;
 
-    const json = isNullBody ? null : JSON.stringify(body, null, 2);
+    const json = isNullBody ? null : stringifyJson(body);
     return new Response(json, {
         status: status,
         headers: [
             ["content-type", "application/json"],
         ],
     });
+}
+
+/** Stringifies a `Json` value into JSON. Handles `Map` and `Set` correctly. */
+function stringifyJson(value: unknown, space?: string | number): string {
+    function replacer(this: unknown, _key: string, value: unknown): unknown {
+        if (value instanceof Map) {
+            const obj: Record<string, unknown> = {};
+            for (const [k, v] of value.entries()) {
+                obj["" + k] = v;
+            }
+            return obj;
+        }
+
+        if (value instanceof Set) {
+            return Array.from(value);
+        }
+
+        return value;
+    }
+
+    return JSON.stringify(value, replacer, space);
 }
 
 /** HTTP status codes */
