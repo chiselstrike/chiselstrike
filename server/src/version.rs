@@ -27,6 +27,8 @@ pub struct VersionInit {
     /// We will signal you on this channel when all workers in the version are ready to accept
     /// jobs.
     pub ready_tx: oneshot::Sender<()>,
+    /// If true, this version is intended only as a "canary" to check whether the code works.
+    pub is_canary: bool,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -102,6 +104,7 @@ async fn run(
     }
 
     let ready_tx = init.ready_tx;
+    let is_canary = init.is_canary;
     let version_id = version.version_id.clone();
     let ready_task = TaskHandle(task::spawn(async move {
         // signal that the version is ready once all workers are ready.
@@ -110,7 +113,12 @@ async fn run(
         // anyway, so it is better if we propagate _that_ error
         if worker_ready_rxs.try_collect::<()>().await.is_ok() {
             let _ = ready_tx.send(());
-            info!("Version {:?} is ready", version_id);
+            let log_level = if is_canary {
+                log::Level::Debug
+            } else {
+                log::Level::Info
+            };
+            log!(log_level, "Version {:?} is ready", version_id);
         }
         Ok(())
     }));
