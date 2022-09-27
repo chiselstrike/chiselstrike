@@ -203,6 +203,7 @@ async fn start_versions(server: Arc<Server>) -> Result<()> {
             policy_system: Arc::new(policy_system),
             worker_count: server.opt.worker_threads,
             ready_tx,
+            is_canary: false,
         };
 
         let (version, job_tx, version_task) = version::spawn(init).await?;
@@ -240,6 +241,7 @@ async fn start_builtin_version(server: Arc<Server>) -> Result<()> {
         policy_system: Arc::new(policy_system),
         worker_count: 1,
         ready_tx,
+        is_canary: false,
     };
 
     let (version, job_tx, version_task) = version::spawn(init).await?;

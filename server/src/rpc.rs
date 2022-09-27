@@ -219,6 +219,7 @@ async fn apply(server: Arc<Server>, request: ApplyRequest) -> Result<ApplyRespon
         policy_system: Arc::new(result.policy_system),
         worker_count: server.opt.worker_threads,
         ready_tx,
+        is_canary: false,
     };
 
     let (version, job_tx, mut version_task) = version::spawn(init).await?;
@@ -262,6 +263,7 @@ async fn validate_modules(
         policy_system: Arc::new(policy_system),
         worker_count: 1,
         ready_tx,
+        is_canary: true,
     };
 
     let (_version, _job_tx, mut version_task) = version::spawn(init).await?;
