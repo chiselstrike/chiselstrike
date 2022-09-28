@@ -28,14 +28,22 @@ pub struct ChiseldConfig {
     pub api_address: SocketAddr,
     pub internal_address: SocketAddr,
     pub rpc_address: SocketAddr,
+    pub kafka_connection: Option<String>,
+    pub kafka_topic: Option<String>,
 }
 
-fn generate_chiseld_config(ports_counter: &AtomicU16) -> ChiseldConfig {
+fn generate_chiseld_config(
+    ports_counter: &AtomicU16,
+    kafka_connection: Option<String>,
+    kafka_topic: Option<String>,
+) -> ChiseldConfig {
     let make_address = || SocketAddr::from((Ipv4Addr::LOCALHOST, get_free_port(ports_counter)));
     ChiseldConfig {
         api_address: make_address(),
         rpc_address: make_address(),
         internal_address: make_address(),
+        kafka_connection,
+        kafka_topic,
     }
 }
 
@@ -44,7 +52,11 @@ async fn setup_test_context(
     opt: &Opt,
     ports_counter: &AtomicU16,
 ) -> TestContext {
-    let chiseld_config = generate_chiseld_config(ports_counter);
+    let chiseld_config = generate_chiseld_config(
+        ports_counter,
+        opt.kafka_connection.to_owned(),
+        opt.kafka_topic.to_owned(),
+    );
     let tmp_dir = Arc::new(TempDir::new("chiseld_test").expect("Could not create tempdir"));
     let chisel_path = bin_dir().join("chisel");
 
@@ -88,16 +100,24 @@ async fn setup_test_context(
         client: reqwest::Client::new(),
     };
 
+    let mut args = vec![
+        "--debug".to_string(),
+        "--api-listen-addr".to_string(),
+        chiseld_config.api_address.to_string(),
+        "--internal-routes-listen-addr".to_string(),
+        chiseld_config.internal_address.to_string(),
+        "--rpc-listen-addr".to_string(),
+        chiseld_config.rpc_address.to_string(),
+    ];
+    if let Some(kafka_connection) = chiseld_config.kafka_connection {
+        let kafka_topic = chiseld_config.kafka_topic.unwrap();
+        args.push("--kafka-connection".to_string());
+        args.push(kafka_connection);
+        args.push("--kafka-topics".to_string());
+        args.push(kafka_topic);
+    }
     let mut cmd = tokio::process::Command::new(chiseld());
-    cmd.args([
-        "--debug",
-        "--api-listen-addr",
-        &chiseld_config.api_address.to_string(),
-        "--internal-routes-listen-addr",
-        &chiseld_config.internal_address.to_string(),
-        "--rpc-listen-addr",
-        &chiseld_config.rpc_address.to_string(),
-    ]);
+    cmd.args(args);
     cmd.current_dir(tmp_dir.path());
 
     let db = match &instance.db_config {
@@ -130,10 +150,15 @@ async fn setup_test_context(
         wait_for_chiseld_startup(&mut chiseld, &chisel).await;
     }
 
+    let kafka_connection = opt.kafka_connection.to_owned();
+    let kafka_topic = opt.kafka_topic.to_owned();
+
     TestContext {
         chiseld,
         chisel,
         _db: db,
+        kafka_connection,
+        kafka_topic,
     }
 }
 

@@ -624,8 +624,8 @@ impl RequestBuilder {
         self.map(|b| b.header(name, value))
     }
 
-    pub async fn send(self) -> Response {
-        let request = self.builder.build().unwrap();
+    pub async fn send(&self) -> Response {
+        let request = self.builder.try_clone().unwrap().build().unwrap();
         let (method, url) = (request.method().clone(), request.url().clone());
         let response = self
             .client
@@ -649,9 +649,38 @@ impl RequestBuilder {
             body,
         }
     }
+
+    /// Send a request, but retry few times if response doesn't match `predicate`.
+    ///
+    /// This API is useful when you are querying and endpoint that you know
+    /// will eventually yield some value, but you don't know when. For example,
+    /// when you are testing a scenario where event causes a database insert,
+    /// but you don't know when the event is going to be handled exactly.
+    pub async fn send_retry<F>(&self, predicate: F) -> Response
+    where
+        F: Fn(&Response) -> bool,
+    {
+        let mut nr_retries = 0;
+        loop {
+            let response = self.send().await;
+            if predicate(&response) {
+                return response;
+            }
+            if nr_retries == 5 {
+                panic!(
+                    "Did not receive an expected response for response even after retry, got: {:?}",
+                    response
+                );
+            }
+            let wait_time = 2_u64.pow(nr_retries);
+            tokio::time::sleep(Duration::from_secs(wait_time)).await;
+            nr_retries += 1;
+        }
+    }
 }
 
 #[must_use]
+#[derive(Debug)]
 pub struct Response {
     method: reqwest::Method,
     url: reqwest::Url,
@@ -792,6 +821,8 @@ pub struct TestContext {
     // Note: The Database must come after chiseld to ensure that chiseld is dropped and terminated
     // before we try to drop the database.
     pub _db: Database,
+    pub kafka_connection: Option<String>,
+    pub kafka_topic: Option<String>,
 }
 
 impl TestContext {

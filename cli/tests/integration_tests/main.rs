@@ -65,6 +65,12 @@ pub struct Opt {
     /// Database password.
     #[structopt(long)]
     pub database_password: Option<String>,
+    /// Kafka connection.
+    #[structopt(long)]
+    pub kafka_connection: Option<String>,
+    /// Kafka topic.
+    #[structopt(long)]
+    pub kafka_topic: Option<String>,
     #[structopt(long)]
     pub optimize: Option<bool>,
     /// Number of Rust tests to run in parallel (does not apply to lit).
