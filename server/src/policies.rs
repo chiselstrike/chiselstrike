@@ -247,7 +247,7 @@ impl PolicySystem {
                     .add(&route.path, regex::Regex::new(&users)?)?;
             }
             if let Some(header) = route.mandatory_header {
-                let methods = parse_methods(header.only_for_methods)?;
+                let methods = header.only_for_methods.map(parse_methods).transpose()?;
                 policies.secret_authorization.add(
                     &route.path,
                     RequiredHeader {
@@ -263,22 +263,12 @@ impl PolicySystem {
 }
 
 /// Parses v's elements into Methods. Returns Err if an element failed to parse.
-fn parse_methods(v: Option<Vec<String>>) -> Result<Option<Vec<hyper::Method>>> {
-    match v {
-        None => Ok(None),
-        Some(v) => {
-            let mut methods = vec![];
-            for s in v.iter() {
-                use anyhow::Context;
-                use std::str::FromStr;
-                methods.push(
-                    hyper::Method::from_str(s)
-                        .with_context(|| format!("Error parsing method {s}"))?,
-                );
-            }
-            Ok(Some(methods))
-        }
-    }
+fn parse_methods(v: Vec<String>) -> Result<Vec<hyper::Method>> {
+    use anyhow::Context;
+    use std::str::FromStr;
+    v.iter()
+        .map(|s| hyper::Method::from_str(s).with_context(|| format!("Error parsing method {s}")))
+        .collect()
 }
 
 pub fn anonymize(_: EntityValue) -> EntityValue {
