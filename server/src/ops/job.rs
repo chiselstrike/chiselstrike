@@ -1,15 +1,17 @@
 // SPDX-FileCopyrightText: © 2022 ChiselStrike <info@chiselstrike.com>
 
+use std::cell::RefCell;
+use std::rc::Rc;
+
+use anyhow::{bail, Context, Result};
+use guard::guard;
+use serde::Serialize;
+use tokio::sync::oneshot;
+
 use crate::http::{HttpRequest, HttpRequestResponse, HttpResponse};
 use crate::kafka::KafkaEvent;
 use crate::version::VersionJob;
 use crate::worker::WorkerState;
-use anyhow::{bail, Context, Result};
-use guard::guard;
-use serde::Serialize;
-use std::cell::RefCell;
-use std::rc::Rc;
-use tokio::sync::oneshot;
 
 /// A job that will be handled in JavaScript.
 #[derive(Debug, Serialize)]

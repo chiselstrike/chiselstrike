@@ -1,5 +1,13 @@
 // SPDX-FileCopyrightText: © 2022 ChiselStrike <info@chiselstrike.com>
 
+use std::collections::{BTreeSet, HashMap};
+use std::path::PathBuf;
+use std::sync::Arc;
+
+use anyhow::{anyhow, bail, Context, Result};
+use petgraph::graphmap::GraphMap;
+use petgraph::Directed;
+
 use crate::datastore::{MetaService, QueryEngine};
 use crate::policies::{EntityPolicy, PolicySystem};
 use crate::proto::type_msg::TypeEnum;
@@ -13,12 +21,6 @@ use crate::types::{
 };
 use crate::version::VersionInfo;
 use crate::FEATURES;
-use anyhow::{anyhow, bail, Context, Result};
-use petgraph::graphmap::GraphMap;
-use petgraph::Directed;
-use std::collections::{BTreeSet, HashMap};
-use std::path::PathBuf;
-use std::sync::Arc;
 
 pub struct ApplyResult {
     pub type_system: TypeSystem,

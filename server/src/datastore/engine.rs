@@ -1,14 +1,14 @@
 // SPDX-FileCopyrightText: © 2021 ChiselStrike <info@chiselstrike.com>
 
-use crate::datastore::query::{
-    KeepOrOmitField, Mutation, QueriedEntity, QueryField, QueryPlan, SqlValue, TargetDatabase,
-};
-use crate::datastore::value::{EntityMap, EntityValue};
-use crate::datastore::DbConnection;
-use crate::types::{DbIndex, Field, ObjectDelta, ObjectType, Type, TypeId, TypeSystem};
+use std::collections::{HashMap, HashSet};
+use std::fmt::Write;
+use std::future::Future;
+use std::pin::Pin;
+use std::sync::Arc;
+use std::task::{Context, Poll};
+
 use anyhow::{anyhow, Context as AnyhowContext, Result};
-use async_lock::Mutex;
-use async_lock::MutexGuardArc;
+use async_lock::{Mutex, MutexGuardArc};
 use deno_core::futures;
 use futures::stream::BoxStream;
 use futures::stream::Stream;
@@ -20,13 +20,14 @@ use sea_query::{Alias, ColumnDef, Index, PostgresQueryBuilder, Table};
 use serde::Serialize;
 use sqlx::any::{Any, AnyArguments, AnyKind, AnyRow};
 use sqlx::{Executor, Row, Transaction, ValueRef};
-use std::collections::{HashMap, HashSet};
-use std::fmt::Write;
-use std::future::Future;
-use std::pin::Pin;
-use std::sync::Arc;
-use std::task::{Context, Poll};
 use uuid::Uuid;
+
+use crate::datastore::query::{
+    KeepOrOmitField, Mutation, QueriedEntity, QueryField, QueryPlan, SqlValue, TargetDatabase,
+};
+use crate::datastore::value::{EntityMap, EntityValue};
+use crate::datastore::DbConnection;
+use crate::types::{DbIndex, Field, ObjectDelta, ObjectType, Type, TypeId, TypeSystem};
 
 /// A query results is a stream of query rows after policies have been applied.
 pub type QueryResults = BoxStream<'static, Result<EntityMap>>;
