@@ -221,39 +221,18 @@ impl PolicySystem {
         let parsed_yaml: YamlPolicies = serde_yaml::from_str(config)?;
         for label in parsed_yaml.labels.unwrap_or_default() {
             let except_uri = regex::Regex::new(&label.except_uri.unwrap_or("^$".into()))?;
-            match label.transform {
-                Some(s) if s == "anonymize" => {
-                    policies.labels.insert(
-                        label.name,
-                        Policy {
-                            kind: Kind::Transform(crate::policies::anonymize),
-                            except_uri,
-                        },
-                    );
-                }
-                Some(s) if s == "omit" => {
-                    policies.labels.insert(
-                        label.name,
-                        Policy {
-                            kind: Kind::Omit,
-                            except_uri,
-                        },
-                    );
-                }
-                Some(s) if s == "match_login" => {
-                    policies.labels.insert(
-                        label.name,
-                        Policy {
-                            kind: Kind::MatchLogin,
-                            except_uri,
-                        },
-                    );
-                }
+            let kind = match label.transform.as_deref() {
+                Some("anonymize") => Kind::Transform(crate::policies::anonymize),
+                Some("omit") => Kind::Omit,
+                Some("match_login") => Kind::MatchLogin,
                 Some(x) => {
                     anyhow::bail!("unknown transform: {x} for label {}", label.name);
                 }
-                None => {}
+                None => continue,
             };
+            policies
+                .labels
+                .insert(label.name, Policy { kind, except_uri });
         }
 
         let routes = parsed_yaml
