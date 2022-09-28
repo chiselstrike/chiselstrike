@@ -262,7 +262,7 @@ impl PolicySystem {
     }
 }
 
-/// Parses v's elements into Methods.  Returns Err if an element failed to parse.
+/// Parses v's elements into Methods. Returns Err if an element failed to parse.
 fn parse_methods(v: Option<Vec<String>>) -> Result<Option<Vec<hyper::Method>>> {
     match v {
         None => Ok(None),
