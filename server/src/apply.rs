@@ -1,7 +1,6 @@
 // SPDX-FileCopyrightText: © 2022 ChiselStrike <info@chiselstrike.com>
 
 use std::collections::{BTreeSet, HashMap};
-use std::path::PathBuf;
 use std::sync::Arc;
 
 use anyhow::{anyhow, bail, Context, Result};
@@ -9,7 +8,7 @@ use petgraph::graphmap::GraphMap;
 use petgraph::Directed;
 
 use crate::datastore::{MetaService, QueryEngine};
-use crate::policies::{EntityPolicy, PolicySystem};
+use crate::policies::PolicySystem;
 use crate::proto::type_msg::TypeEnum;
 use crate::proto::{
     AddTypeRequest, ApplyRequest, ContainerType, FieldDefinition, IndexCandidate,
@@ -20,7 +19,6 @@ use crate::types::{
     DbIndex, Entity, Field, NewField, NewObject, ObjectType, Type, TypeSystem, TypeSystemError,
 };
 use crate::version::VersionInfo;
-use crate::FEATURES;
 
 pub struct ApplyResult {
     pub type_system: TypeSystem,
@@ -30,46 +28,26 @@ pub struct ApplyResult {
 }
 
 pub struct ParsedPolicies {
-    policy_system: PolicySystem,
-    policy_system_text: String,
-    entity_policies: HashMap<String, EntityPolicy>,
+    policy_system: (PolicySystem, String),
 }
 
 impl ParsedPolicies {
     fn parse(request: &[PolicyUpdateRequest]) -> Result<Self> {
         let mut policy_system = None;
-        let mut policy_system_text = String::new();
-        let mut entity_policies = HashMap::new();
 
         for p in request {
-            let path = PathBuf::from(&p.path);
-            match path.extension().and_then(|s| s.to_str()) {
-                Some("ts") if FEATURES.typescript_policies => {
-                    let entity_name = path
-                        .file_name()
-                        .and_then(|s| s.to_str())
-                        .and_then(|s| s.strip_suffix(".ts"))
-                        .context("invalid policy path")?
-                        .to_owned();
-
-                    let policy = EntityPolicy::from_policy_code(p.policy_config.clone())?;
-                    entity_policies.insert(entity_name, policy);
-                }
-                _ => {
-                    if policy_system.is_none() {
-                        policy_system = Some(PolicySystem::from_yaml(&p.policy_config)?);
-                        policy_system_text = p.policy_config.clone();
-                    } else {
-                        anyhow::bail!("Currently only one policy file is supported");
-                    }
-                }
+            if policy_system.is_none() {
+                policy_system.replace((
+                    PolicySystem::from_yaml(&p.policy_config)?,
+                    p.policy_config.clone(),
+                ));
+            } else {
+                anyhow::bail!("Currently only one policy file is supported");
             }
         }
 
         Ok(Self {
             policy_system: policy_system.unwrap_or_default(),
-            policy_system_text,
-            entity_policies,
         })
     }
 }
@@ -106,12 +84,6 @@ pub async fn apply(
             }
         }
     }
-
-    let ParsedPolicies {
-        policy_system,
-        policy_system_text,
-        mut entity_policies,
-    } = ParsedPolicies::parse(&apply_request.policies)?;
 
     if !to_remove_has_data.is_empty() && !apply_request.allow_type_deletion {
         let s = to_remove_has_data
@@ -184,14 +156,7 @@ or
             ty_indexes,
         )?);
 
-        let policy = entity_policies.remove(&name);
-        new_types.insert(
-            name.to_owned(),
-            Entity::Custom {
-                object: ty.clone(),
-                policy,
-            },
-        );
+        new_types.insert(name.to_owned(), Entity::Custom(ty.clone()));
 
         match type_system.lookup_custom_type(&name) {
             Ok(old_type) => {
@@ -206,7 +171,11 @@ or
         }
     }
 
-    meta.persist_policy_version(&mut transaction, &version_id, &policy_system_text)
+    let ParsedPolicies {
+        policy_system: (policy_system, policy_system_str),
+    } = ParsedPolicies::parse(&apply_request.policies)?;
+
+    meta.persist_policy_version(&mut transaction, &version_id, &policy_system_str)
         .await?;
 
     meta.persist_version_info(&mut transaction, &version_id, version_info)
@@ -280,9 +249,9 @@ or
 
     Ok(ApplyResult {
         type_system: type_system.clone(),
-        policy_system,
         type_names_user_order,
         labels,
+        policy_system,
     })
 }
 
