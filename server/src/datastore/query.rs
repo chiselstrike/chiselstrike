@@ -1,18 +1,18 @@
 // SPDX-FileCopyrightText: © 2021 ChiselStrike <info@chiselstrike.com>
 
-use crate::auth::AUTH_USER_NAME;
-use crate::datastore::expr::{BinaryExpr, Expr, PropertyAccess, Value as ExprValue};
-use crate::datastore::value::EntityValue;
-use crate::policies::{FieldPolicies, PolicySystem};
-use crate::types::{Entity, Field, ObjectType, Type, TypeId, TypeSystem};
+use std::collections::{HashMap, HashSet};
+use std::fmt::{self, Write};
 
 use anyhow::{anyhow, Context, Result};
 use enum_as_inner::EnumAsInner;
 use serde_derive::{Deserialize, Serialize};
-use std::collections::HashMap;
-use std::collections::HashSet;
-use std::fmt;
-use std::fmt::Write;
+
+use crate::auth::AUTH_USER_NAME;
+use crate::datastore::expr::{BinaryExpr, Expr, PropertyAccess, Value as ExprValue};
+use crate::policies::{FieldPolicies, PolicySystem};
+use crate::types::{Entity, Field, ObjectType, Type, TypeId, TypeSystem};
+
+use super::value::EntityValue;
 
 #[derive(Debug, Clone, EnumAsInner)]
 pub enum SqlValue {
