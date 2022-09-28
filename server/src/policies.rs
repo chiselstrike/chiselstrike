@@ -220,10 +220,7 @@ impl PolicySystem {
         let mut policies = Self::default();
         let parsed_yaml: YamlPolicies = serde_yaml::from_str(config)?;
         for label in parsed_yaml.labels.unwrap_or_default() {
-            let except_uri = regex::Regex::new(match &label.except_uri {
-                None => "^$", // ^$ never matches; each path has at least a '/' in it.
-                Some(s) => s,
-            })?;
+            let except_uri = regex::Regex::new(&label.except_uri.unwrap_or("^$".into()))?;
             match label.transform {
                 Some(s) if s == "anonymize" => {
                     policies.labels.insert(
