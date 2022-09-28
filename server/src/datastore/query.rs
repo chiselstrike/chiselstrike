@@ -2,6 +2,7 @@
 
 use std::collections::{HashMap, HashSet};
 use std::fmt::{self, Write};
+use std::sync::Arc;
 
 use anyhow::{anyhow, Context, Result};
 use enum_as_inner::EnumAsInner;
@@ -9,10 +10,10 @@ use serde_derive::{Deserialize, Serialize};
 
 use crate::auth::AUTH_USER_NAME;
 use crate::datastore::expr::{BinaryExpr, Expr, PropertyAccess, Value as ExprValue};
-use crate::policies::{FieldPolicies, PolicySystem};
-use crate::types::{Entity, Field, ObjectType, Type, TypeId, TypeSystem};
+use crate::types::{Entity, Field, ObjectType, Type, TypeId};
 
 use super::value::EntityValue;
+use super::DataContext;
 
 #[derive(Debug, Clone, EnumAsInner)]
 pub enum SqlValue {
@@ -24,30 +25,6 @@ pub enum SqlValue {
 impl From<&str> for SqlValue {
     fn from(f: &str) -> Self {
         Self::String(f.to_string())
-    }
-}
-
-/// RequestContext bears a mix of contextual variables used by QueryPlan
-/// and Mutations.
-pub struct RequestContext<'a> {
-    /// Policies to be applied on the query.
-    pub ps: &'a PolicySystem,
-    /// Type system to be used of version `version_id`
-    pub ts: &'a TypeSystem,
-    /// Version to be used.
-    pub version_id: String,
-    /// Id of user making the request.
-    pub user_id: Option<String>,
-    /// Current URL path from which this request originated.
-    pub path: String,
-    /// Current HTTP headers.
-    pub headers: HashMap<String, String>,
-}
-
-impl RequestContext<'_> {
-    /// Calculates field policies for the request being processed.
-    fn make_field_policies(&self, ty: &ObjectType) -> FieldPolicies {
-        self.ps.make_field_policies(&self.user_id, &self.path, ty)
     }
 }
 
@@ -271,21 +248,24 @@ impl QueryPlan {
         builder
     }
 
-    fn from_entity_name(c: &RequestContext, entity_name: &str) -> Result<Self> {
-        let ty = c.ts.lookup_entity(entity_name).with_context(|| {
-            format!("unable to construct QueryPlan from an unknown entity name `{entity_name}`")
-        })?;
+    fn from_entity_name(ctx: &DataContext, entity_name: &str) -> Result<Self> {
+        let ty = ctx
+            .type_system
+            .lookup_entity(entity_name)
+            .with_context(|| {
+                format!("unable to construct QueryPlan from an unknown entity name `{entity_name}`")
+            })?;
 
         let mut builder = Self::new(ty.clone());
-        builder.entity = builder.load_entity(c, &ty)?;
+        builder.entity = builder.load_entity(ctx, &ty)?;
         Ok(builder)
     }
 
     /// Constructs QueryPlan from type `ty` and application of given
     /// `operators.
-    pub fn from_ops(c: &RequestContext, ty: &Entity, operators: Vec<QueryOp>) -> Result<Self> {
+    pub fn from_ops(ctx: &DataContext, ty: &Entity, operators: Vec<QueryOp>) -> Result<Self> {
         let mut query_plan = Self::new(ty.clone());
-        query_plan.entity = query_plan.load_entity(c, ty)?;
+        query_plan.entity = query_plan.load_entity(ctx, ty)?;
         query_plan.extend_operators(operators);
         Ok(query_plan)
     }
@@ -293,9 +273,9 @@ impl QueryPlan {
     /// Constructs a query plan from a query `op_chain` and
     /// additional helper data like `ps`, `version_id`,
     /// `userid` and `path` (url path used for policy evaluation).
-    pub fn from_op_chain(context: &RequestContext, op_chain: QueryOpChain) -> Result<Self> {
+    pub fn from_op_chain(ctx: &DataContext, op_chain: QueryOpChain) -> Result<Self> {
         let (entity_name, operators) = convert_ops(op_chain)?;
-        let mut builder = Self::from_entity_name(context, &entity_name)?;
+        let mut builder = Self::from_entity_name(ctx, &entity_name)?;
 
         builder.extend_operators(operators);
         Ok(builder)
@@ -344,13 +324,9 @@ impl QueryPlan {
 
     /// Prepares the retrieval of Entity of type `ty` from the database and
     /// ensures login restrictions are respected.
-    fn load_entity(
-        &mut self,
-        context: &RequestContext,
-        ty: &Entity,
-    ) -> anyhow::Result<QueriedEntity> {
-        self.add_login_filters_recursive(context, ty, Expr::Parameter { position: 0 })?;
-        self.load_entity_recursive(context, ty, ty.backing_table())
+    fn load_entity(&mut self, ctx: &DataContext, ty: &Entity) -> anyhow::Result<QueriedEntity> {
+        self.add_login_filters_recursive(ctx, ty.object_type(), Expr::Parameter { position: 0 })?;
+        self.load_entity_recursive(ctx, ty, ty.backing_table())
     }
 
     /// Loads QueriedEntity for a given type `ty` to be retrieved from the
@@ -358,11 +334,15 @@ impl QueryPlan {
     /// generated and we attempt to retrieve them recursively as well.
     fn load_entity_recursive(
         &mut self,
-        context: &RequestContext,
+        ctx: &DataContext,
         ty: &Entity,
         current_table: &str,
     ) -> anyhow::Result<QueriedEntity> {
-        let field_policies = context.make_field_policies(ty);
+        let field_policies = ctx.policy_system.make_field_policies(
+            ctx.job_info.user_id(),
+            ctx.job_info.path().unwrap_or_default(),
+            ty,
+        );
 
         let mut fields = vec![];
         let mut joins = HashMap::default();
@@ -373,7 +353,7 @@ impl QueryPlan {
                 _ => KeepOrOmitField::Keep,
             };
 
-            let ty = context.ts.get(&field.type_id)?;
+            let ty = ctx.type_system.get(&field.type_id)?;
 
             let query_field = if let Type::Entity(nested_ty) = &ty {
                 let nested_table = format!(
@@ -390,7 +370,7 @@ impl QueryPlan {
                 joins.insert(
                     field.name.to_owned(),
                     Join {
-                        entity: self.load_entity_recursive(context, nested_ty, &nested_table)?,
+                        entity: self.load_entity_recursive(ctx, nested_ty, &nested_table)?,
                         lkey: field.name.to_owned(),
                         rkey: "id".to_owned(),
                     },
@@ -419,11 +399,15 @@ impl QueryPlan {
     /// `ty` that is to be retrieved from the database.
     fn add_login_filters_recursive(
         &mut self,
-        context: &RequestContext,
-        ty: &Entity,
+        ctx: &DataContext,
+        ty: &Arc<ObjectType>,
         property_chain: Expr,
     ) -> anyhow::Result<()> {
-        let field_policies = context.make_field_policies(ty);
+        let field_policies = ctx.policy_system.make_field_policies(
+            ctx.job_info.user_id(),
+            ctx.job_info.path().unwrap_or_default(),
+            ty,
+        );
         let user_id: ExprValue = match &field_policies.current_userid {
             None => "NULL",
             Some(id) => id.as_str(),
@@ -431,7 +415,7 @@ impl QueryPlan {
         .into();
 
         for field in ty.all_fields() {
-            let ty = context.ts.get(&field.type_id)?;
+            let ty = ctx.type_system.get(&field.type_id)?;
             if let Type::Entity(nested_ty) = &ty {
                 let property_access = PropertyAccess {
                     property: field.name.to_owned(),
@@ -443,7 +427,11 @@ impl QueryPlan {
                         self.operators.push(QueryOp::Filter { expression: expr });
                     }
                 } else {
-                    self.add_login_filters_recursive(context, nested_ty, property_access.into())?;
+                    self.add_login_filters_recursive(
+                        ctx,
+                        nested_ty.object_type(),
+                        property_access.into(),
+                    )?;
                 }
             }
         }
@@ -528,6 +516,7 @@ impl QueryPlan {
             }
             Expr::Property(property) => self.property_expr_to_string(property)?,
             Expr::Parameter { .. } => anyhow::bail!("unexpected standalone parameter usage"),
+            Expr::Not(expr) => format!("NOT ({})", self.filter_expr_to_string(expr)?),
         };
         Ok(expr_str)
     }
@@ -808,17 +797,17 @@ pub struct Mutation {
 impl Mutation {
     /// Constructs delete from filter expression.
     pub fn delete_from_expr(
-        c: &RequestContext,
+        ctx: &DataContext,
         type_name: &str,
         filter_expr: &Option<Expr>,
     ) -> Result<Self> {
-        let base_entity = match c.ts.lookup_type(type_name) {
+        let base_entity = match ctx.type_system.lookup_type(type_name) {
             Ok(Type::Entity(ty)) => ty,
             Ok(ty) => anyhow::bail!("Cannot delete scalar type {type_name} ({})", ty.name()),
             Err(_) => anyhow::bail!("Cannot delete from type `{type_name}`, type not found"),
         };
 
-        let mut query_plan = QueryPlan::from_entity_name(c, type_name)?;
+        let mut query_plan = QueryPlan::from_entity_name(ctx, type_name)?;
         if let Some(expr) = filter_expr {
             query_plan.extend_operators(vec![QueryOp::Filter {
                 expression: expr.clone(),
@@ -852,17 +841,15 @@ pub mod tests {
     use super::*;
     use deno_core::futures;
     use futures::StreamExt;
-    use once_cell::sync::Lazy;
     use serde_json::json;
     use std::sync::Arc;
     use tempfile::NamedTempFile;
 
+    use crate::datastore::engine::TransactionStatic;
     use crate::datastore::expr::BinaryOp;
+    use crate::datastore::test::{COMPANY_TY, ENTITIES, PERSON_TY};
     use crate::datastore::value::EntityMap;
     use crate::datastore::{DbConnection, QueryEngine};
-    use crate::types;
-
-    pub const VERSION: &str = "version_1";
 
     pub fn binary(fields: &[&'static str], op: BinaryOp, value: ExprValue) -> Expr {
         assert!(!fields.len() > 0);
@@ -875,25 +862,6 @@ pub mod tests {
             .into();
         }
         BinaryExpr::new(op, field_chain, value.into()).into()
-    }
-
-    pub fn make_type_system(entities: &[Entity]) -> TypeSystem {
-        let builtin = Arc::new(types::BuiltinTypes::new());
-        let mut ts = TypeSystem::new(builtin, VERSION.into());
-        for ty in entities {
-            ts.add_custom_type(ty.clone()).unwrap();
-        }
-        ts
-    }
-
-    pub fn make_entity(name: &str, fields: Vec<Field>) -> Entity {
-        let desc = types::NewObject::new(name, VERSION);
-        Entity::Custom(Arc::new(ObjectType::new(&desc, fields, vec![]).unwrap()))
-    }
-
-    pub fn make_field(name: &str, ty: Type) -> Field {
-        let desc = types::NewField::new(name, ty, VERSION).unwrap();
-        Field::new(&desc, vec![], None, false, false)
     }
 
     async fn init_query_engine(db_file: &NamedTempFile) -> QueryEngine {
@@ -921,15 +889,16 @@ pub mod tests {
         query_engine: &QueryEngine,
         entity: &Entity,
         entity_value: &serde_json::Value,
-        ts: &TypeSystem,
+        ctx: &DataContext,
     ) {
         let entity_value = EntityValue::from_json(entity_value).unwrap();
         let entity_fields = entity_value.as_map().unwrap();
         query_engine
-            .add_row(entity, entity_fields, None, ts)
+            .add_row(entity.object_type().clone(), entity_fields, ctx)
+            .unwrap()
             .await
             .unwrap();
-        let rows = fetch_rows(query_engine, entity).await;
+        let rows = fetch_rows(query_engine, ctx.txn.clone(), entity).await;
         assert!(rows.iter().any(|row| {
             entity_fields.iter().all(|(key, value)| {
                 if let TypeId::Entity { .. } = entity.get_field(key).unwrap().type_id {
@@ -941,15 +910,22 @@ pub mod tests {
         }));
     }
 
-    pub async fn fetch_rows(qe: &QueryEngine, entity: &Entity) -> Vec<EntityMap> {
+    pub async fn fetch_rows(
+        qe: &QueryEngine,
+        txn: TransactionStatic,
+        entity: &Entity,
+    ) -> Vec<EntityMap> {
         let query_plan = QueryPlan::from_type(entity);
-        fetch_rows_with_plan(qe, query_plan).await
+        fetch_rows_with_plan(qe, txn, query_plan).await
     }
 
-    async fn fetch_rows_with_plan(qe: &QueryEngine, query_plan: QueryPlan) -> Vec<EntityMap> {
+    async fn fetch_rows_with_plan(
+        qe: &QueryEngine,
+        txn: TransactionStatic,
+        query_plan: QueryPlan,
+    ) -> Vec<EntityMap> {
         let qe = Arc::new(qe.clone());
-        let tr = qe.clone().begin_transaction_static().await.unwrap();
-        let row_streams = qe.query(tr, query_plan).unwrap();
+        let row_streams = qe.query(txn, query_plan).unwrap();
 
         row_streams
             .map(|row| row.unwrap())
@@ -957,50 +933,21 @@ pub mod tests {
             .await
     }
 
-    static PERSON_TY: Lazy<Entity> = Lazy::new(|| {
-        make_entity(
-            "Person",
-            vec![
-                make_field("name", Type::String),
-                make_field("age", Type::Float),
-            ],
-        )
-    });
-
-    static COMPANY_TY: Lazy<Entity> = Lazy::new(|| {
-        make_entity(
-            "Company",
-            vec![
-                make_field("name", Type::String),
-                make_field("ceo", PERSON_TY.clone().into()),
-            ],
-        )
-    });
-    static ENTITIES: Lazy<[Entity; 2]> = Lazy::new(|| [PERSON_TY.clone(), COMPANY_TY.clone()]);
-    static TYPE_SYSTEM: Lazy<TypeSystem> = Lazy::new(|| make_type_system(&*ENTITIES));
-
     #[tokio::test]
     async fn test_query_plan() {
-        let fetch_names = |qe: QueryEngine, op_chain: QueryOpChain| async move {
-            let query_plan = QueryPlan::from_op_chain(
-                &RequestContext {
-                    ps: &PolicySystem::default(),
-                    ts: &make_type_system(&*ENTITIES),
-                    version_id: VERSION.to_owned(),
-                    user_id: None,
-                    path: "".to_string(),
-                    headers: HashMap::default(),
-                },
-                op_chain,
-            )
-            .unwrap();
-            let rows = fetch_rows_with_plan(&qe, query_plan).await;
+        async fn fetch_names(
+            ctx: &DataContext,
+            qe: QueryEngine,
+            op_chain: QueryOpChain,
+        ) -> Vec<String> {
+            let query_plan = QueryPlan::from_op_chain(ctx, op_chain).unwrap();
+            let rows = fetch_rows_with_plan(&qe, ctx.txn.clone(), query_plan).await;
             let names: Vec<_> = rows
                 .iter()
                 .map(|r| r["name"].as_str().unwrap().to_owned())
                 .collect();
             names
-        };
+        }
 
         let ppl = [
             json!({"name": "John", "age": json!(20f32)}),
@@ -1008,99 +955,136 @@ pub mod tests {
             json!({"name": "Max", "age": json!(40f32)}),
             json!({"name": "Kek", "age": json!(40f32)}),
         ];
+
         {
             let (qe, _db_file) = setup_clear_db(&*ENTITIES).await;
-            for person in ppl {
-                add_row(&qe, &PERSON_TY, &person, &TYPE_SYSTEM).await;
-            }
-            let make_sort_op = |keys: &[(&str, bool)]| {
-                let keys = keys
-                    .iter()
-                    .map(|(name, asc)| SortKey {
-                        field_name: name.to_string(),
-                        ascending: *asc,
-                    })
-                    .collect();
-                QueryOpChain::SortBy {
-                    keys,
-                    inner: QueryOpChain::BaseEntity {
-                        name: "Person".to_owned(),
-                    }
-                    .into(),
+            qe.with_dummy_ctx(Default::default(), |ctx| async {
+                for person in ppl {
+                    add_row(&qe, &PERSON_TY, &person, &ctx).await;
                 }
-            };
-            let ops = make_sort_op(&[("name", true)]);
-            let names = fetch_names(qe.clone(), ops.clone()).await;
-            assert_eq!(names, vec!["Alan", "John", "Kek", "Max"]);
+                let make_sort_op = |keys: &[(&str, bool)]| {
+                    let keys = keys
+                        .iter()
+                        .map(|(name, asc)| SortKey {
+                            field_name: name.to_string(),
+                            ascending: *asc,
+                        })
+                        .collect();
+                    QueryOpChain::SortBy {
+                        keys,
+                        inner: QueryOpChain::BaseEntity {
+                            name: "Person".to_owned(),
+                        }
+                        .into(),
+                    }
+                };
+                let ops = make_sort_op(&[("name", true)]);
+                let names = fetch_names(&ctx, qe.clone(), ops.clone()).await;
+                assert_eq!(names, vec!["Alan", "John", "Kek", "Max"]);
 
-            let ops = make_sort_op(&[("name", false)]);
-            let names = fetch_names(qe.clone(), ops.clone()).await;
-            assert_eq!(names, vec!["Max", "Kek", "John", "Alan"]);
+                let ops = make_sort_op(&[("name", false)]);
+                let names = fetch_names(&ctx, qe.clone(), ops.clone()).await;
+                assert_eq!(names, vec!["Max", "Kek", "John", "Alan"]);
 
-            let ops = make_sort_op(&[("age", true), ("name", false)]);
-            let names = fetch_names(qe.clone(), ops.clone()).await;
-            assert_eq!(names, vec!["John", "Alan", "Max", "Kek"]);
+                let ops = make_sort_op(&[("age", true), ("name", false)]);
+                let names = fetch_names(&ctx, qe.clone(), ops.clone()).await;
+                assert_eq!(names, vec!["John", "Alan", "Max", "Kek"]);
 
-            let ops = make_sort_op(&[("age", true), ("name", true)]);
-            let names = fetch_names(qe.clone(), ops.clone()).await;
-            assert_eq!(names, vec!["John", "Alan", "Kek", "Max"]);
+                let ops = make_sort_op(&[("age", true), ("name", true)]);
+                let names = fetch_names(&ctx, qe.clone(), ops.clone()).await;
+                assert_eq!(names, vec!["John", "Alan", "Kek", "Max"]);
+
+                ctx
+            })
+            .await;
         }
     }
 
     #[tokio::test]
     async fn test_delete_with_expr() {
-        let delete_with_expr = |entity_name: &str, expr: Expr| {
-            Mutation::delete_from_expr(
-                &RequestContext {
-                    ps: &PolicySystem::default(),
-                    ts: &make_type_system(&*ENTITIES),
-                    version_id: VERSION.to_owned(),
-                    user_id: None,
-                    path: "".to_string(),
-                    headers: HashMap::default(),
-                },
-                entity_name,
-                &Some(expr),
-            )
-            .unwrap()
+        let delete_with_expr = |ctx: &DataContext, entity_name: &str, expr: Expr| {
+            Mutation::delete_from_expr(ctx, entity_name, &Some(expr)).unwrap()
         };
 
         let john = json!({"name": "John", "age": json!(20f32)});
         let alan = json!({"name": "Alan", "age": json!(30f32)});
         {
             let (qe, _db_file) = setup_clear_db(&*ENTITIES).await;
-            add_row(&qe, &PERSON_TY, &john, &TYPE_SYSTEM).await;
+            qe.with_dummy_ctx(Default::default(), |ctx| async {
+                add_row(&qe, &PERSON_TY, &john, &ctx).await;
+                ctx
+            })
+            .await;
 
-            let expr = binary(&["name"], BinaryOp::Eq, "John".into());
-            let mutation = delete_with_expr("Person", expr);
-            qe.mutate(mutation).await.unwrap();
+            qe.with_dummy_ctx(Default::default(), |ctx| async {
+                let expr = binary(&["name"], BinaryOp::Eq, "John".into());
+                let mutation = delete_with_expr(&ctx, "Person", expr);
+                {
+                    let mut txn = ctx.txn.lock().await;
+                    qe.mutate_with_transaction(mutation, &mut txn)
+                        .await
+                        .unwrap();
+                }
+                ctx
+            })
+            .await;
 
-            assert_eq!(fetch_rows(&qe, &PERSON_TY).await.len(), 0);
+            qe.with_dummy_ctx(Default::default(), |ctx| async {
+                assert_eq!(fetch_rows(&qe, ctx.txn.clone(), &PERSON_TY).await.len(), 0);
+                ctx
+            })
+            .await;
         }
         {
             let (qe, _db_file) = setup_clear_db(&*ENTITIES).await;
-            add_row(&qe, &PERSON_TY, &john, &TYPE_SYSTEM).await;
-            add_row(&qe, &PERSON_TY, &alan, &TYPE_SYSTEM).await;
+            qe.with_dummy_ctx(Default::default(), |ctx| async {
+                add_row(&qe, &PERSON_TY, &john, &ctx).await;
+                add_row(&qe, &PERSON_TY, &alan, &ctx).await;
+                ctx
+            })
+            .await;
 
-            let expr = binary(&["age"], BinaryOp::Eq, (30.).into());
-            let mutation = delete_with_expr("Person", expr);
-            qe.mutate(mutation).await.unwrap();
+            qe.with_dummy_ctx(Default::default(), |ctx| async {
+                let expr = binary(&["age"], BinaryOp::Eq, (30.).into());
+                let mutation = delete_with_expr(&ctx, "Person", expr);
+                {
+                    let mut txn = ctx.txn.lock().await;
+                    qe.mutate_with_transaction(mutation, &mut txn)
+                        .await
+                        .unwrap();
+                }
 
-            let rows = fetch_rows(&qe, &PERSON_TY).await;
-            assert_eq!(rows.len(), 1);
-            assert_eq!(rows[0]["name"], "John");
+                let rows = fetch_rows(&qe, ctx.txn.clone(), &PERSON_TY).await;
+                assert_eq!(rows.len(), 1);
+                assert_eq!(rows[0]["name"], "John");
+                ctx
+            })
+            .await;
         }
 
         let chiselstrike = json!({"name": "ChiselStrike", "ceo": john});
         {
             let (qe, _db_file) = setup_clear_db(&*ENTITIES).await;
-            add_row(&qe, &COMPANY_TY, &chiselstrike, &TYPE_SYSTEM).await;
+            qe.with_dummy_ctx(Default::default(), |ctx| async {
+                add_row(&qe, &COMPANY_TY, &chiselstrike, &ctx).await;
+                ctx
+            })
+            .await;
 
-            let expr = binary(&["ceo", "name"], BinaryOp::Eq, "John".into());
-            let mutation = delete_with_expr("Company", expr);
-            qe.mutate(mutation).await.unwrap();
+            qe.with_dummy_ctx(Default::default(), |ctx| async {
+                let expr = binary(&["ceo", "name"], BinaryOp::Eq, "John".into());
+                let mutation = delete_with_expr(&ctx, "Company", expr);
+                {
+                    let mut txn = ctx.txn.lock().await;
+                    qe.mutate_with_transaction(mutation, &mut txn)
+                        .await
+                        .unwrap();
+                }
 
-            assert_eq!(fetch_rows(&qe, &COMPANY_TY).await.len(), 0);
+                assert_eq!(fetch_rows(&qe, ctx.txn.clone(), &COMPANY_TY).await.len(), 0);
+                ctx
+            })
+            .await;
         }
     }
 }

@@ -41,9 +41,6 @@ export async function handleKafkaEvent(
 
     // fake a global request context, so that the datastore operations work in event handler
     requestContext.method = "POST";
-    requestContext.headers = [];
-    requestContext.path = "";
-    requestContext.routingPath = "";
     requestContext.userId = undefined;
 
     // create the `ChiselEvent` object
@@ -52,10 +49,10 @@ export async function handleKafkaEvent(
         value: new Blob([event.value]),
     };
 
-    await opAsync("op_chisel_begin_transaction");
+    await opAsync("op_chisel_begin_transaction", requestContext.rid);
     try {
         await handler(chiselEvent);
-        await opAsync("op_chisel_commit_transaction");
+        await opAsync("op_chisel_commit_transaction", requestContext.rid);
     } catch (e) {
         let description = "";
         if (e instanceof Error && e.stack !== undefined) {
@@ -68,7 +65,7 @@ export async function handleKafkaEvent(
         );
 
         try {
-            opSync("op_chisel_rollback_transaction");
+            opSync("op_chisel_rollback_transaction", requestContext.rid);
         } catch (e) {
             console.error(`Error when rolling back transaction: ${e}`);
         }

@@ -6,7 +6,7 @@ use crate::datastore::QueryEngine;
 use std::collections::HashMap;
 use std::sync::Arc;
 
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct BuiltinTypes {
     pub types: HashMap<String, Type>,
 }

@@ -43,7 +43,7 @@ abstract class Operator<Input, Output> {
             opAsync(
                 "op_chisel_relational_query_create",
                 this,
-                requestContext,
+                requestContext.rid,
             ) as Promise<number>;
         const recordToOutput = (rawRecord: unknown) => {
             return this.recordToOutput(rawRecord);
@@ -57,6 +57,7 @@ abstract class Operator<Input, Output> {
                         const properties = opSync(
                             "op_chisel_query_get_value",
                             rid,
+                            requestContext.rid,
                         );
 
                         if (properties === null) {
@@ -729,7 +730,7 @@ export class ChiselEntity {
         const jsonIds = await opAsync("op_chisel_store", {
             name: this.constructor.name,
             value: this,
-        }, requestContext) as IdsJson;
+        }, requestContext.rid) as IdsJson;
         function backfillIds(this_: ChiselEntity, jsonIds: IdsJson) {
             this_.id = jsonIds.id;
             for (const [fieldName, value] of Object.entries(jsonIds.children)) {
@@ -898,7 +899,7 @@ export class ChiselEntity {
         await opAsync("op_chisel_delete", {
             typeName: this.name,
             filterExpr: restrictionsToFilterExpr(restrictions),
-        }, requestContext);
+        }, requestContext.rid);
     }
 
     /**
@@ -1062,18 +1063,12 @@ export function unique(_target: unknown, _name: string): void {
 }
 
 export const requestContext: {
-    versionId: string;
+    rid: number | undefined;
     method: string;
-    headers: [string, string][];
-    path: string;
-    routingPath: string;
     userId: string | undefined;
 } = {
-    versionId: opSync("op_chisel_get_version_id") as string,
+    rid: undefined,
     method: "",
-    headers: [],
-    path: "",
-    routingPath: "",
     userId: undefined,
 };
 

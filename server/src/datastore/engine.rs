@@ -4,6 +4,7 @@ use std::collections::{HashMap, HashSet};
 use std::fmt::Write;
 use std::future::Future;
 use std::pin::Pin;
+use std::rc::Rc;
 use std::sync::Arc;
 use std::task::{Context, Poll};
 
@@ -27,7 +28,11 @@ use crate::datastore::query::{
 };
 use crate::datastore::value::{EntityMap, EntityValue};
 use crate::datastore::DbConnection;
+use crate::ops::job_context::JobInfo;
+use crate::policies::PolicySystem;
 use crate::types::{DbIndex, Field, ObjectDelta, ObjectType, Type, TypeId, TypeSystem};
+
+use super::DataContext;
 
 /// A query results is a stream of query rows after policies have been applied.
 pub type QueryResults = BoxStream<'static, Result<EntityMap>>;
@@ -69,7 +74,7 @@ async fn make_transactioned_stream(
     }
 }
 
-pub fn new_query_results(
+fn new_query_results(
     raw_query: String,
     tr: TransactionStatic,
 ) -> impl Stream<Item = anyhow::Result<AnyRow>> {
@@ -216,6 +221,21 @@ impl QueryEngine {
 
     pub async fn begin_transaction_static(&self) -> Result<TransactionStatic> {
         Ok(Arc::new(Mutex::new(self.db.pool.begin().await?)))
+    }
+
+    pub async fn create_data_context(
+        &self,
+        type_system: Arc<TypeSystem>,
+        policy_system: Arc<PolicySystem>,
+        job_info: Rc<JobInfo>,
+    ) -> Result<DataContext> {
+        let txn = self.begin_transaction_static().await?;
+        Ok(DataContext {
+            type_system,
+            policy_system,
+            txn,
+            job_info,
+        })
     }
 
     pub async fn begin_transaction(&self) -> Result<Transaction<'static, Any>> {
@@ -475,40 +495,28 @@ impl QueryEngine {
     /// Execute the given `query` and return a stream to the results.
     pub fn query(
         &self,
-        tr: TransactionStatic,
+        txn: TransactionStatic,
         query_plan: QueryPlan,
     ) -> anyhow::Result<QueryResults> {
         let query = query_plan.build_query(&self.target_db())?;
         let allowed_fields = query.allowed_fields;
         let db_kind = self.db.pool.any_kind();
 
-        let stream = new_query_results(query.raw_sql, tr);
+        let stream = new_query_results(query.raw_sql, txn);
         let stream =
             stream.map(move |row| Self::row_to_entity_value(db_kind, &query.entity, &row?));
         let stream = Box::pin(stream.map(move |o| Self::project(o, &allowed_fields)));
         Ok(stream)
     }
 
-    /// Execute the given `mutation`.
-    ///
-    /// Only for testing purposes. For any other purpose, use `mutate_with_transaction`.
-    #[cfg(test)]
-    pub async fn mutate(&self, mutation: Mutation) -> Result<()> {
-        let mut transaction = self.begin_transaction().await?;
-        self.mutate_with_transaction(mutation, &mut transaction)
-            .await?;
-        QueryEngine::commit_transaction(transaction).await?;
-        Ok(())
-    }
-
     pub async fn mutate_with_transaction(
         &self,
         mutation: Mutation,
-        transaction: &mut Transaction<'_, Any>,
+        txn: &mut Transaction<'_, Any>,
     ) -> Result<()> {
         let raw_sql = mutation.build_sql(self.target_db())?;
         let query = sqlx::query(&raw_sql);
-        transaction.execute(query).await?;
+        txn.execute(query).await?;
 
         Ok(())
     }
@@ -522,24 +530,30 @@ impl QueryEngine {
     ///     ...
     /// }
     ///
-    pub fn add_row<'a>(
-        &'a self,
-        ty: &ObjectType,
+    pub fn add_row(
+        &self,
+        ty: Arc<ObjectType>,
         record: &EntityMap,
-        transaction: Option<&'a mut Transaction<'static, Any>>,
-        ts: &TypeSystem,
-    ) -> impl Future<Output = Result<IdTree>> + 'a {
-        let res = self.prepare_insertion(ty, record, ts);
-        async {
+        ctx: &DataContext,
+    ) -> Result<impl Future<Output = Result<IdTree>> + '_> {
+        let res = self.prepare_insertion(&ty, record, &ctx.type_system);
+        let txn = ctx.txn.clone();
+        Ok(async move {
             let (inserts, id_tree) = res?;
-            self.run_sql_queries(&inserts, transaction).await?;
+            let mut txn = txn.lock().await;
+            self.run_sql_queries(&inserts, &mut txn).await?;
             Ok(id_tree)
-        }
+        })
     }
 
-    pub async fn add_row_shallow(&self, ty: &ObjectType, fields_map: &EntityMap) -> Result<()> {
+    pub async fn add_row_shallow(
+        &self,
+        txn: &mut Transaction<'_, Any>,
+        ty: &ObjectType,
+        fields_map: &EntityMap,
+    ) -> Result<()> {
         let query = self.prepare_insertion_shallow(ty, fields_map)?;
-        self.run_sql_queries(&[query], None).await?;
+        self.run_sql_queries(&[query], txn).await?;
         Ok(())
     }
 
@@ -550,19 +564,12 @@ impl QueryEngine {
     async fn run_sql_queries(
         &self,
         queries: &[SqlWithArguments],
-        transaction: Option<&mut Transaction<'_, Any>>,
+        transaction: &mut Transaction<'_, Any>,
     ) -> Result<()> {
-        if let Some(transaction) = transaction {
-            for q in queries {
-                transaction.execute(q.get_sqlx()).await?;
-            }
-        } else {
-            let mut transaction = self.begin_transaction().await?;
-            for q in queries {
-                transaction.execute(q.get_sqlx()).await?;
-            }
-            QueryEngine::commit_transaction(transaction).await?;
+        for q in queries {
+            transaction.execute(q.get_sqlx()).await?;
         }
+
         Ok(())
     }
 

@@ -4508,7 +4508,6 @@ dependencies = [
  "api",
  "async-lock",
  "base64",
- "chiselc",
  "deno_core",
  "deno_runtime",
  "deno_std",

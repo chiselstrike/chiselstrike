@@ -14,7 +14,6 @@ anyhow = { version = "1.0", features = ["backtrace"] }
 api = { path = "../api" }
 async-lock = "2.5.0"
 base64 = "0.13.0"
-chiselc = { path = "../chiselc" }
 deno_core = { path = "../third_party/deno/core" }
 deno_runtime = { path = "../third_party/deno/runtime" }
 deno_std = { path = "../deno_std" }

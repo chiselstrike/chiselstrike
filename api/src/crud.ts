@@ -169,7 +169,7 @@ async function fetchEntitiesCrud<T extends ChiselEntity>(
             urlPath,
             urlQuery,
         },
-        requestContext,
+        requestContext.rid,
     );
     return results as T[];
 }
@@ -184,6 +184,6 @@ async function deleteEntitiesCrud<T extends ChiselEntity>(
             typeName: type.name,
             urlQuery,
         },
-        requestContext,
+        requestContext.rid,
     );
 }

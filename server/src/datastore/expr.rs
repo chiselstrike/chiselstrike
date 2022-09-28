@@ -8,13 +8,18 @@ use serde_derive::{Deserialize, Serialize};
 #[serde(tag = "exprType")]
 pub enum Expr {
     /// A value expression.
-    Value { value: Value },
+    Value {
+        value: Value,
+    },
     /// Expression for addressing function parameters of the current expression
-    Parameter { position: usize },
+    Parameter {
+        position: usize,
+    },
     /// Expression for addressing entity property
     Property(PropertyAccess),
     /// A binary expression.
     Binary(BinaryExpr),
+    Not(Box<Self>),
 }
 
 impl From<Value> for Expr {

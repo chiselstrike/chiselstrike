@@ -8,6 +8,7 @@ use deno_core::{serde_v8, v8};
 mod datastore;
 mod env;
 mod job;
+pub mod job_context;
 mod type_system;
 
 pub fn extension() -> deno_core::Extension {
