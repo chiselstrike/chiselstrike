@@ -60,6 +60,53 @@ pub mod meta;
 pub mod query;
 pub mod value;
 
+use std::rc::Rc;
+use std::sync::Arc;
+
+use anyhow::Context;
 pub use dbconn::DbConnection;
 pub use engine::QueryEngine;
 pub use meta::MetaService;
+
+use crate::ops::job_context::JobInfo;
+use crate::policies::PolicySystem;
+use crate::types::TypeSystem;
+
+use self::engine::TransactionStatic;
+
+pub struct DataContext {
+    pub type_system: Arc<TypeSystem>,
+    pub policy_system: Arc<PolicySystem>,
+    pub job_info: Rc<JobInfo>,
+
+    pub txn: TransactionStatic,
+}
+
+impl DataContext {
+    pub async fn commit(self) -> anyhow::Result<()> {
+        let transaction = Arc::try_unwrap(self.txn)
+            .ok()
+            .context(
+                "Cannot commit a transaction because there is an operation \
+            in progress that uses this transaction",
+            )?
+            .into_inner();
+        QueryEngine::commit_transaction(transaction).await?;
+
+        Ok(())
+    }
+
+    pub fn rollback(self) -> anyhow::Result<()> {
+        let transaction = Arc::try_unwrap(self.txn)
+            .ok()
+            .context(
+                "Cannot rollback transaction because there is an operation \
+            in progress that uses this transaction",
+            )?
+            .into_inner();
+
+        drop(transaction);
+
+        Ok(())
+    }
+}
