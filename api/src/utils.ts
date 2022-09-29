@@ -81,8 +81,14 @@ export function responseFromJson(body: unknown, status = 200) {
     });
 }
 
+const isDebug = opSync("op_chisel_is_debug") as boolean;
+
 /** Stringifies a `Json` value into JSON. Handles `Map` and `Set` correctly. */
 function stringifyJson(value: unknown, space?: string | number): string {
+    if (space === undefined && isDebug) {
+        space = 2;
+    }
+
     function replacer(this: unknown, _key: string, value: unknown): unknown {
         if (value instanceof Map) {
             const obj: Record<string, unknown> = {};
