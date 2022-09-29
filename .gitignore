@@ -7,3 +7,4 @@
 /.chiseld.db*
 /.env
 Session.vim
+/cli/tests/integration_tests/cache

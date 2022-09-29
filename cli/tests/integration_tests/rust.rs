@@ -20,6 +20,7 @@ use std::pin::Pin;
 use std::sync::atomic::AtomicU16;
 use std::sync::Arc;
 use std::task::{Context, Poll};
+use std::time::{Duration, Instant};
 use std::{env, panic};
 use tempdir::TempDir;
 
@@ -62,7 +63,7 @@ async fn setup_test_context(
                         "--auto-index",
                         &optimize_str,
                     ])
-                    .current_dir(&*tmp_dir),
+                    .current_dir(tmp_dir.path()),
             )
             .await
             .expect("chisel init failed");
@@ -72,11 +73,24 @@ async fn setup_test_context(
             execute_async(
                 tokio::process::Command::new("node")
                     .arg(&create_app_js)
-                    .args(["--chisel-version", "latest", "./"])
-                    .current_dir(&*tmp_dir),
+                    .args(["--chisel-version", "latest"])
+                    .arg("--no-install")
+                    .arg("./")
+                    .current_dir(tmp_dir.path()),
             )
             .await
             .expect("create-chiselstrike-app failed");
+
+            // instead of running `npm install` from `create-chiselstrike-app`, we simply create a
+            // symlink of `node_modules` pointing to the "cache" directory, where we have
+            // previously installed all dependencies
+            let modules_cache = repo_dir()
+                .join("cli/tests/integration_tests/cache/node_modules")
+                .canonicalize()
+                .unwrap();
+            let modules_dir = tmp_dir.path().join("node_modules");
+            std::os::unix::fs::symlink(&modules_cache, &modules_dir)
+                .expect("could not create symlink for node_modules/");
         }
     };
 
@@ -157,12 +171,12 @@ fn chiseld() -> String {
 
 struct TestFuture {
     instance: Option<Arc<TestInstance>>,
-    task: tokio::task::JoinHandle<()>,
+    task: tokio::task::JoinHandle<Duration>,
 }
 
 struct TestResult {
     instance: Arc<TestInstance>,
-    result: Result<(), Box<dyn Any + Send + 'static>>,
+    result: Result<Duration, Box<dyn Any + Send + 'static>>,
 }
 
 impl Future for TestFuture {
@@ -213,8 +227,10 @@ pub(crate) async fn run_tests(opt: Arc<Opt>) -> bool {
         if !instances.is_empty() && futures.len() < parallel {
             let instance = Arc::new(instances.pop().unwrap());
             let future = enclose! {(instance, opt, ports_counter) async move {
+                let start = Instant::now();
                 let ctx = setup_test_context(&instance, &opt, &ports_counter).await;
                 instance.spec.test_fn.call(ctx).await;
+                Instant::now().duration_since(start)
             }};
             let task = tokio::task::spawn(future);
 
@@ -238,7 +254,7 @@ pub(crate) async fn run_tests(opt: Arc<Opt>) -> bool {
         }
 
         match result {
-            Ok(_) => println!("{}", "PASSED".green()),
+            Ok(duration) => println!("{} in {:.2} s", "PASSED".green(), duration.as_secs_f64()),
             Err(panic) => {
                 let panic_msg = if let Some(&text) = panic.downcast_ref::<&'static str>() {
                     text

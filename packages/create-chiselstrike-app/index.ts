@@ -13,11 +13,16 @@ function isDirEmpty(dirname: string) {
     return fs.readdirSync(dirname).length === 0;
 }
 
-function run(projectDirectory: string, chiselVersion: string) {
+function run(
+    projectDirectory: string,
+    chiselVersion: string,
+    install: boolean,
+    rewrite: boolean,
+) {
     const projectName = path.basename(projectDirectory);
     projectDirectory = path.resolve(projectDirectory);
     if (fs.existsSync(projectDirectory)) {
-        if (!isDirEmpty(projectDirectory)) {
+        if (!rewrite && !isDirEmpty(projectDirectory)) {
             console.log(
                 `Cannot create ChiselStrike project: directory ${
                     chalk.red(projectDirectory)
@@ -39,13 +44,21 @@ function run(projectDirectory: string, chiselVersion: string) {
     const modelsPath = path.join(projectDirectory, "models");
     const policiesPath = path.join(projectDirectory, "policies");
 
-    fs.mkdirSync(path.join(projectDirectory, ".vscode"));
-    fs.mkdirSync(routesPath);
-    fs.mkdirSync(eventsPath);
-    fs.mkdirSync(modelsPath);
-    fs.closeSync(fs.openSync(path.join(modelsPath, ".gitkeep"), "w"));
-    fs.mkdirSync(policiesPath);
-    fs.closeSync(fs.openSync(path.join(policiesPath, ".gitkeep"), "w"));
+    function mkdirpSync(path: string) {
+        fs.mkdirSync(path, { recursive: true });
+    }
+
+    function touchSync(path: string) {
+        fs.closeSync(fs.openSync(path, "w"));
+    }
+
+    mkdirpSync(path.join(projectDirectory, ".vscode"));
+    mkdirpSync(routesPath);
+    mkdirpSync(eventsPath);
+    mkdirpSync(modelsPath);
+    touchSync(path.join(modelsPath, ".gitkeep"));
+    mkdirpSync(policiesPath);
+    touchSync(path.join(policiesPath, ".gitkeep"));
     const rootFiles = [
         "Chisel.toml",
         "Dockerfile",
@@ -93,11 +106,16 @@ function run(projectDirectory: string, chiselVersion: string) {
         path.join(__dirname, "template", "dockerignore"),
         path.join(projectDirectory, "", ".dockerignore"),
     );
-    console.log("Installing packages. This might take a couple of minutes.");
-    process.chdir(projectDirectory);
-    spawn("npm", ["install"], {
-        stdio: "inherit",
-    });
+
+    if (install) {
+        console.log(
+            "Installing packages. This might take a couple of minutes.",
+        );
+        process.chdir(projectDirectory);
+        spawn("npm", ["install"], {
+            stdio: "inherit",
+        });
+    }
 }
 
 if (os.type() == "Windows_NT") {
@@ -125,7 +143,21 @@ const _program = new Commander.Command(packageJson.name)
         "ChiselStrike version to use.",
         packageJson.version,
     )
+    .option(
+        "--no-install",
+        "Do not install dependencies",
+    )
+    .option(
+        "--rewrite",
+        "Rewrite an existing directory",
+    )
     .action((projectDirectory, options) => {
-        run(projectDirectory, options.chiselVersion);
+        console.log(JSON.stringify(options));
+        run(
+            projectDirectory,
+            options.chiselVersion,
+            !!options.install,
+            !!options.rewrite,
+        );
     })
     .parse(process.argv);

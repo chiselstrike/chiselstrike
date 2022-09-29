@@ -82,14 +82,27 @@ fn main() -> ExitCode {
     // generally available. Tests that want a specific extra package can then install on top
     run("npm", ["install"]);
 
-    let opt = Arc::new(Opt::from_args());
-
     let bd = bin_dir();
     let mut args = vec!["build"];
     if bd.ends_with("release") {
         args.push("--release");
     }
     run("cargo", args);
+
+    // prepare an empty "cache" project, where we install the necessary dependencies once, so that
+    // we can reuse them in test cases
+    run(
+        "node",
+        [
+            "packages/create-chiselstrike-app/dist/index.js",
+            "--chisel-version",
+            "latest",
+            "--rewrite",
+            "cli/tests/integration_tests/cache",
+        ],
+    );
+
+    let opt = Arc::new(Opt::from_args());
 
     let ok = rust::run_tests(opt.clone()) & lit::run_tests(&opt);
     if ok {
