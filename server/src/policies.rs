@@ -7,8 +7,8 @@ use crate::JsonObject;
 use anyhow::Result;
 use chiselc::parse::ParserContext;
 use hyper::http;
+use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
-use yaml_rust::{Yaml, YamlLoader};
 
 /// Different kinds of policies.
 #[derive(Clone)]
@@ -145,6 +145,42 @@ pub struct PolicySystem {
     pub secret_authorization: SecretAuthorization,
 }
 
+#[derive(Serialize, Deserialize, PartialEq, Debug)]
+#[serde(deny_unknown_fields)]
+struct MandatoryHeader {
+    name: String,
+    secret_value_ref: String,
+    only_for_methods: Option<Vec<String>>,
+}
+
+#[derive(Serialize, Deserialize, PartialEq, Debug)]
+#[serde(deny_unknown_fields)]
+struct Route {
+    path: String,
+    users: Option<String>,
+    mandatory_header: Option<MandatoryHeader>,
+}
+
+#[derive(Serialize, Deserialize, PartialEq, Debug)]
+#[serde(deny_unknown_fields)]
+struct Label {
+    name: String,
+    transform: Option<String>,
+    except_uri: Option<String>,
+}
+
+type Routes = Vec<Route>;
+type Endpoints = Vec<Route>;
+type Labels = Vec<Label>;
+
+#[derive(Serialize, Deserialize, PartialEq, Debug)]
+#[serde(deny_unknown_fields)]
+struct YamlPolicies {
+    routes: Option<Routes>,
+    endpoints: Option<Endpoints>,
+    labels: Option<Labels>,
+}
+
 impl PolicySystem {
     /// For field of type `ty` creates field policies.
     pub fn make_field_policies(
@@ -182,124 +218,64 @@ impl PolicySystem {
 
     pub fn from_yaml(config: &str) -> Result<Self> {
         let mut policies = Self::default();
-        let mut labels = vec![];
-
-        let docs = YamlLoader::load_from_str(config)?;
-        for config in docs.iter() {
-            for label in config["labels"].as_vec().get_or_insert(&[].into()).iter() {
-                let name = label["name"].as_str().ok_or_else(|| {
-                    anyhow::anyhow!("couldn't parse yaml: label without a name: {:?}", label)
-                })?;
-
-                labels.push(name.to_owned());
-                debug!("Applying policy for label {:?}", name);
-                let pattern = label["except_uri"].as_str().unwrap_or("^$"); // ^$ never matches; each path has at least a '/' in it.
-
-                match label["transform"].as_str() {
-                    Some("anonymize") => {
-                        policies.labels.insert(
-                            name.to_owned(),
-                            Policy {
-                                kind: Kind::Transform(crate::policies::anonymize),
-                                except_uri: regex::Regex::new(pattern)?,
-                            },
-                        );
-                    }
-                    Some("omit") => {
-                        policies.labels.insert(
-                            name.to_owned(),
-                            Policy {
-                                kind: Kind::Omit,
-                                except_uri: regex::Regex::new(pattern)?,
-                            },
-                        );
-                    }
-                    Some("match_login") => {
-                        policies.labels.insert(
-                            name.to_owned(),
-                            Policy {
-                                kind: Kind::MatchLogin,
-                                except_uri: regex::Regex::new(pattern)?,
-                            },
-                        );
-                    }
-                    Some(x) => {
-                        anyhow::bail!("unknown transform: {} for label {}", x, name);
-                    }
-                    None => {}
-                };
-            }
-
-            #[allow(clippy::or_fun_call)]
-            let routes = config["routes"]
-                .as_vec()
-                .or(config["endpoints"].as_vec())
-                .map(|vec| vec.iter())
-                .into_iter()
-                .flatten();
-
-            for route in routes {
-                if let Some(path) = route["path"].as_str() {
-                    if let Some(users) = route["users"].as_str() {
-                        policies
-                            .user_authorization
-                            .add(path, regex::Regex::new(users)?)?;
-                    }
-                    let header = &route["mandatory_header"];
-                    match header {
-                        Yaml::BadValue => {}
-                        Yaml::Hash(_) => {
-                            let kv = (&header["name"], &header["secret_value_ref"]);
-                            match kv {
-                                (Yaml::String(name), Yaml::String(value)) => {
-                                    let methods = &header["only_for_methods"];
-                                    let methods = match methods {
-                                        Yaml::BadValue => None,
-                                        Yaml::String(_) => Some(parse_methods(&vec![methods.clone()])?),
-                                        Yaml::Array(a) => Some(parse_methods(a)?),
-                                        _ => {
-                                            warn!("only_for_methods must be a list of strings, instead got {methods:?}");
-                                            None
-                                        }
-                                    };
-                                    policies.secret_authorization.add(path, RequiredHeader {
-                                        header_name: name.clone(),
-                                        secret_name: value.clone(),
-                                        methods,
-                                    })?;
-                                }
-                                _ => anyhow::bail!(
-                                    "Header must have string values for keys 'name' and 'secret_value_ref'. Instead got: {header:?}"
-                                ),
-                            }
-                        }
-                        x => anyhow::bail!("Unparsable header: {x:?}"),
-                    }
+        let parsed_yaml: YamlPolicies = serde_yaml::from_str(config)?;
+        for label in parsed_yaml.labels.unwrap_or_default() {
+            let except_uri = regex::Regex::new(&label.except_uri.unwrap_or_else(
+                || "^$".into(), // ^$ never matches; each path has at least a '/' in it.
+            ))?;
+            let kind = match label.transform.as_deref() {
+                Some("anonymize") => Kind::Transform(crate::policies::anonymize),
+                Some("omit") => Kind::Omit,
+                Some("match_login") => Kind::MatchLogin,
+                Some(x) => {
+                    anyhow::bail!("unknown transform: {x} for label {}", label.name);
                 }
+                None => continue,
+            };
+            policies
+                .labels
+                .insert(label.name, Policy { kind, except_uri });
+        }
+
+        let routes = parsed_yaml
+            .routes
+            .or(parsed_yaml.endpoints)
+            .unwrap_or_default();
+
+        for route in routes {
+            if let Some(users) = route.users {
+                policies
+                    .user_authorization
+                    .add(&route.path, regex::Regex::new(&users)?)?;
+            }
+            if let Some(header) = route.mandatory_header {
+                let methods = header.only_for_methods.map(parse_methods).transpose()?;
+                policies.secret_authorization.add(
+                    &route.path,
+                    RequiredHeader {
+                        header_name: header.name,
+                        secret_name: header.secret_value_ref,
+                        methods,
+                    },
+                )?;
             }
         }
         Ok(policies)
     }
 }
 
+/// Parses v's elements into Methods. Returns Err if an element failed to parse.
+fn parse_methods(v: Vec<String>) -> Result<Vec<hyper::Method>> {
+    use anyhow::Context;
+    use std::str::FromStr;
+    v.iter()
+        .map(|s| hyper::Method::from_str(s).with_context(|| format!("Error parsing method {s}")))
+        .collect()
+}
+
 pub fn anonymize(_: EntityValue) -> EntityValue {
     // TODO: use type-specific anonymization.
     EntityValue::String("xxxxx".to_owned())
-}
-
-fn parse_methods(v: &Vec<Yaml>) -> Result<Vec<hyper::Method>> {
-    let mut methods = vec![];
-    for e in v {
-        use anyhow::Context;
-        use std::str::FromStr;
-        match e {
-            Yaml::String(s) => methods.push(
-                hyper::Method::from_str(s).with_context(|| format!("Error parsing method {s}"))?,
-            ),
-            _ => anyhow::bail!("String method expected in only_for_methods, instead got {e:?}"),
-        }
-    }
-    Ok(methods)
 }
 
 #[derive(Debug, Clone)]

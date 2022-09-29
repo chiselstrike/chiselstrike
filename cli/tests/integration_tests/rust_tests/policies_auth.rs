@@ -76,9 +76,9 @@ pub async fn token_auth(mut c: TestContext) {
     c.chisel
         .apply()
         .await
-        .expect_err("Didn't catch wrong header")
+        .expect_err("Didn't catch non-dict header")
         .stderr
-        .peek("Unparsable header");
+        .peek("invalid type");
 
     // Header without name.
     c.chisel.write_unindent(
@@ -90,23 +90,9 @@ pub async fn token_auth(mut c: TestContext) {
     c.chisel
         .apply()
         .await
-        .expect_err("Didn't catch wrong header")
+        .expect_err("Didn't catch missing header name")
         .stderr
-        .peek("Header must have string values for keys 'name' and 'secret_value_ref'");
-
-    // Non-string secret_value_ref.
-    c.chisel.write_unindent(
-        "policies/p.yaml", r##"
-        routes:
-          - path: /
-            mandatory_header: { name: header33, secret_value_ref: 99 }"##,
-    );
-    c.chisel
-        .apply()
-        .await
-        .expect_err("Didn't catch wrong header")
-        .stderr
-        .peek("Header must have string values for keys 'name' and 'secret_value_ref'");
+        .peek("missing field");
 
     // Only PUTs and GETs require a header.
     c.chisel.write_unindent(

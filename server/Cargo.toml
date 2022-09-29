@@ -47,6 +47,7 @@ sea-query = { version = "0.26", features = ["thread-safe"] }
 serde = "1.0.137"
 serde_derive = "1.0.137"
 serde_json = "1.0.81"
+serde_yaml = "0.9.13"
 sha2 = "0.10.2"
 socket2 = { version = "0.3.18", features = ["unix", "reuseport"] }
 sqlx = { git = "https://github.com/chiselstrike/sqlx.git", rev = "bcfb6ca404f9070d9a2e187c717fd4bd166fc19f", features = [
@@ -64,7 +65,6 @@ tonic = "0.5.2"
 url = "2.2"
 utils = { path = "../utils" }
 uuid = { version = "0.8.2", features = ["v4"] }
-yaml-rust = "0.4"
 
 [dev-dependencies]
 tempdir = "0.3.7"
