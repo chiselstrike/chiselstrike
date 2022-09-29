@@ -221,7 +221,7 @@ impl PolicySystem {
         let parsed_yaml: YamlPolicies = serde_yaml::from_str(config)?;
         for label in parsed_yaml.labels.unwrap_or_default() {
             let except_uri = regex::Regex::new(&label.except_uri.unwrap_or_else(
-                || "^$".into(), // ^$ never matches; each path has at least a '/' in it.
+                || r"^\b$".into(), // ^\b$ never matches;
             ))?;
             let kind = match label.transform.as_deref() {
                 Some("anonymize") => Kind::Transform(crate::policies::anonymize),
