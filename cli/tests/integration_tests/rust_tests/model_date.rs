@@ -1,7 +1,6 @@
 use crate::framework::prelude::*;
 
-#[chisel_macros::test(modules = Deno)]
-pub async fn store_and_load(c: TestContext) {
+async fn run_add_and_load_test(c: TestContext) {
     c.chisel.write(
         "models/dated.ts",
         r#"
@@ -9,17 +8,6 @@ pub async fn store_and_load(c: TestContext) {
         export class Dated extends ChiselEntity {
             date: Date;
         }"#,
-    );
-    c.chisel.write(
-        "routes/store.ts",
-        r#"
-        import { Dated } from "../models/dated.ts";
-        export default async function chisel(req: Request) {
-            await Dated.create({
-                date: Date.parse('01 Sep 2022 12:13:14 GMT'),
-            });
-        }
-        "#,
     );
     c.chisel.write(
         "routes/read.ts",
@@ -38,6 +26,83 @@ pub async fn store_and_load(c: TestContext) {
         .send()
         .await
         .assert_text("Thu, 01 Sep 2022 12:13:14 GMT");
+}
+
+#[chisel_macros::test(modules = Deno)]
+pub async fn create_and_load(c: TestContext) {
+    c.chisel.write(
+        "routes/store.ts",
+        r#"
+        import { Dated } from "../models/dated.ts";
+        export default async function chisel(req: Request) {
+            await Dated.create({
+                date: new Date(Date.parse('01 Sep 2022 12:13:14 GMT')),
+            });
+        }
+        "#,
+    );
+    run_add_and_load_test(c).await;
+}
+
+#[chisel_macros::test(modules = Deno)]
+pub async fn build_save_and_load(c: TestContext) {
+    c.chisel.write(
+        "routes/store.ts",
+        r#"
+        import { Dated } from "../models/dated.ts";
+        export default async function chisel(req: Request) {
+            const d = await Dated.build({
+                date: new Date(Date.parse('01 Sep 2022 12:13:14 GMT')),
+            });
+            await d.save();
+        }
+        "#,
+    );
+    run_add_and_load_test(c).await;
+}
+
+#[chisel_macros::test(modules = Deno)]
+pub async fn insert_and_load(c: TestContext) {
+    c.chisel.write(
+        "routes/store.ts",
+        r#"
+        import { Dated } from "../models/dated.ts";
+        export default async function chisel(req: Request) {
+            const correct_date = new Date(Date.parse('01 Sep 2022 12:13:14 GMT'));
+            const false_date = new Date(Date.parse('01 Jan 2000 10:00:00 GMT'));
+            const d = await Dated.upsert({
+                restrictions: {},
+                create: { date: correct_date },
+                update: { date: false_date }
+            });
+            await d.save();
+        }
+        "#,
+    );
+    run_add_and_load_test(c).await;
+}
+
+#[chisel_macros::test(modules = Deno)]
+pub async fn update_and_load(c: TestContext) {
+    c.chisel.write(
+        "routes/store.ts",
+        r#"
+        import { Dated } from "../models/dated.ts";
+        export default async function chisel(req: Request) {
+            const correct_date = new Date(Date.parse('01 Sep 2022 12:13:14 GMT'));
+            const false_date = new Date(Date.parse('01 Jan 2000 10:00:00 GMT'));
+            await Dated.create({
+                date: false_date,
+            });
+            const d = await Dated.upsert({
+                restrictions: {},
+                create: { date: false_date },
+                update: { date: correct_date }
+            });
+        }
+        "#,
+    );
+    run_add_and_load_test(c).await;
 }
 
 #[chisel_macros::test(modules = Deno)]

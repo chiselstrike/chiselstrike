@@ -2,7 +2,7 @@
 
 import { crud } from "./crud.ts";
 import type { RouteMap } from "./routing.ts";
-import { mergeDeep, opAsync, opSync } from "./utils.ts";
+import { opAsync, opSync } from "./utils.ts";
 import { SimpleTypeSystem, TypeSystem } from "./type_system.ts";
 
 /**
@@ -94,69 +94,10 @@ class BaseEntity<T> extends Operator<never, T> {
     }
 
     recordToOutput(rawRecord: unknown): T {
-        const result = new this.baseConstructor();
-        type RecordType = Record<string, unknown>;
-        this.populateEntity(
-            this.name,
-            result as RecordType,
-            rawRecord as RecordType,
+        return buildEntity(
+            this.baseConstructor,
+            rawRecord as Record<string, unknown>,
         );
-        return result;
-    }
-
-    private populateEntity(
-        entityName: string,
-        result: Record<string, unknown>,
-        jsonResult: Record<string, unknown>,
-    ) {
-        const entity = typeSystem.findEntity(entityName)!;
-        for (const field of entity.fields) {
-            if (!(field.name in jsonResult)) {
-                continue;
-            }
-            const fieldValue = jsonResult[field.name];
-            switch (field.type.name) {
-                case "string":
-                case "number":
-                case "boolean":
-                case "array":
-                    result[field.name] = fieldValue;
-                    break;
-                case "jsDate":
-                    result[field.name] = new Date(
-                        fieldValue as number | string,
-                    );
-                    break;
-                case "entity":
-                    if (fieldValue === undefined) {
-                        if (field.isOptional) {
-                            result[field.name] = fieldValue;
-                            continue;
-                        } else {
-                            throw new Error(
-                                `field ${field.name} of entity ${entityName} is not optional but backend returned no value`,
-                            );
-                        }
-                    }
-
-                    if (result[field.name] === undefined) {
-                        result[field.name] = new ChiselEntity();
-                    }
-                    type RecordType = Record<string, unknown>;
-                    this.populateEntity(
-                        field.type.entityName,
-                        result[field.name] as RecordType,
-                        fieldValue as RecordType,
-                    );
-                    break;
-                default:
-                    assertNever(field.type);
-                    throw new Error(
-                        `field ${field.name} of entity ${entityName} has unexpected type ${field
-                            .type as unknown}`,
-                    );
-            }
-        }
     }
 
     public eval(): undefined {
@@ -775,9 +716,10 @@ export class ChiselEntity {
         this: { new (): T },
         ...properties: Partial<T>[]
     ): T {
-        const result = new this();
-        mergeDeep(result as Record<string, unknown>, ...properties);
-        return result;
+        return buildEntity(
+            this,
+            ...properties,
+        );
     }
 
     /** saves the current object into the backend */
@@ -1017,10 +959,12 @@ export class ChiselEntity {
         this: { new (): T },
         ...properties: Record<string, unknown>[]
     ): Promise<T> {
-        const result = new this();
-        mergeDeep(result as Record<string, unknown>, ...properties);
-        await result.save();
-        return result;
+        const entity = buildEntity(
+            this,
+            ...properties,
+        );
+        await entity.save();
+        return entity;
     }
 
     /**
@@ -1048,26 +992,26 @@ export class ChiselEntity {
         args: UpsertArgs<T>,
     ): Promise<T> {
         const it = chiselIterator<T>(this).filter(args.restrictions);
-        let record = null;
+        let foundEntity = null;
         for await (const value of it) {
-            record = value;
+            foundEntity = value;
             break;
         }
-        if (record) {
-            mergeDeep(
-                record as Record<string, unknown>,
-                args.update as Record<string, unknown>,
+        if (foundEntity) {
+            mergeIntoEntity(
+                this.name,
+                foundEntity as Record<string, unknown>,
+                args.update,
             );
-            await record.save();
-            return record;
+            await foundEntity.save();
+            return foundEntity;
         } else {
-            const record = new this();
-            mergeDeep(
-                record as Record<string, unknown>,
-                args.create as Record<string, unknown>,
+            const entity = buildEntity(
+                this,
+                args.create,
             );
-            await record.save();
-            return record;
+            await entity.save();
+            return entity;
         }
     }
 }
@@ -1157,4 +1101,133 @@ export async function loggedInUser(): Promise<AuthUser | undefined> {
         return undefined;
     }
     return await AuthUser.findOne({ id });
+}
+
+function buildEntity<T>(
+    baseConstructor: { new (): T },
+    ...sources: Record<string, unknown>[]
+) {
+    const entity = new baseConstructor();
+    mergeIntoEntity(
+        baseConstructor.name,
+        entity as Record<string, unknown>,
+        ...sources,
+    );
+    return entity;
+}
+
+export function mergeIntoEntity(
+    entityName: string,
+    target: Record<string, unknown>,
+    ...sources: Record<string, unknown>[]
+) {
+    for (const source of sources) {
+        mergeSourceIntoEntity(entityName, target, source);
+    }
+}
+
+function mergeSourceIntoEntity(
+    entityName: string,
+    target: Record<string, unknown>,
+    source: Record<string, unknown>,
+) {
+    const entity = typeSystem.findEntity(entityName);
+    if (entity === undefined) {
+        throw new Error(
+            `trying to build an unknown entity '${entityName}'`,
+        );
+    }
+    for (const field of entity.fields) {
+        if (!(field.name in source)) {
+            continue;
+        }
+        const fieldValue = source[field.name];
+
+        // Id needs to be handled specially as it can be undefined before it's saved although it's
+        // not marked optional within our type system.
+        if (field.name == "id") {
+            target[field.name] = fieldValue;
+            continue;
+        }
+
+        // If there is explicitly provided undefined/null value for a field,
+        // check that it's actually optional.
+        if (fieldValue === undefined || fieldValue === null) {
+            if (field.isOptional) {
+                target[field.name] = fieldValue;
+                continue;
+            } else {
+                throw new Error(
+                    `field ${field.name} of entity ${entityName} is not optional but undefined/null was explicitly provided for the field`,
+                );
+            }
+        }
+
+        const err = (typeName: string) => {
+            new Error(
+                `field ${field.name} of entity ${entityName} is ${typeName}, but provided value ${fieldValue} is of type ${typeof fieldValue}`,
+            );
+        };
+        if (field.type.name == "string") {
+            if (typeof fieldValue == "string") {
+                target[field.name] = fieldValue;
+            } else {
+                throw err("string");
+            }
+        } else if (field.type.name == "number") {
+            if (typeof fieldValue == "number") {
+                target[field.name] = fieldValue;
+            } else {
+                throw err("number");
+            }
+        } else if (field.type.name == "boolean") {
+            if (typeof fieldValue == "boolean") {
+                target[field.name] = fieldValue;
+            } else {
+                throw err("boolean");
+            }
+        } else if (field.type.name == "jsDate") {
+            if (fieldValue instanceof Date) {
+                target[field.name] = fieldValue;
+            } else if (
+                typeof fieldValue == "string" || typeof fieldValue == "number"
+            ) {
+                target[field.name] = new Date(fieldValue);
+            } else {
+                throw new Error(
+                    `field ${field.name} of entity ${entityName} is Date, but provided value ${fieldValue} is not an instance of Date`,
+                );
+            }
+        } else if (field.type.name == "array") {
+            if (Array.isArray(fieldValue)) {
+                target[field.name] = fieldValue;
+            } else {
+                throw new Error(
+                    `field ${field.name} of entity ${entityName} is Array, but provided value ${fieldValue} is not an instance of Array`,
+                );
+            }
+        } else if (field.type.name == "entity") {
+            if (typeof fieldValue == "object") {
+                if (target[field.name] === undefined) {
+                    target[field.name] = new ChiselEntity();
+                }
+                type RecordType = Record<string, unknown>;
+                mergeIntoEntity(
+                    field.type.entityName,
+                    target[field.name] as RecordType,
+                    fieldValue as RecordType,
+                );
+            } else {
+                throw new Error(
+                    `field ${field.name} of entity ${entityName} is Entity, but provided value ${fieldValue} is not an object`,
+                );
+            }
+        } else {
+            assertNever(field.type);
+            throw new Error(
+                `field ${field.name} of entity ${entityName} has unexpected type ${field
+                    .type as unknown}`,
+            );
+        }
+    }
 }

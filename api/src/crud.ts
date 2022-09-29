@@ -1,6 +1,6 @@
 // SPDX-FileCopyrightText: © 2022 ChiselStrike <info@chiselstrike.com>
-import { mergeDeep, opAsync, responseFromJson } from "./utils.ts";
-import { ChiselEntity, requestContext } from "./datastore.ts";
+import { opAsync, responseFromJson } from "./utils.ts";
+import { ChiselEntity, mergeIntoEntity, requestContext } from "./datastore.ts";
 import { ChiselRequest } from "./request.ts";
 import { RouteMap } from "./routing.ts";
 
@@ -120,8 +120,9 @@ export function crud<
                 404,
             );
         }
-        mergeDeep(
-            orig as unknown as Record<string, unknown>,
+        mergeIntoEntity(
+            entity.name,
+            orig as Record<string, unknown>,
             await req.json(),
         );
         await orig.save();
