@@ -691,7 +691,8 @@ impl QueryEngine {
             TypeId::String | TypeId::Id | TypeId::Entity { .. } => {
                 SqlValue::String(convert_json_value!(as_str, String))
             }
-            TypeId::Float | TypeId::JsDate => SqlValue::F64(convert_json_value!(as_f64, f64)),
+            TypeId::Float => SqlValue::F64(convert_json_value!(as_f64, f64)),
+            TypeId::JsDate => SqlValue::F64(convert_json_value!(as_date, f64)),
             TypeId::Boolean => SqlValue::Bool(convert_json_value!(as_bool, bool)),
             TypeId::Array(element_type) => {
                 let val = match fields.get(&field.name) {
