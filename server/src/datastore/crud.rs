@@ -151,9 +151,7 @@ fn cursor_from_pivot(query: &Query, pivot_element: &JsonObject, forward: bool) -
         let value = pivot_element
             .get(&key.field_name)
             .cloned()
-            .with_context(|| {
-                format!("failed to create cursor axis for field `{}", key.field_name)
-            })?;
+            .unwrap_or(serde_json::Value::Null);
         axes.push(CursorAxis { key, value });
     }
     let cursor = Cursor::new(axes, forward);
