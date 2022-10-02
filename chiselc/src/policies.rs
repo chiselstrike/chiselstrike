@@ -3,102 +3,225 @@
 use std::collections::HashMap;
 use std::fmt;
 use std::ops::{Deref, DerefMut};
+use std::str::FromStr;
+use std::sync::Arc;
 
-use anyhow::bail;
-use boa::{Context, JsString, JsValue};
+use anyhow::{bail, Result};
 use quine_mc_cluskey::Bool;
 use serde_json::Value;
+use swc_common::sync::Lrc;
+use swc_common::{SourceMap, Span};
 use swc_ecmascript::ast::{
-    BinaryOp, Expr, Lit, MemberProp, Module, ModuleDecl, ModuleItem, Prop, PropName, PropOrSpread,
-    Stmt, UnaryOp,
+    ArrowExpr, BinaryOp, Expr, ExprStmt, Ident, Lit, MemberProp, Module, ModuleDecl, ModuleItem,
+    Prop, PropName, PropOrSpread, Stmt, UnaryOp,
 };
 
+use crate::parse::emit;
+use crate::rewrite::Target;
 use crate::tools::analysis::control_flow::Idx;
 use crate::tools::analysis::region::Region;
 use crate::tools::analysis::stmt_map::StmtMap;
 use crate::tools::functions::ArrowFunction;
 
-#[derive(Debug, Clone)]
-pub struct Policies {
-    pub read: Option<Policy>,
-    pub write: Option<Policy>,
-}
-
-impl Policies {
-    pub fn parse(module: &Module) -> Self {
-        let mut read = None;
-        let mut write = None;
-
-        match &module.body[0] {
-            ModuleItem::ModuleDecl(m) => match m {
-                ModuleDecl::ExportDefaultExpr(e) => match &*e.expr {
-                    Expr::Object(o) => {
-                        for prop in &o.props {
-                            match prop {
-                                PropOrSpread::Prop(prop) => match &**prop {
-                                    Prop::KeyValue(kv) => {
-                                        let body = match &*kv.value {
-                                            Expr::Arrow(arrow) => {
-                                                let arrow_func =
-                                                    ArrowFunction::parse(arrow).unwrap();
-                                                Policy::from_arrow(&arrow_func)
-                                            }
-                                            _ => todo!(),
-                                        };
-
-                                        match &kv.key {
-                                            PropName::Ident(id) => match &*id.sym {
-                                                "read" => read.replace(body),
-                                                "write" => write.replace(body),
-                                                _ => todo!("unexpected policy rule"),
-                                            },
-                                            _ => todo!(),
-                                        };
-                                    }
-                                    _ => todo!(),
-                                },
-                                _ => todo!(),
-                            }
-                        }
-                    }
-                    _ => todo!(),
-                },
-                _ => todo!(),
-            },
-            ModuleItem::Stmt(_) => todo!(),
-        };
-
-        Self { read, write }
-    }
+#[derive(PartialEq, Eq, Hash, Clone, Copy, Debug)]
+pub enum PolicyName {
+    Read,
+    Create,
+    Update,
+    OnRead,
+    OnSave,
+    GeoLoc,
 }
 
 #[derive(Debug, Clone)]
-pub struct Policy {
-    pub actions: Actions,
-    pub where_conds: Option<Cond>,
-    pub predicates: Predicates,
+pub enum Policy {
+    Filter(FilterPolicy),
+    Transform(TransformPolicy),
 }
 
 impl Policy {
-    fn from_arrow(arrow: &ArrowFunction) -> Self {
-        let mut builder = RulesBuilder::new(&arrow.stmt_map);
-        let actions = builder
-            .infer_rules_from_region(&arrow.regions, Cond::True)
-            .unwrap();
-        let predicates = builder.predicates;
-        let actions = actions.simplify(&predicates);
-        let where_conds = generate_where_from_rules(&actions).map(|c| c.simplify(&predicates));
+    pub fn as_filter(&self) -> Option<&FilterPolicy> {
+        match self {
+            Policy::Filter(ref f) => Some(f),
+            Policy::Transform(_) => None,
+        }
+    }
 
-        Self {
-            actions,
-            where_conds,
-            predicates,
+    pub fn as_transform(&self) -> Option<&TransformPolicy> {
+        match self {
+            Policy::Transform(ref t) => Some(t),
+            Policy::Filter(_) => None,
+        }
+    }
+
+    pub fn code(&self) -> &[u8] {
+        match self {
+            Policy::Filter(ref f) => &f.js_code,
+            Policy::Transform(ref t) => &t.js_code,
         }
     }
 }
 
+impl From<FilterPolicy> for Policy {
+    fn from(p: FilterPolicy) -> Self {
+        Self::Filter(p)
+    }
+}
+
+impl From<TransformPolicy> for Policy {
+    fn from(p: TransformPolicy) -> Self {
+        Self::Transform(p)
+    }
+}
+
+impl FromStr for PolicyName {
+    type Err = anyhow::Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "read" => Ok(Self::Read),
+            "create" => Ok(Self::Create),
+            "update" => Ok(Self::Update),
+            "onRead" => Ok(Self::OnRead),
+            "onSave" => Ok(Self::OnSave),
+            "geoLocation" => Ok(Self::GeoLoc),
+            other => bail!("unknown policy `{other}`"),
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct Policies {
+    policies: HashMap<PolicyName, Policy>,
+}
+
+impl Policies {
+    pub fn parse(module: &Module) -> Result<Self> {
+        let mut policies = HashMap::new();
+
+        for module in &module.body {
+            match module {
+                ModuleItem::ModuleDecl(m) => match m {
+                    ModuleDecl::ExportDefaultExpr(e) => match &*e.expr {
+                        Expr::Object(o) => {
+                            for prop in &o.props {
+                                match prop {
+                                    PropOrSpread::Prop(prop) => match &**prop {
+                                        Prop::KeyValue(kv) => {
+                                            let policy_name = match &kv.key {
+                                                PropName::Ident(id) => match id.sym.parse() {
+                                                    Ok(name) => name,
+                                                    // unknown rule, just ignore it
+                                                    Err(_) => continue,
+                                                },
+                                                _ => bail!("expected property!"),
+                                            };
+
+                                            let body = match policy_name {
+                                                PolicyName::Read
+                                                | PolicyName::Create
+                                                | PolicyName::Update => match &*kv.value {
+                                                    Expr::Arrow(arrow) => {
+                                                        let arrow_func =
+                                                            ArrowFunction::parse(arrow)?;
+                                                        FilterPolicy::from_arrow(&arrow_func)?.into()
+                                                    }
+                                                    _ => bail!("Only arrow functions are supported in policies"),
+                                                },
+                                                PolicyName::OnRead | PolicyName::OnSave | PolicyName::GeoLoc => {
+                                                    match &*kv.value {
+                                                        Expr::Arrow(arrow) => {
+                                                            TransformPolicy::from_arrow(arrow)?
+                                                                .into()
+                                                        },
+                                                        _ => bail!("Only arrow functions are supported in policies"),
+                                                    }
+                                                }
+                                            };
+
+                                            policies.insert(policy_name, body);
+                                        }
+                                        _ => bail!("unexpexted property in policy object"),
+                                    },
+                                    _ => bail!("expexted property"),
+                                }
+                            }
+                        }
+                        _ => bail!("default export for policies should be an object."),
+                    },
+                    // ignore everything else
+                    _ => continue,
+                },
+                ModuleItem::Stmt(_) => continue,
+            };
+        }
+
+        Ok(Self { policies })
+    }
+
+    pub fn iter(&self) -> impl Iterator<Item = (&PolicyName, &Policy)> {
+        self.policies.iter()
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct PolicyParams {
+    names: Vec<String>,
+}
+
+impl PolicyParams {
+    pub fn get_positional_param_name(&self, pos: usize) -> &str {
+        &self.names[pos]
+    }
+
+    fn from_idents(param_names: &[&Ident]) -> Self {
+        let mut names = Vec::new();
+        for name in param_names {
+            names.push(name.sym.to_string());
+        }
+
+        Self { names }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct FilterPolicy {
+    pub where_conds: Option<Cond>,
+    pub predicates: Predicates,
+    pub env: Arc<Environment>,
+    pub js_code: Box<[u8]>,
+    params: PolicyParams,
+}
+
+impl FilterPolicy {
+    fn from_arrow(arrow: &ArrowFunction) -> Result<Self> {
+        let params: Vec<_> = arrow.params().map(|(name, _)| name).collect();
+        let params = PolicyParams::from_idents(&params);
+
+        let mut builder = RulesBuilder::new(&arrow.stmt_map);
+        let actions = builder.infer_rules_from_region(&arrow.regions, Cond::True)?;
+        let predicates = builder.predicates;
+        let actions = Arc::new(actions.simplify(&predicates));
+        let where_conds = generate_where_from_rules(&actions).map(|c| c.simplify(&predicates));
+        let env = Arc::new(builder.env);
+        let js_code = emit_arrow_js_code(arrow.orig)?;
+
+        Ok(Self {
+            where_conds,
+            predicates,
+            params,
+            env,
+            js_code,
+        })
+    }
+
+    pub fn params(&self) -> &PolicyParams {
+        &self.params
+    }
+}
+
 #[derive(Debug, Clone, Copy)]
-enum LogicOp {
+pub enum LogicOp {
     /// ==
     Eq,
     ///
@@ -129,7 +252,7 @@ pub enum Cond {
 }
 
 impl Cond {
-    fn simplify(&self, preds: &Predicates) -> Self {
+    pub fn simplify(&self, preds: &Predicates) -> Self {
         // FIXME: if there are too many predicates, we might need to use another algorithm.
 
         let mut mapping = Vec::new();
@@ -194,8 +317,38 @@ impl Cond {
     }
 }
 
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
+pub enum Var {
+    Ident(String),
+    Member(usize, String),
+}
+
+pub type VarId = usize;
+
+#[derive(Default, Clone, Debug)]
+pub struct Environment {
+    vars: bimap::BiMap<Var, VarId>,
+}
+
+impl Environment {
+    fn insert(&mut self, var: Var) -> VarId {
+        match self.vars.get_by_left(&var) {
+            Some(idx) => *idx,
+            None => {
+                let idx = self.vars.len();
+                self.vars.insert(var, idx);
+                idx
+            }
+        }
+    }
+
+    pub fn get(&self, id: VarId) -> &Var {
+        self.vars.get_by_right(&id).unwrap()
+    }
+}
+
 #[derive(Clone, Debug)]
-enum Predicate {
+pub enum Predicate {
     Bin {
         op: LogicOp,
         lhs: Box<Self>,
@@ -203,136 +356,45 @@ enum Predicate {
     },
     Not(Box<Self>),
     Lit(Value),
-    Var(Var),
-}
-
-#[derive(Clone, Debug)]
-enum Var {
-    Ident(String),
-    Member(Box<Var>, String),
-}
-
-#[derive(Debug, Default)]
-pub struct Values {
-    values: serde_json::Map<String, Value>,
-}
-
-impl Values {
-    pub fn new() -> Self {
-        Self::default()
-    }
-
-    pub fn from_json(values: serde_json::Map<String, Value>) -> Self {
-        Self { values }
-    }
-
-    fn get(&self, var: &Var) -> Option<&Value> {
-        match var {
-            Var::Ident(val) => self.values.get(val),
-            Var::Member(var, val) => self.get(var).and_then(|o| o.get(val)),
-        }
-    }
-}
-
-fn json_to_js_value(json: &Value) -> JsValue {
-    match json {
-        Value::Null => JsValue::Null,
-        Value::Bool(b) => JsValue::Boolean(*b),
-        Value::Number(n) if n.is_u64() => JsValue::Integer(n.as_u64().unwrap() as i32),
-        Value::Number(n) if n.is_i64() => JsValue::Integer(n.as_i64().unwrap() as i32),
-        Value::Number(n) if n.is_f64() => JsValue::Rational(n.as_f64().unwrap() as f64),
-        Value::String(s) => JsValue::String(JsString::new(s)),
-        Value::Array(_) => todo!(),
-        Value::Object(_) => todo!(),
-        _ => unreachable!(),
-    }
+    Var(VarId),
 }
 
 impl Predicate {
-    fn is_lit(&self) -> bool {
+    pub fn is_lit(&self) -> bool {
         matches!(self, Self::Lit(_))
     }
 
-    fn is_var(&self) -> bool {
-        matches!(self, Self::Var(_))
-    }
-
-    fn as_lit(&self) -> Option<&Value> {
+    pub fn as_lit(&self) -> Option<&Value> {
         match self {
             Self::Lit(ref l) => Some(l),
             _ => None,
         }
     }
 
-    fn eval_bin_lit(op: LogicOp, lhs: &JsValue, rhs: &JsValue, ctx: &mut Context) -> Self {
-        match op {
-            LogicOp::Eq => Predicate::Lit(Value::Bool(lhs.equals(rhs, ctx).unwrap())),
-            LogicOp::Neq => Predicate::Lit(Value::Bool(!lhs.equals(rhs, ctx).unwrap())),
-            LogicOp::Gt => Predicate::Lit(Value::Bool(lhs.gt(rhs, ctx).unwrap())),
-            LogicOp::Gte => Predicate::Lit(Value::Bool(lhs.ge(rhs, ctx).unwrap())),
-            LogicOp::Lt => Predicate::Lit(Value::Bool(lhs.lt(rhs, ctx).unwrap())),
-            LogicOp::Lte => Predicate::Lit(Value::Bool(lhs.le(rhs, ctx).unwrap())),
-            LogicOp::And => todo!(),
-            LogicOp::Or => todo!(),
-        }
+    pub fn is_var(&self) -> bool {
+        matches!(self, Self::Lit(_))
     }
 
-    pub fn eval(&self, ctx: &mut Context) -> Self {
+    pub fn as_var(&self) -> Option<VarId> {
         match self {
-            Predicate::Bin { op, lhs, rhs } if lhs.is_lit() && rhs.is_lit() => Self::eval_bin_lit(
-                *op,
-                &json_to_js_value(lhs.as_lit().unwrap()),
-                &json_to_js_value(rhs.as_lit().unwrap()),
-                ctx,
-            ),
-            Predicate::Bin { lhs, rhs, .. } if lhs.is_var() || rhs.is_var() => self.clone(),
-            Predicate::Bin { op, lhs, rhs } => {
-                let new_pred = Predicate::Bin {
-                    op: *op,
-                    lhs: Box::new(lhs.eval(ctx)),
-                    rhs: Box::new(rhs.eval(ctx)),
-                };
-
-                new_pred.eval(ctx)
-            }
-            Predicate::Not(p) if p.is_lit() => {
-                let js_value = json_to_js_value(p.as_lit().unwrap());
-                Predicate::Lit(Value::Bool(!js_value.as_boolean().unwrap()))
-            }
-            Predicate::Not(p) if !p.is_var() => {
-                let p_eval = p.eval(ctx);
-                match p_eval {
-                    Predicate::Lit(l) => {
-                        let js_value = json_to_js_value(&l);
-                        Predicate::Lit(Value::Bool(js_value.not(ctx).unwrap()))
-                    }
-                    _ => Predicate::Not(Box::new(p_eval)),
-                }
-            }
-            _ => self.clone(),
+            Self::Var(id) => Some(*id),
+            _ => None,
         }
     }
 
-    fn substitute(&self, subs: &Values) -> Self {
+    pub fn is_reducible(&self) -> bool {
         match self {
-            Predicate::Bin { op, lhs, rhs } => Self::Bin {
-                op: *op,
-                lhs: Box::new(lhs.substitute(subs)),
-                rhs: Box::new(rhs.substitute(subs)),
-            },
-            Predicate::Not(p) => Self::Not(Box::new(p.substitute(subs))),
-            Predicate::Lit(_) => self.clone(),
-            Predicate::Var(ref val) => match subs.get(val) {
-                Some(val) => Self::Lit(val.clone()),
-                None => self.clone(),
-            },
+            Predicate::Bin { lhs, rhs, .. } => lhs.is_reducible() && rhs.is_reducible(),
+            Predicate::Not(inner) => inner.is_reducible(),
+            Predicate::Lit(_) => true,
+            Predicate::Var(_) => false,
         }
     }
 
-    fn parse_expr(expr: &Expr) -> Self {
+    fn parse_expr(expr: &Expr, env: &mut Environment) -> Self {
         match expr {
             Expr::Unary(u) => match u.op {
-                UnaryOp::Bang => Self::Not(Box::new(Self::parse_expr(&u.arg))),
+                UnaryOp::Bang => Self::Not(Box::new(Self::parse_expr(&u.arg, env))),
                 _ => panic!("unsupported op: {}", u.op),
             },
             Expr::Bin(bin) => {
@@ -349,8 +411,8 @@ impl Predicate {
                 };
                 Self::Bin {
                     op,
-                    lhs: Box::new(Self::parse_expr(&bin.left)),
-                    rhs: Box::new(Self::parse_expr(&bin.right)),
+                    lhs: Box::new(Self::parse_expr(&bin.left, env)),
+                    rhs: Box::new(Self::parse_expr(&bin.right, env)),
                 }
             }
             Expr::Lit(lit) => match lit {
@@ -362,12 +424,16 @@ impl Predicate {
                 Lit::Regex(_) => todo!(),
                 Lit::JSXText(_) => todo!(),
             },
-            Expr::Ident(s) => Self::Var(Var::Ident(s.sym.to_string())),
-            Expr::Paren(_) => todo!(),
-            Expr::Member(m) => match Self::parse_expr(&m.obj) {
+            Expr::Ident(s) => {
+                let var = Var::Ident(s.sym.to_string());
+                Self::Var(env.insert(var))
+            }
+            Expr::Paren(e) => Self::parse_expr(&e.expr, env),
+            Expr::Member(m) => match Self::parse_expr(&m.obj, env) {
                 Predicate::Var(v) => match &m.prop {
                     MemberProp::Ident(id) => {
-                        Self::Var(Var::Member(Box::new(v), id.sym.to_string()))
+                        let var = Var::Member(v, id.sym.to_string());
+                        Self::Var(env.insert(var))
                     }
                     _ => panic!("invalid member expression"),
                 },
@@ -378,9 +444,15 @@ impl Predicate {
     }
 }
 
-#[derive(Clone, Default)]
+#[derive(Default, Clone)]
 pub struct Actions {
     actions: HashMap<Action, Cond>,
+}
+
+impl Actions {
+    pub fn iter(&self) -> impl Iterator<Item = (&Action, &Cond)> {
+        self.actions.iter()
+    }
 }
 
 impl fmt::Debug for Actions {
@@ -419,22 +491,12 @@ impl Predicates {
         id
     }
 
-    fn get(&self, id: PredicateId) -> &Predicate {
+    pub fn get(&self, id: PredicateId) -> &Predicate {
         self.0.get(id).expect("invalid predicate id!")
     }
 
-    /// Applies substitutions to all predicates
-    pub fn substitute(&self, subs: &Values) -> Self {
-        let substitued = self
-            .0
-            .iter()
-            .map(|s| s.substitute(subs))
-            .collect::<Vec<_>>();
-        Self(substitued)
-    }
-
-    pub fn eval(&self, ctx: &mut Context) -> Self {
-        Self(self.0.iter().map(|p| p.eval(ctx)).collect())
+    pub fn map(&self, f: impl FnMut(&Predicate) -> Predicate) -> Self {
+        Self(self.0.iter().map(f).collect())
     }
 }
 
@@ -489,6 +551,7 @@ impl Actions {
 struct RulesBuilder<'a> {
     stmt_map: &'a StmtMap<'a>,
     predicates: Predicates,
+    env: Environment,
 }
 
 #[derive(PartialEq, Debug, Eq, Hash, Clone, Copy)]
@@ -506,6 +569,7 @@ impl<'a> RulesBuilder<'a> {
         Self {
             stmt_map,
             predicates: Predicates::new(),
+            env: Environment::default(),
         }
     }
 
@@ -520,7 +584,7 @@ impl<'a> RulesBuilder<'a> {
 
                 match self.stmt_map[stmts[0]].stmt {
                     Stmt::If(stmt) => {
-                        let predicate = Predicate::parse_expr(&stmt.test);
+                        let predicate = Predicate::parse_expr(&stmt.test, &mut self.env);
                         let id = self.predicates.insert(predicate);
                         Cond::Predicate(id)
                     }
@@ -603,4 +667,37 @@ fn generate_where_from_rules(actions: &Actions) -> Option<Cond> {
         .get(&Action::Skip)
         .cloned()
         .map(|c| Cond::Not(Box::new(c)))
+}
+
+#[derive(Debug, Clone)]
+pub struct TransformPolicy {
+    pub js_code: Box<[u8]>,
+}
+
+impl TransformPolicy {
+    fn from_arrow(arrow: &ArrowExpr) -> Result<Self> {
+        let js_code = emit_arrow_js_code(arrow)?;
+        Ok(Self { js_code })
+    }
+}
+
+fn emit_arrow_js_code(arrow: &ArrowExpr) -> Result<Box<[u8]>> {
+    let module = Module {
+        body: vec![ModuleItem::Stmt(Stmt::Expr(ExprStmt {
+            span: Span::default(),
+            expr: Box::new(Expr::Arrow(arrow.clone())),
+        }))],
+        span: Span::default(),
+        shebang: None,
+    };
+
+    let mut js_code = Vec::new();
+    emit(
+        module,
+        Target::JavaScript,
+        Lrc::new(SourceMap::default()),
+        &mut js_code,
+    )?;
+
+    Ok(js_code.into_boxed_slice())
 }

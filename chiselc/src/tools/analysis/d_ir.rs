@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: © 2022 ChiselStrike <info@chiselstrike.com>
 
 // This module is not used for *now*. Ultimately, Dir will be used to bring more features to the
-// filter syntax, but it was there already, it'll sich around for when we need it.
+// filter syntax, but it was there already, it'll stick around for when we need it.
 #![allow(dead_code)]
 ///! This module contains the code for the D_IR described in [this paper](https://www.cse.iitb.ac.in/~venkateshek/p1781-emani.pdf). This representation gives us algebraic equations for all variables in a program, and is useful for some code transformation, especially from imperative code to SQL.
 use std::collections::{HashMap, HashSet};
