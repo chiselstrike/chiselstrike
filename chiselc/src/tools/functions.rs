@@ -23,7 +23,7 @@ impl<'a> ArrowFunction<'a> {
             BlockStmtOrExpr::BlockStmt(block) => {
                 let (cfg, stmt_map) = ControlFlow::build(&block.stmts);
                 let regions = Region::from_cfg(&cfg, &stmt_map);
-                let d_ir = DIr::from_region(&regions, &stmt_map);
+                let d_ir = DIr::from_region(&regions, &stmt_map).unwrap();
                 Self {
                     orig: arrow,
                     cfg,
