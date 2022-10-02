@@ -18,7 +18,7 @@ impl<'a> ArrowFunction<'a> {
         // TODO!: factorize in function body
         match &arrow.body {
             BlockStmtOrExpr::BlockStmt(block) => {
-                let (cfg, stmt_map) = ControlFlow::build(&block.stmts);
+                let (cfg, stmt_map) = ControlFlow::build(&block.stmts)?;
                 let regions = Region::from_cfg(&cfg, &stmt_map);
                 Ok(Self {
                     orig: arrow,

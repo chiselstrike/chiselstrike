@@ -2,6 +2,8 @@
 
 use std::fmt;
 
+use anyhow::{bail, Result};
+use petgraph::dot::{Config, Dot};
 use petgraph::graph::{DefaultIx, Graph, NodeIndex};
 use petgraph::visit::Reversed;
 use swc_ecmascript::ast::Stmt;
@@ -57,12 +59,12 @@ impl<'a> CFGBuilder<'a, CfgGraph> {
         }
     }
 
-    fn block(&mut self, stmts: &'a [Stmt]) -> (Idx, Vec<(Idx, Edge)>) {
+    fn block(&mut self, stmts: &'a [Stmt]) -> Result<(Idx, Vec<(Idx, Edge)>)> {
         let mut root = None;
         let mut current = None;
 
         for stmt in stmts {
-            let (idx, outs) = self.stmt(stmt);
+            let (idx, outs) = self.stmt(stmt)?;
             match (root, &current) {
                 (None, None) => {
                     root.replace(idx);
@@ -75,21 +77,21 @@ impl<'a> CFGBuilder<'a, CfgGraph> {
                 _ => unreachable!(),
             }
         }
-        (root.unwrap_or(self.previous), current.unwrap_or_default())
+        Ok((root.unwrap_or(self.previous), current.unwrap_or_default()))
     }
 
-    fn stmt(&mut self, stmt: &'a Stmt) -> (Idx, Vec<(Idx, Edge)>) {
+    fn stmt(&mut self, stmt: &'a Stmt) -> Result<(Idx, Vec<(Idx, Edge)>)> {
         match stmt {
             Stmt::Block(block) => self.block(&block.stmts),
             Stmt::If(if_stmt) => {
                 let root = self.add_stmt_node(stmt);
-                let (cons_root, mut cons_out) = self.stmt(&if_stmt.cons);
+                let (cons_root, mut cons_out) = self.stmt(&if_stmt.cons)?;
 
                 self.inner.add_edge(root, cons_root, Edge::True);
 
                 match if_stmt.alt {
                     Some(ref alt) => {
-                        let (alt_root, alt_out) = self.stmt(alt);
+                        let (alt_root, alt_out) = self.stmt(alt)?;
                         if self.previous != self.end {
                             self.inner.add_edge(root, alt_root, Edge::False);
                             cons_out.extend_from_slice(&alt_out);
@@ -99,27 +101,27 @@ impl<'a> CFGBuilder<'a, CfgGraph> {
                         cons_out.push((root, Edge::False));
                     }
                 }
-                (root, cons_out)
+                Ok((root, cons_out))
             }
             Stmt::While(while_stmt) => {
                 let root = self.add_stmt_node(stmt);
-                let (body_root, body_outs) = self.stmt(&while_stmt.body);
+                let (body_root, body_outs) = self.stmt(&while_stmt.body)?;
                 self.inner.add_edge(root, body_root, Edge::False);
 
                 self.merge_out(&body_outs, root);
 
-                (root, vec![(root, Edge::True)])
+                Ok((root, vec![(root, Edge::True)]))
             }
             Stmt::Expr(_) | Stmt::Decl(_) => {
                 let idx = self.add_stmt_node(stmt);
-                (idx, vec![(idx, Edge::Flow)])
+                Ok((idx, vec![(idx, Edge::Flow)]))
             }
             Stmt::Return(_) => {
                 let idx = self.add_stmt_node(stmt);
                 self.inner.add_edge(idx, self.end, Edge::Flow);
-                (idx, vec![])
+                Ok((idx, vec![]))
             }
-            _ => unimplemented!("unimplemented support for statement type"),
+            _ => bail!("unsupported statement type"),
         }
     }
 
@@ -147,7 +149,7 @@ pub struct ControlFlow<G = CfgGraph> {
 
 impl ControlFlow<CfgGraph> {
     // FIXME: it might be a good idea to artificially bind the graph and the map together with a lifetime.
-    pub fn build(stmts: &[Stmt]) -> (Self, StmtMap) {
+    pub fn build(stmts: &[Stmt]) -> Result<(Self, StmtMap)> {
         let mut inner = Graph::new();
         let start = inner.add_node(Node::Labeled("start"));
         let end = inner.add_node(Node::Labeled("stop"));
@@ -158,7 +160,7 @@ impl ControlFlow<CfgGraph> {
             end,
         };
 
-        let (root, outs) = builder.block(stmts);
+        let (root, outs) = builder.block(stmts)?;
 
         builder.inner.add_edge(start, root, Edge::Flow);
 
@@ -172,7 +174,32 @@ impl ControlFlow<CfgGraph> {
             end,
         };
 
-        (this, map)
+        Ok((this, map))
+    }
+
+    /// returns the dot format graph the the CFG
+    /// if sm is Some, then the nodes are resolved to the statements line numbers
+    #[allow(dead_code)]
+    pub fn dot(&self) -> String {
+        let node_getter = |_, (idx, node): (Idx, &Node)| match node {
+            Node::Stmt => format!(r#"label="L{}" "#, idx.index() - 1),
+            Node::Labeled(label) => format!(r#"label = "{label}""#),
+        };
+
+        impl fmt::Display for Node {
+            fn fmt(&self, _: &mut fmt::Formatter<'_>) -> fmt::Result {
+                Ok(())
+            }
+        }
+
+        let edge_getter = |_, _| String::new();
+        Dot::with_attr_getters(
+            &self.inner,
+            &[Config::NodeNoLabel],
+            &edge_getter,
+            &node_getter,
+        )
+        .to_string()
     }
 }
 
