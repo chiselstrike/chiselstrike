@@ -2,7 +2,6 @@
 
 use std::fmt;
 
-use petgraph::dot::{Config, Dot};
 use petgraph::graph::{DefaultIx, Graph, NodeIndex};
 use petgraph::visit::Reversed;
 use swc_ecmascript::ast::Stmt;
@@ -174,30 +173,6 @@ impl ControlFlow<CfgGraph> {
         };
 
         (this, map)
-    }
-
-    /// returns the dot format graph the the CFG
-    /// if sm is Some, then the nodes are resolved to the statements line numbers
-    pub fn dot(&self) -> String {
-        let node_getter = |_, (idx, node): (Idx, &Node)| match node {
-            Node::Stmt => format!(r#"label="L{}" "#, idx.index() - 1),
-            Node::Labeled(label) => format!(r#"label = "{label}""#),
-        };
-
-        impl fmt::Display for Node {
-            fn fmt(&self, _: &mut fmt::Formatter<'_>) -> fmt::Result {
-                Ok(())
-            }
-        }
-
-        let edge_getter = |_, _| String::new();
-        Dot::with_attr_getters(
-            &self.inner,
-            &[Config::NodeNoLabel],
-            &edge_getter,
-            &node_getter,
-        )
-        .to_string()
     }
 }
 

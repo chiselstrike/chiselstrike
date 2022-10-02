@@ -4,6 +4,7 @@ use std::collections::HashMap;
 use std::fmt;
 use std::ops::{Deref, DerefMut};
 
+use anyhow::bail;
 use boa::{Context, JsString, JsValue};
 use quine_mc_cluskey::Bool;
 use serde_json::Value;
@@ -13,7 +14,7 @@ use swc_ecmascript::ast::{
 };
 
 use crate::tools::analysis::control_flow::Idx;
-use crate::tools::analysis::d_ir::{EnrichedRegion, EnrichedRegionInner};
+use crate::tools::analysis::region::Region;
 use crate::tools::analysis::stmt_map::StmtMap;
 use crate::tools::functions::ArrowFunction;
 
@@ -38,7 +39,8 @@ impl Policies {
                                     Prop::KeyValue(kv) => {
                                         let body = match &*kv.value {
                                             Expr::Arrow(arrow) => {
-                                                let arrow_func = ArrowFunction::parse(arrow);
+                                                let arrow_func =
+                                                    ArrowFunction::parse(arrow).unwrap();
                                                 Policy::from_arrow(&arrow_func)
                                             }
                                             _ => todo!(),
@@ -80,7 +82,9 @@ pub struct Policy {
 impl Policy {
     fn from_arrow(arrow: &ArrowFunction) -> Self {
         let mut builder = RulesBuilder::new(&arrow.stmt_map);
-        let actions = builder.infer_rules_from_region(&arrow.d_ir.region, Cond::True);
+        let actions = builder
+            .infer_rules_from_region(&arrow.regions, Cond::True)
+            .unwrap();
         let predicates = builder.predicates;
         let actions = actions.simplify(&predicates);
         let where_conds = generate_where_from_rules(&actions).map(|c| c.simplify(&predicates));
@@ -505,9 +509,9 @@ impl<'a> RulesBuilder<'a> {
         }
     }
 
-    fn extract_cond_from_test(&mut self, region: &EnrichedRegion) -> Cond {
-        match &*region.inner {
-            EnrichedRegionInner::Basic(stmts) => {
+    fn extract_cond_from_test(&mut self, region: &Region) -> Cond {
+        match &region {
+            Region::BasicBlock(stmts) => {
                 assert_eq!(
                     stmts.len(),
                     1,
@@ -527,24 +531,27 @@ impl<'a> RulesBuilder<'a> {
         }
     }
 
-    fn infer_rules_from_region(&mut self, region: &EnrichedRegion, cond: Cond) -> Actions {
-        match &*region.inner {
-            EnrichedRegionInner::Cond { test, cons, alt } => {
-                let test_cond = Box::new(self.extract_cond_from_test(test));
+    fn infer_rules_from_region(&mut self, region: &Region, cond: Cond) -> anyhow::Result<Actions> {
+        let action = match region {
+            Region::Cond(region) => {
+                let test_cond = Box::new(self.extract_cond_from_test(&region.test_region));
 
                 let cons_cond = Cond::And(test_cond.clone(), Box::new(cond.clone()));
-                let cons_rules = self.infer_rules_from_region(cons, cons_cond);
+                let cons_rules = self.infer_rules_from_region(&region.cons_region, cons_cond)?;
 
                 let alt_cond = Cond::And(Box::new(Cond::Not(test_cond)), Box::new(cond));
-                let alt_rules = self.infer_rules_from_region(alt, alt_cond);
+                let alt_rules = self.infer_rules_from_region(&region.alt_region, alt_cond)?;
 
                 cons_rules.merge(&alt_rules)
             }
-            EnrichedRegionInner::Seq { .. } => {
+            Region::Seq { .. } => {
                 todo!()
             }
-            EnrichedRegionInner::Basic(b) => self.infer_basic_block(b, cond),
-        }
+            Region::BasicBlock(b) => self.infer_basic_block(b, cond),
+            Region::Loop(_) => bail!("loops are not supported in the filter rules."),
+        };
+
+        Ok(action)
     }
 
     fn infer_basic_block(&mut self, b: &[Idx], cond: Cond) -> Actions {
