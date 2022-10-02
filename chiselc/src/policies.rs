@@ -8,6 +8,7 @@ use std::sync::Arc;
 
 use anyhow::{bail, Result};
 use quine_mc_cluskey::Bool;
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use swc_common::sync::Lrc;
 use swc_common::{SourceMap, Span};
@@ -240,7 +241,7 @@ pub enum LogicOp {
     Or,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum Cond {
     And(Box<Self>, Box<Self>),
     Or(Box<Self>, Box<Self>),
@@ -562,7 +563,7 @@ struct RulesBuilder<'a> {
     env: Environment,
 }
 
-#[derive(PartialEq, Debug, Eq, Hash, Clone, Copy)]
+#[derive(PartialEq, Debug, Eq, Hash, Clone, Copy, Serialize, Deserialize)]
 pub enum Action {
     Allow,
     Log,
