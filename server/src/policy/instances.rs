@@ -102,7 +102,7 @@ impl PolicyEvalInstance {
         val: &JsValue,
     ) -> Result<Option<Action>> {
         let chisel_ctx = self.chisel_ctx.clone();
-        match self.get_read_action(ctx, &val)? {
+        match self.get_read_action(ctx, val)? {
             Some(action) if action.is_restrictive() => Ok(Some(action)),
             _ => self
                 .get_or_load_create_policy_instance(ctx)?
@@ -117,7 +117,7 @@ impl PolicyEvalInstance {
         val: &JsValue,
     ) -> Result<Option<Action>> {
         let chisel_ctx = self.chisel_ctx.clone();
-        match self.get_read_action(ctx, &val)? {
+        match self.get_read_action(ctx, val)? {
             Some(action) if action.is_restrictive() => Ok(Some(action)),
             _ => self
                 .get_or_load_update_policy_instance(ctx)?
@@ -279,7 +279,7 @@ impl GeoLocPolicyInstance {
             .call(self.function.clone(), &[value.clone(), chisel_ctx.clone()])?;
 
         match result {
-            JsValue::String(ref s) => Location::from_str(&s),
+            JsValue::String(ref s) => Location::from_str(s),
             _ => anyhow::bail!("Expected geolocation to return a string."),
         }
     }
