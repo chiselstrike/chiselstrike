@@ -1,11 +1,53 @@
-use anyhow::{bail, Result};
+#![allow(dead_code)]
+use std::cell::{RefCell, RefMut};
+use std::collections::{hash_map::Entry, HashMap};
+use std::rc::Rc;
 use std::str::FromStr;
+use std::sync::Arc;
+
+use anyhow::{bail, Result};
+
+use crate::datastore::value::{EntityMap, EntityValue};
+use crate::types::ObjectType;
+
+use self::engine::{ChiselRequestContext, PolicyEngine};
+use self::instances::PolicyEvalInstance;
+use self::utils::{entity_map_to_js_value, js_value_to_entity_value};
+
 pub mod engine;
 mod instances;
 mod interpreter;
 pub mod store;
 pub mod type_policy;
 mod utils;
+
+pub struct PolicyContext {
+    pub cache: PolicyInstancesCache,
+    pub engine: Rc<PolicyEngine>,
+    pub request: Rc<dyn ChiselRequestContext>,
+}
+
+impl PolicyContext {
+    pub fn new(engine: Rc<PolicyEngine>, request: Rc<dyn ChiselRequestContext>) -> Self {
+        let cache = PolicyInstancesCache::default();
+        Self {
+            cache,
+            engine,
+            request,
+        }
+    }
+}
+
+#[derive(Clone, Debug, thiserror::Error)]
+pub enum PolicyError {
+    #[error("could not write `{}` to disk: Permission denied", .0.name())]
+    WritePermissionDenied(Arc<ObjectType>),
+    #[error("could not Read `{}`: Permission denied", .0.name())]
+    ReadPermissionDenied(Arc<ObjectType>),
+    #[error("could not write `{}`: Entity is dirty: it was transformed by a policy.", .0.name())]
+    DirtyEntity(Arc<ObjectType>),
+}
+
 #[derive(Debug)]
 #[repr(u8)]
 pub enum Action {
@@ -57,5 +99,26 @@ impl FromStr for Location {
             "germany" => Ok(Self::Germany),
             other => bail!("unknown region {other}"),
         }
+    }
+}
+#[derive(Default)]
+pub struct PolicyInstancesCache {
+    inner: RefCell<HashMap<String, PolicyEvalInstance>>,
+}
+
+impl PolicyInstancesCache {
+    pub fn get_or_create_policy_instance(
+        &self,
+        ctx: &PolicyContext,
+        ty: &Arc<ObjectType>,
+    ) -> RefMut<PolicyEvalInstance> {
+        let inner = self.inner.borrow_mut();
+        RefMut::map(inner, |inner| match inner.entry(ty.name().to_owned()) {
+            Entry::Occupied(e) => e.into_mut(),
+            Entry::Vacant(e) => {
+                let instance = PolicyEvalInstance::new(ctx, ty.clone());
+                e.insert(instance)
+            }
+        })
     }
 }
