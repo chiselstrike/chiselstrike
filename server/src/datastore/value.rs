@@ -153,6 +153,21 @@ macro_rules! define_is_method {
     };
 }
 
+macro_rules! try_into {
+    ($method_name:ident, $variant:ident, $typ:ty) => {
+        pub fn $method_name(self) -> Result<$typ> {
+            match self {
+                Self::$variant(v) => Ok(v),
+                _ => bail!(
+                    "tried to convert entity value to {}, but it is of type {}",
+                    stringify!($typ),
+                    self.kind_str(),
+                ),
+            }
+        }
+    };
+}
+
 impl EntityValue {
     define_is_method! {is_string, String}
     define_is_method! {is_f64, Float64}
@@ -199,6 +214,13 @@ impl EntityValue {
     as_copy!(as_date, JsDate, f64);
     as_ref!(as_array, Array, EntityArray);
     as_ref!(as_map, Map, EntityMap);
+
+    try_into!(try_into_str, String, String);
+    try_into!(try_into_f64, Float64, f64);
+    try_into!(try_into_bool, Boolean, bool);
+    try_into!(try_into_date, JsDate, f64);
+    try_into!(try_into_array, Array, EntityArray);
+    try_into!(try_into_map, Map, EntityMap);
 }
 
 fn eq_f64(value: &EntityValue, other: f64) -> bool {
