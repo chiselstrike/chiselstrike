@@ -9,12 +9,12 @@ use crate::proto::{
 };
 use crate::server::{start_server, wait};
 use anyhow::{anyhow, Result};
+use clap::{Parser, Subcommand};
 use futures::{pin_mut, Future, FutureExt};
 use std::env;
 use std::fs;
 use std::io::ErrorKind;
 use std::path::Path;
-use structopt::StructOpt;
 use tokio::process::Child;
 
 mod cmd;
@@ -37,31 +37,31 @@ fn parse_version(version: &str) -> anyhow::Result<String> {
 
 pub(crate) static DEFAULT_API_VERSION: &str = "dev";
 
-#[derive(StructOpt, Debug)]
-#[structopt(name = "chisel", version = env!("VERGEN_GIT_SEMVER_LIGHTWEIGHT"))]
+#[derive(Parser, Debug)]
+#[command(name = "chisel", version = env!("VERGEN_GIT_SEMVER_LIGHTWEIGHT"))]
 struct Opt {
     /// RPC server address.
-    #[structopt(short, long, default_value = "http://localhost:50051")]
+    #[arg(short, long, default_value = "http://localhost:50051")]
     rpc_addr: String,
-    #[structopt(subcommand)]
+    #[command(subcommand)]
     cmd: Command,
 }
 
-#[derive(StructOpt, Debug)]
+#[derive(Subcommand, Debug)]
 enum Command {
     /// Create a new ChiselStrike project in current directory.
     Init {
         /// Force project initialization by overwriting files if needed.
-        #[structopt(long)]
+        #[arg(long)]
         force: bool,
         /// Skip generating example code.
-        #[structopt(long)]
+        #[arg(long)]
         no_examples: bool,
         /// Enable the optimizer
-        #[structopt(long, parse(try_from_str), default_value = "true")]
+        #[arg(long, action = clap::ArgAction::Set, default_value = "true")]
         optimize: bool,
         /// Enable auto-indexing.
-        #[structopt(long, parse(try_from_str), default_value = "false")]
+        #[arg(long, action = clap::ArgAction::Set, default_value = "false")]
         auto_index: bool,
     },
     /// Describe the endpoints, types, and policies.
@@ -69,10 +69,10 @@ enum Command {
     /// Start a ChiselStrike server for local development.
     Dev {
         /// calls tsc --noEmit to check types. Useful if your IDE isn't doing it.
-        #[structopt(long)]
+        #[arg(long)]
         type_check: bool,
         /// Activate inspector and let a debugger attach at any time.
-        #[structopt(long)]
+        #[arg(long)]
         inspect: bool,
     },
     /// Create a new ChiselStrike project.
@@ -80,13 +80,13 @@ enum Command {
         /// Path where to create the project.
         path: String,
         /// Skip generating example code.
-        #[structopt(long)]
+        #[arg(long)]
         no_examples: bool,
         /// Enable the optimizer
-        #[structopt(long, parse(try_from_str), default_value = "true")]
+        #[arg(long, action = clap::ArgAction::Set, default_value = "true")]
         optimize: bool,
         /// Enable auto-indexing.
-        #[structopt(long, parse(try_from_str), default_value = "false")]
+        #[arg(long, action = clap::ArgAction::Set, default_value = "false")]
         auto_index: bool,
     },
     /// Start the ChiselStrike server.
@@ -97,23 +97,23 @@ enum Command {
     Wait,
     /// Apply configuration to the ChiselStrike server.
     Apply {
-        #[structopt(long)]
+        #[arg(long)]
         allow_type_deletion: bool,
-        #[structopt(long, default_value = DEFAULT_API_VERSION, parse(try_from_str=parse_version))]
+        #[arg(long, default_value = DEFAULT_API_VERSION, value_parser = parse_version)]
         version: String,
         /// calls tsc --noEmit to check types. Useful if your IDE isn't doing it.
-        #[structopt(long)]
+        #[arg(long)]
         type_check: bool,
     },
     /// Delete configuration from the ChiselStrike server.
     Delete {
-        #[structopt(long, default_value = DEFAULT_API_VERSION, parse(try_from_str=parse_version))]
+        #[arg(long, default_value = DEFAULT_API_VERSION, value_parser = parse_version)]
         version: String,
     },
     Populate {
-        #[structopt(long)]
+        #[arg(long)]
         version: String,
-        #[structopt(long)]
+        #[arg(long)]
         from: String,
     },
 }
@@ -180,7 +180,7 @@ async fn main() -> Result<()> {
         .skip(1)
         .collect::<Vec<_>>();
 
-    let opt = Opt::from_iter(chisel_args);
+    let opt = Opt::parse_from(chisel_args);
     let server_url = opt.rpc_addr;
     match opt.cmd {
         Command::Init {
