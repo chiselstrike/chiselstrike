@@ -3,6 +3,7 @@ use std::str::FromStr;
 pub mod engine;
 mod instances;
 mod interpreter;
+pub mod store;
 pub mod type_policy;
 mod utils;
 #[derive(Debug)]
