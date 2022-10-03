@@ -831,7 +831,7 @@ mod tests {
         .await
         .unwrap();
 
-        let query = QueryEngine::new(conn);
+        let qe = QueryEngine::new(conn);
 
         let mut tss = meta
             .load_type_systems(&Arc::new(BuiltinTypes::new()))
@@ -839,7 +839,8 @@ mod tests {
             .unwrap();
         let ts = tss.remove("dev").unwrap();
         let ty = ts.lookup_custom_type("BlogComment").unwrap();
-        let rows = fetch_rows(&query, &ty).await;
+        let txn = qe.begin_transaction_static().await.unwrap();
+        let rows = fetch_rows(&qe, txn, &ty).await;
         assert_eq!(rows.len(), 10);
         Ok(())
     }

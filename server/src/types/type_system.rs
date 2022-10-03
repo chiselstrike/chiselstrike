@@ -250,18 +250,23 @@ impl TypeSystem {
                         )
                     })?;
 
-                let tr = engine.begin_transaction_static().await?;
+                let txn = engine.begin_transaction_static().await?;
                 let query_plan = QueryPlan::from_type(ty_obj);
-                let mut row_streams = engine.query(tr.clone(), query_plan)?;
+                let mut row_streams = engine.query(txn.clone(), query_plan)?;
 
+                let mut shallow_txn = engine.begin_transaction().await?;
                 while let Some(row) = row_streams.next().await {
                     // FIXME: basic rate limit?
                     let row = row
                         .with_context(|| format!("population can't proceed as reading from the underlying database for type {} failed", ty_obj_to.name))?;
-                    engine.add_row_shallow(ty_obj_to, &row).await?;
+                    engine
+                        .add_row_shallow(&mut shallow_txn, ty_obj_to, &row)
+                        .await?;
                 }
+
                 drop(row_streams);
-                QueryEngine::commit_transaction_static(tr).await?;
+                QueryEngine::commit_transaction(shallow_txn).await?;
+                QueryEngine::commit_transaction_static(txn).await?;
             }
         }
         Ok(())

@@ -6,10 +6,10 @@ use std::rc::Rc;
 use anyhow::{bail, Context, Result};
 use guard::guard;
 use serde::Serialize;
-use tokio::sync::oneshot;
 
 use crate::http::{HttpRequest, HttpRequestResponse, HttpResponse};
 use crate::kafka::KafkaEvent;
+use crate::ops::job_context::{JobContext, JobInfo};
 use crate::version::VersionJob;
 use crate::worker::WorkerState;
 
@@ -21,26 +21,15 @@ enum AcceptedJob {
     #[serde(rename_all = "camelCase")]
     Http {
         request: HttpRequest,
-        response_tx_rid: deno_core::ResourceId,
+        ctx_rid: deno_core::ResourceId,
     },
     #[serde(rename_all = "camelCase")]
-    Kafka { event: KafkaEvent },
+    Kafka {
+        event: KafkaEvent,
+        ctx_rid: deno_core::ResourceId,
+    },
 }
 
-/// A Deno resource that wraps a sender that is used to send response for an HTTP request.
-///
-/// This is passed to JavaScript along with the request (in `AcceptedJob::Http`), and JavaScript
-/// then passes the response back to us by calling `op_chisel_http_respond`.
-struct HttpResponseTxResource {
-    response_tx: RefCell<Option<oneshot::Sender<HttpResponse>>>,
-}
-
-impl deno_core::Resource for HttpResponseTxResource {}
-
-// Waits for the next job that should be handled by this worker. Returns `null` when there are no
-// more jobs and the worker should terminate.
-//
-// This function must not be called concurrently (it will throw an exception otherwise).
 #[deno_core::op]
 async fn op_chisel_accept_job(
     state: Rc<RefCell<deno_core::OpState>>,
@@ -52,7 +41,8 @@ async fn op_chisel_accept_job(
     // ... wait for the job ...
     let received_job = job_rx.recv().await;
     // ... and move the `job_rx` back
-    state.borrow_mut().borrow_mut::<WorkerState>().job_rx = Some(job_rx);
+    let mut state = state.borrow_mut();
+    state.borrow_mut::<WorkerState>().job_rx = Some(job_rx);
 
     let accepted_job = match received_job {
         Some(VersionJob::Http(request_response)) => {
@@ -60,16 +50,42 @@ async fn op_chisel_accept_job(
                 request,
                 response_tx,
             } = request_response;
-            let response_tx_res = HttpResponseTxResource {
-                response_tx: RefCell::new(Some(response_tx)),
+
+            let ctx_rid = {
+                let path = request.routing_path.clone();
+                let headers = request.headers.iter().cloned().collect();
+                let method = request.method.clone();
+                let user_id = request.user_id.clone();
+                let response_tx = RefCell::new(Some(response_tx));
+
+                let job_info = Rc::new(JobInfo::HttpRequest {
+                    method,
+                    path,
+                    headers,
+                    user_id,
+                    response_tx,
+                });
+
+                let ctx = JobContext {
+                    current_data_ctx: None.into(),
+                    job_info,
+                };
+
+                state.resource_table.add(ctx)
             };
-            let response_tx_rid = state.borrow_mut().resource_table.add(response_tx_res);
-            AcceptedJob::Http {
-                request,
-                response_tx_rid,
-            }
+
+            AcceptedJob::Http { request, ctx_rid }
         }
-        Some(VersionJob::Kafka(event)) => AcceptedJob::Kafka { event },
+        Some(VersionJob::Kafka(event)) => {
+            let ctx_rid = {
+                let ctx = JobContext {
+                    job_info: Rc::new(JobInfo::KafkaEvent),
+                    current_data_ctx: None.into(),
+                };
+                state.resource_table.add(ctx)
+            };
+            AcceptedJob::Kafka { event, ctx_rid }
+        }
         None => return Ok(None),
     };
 
@@ -79,17 +95,22 @@ async fn op_chisel_accept_job(
 #[deno_core::op]
 fn op_chisel_http_respond(
     state: Rc<RefCell<deno_core::OpState>>,
-    response_tx_rid: deno_core::ResourceId,
+    ctx: deno_core::ResourceId,
     response: HttpResponse,
 ) -> Result<()> {
-    let response_tx = {
-        let response_tx_res: Rc<HttpResponseTxResource> =
-            state.borrow_mut().resource_table.take(response_tx_rid)?;
-        let response_tx: &mut Option<_> = &mut response_tx_res.response_tx.borrow_mut();
-        response_tx
-            .take()
-            .context("Response was already sent on this response sender")?
-    };
-    let _: Result<_, _> = response_tx.send(response);
+    let ctx = state.borrow_mut().resource_table.get::<JobContext>(ctx)?;
+    match *ctx.job_info {
+        JobInfo::HttpRequest {
+            ref response_tx, ..
+        } => {
+            let tx = response_tx
+                .borrow_mut()
+                .take()
+                .context("Response already send for that request")?;
+            let _ = tx.send(response);
+        }
+        _ => bail!("invalid request type"),
+    }
+
     Ok(())
 }

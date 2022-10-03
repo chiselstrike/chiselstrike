@@ -5,7 +5,6 @@ use crate::prefix_map::PrefixMap;
 use crate::types::ObjectType;
 use crate::JsonObject;
 use anyhow::Result;
-use chiselc::parse::ParserContext;
 use hyper::http;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
@@ -185,12 +184,12 @@ impl PolicySystem {
     /// For field of type `ty` creates field policies.
     pub fn make_field_policies(
         &self,
-        user_id: &Option<String>,
+        user_id: Option<&str>,
         current_path: &str,
         ty: &ObjectType,
     ) -> FieldPolicies {
         let mut field_policies = FieldPolicies {
-            current_userid: user_id.clone(),
+            current_userid: user_id.map(Into::into),
             ..Default::default()
         };
 
@@ -276,20 +275,4 @@ fn parse_methods(v: Vec<String>) -> Result<Vec<hyper::Method>> {
 pub fn anonymize(_: EntityValue) -> EntityValue {
     // TODO: use type-specific anonymization.
     EntityValue::String("xxxxx".to_owned())
-}
-
-#[derive(Debug, Clone)]
-#[allow(dead_code)]
-pub struct EntityPolicy {
-    policies: chiselc::policies::Policies,
-}
-
-impl EntityPolicy {
-    #[allow(dead_code)]
-    pub fn from_policy_code(code: String) -> Result<Self> {
-        let ctx = ParserContext::new();
-        let module = ctx.parse(code, true)?;
-        let policies = chiselc::policies::Policies::parse(&module);
-        Ok(Self { policies })
-    }
 }

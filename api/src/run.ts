@@ -9,11 +9,12 @@ import { RouteMap } from "./routing.ts";
 import type { RouteMapLike } from "./routing.ts";
 import { specialAfter, specialBefore } from "./special.ts";
 import { opAsync, opSync } from "./utils.ts";
+import { requestContext } from "./datastore.ts";
 
 // A generic job that we receive from Rust
 type AcceptedJob =
-    | { type: "http"; request: HttpRequest; responseTxRid: number }
-    | { type: "kafka"; event: KafkaEvent };
+    | { type: "http"; request: HttpRequest; ctxRid: number }
+    | { type: "kafka"; event: KafkaEvent; ctxRid: number };
 
 // This is the entry point into the TypeScript runtime, called from `main.js`
 // with structures that describe the user-defined behavior (such as how to
@@ -48,12 +49,22 @@ export default async function run(
         if (job === null) {
             break;
         } else if (job.type == "http") {
-            const httpResponse = await handleHttpRequest(router, job.request);
-            opSync("op_chisel_http_respond", job.responseTxRid, httpResponse);
+            requestContext.rid = job.ctxRid;
+            const httpResponse = await handleHttpRequest(
+                router,
+                job.request,
+            );
+            opSync("op_chisel_http_respond", requestContext.rid, httpResponse);
         } else if (job.type == "kafka") {
+            requestContext.rid = job.ctxRid;
             await handleKafkaEvent(topicMap, job.event);
         } else {
             throw new Error("Unknown type of AcceptedJob");
+        }
+
+        if (requestContext.rid !== undefined) {
+            Deno.core.close(requestContext.rid);
+            requestContext.rid = undefined;
         }
     }
 }
