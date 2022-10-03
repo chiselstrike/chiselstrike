@@ -53,10 +53,11 @@ fn run_in(cmd: &str, args: &[&str], dir: PathBuf) {
         env::current_dir().unwrap()
     );
     assert!(dir.is_dir(), "{:?} is not a directory", dir);
-    let status = Command::new(cmd)
-        .args(args)
-        .current_dir(dir.clone())
-        .status();
+    let mut command = Command::new(cmd);
+    if openssl_legacy_provider_supported() {
+        command.env("NODE_OPTIONS", "--openssl-legacy-provider");
+    };
+    let status = command.args(args).current_dir(dir.clone()).status();
     assert!(
         status.is_ok(),
         "failed to run command `{}` in dir {:?}, error: {:?}",
@@ -65,6 +66,14 @@ fn run_in(cmd: &str, args: &[&str], dir: PathBuf) {
         status.err().unwrap()
     );
     assert!(status.unwrap().success());
+}
+
+fn openssl_legacy_provider_supported() -> bool {
+    let status = Command::new("node")
+        .env("NODE_OPTIONS", "--openssl-legacy-provider")
+        .arg("-v")
+        .status();
+    status.is_ok() && status.unwrap().success()
 }
 
 fn mkdir_empty(dir: &Path) {
