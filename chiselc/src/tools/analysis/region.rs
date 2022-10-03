@@ -2,16 +2,12 @@
 
 use std::ops::Deref;
 
-use petgraph::{
-    visit::{EdgeRef, VisitMap, Visitable},
-    EdgeDirection, Graph,
-};
+use petgraph::visit::{EdgeRef, VisitMap, Visitable};
+use petgraph::{EdgeDirection, Graph};
 use swc_ecmascript::ast::{Decl, Stmt};
 
-use super::{
-    control_flow::{ControlFlow, Edge, Idx, Node},
-    stmt_map::StmtMap,
-};
+use super::control_flow::{ControlFlow, Edge, Idx, Node};
+use super::stmt_map::StmtMap;
 
 #[derive(Debug)]
 pub struct CondRegion {
@@ -73,7 +69,7 @@ impl Region {
         regions
             .into_iter()
             .reduce(|a, b| SeqRegion(a, b).into())
-            .unwrap()
+            .unwrap_or_else(|| Region::BasicBlock(BasicBlock(Vec::new())))
     }
 
     pub fn as_basic_block(&self) -> Option<&BasicBlock> {
@@ -131,27 +127,27 @@ fn is_basic_block_component(stmt: &Stmt) -> bool {
 
 fn make_region<VM: VisitMap<Idx>>(
     graph: &Graph<Node, Edge>,
-    idx: Idx,
+    root: Idx,
     vm: &mut VM,
     map: &StmtMap,
 ) -> (Option<Region>, Option<Idx>) {
-    if vm.is_visited(&idx) {
+    if vm.is_visited(&root) {
         return (None, None);
     }
 
-    vm.visit(idx);
+    vm.visit(root);
 
-    let stmt = match graph[idx] {
-        Node::Stmt => map[idx].stmt,
-        _ => return (None, graph.neighbors(idx).next()),
+    let stmt = match graph[root] {
+        Node::Stmt => map[root].stmt,
+        _ => return (None, graph.neighbors(root).next()),
     };
 
     // FIXME: we could probably express that only in term of nodes, and detect loops with dominators
     // etc... but it is a lot simple this way, at the cost of having to pass around the map
     match stmt {
-        stmt if is_basic_block_component(stmt) => make_basic_block(graph, idx, vm),
-        Stmt::If(_) => make_cond_region(graph, idx, vm, map),
-        Stmt::While(_) => make_loop_region(graph, idx, vm, map),
+        stmt if is_basic_block_component(stmt) => make_basic_block(graph, root, vm),
+        Stmt::If(_) => make_cond_region(graph, root, vm, map),
+        Stmt::While(_) => make_loop_region(graph, root, vm, map),
 
         bad => unimplemented!("unsupported statement: {bad:?}"),
     }
@@ -161,9 +157,8 @@ fn make_region<VM: VisitMap<Idx>>(
 fn get_cond_targets(idx: Idx, graph: &Graph<Node, Edge>) -> (Idx, Idx) {
     let mut neighs = graph.edges(idx);
     // an if node always has two outgoing branches.
-    let fst = neighs.next().unwrap();
-    let snd = neighs.next().unwrap();
-
+    let fst = neighs.next().expect("invalid conditional node");
+    let snd = neighs.next().expect("invalid conditional node");
     assert!(neighs.next().is_none(), "invalid conditional node!");
 
     match (fst.weight(), snd.weight()) {

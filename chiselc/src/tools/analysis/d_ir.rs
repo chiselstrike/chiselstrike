@@ -1,5 +1,8 @@
 // SPDX-FileCopyrightText: © 2022 ChiselStrike <info@chiselstrike.com>
 
+// This module is not used for *now*. Ultimately, Dir will be used to bring more features to the
+// filter syntax, but it was there already, it'll stick around for when we need it.
+#![allow(dead_code)]
 ///! This module contains the code for the D_IR described in [this paper](https://www.cse.iitb.ac.in/~venkateshek/p1781-emani.pdf). This representation gives us algebraic equations for all variables in a program, and is useful for some code transformation, especially from imperative code to SQL.
 use std::collections::{HashMap, HashSet};
 use std::fmt;
@@ -7,14 +10,15 @@ use std::fmt;
 use crate::tools::analysis::region::CondRegion;
 use crate::Symbol;
 
+use anyhow::{bail, Result};
 use petgraph::dot::Dot;
 use petgraph::graph::{EdgeIndex, NodeIndex};
 use petgraph::stable_graph::StableDiGraph;
 use petgraph::visit::{EdgeRef, VisitMap, Visitable};
 use petgraph::EdgeDirection;
 use swc_ecmascript::ast::{
-    AssignOp, BinExpr, BinaryOp, CallExpr, Callee, Expr, ExprStmt, Ident, MemberProp, Pat,
-    PatOrExpr, Stmt, VarDecl,
+    AssignOp, BinExpr, BinaryOp, CallExpr, Callee, Expr, ExprStmt, Ident, MemberExpr, MemberProp,
+    Pat, PatOrExpr, Stmt, VarDecl,
 };
 
 use super::control_flow::Idx;
@@ -50,7 +54,7 @@ impl VeMap {
         }
     }
 
-    fn get(&self, sym: &Symbol) -> Option<NodeIndex> {
+    pub fn get(&self, sym: &Symbol) -> Option<NodeIndex> {
         self.map.get(sym).copied()
     }
 
@@ -206,13 +210,13 @@ pub struct DIr {
 }
 
 impl DIr {
-    pub fn from_region(region: &Region, stmt_map: &StmtMap) -> Self {
+    pub fn from_region(region: &Region, stmt_map: &StmtMap) -> Result<Self> {
         let mut builder = Builder::new(stmt_map);
         let mut ctx = GraphContext::default();
-        let region = builder.build_region(region, &mut ctx);
+        let region = builder.build_region(region, &mut ctx)?;
         let graph = builder.graph;
 
-        Self { graph, region }
+        Ok(Self { graph, region })
     }
 
     pub fn dot(&self, root: NodeIndex) -> String {
@@ -372,31 +376,36 @@ impl<'a> Builder<'a> {
 
             Expr::Ident(id) => ctx.add_node(Node::from(id), &mut self.graph),
             Expr::Lit(_) => ctx.add_node(Node::Lit, &mut self.graph),
-            Expr::Member(expr) => {
-                let project_idx = ctx.add_node(Node::Project, &mut self.graph);
-                let obj_idx = match &*expr.obj {
-                    Expr::Ident(ident) => {
-                        ctx.add_node(Node::Ident(ident.sym.clone()), &mut self.graph)
-                    }
-                    Expr::Call(call) => self.build_call(call, ctx, ve_map),
-                    other => todo!("must deref to a target: {other:?}"),
-                };
-                ctx.add_edge(project_idx, obj_idx, Edge::Indexed(0), &mut self.graph);
-
-                let prop_idx = match &expr.prop {
-                    MemberProp::Ident(id) => {
-                        ctx.add_node(Node::Ident(id.sym.clone()), &mut self.graph)
-                    }
-                    _ => todo!(),
-                };
-
-                ctx.add_edge(project_idx, prop_idx, Edge::Indexed(1), &mut self.graph);
-
-                project_idx
-            }
+            Expr::Member(expr) => self.build_member(expr, ctx, ve_map),
             Expr::Call(call) => self.build_call(call, ctx, ve_map),
-            _ => unimplemented!("unsupported expr"),
+            Expr::Paren(expr) => self.build_expr(&expr.expr, ctx, ve_map),
+            other => unimplemented!("unsupported expr: {other:?}"),
         }
+    }
+
+    fn build_member(
+        &mut self,
+        mem: &MemberExpr,
+        ctx: &mut GraphContext,
+        ve_map: &mut VeMap,
+    ) -> NodeIndex {
+        let project_idx = ctx.add_node(Node::Project, &mut self.graph);
+        let obj_idx = match &*mem.obj {
+            Expr::Ident(ident) => ctx.add_node(Node::Ident(ident.sym.clone()), &mut self.graph),
+            Expr::Call(call) => self.build_call(call, ctx, ve_map),
+            Expr::Member(mem) => self.build_member(mem, ctx, ve_map),
+            other => todo!("must deref to a target: {other:?}"),
+        };
+        ctx.add_edge(project_idx, obj_idx, Edge::Indexed(0), &mut self.graph);
+
+        let prop_idx = match &mem.prop {
+            MemberProp::Ident(id) => ctx.add_node(Node::Ident(id.sym.clone()), &mut self.graph),
+            _ => todo!(),
+        };
+
+        ctx.add_edge(project_idx, prop_idx, Edge::Indexed(1), &mut self.graph);
+
+        project_idx
     }
 
     fn build_var_decl(
@@ -424,28 +433,36 @@ impl<'a> Builder<'a> {
         }
     }
 
-    fn build_region(&mut self, region: &Region, ctx: &mut GraphContext) -> EnrichedRegion {
-        match region {
+    fn build_region(&mut self, region: &Region, ctx: &mut GraphContext) -> Result<EnrichedRegion> {
+        let region = match region {
             Region::BasicBlock(_) => self.build_basic_block(region, ctx),
-            Region::Seq(_) => self.build_seq_region(region, ctx),
-            Region::Cond(_) => self.build_cond_region(region, ctx),
-            Region::Loop(_) => todo!(),
-        }
+            Region::Seq(_) => self.build_seq_region(region, ctx)?,
+            Region::Cond(_) => self.build_cond_region(region, ctx)?,
+            Region::Loop(_) => bail!("loops are not supported!"),
+        };
+
+        Ok(region)
     }
 
-    fn build_seq_region(&mut self, region: &Region, ctx: &mut GraphContext) -> EnrichedRegion {
-        let r = region.as_seq_region().unwrap();
+    fn build_seq_region(
+        &mut self,
+        region: &Region,
+        ctx: &mut GraphContext,
+    ) -> Result<EnrichedRegion> {
+        let r = region
+            .as_seq_region()
+            .expect("build seq region should only be called for a seq region");
         let mut r1_ctx = GraphContext::default();
-        let r1 = self.build_region(&r.0, &mut r1_ctx);
-        let r2 = self.build_region(&r.1, ctx);
+        let r1 = self.build_region(&r.0, &mut r1_ctx)?;
+        let r2 = self.build_region(&r.1, ctx)?;
 
         let (ve_map, context) = self.merge(&r1_ctx, &r1.ve_map, ctx, &r2.ve_map);
 
-        EnrichedRegion {
+        Ok(EnrichedRegion {
             ve_map,
             context,
             inner: Box::new(EnrichedRegionInner::Seq { r1, r2 }),
-        }
+        })
     }
 
     fn build_basic_block(&mut self, region: &Region, ctx: &mut GraphContext) -> EnrichedRegion {
@@ -477,19 +494,25 @@ impl<'a> Builder<'a> {
         }
     }
 
-    fn build_cond_region(&mut self, region: &Region, ctx: &mut GraphContext) -> EnrichedRegion {
+    fn build_cond_region(
+        &mut self,
+        region: &Region,
+        ctx: &mut GraphContext,
+    ) -> Result<EnrichedRegion> {
         let CondRegion {
             test_region,
             cons_region,
             alt_region,
-        } = region.as_cond_region().unwrap();
+        } = region
+            .as_cond_region()
+            .expect("build_cond_region should only be called with a cond region");
 
         let mut ve_map = VeMap::default();
 
-        let cons_region = self.build_region(cons_region, ctx);
-        let alt_region = self.build_region(alt_region, ctx);
+        let cons_region = self.build_region(cons_region, ctx)?;
+        let alt_region = self.build_region(alt_region, ctx)?;
         let mut test_ctx = GraphContext::default();
-        let test_region = self.build_region(test_region, &mut test_ctx);
+        let test_region = self.build_region(test_region, &mut test_ctx)?;
         let test_root = test_ctx.root.expect("test expression should have a root!");
 
         let changed: HashSet<_> = cons_region
@@ -520,7 +543,7 @@ impl<'a> Builder<'a> {
             }
         }
 
-        EnrichedRegion {
+        Ok(EnrichedRegion {
             ve_map,
             context: ctx.clone(),
             inner: Box::new(EnrichedRegionInner::Cond {
@@ -528,7 +551,7 @@ impl<'a> Builder<'a> {
                 cons: cons_region,
                 alt: alt_region,
             }),
-        }
+        })
     }
 
     /// Merges sequention regions r1 and r2, with contexts ctx1 and ctx2 and ve_map1 and ve_map2,

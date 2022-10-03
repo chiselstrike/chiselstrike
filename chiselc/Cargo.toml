@@ -5,8 +5,8 @@ authors = ["ChiselStrike"]
 edition = "2021"
 
 [dependencies]
-Boa = "0.13.0"
 anyhow = "1.0.57"
+bimap = "0.6.2"
 indexmap = "1.8.1"
 petgraph = "0.6.2"
 quine-mc_cluskey = "0.2.4"
