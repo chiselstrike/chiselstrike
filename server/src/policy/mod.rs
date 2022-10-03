@@ -101,6 +101,13 @@ impl FromStr for Location {
         }
     }
 }
+
+#[derive(Debug, Clone, Copy)]
+pub enum WriteAction {
+    Create,
+    Update,
+}
+
 #[derive(Default)]
 pub struct PolicyInstancesCache {
     inner: RefCell<HashMap<String, PolicyEvalInstance>>,
@@ -120,5 +127,93 @@ impl PolicyInstancesCache {
                 e.insert(instance)
             }
         })
+    }
+}
+
+pub struct PolicyProcessor {
+    pub ty: Arc<ObjectType>,
+    pub ctx: Rc<PolicyContext>,
+}
+
+impl PolicyProcessor {
+    pub fn process_read(&self, value: EntityMap) -> anyhow::Result<Option<EntityMap>> {
+        let mut instance = self
+            .ctx
+            .cache
+            .get_or_create_policy_instance(&self.ctx, &self.ty);
+
+        let js_value =
+            entity_map_to_js_value(&mut self.ctx.engine.boa_ctx.borrow_mut(), &value, true);
+
+        let js_value = match instance.get_read_action(&self.ctx, &js_value)? {
+            Some(Action::Allow) | None => Some(js_value),
+            Some(Action::Deny) => Err(PolicyError::ReadPermissionDenied(self.ty.clone()))?,
+            Some(Action::Skip) => None,
+            Some(Action::Log) => {
+                info!("{value:?}");
+                Some(js_value)
+            }
+        };
+
+        if let Some(js_value) = js_value {
+            instance.transform_on_read(&self.ctx, &js_value)?;
+            let new_val = js_value_to_entity_value(&js_value).try_into_map()?;
+
+            if new_val != value {
+                instance.mark_dirty(value["id"].as_str().unwrap());
+            }
+
+            Ok(Some(new_val))
+        } else {
+            js_value
+                .as_ref()
+                .map(js_value_to_entity_value)
+                .map(EntityValue::try_into_map)
+                .transpose()
+        }
+    }
+
+    pub fn process_write(
+        &self,
+        value: EntityMap,
+        action: WriteAction,
+    ) -> Result<(EntityMap, Option<Location>)> {
+        let mut instance = self
+            .ctx
+            .cache
+            .get_or_create_policy_instance(&self.ctx, &self.ty);
+        let js_value =
+            entity_map_to_js_value(&mut self.ctx.engine.boa_ctx.borrow_mut(), &value, true);
+        let action = match action {
+            WriteAction::Create => instance.get_create_action(&self.ctx, &js_value)?,
+            WriteAction::Update => {
+                if instance.is_dirty(value["id"].as_str().unwrap()) {
+                    Err(PolicyError::DirtyEntity(self.ty.clone()))?
+                }
+
+                instance.get_update_action(&self.ctx, &js_value)?
+            }
+        };
+
+        let geo_loc = instance.geo_loc(&self.ctx, &js_value)?;
+
+        match action {
+            Some(Action::Log) => {
+                log::info!("{value:?}");
+            }
+            Some(Action::Deny) => {
+                Err(PolicyError::WritePermissionDenied(self.ty.clone()))?;
+            }
+            Some(Action::Skip) => {
+                // TODO: maybe that's not what we want?
+                Err(PolicyError::WritePermissionDenied(self.ty.clone()))?;
+            }
+            _ => (),
+        }
+
+        instance.transform_on_write(&self.ctx, &js_value)?;
+        let value = js_value_to_entity_value(&js_value).try_into_map()?;
+
+        Ok((value, geo_loc))
     }
 }
