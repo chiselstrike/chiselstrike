@@ -14,6 +14,8 @@ anyhow = { version = "1.0", features = ["backtrace"] }
 api = { path = "../api" }
 async-lock = "2.5.0"
 base64 = "0.13.0"
+boa_engine = "0.16.0"
+chiselc = { path = "../chiselc" }
 deno_core = { path = "../third_party/deno/core" }
 deno_runtime = { path = "../third_party/deno/runtime" }
 deno_std = { path = "../deno_std" }
@@ -33,6 +35,7 @@ log = "0.4.14"
 nix = "0.22.2"
 once_cell = "1.12.0"
 parking_lot = "0.12"
+paste = "1.0.9"
 permutation = "0.4.0"
 petgraph = "0.6.2"
 pin-project = "1"

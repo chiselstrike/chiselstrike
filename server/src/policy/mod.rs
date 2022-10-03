@@ -1,5 +1,6 @@
 use anyhow::{bail, Result};
 use std::str::FromStr;
+pub mod engine;
 mod instances;
 mod interpreter;
 pub mod type_policy;
