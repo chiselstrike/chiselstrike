@@ -19,6 +19,7 @@ pub(crate) mod module_loader;
 pub mod ops;
 pub(crate) mod opt;
 pub(crate) mod policies;
+mod policy;
 pub(crate) mod prefix_map;
 pub(crate) mod rpc;
 pub(crate) mod secrets;
