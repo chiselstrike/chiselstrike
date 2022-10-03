@@ -135,3 +135,54 @@ jobs:
       with:
           command: test
           args: -p cli --test integration_tests -- --database postgres --database-user postgres --database-password "$POSTGRES_PASSWORD" --database-host postgres
+
+  kafka-test:
+    runs-on: self-hosted
+    container:
+      image: ghcr.io/chiselstrike/rust-build-image:v1.1
+      options: --user 1000
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v3
+      with:
+        submodules: recursive
+
+    - name: Install Rust toolchain
+      uses: actions-rs/toolchain@v1
+      with:
+          components: rustfmt, clippy
+
+    - name: Configure Rust cache
+      uses: Swatinem/rust-cache@v1
+
+    - name: Install node
+      uses: actions/setup-node@v3
+      with:
+        node-version: 16
+
+    - name: Configure Node cache
+      uses: actions/cache@v2
+      with:
+            path: ~/.npm
+            key: ${{ runner.os }}-node-${{ hashFiles('**/package-lock.json') }}
+
+    - name: Cargo config
+      run: |
+          mkdir -p ~/.cargo
+          cp scripts/cargo-config.toml ~/.cargo/config.toml
+
+    - name: Setup Apache Kafka
+      run: |
+          sudo apt-get install -y openjdk-8-jre-headless
+          curl -O https://downloads.apache.org/kafka/3.2.3/kafka_2.12-3.2.3.tgz
+          tar xf kafka_2.12-3.2.3.tgz
+          ./kafka_2.12-3.2.3/bin/zookeeper-server-start.sh -daemon kafka_2.12-3.2.3/config/zookeeper.properties
+          ./kafka_2.12-3.2.3/bin/kafka-server-start.sh -daemon kafka_2.12-3.2.3/config/server.properties
+          ./kafka_2.12-3.2.3/bin/kafka-topics.sh --create --topic testing --bootstrap-server localhost:9092
+
+    - name: Run Kafka integration tests
+      uses: actions-rs/cargo@v1
+      timeout-minutes: 20
+      with:
+          command: test
+          args: -p cli --test integration_tests -- --test kafka --kafka-connection localhost:9092 --kafka-topic testing
