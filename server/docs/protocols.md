@@ -2,7 +2,7 @@
 
 ## Control protocol
 
-The control protocol manages types and endpoints, for examle.
+The control protocol manages types and endpoints, for example.
 The wire protocol uses Protobuf, and is defined in the `proto/chisel.proto` file of the source tree.
 
 ### Messages
