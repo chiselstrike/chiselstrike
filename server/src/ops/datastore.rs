@@ -8,7 +8,8 @@ use std::task::{Context, Poll};
 
 use anyhow::{anyhow, bail, Context as _, Result};
 use deno_core::{serde_v8, v8, CancelFuture, OpState};
-use serde_derive::Deserialize;
+use serde::{Deserialize, Serialize};
+use serde_json::Value as JsonValue;
 
 use super::WorkerState;
 use crate::datastore::crud;
@@ -103,13 +104,21 @@ pub struct StoreParams<'a> {
     value: serde_v8::Value<'a>,
 }
 
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WriteResult {
+    id_tree: IdTree,
+    // TODO: return a v8 value instead, but require more work.
+    value: JsonValue,
+}
+
 #[deno_core::op(v8)]
 pub fn op_chisel_store<'a>(
     scope: &mut v8::HandleScope<'a>,
     state: Rc<RefCell<OpState>>,
     params: StoreParams<'a>,
     job_ctx_rid: deno_core::ResourceId,
-) -> anyhow::Result<impl Future<Output = anyhow::Result<IdTree>>> {
+) -> anyhow::Result<impl Future<Output = anyhow::Result<WriteResult>>> {
     let state = state.borrow();
     let v8_value = &params.value.v8_value;
     let value = EntityValue::from_v8(v8_value, scope)?;
@@ -128,14 +137,21 @@ pub fn op_chisel_store<'a>(
     }
 
     Ok(async move {
-        let id_tree = {
+        let fut = {
             let data_ctx = ctx.data_context()?;
-            server
-                .query_engine
-                .add_row(ty.object_type().clone(), value.as_map()?, &data_ctx)?
+            server.query_engine.add_row(
+                ty.object_type().clone(),
+                value.try_into_map()?,
+                &data_ctx,
+            )?
         };
 
-        id_tree.await
+        let (id_tree, value) = fut.await?;
+
+        Ok(WriteResult {
+            id_tree,
+            value: EntityValue::Map(value).into_json(),
+        })
     })
 }
 

@@ -1,6 +1,7 @@
 use anyhow::{bail, Context as _, Result};
 use deno_core::v8;
 use serde::{Deserialize, Serialize};
+use serde_json::{Number, Value as JsonValue};
 use std::collections::HashMap;
 
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
@@ -143,27 +144,35 @@ impl EntityValue {
     pub fn is_null(&self) -> bool {
         matches!(self, Self::Null)
     }
+
+    // TODO: remove that, and use v8 value instead
+    pub fn into_json(self) -> JsonValue {
+        match self {
+            EntityValue::Null => JsonValue::Null,
+            EntityValue::String(s) => JsonValue::String(s),
+            EntityValue::Float64(f) => {
+                JsonValue::Number(Number::from_f64(f).expect("invalid number"))
+            }
+            EntityValue::Boolean(b) => JsonValue::Bool(b),
+            EntityValue::JsDate(date) => {
+                JsonValue::Number(Number::from_f64(date).expect("invalid number"))
+            }
+            EntityValue::Array(arr) => {
+                let vals = arr.into_iter().map(|v| v.into_json()).collect();
+                JsonValue::Array(vals)
+            }
+            EntityValue::Map(map) => {
+                let vals = map.into_iter().map(|(k, v)| (k, v.into_json())).collect();
+                JsonValue::Object(vals)
+            }
+        }
+    }
 }
 
 macro_rules! define_is_method {
     ($method_name:ident, $typ:ident) => {
         pub fn $method_name(&self) -> bool {
             matches!(self, Self::$typ(_))
-        }
-    };
-}
-
-macro_rules! try_into {
-    ($method_name:ident, $variant:ident, $typ:ty) => {
-        pub fn $method_name(self) -> Result<$typ> {
-            match self {
-                Self::$variant(v) => Ok(v),
-                _ => bail!(
-                    "tried to convert entity value to {}, but it is of type {}",
-                    stringify!($typ),
-                    self.kind_str(),
-                ),
-            }
         }
     };
 }
@@ -195,6 +204,21 @@ macro_rules! as_copy {
 macro_rules! as_ref {
     ($method_name:ident, $variant:ident, $typ:ty) => {
         pub fn $method_name(&self) -> Result<&$typ> {
+            match self {
+                Self::$variant(v) => Ok(v),
+                _ => bail!(
+                    "tried to convert entity value to {}, but it is of type {}",
+                    stringify!($typ),
+                    self.kind_str(),
+                ),
+            }
+        }
+    };
+}
+
+macro_rules! try_into {
+    ($method_name:ident, $variant:ident, $typ:ty) => {
+        pub fn $method_name(self) -> Result<$typ> {
             match self {
                 Self::$variant(v) => Ok(v),
                 _ => bail!(

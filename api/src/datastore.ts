@@ -727,10 +727,11 @@ export class ChiselEntity {
     async save() {
         ensureNotGet();
         type IdsJson = { id: string; children: Record<string, IdsJson> };
-        const jsonIds = await opAsync("op_chisel_store", {
+        type WriteResult = { idTree: IdsJson; value: ChiselEntity };
+        const { idTree } = await opAsync("op_chisel_store", {
             name: this.constructor.name,
             value: this,
-        }, requestContext.rid) as IdsJson;
+        }, requestContext.rid) as WriteResult;
         function backfillIds(this_: ChiselEntity, jsonIds: IdsJson) {
             this_.id = jsonIds.id;
             for (const [fieldName, value] of Object.entries(jsonIds.children)) {
@@ -740,7 +741,8 @@ export class ChiselEntity {
                 backfillIds(child as ChiselEntity, value);
             }
         }
-        backfillIds(this, jsonIds);
+        backfillIds(this, idTree);
+        //TODO: apply policy transforms to value back to this
     }
 
     /** Returns a `ChiselCursor` containing all elements of type T known to ChiselStrike.

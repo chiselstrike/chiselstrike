@@ -892,8 +892,8 @@ pub mod tests {
         ctx: &DataContext,
     ) {
         let entity_value = EntityValue::from_json(entity_value).unwrap();
-        let entity_fields = entity_value.as_map().unwrap();
-        query_engine
+        let entity_fields = entity_value.try_into_map().unwrap();
+        let (_, entity_fields) = query_engine
             .add_row(entity.object_type().clone(), entity_fields, ctx)
             .unwrap()
             .await
