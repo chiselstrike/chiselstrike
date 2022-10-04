@@ -1,6 +1,7 @@
 // SPDX-FileCopyrightText: © 2022 ChiselStrike <info@chiselstrike.com>
 
 import { loggedInUser, requestContext } from "./datastore.ts";
+import { PermissionDeniedError } from "./policies.ts";
 import { ChiselRequest } from "./request.ts";
 import { Handler, Middleware, Router, RouterMatch } from "./routing.ts";
 import { HTTP_STATUS, opAsync, opSync, responseFromJson } from "./utils.ts";
@@ -52,8 +53,6 @@ export async function handleHttpRequest(
     // from the request with respect to an arbitrary base
     const url = new URL(httpRequest.uri, location.href);
 
-    // initialize the legacy global request context
-    // note that this means that we can only handle a single request at a time!
     requestContext.method = httpRequest.method;
     requestContext.userId = httpRequest.userId;
 
@@ -110,11 +109,18 @@ export async function handleHttpRequest(
             message += `\nError when rolling back transaction: ${e}`;
         }
 
+        let code: number;
+        if (e instanceof PermissionDeniedError) {
+            code = HTTP_STATUS.FORBIDDEN;
+        } else {
+            code = HTTP_STATUS.INTERNAL_SERVER_ERROR;
+        }
+
         console.error(message);
         if (isDebug) {
-            return textResponse(HTTP_STATUS.INTERNAL_SERVER_ERROR, message);
+            return textResponse(code, message);
         } else {
-            return emptyResponse(HTTP_STATUS.INTERNAL_SERVER_ERROR);
+            return emptyResponse(code);
         }
     }
 }

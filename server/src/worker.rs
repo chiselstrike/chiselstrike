@@ -3,6 +3,7 @@
 use crate::module_loader::ModuleLoader;
 use crate::ops;
 use crate::policy::engine::PolicyEngine;
+use crate::policy::PolicyError;
 use crate::server::Server;
 use crate::version::{Version, VersionJob};
 use anyhow::{bail, Context as _, Result};
@@ -207,6 +208,16 @@ fn get_error_class_name(e: &anyhow::Error) -> &'static str {
             e.downcast_ref::<String>().map(|_| "Error")
         })
         .or_else(|| e.downcast_ref::<&'static str>().map(|_| "Error"))
+        .or_else(|| {
+            match e.downcast_ref::<PolicyError>() {
+                Some(
+                    PolicyError::ReadPermissionDenied(_) | PolicyError::WritePermissionDenied(_),
+                ) => Some("PermissionDeniedError"),
+                Some(PolicyError::DirtyEntity(_)) => Some("DirtyEntityError"),
+                None => None,
+            }
+            .map(|_| "PermissionDeniedError")
+        })
         .unwrap_or_else(|| {
             // when this is printed, please handle the unknown type by adding another
             // `downcast_ref()` check above

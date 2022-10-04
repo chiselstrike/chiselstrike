@@ -13,7 +13,7 @@ use super::query::{Mutation, QueryOp, QueryPlan, SortBy, SortKey};
 use super::value::EntityMap;
 use super::{DataContext, QueryEngine};
 use crate::datastore::expr::{BinaryExpr, BinaryOp, Expr, PropertyAccess, Value as ExprValue};
-use crate::policy::{PolicyProcessor, ValidatedEntityStream};
+use crate::policy::{PolicyError, PolicyProcessor, ValidatedEntityStream};
 use crate::types::{Entity, Type, TypeSystem};
 use crate::{JsonObject, FEATURES};
 
@@ -70,6 +70,7 @@ impl QueryEngine {
 
             let mut results = match results {
                 Ok(res) => res,
+                Err(ref e) if e.downcast_ref::<PolicyError>().is_some() => results?,
                 Err(_) => results.context("failed to collect result rows from the database")?,
             };
 
