@@ -1,6 +1,6 @@
 // SPDX-FileCopyrightText: © 2022 ChiselStrike <info@chiselstrike.com>
-
 use std::collections::{BTreeSet, HashMap};
+use std::path::PathBuf;
 use std::sync::Arc;
 
 use anyhow::{anyhow, bail, Context, Result};
@@ -19,35 +19,57 @@ use crate::types::{
     DbIndex, Entity, Field, NewField, NewObject, ObjectType, Type, TypeSystem, TypeSystemError,
 };
 use crate::version::VersionInfo;
+use crate::FEATURES;
 
 pub struct ApplyResult {
     pub type_system: TypeSystem,
     pub policy_system: PolicySystem,
     pub type_names_user_order: Vec<String>,
     pub labels: Vec<String>,
+    pub policy_sources: Arc<HashMap<String, Box<[u8]>>>,
 }
 
 pub struct ParsedPolicies {
     policy_system: (PolicySystem, String),
+    policy_sources: Arc<HashMap<String, Box<[u8]>>>,
 }
 
 impl ParsedPolicies {
     fn parse(request: &[PolicyUpdateRequest]) -> Result<Self> {
         let mut policy_system = None;
+        let mut policy_sources = HashMap::new();
 
         for p in request {
-            if policy_system.is_none() {
-                policy_system.replace((
-                    PolicySystem::from_yaml(&p.policy_config)?,
-                    p.policy_config.clone(),
-                ));
-            } else {
-                anyhow::bail!("Currently only one policy file is supported");
+            let path = PathBuf::from(&p.path);
+            match path.extension().and_then(|s| s.to_str()) {
+                Some("ts") if FEATURES.typescript_policies => {
+                    let entity_name = path
+                        .file_name()
+                        .and_then(|s| s.to_str())
+                        .and_then(|s| s.strip_suffix(".ts"))
+                        .context("invalid policy path")?
+                        .to_owned();
+                    policy_sources.insert(
+                        entity_name,
+                        p.policy_config.as_bytes().to_vec().into_boxed_slice(),
+                    );
+                }
+                _ => {
+                    if policy_system.is_none() {
+                        policy_system.replace((
+                            PolicySystem::from_yaml(&p.policy_config)?,
+                            p.policy_config.clone(),
+                        ));
+                    } else {
+                        anyhow::bail!("Currently only one policy file is supported");
+                    }
+                }
             }
         }
 
         Ok(Self {
             policy_system: policy_system.unwrap_or_default(),
+            policy_sources: Arc::new(policy_sources),
         })
     }
 }
@@ -181,14 +203,13 @@ or
 
     let ParsedPolicies {
         policy_system: (policy_system, policy_system_str),
+        policy_sources,
     } = ParsedPolicies::parse(&apply_request.policies)?;
 
     meta.persist_policy_version(&mut transaction, &version_id, &policy_system_str)
         .await?;
-
     meta.persist_version_info(&mut transaction, &version_id, version_info)
         .await?;
-
     meta.persist_modules(&mut transaction, &version_id, modules)
         .await?;
 
@@ -260,6 +281,7 @@ or
         type_names_user_order,
         labels,
         policy_system,
+        policy_sources,
     })
 }
 
