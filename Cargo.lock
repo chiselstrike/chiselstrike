@@ -1265,13 +1265,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "dbgarc"
-version = "0.14.0-dev.0"
-dependencies = [
- "backtrace",
-]
-
-[[package]]
 name = "debug_unreachable"
 version = "0.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3349,17 +3342,6 @@ name = "multimap"
 version = "0.8.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e5ce46fe64a9d73be07dcbe690a38ce1b293be448fd8ce1e6c1b8062c9f72c6a"
-
-[[package]]
-name = "my_tsc"
-version = "0.14.0-dev.0"
-dependencies = [
- "deno_runtime",
- "endpoint_tsc",
- "structopt",
- "tokio",
- "url 2.3.1",
-]
 
 [[package]]
 name = "naga"

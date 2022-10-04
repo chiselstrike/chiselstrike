@@ -5,9 +5,7 @@ members = [
     "api",
     "chiselc",
     "cli",
-    "dbgarc",
     "deno_std",
-    "my_tsc",
     "packages",
     "server",
     "tsc_compile",
@@ -16,3 +14,8 @@ members = [
 
 # This is required to nest workspaces https://github.com/rust-lang/cargo/issues/5042
 exclude = ["third_party/deno"]
+
+[workspace.package]
+version = "0.13.0-dev.0"
+authors = ["ChiselStrike"]
+edition = "2021"

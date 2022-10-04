@@ -1,8 +1,8 @@
 [package]
 name = "chiselc"
-version = "0.14.0-dev.0"
-authors = ["ChiselStrike"]
-edition = "2021"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
 
 [dependencies]
 anyhow = "1.0.57"
