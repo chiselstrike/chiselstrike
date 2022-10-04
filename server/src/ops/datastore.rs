@@ -17,6 +17,7 @@ use crate::datastore::expr::Expr;
 use crate::datastore::query::{Mutation, QueryOpChain, QueryPlan};
 use crate::datastore::value::EntityValue;
 use crate::ops::job_context::JobContext;
+use crate::policy::PolicyContext;
 use crate::types::Type;
 use crate::JsonObject;
 
@@ -38,8 +39,10 @@ pub async fn op_chisel_begin_transaction(
         let worker_state = state.borrow::<WorkerState>();
         let type_system = worker_state.version.type_system.clone();
         let policy_system = worker_state.version.policy_system.clone();
+        let policy_engine = worker_state.policy_engine.clone();
+        let policy_context = PolicyContext::new(policy_engine, ctx.job_info.clone());
 
-        query_engine.create_data_context(type_system, policy_system, job_info)
+        query_engine.create_data_context(type_system, policy_system, policy_context, job_info)
     }
     .await?;
 

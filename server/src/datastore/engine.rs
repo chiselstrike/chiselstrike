@@ -30,6 +30,7 @@ use crate::datastore::value::{EntityMap, EntityValue};
 use crate::datastore::DbConnection;
 use crate::ops::job_context::JobInfo;
 use crate::policies::PolicySystem;
+use crate::policy::PolicyContext;
 use crate::types::{DbIndex, Field, ObjectDelta, ObjectType, Type, TypeId, TypeSystem};
 
 use super::DataContext;
@@ -227,12 +228,14 @@ impl QueryEngine {
         &self,
         type_system: Arc<TypeSystem>,
         policy_system: Arc<PolicySystem>,
+        policy_context: PolicyContext,
         job_info: Rc<JobInfo>,
     ) -> Result<DataContext> {
         let txn = self.begin_transaction_static().await?;
         Ok(DataContext {
             type_system,
             policy_system,
+            policy_context: policy_context.into(),
             txn,
             job_info,
         })
