@@ -47,6 +47,7 @@ message TypeMsg {
     bool number = 2;
     bool bool = 3;
     bool js_date = 6;
+    bool array_buffer = 8;
     string entity = 4;
     string entity_id = 7;
     ContainerType array = 5;

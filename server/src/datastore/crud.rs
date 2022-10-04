@@ -416,7 +416,7 @@ fn json_to_value(field_type: &Type, value: &serde_json::Value) -> Result<Expr> {
         }};
     }
     let expr_val = match field_type {
-        Type::Entity(_) | Type::Array(_) => anyhow::bail!(
+        Type::Entity(_) | Type::Array(_) | Type::ArrayBuffer => anyhow::bail!(
             "trying to filter by property of type '{}' which is not supported",
             field_type.name()
         ),
@@ -500,7 +500,7 @@ fn filter_from_param(
         }
         Type::Boolean => ExprValue::Bool(value.parse::<bool>().with_context(|| err_msg("bool"))?),
         Type::EntityId { .. } => ExprValue::String(value.to_owned()),
-        Type::Entity(_) | Type::Array(_) => anyhow::bail!(
+        Type::Entity(_) | Type::Array(_) | Type::ArrayBuffer => anyhow::bail!(
             "trying to filter by property '{}' of type '{}' which is not supported",
             fields.last().unwrap(),
             field_type.name()

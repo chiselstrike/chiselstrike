@@ -4,7 +4,6 @@ import { crud } from "./crud.ts";
 import type { RouteMap } from "./routing.ts";
 import { opAsync, opSync } from "./utils.ts";
 import { SimpleTypeSystem, TypeSystem } from "./type_system.ts";
-
 /**
  * Base class for various Operators applicable on `ChiselCursor`. An
  * implementation of Operator<T> processes an AsyncIterable<T> and
@@ -71,10 +70,6 @@ abstract class Operator<Input, Output> {
             },
         };
     }
-}
-
-function assertNever(_: never) {
-    return false;
 }
 
 /**
@@ -1193,29 +1188,42 @@ function mergeSourceIntoEntity(
         }
 
         const err = (typeName: string) => {
-            new Error(
+            return new Error(
                 `field ${field.name} of entity ${entityName} is ${typeName}, but provided value ${fieldValue} is of type ${typeof fieldValue}`,
             );
         };
-        if (field.type.name == "string" || field.type.name == "entityId") {
+        const typeName = field.type.name;
+        if (typeName == "string" || typeName == "entityId") {
             if (typeof fieldValue == "string") {
                 target[field.name] = fieldValue;
             } else {
                 throw err("string");
             }
-        } else if (field.type.name == "number") {
+        } else if (typeName == "number") {
             if (typeof fieldValue == "number") {
                 target[field.name] = fieldValue;
             } else {
                 throw err("number");
             }
-        } else if (field.type.name == "boolean") {
+        } else if (typeName == "boolean") {
             if (typeof fieldValue == "boolean") {
                 target[field.name] = fieldValue;
             } else {
                 throw err("boolean");
             }
-        } else if (field.type.name == "jsDate") {
+        } else if (typeName == "arrayBuffer") {
+            // This covers the CRUD path where we get the value in form of a
+            // base64 encoded string.
+            if (typeof fieldValue == "string") {
+                // TODO: Get rid of this when we have deno imports working.
+                target[field.name] = Uint8Array.from(
+                    atob(fieldValue),
+                    (c) => c.charCodeAt(0),
+                );
+            } else {
+                target[field.name] = fieldValue;
+            }
+        } else if (typeName == "jsDate") {
             if (fieldValue instanceof Date) {
                 target[field.name] = fieldValue;
             } else if (
@@ -1227,7 +1235,7 @@ function mergeSourceIntoEntity(
                     `field ${field.name} of entity ${entityName} is Date, but provided value ${fieldValue} is not an instance of Date`,
                 );
             }
-        } else if (field.type.name == "array") {
+        } else if (typeName == "array") {
             if (Array.isArray(fieldValue)) {
                 target[field.name] = fieldValue;
             } else {
@@ -1235,7 +1243,7 @@ function mergeSourceIntoEntity(
                     `field ${field.name} of entity ${entityName} is Array, but provided value ${fieldValue} is not an instance of Array`,
                 );
             }
-        } else if (field.type.name == "entity") {
+        } else if (typeName == "entity") {
             if (typeof fieldValue == "object") {
                 if (target[field.name] === undefined) {
                     target[field.name] = new ChiselEntity();
@@ -1252,13 +1260,16 @@ function mergeSourceIntoEntity(
                 );
             }
         } else {
-            assertNever(field.type);
+            assertNever(typeName);
             throw new Error(
-                `field ${field.name} of entity ${entityName} has unexpected type ${field
-                    .type as unknown}`,
+                `field '${field.name}' of entity '${entityName}' has unexpected type '${typeName}'`,
             );
         }
     }
+}
+
+function assertNever(_: never) {
+    return false;
 }
 
 export type Id<Entity extends ChiselEntity> = Entity["id"];

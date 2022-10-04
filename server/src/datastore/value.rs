@@ -1,8 +1,11 @@
 use anyhow::{bail, Context as _, Result};
 use deno_core::v8;
 use serde::{Deserialize, Serialize};
+use serde_with::base64::Base64;
+use serde_with::serde_as;
 use std::collections::HashMap;
 
+#[serde_as]
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
 #[serde(untagged)]
 pub enum EntityValue {
@@ -10,9 +13,11 @@ pub enum EntityValue {
     String(String),
     Float64(f64),
     Boolean(bool),
-    // Representation of JavaScript's Date represented as UNIX timestamp,
-    // specifically it's the number of milliseconds since epoch.
+    /// Representation of JavaScript's Date represented as UNIX timestamp,
+    /// specifically it's the number of milliseconds since epoch.
     JsDate(f64),
+    /// Used to represent binary blobs of data. Corresponds to JS's ArrayBuffer.
+    Bytes(#[serde_as(as = "Base64")] Vec<u8>),
     Array(EntityArray),
     Map(EntityMap),
 }
@@ -36,6 +41,30 @@ impl EntityValue {
         } else if v.is_date() {
             let date = v8::Local::<v8::Date>::try_from(*v).unwrap();
             EntityValue::JsDate(date.value_of())
+        } else if v.is_array_buffer_view() {
+            let view = v8::Local::<v8::ArrayBufferView>::try_from(*v).unwrap();
+            let buff = view.buffer(scope).unwrap();
+            let bs = buff.get_backing_store();
+            let bytes = if let Some(data) = bs.data() {
+                let data_ptr = data.as_ptr() as *const u8;
+                let bytes_slice = unsafe { std::slice::from_raw_parts(data_ptr, bs.byte_length()) };
+                let bytes_slice = &bytes_slice[view.byte_offset()..];
+                bytes_slice.to_vec()
+            } else {
+                vec![]
+            };
+            EntityValue::Bytes(bytes)
+        } else if v.is_array_buffer() {
+            let buff = v8::Local::<v8::ArrayBuffer>::try_from(*v).unwrap();
+            let bs = buff.get_backing_store();
+            let bytes = if let Some(data) = bs.data() {
+                let data_ptr = data.as_ptr() as *const u8;
+                let bytes_slice = unsafe { std::slice::from_raw_parts(data_ptr, bs.byte_length()) };
+                bytes_slice.to_vec()
+            } else {
+                vec![]
+            };
+            EntityValue::Bytes(bytes)
         } else if v.is_array() {
             let array = v8::Local::<v8::Array>::try_from(*v).unwrap();
             let mut value_vec = Vec::with_capacity(array.length() as usize);
@@ -106,6 +135,18 @@ impl EntityValue {
             Self::JsDate(v) => v8::Date::new(scope, *v)
                 .context("failed to create v8 Date when converting EntityValue to v8")?
                 .into(),
+            Self::Bytes(v) => {
+                let buff = v8::ArrayBuffer::new(scope, v.len());
+                let bs = buff.get_backing_store();
+                // Will be none if the bytes vector `v` is empty
+                if bs.data().is_some() {
+                    let data_ptr = bs.data().unwrap().as_ptr() as *mut u8;
+                    let bytes_slice =
+                        unsafe { std::slice::from_raw_parts_mut(data_ptr, bs.byte_length()) };
+                    bytes_slice.copy_from_slice(v);
+                }
+                buff.into()
+            }
             Self::Array(v) => {
                 let array = v8::Array::new(scope, v.len() as i32);
                 for (i, e) in v.iter().enumerate() {
@@ -135,6 +176,7 @@ impl EntityValue {
             Self::Float64(_) => "Float64",
             Self::Boolean(_) => "Boolean",
             Self::JsDate(_) => "JsDate",
+            Self::Bytes(_) => "Bytes",
             Self::Array(_) => "Array",
             Self::Map(_) => "Record",
         }
@@ -158,6 +200,7 @@ impl EntityValue {
     define_is_method! {is_f64, Float64}
     define_is_method! {is_boolean, Boolean}
     define_is_method! {is_date, JsDate}
+    define_is_method! {is_bytes, Bytes}
     define_is_method! {is_array, Array}
     define_is_method! {is_map, Map}
 }
@@ -197,6 +240,7 @@ impl EntityValue {
     as_copy!(as_f64, Float64, f64);
     as_copy!(as_bool, Boolean, bool);
     as_copy!(as_date, JsDate, f64);
+    as_ref!(as_bytes, Bytes, [u8]);
     as_ref!(as_array, Array, EntityArray);
     as_ref!(as_map, Map, EntityMap);
 }

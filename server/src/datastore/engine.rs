@@ -101,6 +101,7 @@ impl TryFrom<&Field> for ColumnDef {
             TypeId::Id => column_def.text().primary_key(),
             TypeId::Float | TypeId::JsDate => column_def.double(),
             TypeId::Boolean => column_def.boolean(),
+            TypeId::ArrayBuffer => column_def.binary(),
             TypeId::Entity { .. } | TypeId::EntityId { .. } => column_def.text(), // Foreign key, must the be same type as Type::Id
             TypeId::Array(_) => column_def.text(), // Arrays are stored as serialized JSONs.
         };
@@ -127,6 +128,7 @@ impl SqlWithArguments {
                 SqlValue::Bool(arg) => sqlx_query = sqlx_query.bind(arg),
                 SqlValue::F64(arg) => sqlx_query = sqlx_query.bind(arg),
                 SqlValue::String(arg) => sqlx_query = sqlx_query.bind(arg),
+                SqlValue::Bytes(arg) => sqlx_query = sqlx_query.bind(arg),
             };
         }
         sqlx_query
@@ -437,6 +439,10 @@ impl QueryEngine {
                             };
                             EntityValue::Boolean(v)
                         }
+                        TypeId::ArrayBuffer => {
+                            let val = row.get::<Vec<u8>, _>(column_idx);
+                            EntityValue::Bytes(val)
+                        }
                         TypeId::Entity { .. } => anyhow::bail!("object is not a scalar"),
                         TypeId::Array(_) => {
                             let array_str = row.get::<&str, _>(column_idx);
@@ -679,12 +685,12 @@ impl QueryEngine {
                 value
             }};
         }
-        macro_rules! convert_json_value {
+        macro_rules! convert_value {
             ($as_type:ident, $fallback:ty) => {{
                 match fields.get(&field.name) {
-                    Some(value_json) => value_json
+                    Some(value) => value
                         .$as_type()
-                        .context("failed to convert json to specific type")?
+                        .context("failed to convert value to specific type")?
                         .to_owned(),
                     None => {
                         let value = field.generate_value().context("failed to generate value")?;
@@ -696,11 +702,20 @@ impl QueryEngine {
 
         let arg = match &field.type_id {
             TypeId::String | TypeId::Id | TypeId::Entity { .. } | TypeId::EntityId { .. } => {
-                SqlValue::String(convert_json_value!(as_str, String))
+                SqlValue::String(convert_value!(as_str, String))
             }
-            TypeId::Float => SqlValue::F64(convert_json_value!(as_f64, f64)),
-            TypeId::JsDate => SqlValue::F64(convert_json_value!(as_date, f64)),
-            TypeId::Boolean => SqlValue::Bool(convert_json_value!(as_bool, bool)),
+            TypeId::Float => SqlValue::F64(convert_value!(as_f64, f64)),
+            TypeId::Boolean => SqlValue::Bool(convert_value!(as_bool, bool)),
+            TypeId::JsDate => SqlValue::F64(convert_value!(as_date, f64)),
+            TypeId::ArrayBuffer => {
+                let value = fields
+                    .get(&field.name)
+                    .context("ArrayBuffer field must not miss value")?
+                    .as_bytes()
+                    .context("failed to convert value to bytes")?
+                    .to_owned();
+                SqlValue::Bytes(value)
+            }
             TypeId::Array(element_type) => {
                 let val = match fields.get(&field.name) {
                     Some(field) => {
@@ -741,6 +756,9 @@ impl QueryEngine {
                     if !e.is_date() && !e.is_f64() {
                         bail!();
                     }
+                }
+                TypeId::ArrayBuffer => {
+                    unreachable!("ArrayBuffer can't be contained within an array")
                 }
                 TypeId::Boolean => maybe_bail!(is_boolean),
                 TypeId::Array(inner_element) => self
