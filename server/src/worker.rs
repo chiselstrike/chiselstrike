@@ -2,6 +2,7 @@
 
 use crate::module_loader::ModuleLoader;
 use crate::ops;
+use crate::policy::engine::PolicyEngine;
 use crate::server::Server;
 use crate::version::{Version, VersionJob};
 use anyhow::{bail, Context as _, Result};
@@ -64,6 +65,9 @@ pub struct WorkerState {
     /// We don't let the user code read the actual environment variables of this process, but we
     /// implement `set_env` and `get_env` using this map.
     pub fake_env: HashMap<String, String>,
+    /// The policy engine for that worker. The policy engine is not !Send + !Sync, therefore it
+    /// cannot be part of the version.
+    pub policy_engine: Rc<PolicyEngine>,
 }
 
 pub async fn spawn(init: WorkerInit) -> Result<WorkerJoinHandle> {
@@ -154,12 +158,19 @@ async fn run(init: WorkerInit) -> Result<()> {
         options,
     );
 
+    let policy_engine = PolicyEngine::default();
+
+    for (ty_name, code) in init.version.policy_sources.iter() {
+        policy_engine.register_policy_from_code(ty_name.clone(), code)?;
+    }
+
     let worker_state = WorkerState {
         server: init.server,
         version: init.version.clone(),
         ready_tx: Some(init.ready_tx),
         job_rx: Some(init.job_rx),
         fake_env: HashMap::new(),
+        policy_engine: Rc::new(policy_engine),
     };
     worker.js_runtime.op_state().borrow_mut().put(worker_state);
 

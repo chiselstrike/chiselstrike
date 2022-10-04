@@ -179,6 +179,7 @@ async fn start_versions(server: Arc<Server>) -> Result<()> {
             .unwrap_or_else(|| TypeSystem::new(server.builtin_types.clone(), version_id.clone()));
         let policy_system = server.meta_service.load_policy_system(&version_id).await?;
         let modules = server.meta_service.load_modules(&version_id).await?;
+        let policy_sources = Arc::new(server.meta_service.load_policy_sources(&version_id).await?);
 
         let root_url = "file:///__root.ts";
         if !modules.contains_key(root_url) {
@@ -204,6 +205,7 @@ async fn start_versions(server: Arc<Server>) -> Result<()> {
             worker_count: server.opt.worker_threads,
             ready_tx,
             is_canary: false,
+            policy_sources,
         };
 
         let (version, job_tx, version_task) = version::spawn(init).await?;
@@ -242,6 +244,7 @@ async fn start_builtin_version(server: Arc<Server>) -> Result<()> {
         worker_count: 1,
         ready_tx,
         is_canary: false,
+        policy_sources: Default::default(),
     };
 
     let (version, job_tx, version_task) = version::spawn(init).await?;

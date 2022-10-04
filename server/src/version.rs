@@ -23,6 +23,8 @@ pub struct VersionInit {
     pub modules: Arc<HashMap<String, String>>,
     pub type_system: Arc<TypeSystem>,
     pub policy_system: Arc<PolicySystem>,
+    /// Sources for the type policies
+    pub policy_sources: Arc<HashMap<String, Box<[u8]>>>,
     pub worker_count: usize,
     /// We will signal you on this channel when all workers in the version are ready to accept
     /// jobs.
@@ -47,6 +49,8 @@ pub struct Version {
     pub info: VersionInfo,
     pub type_system: Arc<TypeSystem>,
     pub policy_system: Arc<PolicySystem>,
+    /// Type policies sources
+    pub policy_sources: Arc<HashMap<String, Box<[u8]>>>,
 }
 
 /// A job that should be handled by a version (more precisely, by one of the workers in the
@@ -70,6 +74,7 @@ pub async fn spawn(
         info: init.info.clone(),
         type_system: init.type_system.clone(),
         policy_system: init.policy_system.clone(),
+        policy_sources: init.policy_sources.clone(),
     });
     let task = CancellableTaskHandle(task::spawn(run(init, version.clone(), job_rx)));
     Ok((version, job_tx, task))
