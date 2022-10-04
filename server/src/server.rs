@@ -257,6 +257,8 @@ async fn refresh_secrets(server: Arc<Server>) -> Result<()> {
                 log::warn!("Could not re-read secrets: {:?}", err);
             }
             last_try_was_failure = true;
+        } else {
+            last_try_was_failure = false;
         }
         tokio::time::sleep(Duration::from_millis(1000)).await;
     }
