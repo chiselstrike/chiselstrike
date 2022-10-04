@@ -213,6 +213,7 @@ And then replace instances of `npm run` with direct calls to the new binaries. F
 
 ```console
 cd my-backend
+npm i esbuild
 ../target/debug/chisel dev
 ```
 
