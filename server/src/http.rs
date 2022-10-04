@@ -187,7 +187,7 @@ async fn handle_version_request(
     // even if `send()` returns an `Ok`, it does not in fact guarantee that the job is received or
     // processed, so we _still_ must handle the case when the job is dropped ...
     let _: Result<_, _> = job_tx.send(job).await;
-    // ... which happens here: when the `job` is dropped, `job.response_tx` is also dropped, so the
+    // ... which happens here: when the `job` is dropped, `job.response_rx` is also dropped, so the
     // `.await` returns an error
     let http_response = response_rx.await.context("Request was aborted")?;
 
