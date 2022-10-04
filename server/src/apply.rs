@@ -8,6 +8,7 @@ use petgraph::graphmap::GraphMap;
 use petgraph::Directed;
 
 use crate::datastore::{MetaService, QueryEngine};
+use crate::feat_typescript_policies;
 use crate::policies::PolicySystem;
 use crate::proto::type_msg::TypeEnum;
 use crate::proto::{
@@ -19,7 +20,6 @@ use crate::types::{
     DbIndex, Entity, Field, NewField, NewObject, ObjectType, Type, TypeSystem, TypeSystemError,
 };
 use crate::version::VersionInfo;
-use crate::FEATURES;
 
 pub struct ApplyResult {
     pub type_system: TypeSystem,
@@ -42,7 +42,7 @@ impl ParsedPolicies {
         for p in request {
             let path = PathBuf::from(&p.path);
             match path.extension().and_then(|s| s.to_str()) {
-                Some("ts") if FEATURES.typescript_policies => {
+                Some("ts") if feat_typescript_policies() => {
                     let entity_name = path
                         .file_name()
                         .and_then(|s| s.to_str())

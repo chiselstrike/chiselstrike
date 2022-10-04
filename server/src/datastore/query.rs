@@ -10,9 +10,9 @@ use serde_derive::{Deserialize, Serialize};
 
 use crate::auth::AUTH_USER_NAME;
 use crate::datastore::expr::{BinaryExpr, Expr, PropertyAccess, Value as ExprValue};
+use crate::feat_typescript_policies;
 use crate::policy::PolicyContext;
 use crate::types::{Entity, Field, ObjectType, Type, TypeId};
-use crate::FEATURES;
 
 use super::value::EntityValue;
 use super::DataContext;
@@ -327,7 +327,7 @@ impl QueryPlan {
     /// Prepares the retrieval of Entity of type `ty` from the database and
     /// ensures login restrictions are respected.
     fn load_entity(&mut self, ctx: &DataContext, ty: &Entity) -> anyhow::Result<QueriedEntity> {
-        if FEATURES.typescript_policies {
+        if feat_typescript_policies() {
             self.add_read_filters(&ctx.policy_context, ty.object_type())?;
         }
         self.add_login_filters_recursive(ctx, ty.object_type(), Expr::Parameter { position: 0 })?;

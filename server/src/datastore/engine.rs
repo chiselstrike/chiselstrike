@@ -28,11 +28,11 @@ use crate::datastore::query::{
 };
 use crate::datastore::value::{EntityMap, EntityValue};
 use crate::datastore::DbConnection;
+use crate::feat_typescript_policies;
 use crate::ops::job_context::JobInfo;
 use crate::policies::PolicySystem;
 use crate::policy::{Location, PolicyContext, PolicyProcessor, WriteAction};
 use crate::types::{DbIndex, Field, ObjectDelta, ObjectType, Type, TypeId, TypeSystem};
-use crate::FEATURES;
 
 use super::DataContext;
 
@@ -540,7 +540,7 @@ impl QueryEngine {
         record: EntityMap,
         ctx: &DataContext,
     ) -> Result<impl Future<Output = Result<(IdTree, EntityMap)>> + '_> {
-        let (record, location) = if FEATURES.typescript_policies {
+        let (record, location) = if feat_typescript_policies() {
             self.validate_write_policies(ty.clone(), record, ctx.policy_context.clone())?
         } else {
             (record, None)

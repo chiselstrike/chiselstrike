@@ -15,7 +15,7 @@ use super::{DataContext, QueryEngine};
 use crate::datastore::expr::{BinaryExpr, BinaryOp, Expr, PropertyAccess, Value as ExprValue};
 use crate::policy::{PolicyError, PolicyProcessor, ValidatedEntityStream};
 use crate::types::{Entity, Type, TypeSystem};
-use crate::{JsonObject, FEATURES};
+use crate::{feat_typescript_policies, JsonObject};
 
 #[derive(Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -51,7 +51,7 @@ impl QueryEngine {
         let query_plan = QueryPlan::from_ops(ctx, base_type, ops)?;
         let stream = self.query(ctx.txn.clone(), query_plan)?;
 
-        let stream: Pin<Box<dyn Stream<Item = _>>> = if FEATURES.typescript_policies {
+        let stream: Pin<Box<dyn Stream<Item = _>>> = if feat_typescript_policies() {
             let validator = PolicyProcessor {
                 ty: base_type.object_type().clone(),
                 ctx: ctx.policy_context.clone(),

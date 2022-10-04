@@ -21,7 +21,7 @@ use crate::datastore::value::EntityValue;
 use crate::ops::job_context::JobContext;
 use crate::policy::{PolicyContext, PolicyProcessor};
 use crate::types::{Entity, Type};
-use crate::{JsonObject, FEATURES};
+use crate::{feat_typescript_policies, JsonObject};
 
 #[deno_core::op]
 pub async fn op_chisel_begin_transaction(
@@ -350,7 +350,7 @@ pub fn op_chisel_query_get_value<'a>(
     let ty = query_stream.ty.object_type().clone();
     let v8_value = match query_stream.next.borrow_mut().take() {
         Some(v) => {
-            if FEATURES.typescript_policies {
+            if feat_typescript_policies() {
                 let ctx = state
                     .borrow()
                     .resource_table

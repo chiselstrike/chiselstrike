@@ -2,13 +2,13 @@
 
 use crate::datastore::{DbConnection, MetaService, QueryEngine};
 use crate::internal::{mark_not_ready, mark_ready};
-use crate::kafka;
 use crate::opt::Opt;
 use crate::policies::PolicySystem;
 use crate::trunk::{self, Trunk};
 use crate::types::{BuiltinTypes, TypeSystem};
 use crate::version::{self, VersionInfo, VersionInit};
-use crate::{http, internal, rpc, secrets, worker, JsonObject};
+use crate::{http, internal, rpc, secrets, worker, JsonObject, FEATURES};
+use crate::{kafka, Features};
 use anyhow::{bail, Context, Result};
 use futures::future::{Fuse, FutureExt};
 use parking_lot::RwLock;
@@ -48,6 +48,15 @@ pub async fn run(opt: Opt) -> Result<()> {
     //
     // This approach is called "structured concurrency", and it seems to be a good way to write
     // concurrent programs and keep your sanity.
+
+    let features = Features {
+        typescript_policies: opt.typescript_policies,
+    };
+
+    FEATURES
+        .set(features)
+        .map_err(|_| ())
+        .expect("features set twice!");
 
     let (server, trunk_task) = make_server(opt).await?;
     start_versions(server.clone()).await?;
