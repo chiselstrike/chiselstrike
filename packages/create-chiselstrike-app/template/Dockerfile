@@ -1,8 +1,10 @@
-FROM node:18-slim
+FROM frolvlad/alpine-glibc:alpine-3.13
 
 COPY . /opt/app
 
 WORKDIR /opt/app
+
+RUN apk add npm
 
 RUN npm i
 
