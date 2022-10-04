@@ -206,6 +206,8 @@ or
         policy_sources,
     } = ParsedPolicies::parse(&apply_request.policies)?;
 
+    meta.persist_policy_sources(&mut transaction, &version_id, &policy_sources)
+        .await?;
     meta.persist_policy_version(&mut transaction, &version_id, &policy_system_str)
         .await?;
     meta.persist_version_info(&mut transaction, &version_id, version_info)

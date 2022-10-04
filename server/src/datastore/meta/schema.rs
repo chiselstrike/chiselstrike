@@ -101,3 +101,10 @@ pub enum Sessions {
     Token,
     UserId,
 }
+
+#[derive(Iden)]
+pub enum PolicyStore {
+    Table,
+    Version,
+    Store,
+}
