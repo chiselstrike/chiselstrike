@@ -589,12 +589,12 @@ version = "0.13.0-dev.0"
 dependencies = [
  "anyhow",
  "bimap",
+ "clap 4.0.8",
  "indexmap",
  "petgraph 0.6.2",
  "quine-mc_cluskey",
  "serde",
  "serde_json",
- "structopt",
  "swc_atoms 0.3.1",
  "swc_common 0.25.0",
  "swc_ecmascript 0.185.0",
@@ -651,12 +651,50 @@ dependencies = [
 ]
 
 [[package]]
+name = "clap"
+version = "4.0.8"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5840cd9093aabeabf7fd932754c435b7674520fc3ddc935c397837050f0f1e4b"
+dependencies = [
+ "atty",
+ "bitflags",
+ "clap_derive",
+ "clap_lex",
+ "once_cell",
+ "strsim 0.10.0",
+ "termcolor",
+]
+
+[[package]]
+name = "clap_derive"
+version = "4.0.8"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "92289ffc6fb4a85d85c246ddb874c05a87a2e540fb6ad52f7ca07c8c1e1840b1"
+dependencies = [
+ "heck 0.4.0",
+ "proc-macro-error",
+ "proc-macro2 1.0.43",
+ "quote 1.0.21",
+ "syn 1.0.99",
+]
+
+[[package]]
+name = "clap_lex"
+version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0d4198f73e42b4936b35b5bb248d81d2b595ecb170da0bac7655c54eedfa8da8"
+dependencies = [
+ "os_str_bytes",
+]
+
+[[package]]
 name = "cli"
 version = "0.13.0-dev.0"
 dependencies = [
  "anyhow",
  "bytes",
  "chisel-macros",
+ "clap 4.0.8",
  "colored",
  "enclose",
  "endpoint_tsc",
@@ -686,7 +724,6 @@ dependencies = [
  "serde_json",
  "server",
  "strip-ansi-escapes",
- "structopt",
  "swc_common 0.17.25",
  "swc_ecmascript 0.143.0",
  "tempdir",
@@ -2870,7 +2907,7 @@ name = "lit"
 version = "1.0.4"
 source = "git+https://github.com/chiselstrike/lit?rev=607b0b9#607b0b9af934e55fdf3814e9186468c9b91b7cae"
 dependencies = [
- "clap",
+ "clap 2.34.0",
  "error-chain",
  "itertools 0.9.0",
  "lazy_static",
@@ -3327,6 +3364,12 @@ dependencies = [
  "pkg-config",
  "vcpkg",
 ]
+
+[[package]]
+name = "os_str_bytes"
+version = "6.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9ff7415e9ae3fff1225851df9e0d9e4e5479f947619774677a63572e55e80eff"
 
 [[package]]
 name = "outref"
@@ -4884,7 +4927,7 @@ version = "0.3.26"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0c6b5c64445ba8094a6ab0c3cd2ad323e07171012d9c98b0b15651daf1787a10"
 dependencies = [
- "clap",
+ "clap 2.34.0",
  "lazy_static",
  "structopt-derive",
 ]
@@ -4909,7 +4952,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4d887e6156acb1f4e2d2968d61d1d3b6c5e102af5f23c3ca606723b5ac2c45cb"
 dependencies = [
  "anyhow",
- "clap",
+ "clap 2.34.0",
  "serde",
  "serde_derive",
  "skeptic",

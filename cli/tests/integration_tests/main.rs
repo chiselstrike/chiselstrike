@@ -1,12 +1,12 @@
 // SPDX-FileCopyrightText: © 2021 ChiselStrike <info@chiselstrike.com>
 
 use crate::common::{bin_dir, run};
+use clap::Parser;
 use regex::Regex;
 use std::fmt::{Display, Formatter};
 use std::process::ExitCode;
 use std::str::FromStr;
 use std::sync::Arc;
-use structopt::StructOpt;
 
 #[path = "../common/mod.rs"]
 pub mod common;
@@ -47,39 +47,39 @@ impl FromStr for DatabaseKind {
     }
 }
 
-#[derive(Debug, StructOpt, Clone)]
-#[structopt(name = "lit_test", about = "Runs integration tests")]
+#[derive(Debug, Parser, Clone)]
+#[command(name = "lit_test", about = "Runs integration tests")]
 pub struct Opt {
     /// Regex that select tests to run.
-    #[structopt(short, long)]
+    #[arg(short, long)]
     pub test: Option<Regex>,
     /// Database system to test with. Supported values: `sqlite` (default) and `postgres`.
-    #[structopt(long, default_value = "sqlite")]
+    #[arg(long, default_value = "sqlite")]
     pub database: DatabaseKind,
     /// Database host name. Default: `localhost`.
-    #[structopt(long, default_value = "localhost")]
+    #[arg(long, default_value = "localhost")]
     pub database_host: String,
     /// Database username.
-    #[structopt(long)]
+    #[arg(long)]
     pub database_user: Option<String>,
     /// Database password.
-    #[structopt(long)]
+    #[arg(long)]
     pub database_password: Option<String>,
     /// Kafka connection.
-    #[structopt(long)]
+    #[arg(long)]
     pub kafka_connection: Option<String>,
     /// Kafka topic.
-    #[structopt(long)]
+    #[arg(long)]
     pub kafka_topic: Option<String>,
-    #[structopt(long)]
+    #[arg(long)]
     pub optimize: Option<bool>,
     /// Number of Rust tests to run in parallel (does not apply to lit).
-    #[structopt(short, long)]
+    #[arg(short, long)]
     pub parallel: Option<usize>,
     test_arg: Option<Regex>,
 
     /// don't capture stdout/stderr of each task, allow printing directly
-    #[structopt(long)]
+    #[arg(long)]
     nocapture: bool,
 }
 
@@ -108,7 +108,7 @@ fn main() -> ExitCode {
         ],
     );
 
-    let opt = Arc::new(Opt::from_args());
+    let opt = Arc::new(Opt::parse());
 
     let ok = rust::run_tests(opt.clone()) & lit::run_tests(&opt);
     if ok {

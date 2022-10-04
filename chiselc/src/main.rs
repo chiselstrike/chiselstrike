@@ -5,31 +5,31 @@ use std::io::{self, Read, Write};
 use std::path::PathBuf;
 
 use anyhow::{Context, Result};
-use structopt::StructOpt;
+use clap::Parser;
 
 use chiselc::parse::compile;
 use chiselc::rewrite::Target;
 use chiselc::symbols::Symbols;
 
-#[derive(StructOpt)]
-#[structopt(name = "chiselc")]
+#[derive(Parser)]
+#[command(name = "chiselc")]
 struct Opt {
     /// Input file
-    #[structopt(parse(from_os_str))]
+    #[arg(value_parser)]
     input: Option<PathBuf>,
     /// Output file (optional).
-    #[structopt(short, long)]
+    #[arg(short, long)]
     output: Option<PathBuf>,
     /// Entity types
-    #[structopt(short, long)]
+    #[arg(short, long)]
     entities: Vec<String>,
     /// Entity types
-    #[structopt(short, long, default_value = "js")]
+    #[arg(short, long, default_value = "js")]
     target: Target,
 }
 
 fn main() -> Result<()> {
-    let opt = Opt::from_args();
+    let opt = Opt::parse();
     let mut input = match opt.input {
         Some(path) => {
             let file = File::open(path.clone())
