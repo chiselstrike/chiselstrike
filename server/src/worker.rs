@@ -158,7 +158,7 @@ async fn run(init: WorkerInit) -> Result<()> {
         options,
     );
 
-    let policy_engine = PolicyEngine::default();
+    let policy_engine = PolicyEngine::new()?;
 
     for (ty_name, code) in init.version.policy_sources.iter() {
         policy_engine.register_policy_from_code(ty_name.clone(), code)?;

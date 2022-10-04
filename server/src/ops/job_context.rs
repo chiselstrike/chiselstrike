@@ -34,9 +34,11 @@ impl ChiselRequestContext for JobInfo {
         }
     }
 
-    fn headers(&self) -> &HashMap<String, String> {
+    fn headers(&self) -> Box<dyn Iterator<Item = (&str, &str)> + '_> {
         match self {
-            JobInfo::HttpRequest { ref headers, .. } => headers,
+            JobInfo::HttpRequest { ref headers, .. } => {
+                Box::new(headers.iter().map(|(k, v)| (k.as_str(), v.as_str())))
+            }
             JobInfo::KafkaEvent => todo!(),
         }
     }

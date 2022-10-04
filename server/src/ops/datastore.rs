@@ -7,6 +7,7 @@ use std::rc::{Rc, Weak};
 use std::task::{Context, Poll};
 
 use anyhow::{anyhow, bail, Context as _, Result};
+use deno_core::serde_v8::Serializable;
 use deno_core::{serde_v8, v8, CancelFuture, OpState};
 use serde::{Deserialize, Serialize};
 use serde_json::Value as JsonValue;
@@ -18,9 +19,9 @@ use crate::datastore::expr::Expr;
 use crate::datastore::query::{Mutation, QueryOpChain, QueryPlan};
 use crate::datastore::value::EntityValue;
 use crate::ops::job_context::JobContext;
-use crate::policy::PolicyContext;
-use crate::types::Type;
-use crate::JsonObject;
+use crate::policy::{PolicyContext, PolicyProcessor};
+use crate::types::{Entity, Type};
+use crate::{JsonObject, FEATURES};
 
 #[deno_core::op]
 pub async fn op_chisel_begin_transaction(
@@ -261,6 +262,7 @@ pub async fn op_chisel_relational_query_create(
         .get::<JobContext>(job_ctx_rid)?;
     let data_ctx = context.data_context()?;
     let query_plan = QueryPlan::from_op_chain(&data_ctx, op_chain)?;
+    let ty = query_plan.base_type().clone();
 
     let stream = server
         .query_engine
@@ -268,6 +270,7 @@ pub async fn op_chisel_relational_query_create(
     let resource = QueryStreamResource {
         stream: RefCell::new(stream),
         cancel: Default::default(),
+        ty,
         next: RefCell::new(None),
     };
     let rid = state.as_ref().borrow_mut().resource_table.add(resource);
@@ -280,6 +283,7 @@ type DbStream = RefCell<QueryResults>;
 struct QueryStreamResource {
     stream: DbStream,
     cancel: deno_core::CancelHandle,
+    ty: Entity,
     next: RefCell<Option<EntityValue>>,
 }
 
@@ -339,11 +343,31 @@ pub fn op_chisel_query_get_value<'a>(
     scope: &mut v8::HandleScope<'a>,
     state: Rc<RefCell<OpState>>,
     query_stream_rid: deno_core::ResourceId,
+    ctx: deno_core::ResourceId,
 ) -> Result<serde_v8::Value<'a>> {
     let query_stream: Rc<QueryStreamResource> =
         state.borrow().resource_table.get(query_stream_rid)?;
+    let ty = query_stream.ty.object_type().clone();
     let v8_value = match query_stream.next.borrow_mut().take() {
-        Some(v) => v.to_v8(scope)?,
+        Some(v) => {
+            if FEATURES.typescript_policies {
+                let ctx = state
+                    .borrow()
+                    .resource_table
+                    .get::<JobContext>(ctx)?
+                    .data_context()?
+                    .policy_context
+                    .clone();
+                let validator = PolicyProcessor { ty, ctx };
+                validator
+                    .process_read(v.try_into_map()?)?
+                    .map(|mut v| v.to_v8(scope))
+                    .transpose()?
+                    .unwrap_or_else(|| v8::null(scope).into())
+            } else {
+                v.to_v8(scope)?
+            }
+        }
         None => v8::null(scope).into(),
     };
     Ok(serde_v8::Value::from(v8_value))

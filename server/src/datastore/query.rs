@@ -10,7 +10,9 @@ use serde_derive::{Deserialize, Serialize};
 
 use crate::auth::AUTH_USER_NAME;
 use crate::datastore::expr::{BinaryExpr, Expr, PropertyAccess, Value as ExprValue};
+use crate::policy::PolicyContext;
 use crate::types::{Entity, Field, ObjectType, Type, TypeId};
+use crate::FEATURES;
 
 use super::value::EntityValue;
 use super::DataContext;
@@ -226,7 +228,7 @@ impl QueryPlan {
         }
     }
 
-    fn base_type(&self) -> &Entity {
+    pub fn base_type(&self) -> &Entity {
         &self.entity.ty
     }
 
@@ -325,6 +327,9 @@ impl QueryPlan {
     /// Prepares the retrieval of Entity of type `ty` from the database and
     /// ensures login restrictions are respected.
     fn load_entity(&mut self, ctx: &DataContext, ty: &Entity) -> anyhow::Result<QueriedEntity> {
+        if FEATURES.typescript_policies {
+            self.add_read_filters(&ctx.policy_context, ty.object_type())?;
+        }
         self.add_login_filters_recursive(ctx, ty.object_type(), Expr::Parameter { position: 0 })?;
         self.load_entity_recursive(ctx, ty, ty.backing_table())
     }
@@ -393,6 +398,19 @@ impl QueryPlan {
             table_alias: current_table.to_owned(),
             joins,
         })
+    }
+
+    fn add_read_filters(
+        &mut self,
+        ctx: &PolicyContext,
+        ty: &Arc<ObjectType>,
+    ) -> anyhow::Result<()> {
+        let mut instance = ctx.cache.get_or_create_policy_instance(ctx, ty);
+        if let Some(expression) = instance.make_read_filter_expr(ctx)?.cloned() {
+            self.operators.push(QueryOp::Filter { expression });
+        }
+
+        Ok(())
     }
 
     /// Adds filters that ensure login constrains are satisfied for a type
