@@ -134,20 +134,41 @@ pub fn js_value_to_entity_value(val: &JsValue) -> EntityValue {
 
 #[cfg(test)]
 mod test {
+    use proptest::prelude::*;
+
     use crate::datastore::value::EntityValue;
 
     use super::*;
 
-    #[test]
-    fn test_convert_array_round_trip() {
-        let mut ctx = boa_engine::Context::default();
-        let entity = EntityValue::Array(vec![
-            EntityValue::Boolean(true),
-            EntityValue::Boolean(false),
-        ]);
+    fn arb_entity_value() -> impl Strategy<Value = EntityValue> {
+        let leaf = prop_oneof![
+            Just(EntityValue::Null),
+            any::<bool>().prop_map(EntityValue::Boolean),
+            any::<f64>().prop_map(EntityValue::Float64),
+            // any::<f64>().prop_map(EntityValue::JsDate), // handle dates first
+            ".*".prop_map(EntityValue::String),
+        ];
+        leaf.prop_recursive(
+            8,   // 8 levels deep
+            256, // Shoot for maximum size of 256 nodes
+            10,  // We put up to 10 items per collection
+            |inner| {
+                prop_oneof![
+                    // Take the inner strategy and make the two recursive cases.
+                    prop::collection::vec(inner.clone(), 0..10).prop_map(EntityValue::Array),
+                    prop::collection::hash_map(".*", inner, 0..10).prop_map(EntityValue::Map),
+                ]
+            },
+        )
+    }
 
-        let js_value = entity_value_to_js_value(&mut ctx, &entity, true);
-        let entity_back = js_value_to_entity_value(&js_value);
-        assert_eq!(entity, entity_back);
+    proptest! {
+           #[test]
+           fn roundtrip_convert(entity in arb_entity_value()) {
+            let mut ctx = boa_engine::Context::default();
+            let js_value = entity_value_to_js_value(&mut ctx, &entity, true);
+            let entity_back = js_value_to_entity_value(&js_value);
+            assert_eq!(entity, entity_back);
+        }
     }
 }
