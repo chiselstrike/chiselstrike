@@ -12,6 +12,27 @@ pub(crate) struct FileRouteMap {
     pub routes: Vec<FileRoute>,
 }
 
+impl FileRouteMap {
+    fn add_route(
+        &mut self,
+        file_path: PathBuf,
+        path_pattern: String,
+        legacy_file_name: Option<String>,
+    ) {
+        if fs::metadata(&file_path)
+            .unwrap_or_else(|_| panic!("Cannot fetch {} metadata", &file_path.display()))
+            .len()
+            > 0
+        {
+            self.routes.push(FileRoute {
+                file_path,
+                path_pattern,
+                legacy_file_name,
+            });
+        }
+    }
+}
+
 /// A file-based route in [`FileRouteMap`].
 ///
 /// Files are mapped to routes as follows:
@@ -64,11 +85,7 @@ fn walk_dir(
         )
     })?;
     if root_is_file {
-        route_map.routes.push(FileRoute {
-            file_path: root_ts_path,
-            path_pattern: path_pattern.into(),
-            legacy_file_name: None,
-        });
+        route_map.add_route(root_ts_path, path_pattern.into(), None);
         return Ok(());
     }
 
@@ -100,14 +117,14 @@ fn walk_dir_entry(
     if metadata.is_file() {
         if let Some(stem) = entry_name.strip_suffix(".ts") {
             let legacy_file_name = get_legacy_file_name(route_dir, &entry_path);
-            route_map.routes.push(FileRoute {
-                file_path: entry_path,
-                path_pattern: match stem {
+            route_map.add_route(
+                entry_path,
+                match stem {
                     "index" => path_pattern.to_string(),
                     stem => format!("{}/{}", path_pattern, stem_to_pattern(stem)),
                 },
                 legacy_file_name,
-            });
+            );
         } else if entry_name.ends_with(".js") {
             bail!(
                 "Found file {}, but only TypeScript files (.ts) are supported",
