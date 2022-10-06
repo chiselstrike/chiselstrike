@@ -84,7 +84,7 @@ impl FromStr for PolicyName {
             "update" => Ok(Self::Update),
             "onRead" => Ok(Self::OnRead),
             "onSave" => Ok(Self::OnSave),
-            "geoLocation" => Ok(Self::GeoLoc),
+            "geoLoc" => Ok(Self::GeoLoc),
             other => bail!("unknown policy `{other}`"),
         }
     }
