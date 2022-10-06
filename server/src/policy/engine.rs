@@ -24,7 +24,7 @@ pub struct PolicyEngine {
 pub trait ChiselRequestContext {
     fn method(&self) -> &str;
     fn path(&self) -> &str;
-    fn headers(&self) -> &HashMap<String, String>;
+    fn headers(&self) -> Box<dyn Iterator<Item = (&str, &str)> + '_>;
     fn user_id(&self) -> Option<&str>;
 
     // TODO: need to find a way around using json here.
@@ -32,7 +32,7 @@ pub trait ChiselRequestContext {
         serde_json::json!({
             "method": self.method(),
             "path": self.path(),
-            "headers": self.headers(),
+            "headers": self.headers().collect::<HashMap<_, _>>(),
             "user_id": self.user_id(),
         })
     }
@@ -52,7 +52,7 @@ pub trait ChiselRequestContext {
         map.set(JsString::from("user_id"), user_id, ctx).unwrap();
 
         let headers = JsMap::new(ctx);
-        for (key, val) in self.headers().iter() {
+        for (key, val) in self.headers() {
             headers
                 .set(JsString::new(key), JsString::new(val), ctx)
                 .unwrap();
@@ -116,7 +116,7 @@ impl PolicyEngine {
                 }
                 PolicyName::OnSave => {
                     let policy = TransformPolicy::new(function);
-                    type_policy.on_write.replace(policy);
+                    type_policy.on_save.replace(policy);
                 }
                 PolicyName::GeoLoc => {
                     let policy = GeoLocPolicy::new(function);

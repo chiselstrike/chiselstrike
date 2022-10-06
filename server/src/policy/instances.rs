@@ -21,7 +21,7 @@ pub struct PolicyEvalInstance {
     create: Option<WritePolicyInstance>,
     update: Option<WritePolicyInstance>,
     on_read: Option<TransformPolicyInstance>,
-    on_write: Option<TransformPolicyInstance>,
+    on_save: Option<TransformPolicyInstance>,
     geoloc: Option<GeoLocPolicyInstance>,
     /// Set of object marked dirty by this instance.
     dirty: HashSet<String>,
@@ -65,7 +65,7 @@ impl PolicyEvalInstance {
             create: None,
             update: None,
             on_read: None,
-            on_write: None,
+            on_save: None,
             geoloc: None,
             chisel_ctx,
         }
@@ -143,7 +143,7 @@ impl PolicyEvalInstance {
     /// This mutates value! therefore value should be set as mutable.
     pub fn transform_on_write(&mut self, ctx: &PolicyContext, val: &JsValue) -> Result<()> {
         let chisel_ctx = self.chisel_ctx.clone();
-        self.get_or_load_on_write_policy_instance(ctx)?
+        self.get_or_load_on_save_policy_instance(ctx)?
             .map(|p| p.transform(ctx, val, &chisel_ctx))
             .transpose()?;
 
@@ -161,7 +161,7 @@ impl PolicyEvalInstance {
     create_get_or_load_instance!(create, WritePolicyInstance);
     create_get_or_load_instance!(update, WritePolicyInstance);
     create_get_or_load_instance!(on_read, TransformPolicyInstance);
-    create_get_or_load_instance!(on_write, TransformPolicyInstance);
+    create_get_or_load_instance!(on_save, TransformPolicyInstance);
     create_get_or_load_instance!(geoloc, GeoLocPolicyInstance);
 }
 
