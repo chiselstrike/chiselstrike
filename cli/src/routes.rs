@@ -19,11 +19,17 @@ impl FileRouteMap {
         path_pattern: String,
         legacy_file_name: Option<String>,
     ) {
-        self.routes.push(FileRoute {
-            file_path,
-            path_pattern,
-            legacy_file_name,
-        });
+        if fs::metadata(&file_path)
+            .unwrap_or_else(|_| panic!("Cannot fetch {} metadata", &file_path.display()))
+            .len()
+            > 0
+        {
+            self.routes.push(FileRoute {
+                file_path,
+                path_pattern,
+                legacy_file_name,
+            });
+        }
     }
 }
 
