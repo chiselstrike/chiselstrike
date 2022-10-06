@@ -1,0 +1,12 @@
+[package]
+name = "chisel-snapshot"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+
+[lib]
+path = "lib.rs"
+
+[dependencies]
+indexmap = {version = "1.9", features = ["serde"]}
+serde = {version = "1.0", features = ["derive", "rc"]}

@@ -1,0 +1,22 @@
+[package]
+name = "chisel-datastore"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+
+[lib]
+path = "lib.rs"
+
+[dependencies]
+anyhow = "1.0"
+chisel-snapshot = { path = "../snapshot" }
+guard = "0.5"
+indexmap = {version = "1.9", features = ["serde"]}
+serde = {version = "1.0", features = ["derive", "rc"]}
+serde_json = "1.0"
+v8 = { version = "0.51.0", default-features = false }
+
+[dependencies.sqlx]
+git = "https://github.com/chiselstrike/sqlx.git"
+rev = "bcfb6ca404f9070d9a2e187c717fd4bd166fc19f"
+features = ["any", "postgres", "sqlite", "runtime-tokio-rustls", "json"]

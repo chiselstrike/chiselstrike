@@ -639,6 +639,20 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "fd16c4719339c4530435d38e511904438d07cce7950afa3718a84ac36c10e89e"
 
 [[package]]
+name = "chisel-datastore"
+version = "0.13.0-dev.0"
+dependencies = [
+ "anyhow",
+ "chisel-snapshot",
+ "guard",
+ "indexmap",
+ "serde",
+ "serde_json",
+ "sqlx",
+ "v8",
+]
+
+[[package]]
 name = "chisel-macros"
 version = "0.14.0-dev.0"
 dependencies = [
@@ -646,6 +660,14 @@ dependencies = [
  "quote 1.0.21",
  "syn 1.0.102",
  "walkdir",
+]
+
+[[package]]
+name = "chisel-snapshot"
+version = "0.13.0-dev.0"
+dependencies = [
+ "indexmap",
+ "serde",
 ]
 
 [[package]]
@@ -5225,6 +5247,7 @@ dependencies = [
  "once_cell",
  "proc-macro2 1.0.47",
  "quote 1.0.21",
+ "serde_json",
  "sha2",
  "sqlx-core",
  "sqlx-rt",

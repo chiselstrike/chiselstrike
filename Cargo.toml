@@ -5,9 +5,11 @@ members = [
     "api",
     "chiselc",
     "cli",
+    "datastore",
     "deno_std",
     "packages",
     "server",
+    "snapshot",
     "tsc_compile",
     "utils",
 ]
