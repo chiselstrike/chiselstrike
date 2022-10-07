@@ -94,7 +94,7 @@ pub(crate) async fn cmd_dev(
 
                         let paths: HashSet<PathBuf> =
                             HashSet::from_iter(paths.into_iter().filter(is_tracked));
-                                if !paths.is_empty() {
+                        if !paths.is_empty() {
                             apply_from_dev(server_url.clone(), type_check).await;
                         }
                     }
