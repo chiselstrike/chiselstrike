@@ -1,7 +1,9 @@
 use std::collections::HashMap;
 
-use boa_engine::object::{JsArray, JsMap};
+use boa_engine::builtins::date::Date;
+use boa_engine::object::{JsArray, ObjectData};
 use boa_engine::prelude::JsObject;
+use boa_engine::property::PropertyKey;
 use boa_engine::{JsString, JsValue};
 use itertools::Itertools;
 use serde_json::{Map, Value as JsonValue};
@@ -12,13 +14,18 @@ pub fn json_map_to_js_value(
     ctx: &mut boa_engine::Context,
     map: &Map<String, JsonValue>,
 ) -> JsValue {
-    let obj = JsMap::new(ctx);
+    let obj = JsObject::empty();
     for (k, v) in map.iter() {
-        obj.set(JsString::from(k.as_str()), json_to_js_value(ctx, v), ctx)
-            .unwrap();
+        obj.set(
+            JsString::from(k.as_str()),
+            json_to_js_value(ctx, v),
+            false,
+            ctx,
+        )
+        .unwrap();
     }
 
-    JsValue::Object(JsObject::from(obj))
+    JsValue::from(obj)
 }
 
 pub fn json_to_js_value(ctx: &mut boa_engine::Context, json: &JsonValue) -> JsValue {
@@ -73,19 +80,20 @@ pub fn entity_map_to_js_value(
     map: &EntityMap,
     writable: bool,
 ) -> JsValue {
-    let object = JsMap::new(ctx);
+    let object = JsObject::empty();
 
     for (prop, value) in map.iter() {
         object
             .set(
-                JsString::new(prop),
+                PropertyKey::String(JsString::new(prop)),
                 entity_value_to_js_value(ctx, value, writable),
+                false,
                 ctx,
             )
             .unwrap();
     }
 
-    JsValue::Object(JsObject::from(object))
+    JsValue::from(object)
 }
 
 pub fn js_value_to_entity_value(val: &JsValue) -> EntityValue {
@@ -125,7 +133,15 @@ pub fn js_value_to_entity_value(val: &JsValue) -> EntityValue {
 
                 EntityValue::Array(arr)
             } else {
-                panic!("unexpected object type");
+                let mut map = HashMap::new();
+                for (k, v) in o.properties().string_properties() {
+                    map.insert(
+                        k.to_string(),
+                        js_value_to_entity_value(v.value().unwrap_or(&JsValue::Null)),
+                    );
+                }
+
+                EntityValue::Map(map)
             }
         }
         JsValue::Symbol(_) => todo!(),

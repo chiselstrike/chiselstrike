@@ -3,8 +3,8 @@ use std::collections::HashMap;
 use std::rc::Rc;
 
 use anyhow::{bail, Result};
-use boa_engine::object::JsMap;
 use boa_engine::prelude::JsObject;
+use boa_engine::property::Attribute;
 use boa_engine::{JsString, JsValue};
 use chiselc::parse::ParserContext;
 use chiselc::policies::{Cond, Environment, PolicyName, Predicate, Predicates, Var};
@@ -15,7 +15,6 @@ use super::store::PolicyStore;
 use super::type_policy::{GeoLocPolicy, ReadPolicy, TransformPolicy, TypePolicy, WritePolicy};
 use crate::datastore::expr::{BinaryExpr, BinaryOp, Expr, PropertyAccess, Value};
 
-#[derive(Default)]
 pub struct PolicyEngine {
     pub boa_ctx: Rc<RefCell<boa_engine::Context>>,
     pub store: RefCell<PolicyStore>,
@@ -38,34 +37,28 @@ pub trait ChiselRequestContext {
     }
 
     fn to_js_value(&self, ctx: &mut boa_engine::Context) -> JsValue {
-        let map = JsMap::new(ctx);
+        let map = JsObject::empty();
 
-        map.set(JsString::from("method"), JsString::from(self.method()), ctx)
-            .unwrap();
-        map.set(JsString::from("path"), JsString::from(self.path()), ctx)
-            .unwrap();
+        map.set("method", self.method(), false, ctx).unwrap();
+        map.set("path", self.path(), false, ctx).unwrap();
 
         let user_id = match self.user_id() {
             Some(val) => JsValue::String(JsString::from(val)),
             None => JsValue::Null,
         };
-        map.set(JsString::from("user_id"), user_id, ctx).unwrap();
+        map.set("userId", user_id, false, ctx).unwrap();
 
-        let headers = JsMap::new(ctx);
+        let headers = JsObject::empty();
         for (key, val) in self.headers() {
-            headers
-                .set(JsString::new(key), JsString::new(val), ctx)
-                .unwrap();
+            headers.set(key, val, false, ctx).unwrap();
         }
 
-        map.set(JsString::from("headers"), JsObject::from(headers), ctx)
-            .unwrap();
+        map.set("headers", headers, false, ctx).unwrap();
 
-        JsValue::Object(JsObject::from(map))
+        JsValue::Object(map)
     }
 }
 
-#[allow(dead_code)]
 impl PolicyEngine {
     pub fn new(store: PolicyStore) -> Self {
         Self {
