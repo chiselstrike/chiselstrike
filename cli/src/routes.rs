@@ -13,14 +13,15 @@ pub(crate) struct FileRouteMap {
 }
 
 impl FileRouteMap {
+    #[allow(unused_must_use)]
     fn add_route(
         &mut self,
         file_path: PathBuf,
         path_pattern: String,
         legacy_file_name: Option<String>,
-    ) {
+    ) -> Result<()> {
         if fs::metadata(&file_path)
-            .unwrap_or_else(|_| panic!("Cannot fetch {} metadata", &file_path.display()))
+            .with_context(|| format!("Cannot fetch {} metadata", &file_path.display()))?
             .len()
             > 0
         {
@@ -30,6 +31,7 @@ impl FileRouteMap {
                 legacy_file_name,
             });
         }
+        Ok(())
     }
 }
 
@@ -85,7 +87,7 @@ fn walk_dir(
         )
     })?;
     if root_is_file {
-        route_map.add_route(root_ts_path, path_pattern.into(), None);
+        route_map.add_route(root_ts_path, path_pattern.into(), None)?;
         return Ok(());
     }
 
@@ -124,7 +126,7 @@ fn walk_dir_entry(
                     stem => format!("{}/{}", path_pattern, stem_to_pattern(stem)),
                 },
                 legacy_file_name,
-            );
+            )?;
         } else if entry_name.ends_with(".js") {
             bail!(
                 "Found file {}, but only TypeScript files (.ts) are supported",
