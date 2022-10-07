@@ -61,7 +61,16 @@ pub fn entity_value_to_js_value(
         EntityValue::Float64(f) => JsValue::Rational(*f),
         EntityValue::Boolean(b) => JsValue::Boolean(*b),
         // TODO: v8 and boa handle date quite differently, need to think how to handle those.
-        EntityValue::JsDate(_) => todo!("dates not yet handled"),
+        EntityValue::JsDate(time) => {
+            let date = JsObject::from_proto_and_data(
+                ctx.intrinsics().constructors().date().prototype(),
+                ObjectData::date(Date::default()),
+            )
+            .into();
+            Date::set_time(&date, &[JsValue::Rational(*time)], ctx).unwrap();
+            date.as_object().unwrap().borrow().is_date();
+            date
+        }
         EntityValue::Array(arr) => {
             let obj = JsArray::new(ctx);
             for val in arr.iter() {
@@ -105,21 +114,13 @@ pub fn js_value_to_entity_value(val: &JsValue) -> EntityValue {
         JsValue::Rational(f) => EntityValue::Float64(*f),
         JsValue::Integer(n) => EntityValue::Float64(*n as _),
         JsValue::BigInt(_) => todo!("big int not supported"),
-        JsValue::Object(ref o) if o.borrow().is_date() => todo!("handle date"),
+        JsValue::Object(ref o) if o.borrow().is_date() => {
+            let time = o.borrow().as_date().unwrap().get_time();
+            EntityValue::JsDate(time)
+        }
         JsValue::Object(ref o) => {
             let o = o.borrow();
-
-            if let Some(js_map) = o.as_map_ref() {
-                let mut map = HashMap::new();
-                for (k, v) in js_map.iter() {
-                    map.insert(
-                        k.as_string().unwrap().to_string(),
-                        js_value_to_entity_value(v),
-                    );
-                }
-
-                EntityValue::Map(map)
-            } else if o.is_array() {
+            if o.is_array() {
                 let arr = o
                     .properties()
                     .index_properties()
@@ -161,7 +162,9 @@ mod test {
             Just(EntityValue::Null),
             any::<bool>().prop_map(EntityValue::Boolean),
             any::<f64>().prop_map(EntityValue::Float64),
-            // any::<f64>().prop_map(EntityValue::JsDate), // handle dates first
+            any::<u32>()
+                .prop_map(|n| n as _)
+                .prop_map(EntityValue::JsDate),
             ".*".prop_map(EntityValue::String),
         ];
         leaf.prop_recursive(
