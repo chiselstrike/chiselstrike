@@ -48,13 +48,30 @@ pub enum PolicyError {
     DirtyEntity(Arc<ObjectType>),
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 #[repr(u8)]
 pub enum Action {
     Allow = 0,
     Deny = 1,
     Skip = 2,
     Log = 3,
+}
+
+impl Action {
+    fn js_value(ctx: &mut boa_engine::Context) -> Result<JsValue> {
+        let map = JsObject::empty();
+
+        map.set("Allow", 0, false, ctx)
+            .map_err(|e| boa_err_to_anyhow(e, ctx))?;
+        map.set("Deny", 1, false, ctx)
+            .map_err(|e| boa_err_to_anyhow(e, ctx))?;
+        map.set("Skip", 2, false, ctx)
+            .map_err(|e| boa_err_to_anyhow(e, ctx))?;
+        map.set("Log", 3, false, ctx)
+            .map_err(|e| boa_err_to_anyhow(e, ctx))?;
+
+        Ok(JsValue::from(map))
+    }
 }
 
 impl TryFrom<i32> for Action {
