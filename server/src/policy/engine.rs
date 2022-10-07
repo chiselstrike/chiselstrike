@@ -163,14 +163,21 @@ impl PolicyEngine {
     }
 
     pub fn call(&self, function: JsObject, args: &[JsValue]) -> anyhow::Result<JsValue> {
+        let mut ctx = self.boa_ctx.borrow_mut();
         function
-            .call(&JsValue::Null, args, &mut self.boa_ctx.borrow_mut())
-            .map_err(boa_err_to_anyhow)
+            .call(&JsValue::Null, args, &mut ctx)
+            .map_err(|e| boa_err_to_anyhow(e, &mut ctx))
     }
 }
 
-fn boa_err_to_anyhow(_e: JsValue) -> anyhow::Error {
-    todo!()
+pub fn boa_err_to_anyhow(e: JsValue, ctx: &mut boa_engine::Context) -> anyhow::Error {
+    let e = e.as_object().unwrap();
+    if !e.is_error() {
+        return anyhow::anyhow!("unknown error");
+    }
+
+    let msg = e.get("message", ctx).unwrap();
+    anyhow::anyhow!("{}", msg.as_string().unwrap().to_string())
 }
 
 fn cond_to_expr(
