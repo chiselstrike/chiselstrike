@@ -58,27 +58,16 @@ pub(crate) async fn cmd_dev(
     let mut tracked = HashSet::new();
     let cwd = std::env::current_dir()?;
 
-    for dir in &manifest.models {
-        let dir = cwd.join(dir);
-        tracked.insert(dir);
-    }
-
-    for dir in &manifest.policies {
-        let dir = cwd.join(dir);
-        tracked.insert(dir);
-    }
-
-    for dir in &manifest.routes {
-        let dir = cwd.join(dir);
-        tracked.insert(dir);
-    }
-
-    if let Some(events) = &manifest.events {
-        for dir in events {
-            let dir = cwd.join(dir);
-            tracked.insert(dir);
-        }
-    }
+    tracked.extend(manifest.models.iter().map(|d| cwd.join(d)));
+    tracked.extend(manifest.policies.iter().map(|d| cwd.join(d)));
+    tracked.extend(manifest.routes.iter().map(|d| cwd.join(d)));
+    tracked.extend(
+        manifest
+            .events
+            .unwrap_or_default()
+            .iter()
+            .map(|d| cwd.join(d)),
+    );
     apply_watcher.watch(&cwd, RecursiveMode::Recursive)?;
 
     loop {
