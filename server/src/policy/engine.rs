@@ -13,6 +13,7 @@ use serde_json::Value as JsonValue;
 use super::interpreter::{self, InterpreterContext, JsonResolver};
 use super::store::PolicyStore;
 use super::type_policy::{GeoLocPolicy, ReadPolicy, TransformPolicy, TypePolicy, WritePolicy};
+use super::Action;
 use crate::datastore::expr::{BinaryExpr, BinaryOp, Expr, PropertyAccess, Value};
 
 pub struct PolicyEngine {
@@ -60,16 +61,14 @@ pub trait ChiselRequestContext {
 }
 
 impl PolicyEngine {
-    pub fn new(store: PolicyStore) -> Self {
-        Self {
-            boa_ctx: Default::default(),
-            store: store.into(),
-        }
-    }
-
-    pub fn with_store_mut(&self, f: impl FnOnce(&mut PolicyStore)) {
-        let mut store = self.store.borrow_mut();
-        f(&mut store);
+    pub fn new() -> Result<Self> {
+        let mut context = boa_engine::Context::default();
+        let action = Action::js_value(&mut context)?;
+        context.register_global_property("Action", action, Attribute::all());
+        Ok(Self {
+            boa_ctx: Rc::new(RefCell::new(context.into())),
+            store: Default::default(),
+        })
     }
 
     pub fn get_policy(&self, ty: &str) -> Option<Ref<TypePolicy>> {
@@ -309,7 +308,7 @@ mod test {
             }
         "#;
 
-        let engine = PolicyEngine::default();
+        let engine = PolicyEngine::new().unwrap();
         engine
             .register_policy_from_code("Person".into(), code)
             .unwrap();
@@ -334,7 +333,7 @@ mod test {
             }
         "#;
 
-        let engine = PolicyEngine::default();
+        let engine = PolicyEngine::new().unwrap();
         let res = engine.register_policy_from_code("Person".into(), code);
 
         assert!(res.is_err());
@@ -354,7 +353,7 @@ mod test {
             }
         "#;
 
-        let engine = PolicyEngine::default();
+        let engine = PolicyEngine::new().unwrap();
         engine
             .register_policy_from_code("Person".into(), code)
             .unwrap();
@@ -393,7 +392,7 @@ mod test {
             }
         "#;
 
-        let engine = PolicyEngine::default();
+        let engine = PolicyEngine::new().unwrap();
         engine
             .register_policy_from_code("Person".into(), code)
             .unwrap();
@@ -451,7 +450,7 @@ mod test {
             }
         "#;
 
-        let engine = PolicyEngine::default();
+        let engine = PolicyEngine::new().unwrap();
         engine
             .register_policy_from_code("Person".into(), code)
             .unwrap();
@@ -500,7 +499,7 @@ mod test {
             }
         "#;
 
-        let engine = PolicyEngine::default();
+        let engine = PolicyEngine::new().unwrap();
         engine
             .register_policy_from_code("Person".into(), code)
             .unwrap();
