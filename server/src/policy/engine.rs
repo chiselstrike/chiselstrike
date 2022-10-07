@@ -286,7 +286,7 @@ mod test {
         }
 
         fn user_id(&self) -> Option<&str> {
-            self.get("user_id")?.as_str().into()
+            self.get("userId")?.as_str().into()
         }
     }
 

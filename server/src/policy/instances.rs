@@ -237,6 +237,7 @@ pub struct TransformPolicyInstance {
 
 impl TransformPolicyInstance {
     /// applies the transform to value.
+    /// TODO: check that output type conforms to model.
     pub fn transform(
         &self,
         ctx: &PolicyContext,
@@ -282,5 +283,180 @@ impl GeoLocPolicyInstance {
             JsValue::String(ref s) => Location::from_str(s),
             _ => anyhow::bail!("Expected geolocation to return a string."),
         }
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use std::rc::Rc;
+
+    use crate::policy::{
+        engine::{boa_err_to_anyhow, ChiselRequestContext, PolicyEngine},
+        utils::json_to_js_value,
+    };
+
+    use super::*;
+
+    fn make_context(ctx: Rc<dyn ChiselRequestContext>) -> PolicyContext {
+        PolicyContext {
+            cache: Default::default(),
+            engine: PolicyEngine::new().unwrap().into(),
+            request: ctx.clone(),
+        }
+    }
+
+    fn compile(policy_ctx: &PolicyContext, code: &[u8]) -> JsObject {
+        let function = policy_ctx.engine.boa_ctx.borrow_mut().eval(code);
+        function
+            .map_err(|e| boa_err_to_anyhow(e, &mut policy_ctx.engine.boa_ctx.borrow_mut()))
+            .unwrap()
+            .as_object()
+            .cloned()
+            .unwrap()
+    }
+
+    fn get_action(policy_ctx: &PolicyContext, code: &[u8], value: &JsValue) -> Action {
+        let req_js = policy_ctx
+            .request
+            .to_js_value(&mut policy_ctx.engine.boa_ctx.borrow_mut());
+        let function = compile(&policy_ctx, code);
+        let filter = WritePolicyInstance { function };
+
+        filter.get_action(&policy_ctx, value, &req_js).unwrap()
+    }
+
+    fn transform(policy_ctx: &PolicyContext, code: &[u8], value: &JsValue) {
+        let req_js = policy_ctx
+            .request
+            .to_js_value(&mut policy_ctx.engine.boa_ctx.borrow_mut());
+        let function = compile(&policy_ctx, code);
+        let filter = TransformPolicyInstance { function };
+
+        filter.transform(policy_ctx, value, &req_js).unwrap()
+    }
+
+    #[test]
+    fn basic_action() {
+        let code = br#"
+            (person, ctx) => {
+                return Action.Allow;
+            }
+        "#;
+        let ctx = Rc::new(serde_json::json!({
+            "headers": {},
+            "method": "GET",
+            "path": "/hello",
+        }));
+
+        let value = JsValue::Null;
+        let policy_ctx = make_context(ctx);
+        let action = get_action(&policy_ctx, code, &value);
+
+        assert_eq!(action, Action::Allow);
+    }
+
+    #[test]
+    fn read_context() {
+        let code = br#"
+            (person, ctx) => {
+                if (ctx.method == "GET"
+                && ctx.path == "/hello"
+                && ctx.userId == "marin"
+                && ctx.headers["someKey"] == "someValue") {
+                    return Action.Skip;
+                }
+                return Action.Deny;
+            }
+        "#;
+        let ctx = Rc::new(serde_json::json!({
+            "headers": {
+                "someKey": "someValue",
+            },
+            "method": "GET",
+            "path": "/hello",
+            "userId": "marin"
+        }));
+
+        let value = JsValue::Null;
+        let policy_ctx = make_context(ctx);
+        let action = get_action(&policy_ctx, code, &value);
+
+        assert_eq!(action, Action::Skip);
+    }
+
+    #[test]
+    fn read_value() {
+        let code = br#"
+            (person, ctx) => {
+                if (person.name == "Roger") {
+                    return Action.Log;
+                }
+                return Action.Deny;
+            }
+        "#;
+        let ctx = Rc::new(serde_json::json!({
+            "headers": {
+                "someKey": "someValue",
+            },
+            "method": "GET",
+            "path": "/hello",
+            "userId": "marin"
+        }));
+
+        let value = serde_json::json!({ "name": "Roger" });
+        let engine = PolicyEngine::new().unwrap();
+        let value = json_to_js_value(&mut engine.boa_ctx.borrow_mut(), &value);
+
+        let policy_ctx = make_context(ctx);
+        let action = get_action(&policy_ctx, code, &value);
+
+        assert_eq!(action, Action::Log);
+    }
+
+    #[test]
+    #[should_panic]
+    fn invalid_return_value() {
+        let code = br#"
+            (person, ctx) => {
+                return "bad";
+            }
+        "#;
+        let ctx = Rc::new(serde_json::json!({
+            "headers": { },
+            "method": "GET",
+            "path": "/hello",
+        }));
+
+        let policy_ctx = make_context(ctx);
+        get_action(&policy_ctx, code, &JsValue::Null);
+    }
+
+    #[test]
+    fn transform_value() {
+        let code = br#"
+            (person, ctx) => {
+                person.name = "bob";
+                return person;
+            }
+        "#;
+        let ctx = Rc::new(serde_json::json!({
+            "headers": { },
+            "method": "GET",
+            "path": "/hello",
+            "userId": "marin"
+        }));
+
+        let policy_ctx = make_context(ctx);
+        let value = serde_json::json!({ "name": "Roger" });
+        let value = json_to_js_value(&mut policy_ctx.engine.boa_ctx.borrow_mut(), &value);
+        transform(&policy_ctx, code, &value);
+
+        let val = value
+            .as_object()
+            .unwrap()
+            .get("name", &mut policy_ctx.engine.boa_ctx.borrow_mut())
+            .unwrap();
+
+        assert_eq!(val.as_string().unwrap().as_str(), "bob");
     }
 }

@@ -175,7 +175,7 @@ mod test {
                 prop_oneof![
                     // Take the inner strategy and make the two recursive cases.
                     prop::collection::vec(inner.clone(), 0..10).prop_map(EntityValue::Array),
-                    prop::collection::hash_map(".*", inner, 0..10).prop_map(EntityValue::Map),
+                    prop::collection::hash_map(".+", inner, 0..10).prop_map(EntityValue::Map),
                 ]
             },
         )
