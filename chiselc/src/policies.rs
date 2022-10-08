@@ -435,6 +435,14 @@ impl Predicate {
                         let var = Var::Member(v, id.sym.to_string());
                         Self::Var(env.insert(var))
                     }
+                    MemberProp::Computed(comp) => {
+                        let prop = match &*comp.expr {
+                            Expr::Lit(Lit::Str(prop)) => prop,
+                            _ => panic!("unsupported computed property expression."),
+                        };
+                        let var = Var::Member(v, prop.value.to_string());
+                        Self::Var(env.insert(var))
+                    }
                     _ => panic!("invalid member expression"),
                 },
                 _ => panic!("invalid member expression"),
