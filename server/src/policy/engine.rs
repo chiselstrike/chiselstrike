@@ -651,4 +651,42 @@ mod test {
 
         assert_eq!(expected, expr);
     }
+
+    #[test]
+    fn read_header_ctx_value_expr() {
+        let code = br#"
+            export default {
+                read: (person, ctx) => {
+                    if (ctx.headers["val"] == "foobar") {
+                        return Action.Skip;
+                    }
+                }
+            }
+        "#;
+
+        let engine = PolicyEngine::new().unwrap();
+        engine
+            .register_policy_from_code("Person".into(), code)
+            .unwrap();
+        let policy = engine.get_policy("Person".into()).unwrap();
+
+        let ctx = serde_json::json!({
+            "headers": {
+                "val": "foobar"
+            },
+            "method": "GET",
+            "path": "/hello",
+        });
+
+        let expr = engine
+            .eval_read_policy_expr(policy.read.as_ref().unwrap(), &ctx)
+            .unwrap()
+            .unwrap();
+
+        let expected = Expr::Value {
+            value: Value::Bool(false),
+        };
+
+        assert_eq!(expr, expected);
+    }
 }
