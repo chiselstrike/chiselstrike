@@ -7,33 +7,41 @@ use std::sync::Arc;
 ///
 /// This describes the abstract TypeScript types, not how we actually store them in the database.
 #[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct Schema {
     /// All entities, either defined by the user or builtin.
+    #[serde(with = "schema_entities")]
     pub entities: HashMap<EntityName, Arc<Entity>>,
     /// Named types (see [`Type::Typedef`]).
+    #[serde(with = "schema_typedefs")]
+    #[serde(default)]
     pub typedefs: HashMap<TypeName, Arc<Type>>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub enum EntityName {
     User(String),
     Builtin(String),
 }
 
 #[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct Entity {
     pub name: EntityName,
     /// Type of the `id` field.
     pub id_type: IdType,
     /// Information about all non-`id` fields.
+    #[serde(with = "entity_fields")]
     pub fields: IndexMap<String, Arc<EntityField>>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct EntityField {
     pub name: String,
     pub type_: Arc<Type>,
-    /// True for fields declared with `?` in TypeScript. This is a different concept from
+    /// True for fields declared with `?` in TypeScript. If true, then the [`type_`] must be
     /// [`Type::Optional`].
     pub optional: bool,
     /// Default value when the field is not stored in the database. Note that this does *not* make
@@ -44,6 +52,7 @@ pub struct EntityField {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct TypeName {
     /// Module specifier (URL) where the type was declared.
     pub module: String,
@@ -52,6 +61,7 @@ pub struct TypeName {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub enum Type {
     /// Transparent reference to a named type defined in [`Schema::typedefs`]. Note that this means
     /// that types may be circular.
@@ -71,6 +81,7 @@ pub enum Type {
 }
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "PascalCase")]
 pub enum PrimitiveType {
     /// `string`
     String,
@@ -85,16 +96,20 @@ pub enum PrimitiveType {
 }
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "PascalCase")]
 pub enum IdType {
     Uuid,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ObjectType {
+    #[serde(with = "object_type_fields")]
     pub fields: IndexMap<String, Arc<ObjectField>>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ObjectField {
     pub name: String,
     pub type_: Arc<Type>,
@@ -102,6 +117,7 @@ pub struct ObjectField {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub enum Value {
     String(String),
     Number(f64),
@@ -115,3 +131,8 @@ impl IdType {
         }
     }
 }
+
+serde_map_as_vec!(mod schema_entities, HashMap<EntityName, Arc<Entity>>, name);
+serde_map_as_tuples!(mod schema_typedefs, HashMap<TypeName, Arc<Type>>);
+serde_map_as_vec!(mod entity_fields, IndexMap<String, Arc<EntityField>>, name);
+serde_map_as_vec!(mod object_type_fields, IndexMap<String, Arc<ObjectField>>, name);

@@ -1,15 +1,16 @@
 use anyhow::{Result, Context, bail};
 use chisel_snapshot::schema;
+use deno_core::v8;
 use sqlx::Row;
 use crate::layout;
 
 pub fn decode_id_from_sql<'s>(
-    id_col: &layout::IdColumn,
+    repr: layout::IdRepr,
     scope: &mut v8::HandleScope<'s>,
     row: &sqlx::any::AnyRow,
     row_idx: usize,
 ) -> Result<v8::Local<'s, v8::Value>> {
-    Ok(match id_col.repr {
+    Ok(match repr {
         layout::IdRepr::UuidAsString =>
             to_string(scope, row.try_get(row_idx)?),
     })
@@ -17,28 +18,26 @@ pub fn decode_id_from_sql<'s>(
 
 pub fn decode_field_from_sql<'s>(
     schema: &schema::Schema,
-    table: &layout::EntityTable,
-    field_col: &layout::FieldColumn,
+    repr: layout::FieldRepr,
+    type_: &schema::Type,
     scope: &mut v8::HandleScope<'s>,
     row: &sqlx::any::AnyRow,
     row_idx: usize,
 ) -> Result<v8::Local<'s, v8::Value>> {
-    Ok(match field_col.repr {
-        layout::ColumnRepr::StringAsText | layout::ColumnRepr::UuidAsText =>
+    Ok(match repr {
+        layout::FieldRepr::StringAsText | layout::FieldRepr::UuidAsText =>
             to_string(scope, row.try_get(row_idx)?),
-        layout::ColumnRepr::NumberAsDouble =>
+        layout::FieldRepr::NumberAsDouble =>
             to_number(scope, row.try_get(row_idx)?),
-        layout::ColumnRepr::BooleanAsInt =>
+        layout::FieldRepr::BooleanAsInt =>
             to_boolean(scope, row.try_get(row_idx)?),
-        layout::ColumnRepr::JsDateAsDouble =>
+        layout::FieldRepr::JsDateAsDouble =>
             to_js_date(scope, row.try_get(row_idx)?)?,
-        layout::ColumnRepr::AsJsonText => {
+        layout::FieldRepr::AsJsonText => {
             let json_str: &str = row.try_get(row_idx)?;
             let json = serde_json::from_str(json_str)
                 .context("could not parse JSON")?;
-            let entity = &schema.entities[&table.entity_name];
-            let field = &entity.fields[&field_col.field_name];
-            decode_from_json(schema, &field.type_, scope, &json)?
+            decode_from_json(schema, type_, scope, &json)?
         },
     })
 }
@@ -87,7 +86,7 @@ pub fn decode_from_json<'s>(
                     Some(json_value) => {
                         let key = v8::String::new(obj_scope, &field.name).unwrap();
                         let value = decode_from_json(schema, &field.type_, obj_scope, json_value)?;
-                        obj.set(obj_scope, key.into(), value);
+                        obj.set(obj_scope, key.into(), value).unwrap();
                     },
                     None if !field.optional =>
                         bail!("expected field {:?} in JSON object", field.name),

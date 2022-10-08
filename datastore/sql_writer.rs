@@ -31,6 +31,7 @@ impl SqlWriter {
                 self.text.push(c);
             }
         }
+        self.text.push('"');
     }
 
     pub fn write_param(&mut self, idx: usize) {

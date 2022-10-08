@@ -644,12 +644,14 @@ version = "0.13.0-dev.0"
 dependencies = [
  "anyhow",
  "chisel-snapshot",
+ "deno_core",
+ "futures",
  "guard",
  "indexmap",
  "serde",
  "serde_json",
  "sqlx",
- "v8",
+ "tokio",
 ]
 
 [[package]]

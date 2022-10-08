@@ -1,15 +1,16 @@
 use anyhow::{Result, Context, anyhow, bail};
 use chisel_snapshot::schema;
+use deno_core::v8;
 use sqlx::Arguments;
 use crate::layout;
 
 pub fn encode_id_to_sql<'s>(
-    id_col: &layout::IdColumn,
+    repr: layout::IdRepr,
     scope: &mut v8::HandleScope<'s>,
     value: v8::Local<'s, v8::Value>,
     out_args: &mut sqlx::any::AnyArguments,
 ) -> Result<()> {
-    match id_col.repr {
+    match repr {
         layout::IdRepr::UuidAsString =>
             out_args.add(as_string_lossy(scope, value, "uuid id")?),
     }
@@ -18,32 +19,25 @@ pub fn encode_id_to_sql<'s>(
 
 pub fn encode_field_to_sql<'s>(
     schema: &schema::Schema,
-    table: &layout::EntityTable,
-    field_col: &layout::FieldColumn,
+    repr: layout::FieldRepr,
+    type_: &schema::Type,
     scope: &mut v8::HandleScope<'s>,
     value: v8::Local<'s, v8::Value>,
     out_args: &mut sqlx::any::AnyArguments,
 ) -> Result<()> {
-    let entity = &schema.entities[&table.entity_name];
-    let field = &entity.fields[&field_col.field_name];
-    if field.optional && value.is_null_or_undefined() {
-        out_args.add(Option::<String>::None);
-        return Ok(())
-    }
-
-    match field_col.repr {
-        layout::ColumnRepr::StringAsText =>
+    match repr {
+        layout::FieldRepr::StringAsText =>
             out_args.add(as_string_lossy(scope, value, "string field")?),
-        layout::ColumnRepr::NumberAsDouble =>
+        layout::FieldRepr::NumberAsDouble =>
             out_args.add(as_f64(scope, value, "number field")?),
-        layout::ColumnRepr::BooleanAsInt =>
+        layout::FieldRepr::BooleanAsInt =>
             out_args.add(as_bool(value, "boolean field")?),
-        layout::ColumnRepr::UuidAsText =>
+        layout::FieldRepr::UuidAsText =>
             out_args.add(as_string_lossy(scope, value, "Uuid field")?),
-        layout::ColumnRepr::JsDateAsDouble =>
+        layout::FieldRepr::JsDateAsDouble =>
             out_args.add(as_js_date(value, "JsDate field")?),
-        layout::ColumnRepr::AsJsonText => {
-            let json = encode_to_json(schema, &field.type_, scope, value)
+        layout::FieldRepr::AsJsonText => {
+            let json = encode_to_json(schema, type_, scope, value)
                 .context("could not convert JS value to JSON (field)")?;
             let json_str = serde_json::to_string(&json).expect("could not serialize JSON");
             out_args.add(json_str);
@@ -175,7 +169,7 @@ fn as_array<'s>(
     what: &'static str,
 ) -> Result<v8::Local<'s, v8::Array>> {
     v8::Local::<v8::Array>::try_from(value)
-        .map_err(|_| anyhow!("expected a JS Array ({})", what))
+        .map_err(|_| anyhow!("expected a JS array ({})", what))
 }
 
 fn as_object<'s>(
@@ -183,5 +177,5 @@ fn as_object<'s>(
     what: &'static str,
 ) -> Result<v8::Local<'s, v8::Object>> {
     v8::Local::<v8::Object>::try_from(value)
-        .map_err(|_| anyhow!("expected a JS Object ({})", what))
+        .map_err(|_| anyhow!("expected a JS object ({})", what))
 }
