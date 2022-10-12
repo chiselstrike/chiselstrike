@@ -1049,6 +1049,9 @@ export class ChiselEntity {
 function restrictionsToFilterExpr<T extends ChiselEntity>(
     restrictions: Partial<T>,
 ): Record<string, unknown> | undefined {
+    if (typeof restrictions != "object") {
+        throw `expected object, but found ${typeof restrictions} instead`;
+    }
     let expr = undefined;
     for (const key in restrictions) {
         let value = restrictions[key] as unknown;
