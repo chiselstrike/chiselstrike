@@ -17,6 +17,7 @@ module.exports = {
         "/packages/third_party",
         "/target",
         "/packages/chiselstrike-api/lib",
+        "/packages/chiselstrike-next-auth/lib",
         "/packages/create-chiselstrike-app/dist",
         "/packages/create-chiselstrike-app/template",
         "/tsc_compile/tests",

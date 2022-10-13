@@ -9,4 +9,5 @@ cwd=$(pwd)
 cargo build -p packages
 cd "$cwd/packages/chiselstrike-api" && npm i && npm publish
 cd "$cwd/packages/chiselstrike-cli" && npm i && npm publish
+cd "$cwd/packages/chiselstrike-next-auth" && npm i && npm publish
 cd "$cwd/packages/create-chiselstrike-app" && npm i && npm publish
