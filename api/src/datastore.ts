@@ -1051,9 +1051,14 @@ function restrictionsToFilterExpr<T extends ChiselEntity>(
 ): Record<string, unknown> | undefined {
     let expr = undefined;
     for (const key in restrictions) {
-        if (restrictions[key] === undefined) {
+        let value = restrictions[key] as unknown;
+        if (value === undefined) {
             continue;
+        } else if (value instanceof Date) {
+            // Dirty hack until we process filtering expressions via v8.
+            value = value.getTime();
         }
+
         const cmpExpr = {
             exprType: "Binary",
             left: {
@@ -1064,7 +1069,7 @@ function restrictionsToFilterExpr<T extends ChiselEntity>(
             op: "Eq",
             right: {
                 exprType: "Value",
-                value: restrictions[key],
+                value,
             },
         };
         if (expr === undefined) {

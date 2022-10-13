@@ -175,3 +175,45 @@ pub async fn crud(c: TestContext) {
     )
     .unwrap();
 }
+
+#[chisel_macros::test(modules = Deno)]
+pub async fn filtering(c: TestContext) {
+    c.chisel.write(
+        "models/dated.ts",
+        r#"
+        import { ChiselEntity } from "@chiselstrike/api"
+        export class Dated extends ChiselEntity {
+            date: Date;
+        }"#,
+    );
+    c.chisel.write(
+        "routes/store.ts",
+        r#"
+        import { Dated } from "../models/dated.ts";
+        export default async function chisel(req: Request) {
+            await Dated.create({
+                date: new Date(Date.parse('01 Sep 2022 12:13:14 GMT')),
+            });
+        }
+        "#,
+    );
+    c.chisel.write(
+        "routes/filter.ts",
+        r#"
+        import { Dated } from "../models/dated.ts";
+        export default async function chisel(req: Request) {
+            const dated = await Dated.findOne({
+                date: new Date(Date.parse('01 Sep 2022 12:13:14 GMT')),
+            });
+            return dated!.date.toUTCString();
+        }
+        "#,
+    );
+    c.chisel.apply_ok().await;
+    c.chisel.post("/dev/store").send().await.assert_ok();
+    c.chisel
+        .get("/dev/filter")
+        .send()
+        .await
+        .assert_text("Thu, 01 Sep 2022 12:13:14 GMT");
+}
