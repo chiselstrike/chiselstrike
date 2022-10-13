@@ -1,0 +1,48 @@
+{
+    "name": "@chiselstrike/next-auth",
+    "version": "0.13.0-dev.0",
+    "keywords": [
+        "api",
+        "chiselstrike",
+        "next-auth"
+    ],
+    "description": "ChiselStrike adapter for NextAuth.js",
+    "homepage": "https://www.chiselstrike.com",
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/chiselstrike/chiselstrike.git",
+        "directory": "chiselstrike-next-auth"
+    },
+    "author": "ChiselStrike <info@chiselstrike.com>",
+    "license": "Apache-2.0",
+    "main": "./dist/index.js",
+    "scripts": {
+        "prepare": "npm run build",
+        "build": "rimraf ./dist && ncc build lib/index.ts -o ./dist/",
+        "test:default": "jest",
+        "test": "pnpm test:default"
+    },
+    "files": [
+        "dist"
+    ],
+    "peerDependencies": {
+        "next-auth": "^4"
+    },
+    "//devDependencies": {
+        "@next-auth/adapter-test": "workspace:*",
+        "@next-auth/tsconfig": "workspace:*",
+        "next-auth": "workspace:*"
+    },
+    "devDependencies": {
+        "@types/chalk": "2.2.0",
+        "@types/node": "17.0.8",
+        "@vercel/ncc": "0.33.1",
+        "isomorphic-fetch": "3.0.0",
+        "jest": "^27.4.3",
+        "rimraf": "3.0.2",
+        "typescript": "4.5.4"
+    },
+    "engines": {
+        "node": ">=14.18.0"
+    }
+}
