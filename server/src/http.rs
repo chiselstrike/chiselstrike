@@ -8,9 +8,11 @@ use deno_core::serde_v8;
 use enclose::enclose;
 use futures::stream::{FuturesUnordered, TryStreamExt};
 use futures::FutureExt;
+use jsonwebtoken::{DecodingKey, Validation};
 use lazy_static::lazy_static;
 use regex::Regex;
 use serde::{Deserialize, Serialize};
+use serde_json::Value as JsonValue;
 use std::convert::Infallible;
 use std::future::ready;
 use std::net::SocketAddr;
@@ -115,6 +117,7 @@ pub struct HttpRequest {
     pub body: serde_v8::ZeroCopyBuf,
     pub routing_path: String,
     pub user_id: Option<String>,
+    pub token: Option<Token>,
 }
 
 /// HTTP response that is received from JavaScript.
@@ -124,6 +127,30 @@ pub struct HttpResponse {
     pub status: u16,
     pub headers: Vec<(String, String)>,
     pub body: serde_v8::ZeroCopyBuf,
+}
+
+#[derive(Debug, Serialize)]
+pub enum Token {
+    Jwt(JsonValue),
+}
+
+fn process_auth(token: &[u8], secret: &[u8]) -> Result<Option<Token>> {
+    let token_str = std::str::from_utf8(token).unwrap();
+    let mut split = token_str.split_whitespace();
+    match split.next() {
+        Some("Bearer") => {
+            let token_str = split.next().unwrap();
+            let token = jsonwebtoken::decode::<JsonValue>(
+                &token_str,
+                &DecodingKey::from_secret(secret),
+                &Validation::default(),
+            )?;
+
+            let jwt = Token::Jwt(token.claims);
+            Ok(Some(jwt))
+        }
+        _ => Ok(None),
+    }
 }
 
 async fn handle_version_request(
@@ -137,11 +164,25 @@ async fn handle_version_request(
     let req_body = hyper::body::to_bytes(req_body).await?;
 
     // TODO: we don't authenticate the user!!!
+    // get the token here instead, and parse jwt
     let user_id: Option<String> = req_parts
         .headers
         .get("ChiselUID")
         .and_then(|value| value.to_str().ok())
         .map(|value| value.into());
+
+    let secret = {
+        let lock = server.secrets.read();
+        let val = lock.get("CHISEL_JWT_SECRET").unwrap();
+        val.as_str().unwrap().to_owned()
+    };
+    let authorization = req_parts
+        .headers
+        .get("Authorization")
+        .and_then(|token| process_auth(token.as_bytes(), secret.as_ref()).transpose())
+        .transpose()?;
+
+    dbg!(&authorization);
 
     let username = auth::get_username_from_id(&server, &version, user_id.as_deref()).await;
     if !version
@@ -175,6 +216,7 @@ async fn handle_version_request(
         body: serde_v8::ZeroCopyBuf::from(req_body.to_vec()),
         routing_path,
         user_id,
+        token: authorization,
     };
 
     // send the job and wait for the response
