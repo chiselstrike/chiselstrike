@@ -13,6 +13,7 @@ use serde_json::Value as JsonValue;
 use super::interpreter::{self, InterpreterContext, JsonResolver};
 use super::store::PolicyStore;
 use super::type_policy::{GeoLocPolicy, ReadPolicy, TransformPolicy, TypePolicy, WritePolicy};
+use super::utils::json_to_js_value;
 use super::Action;
 use crate::datastore::expr::{BinaryExpr, BinaryOp, Expr, PropertyAccess, Value};
 
@@ -26,6 +27,7 @@ pub trait ChiselRequestContext {
     fn path(&self) -> &str;
     fn headers(&self) -> Box<dyn Iterator<Item = (&str, &str)> + '_>;
     fn user_id(&self) -> Option<&str>;
+    fn token(&self) -> Option<&JsonValue>;
 
     // TODO: need to find a way around using json here.
     fn to_value(&self) -> JsonValue {
@@ -55,9 +57,25 @@ pub trait ChiselRequestContext {
         }
 
         map.set("headers", headers, false, ctx).unwrap();
+        let token = match self.token() {
+            Some(tok) => json_to_js_value(ctx, tok),
+            None => JsValue::Null,
+        };
+
+        map.set("token", token, false, ctx).unwrap();
 
         JsValue::Object(map)
     }
+}
+
+fn print(
+    _: &boa_engine::JsValue,
+    args: &[boa_engine::JsValue],
+    ctx: &mut boa_engine::Context,
+) -> std::result::Result<JsValue, JsValue> {
+    let value = args[0].to_string(ctx).unwrap();
+    println!("{value}");
+    Ok(JsValue::Null)
 }
 
 impl PolicyEngine {
@@ -65,6 +83,7 @@ impl PolicyEngine {
         let mut context = boa_engine::Context::default();
         let action = Action::js_value(&mut context)?;
         context.register_global_property("Action", action, Attribute::all());
+        context.register_global_function("print", 0, print);
         Ok(Self {
             boa_ctx: Rc::new(RefCell::new(context.into())),
             store: Default::default(),

@@ -8,6 +8,7 @@ use deno_core::serde_v8;
 use enclose::enclose;
 use futures::stream::{FuturesUnordered, TryStreamExt};
 use futures::FutureExt;
+use itertools::Itertools;
 use jsonwebtoken::{DecodingKey, Validation};
 use lazy_static::lazy_static;
 use regex::Regex;
@@ -129,7 +130,7 @@ pub struct HttpResponse {
     pub body: serde_v8::ZeroCopyBuf,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Clone)]
 pub enum Token {
     Jwt(JsonValue),
 }
@@ -137,13 +138,14 @@ pub enum Token {
 fn process_auth(token: &[u8], secret: &[u8]) -> Result<Option<Token>> {
     let token_str = std::str::from_utf8(token).unwrap();
     let mut split = token_str.split_whitespace();
+    let decoding = DecodingKey::from_rsa_pem(secret).unwrap();
     match split.next() {
         Some("Bearer") => {
             let token_str = split.next().unwrap();
             let token = jsonwebtoken::decode::<JsonValue>(
-                &token_str,
-                &DecodingKey::from_secret(secret),
-                &Validation::default(),
+                token_str,
+                &decoding,
+                &Validation::new(jsonwebtoken::Algorithm::RS256),
             )?;
 
             let jwt = Token::Jwt(token.claims);
@@ -171,18 +173,30 @@ async fn handle_version_request(
         .and_then(|value| value.to_str().ok())
         .map(|value| value.into());
 
-    let secret = {
-        let lock = server.secrets.read();
-        let val = lock.get("CHISEL_JWT_SECRET").unwrap();
-        val.as_str().unwrap().to_owned()
-    };
-    let authorization = req_parts
+    let authorization = match req_parts
         .headers
         .get("Authorization")
-        .and_then(|token| process_auth(token.as_bytes(), secret.as_ref()).transpose())
-        .transpose()?;
+        .and_then(|token| {
+            let secret = {
+                let lock = server.secrets.read();
+                let val = lock.get("CHISEL_JWT_VALIDATION_KEY").unwrap();
+                let val = val.as_str().unwrap().to_owned();
+                let lines = val
+                    .as_bytes()
+                    .chunks(64)
+                    .map(|s| std::str::from_utf8(s).unwrap())
+                    .join("\n");
+                format!("-----BEGIN PUBLIC KEY-----\n{lines}\n-----END PUBLIC KEY-----")
+            };
 
-    dbg!(&authorization);
+            process_auth(token.as_bytes(), secret.as_ref()).transpose()
+        })
+        .transpose()
+    {
+        Ok(auth) => auth,
+        // TODO: better error messages
+        Err(_) => return Ok(handle_forbidden("permission denied")),
+    };
 
     let username = auth::get_username_from_id(&server, &version, user_id.as_deref()).await;
     if !version

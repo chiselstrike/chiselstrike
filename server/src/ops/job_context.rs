@@ -2,10 +2,11 @@ use std::cell::{Ref, RefCell};
 use std::collections::HashMap;
 use std::rc::Rc;
 
+use serde_json::Value as JsonValue;
 use tokio::sync::oneshot;
 
 use crate::datastore::DataContext;
-use crate::http::HttpResponse;
+use crate::http::{HttpResponse, Token};
 use crate::policy::engine::ChiselRequestContext;
 
 pub enum JobInfo {
@@ -15,6 +16,7 @@ pub enum JobInfo {
         headers: HashMap<String, String>,
         user_id: Option<String>,
         response_tx: RefCell<Option<oneshot::Sender<HttpResponse>>>,
+        token: Option<Token>,
     },
     KafkaEvent,
 }
@@ -46,6 +48,16 @@ impl ChiselRequestContext for JobInfo {
     fn user_id(&self) -> Option<&str> {
         match self {
             JobInfo::HttpRequest { ref user_id, .. } => user_id.as_deref(),
+            JobInfo::KafkaEvent => todo!(),
+        }
+    }
+
+    fn token(&self) -> Option<&JsonValue> {
+        match self {
+            JobInfo::HttpRequest { ref token, .. } => match token {
+                Some(Token::Jwt(ref val)) => Some(val),
+                _ => None,
+            },
             JobInfo::KafkaEvent => todo!(),
         }
     }

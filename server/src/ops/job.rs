@@ -64,6 +64,7 @@ async fn op_chisel_accept_job(
                     headers,
                     user_id,
                     response_tx,
+                    token: request.token.clone(),
                 });
 
                 let ctx = JobContext {
