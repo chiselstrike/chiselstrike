@@ -20,6 +20,35 @@ use swc_ecma_parser::{lexer::Lexer, Parser, StringInput, Syntax, TsConfig};
 use swc_ecmascript::ast::{self as swc_ecma_ast, TsTypeRef};
 use swc_ecmascript::parser as swc_ecma_parser;
 
+#[derive(Debug, Clone, Copy)]
+enum EntityType {
+    Entity,
+    ChiselEntity,
+}
+
+impl EntityType {
+    fn parse(handler: &Handler, x: &Expr) -> Result<Self> {
+        let s = get_ident_string(handler, x)?;
+        match s.as_ref() {
+            "ChiselEntity" => Ok(EntityType::ChiselEntity),
+            "Entity" => Ok(EntityType::Entity),
+            x => Err(anyhow!("superclass {} not recognized", x)),
+        }
+    }
+
+    fn validate_field(self, field_name: &str, class_name: &str) -> Result<()> {
+        match self {
+            EntityType::ChiselEntity => {
+                anyhow::ensure!(field_name != "id", "Creating a field with the name `id` is not supported. 😟\nBut don't worry! ChiselStrike creates an id field automatically, and you can access it in your endpoints as {}.id 🤩", class_name);
+
+                anyhow::ensure!(!field_name.starts_with('_'), "Field names starting with '_' are reserved for ChiselEntity and cannot be used");
+            }
+            _ => unreachable!(),
+        }
+        Ok(())
+    }
+}
+
 impl FieldDefinition {
     pub(crate) fn field_type(&self) -> Result<&TypeEnum> {
         self.field_type
@@ -272,7 +301,12 @@ fn validate_type_vec(type_vec: &[AddTypeRequest], valid_entities: &BTreeSet<Stri
     Ok(())
 }
 
-fn parse_class_prop(x: &ClassProp, class_name: &str, handler: &Handler) -> Result<FieldDefinition> {
+fn parse_class_prop(
+    x: &ClassProp,
+    class_name: &str,
+    entity_type: EntityType,
+    handler: &Handler,
+) -> Result<FieldDefinition> {
     macro_rules! swc_err {
         ($span:ident, $msg:literal, $($args:tt)*) => {{
             let formatted_msg = format!($msg, $($args)*);
@@ -281,7 +315,7 @@ fn parse_class_prop(x: &ClassProp, class_name: &str, handler: &Handler) -> Resul
     }
 
     let (field_name, is_optional) = get_field_info(handler, &x.key)?;
-    anyhow::ensure!(field_name != "id", "Creating a field with the name `id` is not supported. 😟\nBut don't worry! ChiselStrike creates an id field automatically, and you can access it in your endpoints as {}.id 🤩", class_name);
+    entity_type.validate_field(&field_name, class_name)?;
 
     let (field_type, default_value) = match (&x.type_ann, &x.value) {
         (Some(type_ann), Some(value)) => {
@@ -368,17 +402,25 @@ fn parse_class_decl<P: AsRef<Path>>(
                 bail!("Model {} defined twice", name);
             }
 
+            let entity_type = match &x.class.super_class {
+                None => return Ok(()), // not a ChiselStrike class
+                Some(x) => EntityType::parse(handler, x),
+            }?;
+
             for member in &x.class.body {
                 match member {
-                    ClassMember::ClassProp(x) => match parse_class_prop(x, &name, handler) {
-                        Err(err) => {
-                            handler.span_err(x.span(), &format!("While parsing class {}", name));
-                            bail!("{}", err);
+                    ClassMember::ClassProp(x) => {
+                        match parse_class_prop(x, &name, entity_type, handler) {
+                            Err(err) => {
+                                handler
+                                    .span_err(x.span(), &format!("While parsing class {}", name));
+                                bail!("{}", err);
+                            }
+                            Ok(fd) => {
+                                field_defs.push(fd);
+                            }
                         }
-                        Ok(fd) => {
-                            field_defs.push(fd);
-                        }
-                    },
+                    }
                     ClassMember::Constructor(_x) => {
                         handler.span_err(member.span(), "Constructors not allowed in ChiselStrike model definitions. Consider adding default values so one is not needed, or call ChiselEntity's create method");
                         bail!("invalid type file {}", filename.as_ref().display());
@@ -386,6 +428,27 @@ fn parse_class_decl<P: AsRef<Path>>(
                     _ => {}
                 }
             }
+            field_defs.push(FieldDefinition {
+                name: "_createdAt".to_string(),
+                is_optional: true,
+                is_unique: false,
+                default_value: None,
+                field_type: Some(TypeMsg {
+                    type_enum: Some(TypeEnum::JsDate(true)),
+                }),
+                labels: vec![],
+            });
+
+            field_defs.push(FieldDefinition {
+                name: "_updatedAt".to_string(),
+                is_optional: true,
+                is_unique: false,
+                default_value: None,
+                field_type: Some(TypeMsg {
+                    type_enum: Some(TypeEnum::JsDate(true)),
+                }),
+                labels: vec![],
+            });
             type_vec.push(AddTypeRequest { name, field_defs });
         }
         z => {

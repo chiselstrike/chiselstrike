@@ -679,6 +679,16 @@ export class ChiselEntity {
     /** UUID identifying this object. */
     id?: string;
 
+    _updatedAt?: Date;
+    _createdAt?: Date;
+
+    updateMeta() {
+        if (!this._createdAt) {
+            this._createdAt = new Date();
+        }
+        this._updatedAt = new Date();
+    }
+
     /**
      * Builds a new entity.
      *
@@ -721,6 +731,8 @@ export class ChiselEntity {
     /** saves the current object into the backend */
     async save() {
         ensureNotGet();
+        this.updateMeta();
+
         type IdsJson = { id: string; children: Record<string, IdsJson> };
         const jsonIds = await opAsync("op_chisel_store", {
             name: this.constructor.name,
