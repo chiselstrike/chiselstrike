@@ -11,7 +11,7 @@ use chiselc::parse::compile;
 use chiselc::rewrite::Target;
 use chiselc::symbols::Symbols;
 
-#[derive(Parser)]
+#[derive(Parser, Debug)]
 #[command(name = "chiselc", version)]
 struct Opt {
     /// Input file
@@ -50,4 +50,17 @@ fn main() -> Result<()> {
     }
     compile(data, symbols, opt.target, output)?;
     Ok(())
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    use clap::error::ErrorKind;
+
+    #[test]
+    fn test_version_arg() {
+        let opts = Opt::try_parse_from(["prg", "--version"]);
+        let err = opts.unwrap_err().kind();
+        assert!(matches!(err, ErrorKind::DisplayVersion));
+    }
 }
