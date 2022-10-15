@@ -12,7 +12,7 @@ use chiselc::rewrite::Target;
 use chiselc::symbols::Symbols;
 
 #[derive(Parser)]
-#[command(name = "chiselc")]
+#[command(name = "chiselc", version)]
 struct Opt {
     /// Input file
     #[arg(value_parser)]
