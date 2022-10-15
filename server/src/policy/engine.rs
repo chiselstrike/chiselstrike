@@ -125,9 +125,13 @@ impl PolicyEngine {
                     let policy = TransformPolicy::new(function);
                     type_policy.on_read.replace(policy);
                 }
-                PolicyName::OnSave => {
+                PolicyName::OnCreate => {
                     let policy = TransformPolicy::new(function);
-                    type_policy.on_save.replace(policy);
+                    type_policy.on_create.replace(policy);
+                }
+                PolicyName::OnUpdate => {
+                    let policy = TransformPolicy::new(function);
+                    type_policy.on_update.replace(policy);
                 }
                 PolicyName::GeoLoc => {
                     let policy = GeoLocPolicy::new(function);
@@ -345,7 +349,7 @@ mod test {
         assert!(policy.create.is_some());
         assert!(policy.update.is_some());
         assert!(policy.on_read.is_some());
-        assert!(policy.on_save.is_some());
+        assert!(policy.on_create.is_some());
         assert!(policy.geoloc.is_some());
     }
 
