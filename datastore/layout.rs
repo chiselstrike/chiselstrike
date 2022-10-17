@@ -57,7 +57,9 @@ pub struct FieldColumn {
 #[serde(rename_all = "PascalCase")]
 pub enum IdRepr {
     /// An UUID stored as an SQL text.
-    UuidAsString,
+    UuidAsText,
+    /// A JS string stored as an SQL text.
+    StringAsText,
 }
 
 /// Representation of a JavaScript field in SQL column.

@@ -11,8 +11,10 @@ pub fn encode_id_to_sql<'s>(
     out_args: &mut sqlx::any::AnyArguments,
 ) -> Result<()> {
     match repr {
-        layout::IdRepr::UuidAsString =>
+        layout::IdRepr::UuidAsText =>
             out_args.add(as_string_lossy(scope, value, "uuid id")?),
+        layout::IdRepr::StringAsText =>
+            out_args.add(as_string_lossy(scope, value, "string id")?),
     }
     Ok(())
 }

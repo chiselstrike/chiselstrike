@@ -99,6 +99,7 @@ pub enum PrimitiveType {
 #[serde(rename_all = "PascalCase")]
 pub enum IdType {
     Uuid,
+    String,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -128,6 +129,7 @@ impl IdType {
     pub fn as_primitive_type(self) -> PrimitiveType {
         match self {
             Self::Uuid => PrimitiveType::Uuid,
+            Self::String => PrimitiveType::String,
         }
     }
 }

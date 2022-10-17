@@ -11,7 +11,9 @@ pub fn decode_id_from_sql<'s>(
     row_idx: usize,
 ) -> Result<v8::Local<'s, v8::Value>> {
     Ok(match repr {
-        layout::IdRepr::UuidAsString =>
+        layout::IdRepr::UuidAsText =>
+            to_string(scope, row.try_get(row_idx)?),
+        layout::IdRepr::StringAsText =>
             to_string(scope, row.try_get(row_idx)?),
     })
 }

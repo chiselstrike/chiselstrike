@@ -1,8 +1,10 @@
+(async () => {
+
 const schema = {
     entities: [
         {
             name: {user: "Book"},
-            idType: "Uuid",
+            idType: "String",
             fields: [],
         }
     ],
@@ -13,39 +15,67 @@ const layout = {
         {
             entityName: {user: "Book"},
             tableName: "book",
-            idCol: {colName: "id", repr: "UuidAsString"},
+            idCol: {colName: "id", repr: "StringAsText"},
             fieldCols: [],
         },
     ],
     schema,
 };
 
-(async function test() {
-    const connRid = await Deno.core.opAsync("op_test_connect", layout);
-    await Deno.core.opAsync("op_test_execute_sql", connRid,
-        "CREATE TABLE book (id TEXT PRIMARY KEY)",
-    );
+await t.context("simple", async (t) => {
+    await Conn.connect(layout, async (conn) => {
+        await conn.executeSql(
+            "CREATE TABLE book (id TEXT PRIMARY KEY)",
+        );
+        const findQuery = Query.findById(conn, {user: "Book"}).closeWith(conn);
+        const storeQuery = Query.storeWithId(conn, {user: "Book"}).closeWith(conn);
 
-    const findQueryRid = Deno.core.opSync("op_datastore_find_by_id_query", connRid, {user: "Book"});
-    const storeQueryRid = Deno.core.opSync("op_datastore_store_with_id_query", connRid, {user: "Book"});
+        await t.case("store and fetch", async () => {
+            await conn.begin(async (ctx) => {
+                await storeQuery.startExecute({"id": "pride-prejudice"}, async (fut) => {
+                    await fut.execute(ctx);
+                    assertEq(fut.rowsAffected(), 1);
+                });
 
-    const ctxRid = await Deno.core.opAsync("op_datastore_begin", connRid);
+                await findQuery.startFetch("pride-prejudice", async (stream) => {
+                    assert(await stream.fetch(ctx));
+                    assertJsonEq(stream.read(), {"id": "pride-prejudice"});
+                    assert(!await stream.fetch(ctx));
+                });
+            });
 
-    const execRid = Deno.core.opSync("op_datastore_execute_start", storeQueryRid, {"id": "pride-prejudice"});
-    await Deno.core.opAsync("op_datastore_execute", ctxRid, execRid);
-    const rows = Deno.core.opSync("op_datastore_execute_rows_affected", execRid);
-    Deno.core.opSync("op_test_println", rows);
-    Deno.core.close(execRid);
+            assertJsonEq(
+                await conn.fetchSql("SELECT (id) FROM book ORDER BY id"),
+                [["pride-prejudice"]],
+            );
+        });
 
-    const fetchRid = Deno.core.opSync("op_datastore_fetch_start", findQueryRid, "pride-prejudice");
-    await Deno.core.opAsync("op_datastore_fetch", ctxRid, fetchRid);
-    const obj = Deno.core.opSync("op_datastore_fetch_read", fetchRid);
-    Deno.core.opSync("op_test_println", obj);
-    Deno.core.close(fetchRid);
+        await t.case("store multiple", async () => {
+            await conn.begin(async (ctx) => {
+                await storeQuery.execute(ctx, {"id": "pride-prejudice"});
+                await storeQuery.execute(ctx, {"id": "sense-sensibility"});
+                await storeQuery.execute(ctx, {"id": "robinson-crusoe"});
+            });
 
-    await Deno.core.opAsync("op_datastore_commit", ctxRid);
+            assertJsonEq(
+                await conn.fetchSql("SELECT (id) FROM book ORDER BY id"),
+                [["pride-prejudice"], ["robinson-crusoe"], ["sense-sensibility"]],
+            );
+        });
 
-    Deno.core.close(storeQueryRid);
-    Deno.core.close(findQueryRid);
-    Deno.core.close(connRid);
+        await t.case("fetch nonexistent", async () => {
+            await conn.begin(async (ctx) => {
+                await storeQuery.execute(ctx, {"id": "pride-prejudice"});
+            });
+
+            await conn.begin(async (ctx) => {
+                assertJsonEq(
+                    await findQuery.fetch(ctx, "sense-sensibility"),
+                    [],
+                );
+            });
+        });
+    });
+});
+
 })()
