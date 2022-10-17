@@ -1,3 +1,5 @@
+//! Queries for "CRUD" operations with entities.
+
 use anyhow::{Context, Result,};
 use chisel_snapshot::schema;
 use deno_core::v8;
@@ -7,6 +9,10 @@ use crate::conn::DataConn;
 use crate::query::{Query, InputParam, InputExpr, OutputExpr};
 use crate::query::build::QueryBuilder;
 
+/// Creates a [`Query`] that returns an entity given its id.
+///
+/// The argument of the query is just the id (NOT an object with property `id`!), the output is the
+/// entity as a JS object.
 pub fn find_by_id_query<'s>(
     conn: &DataConn,
     scope: &mut v8::HandleScope<'s>,
@@ -50,6 +56,10 @@ pub fn find_by_id_query<'s>(
     Ok(q.build(conn))
 }
 
+/// Creates a [`Query`] that stores an entity with a given id.
+///
+/// The argument of the query is a JS object that represents the entity, including the `id` field.
+/// It does not have any output.
 pub fn store_with_id_query<'s>(
     conn: &DataConn,
     scope: &mut v8::HandleScope<'s>,

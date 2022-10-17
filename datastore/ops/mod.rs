@@ -1,3 +1,5 @@
+#![allow(clippy::await_holding_refcell_ref)]
+
 use anyhow::{Result, anyhow, bail};
 use std::cell::RefCell;
 use std::future::Future;
@@ -11,8 +13,8 @@ pub fn extension() -> deno_core::Extension {
             op_datastore_begin::decl(),
             op_datastore_commit::decl(),
             op_datastore_rollback::decl(),
-            entity::op_datastore_find_by_id_query::decl(),
-            entity::op_datastore_store_with_id_query::decl(),
+            entity::op_datastore_query_find_by_id::decl(),
+            entity::op_datastore_query_store_with_id::decl(),
             query::op_datastore_fetch_start::decl(),
             query::op_datastore_fetch::decl(),
             query::op_datastore_fetch_read::decl(),
@@ -72,7 +74,8 @@ macro_rules! with_borrowed_ctx {
         let mut ctx_refmut = ctx_res_rc.0.try_borrow_mut()
             .context("could not borrow data context, another operation is in progress")?;
         match *ctx_refmut {
-            Some(ref mut $ctx) => $body,
+            Some(ref mut $ctx) => 
+                $body
             None => ::anyhow::bail!("could not borrow data context that has been closed"),
         }
     }}

@@ -2,6 +2,7 @@ use crate::conn::DataConn;
 use crate::sql_writer::SqlWriter;
 use super::{Query, InputParam, OutputExpr};
 
+/// Helper for building [`Query`] objects.
 #[derive(Debug)]
 pub struct QueryBuilder {
     pub sql: SqlWriter,

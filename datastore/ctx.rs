@@ -3,6 +3,7 @@ use std::sync::Arc;
 use crate::conn::DataConn;
 use crate::layout;
 
+/// Database transaction.
 pub struct DataCtx {
     pub layout: Arc<layout::Layout>,
     pub txn: sqlx::Transaction<'static, sqlx::Any>,

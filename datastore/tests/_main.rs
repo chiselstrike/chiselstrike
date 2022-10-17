@@ -89,7 +89,7 @@ fn read_test_paths(tests_dir: &Path) -> Result<Vec<PathBuf>> {
         let path = entry.path();
         if path.extension() != Some(OsStr::new("js")) { continue }
         guard!{let Some(name) = path.file_name().and_then(|n| n.to_str()) else { continue }};
-        if name.starts_with("_") { continue }
+        if name.starts_with('_') { continue }
         test_paths.push(path);
     }
     test_paths.sort_unstable();

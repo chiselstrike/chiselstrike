@@ -82,7 +82,7 @@ pub async fn op_datastore_execute(
 }
 
 #[deno_core::op]
-pub fn op_datastore_execute_rows_affected<'s>(
+pub fn op_datastore_execute_rows_affected(
     op_state: &mut deno_core::OpState,
     future_rid: deno_core::ResourceId,
 ) -> Result<u64> {

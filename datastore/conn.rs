@@ -1,6 +1,7 @@
 use std::sync::Arc;
 use crate::layout;
 
+/// Database connection.
 #[derive(Debug)]
 pub struct DataConn {
     pub layout: Arc<layout::Layout>,

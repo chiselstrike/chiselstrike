@@ -1,7 +1,7 @@
 #[macro_export]
 macro_rules! serde_map_as_vec {
     (mod $mod:ident, $map:ident<$name:ty, $elem:ty>, $elem_name:ident) => {
-        pub mod $mod {
+        mod $mod {
             use ::serde::ser::{Serialize, Serializer};
             use ::serde::de::{Deserialize, Deserializer};
             use super::*;
@@ -29,7 +29,7 @@ macro_rules! serde_map_as_vec {
 #[macro_export]
 macro_rules! serde_map_as_tuples {
     (mod $mod:ident, $map:ident<$key:ty, $value:ty>) => {
-        pub mod $mod {
+        mod $mod {
             use ::serde::ser::{Serialize, Serializer};
             use ::serde::de::{Deserialize, Deserializer};
             use super::*;

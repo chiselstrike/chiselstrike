@@ -52,12 +52,12 @@ class Conn extends Resource {
 
 class Query extends Resource {
     static findById(conn, entityName) {
-        const rid = Deno.core.opSync("op_datastore_find_by_id_query", conn.rid, entityName);
+        const rid = Deno.core.opSync("op_datastore_query_find_by_id", conn.rid, entityName);
         return new Query(rid);
     }
 
     static storeWithId(conn, entityName) {
-        const rid = Deno.core.opSync("op_datastore_store_with_id_query", conn.rid, entityName);
+        const rid = Deno.core.opSync("op_datastore_query_store_with_id", conn.rid, entityName);
         return new Query(rid);
     }
 

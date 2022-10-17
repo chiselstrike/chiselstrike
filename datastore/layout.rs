@@ -8,7 +8,7 @@ use std::sync::Arc;
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Layout {
-    #[serde(with = "layout_entity_tables")]
+    #[serde(with = "layout_entity_tables")] // serialize as Vec<EntityTable>
     pub entity_tables: HashMap<schema::EntityName, Arc<EntityTable>>,
     pub schema: Arc<schema::Schema>,
 }
@@ -20,7 +20,7 @@ pub struct EntityTable {
     pub entity_name: schema::EntityName,
     pub table_name: Name,
     pub id_col: IdColumn,
-    #[serde(with = "entity_table_field_cols")]
+    #[serde(with = "entity_table_field_cols")] // serialize as Vec<FieldColumn>
     pub field_cols: IndexMap<String, FieldColumn>,
     #[serde(default)]
     pub table_indexes: Vec<TableIndex>,
@@ -44,6 +44,7 @@ pub struct IdColumn {
     pub repr: IdRepr,
 }
 
+/// Description of an SQL column that stores an entity field.
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct FieldColumn {

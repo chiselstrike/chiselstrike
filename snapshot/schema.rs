@@ -41,8 +41,8 @@ pub struct Entity {
 pub struct EntityField {
     pub name: String,
     pub type_: Arc<Type>,
-    /// True for fields declared with `?` in TypeScript. If true, then the [`type_`] must be
-    /// [`Type::Optional`].
+    /// True for fields declared with `?` in TypeScript. If true, then the [`type_`][Self::type_]
+    /// must be [`Type::Optional`].
     pub optional: bool,
     /// Default value when the field is not stored in the database. Note that this does *not* make
     /// the field optional.

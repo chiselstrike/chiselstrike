@@ -5,7 +5,7 @@ use crate::conn::DataConn;
 use crate::entity;
 
 #[deno_core::op(v8)]
-pub fn op_datastore_find_by_id_query<'s>(
+pub fn op_datastore_query_find_by_id<'s>(
     scope: &mut v8::HandleScope<'s>,
     op_state: &mut deno_core::OpState,
     conn_rid: deno_core::ResourceId,
@@ -18,7 +18,7 @@ pub fn op_datastore_find_by_id_query<'s>(
 }
 
 #[deno_core::op(v8)]
-pub fn op_datastore_store_with_id_query<'s>(
+pub fn op_datastore_query_store_with_id<'s>(
     scope: &mut v8::HandleScope<'s>,
     op_state: &mut deno_core::OpState,
     conn_rid: deno_core::ResourceId,

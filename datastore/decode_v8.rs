@@ -1,3 +1,5 @@
+//! Converting values from SQL to V8.
+
 use anyhow::{Result, Context, bail};
 use chisel_snapshot::schema;
 use deno_core::v8;
