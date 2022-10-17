@@ -237,8 +237,8 @@ fn chiselc_spawn(
         "js".as_ref(),
     ];
     if !entities.is_empty() {
-        args.push("-e".as_ref());
         for entity in entities.iter() {
+            args.push("-e".as_ref());
             args.push(entity.as_ref());
         }
     }
@@ -252,8 +252,8 @@ fn chiselc_spawn(
 fn chiselc_output(code: String, target: &str, entities: &[String]) -> Result<String> {
     let mut args: Vec<&str> = vec!["--target", target];
     if !entities.is_empty() {
-        args.push("-e");
         for entity in entities.iter() {
+            args.push("-e");
             args.push(entity);
         }
     }

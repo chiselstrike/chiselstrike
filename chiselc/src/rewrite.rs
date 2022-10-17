@@ -19,7 +19,7 @@ use swc_ecmascript::ast::{
 };
 
 /// The query language target
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub enum Target {
     /// Emit JavaScript using ChiselStrike query expressions.
     JavaScript,
