@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
 use boa_engine::builtins::date::Date;
-use boa_engine::object::{JsArray, ObjectData};
+use boa_engine::object::{JsArray, JsArrayBuffer, ObjectData};
 use boa_engine::prelude::JsObject;
 use boa_engine::property::PropertyKey;
 use boa_engine::{JsString, JsValue};
@@ -81,6 +81,10 @@ pub fn entity_value_to_js_value(
             JsValue::Object(JsObject::from(obj))
         }
         EntityValue::Map(map) => entity_map_to_js_value(ctx, map, writable),
+        EntityValue::Bytes(bytes) => {
+            let ab = JsArrayBuffer::from_byte_block(bytes.clone(), ctx).unwrap();
+            ab.into()
+        }
     }
 }
 
@@ -120,7 +124,9 @@ pub fn js_value_to_entity_value(val: &JsValue) -> EntityValue {
         }
         JsValue::Object(ref o) => {
             let o = o.borrow();
-            if o.is_array() {
+            if let Some(ab) = o.as_array_buffer() {
+                EntityValue::Bytes(ab.array_buffer_data.clone().unwrap_or_default())
+            } else if o.is_array() {
                 let arr = o
                     .properties()
                     .index_properties()
