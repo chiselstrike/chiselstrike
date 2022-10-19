@@ -24,7 +24,7 @@ use sqlx::{Executor, Row, Transaction, ValueRef};
 use uuid::Uuid;
 
 use crate::datastore::query::{
-    KeepOrOmitField, Mutation, QueriedEntity, QueryField, QueryPlan, SqlValue, TargetDatabase,
+    KeepOrOmitField, Mutation, QueryField, QueryPlan, SqlValue, TargetDatabase,
 };
 use crate::datastore::value::{EntityMap, EntityValue};
 use crate::datastore::DbConnection;
@@ -164,8 +164,8 @@ fn column_is_null(row: &AnyRow, column_idx: usize) -> bool {
     row.try_get_raw(column_idx).unwrap().is_null()
 }
 
-fn id_idx(entity: &QueriedEntity) -> usize {
-    for f in &entity.fields {
+fn id_idx(fields: &Vec<QueryField>) -> usize {
+    for f in fields {
         match f {
             QueryField::Scalar {
                 name, column_idx, ..
@@ -393,11 +393,11 @@ impl QueryEngine {
 
     fn row_to_entity_value(
         db_kind: AnyKind,
-        entity: &QueriedEntity,
+        fields: &Vec<QueryField>,
         row: &AnyRow,
     ) -> Result<EntityMap> {
         let mut ret = EntityMap::default();
-        for s_field in &entity.fields {
+        for s_field in fields {
             match s_field {
                 QueryField::Scalar {
                     name,
@@ -461,13 +461,13 @@ impl QueryEngine {
                     is_optional,
                     transform,
                     keep_or_omit,
+                    fields,
                 } => {
                     let omit_field = matches!(keep_or_omit, KeepOrOmitField::Omit);
-                    let child_entity = entity.get_child_entity(name).unwrap();
-                    if omit_field || (*is_optional && column_is_null(row, id_idx(child_entity))) {
+                    if omit_field || (*is_optional && column_is_null(row, id_idx(fields))) {
                         continue;
                     }
-                    let val = Self::row_to_entity_value(db_kind, child_entity, row)?;
+                    let val = Self::row_to_entity_value(db_kind, fields, row)?;
                     let mut val = EntityValue::Map(val);
                     if let Some(tr) = transform {
                         // Apply policy transformation
@@ -510,7 +510,7 @@ impl QueryEngine {
 
         let stream = new_query_results(query.raw_sql, txn);
         let stream =
-            stream.map(move |row| Self::row_to_entity_value(db_kind, &query.entity, &row?));
+            stream.map(move |row| Self::row_to_entity_value(db_kind, &query.fields, &row?));
         let stream = Box::pin(stream.map(move |o| Self::project(o, &allowed_fields)));
         Ok(stream)
     }

@@ -60,6 +60,8 @@ pub enum QueryField {
         transform: Option<fn(EntityValue) -> EntityValue>,
         /// Do not include field in return json
         keep_or_omit: KeepOrOmitField,
+        /// Fields to be retrieved from the entity.
+        fields: Vec<QueryField>,
     },
 }
 
@@ -72,9 +74,9 @@ pub enum QueryField {
 pub struct Query {
     /// SQL query text
     pub raw_sql: String,
-    /// Entity that is being queried. Contains information necessary to reconstruct
+    /// Fields that are being retrieved. Contains information necessary to reconstruct
     /// the JSON response.
-    pub entity: QueriedEntity,
+    pub fields: Vec<QueryField>,
     /// Entity fields selected by the user. This field is used to post-filter fields that
     /// shall be returned to the user in JSON.
     /// FIXME: The post-filtering is suboptimal solution and selection should happen when
@@ -87,7 +89,7 @@ pub struct Query {
 #[derive(Debug, Clone)]
 pub struct QueriedEntity {
     /// Entity fields to be returned in JSON response
-    pub fields: Vec<QueryField>,
+    fields: Vec<QueryField>,
     /// Type of the entity.
     ty: Entity,
     /// Alias name of this entity to be used in SQL query.
@@ -98,10 +100,6 @@ pub struct QueriedEntity {
 }
 
 impl QueriedEntity {
-    pub fn get_child_entity<'a>(&'a self, child_name: &str) -> Option<&'a QueriedEntity> {
-        self.joins.get(child_name).map(|c| &c.entity)
-    }
-
     fn has_field(&self, field_name: &str) -> bool {
         self.ty.all_fields().any(|field| field.name == field_name)
     }
@@ -368,20 +366,25 @@ impl QueryPlan {
                 self.join_counter += 1;
 
                 self.make_scalar_field(field, current_table, field_policy, &keep_or_omit);
-                joins.insert(
-                    field.name.to_owned(),
-                    Join {
-                        entity: self.load_entity_recursive(ctx, nested_ty, &nested_table)?,
-                        lkey: field.name.to_owned(),
-                        rkey: "id".to_owned(),
-                    },
-                );
-                QueryField::Entity {
+
+                let entity = self.load_entity_recursive(ctx, nested_ty, &nested_table)?;
+                let entity_field = QueryField::Entity {
                     name: field.name.clone(),
                     is_optional: field.is_optional,
                     transform: field_policy,
                     keep_or_omit,
-                }
+                    fields: entity.fields.clone(),
+                };
+
+                joins.insert(
+                    field.name.to_owned(),
+                    Join {
+                        entity,
+                        lkey: field.name.to_owned(),
+                        rkey: "id".to_owned(),
+                    },
+                );
+                entity_field
             } else {
                 self.make_scalar_field(field, current_table, field_policy, &keep_or_omit)
             };
@@ -704,8 +707,8 @@ impl QueryPlan {
     pub fn build_query(&self, target: &TargetDatabase) -> Result<Query> {
         Ok(Query {
             raw_sql: self.make_raw_query(target)?,
-            entity: self.entity.clone(),
             allowed_fields: self.allowed_fields.clone(),
+            fields: self.entity.fields.clone(),
         })
     }
 }
@@ -891,24 +894,26 @@ pub mod tests {
         entity: &Entity,
         entity_value: &serde_json::Value,
         ctx: &DataContext,
-    ) {
+    ) -> String {
         let entity_value = EntityValue::from_json(entity_value).unwrap();
         let entity_fields = entity_value.as_map().unwrap();
-        query_engine
+        let entity_id = query_engine
             .add_row(entity.object_type().clone(), entity_fields, ctx)
             .unwrap()
             .await
-            .unwrap();
+            .unwrap()
+            .id;
+
         let rows = fetch_rows(query_engine, ctx.txn.clone(), entity).await;
-        assert!(rows.iter().any(|row| {
-            entity_fields.iter().all(|(key, value)| {
-                if let TypeId::Entity { .. } = entity.get_field(key).unwrap().type_id {
-                    true
-                } else {
-                    row[key] == *value
-                }
-            })
+        let inserted_entity = rows.iter().find(|e| e["id"] == entity_id).unwrap();
+        assert!(entity_fields.iter().all(|(key, value)| {
+            if let TypeId::Entity { .. } = entity.get_field(key).unwrap().type_id {
+                true
+            } else {
+                inserted_entity[key] == *value
+            }
         }));
+        entity_id
     }
 
     pub async fn fetch_rows(
