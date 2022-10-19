@@ -120,3 +120,71 @@ pub async fn min_max_by(c: TestContext) {
         json!([null, null])
     );
 }
+
+#[chisel_macros::test(modules = Deno)]
+pub async fn count_basic(c: TestContext) {
+    c.chisel.write("models/models.ts", MODELS);
+    c.chisel.write("routes/people.ts", PEOPLE_CRUD);
+    c.chisel.write(
+        "routes/count.ts",
+        r#"
+        import { Person } from "../models/models.ts";
+
+        export default async function chisel(req: Request) {
+            return await Person.cursor().count()
+        }"#,
+    );
+    c.chisel.apply_ok().await;
+
+    assert_eq!(
+        c.chisel.get_json("/dev/count").await,
+        json!(0)
+    );
+
+    store_people(&c.chisel).await;
+    assert_eq!(
+        c.chisel.get_json("/dev/count").await,
+        json!(3)
+    );
+
+    c.chisel.write(
+        "routes/count.ts",
+        r#"
+        import { Person } from "../models/models.ts";
+
+        export default async function chisel(req: Request) {
+            return await Person.cursor()
+            .filter({age: 50})
+            .count()
+        }"#,
+    );
+    c.chisel.apply_ok().await;
+    assert_eq!(
+        c.chisel.get_json("/dev/count").await,
+        json!(1)
+    );
+}
+
+#[chisel_macros::test(modules = Deno, optimize = No)]
+pub async fn count_in_typescript(c: TestContext) {
+    c.chisel.write("models/models.ts", MODELS);
+    c.chisel.write("routes/people.ts", PEOPLE_CRUD);
+    c.chisel.write(
+        "routes/count.ts",
+        r#"
+        import { Person } from "../models/models.ts";
+
+        export default async function chisel(req: Request) {
+            return await Person.cursor()
+                .filter((p) => { return p.age >= 40 })
+                .count();
+        }"#,
+    );
+    c.chisel.apply_ok().await;
+
+    store_people(&c.chisel).await;
+    assert_eq!(
+        c.chisel.get_json("/dev/count").await,
+        json!(2)
+    );
+}

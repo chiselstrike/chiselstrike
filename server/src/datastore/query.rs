@@ -143,6 +143,8 @@ pub enum QueryOp {
     Skip { count: u64 },
     /// Lexicographically sorts elements using `SortKey`s.
     SortBy(SortBy),
+    /// Counts the elements.
+    Count,
 }
 
 struct Column {
@@ -290,8 +292,14 @@ impl QueryPlan {
     fn process_projections(&mut self, mut ops: Vec<QueryOp>) -> Vec<QueryOp> {
         // FIXME: Replace this with .drain_filter() when it's moved to stable.
         for op in &ops {
-            if let QueryOp::Projection { fields } = op {
-                self.allowed_fields = Some(HashSet::from_iter(fields.iter().cloned()));
+            match op {
+                QueryOp::Projection { fields } => {
+                    self.allowed_fields = Some(HashSet::from_iter(fields.iter().cloned()));
+                }
+                QueryOp::Count => {
+                    self.allowed_fields = None;
+                }
+                _ => (),
             }
         }
         ops.retain(|op| !matches!(op, QueryOp::Projection { .. }));
@@ -679,9 +687,20 @@ impl QueryPlan {
             .map(|op| *op.as_skip().unwrap())
     }
 
-    fn make_raw_query(&self, target: &TargetDatabase) -> Result<String> {
+    fn contains_count(&self, ops: &[QueryOp]) -> bool {
+        if let Some(p) = ops.iter().position(|op| matches!(op, QueryOp::Count)) {
+            assert!(p == ops.len() - 1);
+            true
+        } else {
+            false
+        }
+    }
+
+    fn make_raw_query(&self, target: &TargetDatabase) -> Result<(String, Vec<QueryField>)> {
         let mut sql_query = self.make_core_select();
         let mut remaining_ops: &[QueryOp] = &self.operators[..];
+        let mut fields = self.entity.fields.clone();
+
         while !remaining_ops.is_empty() {
             let (ops, remainder) = self.split_on_first_take(remaining_ops);
             remaining_ops = remainder;
@@ -696,20 +715,36 @@ impl QueryPlan {
             let offset = self.find_skip_count(ops);
             let lo_string = self.make_limit_and_offset_string(target, limit, offset);
 
+            let columns_selection = if self.contains_count(ops) {
+                assert!(remaining_ops.is_empty());
+                fields = vec![QueryField::Scalar {
+                    name: "count".to_owned(),
+                    type_id: TypeId::Int64,
+                    is_optional: false,
+                    column_idx: 0,
+                    transform: None,
+                    keep_or_omit: KeepOrOmitField::Keep,
+                }];
+                "COUNT(*)"
+            } else {
+                "*"
+            };
+
             // The "AS subquery" part is necessary to make Postgres happy.
             sql_query = format!(
-                "SELECT * FROM ({}) AS subquery {} {} {}",
-                sql_query, filter_string, sort_string, lo_string
+                "SELECT {} FROM ({}) AS subquery {} {} {}",
+                columns_selection, sql_query, filter_string, sort_string, lo_string
             );
         }
-        Ok(sql_query)
+        Ok((sql_query, fields))
     }
 
     pub fn build_query(&self, target: &TargetDatabase) -> Result<Query> {
+        let (raw_sql, fields) = self.make_raw_query(target)?;
         Ok(Query {
-            raw_sql: self.make_raw_query(target)?,
+            raw_sql,
             allowed_fields: self.allowed_fields.clone(),
-            fields: self.entity.fields.clone(),
+            fields,
         })
     }
 }
@@ -768,6 +803,9 @@ pub enum QueryOpChain {
         keys: Vec<SortKey>,
         inner: Box<QueryOpChain>,
     },
+    Count {
+        inner: Box<QueryOpChain>,
+    },
 }
 
 /// Converts operator chain into a tuple `(entity_name, ops)`, where
@@ -786,6 +824,7 @@ fn convert_ops(op: QueryOpChain) -> Result<(String, Vec<QueryOp>)> {
         Op::Take { count, inner } => (QueryOp::Take { count }, inner),
         Op::Skip { count, inner } => (QueryOp::Skip { count }, inner),
         Op::SortBy { keys, inner } => (QueryOp::SortBy(SortBy { keys }), inner),
+        Op::Count { inner } => (QueryOp::Count, inner),
     };
     let (entity_name, mut ops) = convert_ops(*inner)?;
     ops.push(query_op);

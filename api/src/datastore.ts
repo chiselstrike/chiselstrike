@@ -386,6 +386,35 @@ class SortBy<T> extends Operator<T, T> {
 }
 
 /**
+ * Count operator counts elements contained within the inner cursor.
+ */
+class Count extends Operator<unknown, number> {
+    constructor(
+        inner: Operator<unknown, unknown>,
+    ) {
+        super(inner);
+    }
+
+    apply(
+        iter: AsyncIterable<unknown>,
+    ): AsyncIterable<number> {
+        return {
+            [Symbol.asyncIterator]: async function* () {
+                let count = 0;
+                for await (const _ of iter) {
+                    count += 1;
+                }
+                yield count;
+            },
+        };
+    }
+
+    recordToOutput(rawRecord: unknown): number {
+        return (rawRecord as { count: number }).count;
+    }
+}
+
+/**
  * AggregateBy operator is an intermediate Operator used to implement various aggregation
  * operators like MinBy/MaxBy. It provides a general aggregate interface performing a fold
  * along `Input[K]` field values using `init` initial value and aggerage (fold) operator
@@ -580,6 +609,22 @@ export class ChiselCursor<T> {
                 this.inner,
                 [new SortKey<T>(key, ascending)],
             ),
+        );
+    }
+
+    /**
+     * Counts the elements contained within this cursor.
+     */
+    async count(): Promise<number> {
+        const c = new ChiselCursor(
+            new Count(this.inner),
+        );
+        for await (const count of c) {
+            return count;
+        }
+        throw Error(
+            "The application of Count operator should result in a cursor " +
+                "containing exactly one element but it contained none",
         );
     }
 
