@@ -23,9 +23,11 @@ pub struct PolicyEvalInstance {
     on_read: Option<TransformPolicyInstance>,
     on_save: Option<TransformPolicyInstance>,
     geoloc: Option<GeoLocPolicyInstance>,
-    /// Set of object marked dirty by this instance.
+    /// When a read entity is transformed, it is marked as dirty, and its id is put in the dirty
+    /// set. Upon write, we check if the entity is part of this set, and throw an error if it is.
     dirty: HashSet<String>,
     ty: Arc<ObjectType>,
+    /// JsValue representation of the ChiselRequestContext.
     chisel_ctx: JsValue,
 }
 
@@ -38,7 +40,7 @@ macro_rules! create_get_or_load_instance {
                     return Ok(Some(instance));
                 }
 
-                match ctx.engine.store.borrow().get(self.ty.name()) {
+                match ctx.engine.policies.borrow().get(self.ty.name()) {
                     Some(crate::policy::type_policy::TypePolicy {
                         $policy: Some(policy),
                         ..
@@ -382,6 +384,21 @@ mod test {
         let action = get_action(&policy_ctx, code, &value);
 
         assert_eq!(action, Action::Skip);
+
+        let ctx = Rc::new(serde_json::json!({
+            "headers": {
+                "someKey": "otherVal",
+            },
+            "method": "GET",
+            "path": "/hello",
+            "userId": "marin"
+        }));
+
+        let value = JsValue::Null;
+        let policy_ctx = make_context(ctx);
+        let action = get_action(&policy_ctx, code, &value);
+
+        assert_eq!(action, Action::Deny);
     }
 
     #[test]

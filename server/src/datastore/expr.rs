@@ -1,6 +1,5 @@
 // SPDX-FileCopyrightText: © 2022 ChiselStrike <info@chiselstrike.com>
 
-use chiselc::policies::LogicOp;
 use serde_derive::{Deserialize, Serialize};
 use serde_json::Value as JsonValue;
 
@@ -142,21 +141,6 @@ pub enum BinaryOp {
     Or,
     Like,
     NotLike,
-}
-
-impl From<LogicOp> for BinaryOp {
-    fn from(op: LogicOp) -> Self {
-        match op {
-            LogicOp::Eq => BinaryOp::Eq,
-            LogicOp::Neq => BinaryOp::NotEq,
-            LogicOp::Gt => BinaryOp::Gt,
-            LogicOp::Gte => BinaryOp::GtEq,
-            LogicOp::Lt => BinaryOp::Lt,
-            LogicOp::Lte => BinaryOp::LtEq,
-            LogicOp::And => BinaryOp::And,
-            LogicOp::Or => BinaryOp::Or,
-        }
-    }
 }
 
 impl BinaryOp {

@@ -51,11 +51,14 @@ pub enum PolicyError {
 }
 
 #[derive(Debug, PartialEq)]
-#[repr(u8)]
 pub enum Action {
+    /// Allow, and perform the action
     Allow = 0,
+    /// Deny the action, an return an error
     Deny = 1,
+    /// Do not perform the action
     Skip = 2,
+    /// Perform the action, but log the entity
     Log = 3,
 }
 
@@ -174,21 +177,22 @@ impl PolicyProcessor {
             }
         };
 
-        if let Some(js_value) = js_value {
-            instance.transform_on_read(&self.ctx, &js_value)?;
-            let new_val = js_value_to_entity_value(&js_value).try_into_map()?;
+        match js_value {
+            Some(js_value) => {
+                instance.transform_on_read(&self.ctx, &js_value)?;
+                let new_val = js_value_to_entity_value(&js_value).try_into_map()?;
 
-            if new_val != value {
-                instance.mark_dirty(value["id"].as_str().unwrap());
+                if new_val != value {
+                    instance.mark_dirty(value["id"].as_str().unwrap());
+                }
+
+                Ok(Some(new_val))
             }
-
-            Ok(Some(new_val))
-        } else {
-            js_value
+            None => js_value
                 .as_ref()
                 .map(js_value_to_entity_value)
                 .map(EntityValue::try_into_map)
-                .transpose()
+                .transpose(),
         }
     }
 
@@ -227,7 +231,8 @@ impl PolicyProcessor {
                 // TODO: maybe that's not what we want?
                 Err(PolicyError::WritePermissionDenied(self.ty.clone()))?;
             }
-            _ => (),
+            // don't do anything
+            None | Some(Action::Allow) => (),
         }
 
         instance.transform_on_write(&self.ctx, &js_value)?;

@@ -7,7 +7,7 @@ use boa_engine::prelude::JsObject;
 use boa_engine::property::Attribute;
 use boa_engine::{JsString, JsValue};
 use chiselc::parse::ParserContext;
-use chiselc::policies::{Cond, Environment, PolicyName, Predicate, Predicates, Var};
+use chiselc::policies::{Cond, Environment, LogicOp, PolicyName, Predicate, Predicates, Var};
 use serde_json::Value as JsonValue;
 
 use super::interpreter::{self, InterpreterContext, JsonResolver};
@@ -17,10 +17,15 @@ use super::Action;
 use crate::datastore::expr::{BinaryExpr, BinaryOp, Expr, PropertyAccess, Value};
 
 pub struct PolicyEngine {
+    /// The boa context, used for evaluating JS with boa.
     pub boa_ctx: Rc<RefCell<boa_engine::Context>>,
-    pub store: RefCell<PolicyStore>,
+    /// The policy store, mapping entity names to type policies.
+    pub policies: RefCell<PolicyStore>,
 }
 
+/// Represents the request context that is being passed as a parameter to the policies
+// TODO(marin): This is a temporary trait until I figure out how this data should be passed around,
+// and what shape it will have.
 pub trait ChiselRequestContext {
     fn method(&self) -> &str;
     fn path(&self) -> &str;
@@ -67,21 +72,28 @@ impl PolicyEngine {
         context.register_global_property("Action", action, Attribute::all());
         Ok(Self {
             boa_ctx: Rc::new(RefCell::new(context.into())),
-            store: Default::default(),
+            policies: Default::default(),
         })
     }
 
-    pub fn get_policy(&self, ty: &str) -> Option<Ref<TypePolicy>> {
-        let store = self.store.borrow();
+    /// Returns the type policy for the given entity_name.
+    pub fn get_policy(&self, entity_name: &str) -> Option<Ref<TypePolicy>> {
+        let store = self.policies.borrow();
         // this is a trick to get an Option<Ref<T>> from a Option<&T>
-        if store.get(ty).is_some() {
-            Some(Ref::map(store, |s| s.get(ty).unwrap()))
+        if store.get(entity_name).is_some() {
+            Some(Ref::map(store, |s| s.get(entity_name).unwrap()))
         } else {
             None
         }
     }
 
-    pub fn register_policy_from_code(&self, ty_name: String, code: &[u8]) -> anyhow::Result<()> {
+    // Given a entity_name, and some policy code, compiles the policy code, and store it in the
+    // engine store, with entity_name as key.
+    pub fn register_policy_from_code(
+        &self,
+        entity_name: String,
+        code: &[u8],
+    ) -> anyhow::Result<()> {
         let ctx = ParserContext::new();
         let module = ctx.parse(std::str::from_utf8(code).unwrap().to_owned(), false)?;
         let policies = chiselc::policies::Policies::parse(&module)?;
@@ -117,11 +129,14 @@ impl PolicyEngine {
             }
         }
 
-        self.store.borrow_mut().insert(ty_name, type_policy);
+        self.policies.borrow_mut().insert(entity_name, type_policy);
 
         Ok(())
     }
 
+    /// Takes a ReadPolicy and ChiselRequestContext, and partially evaluate the read policy to
+    /// extract its skip condition, then translate that into an Expr that the data layer can append
+    /// to queries.
     pub fn eval_read_policy_expr(
         &self,
         policy: &ReadPolicy,
@@ -151,6 +166,8 @@ impl PolicyEngine {
         }
     }
 
+    /// Given some JS code representing a function, compiles the functions, and returns the
+    /// resulting JsObject. This function can later be called.
     fn compile_function(&self, code: &[u8]) -> Result<JsObject> {
         Ok(self
             .boa_ctx
@@ -162,6 +179,8 @@ impl PolicyEngine {
             .clone())
     }
 
+    /// Takes a JsObject representing a function, and a list of arguments, and call the function
+    /// with these arguments.
     pub fn call(&self, function: JsObject, args: &[JsValue]) -> anyhow::Result<JsValue> {
         let mut ctx = self.boa_ctx.borrow_mut();
         function
@@ -190,20 +209,12 @@ fn cond_to_expr(
         Cond::And(left, right) => {
             let right = cond_to_expr(right, preds, entity_param_name, env)?;
             let left = cond_to_expr(left, preds, entity_param_name, env)?;
-            Expr::Binary(BinaryExpr {
-                left: Box::new(left),
-                op: BinaryOp::And,
-                right: Box::new(right),
-            })
+            BinaryExpr::and(left, right).into()
         }
         Cond::Or(left, right) => {
             let right = cond_to_expr(right, preds, entity_param_name, env)?;
             let left = cond_to_expr(left, preds, entity_param_name, env)?;
-            Expr::Binary(BinaryExpr {
-                left: Box::new(left),
-                op: BinaryOp::Or,
-                right: Box::new(right),
-            })
+            BinaryExpr::or(left, right).into()
         }
         Cond::Not(cond) => Expr::Not(Box::new(cond_to_expr(cond, preds, entity_param_name, env)?)),
         Cond::Predicate(id) => {
@@ -219,6 +230,21 @@ fn cond_to_expr(
     };
 
     Ok(val)
+}
+
+impl From<LogicOp> for BinaryOp {
+    fn from(op: LogicOp) -> Self {
+        match op {
+            LogicOp::Eq => BinaryOp::Eq,
+            LogicOp::Neq => BinaryOp::NotEq,
+            LogicOp::Gt => BinaryOp::Gt,
+            LogicOp::Gte => BinaryOp::GtEq,
+            LogicOp::Lt => BinaryOp::Lt,
+            LogicOp::Lte => BinaryOp::LtEq,
+            LogicOp::And => BinaryOp::And,
+            LogicOp::Or => BinaryOp::Or,
+        }
+    }
 }
 
 fn predicate_to_expr(pred: &Predicate, entity_param_name: &str, env: &Environment) -> Result<Expr> {
@@ -291,7 +317,7 @@ mod test {
     }
 
     #[test]
-    fn regiter_code_ok() {
+    fn register_code_ok() {
         let code = br#"
             export default {
                 read: (entity, ctx) => {
