@@ -19,6 +19,7 @@ use super::DataContext;
 pub enum SqlValue {
     Bool(bool),
     F64(f64),
+    I64(i64),
     String(String),
     Bytes(Vec<u8>),
 }

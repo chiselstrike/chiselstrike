@@ -12,6 +12,7 @@ pub enum EntityValue {
     Null,
     String(String),
     Float64(f64),
+    Int64(i64),
     Boolean(bool),
     /// Representation of JavaScript's Date represented as UNIX timestamp,
     /// specifically it's the number of milliseconds since epoch.
@@ -131,6 +132,7 @@ impl EntityValue {
                 .context("failed to create v8 string when converting EntityValue to v8")?
                 .into(),
             Self::Float64(v) => v8::Number::new(scope, *v).into(),
+            Self::Int64(v) => v8::Number::new(scope, *v as f64).into(),
             Self::Boolean(v) => v8::Boolean::new(scope, *v).into(),
             Self::JsDate(v) => v8::Date::new(scope, *v)
                 .context("failed to create v8 Date when converting EntityValue to v8")?
@@ -174,6 +176,7 @@ impl EntityValue {
             Self::Null => "Null",
             Self::String(_) => "String",
             Self::Float64(_) => "Float64",
+            Self::Int64(_) => "Int64",
             Self::Boolean(_) => "Boolean",
             Self::JsDate(_) => "JsDate",
             Self::Bytes(_) => "Bytes",
@@ -198,6 +201,7 @@ macro_rules! define_is_method {
 impl EntityValue {
     define_is_method! {is_string, String}
     define_is_method! {is_f64, Float64}
+    define_is_method! {is_i64, Int64}
     define_is_method! {is_boolean, Boolean}
     define_is_method! {is_date, JsDate}
     define_is_method! {is_bytes, Bytes}
@@ -238,6 +242,7 @@ macro_rules! as_ref {
 impl EntityValue {
     as_ref!(as_str, String, str);
     as_copy!(as_f64, Float64, f64);
+    as_copy!(as_i64, Int64, i64);
     as_copy!(as_bool, Boolean, bool);
     as_copy!(as_date, JsDate, f64);
     as_ref!(as_bytes, Bytes, [u8]);

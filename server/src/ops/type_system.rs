@@ -88,6 +88,7 @@ fn simplify_type_id(ty: &TypeId) -> SimpleTypeId {
     match ty {
         TypeId::String => SimpleTypeId::String,
         TypeId::Float => SimpleTypeId::Number,
+        TypeId::Int64 => SimpleTypeId::Number,
         TypeId::Boolean => SimpleTypeId::Boolean,
         TypeId::JsDate => SimpleTypeId::JsDate,
         TypeId::Id => SimpleTypeId::String,

@@ -222,6 +222,8 @@ impl<'a> ObjectDescriptor for NewObject<'a> {
 pub enum TypeId {
     String,
     Float,
+    /// 64-bit integer
+    Int64,
     Boolean,
     /// Represents JavaScript Date class
     JsDate,
@@ -241,6 +243,7 @@ impl TypeId {
         match self {
             TypeId::Id | TypeId::String => "string".to_string(),
             TypeId::Float => "number".to_string(),
+            TypeId::Int64 => "int64".to_string(),
             TypeId::Boolean => "boolean".to_string(),
             TypeId::JsDate => "jsDate".to_string(),
             TypeId::ArrayBuffer => "ArrayBuffer".to_string(),
