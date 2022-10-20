@@ -54,7 +54,9 @@ function run(
 
     mkdirpSync(path.join(projectDirectory, ".vscode"));
     mkdirpSync(routesPath);
+    touchSync(path.join(routesPath, ".gitkeep"));
     mkdirpSync(eventsPath);
+    touchSync(path.join(eventsPath, ".gitkeep"));
     mkdirpSync(modelsPath);
     touchSync(path.join(modelsPath, ".gitkeep"));
     mkdirpSync(policiesPath);
