@@ -170,7 +170,7 @@ dependencies = [
 
 [[package]]
 name = "api"
-version = "0.13.0"
+version = "0.13.1"
 dependencies = [
  "anyhow",
  "lazy_static",
@@ -575,7 +575,7 @@ checksum = "fd16c4719339c4530435d38e511904438d07cce7950afa3718a84ac36c10e89e"
 
 [[package]]
 name = "chisel-macros"
-version = "0.13.0"
+version = "0.13.1"
 dependencies = [
  "proc-macro2 1.0.47",
  "quote 1.0.21",
@@ -585,7 +585,7 @@ dependencies = [
 
 [[package]]
 name = "chiselc"
-version = "0.13.0"
+version = "0.13.1"
 dependencies = [
  "anyhow",
  "bimap",
@@ -690,7 +690,7 @@ dependencies = [
 
 [[package]]
 name = "cli"
-version = "0.13.0"
+version = "0.13.1"
 dependencies = [
  "anyhow",
  "base64",
@@ -1175,7 +1175,7 @@ dependencies = [
 
 [[package]]
 name = "dbgarc"
-version = "0.13.0"
+version = "0.13.1"
 dependencies = [
  "backtrace",
 ]
@@ -1483,7 +1483,7 @@ dependencies = [
 
 [[package]]
 name = "deno_std"
-version = "0.13.0"
+version = "0.13.1"
 dependencies = [
  "anyhow",
  "deno_ast 0.19.0",
@@ -1785,7 +1785,7 @@ dependencies = [
 
 [[package]]
 name = "endpoint_tsc"
-version = "0.13.0"
+version = "0.13.1"
 dependencies = [
  "anyhow",
  "api",
@@ -1920,14 +1920,14 @@ dependencies = [
 
 [[package]]
 name = "filetime"
-version = "0.2.17"
+version = "0.2.18"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e94a7bbaa59354bc20dd75b67f23e2797b4490e9d6928203fb105c79e448c86c"
+checksum = "4b9663d381d07ae25dc88dbdf27df458faa83a9b25336bcac83d5e452b5fc9d3"
 dependencies = [
  "cfg-if 1.0.0",
  "libc",
  "redox_syscall",
- "windows-sys 0.36.1",
+ "windows-sys 0.42.0",
 ]
 
 [[package]]
@@ -3179,7 +3179,7 @@ checksum = "e5ce46fe64a9d73be07dcbe690a38ce1b293be448fd8ce1e6c1b8062c9f72c6a"
 
 [[package]]
 name = "my_tsc"
-version = "0.13.0"
+version = "0.13.1"
 dependencies = [
  "deno_runtime",
  "endpoint_tsc",
@@ -3496,7 +3496,7 @@ dependencies = [
 
 [[package]]
 name = "packages"
-version = "0.13.0"
+version = "0.13.1"
 dependencies = [
  "api",
 ]
@@ -4603,7 +4603,7 @@ dependencies = [
 
 [[package]]
 name = "server"
-version = "0.13.0"
+version = "0.13.1"
 dependencies = [
  "aes-gcm 0.9.4",
  "anyhow",
@@ -6292,7 +6292,7 @@ checksum = "59547bce71d9c38b83d9c0e92b6066c4253371f15005def0c30d9657f50c7642"
 
 [[package]]
 name = "tsc_compile"
-version = "0.13.0"
+version = "0.13.1"
 dependencies = [
  "console",
  "deno_core",
@@ -6306,7 +6306,7 @@ dependencies = [
 
 [[package]]
 name = "tsc_compile_build"
-version = "0.13.0"
+version = "0.13.1"
 
 [[package]]
 name = "tungstenite"
@@ -6560,7 +6560,7 @@ checksum = "936e4b492acfd135421d8dca4b1aa80a7bfc26e702ef3af710e0752684df5372"
 
 [[package]]
 name = "utils"
-version = "0.13.0"
+version = "0.13.1"
 dependencies = [
  "anyhow",
  "async-channel",

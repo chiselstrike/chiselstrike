@@ -1,6 +1,6 @@
 [package]
 name = "dbgarc"
-version = "0.13.0"
+version = "0.13.1"
 authors = ["ChiselStrike"]
 edition = "2021"
 
