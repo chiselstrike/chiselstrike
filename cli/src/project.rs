@@ -102,8 +102,13 @@ impl Manifest {
 
     pub fn topic_map(&self, base_dir: &Path) -> anyhow::Result<FileTopicMap> {
         if let Some(events) = self.events.as_ref() {
-            build_file_topic_map(base_dir, events)
-                .context("Could not read event handlers (Kafka topics) from filesystem")
+            match build_file_topic_map(base_dir, events) {
+                Ok(ret) => Ok(ret),
+                Err(err) => {
+                    println!("Warning: unable to process event handlers: {:#}", err);
+                    Ok(FileTopicMap::default())
+                }
+            }
         } else {
             Ok(FileTopicMap::default())
         }
