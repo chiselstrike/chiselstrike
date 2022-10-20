@@ -54,20 +54,38 @@ pub enum Value {
     Null,
 }
 
-impl From<&JsonValue> for Value {
-    fn from(json: &JsonValue) -> Self {
-        match json {
+impl Value {
+    fn try_from(json: &JsonValue) -> anyhow::Result<Self> {
+        let v = match json {
             JsonValue::Null => Value::Null,
             JsonValue::Bool(b) => Value::Bool(*b),
             JsonValue::Number(n) if n.is_i64() => Value::I64(n.as_i64().unwrap()),
             JsonValue::Number(n) if n.is_u64() => Value::U64(n.as_u64().unwrap()),
             JsonValue::Number(n) if n.is_f64() => Value::F64(n.as_f64().unwrap()),
             JsonValue::String(s) => Value::String(s.clone()),
-            JsonValue::Array(_) | JsonValue::Object(_) => {
-                unimplemented!("object and arrays not part of the data model.")
+            JsonValue::Array(_) => {
+                anyhow::bail!(
+                    "Trying to convert JSON Array {json} to Expression Value which is not supported"
+                )
             }
-            _ => unreachable!(),
-        }
+            JsonValue::Object(_) => {
+                anyhow::bail!(
+                    "Trying to convert JSON Object {json} to Expression Value which is not supported"
+                )
+            }
+            _ => {
+                anyhow::bail!(
+                    "Trying to convert JSON value {json} to Expression Value which is not supported"
+                )
+            }
+        };
+        Ok(v)
+    }
+}
+
+impl From<&JsonValue> for Value {
+    fn from(json: &JsonValue) -> Self {
+        Self::try_from(json).unwrap()
     }
 }
 

@@ -4,7 +4,7 @@ use crate::framework::prelude::*;
 use crate::framework::Chisel;
 
 static PERSON_MODEL: &str = r#"
-    import { ChiselEntity, labels } from "@chiselstrike/api";
+    import { ChiselEntity } from "@chiselstrike/api";
 
     export class Person extends ChiselEntity {
         firstName: string = "";
@@ -125,7 +125,7 @@ pub async fn various_types(c: TestContext) {
 
             return await Person.cursor()
                 .filter(filter)
-                .map(p => p.first_name)
+                .map(p => p.firstName)
                 .toArray();
         }"#,
     );
@@ -271,4 +271,270 @@ pub async fn sql_keywords(c: TestContext) {
         let url = format!("/dev/findall?property={keyword}");
         json_is_subset(&c.chisel.get_json(&url).await, &expected_json).unwrap();
     }
+}
+
+static EXPR_FILTER_ENDPOINT: &str = r#"
+    import { ChiselRequest } from '@chiselstrike/api';
+    import { Person } from "../models/person.ts";
+
+    export default async function chisel(req: ChiselRequest) {
+        return await Person.cursor()
+            .filter((_) => true) // Ensure in-TS eval when not optimized.
+            .filter(await req.json())
+            .sortBy("firstName")
+            .map(p => p.firstName)
+            .toArray();
+    }"#;
+
+#[chisel_macros::test(modules = Deno, optimize = Both)]
+pub async fn expr_filter_basic(c: TestContext) {
+    c.chisel.write("models/person.ts", PERSON_MODEL);
+    c.chisel.write("routes/people.ts", PEOPLE_CRUD);
+    c.chisel.write("routes/query.ts", EXPR_FILTER_ENDPOINT);
+    c.chisel.apply_ok().await;
+    store_people(&c.chisel).await;
+
+    c.chisel
+        .post("/dev/query")
+        .json(json!({
+            "lastName": "Plhak"
+        }))
+        .send()
+        .await
+        .assert_json(json!(["Jan"]));
+
+    c.chisel
+        .post("/dev/query")
+        .json(json!({
+            "age": 666
+        }))
+        .send()
+        .await
+        .assert_json(json!(["Glauber"]));
+
+    c.chisel
+        .post("/dev/query")
+        .json(json!({
+            "age": {"$gte": 666, "$lt": 667}
+        }))
+        .send()
+        .await
+        .assert_json(json!(["Glauber"]));
+}
+
+#[chisel_macros::test(modules = Deno, optimize = Both)]
+pub async fn expr_filter_logical_ops(c: TestContext) {
+    c.chisel.write("models/person.ts", PERSON_MODEL);
+    c.chisel.write("routes/people.ts", PEOPLE_CRUD);
+    c.chisel.write("routes/query.ts", EXPR_FILTER_ENDPOINT);
+    c.chisel.apply_ok().await;
+    store_people(&c.chisel).await;
+
+    c.chisel
+        .post("/dev/query")
+        .json(json!({
+            "$not": {"firstName": "Glauber"}
+        }))
+        .send()
+        .await
+        .assert_json(json!(["Jan", "Pekka"]));
+
+    c.chisel
+        .post("/dev/query")
+        .json(json!({
+            "$and": [
+                {"age": {"$gte": 666}},
+                {"human": true}
+            ]
+        }))
+        .send()
+        .await
+        .assert_json(json!(["Glauber"]));
+
+    c.chisel
+        .post("/dev/query")
+        .json(json!({
+            "$or": [
+                {"age": 666},
+                {"firstName": "Pekka"}
+            ]
+        }))
+        .send()
+        .await
+        .assert_json(json!(["Glauber", "Pekka"]));
+
+    c.chisel
+        .post("/dev/query")
+        .json(json!({
+            "$and": [
+                {
+                    "$or": [
+                        {"firstName": "Jan"},
+                        {"firstName": "Pekka"}
+                    ]
+                },
+                {
+                    "$or": [
+                        {"lastName": "Costa"},
+                        {"lastName": "Plhak"}
+                    ]
+                }
+            ]
+        }))
+        .send()
+        .await
+        .assert_json(json!(["Jan"]));
+}
+
+#[chisel_macros::test(modules = Deno, optimize = Both)]
+pub async fn expr_filter_comparators(c: TestContext) {
+    c.chisel.write("models/person.ts", PERSON_MODEL);
+    c.chisel.write("routes/people.ts", PEOPLE_CRUD);
+    c.chisel.write("routes/query.ts", EXPR_FILTER_ENDPOINT);
+    c.chisel.apply_ok().await;
+    store_people(&c.chisel).await;
+
+    c.chisel
+        .post("/dev/query")
+        .json(json!({
+            "firstName": {"$eq": "Jan"}
+        }))
+        .send()
+        .await
+        .assert_json(json!(["Jan"]));
+
+    c.chisel
+        .post("/dev/query")
+        .json(json!({
+            "firstName": {"$ne": "Jan"}
+        }))
+        .send()
+        .await
+        .assert_json(json!(["Glauber", "Pekka"]));
+
+    c.chisel
+        .post("/dev/query")
+        .json(json!({
+            "age": {"$gt": 666}
+        }))
+        .send()
+        .await
+        .assert_json(json!(["Pekka"]));
+
+    c.chisel
+        .post("/dev/query")
+        .json(json!({
+            "age": {"$gte": 666}
+        }))
+        .send()
+        .await
+        .assert_json(json!(["Glauber", "Pekka"]));
+
+    c.chisel
+        .post("/dev/query")
+        .json(json!({
+            "age": {"$lt": 666}
+        }))
+        .send()
+        .await
+        .assert_json(json!(["Jan"]));
+    c.chisel
+        .post("/dev/query")
+        .json(json!({
+            "age": {"$lte": 666}
+        }))
+        .send()
+        .await
+        .assert_json(json!(["Glauber", "Jan"]));
+}
+
+#[chisel_macros::test(modules = Deno, optimize = Both)]
+pub async fn expr_filter_nested_entities(c: TestContext) {
+    c.chisel.write("models/person.ts", PERSON_MODEL);
+    c.chisel.write(
+        "models/company.ts",
+        r#"
+        import { ChiselEntity } from "@chiselstrike/api";
+        import { Person } from "../models/person.ts";
+
+        export class Company extends ChiselEntity {
+            name: string;
+            ceo: Person = new Person();
+        }
+    "#,
+    );
+    c.chisel.write(
+        "routes/companies.ts",
+        r#"
+        import { Company } from "../models/company.ts";
+        export default Company.crud();
+    "#,
+    );
+    c.chisel.write(
+        "routes/query.ts",
+        r#"
+        import { ChiselRequest } from '@chiselstrike/api';
+        import { Company } from "../models/company.ts";
+
+        export default async function chisel(req: ChiselRequest) {
+            return await Company.cursor()
+                .filter((_) => true) // Ensure in-TS eval when not optimized.
+                .filter(await req.json())
+                .sortBy("name")
+                .map(c => c.name)
+                .toArray();
+        }"#,
+    );
+    c.chisel.apply_ok().await;
+    c.chisel
+        .post_json(
+            "dev/companies",
+            json!({
+                "name": "ChiselStrike",
+                "ceo": {
+                    "firstName":"Glauber",
+                    "lastName":"Costa",
+                    "age": 666,
+                    "human": true,
+                    "height": 10.01
+                }
+            }),
+        )
+        .await;
+    c.chisel
+        .post_json(
+            "dev/companies",
+            json!({
+                "name": "Sauna inc.",
+                "ceo": {
+                    "firstName":"Pekka",
+                    "lastName":"Enberg",
+                    "age": 888,
+                    "human": false,
+                    "height": 12.2
+                }
+            }),
+        )
+        .await;
+
+    c.chisel
+        .post("/dev/query")
+        .json(json!({
+            "ceo": {
+                "firstName": "Glauber"
+            }
+        }))
+        .send()
+        .await
+        .assert_json(json!(["ChiselStrike"]));
+    c.chisel
+        .post("/dev/query")
+        .json(json!({
+            "ceo": {
+                "age": {"$gt": 666}
+            }
+        }))
+        .send()
+        .await
+        .assert_json(json!(["Sauna inc."]));
 }

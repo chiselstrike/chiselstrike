@@ -41,6 +41,7 @@ async fn main() -> Result<()> {
     compile("builtin_root").await?;
     compile("crud").await?;
     compile("datastore").await?;
+    compile("filter").await?;
     compile("http").await?;
     compile("kafka").await?;
     compile("request").await?;
