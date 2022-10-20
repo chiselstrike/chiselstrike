@@ -84,7 +84,7 @@ impl FromStr for PolicyName {
             "update" => Ok(Self::Update),
             "onRead" => Ok(Self::OnRead),
             "onSave" => Ok(Self::OnSave),
-            "geoLocation" => Ok(Self::GeoLoc),
+            "geoLoc" => Ok(Self::GeoLoc),
             other => bail!("unknown policy `{other}`"),
         }
     }
@@ -433,6 +433,14 @@ impl Predicate {
                 Predicate::Var(v) => match &m.prop {
                     MemberProp::Ident(id) => {
                         let var = Var::Member(v, id.sym.to_string());
+                        Self::Var(env.insert(var))
+                    }
+                    MemberProp::Computed(comp) => {
+                        let prop = match &*comp.expr {
+                            Expr::Lit(Lit::Str(prop)) => prop,
+                            _ => panic!("unsupported computed property expression."),
+                        };
+                        let var = Var::Member(v, prop.value.to_string());
                         Self::Var(env.insert(var))
                     }
                     _ => panic!("invalid member expression"),

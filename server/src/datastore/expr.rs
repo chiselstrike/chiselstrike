@@ -1,6 +1,7 @@
 // SPDX-FileCopyrightText: © 2022 ChiselStrike <info@chiselstrike.com>
 
 use serde_derive::{Deserialize, Serialize};
+use serde_json::Value as JsonValue;
 
 /// An expression.
 #[cfg_attr(test, derive(PartialEq))]
@@ -51,6 +52,23 @@ pub enum Value {
     F64(f64),
     String(String),
     Null,
+}
+
+impl From<&JsonValue> for Value {
+    fn from(json: &JsonValue) -> Self {
+        match json {
+            JsonValue::Null => Value::Null,
+            JsonValue::Bool(b) => Value::Bool(*b),
+            JsonValue::Number(n) if n.is_i64() => Value::I64(n.as_i64().unwrap()),
+            JsonValue::Number(n) if n.is_u64() => Value::U64(n.as_u64().unwrap()),
+            JsonValue::Number(n) if n.is_f64() => Value::F64(n.as_f64().unwrap()),
+            JsonValue::String(s) => Value::String(s.clone()),
+            JsonValue::Array(_) | JsonValue::Object(_) => {
+                unimplemented!("object and arrays not part of the data model.")
+            }
+            _ => unreachable!(),
+        }
+    }
 }
 
 impl From<bool> for Value {
