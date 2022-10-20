@@ -321,17 +321,17 @@ mod test {
         let req_js = policy_ctx
             .request
             .to_js_value(&mut policy_ctx.engine.boa_ctx.borrow_mut());
-        let function = compile(&policy_ctx, code);
+        let function = compile(policy_ctx, code);
         let filter = WritePolicyInstance { function };
 
-        filter.get_action(&policy_ctx, value, &req_js).unwrap()
+        filter.get_action(policy_ctx, value, &req_js).unwrap()
     }
 
     fn transform(policy_ctx: &PolicyContext, code: &[u8], value: &JsValue) {
         let req_js = policy_ctx
             .request
             .to_js_value(&mut policy_ctx.engine.boa_ctx.borrow_mut());
-        let function = compile(&policy_ctx, code);
+        let function = compile(policy_ctx, code);
         let filter = TransformPolicyInstance { function };
 
         filter.transform(policy_ctx, value, &req_js).unwrap()

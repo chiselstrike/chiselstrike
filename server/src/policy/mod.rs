@@ -50,7 +50,7 @@ pub enum PolicyError {
     DirtyEntity(Arc<ObjectType>),
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Eq)]
 pub enum Action {
     /// Allow, and perform the action
     Allow = 0,

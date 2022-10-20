@@ -71,7 +71,7 @@ impl PolicyEngine {
         let action = Action::js_value(&mut context)?;
         context.register_global_property("Action", action, Attribute::all());
         Ok(Self {
-            boa_ctx: Rc::new(RefCell::new(context.into())),
+            boa_ctx: Rc::new(RefCell::new(context)),
             policies: Default::default(),
         })
     }
@@ -209,12 +209,12 @@ fn cond_to_expr(
         Cond::And(left, right) => {
             let right = cond_to_expr(right, preds, entity_param_name, env)?;
             let left = cond_to_expr(left, preds, entity_param_name, env)?;
-            BinaryExpr::and(left, right).into()
+            BinaryExpr::and(left, right)
         }
         Cond::Or(left, right) => {
             let right = cond_to_expr(right, preds, entity_param_name, env)?;
             let left = cond_to_expr(left, preds, entity_param_name, env)?;
-            BinaryExpr::or(left, right).into()
+            BinaryExpr::or(left, right)
         }
         Cond::Not(cond) => Expr::Not(Box::new(cond_to_expr(cond, preds, entity_param_name, env)?)),
         Cond::Predicate(id) => {
@@ -312,7 +312,7 @@ mod test {
         }
 
         fn user_id(&self) -> Option<&str> {
-            self.get("userId")?.as_str().into()
+            self.get("userId")?.as_str()
         }
     }
 
@@ -343,10 +343,10 @@ mod test {
 
         let engine = PolicyEngine::new().unwrap();
         engine
-            .register_policy_from_code("Person".into(), code)
+            .register_policy_from_code("Person".to_string(), code)
             .unwrap();
 
-        let policy = engine.get_policy("Person".into()).unwrap();
+        let policy = engine.get_policy("Person").unwrap();
 
         assert!(policy.read.is_some());
         assert!(policy.create.is_some());
@@ -388,9 +388,9 @@ mod test {
 
         let engine = PolicyEngine::new().unwrap();
         engine
-            .register_policy_from_code("Person".into(), code)
+            .register_policy_from_code("Person".to_string(), code)
             .unwrap();
-        let policy = engine.get_policy("Person".into()).unwrap();
+        let policy = engine.get_policy("Person").unwrap();
 
         let ctx = serde_json::json! ({
             "headers": {},
@@ -427,9 +427,9 @@ mod test {
 
         let engine = PolicyEngine::new().unwrap();
         engine
-            .register_policy_from_code("Person".into(), code)
+            .register_policy_from_code("Person".to_string(), code)
             .unwrap();
-        let policy = engine.get_policy("Person".into()).unwrap();
+        let policy = engine.get_policy("Person").unwrap();
 
         let ctx = serde_json::json!({
             "headers": {},
@@ -443,26 +443,20 @@ mod test {
             .unwrap();
         // if name == "marin", skip, in other words, take name != "marin"
         let expected = Expr::Not(
-            Expr::Binary(BinaryExpr {
-                left: Expr::Binary(BinaryExpr {
-                    left: Expr::Property(PropertyAccess {
+            BinaryExpr::and(
+                BinaryExpr::eq(
+                    Expr::Property(PropertyAccess {
                         property: "name".into(),
                         object: Expr::Parameter { position: 0 }.into(),
-                    })
-                    .into(),
-                    op: BinaryOp::Eq,
-                    right: Expr::Value {
+                    }),
+                    Expr::Value {
                         value: Value::String("marin".into()),
-                    }
-                    .into(),
-                })
-                .into(),
-                op: BinaryOp::And,
-                right: Expr::Value {
+                    },
+                ),
+                Expr::Value {
                     value: Value::Bool(true),
-                }
-                .into(),
-            })
+                },
+            )
             .into(),
         );
 
@@ -485,9 +479,9 @@ mod test {
 
         let engine = PolicyEngine::new().unwrap();
         engine
-            .register_policy_from_code("Person".into(), code)
+            .register_policy_from_code("Person".to_string(), code)
             .unwrap();
-        let policy = engine.get_policy("Person".into()).unwrap();
+        let policy = engine.get_policy("Person").unwrap();
 
         let ctx = serde_json::json!({
             "headers": {},
@@ -534,9 +528,9 @@ mod test {
 
         let engine = PolicyEngine::new().unwrap();
         engine
-            .register_policy_from_code("Person".into(), code)
+            .register_policy_from_code("Person".to_string(), code)
             .unwrap();
-        let policy = engine.get_policy("Person".into()).unwrap();
+        let policy = engine.get_policy("Person").unwrap();
 
         let ctx = serde_json::json!({
             "headers": {},
@@ -552,128 +546,83 @@ mod test {
         // sorry for what's next... :()
         // p1 = !(name == "marin" && true) = !A
         let p1 = Expr::Not(
-            Expr::Binary(BinaryExpr {
-                left: Expr::Binary(
-                    BinaryExpr {
-                        left: Expr::Property(PropertyAccess {
-                            property: "name".into(),
-                            object: Expr::Parameter { position: 0 }.into(),
-                        })
-                        .into(),
-                        op: BinaryOp::Eq,
-                        right: Expr::Value {
-                            value: Value::String("marin".into()),
-                        }
-                        .into(),
-                    }
-                    .into(),
-                )
-                .into(),
-                op: BinaryOp::And,
-                right: Expr::Value {
+            BinaryExpr::and(
+                BinaryExpr::eq(
+                    Expr::Property(PropertyAccess {
+                        property: "name".into(),
+                        object: Expr::Parameter { position: 0 }.into(),
+                    }),
+                    Expr::Value {
+                        value: Value::String("marin".into()),
+                    },
+                ),
+                Expr::Value {
                     value: Value::Bool(true),
-                }
-                .into(),
-            })
+                },
+            )
             .into(),
-        )
-        .into();
+        );
 
         // p2 = !(name == Jim && age < 178) = !C
         let p2 = Expr::Not(
-            Expr::Binary(BinaryExpr {
-                left: Expr::Binary(BinaryExpr {
-                    left: Expr::Property(PropertyAccess {
+            BinaryExpr::and(
+                BinaryExpr::eq(
+                    Expr::Property(PropertyAccess {
                         property: "name".into(),
                         object: Expr::Parameter { position: 0 }.into(),
-                    })
-                    .into(),
-                    op: BinaryOp::Eq,
-                    right: Expr::Value {
+                    }),
+                    Expr::Value {
                         value: Value::String("Jim".into()),
-                    }
-                    .into(),
-                })
-                .into(),
-                op: BinaryOp::And,
-                right: Expr::Binary(BinaryExpr {
-                    left: Expr::Property(PropertyAccess {
+                    },
+                ),
+                BinaryExpr::lt(
+                    Expr::Property(PropertyAccess {
                         property: "age".into(),
                         object: Expr::Parameter { position: 0 }.into(),
-                    })
-                    .into(),
-                    op: BinaryOp::Lt,
-                    right: Expr::Value {
+                    }),
+                    Expr::Value {
                         value: Value::F64(178.0),
-                    }
-                    .into(),
-                })
-                .into(),
-            })
-            .into(),
-        )
-        .into();
-
-        // p3 = p1 && p2 = !A && !C
-        let p3 = Expr::Binary(
-            BinaryExpr {
-                left: p1,
-                op: BinaryOp::And,
-                right: p2,
-            }
-            .into(),
-        )
-        .into();
-
-        // p4 = (age == 42) && !(name == "marin" && true) = !A && B
-        let p4 = Expr::Binary(BinaryExpr {
-            left: Expr::Binary(BinaryExpr {
-                left: Expr::Property(PropertyAccess {
-                    property: "age".into(),
-                    object: Expr::Parameter { position: 0 }.into(),
-                })
-                .into(),
-                op: BinaryOp::Eq,
-                right: Expr::Value {
-                    value: Value::F64(42.0),
-                }
-                .into(),
-            })
-            .into(),
-            op: BinaryOp::And,
-            right: Expr::Not(
-                Expr::Binary(BinaryExpr {
-                    left: Expr::Binary(BinaryExpr {
-                        left: Expr::Property(PropertyAccess {
-                            property: "name".into(),
-                            object: Expr::Parameter { position: 0 }.into(),
-                        })
-                        .into(),
-                        op: BinaryOp::Eq,
-                        right: Expr::Value {
-                            value: Value::String("marin".into()),
-                        }
-                        .into(),
-                    })
-                    .into(),
-                    op: BinaryOp::And,
-                    right: Expr::Value {
-                        value: Value::Bool(true),
-                    }
-                    .into(),
-                })
-                .into(),
+                    },
+                ),
             )
             .into(),
-        })
-        .into();
+        );
+
+        // p3 = p1 && p2 = !A && !C
+        let p3 = BinaryExpr::and(p1, p2);
+
+        // p4 = (age == 42) && !(name == "marin" && true) = !A && B
+        let p4 = BinaryExpr::and(
+            BinaryExpr::eq(
+                Expr::Property(PropertyAccess {
+                    property: "age".into(),
+                    object: Expr::Parameter { position: 0 }.into(),
+                }),
+                Expr::Value {
+                    value: Value::F64(42.0),
+                },
+            ),
+            Expr::Not(
+                BinaryExpr::and(
+                    BinaryExpr::eq(
+                        Expr::Property(PropertyAccess {
+                            property: "name".into(),
+                            object: Expr::Parameter { position: 0 }.into(),
+                        }),
+                        Expr::Value {
+                            value: Value::String("marin".into()),
+                        },
+                    ),
+                    Expr::Value {
+                        value: Value::Bool(true),
+                    },
+                )
+                .into(),
+            ),
+        );
 
         // expected = p3 || p4 = (!A && !C) || (!A && B) : SUCCESS this is what we wanted!
-        let expected = Expr::Binary(BinaryExpr {
-            left: p3,
-            op: BinaryOp::Or,
-            right: p4,
-        });
+        let expected = BinaryExpr::or(p3, p4);
 
         assert_eq!(expected, expr);
     }
@@ -692,9 +641,9 @@ mod test {
 
         let engine = PolicyEngine::new().unwrap();
         engine
-            .register_policy_from_code("Person".into(), code)
+            .register_policy_from_code("Person".to_string(), code)
             .unwrap();
-        let policy = engine.get_policy("Person".into()).unwrap();
+        let policy = engine.get_policy("Person").unwrap();
 
         let ctx = serde_json::json!({
             "headers": {
