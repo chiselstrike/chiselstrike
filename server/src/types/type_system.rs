@@ -283,6 +283,7 @@ impl TypeSystem {
         match ty {
             TypeId::String
             | TypeId::Float
+            | TypeId::Int64
             | TypeId::Boolean
             | TypeId::Id
             | TypeId::JsDate

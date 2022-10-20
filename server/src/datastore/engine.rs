@@ -24,7 +24,7 @@ use sqlx::{Executor, Row, Transaction, ValueRef};
 use uuid::Uuid;
 
 use crate::datastore::query::{
-    KeepOrOmitField, Mutation, QueriedEntity, QueryField, QueryPlan, SqlValue, TargetDatabase,
+    KeepOrOmitField, Mutation, QueryField, QueryPlan, SqlValue, TargetDatabase,
 };
 use crate::datastore::value::{EntityMap, EntityValue};
 use crate::datastore::DbConnection;
@@ -100,6 +100,7 @@ impl TryFrom<&Field> for ColumnDef {
             TypeId::String => column_def.text(),
             TypeId::Id => column_def.text().primary_key(),
             TypeId::Float | TypeId::JsDate => column_def.double(),
+            TypeId::Int64 => column_def.big_integer(),
             TypeId::Boolean => column_def.boolean(),
             TypeId::ArrayBuffer => column_def.binary(),
             TypeId::Entity { .. } | TypeId::EntityId { .. } => column_def.text(), // Foreign key, must the be same type as Type::Id
@@ -127,6 +128,7 @@ impl SqlWithArguments {
             match arg {
                 SqlValue::Bool(arg) => sqlx_query = sqlx_query.bind(arg),
                 SqlValue::F64(arg) => sqlx_query = sqlx_query.bind(arg),
+                SqlValue::I64(arg) => sqlx_query = sqlx_query.bind(arg),
                 SqlValue::String(arg) => sqlx_query = sqlx_query.bind(arg),
                 SqlValue::Bytes(arg) => sqlx_query = sqlx_query.bind(arg),
             };
@@ -164,8 +166,8 @@ fn column_is_null(row: &AnyRow, column_idx: usize) -> bool {
     row.try_get_raw(column_idx).unwrap().is_null()
 }
 
-fn id_idx(entity: &QueriedEntity) -> usize {
-    for f in &entity.fields {
+fn id_idx(fields: &Vec<QueryField>) -> usize {
+    for f in fields {
         match f {
             QueryField::Scalar {
                 name, column_idx, ..
@@ -393,11 +395,11 @@ impl QueryEngine {
 
     fn row_to_entity_value(
         db_kind: AnyKind,
-        entity: &QueriedEntity,
+        fields: &Vec<QueryField>,
         row: &AnyRow,
     ) -> Result<EntityMap> {
         let mut ret = EntityMap::default();
-        for s_field in &entity.fields {
+        for s_field in fields {
             match s_field {
                 QueryField::Scalar {
                     name,
@@ -423,6 +425,7 @@ impl QueryEngine {
                             let val: f64 = row.get_unchecked(column_idx);
                             EntityValue::JsDate(val)
                         }
+                        TypeId::Int64 => EntityValue::Float64(row.get::<i64, _>(column_idx) as f64),
                         TypeId::String | TypeId::Id | TypeId::EntityId { .. } => {
                             let val = row.get::<&str, _>(column_idx);
                             EntityValue::String(val.to_owned())
@@ -461,13 +464,13 @@ impl QueryEngine {
                     is_optional,
                     transform,
                     keep_or_omit,
+                    fields,
                 } => {
                     let omit_field = matches!(keep_or_omit, KeepOrOmitField::Omit);
-                    let child_entity = entity.get_child_entity(name).unwrap();
-                    if omit_field || (*is_optional && column_is_null(row, id_idx(child_entity))) {
+                    if omit_field || (*is_optional && column_is_null(row, id_idx(fields))) {
                         continue;
                     }
-                    let val = Self::row_to_entity_value(db_kind, child_entity, row)?;
+                    let val = Self::row_to_entity_value(db_kind, fields, row)?;
                     let mut val = EntityValue::Map(val);
                     if let Some(tr) = transform {
                         // Apply policy transformation
@@ -510,7 +513,7 @@ impl QueryEngine {
 
         let stream = new_query_results(query.raw_sql, txn);
         let stream =
-            stream.map(move |row| Self::row_to_entity_value(db_kind, &query.entity, &row?));
+            stream.map(move |row| Self::row_to_entity_value(db_kind, &query.fields, &row?));
         let stream = Box::pin(stream.map(move |o| Self::project(o, &allowed_fields)));
         Ok(stream)
     }
@@ -705,6 +708,7 @@ impl QueryEngine {
                 SqlValue::String(convert_value!(as_str, String))
             }
             TypeId::Float => SqlValue::F64(convert_value!(as_f64, f64)),
+            TypeId::Int64 => SqlValue::I64(convert_value!(as_i64, i64)),
             TypeId::Boolean => SqlValue::Bool(convert_value!(as_bool, bool)),
             TypeId::JsDate => SqlValue::F64(convert_value!(as_date, f64)),
             TypeId::ArrayBuffer => {
@@ -752,6 +756,7 @@ impl QueryEngine {
                     maybe_bail!(is_string)
                 }
                 TypeId::Float => maybe_bail!(is_f64),
+                TypeId::Int64 => maybe_bail!(is_i64),
                 TypeId::JsDate => {
                     if !e.is_date() && !e.is_f64() {
                         bail!();

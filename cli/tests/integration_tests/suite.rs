@@ -58,7 +58,7 @@ impl TestSuite {
 
             match (test_spec.optimize, optimize) {
                 (OptimizeSpec::Yes, true) => {}
-                //(OptimizeSpec::No, false) => {},
+                (OptimizeSpec::No, false) => {}
                 (OptimizeSpec::Both, _) => {}
                 (_, _) => return None,
             }
@@ -108,7 +108,7 @@ pub enum Modules {
 #[derive(Copy, Clone, Debug)]
 pub enum OptimizeSpec {
     Yes,
-    //No,
+    No,
     Both,
 }
 
