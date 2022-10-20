@@ -7,8 +7,8 @@ static PERSON_MODEL: &str = r#"
     import { ChiselEntity, labels } from "@chiselstrike/api";
 
     export class Person extends ChiselEntity {
-        first_name: string = "";
-        last_name: string = "";
+        firstName: string = "";
+        lastName: string = "";
         age: number = 0;
         human: boolean = false;
         height: number = 1;
@@ -25,8 +25,8 @@ async fn store_people(chisel: &Chisel) {
         .post_json(
             "dev/people",
             json!({
-                "first_name":"Glauber",
-                "last_name":"Costa",
+                "firstName":"Glauber",
+                "lastName":"Costa",
                 "age": 666,
                 "human": true,
                 "height": 10.01
@@ -37,8 +37,8 @@ async fn store_people(chisel: &Chisel) {
         .post_json(
             "dev/people",
             json!({
-                "first_name":"Jan",
-                "last_name":"Plhak",
+                "firstName":"Jan",
+                "lastName":"Plhak",
                 "age": -666,
                 "human": true,
                 "height": 10.02
@@ -49,8 +49,8 @@ async fn store_people(chisel: &Chisel) {
         .post_json(
             "dev/people",
             json!({
-                "first_name":"Pekka",
-                "last_name":"Enberg",
+                "firstName":"Pekka",
+                "lastName":"Enberg",
                 "age": 888,
                 "human": false,
                 "height": 12.2
@@ -70,10 +70,10 @@ pub async fn basic(c: TestContext) {
         import { Person } from "../models/person.ts";
 
         export default async function chisel(req: ChiselRequest) {
-            const first_name = req.query.get("first_name")!;
+            const firstName = req.query.get("first_name")!;
             return await Person.cursor()
-                .filter({first_name})
-                .map(p => p.last_name)
+                .filter({firstName})
+                .map(p => p.lastName)
                 .toArray();
         }"#,
     );
