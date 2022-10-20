@@ -1,6 +1,6 @@
 [package]
 name = "tsc_compile"
-version = "0.13.0-dev.0"
+version = "0.13.0"
 authors = ["ChiselStrike"]
 edition = "2021"
 
