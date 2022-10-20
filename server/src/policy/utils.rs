@@ -4,7 +4,7 @@ use boa_engine::builtins::date::Date;
 use boa_engine::object::{JsArray, JsArrayBuffer, ObjectData};
 use boa_engine::prelude::JsObject;
 use boa_engine::property::PropertyKey;
-use boa_engine::{JsString, JsValue};
+use boa_engine::{JsBigInt, JsString, JsValue};
 use itertools::Itertools;
 use serde_json::{Map, Value as JsonValue};
 
@@ -85,6 +85,7 @@ pub fn entity_value_to_js_value(
             let ab = JsArrayBuffer::from_byte_block(bytes.clone(), ctx).unwrap();
             ab.into()
         }
+        EntityValue::Int64(i) => JsValue::BigInt(JsBigInt::new(*i)),
     }
 }
 
@@ -117,7 +118,7 @@ pub fn js_value_to_entity_value(val: &JsValue) -> EntityValue {
         JsValue::String(ref s) => EntityValue::String(s.to_string()),
         JsValue::Rational(f) => EntityValue::Float64(*f),
         JsValue::Integer(n) => EntityValue::Float64(*n as _),
-        JsValue::BigInt(_) => todo!("big int not supported"),
+        JsValue::BigInt(i) => EntityValue::Int64(i.to_string().parse().unwrap()),
         JsValue::Object(ref o) if o.borrow().is_date() => {
             let time = o.borrow().as_date().unwrap().get_time();
             EntityValue::JsDate(time)
