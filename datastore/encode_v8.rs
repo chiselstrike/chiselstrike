@@ -1,10 +1,11 @@
 //! Converting values from V8 to SQL.
 
-use anyhow::{Result, Context, anyhow, bail};
+use anyhow::{Result, Context, anyhow, bail, ensure};
 use chisel_snapshot::schema;
 use deno_core::v8;
 use sqlx::Arguments;
 use crate::layout;
+use crate::util::is_canonical_uuid;
 
 pub fn encode_id_to_sql<'s>(
     repr: layout::IdRepr,
@@ -14,7 +15,7 @@ pub fn encode_id_to_sql<'s>(
 ) -> Result<()> {
     match repr {
         layout::IdRepr::UuidAsText =>
-            out_args.add(as_string_lossy(scope, value, "uuid id")?),
+            out_args.add(as_uuid(scope, value, "uuid id")?),
         layout::IdRepr::StringAsText =>
             out_args.add(as_string_lossy(scope, value, "string id")?),
     }
@@ -35,17 +36,25 @@ pub fn encode_field_to_sql<'s>(
         return Ok(());
     }
 
+    fn ensure_not_nan(x: f64) -> Result<f64> {
+        if !x.is_nan() {
+            Ok(x)
+        } else {
+            bail!("cannot store a NaN")
+        }
+    }
+
     match repr {
         layout::FieldRepr::StringAsText =>
             out_args.add(as_string_lossy(scope, value, "string field")?),
         layout::FieldRepr::NumberAsDouble =>
-            out_args.add(as_f64(scope, value, "number field")?),
+            out_args.add(as_f64(scope, value, "number field").and_then(ensure_not_nan)?),
         layout::FieldRepr::BooleanAsInt =>
             out_args.add(as_bool(value, "boolean field")?),
         layout::FieldRepr::UuidAsText =>
-            out_args.add(as_string_lossy(scope, value, "Uuid field")?),
+            out_args.add(as_uuid(scope, value, "Uuid field")?),
         layout::FieldRepr::JsDateAsDouble =>
-            out_args.add(as_js_date(value, "JsDate field")?),
+            out_args.add(as_js_date(value, "JsDate field").and_then(ensure_not_nan)?),
         layout::FieldRepr::AsJsonText => {
             let json = encode_to_json(schema, type_, scope, value)
                 .context("could not convert JS value to JSON (field)")?;
@@ -120,13 +129,23 @@ fn encode_primitive_to_json<'s>(
         schema::PrimitiveType::String =>
             as_string_lossy(scope, value, "string JSON value")?.into(),
         schema::PrimitiveType::Number =>
-            as_f64(scope, value, "number JSON value")?.into(),
+            as_f64(scope, value, "number JSON value").and_then(encode_f64_to_json)?,
         schema::PrimitiveType::Boolean =>
             as_bool(value, "boolean JSON value")?.into(),
         schema::PrimitiveType::Uuid =>
-            as_string_lossy(scope, value, "Uuid JSON value")?.into(),
+            as_uuid(scope, value, "Uuid JSON value")?.into(),
         schema::PrimitiveType::JsDate =>
-            as_js_date(value, "JsDate JSON value")?.into(),
+            as_js_date(value, "JsDate JSON value").and_then(encode_f64_to_json)?,
+    })
+}
+
+fn encode_f64_to_json(value: f64) -> Result<serde_json::Value> {
+    Ok(if let Some(number) = serde_json::Number::from_f64(value) {
+        number.into()
+    } else if value.is_infinite() {
+        if value.is_sign_positive() { "+inf" } else { "-inf" }.into()
+    } else {
+        bail!("cannot store a NaN")
     })
 }
 
@@ -160,6 +179,17 @@ fn as_bool<'s>(value: v8::Local<'s, v8::Value>, what: &'static str) -> Result<bo
     } else {
         bail!("expected a JS true or false ({})", what)
     }
+}
+
+fn as_uuid<'s>(
+    scope: &mut v8::HandleScope<'s>,
+    value: v8::Local<'s, v8::Value>,
+    what: &'static str,
+) -> Result<String> {
+    let string = as_string_lossy(scope, value, what)?;
+    ensure!(is_canonical_uuid(&string),
+        "expected an UUID in canonical (hyphenated lowercase decimal) format");
+    Ok(string)
 }
 
 fn as_js_date<'s>(

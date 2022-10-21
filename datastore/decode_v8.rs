@@ -115,12 +115,25 @@ fn decode_primitive_from_json<'s>(
         schema::PrimitiveType::String | schema::PrimitiveType::Uuid =>
             to_string(scope, json.as_str().context("expected a JSON string")?),
         schema::PrimitiveType::Number =>
-            to_number(scope, json.as_f64().context("expected a JSON number")?),
+            to_number(scope, decode_f64_from_json(json)?),
         schema::PrimitiveType::Boolean =>
             to_boolean(scope, json.as_bool().context("expected a JSON boolean")?),
         schema::PrimitiveType::JsDate =>
             to_js_date(scope, json.as_f64().context("expected a JSON number (representing a JS Date)")?)?,
     })
+}
+
+fn decode_f64_from_json(json: &serde_json::Value) -> Result<f64> {
+    match json {
+        serde_json::Value::Number(num) =>
+            num.as_f64().context("could not convert JSON number to f64"),
+        serde_json::Value::String(value) => match value.as_str() {
+            "+inf" => Ok(f64::INFINITY),
+            "-inf" => Ok(f64::NEG_INFINITY),
+            _ => bail!("expected a JSON number, got a string"),
+        },
+        _ => bail!("expected a JSON number"),
+    }
 }
 
 fn to_string<'s>(scope: &mut v8::HandleScope<'s>, value: &str) -> v8::Local<'s, v8::Value> {

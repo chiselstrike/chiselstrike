@@ -40,6 +40,7 @@ pub struct FieldColumn {
     pub field_name: String,
     pub col_name: Name,
     pub repr: FieldRepr,
+    #[serde(default)]
     pub nullable: bool,
 }
 
