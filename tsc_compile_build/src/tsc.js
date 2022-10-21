@@ -162,6 +162,7 @@
     // FIXME: get this list from build.rs
     const libs = {
         "deno.broadcast_channel": "deno_broadcast_channel",
+        "deno.cache": "deno_cache",
         "deno.console": "deno_console",
         "deno.core": "deno_core",
         "deno.crypto": "deno_crypto",

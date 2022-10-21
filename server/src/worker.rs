@@ -130,6 +130,7 @@ async fn run(init: WorkerInit) -> Result<()> {
         shared_array_buffer_store: None,
         compiled_wasm_module_store: None,
         stdio: Default::default(),
+        cache_storage_dir: None,
     };
 
     use deno_runtime::permissions::Permissions;
