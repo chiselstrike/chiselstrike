@@ -31,9 +31,17 @@ pub struct Query {
 #[derive(Debug)]
 pub enum InputParam {
     /// A JS id encoded into SQL.
-    Id(layout::IdRepr, InputExpr),
+    Id {
+        repr: layout::IdRepr,
+        expr: InputExpr,
+    },
     /// A JS field encoded into SQL.
-    Field(layout::FieldRepr, Arc<schema::Type>, InputExpr),
+    Field {
+        repr: layout::FieldRepr,
+        nullable: bool,
+        type_: Arc<schema::Type>,
+        expr: InputExpr,
+    },
 }
 
 /// Expression that computes a JS value from the single JS "argument".
@@ -42,18 +50,23 @@ pub enum InputExpr {
     /// The JS argument provided by the user.
     Arg,
     /// Get property of a JS object.
-    Get(Box<InputExpr>, v8::Global<v8::String>),
+    Get { obj_expr: Box<InputExpr>, key: v8::Global<v8::String> },
 }
 
 /// Expression that computes a JS output value from SQL row.
 #[derive(Debug)]
 pub enum OutputExpr {
     /// Create a JS object.
-    Object(Vec<(v8::Global<v8::String>, OutputExpr)>),
+    Object { properties: Vec<(v8::Global<v8::String>, OutputExpr)> },
     /// Decode a JS id from column with given index in the SQL row.
-    Id(layout::IdRepr, usize),
+    Id { repr: layout::IdRepr, col_idx: usize },
     /// Decode a JS field from column with given index in the SQL row.
-    Field(layout::FieldRepr, Arc<schema::Type>, usize),
+    Field {
+        repr: layout::FieldRepr,
+        nullable: bool,
+        type_: Arc<schema::Type>,
+        col_idx: usize,
+    },
 }
 
 

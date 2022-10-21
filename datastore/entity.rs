@@ -27,7 +27,7 @@ pub fn find_by_id_query<'s>(
 
     {
         q.sql.write(&table.id_col.col_name);
-        let id_out_expr = OutputExpr::Id(table.id_col.repr, 0);
+        let id_out_expr = OutputExpr::Id { repr: table.id_col.repr, col_idx: 0 };
         out_obj.push((global_str(scope, "id"), id_out_expr));
     }
 
@@ -35,11 +35,16 @@ pub fn find_by_id_query<'s>(
         q.sql.write(", ");
         q.sql.write(&field.col_name);
         let field_type = entity.fields[&field.field_name].type_.clone();
-        let field_out_expr = OutputExpr::Field(field.repr, field_type, i + 1);
+        let field_out_expr = OutputExpr::Field {
+            repr: field.repr,
+            nullable: field.nullable,
+            type_: field_type,
+            col_idx: i + 1,
+        };
         out_obj.push((global_str(scope, &field.field_name), field_out_expr));
     }
 
-    q.output(OutputExpr::Object(out_obj));
+    q.output(OutputExpr::Object { properties: out_obj });
 
     q.sql.write(" FROM ");
     q.sql.write(&table.table_name);
@@ -48,7 +53,10 @@ pub fn find_by_id_query<'s>(
     q.sql.write(&table.id_col.col_name);
     q.sql.write(" = ");
 
-    let id_param = q.add_input(InputParam::Id(table.id_col.repr, InputExpr::Arg));
+    let id_param = q.add_input(InputParam::Id {
+        repr: table.id_col.repr,
+        expr: InputExpr::Arg,
+    });
     q.sql.write_param(id_param);
 
     q.sql.write(" LIMIT 1");
@@ -81,15 +89,30 @@ pub fn store_with_id_query<'s>(
     q.sql.write(") VALUES (");
 
     {
-        let id_expr = InputExpr::Get(Box::new(InputExpr::Arg), global_str(scope, "id"));
-        let id_param = q.add_input(InputParam::Id(table.id_col.repr, id_expr));
+        let id_expr = InputExpr::Get {
+            obj_expr: Box::new(InputExpr::Arg),
+            key: global_str(scope, "id"),
+        };
+        let id_param = q.add_input(InputParam::Id {
+            repr: table.id_col.repr,
+            expr: id_expr
+        });
         q.sql.write_param(id_param);
     }
 
     for field in table.field_cols.values() {
-        let field_expr = InputExpr::Get(Box::new(InputExpr::Arg), global_str(scope, &field.field_name));
+        let field_expr = InputExpr::Get {
+            obj_expr: Box::new(InputExpr::Arg),
+            key: global_str(scope, &field.field_name),
+        };
         let field_type = entity.fields[&field.field_name].type_.clone();
-        let field_param = q.add_input(InputParam::Field(field.repr, field_type, field_expr));
+        let field_param = q.add_input(InputParam::Field {
+            repr: field.repr,
+            nullable: field.nullable,
+            type_: field_type,
+            expr: field_expr,
+        });
+        q.sql.write(", ");
         q.sql.write_param(field_param);
     }
 

@@ -3,42 +3,47 @@
 use anyhow::{Result, Context, bail};
 use chisel_snapshot::schema;
 use deno_core::v8;
-use sqlx::Row;
+use sqlx::{Row, ValueRef};
 use crate::layout;
 
 pub fn decode_id_from_sql<'s>(
     repr: layout::IdRepr,
     scope: &mut v8::HandleScope<'s>,
     row: &sqlx::any::AnyRow,
-    row_idx: usize,
+    col_idx: usize,
 ) -> Result<v8::Local<'s, v8::Value>> {
     Ok(match repr {
         layout::IdRepr::UuidAsText =>
-            to_string(scope, row.try_get(row_idx)?),
+            to_string(scope, row.try_get(col_idx)?),
         layout::IdRepr::StringAsText =>
-            to_string(scope, row.try_get(row_idx)?),
+            to_string(scope, row.try_get(col_idx)?),
     })
 }
 
 pub fn decode_field_from_sql<'s>(
     schema: &schema::Schema,
     repr: layout::FieldRepr,
+    nullable: bool,
     type_: &schema::Type,
     scope: &mut v8::HandleScope<'s>,
     row: &sqlx::any::AnyRow,
-    row_idx: usize,
+    col_idx: usize,
 ) -> Result<v8::Local<'s, v8::Value>> {
+    if nullable && row.try_get_raw(col_idx).unwrap().is_null() {
+        return Ok(v8::undefined(scope).into());
+    }
+
     Ok(match repr {
         layout::FieldRepr::StringAsText | layout::FieldRepr::UuidAsText =>
-            to_string(scope, row.try_get(row_idx)?),
+            to_string(scope, row.try_get(col_idx)?),
         layout::FieldRepr::NumberAsDouble =>
-            to_number(scope, row.try_get(row_idx)?),
+            to_number(scope, row.try_get(col_idx)?),
         layout::FieldRepr::BooleanAsInt =>
-            to_boolean(scope, row.try_get(row_idx)?),
+            to_boolean(scope, row.try_get(col_idx)?),
         layout::FieldRepr::JsDateAsDouble =>
-            to_js_date(scope, row.try_get(row_idx)?)?,
+            to_js_date(scope, row.try_get(col_idx)?)?,
         layout::FieldRepr::AsJsonText => {
-            let json_str: &str = row.try_get(row_idx)?;
+            let json_str: &str = row.try_get(col_idx)?;
             let json = serde_json::from_str(json_str)
                 .context("could not parse JSON")?;
             decode_from_json(schema, type_, scope, &json)?
@@ -54,10 +59,8 @@ pub fn decode_from_json<'s>(
 ) -> Result<v8::Local<'s, v8::Value>> {
     let scope = &mut v8::EscapableHandleScope::new(out_scope);
     let value: v8::Local<v8::Value> = match type_ {
-        schema::Type::Typedef(type_name) => {
-            let type_ = schema.typedefs.get(type_name).unwrap();
-            decode_from_json(schema, type_, scope, json)?
-        },
+        schema::Type::Typedef(type_name) =>
+            decode_from_json(schema, &schema.typedefs[type_name], scope, json)?,
         schema::Type::Id(entity_name) | schema::Type::EagerRef(entity_name) => {
             let entity = schema.entities.get(entity_name).unwrap();
             decode_primitive_from_json(entity.id_type.as_primitive_type(), scope, json)?

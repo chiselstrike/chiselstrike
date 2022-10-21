@@ -4,6 +4,7 @@ use guard::guard;
 use sqlx::prelude::*;
 use std::rc::Rc;
 use crate::ctx::DataCtx;
+use crate::util::reduce_args_lifetime;
 use super::{Query, eval};
 
 pub struct FetchStream {
@@ -34,7 +35,13 @@ impl FetchStream {
             }};
 
             let sql_stmt = ctx.txn.prepare(self.query.sql_text.as_str()).await
-                .context("could not prepare SQL statement")?
+                .with_context(|| {
+                    if cfg!(debug_assertions) {
+                        format!("could not prepare SQL statement {:?}", self.query.sql_text)
+                    } else {
+                        "could not prepare SQL statement".into()
+                    }
+                })?
                 .to_owned();
             let sql_args = unsafe { reduce_args_lifetime(sql_args) };
             let sql_query = sql_stmt.query_with(sql_args);
@@ -83,7 +90,13 @@ impl ExecuteFuture {
         }};
 
         let sql_stmt = ctx.txn.prepare(self.query.sql_text.as_str()).await
-            .context("could not prepare SQL statement")?
+            .with_context(|| {
+                if cfg!(debug_assertions) {
+                    format!("could not prepare SQL statement {:?}", self.query.sql_text)
+                } else {
+                    "could not prepare SQL statement".into()
+                }
+            })?
             .to_owned();
         let sql_args = unsafe { reduce_args_lifetime(sql_args) };
         let sql_query = sql_stmt.query_with(sql_args);
@@ -101,13 +114,3 @@ impl ExecuteFuture {
         }
     }
 }
-
-// this trick is necessary, because `sqlx`-s use of lifetimes (and traits!) is just insane
-// (apparently, by design, to avoid "misuse"):
-//
-// https://github.com/launchbadge/sqlx/issues/1428
-// https://github.com/launchbadge/sqlx/issues/1594
-unsafe fn reduce_args_lifetime<'q>(args: sqlx::any::AnyArguments<'static>) -> sqlx::any::AnyArguments<'q> {
-    std::mem::transmute(args)
-}
-

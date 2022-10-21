@@ -26,15 +26,15 @@ fn encode_input_arg<'s>(
     out_args: &mut sqlx::any::AnyArguments,
 ) -> Result<()> {
     match param {
-        InputParam::Id(repr, input_expr) => {
-            let js_value = eval_input_expr(schema, input_expr, scope, js_arg)
+        InputParam::Id { repr, expr } => {
+            let js_value = eval_input_expr(schema, expr, scope, js_arg)
                 .context("could not evaluate id input")?;
             encode_v8::encode_id_to_sql(*repr, scope, js_value, out_args)
         },
-        InputParam::Field(repr, type_, input_expr) => {
-            let js_value = eval_input_expr(schema, input_expr, scope, js_arg)
+        InputParam::Field { repr, nullable, type_, expr } => {
+            let js_value = eval_input_expr(schema, expr, scope, js_arg)
                 .context("could not evaluate field input")?;
-            encode_v8::encode_field_to_sql(schema, *repr, type_, scope, js_value, out_args)
+            encode_v8::encode_field_to_sql(schema, *repr, *nullable, type_, scope, js_value, out_args)
         },
     }
 }
@@ -47,7 +47,7 @@ fn eval_input_expr<'s>(
 ) -> Result<v8::Local<'s, v8::Value>> {
     match expr {
         InputExpr::Arg => Ok(arg),
-        InputExpr::Get(obj_expr, key_global) => {
+        InputExpr::Get { obj_expr, key: key_global } => {
             let get_key_str = |scope: &mut v8::HandleScope<'_>| {
                 let key: &v8::String = key_global.borrow();
                 key.to_rust_string_lossy(scope)
@@ -71,7 +71,7 @@ pub fn eval_output_expr<'s>(
     row: &sqlx::any::AnyRow,
 ) -> Result<v8::Local<'s, v8::Value>> {
     match expr {
-        OutputExpr::Object(properties) => {
+        OutputExpr::Object { properties } => {
             let scope = &mut v8::EscapableHandleScope::new(out_scope);
             let obj = v8::Object::new(scope);
             for (key_global, value_expr) in properties.iter() {
@@ -81,9 +81,9 @@ pub fn eval_output_expr<'s>(
             }
             Ok(scope.escape(obj).into())
         },
-        OutputExpr::Id(repr, row_idx) =>
-            decode_v8::decode_id_from_sql(*repr, out_scope, row, *row_idx),
-        OutputExpr::Field(repr, type_, row_idx) =>
-            decode_v8::decode_field_from_sql(schema, *repr, type_, out_scope, row, *row_idx),
+        OutputExpr::Id { repr, col_idx } =>
+            decode_v8::decode_id_from_sql(*repr, out_scope, row, *col_idx),
+        OutputExpr::Field { repr, nullable, type_, col_idx } =>
+            decode_v8::decode_field_from_sql(schema, *repr, *nullable, type_, out_scope, row, *col_idx),
     }
 }

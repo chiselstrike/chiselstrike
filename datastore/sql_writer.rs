@@ -13,6 +13,10 @@ impl SqlWriter {
         Self { kind, text: String::new() }
     }
 
+    pub fn kind(&self) -> sqlx::any::AnyKind {
+        self.kind
+    }
+
     /// Overloaded helper method that calls a `write_*` method depending on the type `T`.
     pub fn write<T: WriteSql + ?Sized>(&mut self, x: &T) {
         x.write_sql(self);
@@ -66,6 +70,12 @@ pub trait WriteSql {
 }
 
 impl WriteSql for str {
+    fn write_sql(&self, writer: &mut SqlWriter) {
+        writer.write_str(self);
+    }
+}
+
+impl WriteSql for String {
     fn write_sql(&self, writer: &mut SqlWriter) {
         writer.write_str(self);
     }

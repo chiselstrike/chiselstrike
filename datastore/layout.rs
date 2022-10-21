@@ -21,18 +21,7 @@ pub struct EntityTable {
     pub table_name: Name,
     pub id_col: IdColumn,
     #[serde(with = "entity_table_field_cols")] // serialize as Vec<FieldColumn>
-    pub field_cols: IndexMap<String, FieldColumn>,
-    #[serde(default)]
-    pub table_indexes: Vec<TableIndex>,
-}
-
-/// An SQL index on a table.
-#[derive(Debug, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct TableIndex {
-    pub index_name: Name,
-    pub field_cols: Vec<String>,
-    pub is_unique: bool,
+    pub field_cols: IndexMap<String, Arc<FieldColumn>>,
 }
 
 /// Description of the SQL column that stores the entity id. This column is the primary key of its
@@ -51,11 +40,12 @@ pub struct FieldColumn {
     pub field_name: String,
     pub col_name: Name,
     pub repr: FieldRepr,
+    pub nullable: bool,
 }
 
 /// Representation of a JavaScript id in SQL.
 #[derive(Debug, Copy, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "PascalCase")]
+#[serde(rename_all = "camelCase")]
 pub enum IdRepr {
     /// An UUID stored as an SQL text.
     UuidAsText,
@@ -65,7 +55,7 @@ pub enum IdRepr {
 
 /// Representation of a JavaScript field in SQL column.
 #[derive(Debug, Copy, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "PascalCase")]
+#[serde(rename_all = "camelCase")]
 pub enum FieldRepr {
     /// A JS string stored as an SQL text.
     StringAsText,
@@ -87,4 +77,4 @@ pub enum FieldRepr {
 pub struct Name(pub String);
 
 serde_map_as_vec!(mod layout_entity_tables, HashMap<schema::EntityName, Arc<EntityTable>>, entity_name);
-serde_map_as_vec!(mod entity_table_field_cols, IndexMap<String, FieldColumn>, field_name);
+serde_map_as_vec!(mod entity_table_field_cols, IndexMap<String, Arc<FieldColumn>>, field_name);

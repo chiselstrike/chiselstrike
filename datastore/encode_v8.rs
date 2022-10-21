@@ -24,11 +24,17 @@ pub fn encode_id_to_sql<'s>(
 pub fn encode_field_to_sql<'s>(
     schema: &schema::Schema,
     repr: layout::FieldRepr,
+    nullable: bool,
     type_: &schema::Type,
     scope: &mut v8::HandleScope<'s>,
     value: v8::Local<'s, v8::Value>,
     out_args: &mut sqlx::any::AnyArguments,
 ) -> Result<()> {
+    if nullable && value.is_undefined() {
+        out_args.add(None::<String>);
+        return Ok(());
+    }
+
     match repr {
         layout::FieldRepr::StringAsText =>
             out_args.add(as_string_lossy(scope, value, "string field")?),
@@ -59,10 +65,8 @@ pub fn encode_to_json<'s>(
     // TODO: a malicious user can overflow our call stack with a deeply nested data structure. we
     // should rewrite this function not to be recursive.
     match type_ {
-        schema::Type::Typedef(type_name) => {
-            let type_ = schema.typedefs.get(type_name).unwrap();
-            encode_to_json(schema, type_, scope, value)
-        },
+        schema::Type::Typedef(type_name) =>
+            encode_to_json(schema, &schema.typedefs[type_name], scope, value),
         schema::Type::Id(entity_name) | schema::Type::EagerRef(entity_name) => {
             let entity = schema.entities.get(entity_name).unwrap();
             encode_primitive_to_json(entity.id_type.as_primitive_type(), scope, value)

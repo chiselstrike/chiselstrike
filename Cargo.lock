@@ -668,8 +668,11 @@ dependencies = [
 name = "chisel-snapshot"
 version = "0.13.0-dev.0"
 dependencies = [
+ "anyhow",
  "indexmap",
+ "lazy_static",
  "serde",
+ "serde_json",
 ]
 
 [[package]]

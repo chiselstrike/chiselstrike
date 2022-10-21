@@ -1,7 +1,9 @@
 use anyhow::{Result, Context, bail};
-use chisel_datastore::{conn, layout};
+use chisel_datastore::{conn, layout, migrate};
+use chisel_snapshot::schema;
 use deno_core::v8;
 use guard::guard;
+use sqlx::ValueRef;
 use sqlx::prelude::*;
 use std::{env, fs};
 use std::cell::RefCell;
@@ -48,12 +50,13 @@ async fn run_tests() -> Result<bool> {
     for test_path in test_paths.iter() {
         let test_source = fs::read_to_string(test_path)
             .context("could not read test file")?;
-        let test_name = test_path.display().to_string();
+        let test_rel_path = test_path.strip_prefix(&tests_dir).unwrap_or(&test_path);
+        let test_name = test_rel_path.display().to_string();
 
         let promise = js_runtime.execute_script(&test_name, &test_source)
-            .context("could not execute test script")?;
+            .with_context(|| format!("could not execute test script {}", test_name))?;
         js_runtime.resolve_value(promise).await
-            .context("could not resolve test promise")?;
+            .with_context(|| format!("could not resolve test promise from {}", test_name))?;
     }
 
     js_runtime.run_event_loop(true).await
@@ -99,6 +102,8 @@ fn read_test_paths(tests_dir: &Path) -> Result<Vec<PathBuf>> {
 fn test_extension() -> deno_core::Extension {
     deno_core::ExtensionBuilder::default()
         .ops(vec![
+            op_test_create_db::decl(),
+            op_test_migrate::decl(),
             op_test_connect::decl(),
             op_test_execute_sql::decl(),
             op_test_fetch_sql::decl(),
@@ -107,35 +112,64 @@ fn test_extension() -> deno_core::Extension {
         .build()
 }
 
+struct DbRes(sqlx::AnyPool);
+impl deno_core::Resource for DbRes {}
+
 #[deno_core::op]
-async fn op_test_connect(
+async fn op_test_create_db(op_state: Rc<RefCell<deno_core::OpState>>) -> Result<deno_core::ResourceId> {
+    let pool = sqlx::AnyPool::connect("sqlite::memory:").await?;
+    Ok(op_state.borrow_mut().resource_table.add(DbRes(pool)))
+}
+
+#[deno_core::op]
+async fn op_test_migrate(
     op_state: Rc<RefCell<deno_core::OpState>>,
+    db_rid: deno_core::ResourceId,
+    old_layout: layout::Layout,
+    new_schema: schema::Schema,
+) -> Result<layout::Layout> {
+    let db = op_state.borrow().resource_table.get::<DbRes>(db_rid)?;
+    let plan_opts = migrate::PlanOpts { table_prefix: "".into() };
+    let mut txn = db.0.begin().await
+        .context("could not begin transaction")?;
+    let new_layout = migrate::migrate(&mut txn, &old_layout, Arc::new(new_schema), &plan_opts).await?;
+    txn.commit().await
+        .context("could not commit transaction")?;
+    Ok(new_layout)
+}
+
+#[deno_core::op]
+fn op_test_connect(
+    op_state: &mut deno_core::OpState,
+    db_rid: deno_core::ResourceId,
     layout: layout::Layout,
 ) -> Result<deno_core::ResourceId> {
-    let pool = sqlx::AnyPool::connect("sqlite::memory:").await?;
-    let conn = conn::DataConn::new(Arc::new(layout), pool);
-    Ok(op_state.borrow_mut().resource_table.add(conn))
+    let db = op_state.resource_table.get::<DbRes>(db_rid)?;
+    let conn = conn::DataConn::new(Arc::new(layout), db.0.clone());
+    Ok(op_state.resource_table.add(conn))
 }
 
 #[deno_core::op]
 async fn op_test_execute_sql(
     op_state: Rc<RefCell<deno_core::OpState>>,
-    conn_rid: deno_core::ResourceId,
+    db_rid: deno_core::ResourceId,
     sql_text: String,
 ) -> Result<()> {
-    let conn = op_state.borrow().resource_table.get::<conn::DataConn>(conn_rid)?;
-    conn.pool.execute(sql_text.as_str()).await?;
+    let db = op_state.borrow().resource_table.get::<DbRes>(db_rid)?;
+    db.0.execute(sql_text.as_str()).await
+        .context("could not execute the SQL statement")?;
     Ok(())
 }
 
 #[deno_core::op]
 async fn op_test_fetch_sql(
     op_state: Rc<RefCell<deno_core::OpState>>,
-    conn_rid: deno_core::ResourceId,
+    db_rid: deno_core::ResourceId,
     sql_text: String,
 ) -> Result<Vec<Vec<serde_json::Value>>> {
-    let conn = op_state.borrow().resource_table.get::<conn::DataConn>(conn_rid)?;
-    let rows = conn.pool.fetch_all(sql_text.as_str()).await?;
+    let db = op_state.borrow().resource_table.get::<DbRes>(db_rid)?;
+    let rows = db.0.fetch_all(sql_text.as_str()).await
+        .context("could not execute the SQL statement")?;
     rows.into_iter().map(|row| {
         (0..row.len()).map(|column_i| {
             sql_column_to_json(&row, column_i)
@@ -144,7 +178,9 @@ async fn op_test_fetch_sql(
 }
 
 fn sql_column_to_json(row: &sqlx::any::AnyRow, column_i: usize) -> Result<serde_json::Value> {
-    if let Ok(x) = row.try_get::<String, _>(column_i) {
+    if row.try_get_raw(column_i).unwrap().is_null() {
+        return Ok(serde_json::Value::Null)
+    } else if let Ok(x) = row.try_get::<String, _>(column_i) {
         return Ok(serde_json::Value::String(x));
     }
     bail!("could not decode value from column {} to JSON", column_i)

@@ -1,3 +1,5 @@
+"use strict";
+
 class Resource {
     constructor(rid) {
         this.rid = rid;
@@ -12,21 +14,19 @@ class Resource {
         this.rid = null;
     }
 
-    closeWith(otherRes) {
-        otherRes.closeOnClose.push(this);
+    closeWith(somethingElse) {
+        somethingElse.closeOnClose.push(this);
         return this;
     }
 }
 
-class Conn extends Resource {
-    static async connect(layout, callback) {
-        const conn = new Conn(await Deno.core.opAsync("op_test_connect", layout));
-        if (callback) {
-            await callback(conn);
-            conn.close();
-        } else {
-            return conn;
-        }
+class Db extends Resource {
+    static async create() {
+        return new Db(await Deno.core.opAsync("op_test_create_db"));
+    }
+
+    async migrate(oldLayout, newSchema) {
+        return await Deno.core.opAsync("op_test_migrate", this.rid, oldLayout, newSchema);
     }
 
     async executeSql(...sqls) {
@@ -37,6 +37,18 @@ class Conn extends Resource {
 
     async fetchSql(sql) {
         return await Deno.core.opAsync("op_test_fetch_sql", this.rid, sql);
+    }
+}
+
+class Conn extends Resource {
+    static async connect(db, layout, callback) {
+        const conn = new Conn(Deno.core.opSync("op_test_connect", db.rid, layout));
+        if (callback) {
+            await callback(conn);
+            conn.close();
+        } else {
+            return conn;
+        }
     }
 
     async begin(callback) {
@@ -87,6 +99,14 @@ class Query extends Resource {
             }
         });
         return values;
+    }
+
+    async fetchOne(ctx, arg) {
+        const values = await this.fetch(ctx, arg);
+        if (values.length != 1) {
+            throw new Error(`expected exactly one result, but got ${values.length}`);
+        }
+        return values[0];
     }
 
     async execute(ctx, arg) {

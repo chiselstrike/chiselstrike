@@ -4,3 +4,4 @@
 pub mod serde_with;
 
 pub mod schema;
+pub mod typecheck;
