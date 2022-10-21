@@ -48,6 +48,7 @@ pub struct WorkerJoinHandle {
 /// This struct is stored in the `op_state` in the Deno runtime, from where we can obtain it in
 /// Deno ops. Every worker runs on its own thread and runs code for a single version.
 pub struct WorkerState {
+    pub worker_idx: usize,
     pub server: Arc<Server>,
     pub version: Arc<Version>,
 
@@ -167,6 +168,7 @@ async fn run(init: WorkerInit) -> Result<()> {
     }
 
     let worker_state = WorkerState {
+        worker_idx: init.worker_idx,
         server: init.server,
         version: init.version.clone(),
         ready_tx: Some(init.ready_tx),
