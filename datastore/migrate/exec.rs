@@ -1,9 +1,9 @@
-use anyhow::{Result, Context, bail};
+use anyhow::{Result, Context, bail, ensure};
+use chisel_snapshot::schema;
 use sqlx::any::AnyKind;
-use sqlx::{Executor, Statement};
-use crate::{encode_value, layout};
+use sqlx::Executor;
+use crate::layout;
 use crate::sql_writer::SqlWriter;
-use crate::util::reduce_args_lifetime;
 use super::plan;
 
 pub async fn exec_migration_step(
@@ -32,7 +32,7 @@ async fn add_table(
     step: &plan::AddTable,
 ) -> Result<()> {
     let new_table = &step.new_table;
-    execute_sql(txn, |sql, _args| {
+    execute_sql(txn, |sql| {
         sql.write("CREATE TABLE ");
         sql.write(&new_table.table_name);
         sql.write(" (");
@@ -59,7 +59,7 @@ async fn remove_table(
     txn: &mut sqlx::Transaction<'static, sqlx::Any>,
     step: &plan::RemoveTable,
 ) -> Result<()> {
-    execute_sql(txn, |sql, _args| {
+    execute_sql(txn, |sql| {
         sql.write("DROP TABLE ");
         sql.write(&step.old_table_name);
         Ok(())
@@ -70,14 +70,15 @@ async fn add_column(
     txn: &mut sqlx::Transaction<'static, sqlx::Any>,
     step: &plan::AddColumn,
 ) -> Result<()> {
-    execute_sql(txn, |sql, args| {
+    execute_sql(txn, |sql| {
         sql.write("ALTER TABLE ");
         sql.write(&step.table_name);
         sql.write(" ADD COLUMN ");
         write_col(sql, &step.new_col);
-        sql.write(" DEFAULT ");
-        sql.write_param(0);
-        encode_value::encode_field_to_sql(step.new_col.repr, step.new_col.nullable, &step.value, args)?;
+        sql.write(" DEFAULT (");
+        write_value(sql, step.new_col.repr, step.new_col.nullable, &step.value)
+            .context("could not encode the default value")?;
+        sql.write(")");
         Ok(())
     }).await
 }
@@ -86,7 +87,7 @@ async fn remove_column(
     txn: &mut sqlx::Transaction<'static, sqlx::Any>,
     step: &plan::RemoveColumn,
 ) -> Result<()> {
-    execute_sql(txn, |sql, _args| {
+    execute_sql(txn, |sql| {
         sql.write("ALTER TABLE ");
         sql.write(&step.table_name);
         sql.write(" DROP COLUMN ");
@@ -120,7 +121,7 @@ async fn update_nullable_postgres(
     step: &plan::UpdateColumn,
     new_nullable: bool,
 ) -> Result<()> {
-    execute_sql(txn, |sql, _args| {
+    execute_sql(txn, |sql| {
         sql.write("ALTER TABLE ");
         sql.write(&step.table_name);
         sql.write(" ALTER COLUMN ");
@@ -139,7 +140,7 @@ async fn update_set_nullable_sqlite(
     let tmp_col_name = layout::Name(format!("__tmp_{}", step.col_name.0));
 
     // 1. create a new nullable column
-    execute_sql(txn, |sql, _args| {
+    execute_sql(txn, |sql| {
         sql.write("ALTER TABLE ");
         sql.write(&step.table_name);
         sql.write(" ADD COLUMN ");
@@ -150,7 +151,7 @@ async fn update_set_nullable_sqlite(
     }).await?;
 
     // 2. copy values from the old column to the new column
-    execute_sql(txn, |sql, _args| {
+    execute_sql(txn, |sql| {
         sql.write("UPDATE ");
         sql.write(&step.table_name);
         sql.write(" SET ");
@@ -161,7 +162,7 @@ async fn update_set_nullable_sqlite(
     }).await?;
 
     // 3. drop the old column
-    execute_sql(txn, |sql, _args| {
+    execute_sql(txn, |sql| {
         sql.write("ALTER TABLE ");
         sql.write(&step.table_name);
         sql.write(" DROP COLUMN ");
@@ -170,7 +171,7 @@ async fn update_set_nullable_sqlite(
     }).await?;
 
     // 4. rename the new column
-    execute_sql(txn, |sql, _args| {
+    execute_sql(txn, |sql| {
         sql.write("ALTER TABLE ");
         sql.write(&step.table_name);
         sql.write(" RENAME COLUMN ");
@@ -203,42 +204,75 @@ fn field_repr_to_sql(repr: layout::FieldRepr, kind: AnyKind) -> String {
         layout::FieldRepr::StringAsText
             | layout::FieldRepr::UuidAsText
             | layout::FieldRepr::AsJsonText
-            => "text",
+            => "TEXT",
         layout::FieldRepr::NumberAsDouble
             | layout::FieldRepr::JsDateAsDouble
             => match kind {
                 AnyKind::Postgres => "double precision",
-                AnyKind::Sqlite => "real",
+                AnyKind::Sqlite => "REAL",
             },
         layout::FieldRepr::BooleanAsInt => match kind {
             AnyKind::Postgres => "smallint",
-            AnyKind::Sqlite => "integer",
+            AnyKind::Sqlite => "INTEGER",
         },
     }.into()
 }
 
+fn write_value(
+    sql: &mut SqlWriter,
+    repr: layout::FieldRepr,
+    nullable: bool,
+    value: &schema::Value,
+) -> Result<()> {
+    match (repr, value) {
+        (layout::FieldRepr::AsJsonText, value) => {
+            let json: serde_json::Value = match value {
+                schema::Value::String(value) => value.clone().into(),
+                schema::Value::Number(value) => match value {
+                    schema::NumberValue::Finite(value) => value.clone().into(),
+                    schema::NumberValue::NegInf => "-inf".into(),
+                    schema::NumberValue::PosInf => "+inf".into(),
+                },
+                schema::Value::Undefined => serde_json::Value::Null,
+            };
+            let json_str = serde_json::to_string(&json).unwrap();
+            sql.write_literal_str(&json_str)
+        },
+        (layout::FieldRepr::StringAsText, schema::Value::String(value)) =>
+            sql.write_literal_str(value),
+        (layout::FieldRepr::NumberAsDouble, schema::Value::Number(value)) => {
+            let value = value.as_f64().context("number is not a valid f64")?;
+            sql.write_literal_f64(value)
+        },
+        (_, schema::Value::Undefined) => {
+            ensure!(nullable, "cannot store undefined (null) in non-nullable column");
+            Ok(sql.write("NULL"))
+        },
+        (_, _) =>
+            bail!("invalid combination of default value and column repr"),
+    }
+}
+
 async fn execute_sql<F>(txn: &mut sqlx::Transaction<'static, sqlx::Any>, f: F) -> Result<()>
-    where F: FnOnce(&mut SqlWriter, &mut sqlx::any::AnyArguments) -> Result<()>
+    where F: FnOnce(&mut SqlWriter) -> Result<()>
 {
     let mut sql_writer = SqlWriter::new(txn.kind());
-    let mut sql_args = sqlx::any::AnyArguments::default();
-    f(&mut sql_writer, &mut sql_args)?;
+    f(&mut sql_writer)?;
 
     async fn execute(
         txn: &mut sqlx::Transaction<'static, sqlx::Any>,
         sql_text: &str,
-        sql_args: sqlx::any::AnyArguments<'static>,
     ) -> Result<()> {
-        let sql_stmt = txn.prepare(sql_text).await
-            .context("could not prepare SQL statement")?
-            .to_owned();
-        let sql_args = unsafe { reduce_args_lifetime(sql_args) };
-        let sql_query = sql_stmt.query_with(sql_args);
-        txn.execute(sql_query).await
-            .context("could not execute SQL statement")?;
-
+        txn.execute(sql_text).await
+            .with_context(|| {
+                if cfg!(debug_assertions) {
+                    format!("could not execute SQL statement {:?}", sql_text)
+                } else {
+                    "could not execute SQL statement".into()
+                }
+            })?;
         Ok(())
     }
 
-    execute(txn, &sql_writer.build(), sql_args).await
+    execute(txn, &sql_writer.build()).await
 }

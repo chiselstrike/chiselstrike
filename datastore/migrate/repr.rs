@@ -30,7 +30,7 @@ pub fn new_field_repr(schema: &schema::Schema, type_: &schema::Type) -> layout::
     match type_ {
         schema::Type::Typedef(type_name) =>
             new_field_repr(schema, &schema.typedefs[type_name]),
-        schema::Type::Id(entity_name) | schema::Type::EagerRef(entity_name) =>
+        schema::Type::Ref(entity_name, _) =>
             new_primitive_repr(schema.entities[entity_name].id_type.as_primitive_type()),
         schema::Type::Primitive(type_) =>
             new_primitive_repr(*type_),

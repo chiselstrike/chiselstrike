@@ -76,7 +76,7 @@ pub fn encode_to_json<'s>(
     match type_ {
         schema::Type::Typedef(type_name) =>
             encode_to_json(schema, &schema.typedefs[type_name], scope, value),
-        schema::Type::Id(entity_name) | schema::Type::EagerRef(entity_name) => {
+        schema::Type::Ref(entity_name, _) => {
             let entity = schema.entities.get(entity_name).unwrap();
             encode_primitive_to_json(entity.id_type.as_primitive_type(), scope, value)
         },
@@ -188,7 +188,7 @@ fn as_uuid<'s>(
 ) -> Result<String> {
     let string = as_string_lossy(scope, value, what)?;
     ensure!(is_canonical_uuid(&string),
-        "expected an UUID in canonical (hyphenated lowercase decimal) format");
+        "expected an UUID in canonical (hyphenated lowercase hexadecimal) format");
     Ok(string)
 }
 

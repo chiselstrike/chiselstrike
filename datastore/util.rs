@@ -1,12 +1,3 @@
-// this trick is necessary, because `sqlx`-s use of lifetimes (and traits!) is just insane
-// (apparently, by design, to avoid "misuse"):
-//
-// https://github.com/launchbadge/sqlx/issues/1428
-// https://github.com/launchbadge/sqlx/issues/1594
-pub unsafe fn reduce_args_lifetime<'q>(args: sqlx::any::AnyArguments<'static>) -> sqlx::any::AnyArguments<'q> {
-    std::mem::transmute(args)
-}
-
 pub fn is_canonical_uuid(uuid: &str) -> bool {
     let dash_pattern = 0b000000001000010000100001000000000000u64;
     if uuid.len() != 36 { return false; }

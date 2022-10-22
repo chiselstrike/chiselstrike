@@ -146,3 +146,28 @@ class ExecuteFuture extends Resource {
     }
 }
 
+async function findById(conn, entityName, id) {
+    const query = Query.findById(conn, entityName);
+    const ctx = await conn.begin();
+    const obj = await query.fetchOne(ctx, id);
+    ctx.close();
+    query.close();
+    return obj;
+}
+
+async function storeWithId(conn, entityName, obj) {
+    const query = Query.storeWithId(conn, entityName);
+    const ctx = await conn.begin();
+    await query.execute(ctx, obj);
+    await ctx.commit();
+    query.close();
+}
+
+async function assertFind(conn, entityName, findObj) {
+    assertJsonEq(await findById(conn, entityName, findObj["id"]), findObj);
+}
+
+async function assertStoreAndFind(conn, entityName, storeObj, findObj = storeObj) {
+    await storeWithId(conn, entityName, storeObj);
+    assertJsonEq(await findById(conn, entityName, storeObj["id"]), findObj);
+}

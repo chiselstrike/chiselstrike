@@ -1,6 +1,7 @@
 use indexmap::IndexMap;
 use lazy_static::lazy_static;
-use serde::{Serialize, Deserialize};
+use serde::{Serialize, Deserialize, ser, de};
+use std::fmt;
 use std::collections::HashMap;
 use std::hash::{Hash, Hasher};
 use std::sync::Arc;
@@ -69,10 +70,8 @@ pub enum Type {
     /// Transparent reference to a named type defined in [`Schema::typedefs`]. Note that this means
     /// that types may be recursive.
     Typedef(TypeName),
-    /// `Id<E>` from TypeScript: an identifier of another entity.
-    Id(EntityName),
-    /// `E` from TypeScript: a reference to another entity, loaded eagerly.
-    EagerRef(EntityName),
+    /// A reference to another entity `E`
+    Ref(EntityName, RefKind),
     /// A primitive type.
     Primitive(PrimitiveType),
     /// `T | undefined` from TypeScript.
@@ -81,6 +80,15 @@ pub enum Type {
     Array(Arc<Type>),
     /// An object type ("struct") from TypeScript.
     Object(Arc<ObjectType>),
+}
+
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum RefKind {
+    /// `Id<E>`, a lazy reference
+    Id,
+    /// `E`, an eager reference
+    Eager,
 }
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -126,8 +134,15 @@ pub struct ObjectField {
 #[serde(rename_all = "camelCase")]
 pub enum Value {
     String(String),
-    Number(serde_json::Number),
+    Number(NumberValue),
     Undefined,
+}
+
+#[derive(Debug, Clone, PartialEq, Hash)]
+pub enum NumberValue {
+    NegInf,
+    Finite(serde_json::Number),
+    PosInf,
 }
 
 impl IdType {
@@ -135,6 +150,16 @@ impl IdType {
         match self {
             Self::Uuid => PrimitiveType::Uuid,
             Self::String => PrimitiveType::String,
+        }
+    }
+}
+
+impl NumberValue {
+    pub fn as_f64(&self) -> Option<f64> {
+        match self {
+            Self::Finite(num) => num.as_f64(),
+            Self::NegInf => Some(f64::NEG_INFINITY),
+            Self::PosInf => Some(f64::INFINITY),
         }
     }
 }
@@ -151,6 +176,53 @@ serde_map_as_vec!(mod schema_entities, HashMap<EntityName, Arc<Entity>>, name);
 serde_map_as_tuples!(mod schema_typedefs, HashMap<TypeName, Arc<Type>>);
 serde_map_as_vec!(mod entity_fields, IndexMap<String, Arc<EntityField>>, name);
 serde_map_as_vec!(mod object_type_fields, IndexMap<String, Arc<ObjectField>>, name);
+
+impl Serialize for NumberValue {
+    fn serialize<S: ser::Serializer>(&self, ser: S) -> Result<S::Ok, S::Error> {
+        match self {
+            Self::Finite(number) => number.serialize(ser),
+            Self::NegInf => ser.serialize_str("negInf"),
+            Self::PosInf => ser.serialize_str("posInf"),
+        }
+    }
+}
+
+impl<'de> Deserialize<'de> for NumberValue {
+    fn deserialize<D: de::Deserializer<'de>>(deser: D) -> Result<Self, D::Error> {
+        struct NumberVisitor;
+        impl<'de> de::Visitor<'de> for NumberVisitor {
+            type Value = NumberValue;
+
+            fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+                formatter.write_str(r#"a JSON number, "negInf" or "posInf""#)
+            }
+
+            fn visit_i64<E>(self, value: i64) -> Result<NumberValue, E> {
+                Ok(NumberValue::Finite(value.into()))
+            }
+
+            fn visit_u64<E>(self, value: u64) -> Result<NumberValue, E> {
+                Ok(NumberValue::Finite(value.into()))
+            }
+
+            fn visit_f64<E: de::Error>(self, value: f64) -> Result<NumberValue, E> {
+                match serde_json::Number::from_f64(value) {
+                    Some(number) => Ok(NumberValue::Finite(number)),
+                    None => Err(de::Error::custom("invalid JSON number")),
+                }
+            }
+
+            fn visit_str<E: de::Error>(self, value: &str) -> Result<NumberValue, E> {
+                match value {
+                    "posInf" => Ok(NumberValue::PosInf),
+                    "negInf" => Ok(NumberValue::NegInf),
+                    _ => Err(de::Error::custom("invalid string encoding number value")),
+                }
+            }
+        }
+        deser.deserialize_any(NumberVisitor)
+    }
+}
 
 impl Hash for ObjectType {
     fn hash<H: Hasher>(&self, state: &mut H) {

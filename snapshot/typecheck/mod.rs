@@ -53,22 +53,15 @@ fn step(
     }
 
     match (&*src_type, &*tgt_type) {
-        (
-            schema::Type::Id(src_name) | schema::Type::EagerRef(src_name),
-            schema::Type::Id(tgt_name) | schema::Type::EagerRef(tgt_name),
-        ) if variant == TypeVariant::Plain => {
+        (schema::Type::Ref(src_name, src_kind), schema::Type::Ref(tgt_name, tgt_kind)) => {
             ensure!(src_name == tgt_name,
                 "references to entities {:?} and {:?} are not compatible",
-                src_name, tgt_name)
+                src_name, tgt_name);
+            if variant == TypeVariant::Entity {
+                ensure!(src_kind == tgt_kind,
+                    "references {:?} and {:?} are not compatible", src_kind, tgt_kind);
+            }
         },
-        (schema::Type::Id(src_name), schema::Type::Id(tgt_name)) =>
-            ensure!(src_name == tgt_name,
-                "identifiers of entities {:?} and {:?} are not compatible",
-                src_name, tgt_name),
-        (schema::Type::EagerRef(src_name), schema::Type::EagerRef(tgt_name)) =>
-            ensure!(src_name == tgt_name,
-                "eager references to entities {:?} and {:?} are not compatible",
-                src_name, tgt_name),
         (schema::Type::Primitive(src_type), schema::Type::Primitive(tgt_type)) =>
             ensure!(is_primitive_subtype(*src_type, *tgt_type),
                 "primitive type {:?} cannot be used in place of {:?}",
@@ -229,10 +222,10 @@ mod tests {
             ],
         });
 
-        let id_book = type_!({"id": {"user": "Book"}});
-        let id_person = type_!({"id": {"user": "Person"}});
-        let eager_book = type_!({"eagerRef": {"user": "Book"}});
-        let eager_person = type_!({"eagerRef": {"user": "Person"}});
+        let id_book = type_!({"ref": [{"user": "Book"}, "id"]});
+        let id_person = type_!({"ref": [{"user": "Person"}, "id"]});
+        let eager_book = type_!({"ref": [{"user": "Book"}, "eager"]});
+        let eager_person = type_!({"ref": [{"user": "Person"}, "eager"]});
 
         // the relation must be reflexive
         assert_subtype!(s, id_book, id_book, variant: Plain);
@@ -246,7 +239,7 @@ mod tests {
         assert_not_subtype!(s, eager_book, eager_person, variant: Plain);
         assert_not_subtype!(s, eager_book, eager_person, variant: Entity);
 
-        // `Id<E>` and `E` are equivalent in `Plain` typing...
+        // references of different kinds are equivalent in `Plain` typing...
         assert_subtype!(s, id_book, eager_book, variant: Plain);
         assert_subtype!(s, eager_book, id_book, variant: Plain);
 

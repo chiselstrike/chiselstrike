@@ -10,32 +10,6 @@ t.context("entity load and store", async (t) => {
         return (await Conn.connect(db, layout)).closeWith(db);
     }
 
-    async function findById(conn, entityName, id) {
-        const query = Query.findById(conn, entityName);
-        const ctx = await conn.begin();
-        const obj = await query.fetchOne(ctx, id);
-        ctx.close();
-        query.close();
-        return obj;
-    }
-
-    async function storeWithId(conn, entityName, obj) {
-        const query = Query.storeWithId(conn, entityName);
-        const ctx = await conn.begin();
-        await query.execute(ctx, obj);
-        await ctx.commit();
-        query.close();
-    }
-
-    async function assertFind(conn, entityName, findObj) {
-        assertJsonEq(await findById(conn, entityName, findObj["id"]), findObj);
-    }
-
-    async function assertStoreAndFind(conn, entityName, storeObj, findObj = storeObj) {
-        await storeWithId(conn, entityName, storeObj);
-        assertJsonEq(await findById(conn, entityName, storeObj["id"]), findObj);
-    }
-
     const uuid1 = "2d35d9c6-a42c-4ba9-b877-bed8ed61d02a";
     const uuid2 = "f6223176-fbd8-4551-9f1b-fc6b11504ee9";
 
@@ -280,7 +254,7 @@ t.context("entity load and store", async (t) => {
             await storeWithId(conn, {user: "E"}, {"id": "nan", "array": [1, 2, NaN]});
         });
     });
-    
+
     await t.case("objects", async (t) => {
         //  class E extends Entity {
         //      id: string,
@@ -340,7 +314,7 @@ t.context("entity load and store", async (t) => {
                 "birth": new Date("1828-02-08"),
                 "addresses": [
                     {
-                        "lines": ["La Madeleine cemetery", "Amiens", "France"], 
+                        "lines": ["La Madeleine cemetery", "Amiens", "France"],
                         "coords": {"lat": 49.913889, "lng": 2.283611},
                     },
                 ],
@@ -417,5 +391,63 @@ t.context("entity load and store", async (t) => {
 
         await t.case("as field", () => test("uuidAsText", "TEXT"));
         await t.case("as json", () => test("asJsonText", "TEXT"));
+    });
+
+    await t.context("references", async (t) => {
+        async function test(refKind, refType, refRepr, refSqlType, refValues) {
+            const schema = {entities: [
+                {
+                    name: {user: "Post"},
+                    idType: refType,
+                    fields: [],
+                },
+                {
+                    name: {user: "Comment"},
+                    idType: "string",
+                    fields: [
+                        {name: "post", type: {ref: [{user: "Post"}, refKind]}},
+                    ],
+                },
+            ]};
+            const layout = {
+                entityTables: [
+                    {
+                        entityName: {user: "Post"},
+                        tableName: "post",
+                        idCol: {colName: "id", repr: refRepr},
+                        fieldCols: [],
+                    },
+                    {
+                        entityName: {user: "Comment"},
+                        tableName: "comment",
+                        idCol: {colName: "id", repr: "stringAsText"},
+                        fieldCols: [
+                            {fieldName: "post", colName: "post_id", repr: refRepr},
+                        ],
+                    }
+                ],
+                schema,
+            };
+            await db.executeSql(
+                `CREATE TABLE post (id ${refSqlType} PRIMARY KEY)`,
+                `CREATE TABLE comment (id TEXT PRIMARY KEY, post_id ${refSqlType} NOT NULL)`,
+            );
+            const conn = (await Conn.connect(db, layout)).closeWith(db);
+
+            for (let i = 0; i < refValues.length; ++i) {
+                await assertStoreAndFind(conn, {user: "Comment"},
+                    {"id": `${i}`, "post": refValues[i]});
+            }
+        }
+
+        for (const refKind of ["id", "eager"]) {
+            const stringValues = ["", "one", "žluťoučký kůň"];
+            await t.case(`string ${refKind}`, () =>
+                test(refKind, "string", "stringAsText", "TEXT", stringValues));
+
+            const uuidValues = [uuid1, uuid2];
+            await t.case(`uuid ${refKind}`, () =>
+                test(refKind, "uuid", "uuidAsText", "TEXT", uuidValues));
+        }
     });
 });

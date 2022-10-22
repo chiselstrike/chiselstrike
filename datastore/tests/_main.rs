@@ -45,7 +45,7 @@ async fn run_tests() -> Result<bool> {
         }
     }
     execute_script!("_utils.js");
-    execute_script!("_resources.js");
+    execute_script!("_datastore.js");
     execute_script!("_framework.js");
     
     for test_path in test_paths.iter() {

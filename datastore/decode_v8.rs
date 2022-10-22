@@ -61,7 +61,7 @@ pub fn decode_from_json<'s>(
     let value: v8::Local<v8::Value> = match type_ {
         schema::Type::Typedef(type_name) =>
             decode_from_json(schema, &schema.typedefs[type_name], scope, json)?,
-        schema::Type::Id(entity_name) | schema::Type::EagerRef(entity_name) => {
+        schema::Type::Ref(entity_name, _) => {
             let entity = schema.entities.get(entity_name).unwrap();
             decode_primitive_from_json(entity.id_type.as_primitive_type(), scope, json)?
         },
