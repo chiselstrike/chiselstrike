@@ -470,7 +470,7 @@ class MinBy<Input, K extends keyof Input>
             if (v2 === undefined || v2 === null) {
                 return v1;
             }
-            if (v1 === undefined) {
+            if (v1 === undefined || v1 == null) {
                 return v2;
             }
             return v1 < v2 ? v1 : v2;
@@ -486,7 +486,7 @@ class MaxBy<Input, K extends keyof Input>
             if (v2 === undefined || v2 === null) {
                 return v1;
             }
-            if (v1 === undefined) {
+            if (v1 === undefined || v1 == null) {
                 return v2;
             }
             return v1 > v2 ? v1 : v2;

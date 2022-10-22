@@ -11,7 +11,7 @@ use structopt::StructOpt;
 fn find_default_config_path() -> Option<PathBuf> {
     let config_dir = dirs::config_dir()?.join("chiselstrike");
     let config_path = config_dir.join("config.toml");
-    config_path.exists().then(|| config_path)
+    config_path.exists().then_some(config_path)
 }
 
 #[tokio::main]

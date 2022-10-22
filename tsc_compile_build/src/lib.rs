@@ -33,6 +33,9 @@ pub fn read(path: &str) -> &'static str {
             "lib.deno_broadcast_channel.d.ts" => inc_and_rerun!(
                 "../../third_party/deno/ext/broadcast_channel/lib.deno_broadcast_channel.d.ts"
             ),
+            "lib.deno_cache.d.ts" => {
+                inc_and_rerun!("../../third_party/deno/ext/cache/lib.deno_cache.d.ts")
+            }
             "lib.deno_console.d.ts" => {
                 inc_and_rerun!("../../third_party/deno/ext/console/lib.deno_console.d.ts")
             }
@@ -119,6 +122,7 @@ pub fn read(path: &str) -> &'static str {
                 "lib.es2022.error.d.ts",
                 "lib.es2022.intl.d.ts",
                 "lib.es2022.object.d.ts",
+                "lib.es2022.sharedmemory.d.ts",
                 "lib.es2022.string.d.ts",
                 "lib.es5.d.ts",
                 "lib.esnext.array.d.ts",

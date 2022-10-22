@@ -73,10 +73,7 @@ fn run_tests_inner(opt: &Opt, ports: &AtomicU16, optimize: bool) -> bool {
         .collect::<Vec<_>>();
 
     if let Some(name_regex) = opt.test.as_ref().or(opt.test_arg.as_ref()) {
-        lit_files = lit_files
-            .into_iter()
-            .filter(|path| name_regex.is_match(path.to_str().unwrap()))
-            .collect();
+        lit_files.retain(|path| name_regex.is_match(path.to_str().unwrap()));
     }
 
     if lit_files.is_empty() {
