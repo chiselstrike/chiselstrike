@@ -67,6 +67,9 @@ pub struct Opt {
     #[structopt(long, env = "CHISEL_SECRET_LOCATION")]
     pub chisel_secret_location: Option<String>,
 
+    #[structopt(long)]
+    pub typescript_policies: bool,
+
     /// Prints the configuration resulting from the merging of all the configuration sources,
     /// including default values, in the JSON format.
     /// This is the configuration that will be used when starting chiseld.
