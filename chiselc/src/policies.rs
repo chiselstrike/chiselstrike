@@ -8,7 +8,6 @@ use std::sync::Arc;
 
 use anyhow::{bail, Result};
 use quine_mc_cluskey::Bool;
-use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use swc_common::sync::Lrc;
 use swc_common::{SourceMap, Span};

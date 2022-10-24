@@ -883,9 +883,11 @@ impl QueryEngine {
     ) -> Result<(EntityMap, Option<Location>)> {
         let processor = PolicyProcessor { ty, ctx };
 
-        let action = is_object_creation(&value)
-            .then_some(WriteAction::Create)
-            .unwrap_or(WriteAction::Update);
+        let action = if is_object_creation(&value) {
+            WriteAction::Create
+        } else {
+            WriteAction::Update
+        };
 
         processor.process_write(&value, action)
     }
