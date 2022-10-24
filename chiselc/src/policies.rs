@@ -8,6 +8,7 @@ use std::sync::Arc;
 
 use anyhow::{bail, Result};
 use quine_mc_cluskey::Bool;
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use swc_common::sync::Lrc;
 use swc_common::{SourceMap, Span};
@@ -16,7 +17,7 @@ use swc_ecmascript::ast::{
     Prop, PropName, PropOrSpread, Stmt, UnaryOp,
 };
 
-use crate::parse::emit;
+use crate::parse::{emit, ParserContext};
 use crate::rewrite::Target;
 use crate::tools::analysis::control_flow::Idx;
 use crate::tools::analysis::region::Region;
@@ -96,7 +97,13 @@ pub struct Policies {
 }
 
 impl Policies {
-    pub fn parse(module: &Module) -> Result<Self> {
+    pub fn parse_code(code: &[u8]) -> Result<Self> {
+        let ctx = ParserContext::new();
+        let module = ctx.parse(std::str::from_utf8(code).unwrap().to_owned(), false)?;
+        Self::parse(&module)
+    }
+
+    fn parse(module: &Module) -> Result<Self> {
         let mut policies = HashMap::new();
 
         for module in &module.body {

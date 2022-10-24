@@ -6,7 +6,6 @@ use anyhow::{bail, Result};
 use boa_engine::prelude::JsObject;
 use boa_engine::property::Attribute;
 use boa_engine::{JsString, JsValue};
-use chiselc::parse::ParserContext;
 use chiselc::policies::{Cond, Environment, LogicOp, PolicyName, Predicate, Predicates, Var};
 use serde_json::Value as JsonValue;
 
@@ -94,9 +93,7 @@ impl PolicyEngine {
         entity_name: String,
         code: &[u8],
     ) -> anyhow::Result<()> {
-        let ctx = ParserContext::new();
-        let module = ctx.parse(std::str::from_utf8(code).unwrap().to_owned(), false)?;
-        let policies = chiselc::policies::Policies::parse(&module)?;
+        let policies = chiselc::policies::Policies::parse_code(code)?;
         let mut type_policy = TypePolicy::default();
         for (name, policy) in policies.iter() {
             let function = self.compile_function(policy.code())?;
