@@ -6,6 +6,7 @@ use tokio::sync::oneshot;
 
 use crate::datastore::DataContext;
 use crate::http::HttpResponse;
+use crate::policy::engine::ChiselRequestContext;
 
 pub enum JobInfo {
     HttpRequest {
@@ -16,6 +17,38 @@ pub enum JobInfo {
         response_tx: RefCell<Option<oneshot::Sender<HttpResponse>>>,
     },
     KafkaEvent,
+}
+
+impl ChiselRequestContext for JobInfo {
+    fn method(&self) -> &str {
+        match self {
+            JobInfo::HttpRequest { ref method, .. } => method,
+            JobInfo::KafkaEvent => todo!(),
+        }
+    }
+
+    fn path(&self) -> &str {
+        match self {
+            JobInfo::HttpRequest { ref path, .. } => path,
+            JobInfo::KafkaEvent => todo!(),
+        }
+    }
+
+    fn headers(&self) -> Box<dyn Iterator<Item = (&str, &str)> + '_> {
+        match self {
+            JobInfo::HttpRequest { ref headers, .. } => {
+                Box::new(headers.iter().map(|(k, v)| (k.as_str(), v.as_str())))
+            }
+            JobInfo::KafkaEvent => todo!(),
+        }
+    }
+
+    fn user_id(&self) -> Option<&str> {
+        match self {
+            JobInfo::HttpRequest { ref user_id, .. } => user_id.as_deref(),
+            JobInfo::KafkaEvent => todo!(),
+        }
+    }
 }
 
 impl JobInfo {
