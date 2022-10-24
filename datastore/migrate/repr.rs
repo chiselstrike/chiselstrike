@@ -57,40 +57,53 @@ pub fn update_field_repr(
     old_type: &Arc<schema::Type>,
     new_type: &Arc<schema::Type>,
 ) -> Result<layout::FieldRepr> {
-    let is_new_supertype_of = |src_type: &Arc<schema::Type>| -> Result<()> {
-        typecheck::is_subtype(new_schema, src_type, new_schema, new_type, typecheck::TypeVariant::Plain)
+    let is_new_subtype_of = |src_type: &Arc<schema::Type>| -> bool {
+        typecheck::is_subtype(
+            new_schema, new_type, new_schema, src_type,
+            typecheck::TypeVariant::Plain
+        ).is_ok()
+    };
+    let ensure_new_supertype_of = |src_type: &Arc<schema::Type>| -> Result<()> {
+        typecheck::is_subtype(
+            new_schema, src_type, new_schema, new_type,
+            typecheck::TypeVariant::Plain
+        )
     };
 
     Ok(match old_repr {
         layout::FieldRepr::StringAsText => {
-            is_new_supertype_of(&schema::TYPE_STRING)
+            ensure_new_supertype_of(&schema::TYPE_STRING)
                 .context("field must keep compatibility with string")?;
             layout::FieldRepr::StringAsText
         },
         layout::FieldRepr::NumberAsDouble => {
-            is_new_supertype_of(&schema::TYPE_NUMBER)
+            ensure_new_supertype_of(&schema::TYPE_NUMBER)
                 .context("field must keep compatibility with number")?;
             layout::FieldRepr::NumberAsDouble
         },
         layout::FieldRepr::BooleanAsInt => {
-            is_new_supertype_of(&schema::TYPE_BOOLEAN)
+            ensure_new_supertype_of(&schema::TYPE_BOOLEAN)
                 .context("field must keep compatibility with boolean")?;
             layout::FieldRepr::BooleanAsInt
         },
         layout::FieldRepr::UuidAsText => {
-            if is_new_supertype_of(&schema::TYPE_UUID).is_ok() {
+            if is_new_subtype_of(&schema::TYPE_UUID) {
+                ensure_new_supertype_of(&schema::TYPE_STRING)
+                    .context("field must keep compatibility with Uuid")?;
                 layout::FieldRepr::UuidAsText
             } else {
-                is_new_supertype_of(&schema::TYPE_STRING)
+                ensure_new_supertype_of(&schema::TYPE_STRING)
                     .context("field must keep compatibility with Uuid or string")?;
                 layout::FieldRepr::StringAsText
             }
         },
         layout::FieldRepr::JsDateAsDouble => {
-            if is_new_supertype_of(&schema::TYPE_JS_DATE).is_ok() {
+            if is_new_subtype_of(&schema::TYPE_JS_DATE) {
+                ensure_new_supertype_of(&schema::TYPE_NUMBER)
+                    .context("field must keep compatibility with Date")?;
                 layout::FieldRepr::JsDateAsDouble
             } else {
-                is_new_supertype_of(&schema::TYPE_NUMBER)
+                ensure_new_supertype_of(&schema::TYPE_NUMBER)
                     .context("field must keep compatibility with Date or number")?;
                 layout::FieldRepr::NumberAsDouble
             }

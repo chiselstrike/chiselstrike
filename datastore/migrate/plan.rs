@@ -11,12 +11,16 @@ pub struct PlanOpts {
     pub table_prefix: String,
 }
 
+/// Plan how to migrate the database to a new [`Schema`][schema::Schema].
 #[derive(Debug)]
 pub struct Plan {
+    /// The database layout after the migration.
     pub new_layout: layout::Layout,
+    /// Sequence of operations that need to be performed to migrate the database.
     pub steps: Vec<Step>,
 }
 
+/// A single operation of a database migration.
 #[derive(Debug)]
 pub enum Step {
     AddTable(AddTable),
@@ -57,6 +61,7 @@ pub struct UpdateColumn {
     pub new_nullable: Option<bool>,
 }
 
+/// Computes a plan how to migrate the database from old layout to a new schema.
 pub fn plan_migration(
     old_layout: &layout::Layout,
     new_schema: Arc<schema::Schema>,

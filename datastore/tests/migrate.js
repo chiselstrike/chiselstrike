@@ -119,7 +119,7 @@ t.context("migrate", async (t) => {
             );
         });
     });
-    
+
     await t.context("existing entity", async (t) => {
         await t.case("add optional field", async (t) => {
             const oldSchema = {entities: [{
@@ -197,6 +197,247 @@ t.context("migrate", async (t) => {
                 "addedInf": 1e6,
                 "addedStr": "yellow horse",
             });
+        });
+
+        await t.case("remove field", async (t) => {
+            const oldSchema = {entities: [{
+                name: {user: "E"},
+                idType: "string",
+                fields: [
+                    {name: "str", type: {primitive: "string"}},
+                ],
+            }]};
+            const oldLayout = {
+                entityTables: [{
+                    entityName: {user: "E"},
+                    tableName: "e",
+                    idCol: {colName: "id", repr: "stringAsText"},
+                    fieldCols: [
+                        {fieldName: "str", colName: "str", repr: "stringAsText"},
+                    ],
+                }],
+                schema: oldSchema,
+            };
+            await db.executeSql(
+                "CREATE TABLE e (id TEXT PRIMARY KEY, str TEXT NOT NULL)",
+                "INSERT INTO e VALUES ('one', 'quick fox')",
+            );
+
+            const newSchema = {entities: [{
+                name: {user: "E"},
+                idType: "string",
+                fields: [],
+            }]};
+            const conn = await migrate(oldLayout, newSchema);
+
+            await assertFind(conn, {user: "E"}, {"id": "one"});
+            await assertStoreAndFind(conn, {user: "E"}, {"id": "two"});
+        });
+
+        await t.case("update primitive field to a supertype", async (t) => {
+            const oldSchema = {entities: [{
+                name: {user: "E"},
+                idType: "string",
+                fields: [
+                    {name: "u", type: {primitive: "uuid"}},
+                ],
+            }]};
+            const oldLayout = {
+                entityTables: [{
+                    entityName: {user: "E"},
+                    tableName: "e",
+                    idCol: {colName: "id", repr: "stringAsText"},
+                    fieldCols: [
+                        {fieldName: "u", colName: "u", repr: "uuidAsText"},
+                    ],
+                }],
+                schema: oldSchema,
+            };
+            await db.executeSql(
+                "CREATE TABLE e (id TEXT PRIMARY KEY, u TEXT NOT NULL)",
+                `INSERT INTO e VALUES ('one', '${uuid1}')`,
+            );
+
+            const newSchema = {entities: [{
+                name: {user: "E"},
+                idType: "string",
+                fields: [
+                    {name: "u", type: {primitive: "string"}},
+                ],
+            }]};
+            const conn = await migrate(oldLayout, newSchema);
+
+            await assertFind(conn, {user: "E"}, {"id": "one", "u": uuid1});
+            await assertStoreAndFind(conn, {user: "E"}, {"id": "two", "u": "fox in a box"});
+        });
+
+        await t.case("make a field optional", async (t) => {
+            const oldSchema = {entities: [{
+                name: {user: "E"},
+                idType: "string",
+                fields: [
+                    {name: "s", type: {primitive: "string"}},
+                ],
+            }]};
+            const oldLayout = {
+                entityTables: [{
+                    entityName: {user: "E"},
+                    tableName: "e",
+                    idCol: {colName: "id", repr: "stringAsText"},
+                    fieldCols: [
+                        {fieldName: "s", colName: "s", repr: "stringAsText"},
+                    ],
+                }],
+                schema: oldSchema,
+            };
+            await db.executeSql(
+                "CREATE TABLE e (id TEXT PRIMARY KEY, s TEXT NOT NULL)",
+                `INSERT INTO e VALUES ('one', 'first fox')`,
+            );
+
+            const newSchema = {entities: [{
+                name: {user: "E"},
+                idType: "string",
+                fields: [
+                    {name: "s", type: {optional: {primitive: "string"}}},
+                ],
+            }]};
+            const conn = await migrate(oldLayout, newSchema);
+
+            await assertFind(conn, {user: "E"}, {"id": "one", "s": "first fox"});
+            await assertStoreAndFind(conn, {user: "E"}, {"id": "two", "s": undefined});
+        });
+
+        await t.case("update object field to a supertype", async (t) => {
+            const oldSchema = {entities: [{
+                name: {user: "E"},
+                idType: "string",
+                fields: [
+                    {name: "o", type: {object: {fields: [
+                        {name: "x", type: {primitive: "number"}},
+                    ]}}},
+                ],
+            }]};
+            const oldLayout = {
+                entityTables: [{
+                    entityName: {user: "E"},
+                    tableName: "e",
+                    idCol: {colName: "id", repr: "stringAsText"},
+                    fieldCols: [
+                        {fieldName: "o", colName: "o", repr: "asJsonText"},
+                    ],
+                }],
+                schema: oldSchema,
+            };
+            await db.executeSql(
+                "CREATE TABLE e (id TEXT PRIMARY KEY, o TEXT NOT NULL)",
+                `INSERT INTO e VALUES ('one', '{"x": 1.0}')`,
+            );
+
+            const newSchema = {entities: [{
+                name: {user: "E"},
+                idType: "string",
+                fields: [
+                    {name: "o", type: {object: {fields: [
+                        {name: "x", type: {primitive: "number"}},
+                        {name: "y", type: {optional: {primitive: "number"}}, optional: true},
+                    ]}}},
+                ],
+            }]};
+            const conn = await migrate(oldLayout, newSchema);
+
+            await assertFind(conn, {user: "E"}, {"id": "one", "o": {"x": 1}});
+            await assertStoreAndFind(conn, {user: "E"}, {"id": "two", "o": {"x": 2, "y": 100}});
+        });
+
+        await t.case("update id to a supertype", async (t) => {
+            const oldSchema = {entities: [{
+                name: {user: "E"},
+                idType: "uuid",
+                fields: [],
+            }]};
+            const oldLayout = {
+                entityTables: [{
+                    entityName: {user: "E"},
+                    tableName: "e",
+                    idCol: {colName: "id", repr: "uuidAsText"},
+                    fieldCols: [],
+                }],
+                schema: oldSchema,
+            };
+            await db.executeSql(
+                "CREATE TABLE e (id TEXT PRIMARY KEY)",
+                `INSERT INTO e VALUES ('${uuid1}')`,
+            );
+
+            const newSchema = {entities: [{
+                name: {user: "E"},
+                idType: "string",
+                fields: [],
+            }]};
+            const conn = await migrate(oldLayout, newSchema);
+
+            await assertFind(conn, {user: "E"}, {"id": uuid1});
+            await assertStoreAndFind(conn, {user: "E"}, {"id": "two"});
+        });
+    });
+
+    await t.context("forbidden migrations", async (t) => {
+        async function assertMigrateThrows(oldLayout, newSchema, pattern) {
+            await assertThrows(pattern, () => migrate(oldLayout, newSchema));
+        }
+
+        const oldSchema = {entities: [{
+            name: {user: "E"},
+            idType: "string",
+            fields: [
+                {name: "oldStr", type: {primitive: "string"}},
+            ],
+        }]};
+        const oldLayout = {
+            entityTables: [{
+                entityName: {user: "E"},
+                tableName: "e",
+                idCol: {colName: "id", repr: "stringAsText"},
+                fieldCols: [
+                    {fieldName: "oldStr", colName: "oldStr", repr: "stringAsText"},
+                ],
+            }],
+            schema: oldSchema,
+        };
+
+        await t.case("change type of the id to incompatible type", async (t) => {
+            const newSchema = {entities: [{
+                name: {user: "E"},
+                idType: "uuid",
+                fields: [
+                    {name: "oldStr", type: {primitive: "string"}},
+                ],
+            }]};
+            await assertMigrateThrows(oldLayout, newSchema, "id");
+        });
+
+        await t.case("change type of field to incompatible type", async (t) => {
+            const newSchema = {entities: [{
+                name: {user: "E"},
+                idType: "uuid",
+                fields: [
+                    {name: "oldStr", type: {primitive: "number"}},
+                ],
+            }]};
+            await assertMigrateThrows(oldLayout, newSchema, "id");
+        });
+
+        await t.case("add field without default value", async (t) => {
+            const newSchema = {entities: [{
+                name: {user: "E"},
+                idType: "string",
+                fields: [
+                    {name: "oldStr", type: {primitive: "string"}},
+                    {name: "noDefault", type: {primitive: "boolean"}},
+                ],
+            }]};
+            await assertMigrateThrows(oldLayout, newSchema, "default value");
         });
     });
 });
