@@ -182,6 +182,7 @@ pub trait Filter {
             .call(self.filter_function(), &[value.clone(), chisel_ctx.clone()])?;
         match result {
             JsValue::Integer(action) => action.try_into(),
+            JsValue::Undefined => Ok(Action::Deny),
             val => anyhow::bail!("invalid action: {val:?}"),
         }
     }
