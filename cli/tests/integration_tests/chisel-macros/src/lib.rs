@@ -6,7 +6,7 @@ use proc_macro::TokenStream;
 use proc_macro2::Span;
 use syn::{
     parse::{Parse, ParseStream},
-    parse_macro_input, Ident, ItemFn, LitBool, LitStr, Token,
+    parse_macro_input, ExprArray, Ident, ItemFn, LitBool, LitStr, Token,
 };
 
 /// Arguments to the test macro
@@ -19,6 +19,8 @@ struct TestArgs {
     db: Option<Ident>,
     /// A boolean.
     start_chiseld: Option<LitBool>,
+    /// A list of args to pass to chiseld
+    chiseld_args: Option<ExprArray>,
 }
 
 impl Parse for TestArgs {
@@ -27,6 +29,7 @@ impl Parse for TestArgs {
         let mut optimize = None;
         let mut db = None;
         let mut start_chiseld = None;
+        let mut chiseld_args = None;
 
         // TODO: use `syn::AttributeArgs` or the `darling` crate to parse the arguments
         while !input.is_empty() {
@@ -48,6 +51,10 @@ impl Parse for TestArgs {
                     let _: Token!(=) = input.parse()?;
                     start_chiseld = Some(input.parse()?);
                 }
+                "chiseld_args" if chiseld_args.is_none() => {
+                    let _: Token!(=) = input.parse()?;
+                    chiseld_args = Some(input.parse()?);
+                }
                 other => {
                     return Err(syn::Error::new(
                         key.span(),
@@ -67,6 +74,7 @@ impl Parse for TestArgs {
             optimize,
             db,
             start_chiseld,
+            chiseld_args,
         })
     }
 }
@@ -87,6 +95,10 @@ pub fn test(args: TokenStream, input: TokenStream) -> TokenStream {
     let start_chiseld = args
         .start_chiseld
         .unwrap_or_else(|| LitBool::new(true, Span::call_site()));
+    let chiseld_args = args
+        .chiseld_args
+        .map(|s| quote::quote! {&#s})
+        .unwrap_or_else(|| quote::quote! {&[]});
 
     quote::quote! {
         ::inventory::submit! {
@@ -97,6 +109,7 @@ pub fn test(args: TokenStream, input: TokenStream) -> TokenStream {
                 db: crate::suite::DatabaseSpec::#db,
                 start_chiseld: #start_chiseld,
                 test_fn: &#fun_name,
+                chiseld_args: #chiseld_args,
             }
         }
 
