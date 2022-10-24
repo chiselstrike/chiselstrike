@@ -16,6 +16,7 @@ use anyhow::{anyhow, Context, Result};
 use bytes::{Buf, Bytes, BytesMut};
 use futures::future::Fuse;
 use futures::{pin_mut, Future, FutureExt};
+use serde::Serialize;
 use tempdir::TempDir;
 use tokio::io::{duplex, AsyncRead, AsyncReadExt, AsyncWriteExt, DuplexStream};
 
@@ -588,16 +589,26 @@ impl Chisel {
         self.get(url).send().await.assert_ok().json()
     }
 
-    pub async fn post_json<V: Borrow<serde_json::Value>>(&self, url: &str, data: V) {
+    pub async fn post_json<V: Serialize>(&self, url: &str, data: V) {
         self.post(url).json(data).send().await.assert_ok();
     }
 
     #[allow(dead_code)]
-    pub async fn post_json_status<V: Borrow<serde_json::Value>>(&self, url: &str, data: V) -> u16 {
+    pub async fn patch_json<V: Serialize>(&self, url: &str, data: V) {
+        self.patch(url).json(data).send().await.assert_ok();
+    }
+
+    #[allow(dead_code)]
+    pub async fn patch_json_status<V: Serialize>(&self, url: &str, data: V) -> u16 {
+        self.patch(url).json(data).send().await.status()
+    }
+
+    #[allow(dead_code)]
+    pub async fn post_json_status<V: Serialize>(&self, url: &str, data: V) -> u16 {
         self.post(url).json(data).send().await.status()
     }
 
-    pub async fn post_json_text<V: Borrow<serde_json::Value>>(&self, url: &str, data: V) -> String {
+    pub async fn post_json_text<V: Serialize>(&self, url: &str, data: V) -> String {
         self.post(url).json(data).send().await.assert_ok().text()
     }
 }
@@ -616,7 +627,7 @@ impl RequestBuilder {
         }
     }
 
-    pub fn json<V: Borrow<serde_json::Value>>(self, data: V) -> Self {
+    pub fn json<V: Serialize>(self, data: V) -> Self {
         self.map(|b| b.json(data.borrow()))
     }
 

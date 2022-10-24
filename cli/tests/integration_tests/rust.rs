@@ -130,6 +130,9 @@ async fn setup_test_context(
         args.push("--kafka-topics".to_string());
         args.push(kafka_topic);
     }
+    // add user provided arguments
+    args.extend(instance.spec.chiseld_args.iter().map(ToString::to_string));
+
     let mut cmd = tokio::process::Command::new(chiseld());
     cmd.args(args);
     cmd.current_dir(tmp_dir.path());

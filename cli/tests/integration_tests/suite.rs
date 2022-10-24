@@ -18,6 +18,7 @@ pub struct TestSpec {
     pub db: DatabaseSpec,
     pub start_chiseld: bool,
     pub test_fn: &'static (dyn TestFn + Sync),
+    pub chiseld_args: &'static [&'static str],
 }
 
 pub struct TestInstance {
