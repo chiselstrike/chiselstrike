@@ -15,10 +15,10 @@ pub fn extension() -> deno_core::Extension {
             op_datastore_rollback::decl(),
             entity::op_datastore_query_find_by_id::decl(),
             entity::op_datastore_query_store_with_id::decl(),
-            query::op_datastore_fetch_start::decl(),
+            query::op_datastore_fetch_new::decl(),
             query::op_datastore_fetch::decl(),
             query::op_datastore_fetch_read::decl(),
-            query::op_datastore_execute_start::decl(),
+            query::op_datastore_execute_new::decl(),
             query::op_datastore_execute::decl(),
             query::op_datastore_execute_rows_affected::decl(),
         ])

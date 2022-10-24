@@ -11,9 +11,9 @@ pub fn eval_sql_args<'s, 'a>(
     js_arg: v8::Local<'s, v8::Value>,
 ) -> Result<sqlx::any::AnyArguments<'a>> {
     let mut sql_args = sqlx::any::AnyArguments::default();
-    for input_param in query.inputs.iter() {
+    for (i, input_param) in query.inputs.iter().enumerate() {
         encode_input_arg(&query.schema, input_param, scope, js_arg, &mut sql_args)
-            .context("could not encode SQL argument from JS input")?;
+            .with_context(|| format!("could not encode SQL argument {} from JS input", i))?;
     }
     Ok(sql_args)
 }

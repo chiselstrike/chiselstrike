@@ -14,7 +14,7 @@ pub struct FetchStream {
 }
 
 impl FetchStream {
-    pub fn start<'s>(
+    pub fn new<'s>(
         query: Rc<Query>,
         scope: &mut v8::HandleScope<'s>,
         js_arg: v8::Local<'s, v8::Value>,
@@ -74,7 +74,7 @@ pub struct ExecuteFuture {
 }
 
 impl ExecuteFuture {
-    pub fn start<'s>(
+    pub fn new<'s>(
         query: Rc<Query>,
         scope: &mut v8::HandleScope<'s>,
         js_arg: v8::Local<'s, v8::Value>,

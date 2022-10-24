@@ -73,8 +73,8 @@ class Query extends Resource {
         return new Query(rid);
     }
 
-    startFetch(arg, callback) {
-        const stream = new FetchStream(Deno.core.opSync("op_datastore_fetch_start", this.rid, arg));
+    newFetch(arg, callback) {
+        const stream = new FetchStream(Deno.core.opSync("op_datastore_fetch_new", this.rid, arg));
         if (callback) {
             return callback(stream).then(() => stream.close());
         } else {
@@ -82,8 +82,8 @@ class Query extends Resource {
         }
     }
 
-    startExecute(arg, callback) {
-        const future = new ExecuteFuture(Deno.core.opSync("op_datastore_execute_start", this.rid, arg));
+    newExecute(arg, callback) {
+        const future = new ExecuteFuture(Deno.core.opSync("op_datastore_execute_new", this.rid, arg));
         if (callback) {
             return callback(future).then(() => future.close());
         } else {
@@ -93,7 +93,7 @@ class Query extends Resource {
 
     async fetch(ctx, arg) {
         const values = [];
-        await this.startFetch(arg, async (stream) => {
+        await this.newFetch(arg, async (stream) => {
             while (await stream.fetch(ctx)) {
                 values.push(stream.read());
             }
@@ -110,7 +110,7 @@ class Query extends Resource {
     }
 
     async execute(ctx, arg) {
-        await this.startExecute(arg, (fut) => fut.execute(ctx));
+        await this.newExecute(arg, (fut) => fut.execute(ctx));
     }
 }
 

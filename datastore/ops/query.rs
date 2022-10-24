@@ -13,14 +13,14 @@ struct FetchStreamRes(RefCell<FetchStream>);
 impl deno_core::Resource for FetchStreamRes {}
 
 #[deno_core::op(v8)]
-pub fn op_datastore_fetch_start<'s>(
+pub fn op_datastore_fetch_new<'s>(
     scope: &mut v8::HandleScope<'s>,
     op_state: &mut deno_core::OpState,
     query_rid: deno_core::ResourceId,
     arg: serde_v8::Value<'s>,
 ) -> Result<deno_core::ResourceId> {
     let query = op_state.resource_table.get::<Query>(query_rid)?;
-    let stream = FetchStream::start(query, scope, arg.into())?;
+    let stream = FetchStream::new(query, scope, arg.into())?;
     let stream_res = FetchStreamRes(RefCell::new(stream));
     Ok(op_state.resource_table.add(stream_res))
 }
@@ -56,14 +56,14 @@ struct ExecuteFutureRes(RefCell<ExecuteFuture>);
 impl deno_core::Resource for ExecuteFutureRes {}
 
 #[deno_core::op(v8)]
-pub fn op_datastore_execute_start<'s>(
+pub fn op_datastore_execute_new<'s>(
     scope: &mut v8::HandleScope<'s>,
     op_state: &mut deno_core::OpState,
     query_rid: deno_core::ResourceId,
     arg: serde_v8::Value<'s>,
 ) -> Result<deno_core::ResourceId> {
     let query = op_state.resource_table.get::<Query>(query_rid)?;
-    let future = ExecuteFuture::start(query, scope, arg.into())?;
+    let future = ExecuteFuture::new(query, scope, arg.into())?;
     let future_res = ExecuteFutureRes(RefCell::new(future));
     Ok(op_state.resource_table.add(future_res))
 }

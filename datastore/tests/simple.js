@@ -47,12 +47,12 @@ await t.context("simple", async (t) => {
                 "author": "Jane Austen",
             };
 
-            await storeQuery.startExecute(bookObj, async (fut) => {
+            await storeQuery.newExecute(bookObj, async (fut) => {
                 await fut.execute(ctx);
                 assertEq(fut.rowsAffected(), 1);
             });
 
-            await findQuery.startFetch("pride-prejudice", async (stream) => {
+            await findQuery.newFetch("pride-prejudice", async (stream) => {
                 assert(await stream.fetch(ctx));
                 assertJsonEq(stream.read(), bookObj);
                 assert(!await stream.fetch(ctx));
