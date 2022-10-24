@@ -42,7 +42,11 @@ pub async fn migrate_schema_step(
             migrate_to_2(ctx).await?;
             Some("2")
         }
-        "2" => None,
+        "2" => {
+            migrate_to_3(ctx).await?;
+            Some("3")
+        }
+        "3" => None,
         _ => bail!("Don't know how to migrate from version {:?}", old_version),
     })
 }
@@ -327,6 +331,20 @@ async fn migrate_to_2(ctx: &mut MigrateContext<'_, '_>) -> Result<()> {
     }
 
     execute_stmt(ctx, sea_query::Table::drop().table(Sources::Table)).await?;
+
+    Ok(())
+}
+
+async fn migrate_to_3(ctx: &mut MigrateContext<'_, '_>) -> Result<()> {
+    execute_stmt(
+        ctx,
+        sea_query::Table::create()
+            .table(PolicyStore::Table)
+            .col(sea_query::ColumnDef::new(PolicyStore::Version).text())
+            .col(sea_query::ColumnDef::new(PolicyStore::Store).text())
+            .primary_key(sea_query::Index::create().col(PolicyStore::Version)),
+    )
+    .await?;
 
     Ok(())
 }
