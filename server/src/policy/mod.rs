@@ -198,7 +198,7 @@ impl PolicyProcessor {
 
     pub fn process_write(
         &self,
-        value: EntityMap,
+        value: &EntityMap,
         action: WriteAction,
     ) -> Result<(EntityMap, Option<Location>)> {
         let mut instance = self
@@ -206,7 +206,7 @@ impl PolicyProcessor {
             .cache
             .get_or_create_policy_instance(&self.ctx, &self.ty);
         let js_value =
-            entity_map_to_js_value(&mut self.ctx.engine.boa_ctx.borrow_mut(), &value, true);
+            entity_map_to_js_value(&mut self.ctx.engine.boa_ctx.borrow_mut(), value, true);
         let action = match action {
             WriteAction::Create => instance.get_create_action(&self.ctx, &js_value)?,
             WriteAction::Update => {
