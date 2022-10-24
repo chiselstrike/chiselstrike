@@ -4,10 +4,12 @@ use std::collections::{hash_map::Entry, HashMap};
 use std::rc::Rc;
 use std::str::FromStr;
 use std::sync::Arc;
+use std::task::Poll;
 
 use anyhow::{bail, Result};
 use boa_engine::prelude::JsObject;
 use boa_engine::JsValue;
+use futures::{Stream, StreamExt};
 
 use crate::datastore::value::{EntityMap, EntityValue};
 use crate::types::ObjectType;
@@ -15,7 +17,6 @@ use crate::types::ObjectType;
 use self::engine::{boa_err_to_anyhow, ChiselRequestContext, PolicyEngine};
 use self::instances::PolicyEvalInstance;
 use self::utils::{entity_map_to_js_value, js_value_to_entity_value};
-
 pub mod engine;
 mod instances;
 mod interpreter;
@@ -239,5 +240,42 @@ impl PolicyProcessor {
         let value = js_value_to_entity_value(&js_value).try_into_map()?;
 
         Ok((value, geo_loc))
+    }
+}
+
+pub struct ValidatedEntityStream<S> {
+    pub stream: S,
+    pub validator: PolicyProcessor,
+}
+
+impl<S> Stream for ValidatedEntityStream<S>
+where
+    S: Stream<Item = Result<EntityMap>> + Unpin,
+{
+    type Item = anyhow::Result<EntityMap>;
+
+    fn poll_next(
+        mut self: std::pin::Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+    ) -> Poll<Option<Self::Item>> {
+        // we "could" be dropping many elements here, to avoid blocking the main loop for too long,
+        // we limit the amount of items that get can get at once, and collaboratively yield.
+        for _ in 0..64 {
+            let item = futures::ready!(self.stream.poll_next_unpin(cx));
+            match item {
+                Some(item) => match item {
+                    Ok(value) => match self.validator.process_read(value) {
+                        Ok(Some(value)) => return Poll::Ready(Some(Ok(value))),
+                        Ok(None) => continue,
+                        Err(e) => return Poll::Ready(Some(Err(e))),
+                    },
+                    Err(e) => return Poll::Ready(Some(Err(e))),
+                },
+                None => return Poll::Ready(None),
+            }
+        }
+
+        cx.waker().wake_by_ref();
+        Poll::Pending
     }
 }

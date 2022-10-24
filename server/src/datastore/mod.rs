@@ -70,6 +70,7 @@ pub use meta::MetaService;
 
 use crate::ops::job_context::JobInfo;
 use crate::policies::PolicySystem;
+use crate::policy::PolicyContext;
 use crate::types::TypeSystem;
 
 use self::engine::TransactionStatic;
@@ -78,7 +79,7 @@ pub struct DataContext {
     pub type_system: Arc<TypeSystem>,
     pub policy_system: Arc<PolicySystem>,
     pub job_info: Rc<JobInfo>,
-
+    pub policy_context: Rc<PolicyContext>,
     pub txn: TransactionStatic,
 }
 
@@ -120,6 +121,7 @@ mod test {
     use url::Url;
 
     use crate::{
+        policy::engine::PolicyEngine,
         types::{self, Entity, Field, ObjectType, Type},
         JsonObject,
     };
@@ -190,10 +192,16 @@ mod test {
                 user_id: None,
                 response_tx: Default::default(),
             });
+            let policy_context = PolicyContext {
+                cache: Default::default(),
+                engine: PolicyEngine::new().unwrap().into(),
+                request: job_info.clone(),
+            };
             let ctx = self
                 .create_data_context(
                     Arc::new(TYPE_SYSTEM.clone()),
                     Default::default(),
+                    policy_context,
                     job_info.clone(),
                 )
                 .await

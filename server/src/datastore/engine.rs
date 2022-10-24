@@ -28,8 +28,10 @@ use crate::datastore::query::{
 };
 use crate::datastore::value::{EntityMap, EntityValue};
 use crate::datastore::DbConnection;
+use crate::feat_typescript_policies;
 use crate::ops::job_context::JobInfo;
 use crate::policies::PolicySystem;
+use crate::policy::{Location, PolicyContext, PolicyProcessor, WriteAction};
 use crate::types::{DbIndex, Field, ObjectDelta, ObjectType, Type, TypeId, TypeSystem};
 
 use super::DataContext;
@@ -231,12 +233,14 @@ impl QueryEngine {
         &self,
         type_system: Arc<TypeSystem>,
         policy_system: Arc<PolicySystem>,
+        policy_context: PolicyContext,
         job_info: Rc<JobInfo>,
     ) -> Result<DataContext> {
         let txn = self.begin_transaction_static().await?;
         Ok(DataContext {
             type_system,
             policy_system,
+            policy_context: policy_context.into(),
             txn,
             job_info,
         })
@@ -542,16 +546,26 @@ impl QueryEngine {
     pub fn add_row(
         &self,
         ty: Arc<ObjectType>,
-        record: &EntityMap,
+        record: EntityMap,
         ctx: &DataContext,
-    ) -> Result<impl Future<Output = Result<IdTree>> + '_> {
-        let res = self.prepare_insertion(&ty, record, &ctx.type_system);
+    ) -> Result<impl Future<Output = Result<(EntityMap, IdTree)>> + '_> {
+        let (record, location) = if feat_typescript_policies() {
+            self.validate_write_policies(ty.clone(), record, ctx.policy_context.clone())?
+        } else {
+            (record, None)
+        };
+        let res = self.prepare_insertion(&ty, &record, &ctx.type_system);
         let txn = ctx.txn.clone();
         Ok(async move {
             let (inserts, id_tree) = res?;
+            // mock saving to some region
+            if let Some(loc) = location {
+                log::info!("Saving {} to region {loc:?}", id_tree.id);
+            }
             let mut txn = txn.lock().await;
+
             self.run_sql_queries(&inserts, &mut txn).await?;
-            Ok(id_tree)
+            Ok((record, id_tree))
         })
     }
 
@@ -860,4 +874,23 @@ impl QueryEngine {
             args: query_args,
         })
     }
+
+    fn validate_write_policies(
+        &self,
+        ty: Arc<ObjectType>,
+        value: EntityMap,
+        ctx: Rc<PolicyContext>,
+    ) -> Result<(EntityMap, Option<Location>)> {
+        let processor = PolicyProcessor { ty, ctx };
+
+        let action = is_object_creation(&value)
+            .then_some(WriteAction::Create)
+            .unwrap_or(WriteAction::Update);
+
+        processor.process_write(&value, action)
+    }
+}
+
+fn is_object_creation(obj: &EntityMap) -> bool {
+    obj.get("id").is_none()
 }

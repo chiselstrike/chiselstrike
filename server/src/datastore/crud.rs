@@ -1,8 +1,10 @@
 // SPDX-FileCopyrightText: © 2022 ChiselStrike <info@chiselstrike.com>
 
+use std::pin::Pin;
+
 use anyhow::{Context, Result};
 use deno_core::futures;
-use futures::{Future, StreamExt};
+use futures::{Future, Stream, StreamExt};
 use guard::guard;
 use serde_derive::{Deserialize, Serialize};
 use serde_json::json;
@@ -11,8 +13,9 @@ use super::query::{Mutation, QueryOp, QueryPlan, SortBy, SortKey};
 use super::value::EntityMap;
 use super::{DataContext, QueryEngine};
 use crate::datastore::expr::{BinaryExpr, BinaryOp, Expr, PropertyAccess, Value as ExprValue};
+use crate::policy::{PolicyError, PolicyProcessor, ValidatedEntityStream};
 use crate::types::{Entity, Type, TypeSystem};
-use crate::JsonObject;
+use crate::{feat_typescript_policies, JsonObject};
 
 #[derive(Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -48,6 +51,16 @@ impl QueryEngine {
         let query_plan = QueryPlan::from_ops(ctx, base_type, ops)?;
         let stream = self.query(ctx.txn.clone(), query_plan)?;
 
+        let stream: Pin<Box<dyn Stream<Item = _>>> = if feat_typescript_policies() {
+            let validator = PolicyProcessor {
+                ty: base_type.object_type().clone(),
+                ctx: ctx.policy_context.clone(),
+            };
+            Box::pin(ValidatedEntityStream { stream, validator })
+        } else {
+            Box::pin(stream)
+        };
+
         Ok(async move {
             let results = stream
                 .collect::<Vec<_>>()
@@ -57,6 +70,7 @@ impl QueryEngine {
 
             let mut results = match results {
                 Ok(res) => res,
+                Err(ref e) if e.downcast_ref::<PolicyError>().is_some() => results?,
                 Err(_) => results.context("failed to collect result rows from the database")?,
             };
 
