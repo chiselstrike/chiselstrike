@@ -6,7 +6,7 @@ use std::ops::{Deref, DerefMut};
 use std::str::FromStr;
 use std::sync::Arc;
 
-use anyhow::{bail, Result};
+use anyhow::{bail, Context, Result};
 use quine_mc_cluskey::Bool;
 use serde_json::Value;
 use swc_common::sync::Lrc;
@@ -98,7 +98,12 @@ pub struct Policies {
 impl Policies {
     pub fn parse_code(code: &[u8]) -> Result<Self> {
         let ctx = ParserContext::new();
-        let module = ctx.parse(std::str::from_utf8(code).unwrap().to_owned(), false)?;
+        let module = ctx.parse(
+            std::str::from_utf8(code)
+                .context("the provided code is not valid UTF-8")?
+                .to_owned(),
+            false,
+        )?;
         Self::parse(&module)
     }
 

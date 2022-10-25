@@ -258,24 +258,21 @@ where
         mut self: std::pin::Pin<&mut Self>,
         cx: &mut std::task::Context<'_>,
     ) -> Poll<Option<Self::Item>> {
-        // we "could" be dropping many elements here, to avoid blocking the main loop for too long,
-        // we limit the amount of items that get can get at once, and collaboratively yield.
-        for _ in 0..64 {
-            let item = futures::ready!(self.stream.poll_next_unpin(cx));
-            match item {
-                Some(item) => match item {
-                    Ok(value) => match self.validator.process_read(value) {
-                        Ok(Some(value)) => return Poll::Ready(Some(Ok(value))),
-                        Ok(None) => continue,
-                        Err(e) => return Poll::Ready(Some(Err(e))),
-                    },
-                    Err(e) => return Poll::Ready(Some(Err(e))),
+        let item = futures::ready!(self.stream.poll_next_unpin(cx));
+        match item {
+            Some(item) => match item {
+                Ok(value) => match self.validator.process_read(value) {
+                    Ok(Some(value)) => Poll::Ready(Some(Ok(value))),
+                    Ok(None) => {
+                        // We yield to the runtime and ask to be rescheduled right away.
+                        cx.waker().wake_by_ref();
+                        Poll::Pending
+                    }
+                    Err(e) => Poll::Ready(Some(Err(e))),
                 },
-                None => return Poll::Ready(None),
-            }
+                Err(e) => Poll::Ready(Some(Err(e))),
+            },
+            None => Poll::Ready(None),
         }
-
-        cx.waker().wake_by_ref();
-        Poll::Pending
     }
 }

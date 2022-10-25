@@ -550,7 +550,7 @@ impl QueryEngine {
         ctx: &DataContext,
     ) -> Result<impl Future<Output = Result<(EntityMap, IdTree)>> + '_> {
         let (record, location) = if feat_typescript_policies() {
-            self.validate_write_policies(ty.clone(), record, ctx.policy_context.clone())?
+            self.apply_write_policies(ty.clone(), record, ctx.policy_context.clone())?
         } else {
             (record, None)
         };
@@ -875,7 +875,7 @@ impl QueryEngine {
         })
     }
 
-    fn validate_write_policies(
+    fn apply_write_policies(
         &self,
         ty: Arc<ObjectType>,
         value: EntityMap,
