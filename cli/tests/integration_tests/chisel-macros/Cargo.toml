@@ -1,9 +1,8 @@
 [package]
 name = "chisel-macros"
-version = "0.14.0-dev.0"
-edition = "2021"
-
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
 
 [dependencies]
 proc-macro2 = { version = "1.0.43", features = ["span-locations"] }
