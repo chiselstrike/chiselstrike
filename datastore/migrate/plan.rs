@@ -195,7 +195,7 @@ fn plan_update_id_col(
 //
 
 fn plan_field_col(schema: &schema::Schema, field: &schema::EntityField) -> Arc<layout::FieldColumn> {
-    let (repr, nullable) = match typecheck::is_optional(schema, &field.type_) {
+    let (repr, nullable) = match typecheck::check_optional(schema, &field.type_) {
         Some(type_) => (repr::new_field_repr(schema, &type_), true),
         None => (repr::new_field_repr(schema, &field.type_), false),
     };
@@ -241,8 +241,8 @@ fn plan_update_field_col(
     };
 
     let (old_type, new_type) = (&old_field.type_, &new_field.type_);
-    let old_type_opt = typecheck::is_optional(old_schema, old_type);
-    let new_type_opt = typecheck::is_optional(new_schema, new_type);
+    let old_type_opt = typecheck::check_optional(old_schema, old_type);
+    let new_type_opt = typecheck::check_optional(new_schema, new_type);
     let (old_type, new_type, new_nullable) = match (old_type_opt, new_type_opt) {
         (Some(old_type), Some(new_type)) => (old_type, new_type, true),
         (None, None) => (old_type, new_type, false),

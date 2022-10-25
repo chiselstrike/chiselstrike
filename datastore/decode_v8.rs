@@ -29,7 +29,7 @@ pub fn decode_field_from_sql<'s>(
     row: &sqlx::any::AnyRow,
     col_idx: usize,
 ) -> Result<v8::Local<'s, v8::Value>> {
-    if nullable && row.try_get_raw(col_idx).unwrap().is_null() {
+    if nullable && row.try_get_raw(col_idx).expect("could not get column").is_null() {
         return Ok(v8::undefined(scope).into());
     }
 

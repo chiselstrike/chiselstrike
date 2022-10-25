@@ -4,7 +4,7 @@ use std::sync::Arc;
 use crate::schema;
 
 mod recursive;
-use self::recursive::{Relation, evaluate_relation};
+use self::recursive::{Pair, evaluate_relation};
 
 /// Variant of the typechecking algorithm.
 #[derive(Copy, Clone, PartialEq, Eq, Hash)]
@@ -22,11 +22,11 @@ pub enum TypeVariant {
     Plain,
 }
 
-/// Decides wheter `src_type` is a subtype of `tgt_type`.
+/// Decides whether `src_type` is a subtype of `tgt_type`.
 ///
 /// A type _S_ is a subtype of type _T_ (written _S <: T_) if _S_ can be used whenever _T_ is
 /// expected.
-pub fn is_subtype(
+pub fn check_subtype(
     src_schema: &schema::Schema,
     src_type: &Arc<schema::Type>,
     tgt_schema: &schema::Schema,
@@ -34,20 +34,20 @@ pub fn is_subtype(
     variant: TypeVariant,
 ) -> Result<()> {
     evaluate_relation(src_schema, tgt_schema, (src_type.clone(), tgt_type.clone()),
-        |goal, goals| step(src_schema, tgt_schema, goal, variant, goals))
+        |goal, goals| subtype_step(src_schema, tgt_schema, goal, variant, goals))
 }
 
-fn step(
+fn subtype_step(
     src_schema: &schema::Schema,
     tgt_schema: &schema::Schema,
-    goal: Relation,
+    goal: Pair,
     variant: TypeVariant,
-    goals: &mut Vec<Relation>,
+    goals: &mut Vec<Pair>,
 ) -> Result<()> {
     let (src_type, tgt_type) = goal;
 
-    if let Some(tgt_type) = is_optional(tgt_schema, &tgt_type) {
-        let src_type = is_optional(src_schema, &src_type).unwrap_or(&src_type);
+    if let Some(tgt_type) = check_optional(tgt_schema, &tgt_type) {
+        let src_type = check_optional(src_schema, &src_type).unwrap_or(&src_type);
         goals.push((src_type.clone(), tgt_type.clone()));
         return Ok(());
     }
@@ -96,7 +96,7 @@ pub fn is_primitive_subtype(src_type: schema::PrimitiveType, tgt_type: schema::P
 ///
 /// Notably, this handles typedefs and nested optionals (it returns `T` for type `(T |
 /// undefined) | undefined`.
-pub fn is_optional<'s>(
+pub fn check_optional<'s>(
     schema: &'s schema::Schema,
     type_: &'s Arc<schema::Type>,
 ) -> Option<&'s Arc<schema::Type>> {
@@ -147,34 +147,34 @@ mod tests {
         };
     }
 
-    macro_rules! _is_subtype {
+    macro_rules! _check_subtype {
         ($src_ty:tt, $tgt_ty:tt) => {
-            _is_subtype!($src_ty, $tgt_ty, variant: Plain)
+            _check_subtype!($src_ty, $tgt_ty, variant: Plain)
         };
         ($src_ty:tt, $tgt_ty:tt, variant: $variant:ident) => {{
             let empty_schema = schema::Schema::default();
-            _is_subtype!(empty_schema, $src_ty, $tgt_ty, variant: $variant)
+            _check_subtype!(empty_schema, $src_ty, $tgt_ty, variant: $variant)
         }};
         ($schema:expr, $src_ty:tt, $tgt_ty:tt) => {
-            _is_subtype!($schema, $src_ty, $tgt_ty, variant: Plain)
+            _check_subtype!($schema, $src_ty, $tgt_ty, variant: Plain)
         };
         ($schema:expr, $src_ty:tt, $tgt_ty:tt, variant: $variant:ident) => {{
             let schema = &$schema;
-            _is_subtype!(schema, $src_ty, schema, $tgt_ty, variant: $variant)
+            _check_subtype!(schema, $src_ty, schema, $tgt_ty, variant: $variant)
         }};
         ($src_schema:expr, $src_ty:tt, $tgt_schema:expr, $tgt_ty:tt, variant: $variant:ident) => {{
             let src_schema = &$src_schema;
             let tgt_schema = &$tgt_schema;
             let src_ty = type_!($src_ty);
             let tgt_ty = type_!($tgt_ty);
-            let res = is_subtype(src_schema, &src_ty, tgt_schema, &tgt_ty, TypeVariant::$variant);
+            let res = check_subtype(src_schema, &src_ty, tgt_schema, &tgt_ty, TypeVariant::$variant);
             (src_ty, tgt_ty, res)
         }};
     }
 
     macro_rules! assert_subtype {
         ($($args:tt)*) => {
-            let (src_ty, tgt_ty, res) = _is_subtype!($($args)*);
+            let (src_ty, tgt_ty, res) = _check_subtype!($($args)*);
             if let Err(err) = res {
                 panic!("{:?} should be a subtype of {:?}: {:#}", src_ty, tgt_ty, err);
             }
@@ -183,7 +183,7 @@ mod tests {
 
     macro_rules! assert_not_subtype {
         ($($args:tt)*) => {
-            let (src_ty, tgt_ty, res) = _is_subtype!($($args)*);
+            let (src_ty, tgt_ty, res) = _check_subtype!($($args)*);
             if res.is_ok() {
                 panic!("{:?} should not be a subtype of {:?}", src_ty, tgt_ty);
             }
@@ -398,13 +398,13 @@ mod tests {
             ],
         });
 
-        assert_eq!(is_optional(s, &string), None);
-        assert_eq!(is_optional(s, &type_!({"optional": string})), Some(&string));
-        assert_eq!(is_optional(s, &type_!({"optional": {"optional": string}})), Some(&string));
-        assert_eq!(is_optional(s, &t), None);
-        assert_eq!(is_optional(s, &u), Some(&t));
-        assert_eq!(is_optional(s, &type_!({"optional": u})), Some(&t));
-        assert_eq!(is_optional(s, &type_!({"optional": t})), Some(&t));
+        assert_eq!(check_optional(s, &string), None);
+        assert_eq!(check_optional(s, &type_!({"optional": string})), Some(&string));
+        assert_eq!(check_optional(s, &type_!({"optional": {"optional": string}})), Some(&string));
+        assert_eq!(check_optional(s, &t), None);
+        assert_eq!(check_optional(s, &u), Some(&t));
+        assert_eq!(check_optional(s, &type_!({"optional": u})), Some(&t));
+        assert_eq!(check_optional(s, &type_!({"optional": t})), Some(&t));
     }
 
     #[test]
@@ -428,9 +428,9 @@ mod tests {
         assert_subtype!(s, t, t);
         assert_subtype!(s, t, string);
         assert_subtype!(s, string, t);
-        assert_eq!(is_optional(&s, &t), None);
+        assert_eq!(check_optional(&s, &t), None);
 
-        // type U behaves even more weird than type T; let's just check that the algorithm
+        // type U behaves even weirder than type T; let's just check that the algorithm
         // terminates.
         assert_subtype!(s, u, u);
         assert_subtype!(s, u, {"optional": u});
@@ -438,7 +438,7 @@ mod tests {
         assert_subtype!(s, {"optional": string}, u);
         assert_not_subtype!(s, u, string);
         assert_subtype!(s, string, u);
-        assert_eq!(is_optional(&s, &t), None);
+        assert_eq!(check_optional(&s, &t), None);
     }
 
 }
