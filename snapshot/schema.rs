@@ -1,5 +1,5 @@
 use indexmap::IndexMap;
-use lazy_static::lazy_static;
+use once_cell::sync::Lazy;
 use serde::{Serialize, Deserialize, ser, de};
 use std::fmt;
 use std::collections::HashMap;
@@ -164,13 +164,11 @@ impl NumberValue {
     }
 }
 
-lazy_static! {
-    pub static ref TYPE_STRING: Arc<Type> = Arc::new(Type::Primitive(PrimitiveType::String));
-    pub static ref TYPE_NUMBER: Arc<Type> = Arc::new(Type::Primitive(PrimitiveType::Number));
-    pub static ref TYPE_BOOLEAN: Arc<Type> = Arc::new(Type::Primitive(PrimitiveType::Boolean));
-    pub static ref TYPE_UUID: Arc<Type> = Arc::new(Type::Primitive(PrimitiveType::Uuid));
-    pub static ref TYPE_JS_DATE: Arc<Type> = Arc::new(Type::Primitive(PrimitiveType::JsDate));
-}
+pub static TYPE_STRING: Lazy<Arc<Type>> = Lazy::new(|| Arc::new(Type::Primitive(PrimitiveType::String)));
+pub static TYPE_NUMBER: Lazy<Arc<Type>> = Lazy::new(|| Arc::new(Type::Primitive(PrimitiveType::Number)));
+pub static TYPE_BOOLEAN: Lazy<Arc<Type>> = Lazy::new(|| Arc::new(Type::Primitive(PrimitiveType::Boolean)));
+pub static TYPE_UUID: Lazy<Arc<Type>> = Lazy::new(|| Arc::new(Type::Primitive(PrimitiveType::Uuid)));
+pub static TYPE_JS_DATE: Lazy<Arc<Type>> = Lazy::new(|| Arc::new(Type::Primitive(PrimitiveType::JsDate)));
 
 serde_map_as_vec!(mod schema_entities, HashMap<EntityName, Arc<Entity>>, name);
 serde_map_as_tuples!(mod schema_typedefs, HashMap<TypeName, Arc<Type>>);
