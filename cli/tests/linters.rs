@@ -14,7 +14,8 @@ mod linters {
     }
 
     fn nightly<'a, T: IntoIterator<Item = &'a str>>(args: T) -> Command {
-        let mut ret = cargo(itertools::chain(["+nightly-2022-08-29"], args));
+        // the nightly version needs to be kept in sync with .github/workflows/rust.yml
+        let mut ret = cargo(itertools::chain(["+nightly-2022-10-24"], args));
         ret.env("CARGO_TARGET_DIR", "./target/nightly");
         ret
     }

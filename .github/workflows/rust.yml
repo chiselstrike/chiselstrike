@@ -14,7 +14,8 @@ env:
   CARGO_TERM_COLOR: always
   REGISTRY: ghcr.io
   IMAGE_NAME: ${{ github.repository }}
-  nightly-version: nightly-2022-08-29
+  # the nightly version needs to be kept in sync with cli/tests/linters.rs
+  nightly-version: nightly-2022-10-24
   POSTGRES_PASSWORD: postgres
 
 jobs:
