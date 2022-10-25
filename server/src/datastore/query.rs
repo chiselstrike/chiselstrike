@@ -957,7 +957,6 @@ pub mod tests {
         let entity_fields = entity_value.try_into_map().unwrap();
         let (entity_fields, id_tree) = query_engine
             .add_row(entity.object_type().clone(), entity_fields, ctx)
-            .unwrap()
             .await
             .unwrap();
 

@@ -58,7 +58,7 @@ pub async fn op_chisel_begin_transaction(
         "A transaction is already open for this context"
     );
 
-    current_data_ctx.replace(data_ctx);
+    current_data_ctx.replace(data_ctx.into());
 
     Ok(())
 }
@@ -77,6 +77,9 @@ pub async fn op_chisel_commit_transaction(
         .borrow_mut()
         .take()
         .context("Cannot commit a transaction because no transaction is in progress")?;
+    let data_ctx = Rc::try_unwrap(data_ctx).map_err(|_| {
+        anyhow!("Cannot commit because a reference to the transaction is still being held.")
+    })?;
 
     data_ctx.commit().await?;
 
@@ -89,11 +92,17 @@ pub fn op_chisel_rollback_transaction(
     job_ctx_rid: deno_core::ResourceId,
 ) -> Result<()> {
     let ctx = state.resource_table.get::<JobContext>(job_ctx_rid)?;
-    ctx.current_data_ctx
+    let ctx = ctx
+        .current_data_ctx
         .borrow_mut()
         .take()
-        .context("Cannot commit a transaction because no transaction is in progress")?
-        .rollback()?;
+        .context("Cannot commit a transaction because no transaction is in progress")?;
+
+    let ctx = Rc::try_unwrap(ctx).map_err(|_| {
+        anyhow!("Cannot commit because a reference to the transaction is still being held.")
+    })?;
+
+    ctx.rollback()?;
 
     Ok(())
 }
@@ -129,16 +138,12 @@ pub fn op_chisel_store<'a>(
     }
 
     Ok(async move {
-        let fut = {
-            let data_ctx = ctx.data_context()?;
-            server.query_engine.add_row(
-                ty.object_type().clone(),
-                value.try_into_map()?,
-                &data_ctx,
-            )?
-        };
-
-        let (_value, id_tree) = fut.await?;
+        let data_ctx = ctx.data_context()?;
+        let val = value.try_into_map()?;
+        let (_value, id_tree) = server
+            .query_engine
+            .add_row(ty.object_type().clone(), val, &data_ctx)
+            .await?;
 
         Ok(id_tree)
     })

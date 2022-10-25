@@ -1,4 +1,4 @@
-use std::cell::{Ref, RefCell};
+use std::cell::RefCell;
 use std::collections::HashMap;
 use std::rc::Rc;
 
@@ -76,15 +76,17 @@ impl JobInfo {
 
 pub struct JobContext {
     pub job_info: Rc<JobInfo>,
-    pub current_data_ctx: RefCell<Option<DataContext>>,
+    pub current_data_ctx: RefCell<Option<Rc<DataContext>>>,
 }
 
 impl JobContext {
     /// Attempts to return a reference to the current data context.
-    pub fn data_context(&self) -> anyhow::Result<Ref<DataContext>> {
+    pub fn data_context(&self) -> anyhow::Result<Rc<DataContext>> {
         let ctx = self.current_data_ctx.borrow();
-        anyhow::ensure!(ctx.is_some(), "No transaction in the current context");
-        Ok(Ref::map(ctx, |ctx| ctx.as_ref().unwrap()))
+        match &*ctx {
+            Some(ctx) => Ok(ctx.clone()),
+            None => anyhow::bail!("No transaction in the current context"),
+        }
     }
 }
 

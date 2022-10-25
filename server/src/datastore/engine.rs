@@ -2,7 +2,6 @@
 
 use std::collections::{HashMap, HashSet};
 use std::fmt::Write;
-use std::future::Future;
 use std::pin::Pin;
 use std::rc::Rc;
 use std::sync::Arc;
@@ -543,30 +542,29 @@ impl QueryEngine {
     ///     ...
     /// }
     ///
-    pub fn add_row(
+    pub async fn add_row(
         &self,
         ty: Arc<ObjectType>,
         record: EntityMap,
         ctx: &DataContext,
-    ) -> Result<impl Future<Output = Result<(EntityMap, IdTree)>> + '_> {
+    ) -> Result<(EntityMap, IdTree)> {
         let (record, location) = if feat_typescript_policies() {
-            self.apply_write_policies(ty.clone(), record, ctx.policy_context.clone())?
+            let is_creation = self.is_object_creation(ctx, &ty, &record).await?;
+            self.apply_write_policies(ty.clone(), record, ctx.policy_context.clone(), is_creation)?
         } else {
             (record, None)
         };
-        let res = self.prepare_insertion(&ty, &record, &ctx.type_system);
-        let txn = ctx.txn.clone();
-        Ok(async move {
-            let (inserts, id_tree) = res?;
-            // mock saving to some region
-            if let Some(loc) = location {
-                log::info!("Saving {} to region {loc:?}", id_tree.id);
-            }
-            let mut txn = txn.lock().await;
+        let (inserts, id_tree) = self.prepare_insertion(&ty, &record, &ctx.type_system)?;
+        // mock saving to some region
+        if let Some(loc) = location {
+            log::info!("Saving {} to region {loc:?}", id_tree.id);
+        }
 
-            self.run_sql_queries(&inserts, &mut txn).await?;
-            Ok((record, id_tree))
-        })
+        let txn = ctx.txn.clone();
+        let mut txn = txn.lock().await;
+
+        self.run_sql_queries(&inserts, &mut txn).await?;
+        Ok((record, id_tree))
     }
 
     pub async fn add_row_shallow(
@@ -880,10 +878,11 @@ impl QueryEngine {
         ty: Arc<ObjectType>,
         value: EntityMap,
         ctx: Rc<PolicyContext>,
+        is_creation: bool,
     ) -> Result<(EntityMap, Option<Location>)> {
         let processor = PolicyProcessor { ty, ctx };
 
-        let action = if is_object_creation(&value) {
+        let action = if is_creation {
             WriteAction::Create
         } else {
             WriteAction::Update
@@ -891,8 +890,30 @@ impl QueryEngine {
 
         processor.process_write(&value, action)
     }
-}
 
-fn is_object_creation(obj: &EntityMap) -> bool {
-    obj.get("id").is_none()
+    async fn is_object_creation(
+        &self,
+        ctx: &DataContext,
+        ty: &ObjectType,
+        obj: &EntityMap,
+    ) -> Result<bool> {
+        let txn = ctx.txn.clone();
+        let mut txn = txn.lock().await;
+        match obj.get("id") {
+            None => Ok(true),
+            Some(id) => Ok(!self.exists_entity_id(&mut txn, id, ty).await?),
+        }
+    }
+
+    async fn exists_entity_id(
+        &self,
+        txn: &mut Transaction<'_, Any>,
+        id: &EntityValue,
+        ty: &ObjectType,
+    ) -> Result<bool, anyhow::Error> {
+        let id = id.as_str()?;
+        let query = format!("SELECT 1 from \"{}\" where id=$1", ty.backing_table(),);
+        let query = sqlx::query(&query).bind(id);
+        Ok(txn.fetch_optional(query).await?.is_some())
+    }
 }
