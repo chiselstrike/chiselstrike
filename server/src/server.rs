@@ -2,13 +2,14 @@
 
 use crate::datastore::{DbConnection, MetaService, QueryEngine};
 use crate::internal::{mark_not_ready, mark_ready};
+use crate::kafka::{self, KafkaService};
 use crate::opt::Opt;
 use crate::policies::PolicySystem;
 use crate::trunk::{self, Trunk};
 use crate::types::{BuiltinTypes, TypeSystem};
 use crate::version::{self, VersionInfo, VersionInit};
+use crate::Features;
 use crate::{http, internal, rpc, secrets, worker, JsonObject, FEATURES};
-use crate::{kafka, Features};
 use anyhow::{bail, Context, Result};
 use futures::future::{Fuse, FutureExt};
 use parking_lot::RwLock;
@@ -28,6 +29,7 @@ pub struct Server {
     pub db: Arc<DbConnection>,
     pub query_engine: QueryEngine,
     pub meta_service: MetaService,
+    pub kafka_service: Option<Arc<KafkaService>>,
     /// Global builtin types such as `string` and `AuthUser`, shared for all versions.
     pub builtin_types: Arc<BuiltinTypes>,
     /// Type system for each version (key is version id), should reflect the state of the "meta"
@@ -75,9 +77,7 @@ pub async fn run(opt: Opt) -> Result<()> {
         .context("Could not start an internal HTTP server")?;
 
     let kafka_task = match server.opt.kafka_connection.clone() {
-        Some(connection) => kafka::spawn(server.clone(), connection, &server.opt.kafka_topics)
-            .await?
-            .fuse(),
+        Some(_) => kafka::spawn(server.clone()).await?.fuse(),
         None => Fuse::terminated(),
     };
 
@@ -113,6 +113,11 @@ async fn make_server(opt: Opt) -> Result<(Arc<Server>, TaskHandle<Result<()>>)> 
     let db = Arc::new(db);
     let query_engine = QueryEngine::new(db.clone());
     let meta_service = MetaService::new(db.clone());
+    let kafka_service = if let Some(ref kafka_connection) = opt.kafka_connection {
+        Some(Arc::new(KafkaService::connect(kafka_connection).await?))
+    } else {
+        None
+    };
 
     let legacy_dbs = find_legacy_sqlite_dbs(&opt);
     if extract_sqlite_file(&opt.db_uri).is_some() && legacy_dbs.len() == 2 {
@@ -151,6 +156,7 @@ async fn make_server(opt: Opt) -> Result<(Arc<Server>, TaskHandle<Result<()>>)> 
         db,
         query_engine,
         meta_service,
+        kafka_service,
         builtin_types,
         type_systems,
         secrets,

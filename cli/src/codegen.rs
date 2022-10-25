@@ -80,7 +80,7 @@ fn codegen_topic_map(
         // TODO: same quotation issues as above
         lines.push(format!("import eventHandler{} from {:?}", i, import));
         lines.push(format!(
-            "topicMap.topic({:?}, eventHandler{});",
+            "await topicMap.topic({:?}, eventHandler{});",
             topic.topic, i
         ));
     }
