@@ -18,6 +18,10 @@ pub(crate) fn mark_not_ready() {
     HEALTH_READY.store(400, Ordering::Relaxed);
 }
 
+pub(crate) fn is_stopping() -> bool {
+    HEALTH_READY.load(Ordering::Relaxed) == 400
+}
+
 fn response(body: &str, status: u16) -> Result<Response<Body>> {
     Ok(Response::builder()
         .status(status)

@@ -185,4 +185,4 @@ jobs:
       timeout-minutes: 20
       with:
           command: test
-          args: -p cli --test integration_tests -- --test kafka --kafka-connection localhost:9092 --kafka-topic testing
+          args: -p cli --test integration_tests -- --test kafka --kafka-connection localhost:9092

@@ -33,7 +33,7 @@ pub async fn test_kafka_apply(c: TestContext) {
 #[chisel_macros::test(modules = Node)]
 pub async fn test_kafka_consume(c: TestContext) {
     if let Some(kafka_connection) = c.kafka_connection {
-        let kafka_topic = c.kafka_topic.unwrap();
+        let kafka_topic = "testing";
         c.chisel.write(
             "models/event.ts",
             r##"
@@ -73,7 +73,7 @@ pub async fn test_kafka_consume(c: TestContext) {
             .build()
             .await
             .unwrap();
-        let partition_client = client.partition_client(kafka_topic.clone(), 0).unwrap();
+        let partition_client = client.partition_client(kafka_topic, 0).unwrap();
         let record = Record {
             key: None,
             value: Some(b"hello kafka".to_vec()),

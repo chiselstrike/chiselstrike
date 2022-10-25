@@ -33,10 +33,6 @@ pub struct Opt {
     /// Kafka connection.
     #[structopt(long)]
     pub kafka_connection: Option<String>,
-    /// Kafka topics to subscribe to.
-    #[structopt(long)]
-    pub kafka_topics: Vec<String>,
-
     /// Activate inspector and let a debugger attach at any time.
     #[structopt(long)]
     pub inspect: bool,

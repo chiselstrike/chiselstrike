@@ -1,18 +1,24 @@
 // SPDX-FileCopyrightText: © 2022 ChiselStrike <info@chiselstrike.com>
 
+use crate::internal::is_stopping;
 use crate::server::Server;
 use crate::version::VersionJob;
-use anyhow::{Context, Result};
+use anyhow::{anyhow, Result};
 use deno_core::serde_v8;
 use enclose::enclose;
-use futures::stream::{FuturesUnordered, StreamExt, TryStreamExt};
+use futures::stream::{AbortHandle, Abortable, FuturesUnordered, StreamExt, TryStreamExt};
+use futures::FutureExt;
+use parking_lot::Mutex;
 use rskafka::client::{
     consumer::{StartOffset, StreamConsumerBuilder},
-    ClientBuilder,
+    partition::PartitionClient,
+    Client, ClientBuilder,
 };
 use rskafka::record::Record;
 use serde::Serialize;
+use std::collections::HashMap;
 use std::sync::Arc;
+use tokio::sync::Notify;
 use utils::TaskHandle;
 
 /// Kafka event that is passed to JavaScript.
@@ -24,30 +30,97 @@ pub struct KafkaEvent {
     pub value: serde_v8::ZeroCopyBuf,
 }
 
-pub async fn spawn(
-    server: Arc<Server>,
-    connection: String,
-    topics: &[String],
-) -> Result<TaskHandle<Result<()>>> {
-    let client = ClientBuilder::new(vec![connection]).build().await?;
-    let streams = topics.iter().map(move |topic| {
-        let topic = topic.clone();
-        let partition_client = Arc::new(client.partition_client(topic.clone(), 0).unwrap());
-        let stream = StreamConsumerBuilder::new(partition_client, StartOffset::Latest)
-            .with_max_wait_ms(100)
-            .build();
-        stream.map_ok(move |record| (topic.clone(), record))
-    });
-    let mut streams = futures::stream::select_all(streams);
+pub struct KafkaService {
+    client: Client,
+    topics: Mutex<HashMap<String, Arc<PartitionClient>>>,
+    resubscribe: Notify,
+}
 
+impl KafkaService {
+    pub async fn connect(connection: &str) -> Result<KafkaService> {
+        let client = ClientBuilder::new(vec![connection.to_owned()])
+            .build()
+            .await?;
+        let topics = Mutex::new(HashMap::default());
+        let resubscribe = Notify::new();
+        Ok(KafkaService {
+            client,
+            topics,
+            resubscribe,
+        })
+    }
+
+    pub async fn subscribe_topic(&self, topic: &String) {
+        let mut topics = self.topics.lock();
+        if topics.contains_key(topic) {
+            return;
+        }
+        let partition_client = Arc::new(self.client.partition_client(topic.clone(), 0).unwrap());
+        topics.insert(topic.to_owned(), partition_client);
+        self.resubscribe.notify_one();
+    }
+
+    pub async fn get_topics(&self) -> HashMap<String, Arc<PartitionClient>> {
+        let topics = self.topics.lock();
+        topics.clone()
+    }
+}
+
+pub async fn spawn(server: Arc<Server>) -> Result<TaskHandle<Result<()>>> {
     let task = tokio::task::spawn(async move {
-        while let Some(res) = streams.next().await {
-            let (topic, (record, _)) = res.context("Could not receive event from Kafka")?;
-            handle_event(&server, topic, record.record).await?;
+        let service = server
+            .kafka_service
+            .as_ref()
+            .ok_or_else(|| anyhow!("Internal error: Kafka is not configured."))?;
+        while !is_stopping() {
+            let (mut stream, abort_handle) = build_event_stream(service).fuse().await;
+            loop {
+                tokio::select! {
+                    event = stream.next() => {
+                        if let Some(Ok((topic, (record, _)))) = event {
+                            handle_event(&server, topic, record.record).await?;
+                        } else {
+                            break;
+                        }
+                    },
+                    _ = service.resubscribe.notified() => {
+                        abort_handle.abort();
+                    }
+                }
+            }
         }
         Ok(())
     });
     Ok(TaskHandle(task))
+}
+
+/// Event stream from multiple Kafka topics.
+type EventStream = Box<
+    dyn futures::Stream<
+            Item = Result<
+                (String, (rskafka::record::RecordAndOffset, i64)),
+                rskafka::client::error::Error,
+            >,
+        > + Unpin
+        + Send,
+>;
+
+/// Build a multiplexed event stream from all the Kafka topics.
+async fn build_event_stream(service: &KafkaService) -> (Abortable<EventStream>, AbortHandle) {
+    let topics = service.get_topics().await;
+    let stream: EventStream = if topics.is_empty() {
+        Box::new(futures::stream::pending())
+    } else {
+        let streams = topics.iter().map(move |(topic, partition_client)| {
+            let topic = topic.clone();
+            let stream = StreamConsumerBuilder::new(partition_client.clone(), StartOffset::Latest)
+                .with_max_wait_ms(100)
+                .build();
+            stream.map_ok(move |record| (topic.clone(), record))
+        });
+        Box::new(futures::stream::select_all(streams))
+    };
+    futures::stream::abortable(stream)
 }
 
 async fn handle_event(server: &Server, topic: String, record: Record) -> Result<()> {

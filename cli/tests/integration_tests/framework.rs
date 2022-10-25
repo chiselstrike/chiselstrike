@@ -831,7 +831,6 @@ pub struct TestContext {
     // before we try to drop the database.
     pub _db: Database,
     pub kafka_connection: Option<String>,
-    pub kafka_topic: Option<String>,
 }
 
 impl TestContext {
