@@ -12,6 +12,68 @@ export function opAsync(
     return Deno.core.opAsync(opName, a, b);
 }
 
+interface CounterParams<T extends string = string> {
+    name: string;
+    help?: string;
+    labels?: T[];
+}
+
+interface IncrementCounterByParams {
+    name: string;
+    labels: string[];
+    value: number;
+}
+
+type Labels<T extends string> = Record<T, string>;
+
+export class Counter<T extends string = string> {
+    private name: string;
+    private label_keys: T[];
+
+    constructor(params: CounterParams<T>) {
+        this.name = params.name;
+        this.label_keys = params.labels ?? [];
+        registerCounter(params);
+    }
+
+    with(labels?: Labels<T>): LabeledCounter {
+        const label_values = this.label_keys.map((label) =>
+            (labels ?? {} as Labels<T>)[label]
+        );
+        return new LabeledCounter(this.name, label_values);
+    }
+}
+
+class LabeledCounter {
+    private name: string;
+    private labels: string[];
+
+    constructor(name: string, labels: string[]) {
+        this.name = name;
+        this.labels = labels;
+    }
+
+    inc(value?: number): void {
+        incrementCounterBy({
+            name: this.name,
+            labels: this.labels,
+            value: value ?? 1,
+        });
+    }
+}
+
+function registerCounter({ name, help, labels }: CounterParams) {
+    return opSync("op_chisel_register_app_counter", {
+        name,
+        help: help ?? "",
+        labels: labels ?? [],
+    });
+}
+
+function incrementCounterBy(params: IncrementCounterByParams) {
+    return opSync("op_chisel_inc_by_app_counter", params);
+}
+
 export type JSONValue =
     | string
     | number
