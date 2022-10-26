@@ -4,10 +4,12 @@ use std::collections::{hash_map::Entry, HashMap};
 use std::rc::Rc;
 use std::str::FromStr;
 use std::sync::Arc;
+use std::task::Poll;
 
 use anyhow::{bail, Result};
 use boa_engine::prelude::JsObject;
 use boa_engine::JsValue;
+use futures::{Stream, StreamExt};
 
 use crate::datastore::value::{EntityMap, EntityValue};
 use crate::types::ObjectType;
@@ -15,7 +17,6 @@ use crate::types::ObjectType;
 use self::engine::{boa_err_to_anyhow, ChiselRequestContext, PolicyEngine};
 use self::instances::PolicyEvalInstance;
 use self::utils::{entity_map_to_js_value, js_value_to_entity_value};
-
 pub mod engine;
 mod instances;
 mod interpreter;
@@ -198,7 +199,7 @@ impl PolicyProcessor {
 
     pub fn process_write(
         &self,
-        value: EntityMap,
+        value: &EntityMap,
         action: WriteAction,
     ) -> Result<(EntityMap, Option<Location>)> {
         let mut instance = self
@@ -206,7 +207,7 @@ impl PolicyProcessor {
             .cache
             .get_or_create_policy_instance(&self.ctx, &self.ty);
         let js_value =
-            entity_map_to_js_value(&mut self.ctx.engine.boa_ctx.borrow_mut(), &value, true);
+            entity_map_to_js_value(&mut self.ctx.engine.boa_ctx.borrow_mut(), value, true);
         let action = match action {
             WriteAction::Create => instance.get_create_action(&self.ctx, &js_value)?,
             WriteAction::Update => {
@@ -239,5 +240,39 @@ impl PolicyProcessor {
         let value = js_value_to_entity_value(&js_value).try_into_map()?;
 
         Ok((value, geo_loc))
+    }
+}
+
+pub struct ValidatedEntityStream<S> {
+    pub stream: S,
+    pub validator: PolicyProcessor,
+}
+
+impl<S> Stream for ValidatedEntityStream<S>
+where
+    S: Stream<Item = Result<EntityMap>> + Unpin,
+{
+    type Item = anyhow::Result<EntityMap>;
+
+    fn poll_next(
+        mut self: std::pin::Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+    ) -> Poll<Option<Self::Item>> {
+        let item = futures::ready!(self.stream.poll_next_unpin(cx));
+        match item {
+            Some(item) => match item {
+                Ok(value) => match self.validator.process_read(value) {
+                    Ok(Some(value)) => Poll::Ready(Some(Ok(value))),
+                    Ok(None) => {
+                        // We yield to the runtime and ask to be rescheduled right away.
+                        cx.waker().wake_by_ref();
+                        Poll::Pending
+                    }
+                    Err(e) => Poll::Ready(Some(Err(e))),
+                },
+                Err(e) => Poll::Ready(Some(Err(e))),
+            },
+            None => Poll::Ready(None),
+        }
     }
 }

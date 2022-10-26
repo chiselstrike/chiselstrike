@@ -7,8 +7,9 @@ use std::rc::{Rc, Weak};
 use std::task::{Context, Poll};
 
 use anyhow::{anyhow, bail, Context as _, Result};
+use deno_core::serde_v8::Serializable;
 use deno_core::{serde_v8, v8, CancelFuture, OpState};
-use serde_derive::Deserialize;
+use serde::Deserialize;
 
 use super::WorkerState;
 use crate::datastore::crud;
@@ -17,8 +18,9 @@ use crate::datastore::expr::Expr;
 use crate::datastore::query::{Mutation, QueryOpChain, QueryPlan};
 use crate::datastore::value::EntityValue;
 use crate::ops::job_context::JobContext;
-use crate::types::Type;
-use crate::JsonObject;
+use crate::policy::{PolicyContext, PolicyProcessor};
+use crate::types::{Entity, Type};
+use crate::{feat_typescript_policies, JsonObject};
 
 #[deno_core::op]
 pub async fn op_chisel_begin_transaction(
@@ -38,8 +40,10 @@ pub async fn op_chisel_begin_transaction(
         let worker_state = state.borrow::<WorkerState>();
         let type_system = worker_state.version.type_system.clone();
         let policy_system = worker_state.version.policy_system.clone();
+        let policy_engine = worker_state.policy_engine.clone();
+        let policy_context = PolicyContext::new(policy_engine, ctx.job_info.clone());
 
-        query_engine.create_data_context(type_system, policy_system, job_info)
+        query_engine.create_data_context(type_system, policy_system, policy_context, job_info)
     }
     .await?;
 
@@ -54,7 +58,7 @@ pub async fn op_chisel_begin_transaction(
         "A transaction is already open for this context"
     );
 
-    current_data_ctx.replace(data_ctx);
+    current_data_ctx.replace(data_ctx.into());
 
     Ok(())
 }
@@ -73,6 +77,9 @@ pub async fn op_chisel_commit_transaction(
         .borrow_mut()
         .take()
         .context("Cannot commit a transaction because no transaction is in progress")?;
+    let data_ctx = Rc::try_unwrap(data_ctx).map_err(|_| {
+        anyhow!("Cannot commit because a reference to the transaction is still being held.")
+    })?;
 
     data_ctx.commit().await?;
 
@@ -85,11 +92,17 @@ pub fn op_chisel_rollback_transaction(
     job_ctx_rid: deno_core::ResourceId,
 ) -> Result<()> {
     let ctx = state.resource_table.get::<JobContext>(job_ctx_rid)?;
-    ctx.current_data_ctx
+    let ctx = ctx
+        .current_data_ctx
         .borrow_mut()
         .take()
-        .context("Cannot commit a transaction because no transaction is in progress")?
-        .rollback()?;
+        .context("Cannot commit a transaction because no transaction is in progress")?;
+
+    let ctx = Rc::try_unwrap(ctx).map_err(|_| {
+        anyhow!("Cannot commit because a reference to the transaction is still being held.")
+    })?;
+
+    ctx.rollback()?;
 
     Ok(())
 }
@@ -125,14 +138,14 @@ pub fn op_chisel_store<'a>(
     }
 
     Ok(async move {
-        let id_tree = {
-            let data_ctx = ctx.data_context()?;
-            server
-                .query_engine
-                .add_row(ty.object_type().clone(), value.as_map()?, &data_ctx)?
-        };
+        let data_ctx = ctx.data_context()?;
+        let val = value.try_into_map()?;
+        let (_value, id_tree) = server
+            .query_engine
+            .add_row(ty.object_type().clone(), val, &data_ctx)
+            .await?;
 
-        id_tree.await
+        Ok(id_tree)
     })
 }
 
@@ -242,6 +255,7 @@ pub async fn op_chisel_relational_query_create(
         .get::<JobContext>(job_ctx_rid)?;
     let data_ctx = context.data_context()?;
     let query_plan = QueryPlan::from_op_chain(&data_ctx, op_chain)?;
+    let ty = query_plan.base_type().clone();
 
     let stream = server
         .query_engine
@@ -249,6 +263,7 @@ pub async fn op_chisel_relational_query_create(
     let resource = QueryStreamResource {
         stream: RefCell::new(stream),
         cancel: Default::default(),
+        ty,
         next: RefCell::new(None),
     };
     let rid = state.as_ref().borrow_mut().resource_table.add(resource);
@@ -261,6 +276,7 @@ type DbStream = RefCell<QueryResults>;
 struct QueryStreamResource {
     stream: DbStream,
     cancel: deno_core::CancelHandle,
+    ty: Entity,
     next: RefCell<Option<EntityValue>>,
 }
 
@@ -320,11 +336,31 @@ pub fn op_chisel_query_get_value<'a>(
     scope: &mut v8::HandleScope<'a>,
     state: Rc<RefCell<OpState>>,
     query_stream_rid: deno_core::ResourceId,
+    ctx: deno_core::ResourceId,
 ) -> Result<serde_v8::Value<'a>> {
     let query_stream: Rc<QueryStreamResource> =
         state.borrow().resource_table.get(query_stream_rid)?;
+    let ty = query_stream.ty.object_type().clone();
     let v8_value = match query_stream.next.borrow_mut().take() {
-        Some(v) => v.to_v8(scope)?,
+        Some(v) => {
+            if feat_typescript_policies() {
+                let ctx = state
+                    .borrow()
+                    .resource_table
+                    .get::<JobContext>(ctx)?
+                    .data_context()?
+                    .policy_context
+                    .clone();
+                let validator = PolicyProcessor { ty, ctx };
+                validator
+                    .process_read(v.try_into_map()?)?
+                    .map(|mut v| v.to_v8(scope))
+                    .transpose()?
+                    .unwrap_or_else(|| v8::null(scope).into())
+            } else {
+                v.to_v8(scope)?
+            }
+        }
         None => v8::null(scope).into(),
     };
     Ok(serde_v8::Value::from(v8_value))

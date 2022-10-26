@@ -734,6 +734,44 @@ impl MetaService {
         PolicySystem::from_yaml(yaml)
     }
 
+    pub async fn persist_policy_sources(
+        &self,
+        transaction: &mut Transaction<'_, Any>,
+        version_id: &str,
+        sources: &HashMap<String, Box<[u8]>>,
+    ) -> Result<()> {
+        // TODO: json is probably not the right format.
+        let json = serde_json::to_string(&sources)?;
+        let add_policy = sqlx::query(
+            r#"
+            INSERT INTO policy_store (store, version)
+            VALUES ($1, $2)
+            ON CONFLICT(version) DO UPDATE SET store = $1
+            WHERE policy_store.version = $2"#,
+        )
+        .bind(json)
+        .bind(version_id.to_owned());
+        execute(transaction, add_policy).await?;
+        Ok(())
+    }
+
+    pub async fn load_policy_sources(
+        &self,
+        version_id: &str,
+    ) -> Result<HashMap<String, Box<[u8]>>> {
+        let get_policy =
+            sqlx::query("SELECT store FROM policy_store WHERE version = $1").bind(version_id);
+        let mut transaction = self.begin_transaction().await?;
+        match transaction.fetch_optional(get_policy).await? {
+            Some(row) => {
+                let json: &str = row.get("store");
+                let store = serde_json::from_str(json)?;
+                Ok(store)
+            }
+            None => Ok(HashMap::new()),
+        }
+    }
+
     pub(crate) async fn count_rows(
         &self,
         transaction: &mut Transaction<'_, Any>,

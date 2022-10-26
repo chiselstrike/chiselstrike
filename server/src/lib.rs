@@ -1,10 +1,27 @@
 // SPDX-FileCopyrightText: © 2021 ChiselStrike <info@chiselstrike.com>
 
+use once_cell::sync::OnceCell;
+
 pub use crate::auth::is_auth_entity_name;
 pub use crate::opt::Opt;
 pub use crate::server::run;
 
 pub(crate) type JsonObject = serde_json::Map<String, serde_json::Value>;
+
+pub(crate) static FEATURES: OnceCell<Features> = OnceCell::new();
+
+pub(crate) fn feat_typescript_policies() -> bool {
+    FEATURES
+        .get()
+        .map(|f| f.typescript_policies)
+        .unwrap_or_default()
+}
+
+/// Chiseld experimental features
+#[derive(Default)]
+pub struct Features {
+    typescript_policies: bool,
+}
 
 #[macro_use]
 extern crate log;

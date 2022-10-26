@@ -35,6 +35,7 @@ lazy_static! {
         source_js!("special"),
         source_js!("type_system"),
         source_js!("utils"),
+        source_js!("policies"),
         ("main.js", include_str!("main.js")),
     ]
     .into_iter()
@@ -52,6 +53,7 @@ lazy_static! {
         source_d_ts!("special"),
         source_d_ts!("type_system"),
         source_d_ts!("utils"),
+        source_d_ts!("policies"),
     ]
     .into_iter()
     .collect();

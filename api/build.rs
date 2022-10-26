@@ -49,6 +49,7 @@ async fn main() -> Result<()> {
     compile("special").await?;
     compile("type_system").await?;
     compile("utils").await?;
+    compile("policies").await?;
 
     Ok(())
 }

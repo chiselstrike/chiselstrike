@@ -10,6 +10,8 @@ use serde_derive::{Deserialize, Serialize};
 
 use crate::auth::AUTH_USER_NAME;
 use crate::datastore::expr::{BinaryExpr, Expr, PropertyAccess, Value as ExprValue};
+use crate::feat_typescript_policies;
+use crate::policy::PolicyContext;
 use crate::types::{Entity, Field, ObjectType, Type, TypeId};
 
 use super::value::EntityValue;
@@ -228,7 +230,7 @@ impl QueryPlan {
         }
     }
 
-    fn base_type(&self) -> &Entity {
+    pub fn base_type(&self) -> &Entity {
         &self.entity.ty
     }
 
@@ -333,6 +335,9 @@ impl QueryPlan {
     /// Prepares the retrieval of Entity of type `ty` from the database and
     /// ensures login restrictions are respected.
     fn load_entity(&mut self, ctx: &DataContext, ty: &Entity) -> anyhow::Result<QueriedEntity> {
+        if feat_typescript_policies() {
+            self.add_read_filters(&ctx.policy_context, ty.object_type())?;
+        }
         self.add_login_filters_recursive(ctx, ty.object_type(), Expr::Parameter { position: 0 })?;
         self.load_entity_recursive(ctx, ty, ty.backing_table())
     }
@@ -406,6 +411,19 @@ impl QueryPlan {
             table_alias: current_table.to_owned(),
             joins,
         })
+    }
+
+    fn add_read_filters(
+        &mut self,
+        ctx: &PolicyContext,
+        ty: &Arc<ObjectType>,
+    ) -> anyhow::Result<()> {
+        let mut instance = ctx.cache.get_or_create_policy_instance(ctx, ty);
+        if let Some(expression) = instance.make_read_filter_expr(ctx)?.cloned() {
+            self.operators.push(QueryOp::Filter { expression });
+        }
+
+        Ok(())
     }
 
     /// Adds filters that ensure login constrains are satisfied for a type
@@ -936,13 +954,13 @@ pub mod tests {
         ctx: &DataContext,
     ) -> String {
         let entity_value = EntityValue::from_json(entity_value).unwrap();
-        let entity_fields = entity_value.as_map().unwrap();
-        let entity_id = query_engine
+        let entity_fields = entity_value.try_into_map().unwrap();
+        let (entity_fields, id_tree) = query_engine
             .add_row(entity.object_type().clone(), entity_fields, ctx)
-            .unwrap()
             .await
-            .unwrap()
-            .id;
+            .unwrap();
+
+        let entity_id = id_tree.id;
 
         let rows = fetch_rows(query_engine, ctx.txn.clone(), entity).await;
         let inserted_entity = rows.iter().find(|e| e["id"] == entity_id).unwrap();

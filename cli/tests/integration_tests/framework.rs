@@ -598,12 +598,10 @@ impl Chisel {
         self.patch(url).json(data).send().await.assert_ok();
     }
 
-    #[allow(dead_code)]
     pub async fn patch_json_status<V: Serialize>(&self, url: &str, data: V) -> u16 {
         self.patch(url).json(data).send().await.status()
     }
 
-    #[allow(dead_code)]
     pub async fn post_json_status<V: Serialize>(&self, url: &str, data: V) -> u16 {
         self.post(url).json(data).send().await.status()
     }

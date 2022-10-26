@@ -10,6 +10,7 @@ import type { RouteMapLike } from "./routing.ts";
 import { specialAfter, specialBefore } from "./special.ts";
 import { opAsync, opSync } from "./utils.ts";
 import { requestContext } from "./datastore.ts";
+import { DirtyEntityError, PermissionDeniedError } from "./policies.ts";
 
 // A generic job that we receive from Rust
 type AcceptedJob =
@@ -36,6 +37,15 @@ export default async function run(
 
     // signal to Rust that we are ready to handle jobs
     Deno.core.opSync("op_chisel_ready");
+
+    // register new error class
+    // @ts-ignore: Dynamic property
+    Deno.core.registerErrorClass(
+        "PermissionDeniedError",
+        PermissionDeniedError,
+    );
+    // @ts-ignore: Dynamic property
+    Deno.core.registerErrorClass("DirtyEntityError", DirtyEntityError);
 
     for (;;) {
         const job = await opAsync(

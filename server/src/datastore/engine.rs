@@ -2,7 +2,6 @@
 
 use std::collections::{HashMap, HashSet};
 use std::fmt::Write;
-use std::future::Future;
 use std::pin::Pin;
 use std::rc::Rc;
 use std::sync::Arc;
@@ -28,8 +27,10 @@ use crate::datastore::query::{
 };
 use crate::datastore::value::{EntityMap, EntityValue};
 use crate::datastore::DbConnection;
+use crate::feat_typescript_policies;
 use crate::ops::job_context::JobInfo;
 use crate::policies::PolicySystem;
+use crate::policy::{Location, PolicyContext, PolicyProcessor, WriteAction};
 use crate::types::{DbIndex, Field, ObjectDelta, ObjectType, Type, TypeId, TypeSystem};
 
 use super::DataContext;
@@ -231,12 +232,14 @@ impl QueryEngine {
         &self,
         type_system: Arc<TypeSystem>,
         policy_system: Arc<PolicySystem>,
+        policy_context: PolicyContext,
         job_info: Rc<JobInfo>,
     ) -> Result<DataContext> {
         let txn = self.begin_transaction_static().await?;
         Ok(DataContext {
             type_system,
             policy_system,
+            policy_context: policy_context.into(),
             txn,
             job_info,
         })
@@ -539,20 +542,29 @@ impl QueryEngine {
     ///     ...
     /// }
     ///
-    pub fn add_row(
+    pub async fn add_row(
         &self,
         ty: Arc<ObjectType>,
-        record: &EntityMap,
+        record: EntityMap,
         ctx: &DataContext,
-    ) -> Result<impl Future<Output = Result<IdTree>> + '_> {
-        let res = self.prepare_insertion(&ty, record, &ctx.type_system);
+    ) -> Result<(EntityMap, IdTree)> {
+        let (record, location) = if feat_typescript_policies() {
+            let is_creation = self.is_object_creation(ctx, &ty, &record).await?;
+            self.apply_write_policies(ty.clone(), record, ctx.policy_context.clone(), is_creation)?
+        } else {
+            (record, None)
+        };
+        let (inserts, id_tree) = self.prepare_insertion(&ty, &record, &ctx.type_system)?;
+        // mock saving to some region
+        if let Some(loc) = location {
+            log::info!("Saving {} to region {loc:?}", id_tree.id);
+        }
+
         let txn = ctx.txn.clone();
-        Ok(async move {
-            let (inserts, id_tree) = res?;
-            let mut txn = txn.lock().await;
-            self.run_sql_queries(&inserts, &mut txn).await?;
-            Ok(id_tree)
-        })
+        let mut txn = txn.lock().await;
+
+        self.run_sql_queries(&inserts, &mut txn).await?;
+        Ok((record, id_tree))
     }
 
     pub async fn add_row_shallow(
@@ -859,5 +871,49 @@ impl QueryEngine {
             sql: self.make_insert_query(ty, fields_map)?,
             args: query_args,
         })
+    }
+
+    fn apply_write_policies(
+        &self,
+        ty: Arc<ObjectType>,
+        value: EntityMap,
+        ctx: Rc<PolicyContext>,
+        is_creation: bool,
+    ) -> Result<(EntityMap, Option<Location>)> {
+        let processor = PolicyProcessor { ty, ctx };
+
+        let action = if is_creation {
+            WriteAction::Create
+        } else {
+            WriteAction::Update
+        };
+
+        processor.process_write(&value, action)
+    }
+
+    async fn is_object_creation(
+        &self,
+        ctx: &DataContext,
+        ty: &ObjectType,
+        obj: &EntityMap,
+    ) -> Result<bool> {
+        let txn = ctx.txn.clone();
+        let mut txn = txn.lock().await;
+        match obj.get("id") {
+            None => Ok(true),
+            Some(id) => Ok(!self.exists_entity_id(&mut txn, id, ty).await?),
+        }
+    }
+
+    async fn exists_entity_id(
+        &self,
+        txn: &mut Transaction<'_, Any>,
+        id: &EntityValue,
+        ty: &ObjectType,
+    ) -> Result<bool, anyhow::Error> {
+        let id = id.as_str()?;
+        let query = format!("SELECT 1 from \"{}\" where id=$1", ty.backing_table(),);
+        let query = sqlx::query(&query).bind(id);
+        Ok(txn.fetch_optional(query).await?.is_some())
     }
 }

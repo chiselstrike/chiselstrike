@@ -24,6 +24,9 @@ module.exports = {
     ],
     rules: {
         "@typescript-eslint/switch-exhaustiveness-check": "error",
+        "@typescript-eslint/ban-ts-comment": ["off", {
+            "ts-nocheck": "allow-with-description"
+        }],
         "@typescript-eslint/triple-slash-reference": "off",
     },
 };

@@ -75,7 +75,8 @@ function stringifyJson(value: unknown, space?: string | number): string {
 
 /** HTTP status codes */
 export const HTTP_STATUS = {
-    NOT_FOUND: 404,
-    METHOD_NOT_ALLOWED: 405,
+    FORBIDDEN: 403,
     INTERNAL_SERVER_ERROR: 500,
+    METHOD_NOT_ALLOWED: 405,
+    NOT_FOUND: 404,
 };
