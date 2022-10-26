@@ -30,6 +30,7 @@ guard = "0.5"
 http = "0.2.6"
 hyper = { version = "0.14.16", features = ["server", "tcp", "http1"] }
 itertools = "0.10.1"
+jsonwebtoken = "8.1.1"
 lazy_static = "1.4"
 log = "0.4.14"
 nix = "0.22.2"
