@@ -77,7 +77,7 @@ mod linters {
 
     #[test]
     fn sorted_dependencies() {
-        cargo_install("1.0.5", "cargo-sort", "cargo-sort");
+        cargo_install("1.0.9", "cargo-sort", "cargo-sort");
         cargo(["sort", "-w", "-c"]);
     }
 
