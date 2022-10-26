@@ -2,19 +2,22 @@ use std::cell::RefCell;
 use std::collections::HashMap;
 use std::rc::Rc;
 
+use serde_json::Value as JsonValue;
 use tokio::sync::oneshot;
 
+use crate::authentication::Authentication;
 use crate::datastore::DataContext;
 use crate::http::HttpResponse;
 use crate::policy::engine::ChiselRequestContext;
 
+#[allow(clippy::large_enum_variant)]
 pub enum JobInfo {
     HttpRequest {
         method: String,
         path: String,
         headers: HashMap<String, String>,
-        user_id: Option<String>,
         response_tx: RefCell<Option<oneshot::Sender<HttpResponse>>>,
+        authentication: Authentication,
     },
     KafkaEvent,
 }
@@ -45,7 +48,22 @@ impl ChiselRequestContext for JobInfo {
 
     fn user_id(&self) -> Option<&str> {
         match self {
-            JobInfo::HttpRequest { ref user_id, .. } => user_id.as_deref(),
+            JobInfo::HttpRequest {
+                authentication: Authentication::UserId(ref uid),
+                ..
+            } => Some(uid),
+            _ => None,
+        }
+    }
+
+    fn token(&self) -> Option<&JsonValue> {
+        match self {
+            JobInfo::HttpRequest {
+                ref authentication, ..
+            } => match authentication {
+                Authentication::Jwt(ref val) => Some(val),
+                _ => None,
+            },
             JobInfo::KafkaEvent => todo!(),
         }
     }
@@ -68,8 +86,11 @@ impl JobInfo {
 
     pub fn user_id(&self) -> Option<&str> {
         match self {
-            JobInfo::HttpRequest { ref user_id, .. } => user_id.as_deref(),
-            JobInfo::KafkaEvent => None,
+            JobInfo::HttpRequest {
+                authentication: Authentication::UserId(ref uid),
+                ..
+            } => Some(uid),
+            _ => None,
         }
     }
 }

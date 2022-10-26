@@ -35,7 +35,8 @@ pub struct Server {
     /// Type system for each version (key is version id), should reflect the state of the "meta"
     /// database.
     pub type_systems: tokio::sync::Mutex<HashMap<String, TypeSystem>>,
-    /// Current secrets, they are periodically refreshed and rewritten.
+    /// Current secrets, they are periodically refreshed and rewritten. // Todo: this should be an
+    /// async RwLock.
     pub secrets: RwLock<JsonObject>,
     /// Handle to an inspector server that allows debugging of JavaScript code from Chrome.
     pub inspector: Option<Arc<deno_runtime::inspector_server::InspectorServer>>,

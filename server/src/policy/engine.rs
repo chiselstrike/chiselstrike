@@ -12,6 +12,7 @@ use serde_json::Value as JsonValue;
 use super::interpreter::{self, InterpreterContext, JsonResolver};
 use super::store::PolicyStore;
 use super::type_policy::{GeoLocPolicy, ReadPolicy, TransformPolicy, TypePolicy, WritePolicy};
+use super::utils::json_to_js_value;
 use super::Action;
 use crate::datastore::expr::{BinaryExpr, BinaryOp, Expr, PropertyAccess, Value};
 
@@ -30,6 +31,7 @@ pub trait ChiselRequestContext {
     fn path(&self) -> &str;
     fn headers(&self) -> Box<dyn Iterator<Item = (&str, &str)> + '_>;
     fn user_id(&self) -> Option<&str>;
+    fn token(&self) -> Option<&JsonValue>;
 
     // TODO: need to find a way around using json here.
     fn to_value(&self) -> JsonValue {
@@ -38,6 +40,7 @@ pub trait ChiselRequestContext {
             "path": self.path(),
             "headers": self.headers().collect::<HashMap<_, _>>(),
             "user_id": self.user_id(),
+            "token": self.token(),
         })
     }
 
@@ -59,6 +62,12 @@ pub trait ChiselRequestContext {
         }
 
         map.set("headers", headers, false, ctx).unwrap();
+        let token = match self.token() {
+            Some(tok) => json_to_js_value(ctx, tok),
+            None => JsValue::Null,
+        };
+
+        map.set("token", token, false, ctx).unwrap();
 
         JsValue::Object(map)
     }
@@ -314,6 +323,10 @@ mod test {
 
         fn user_id(&self) -> Option<&str> {
             self.get("userId")?.as_str()
+        }
+
+        fn token(&self) -> Option<&JsonValue> {
+            None
         }
     }
 
