@@ -1,12 +1,83 @@
 // SPDX-FileCopyrightText: © 2021 ChiselStrike <info@chiselstrike.com>
+use std::fmt;
+
+use anyhow::anyhow;
+use sqlx::Row;
 
 use crate::datastore::engine::SqlWithArguments;
 use crate::datastore::query::SqlValue;
-use crate::server::Server;
 use crate::types::{Entity, Type};
-use crate::version::Version;
-use anyhow::Result;
-use sqlx::Row;
+use crate::{server::Server, version::Version};
+
+type Result<T> = std::result::Result<T, AuthError>;
+
+macro_rules! bad_request {
+    ($($token:tt)*) => {
+        return Err(AuthError::bad_request(anyhow!($($token)*)))
+    };
+}
+
+macro_rules! forbidden {
+    ($($token:tt)*) => {
+        return Err(AuthError::forbidden(anyhow!($($token)*)))
+    };
+}
+
+macro_rules! internal {
+    ($($token:tt)*) => {
+        return Err(AuthError::forbidden(anyhow!($($token)*)))
+    };
+}
+
+#[derive(Debug)]
+pub struct AuthError {
+    pub inner: anyhow::Error,
+    pub err_kind: AuthErrorKind,
+}
+
+impl fmt::Display for AuthError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let context = match self.err_kind {
+            AuthErrorKind::Forbbiden => "forbidden",
+            AuthErrorKind::BadRequest => "bad request",
+            AuthErrorKind::Internal => "internal error",
+        };
+
+        write!(f, "{context}: {}", self.inner)
+    }
+}
+
+impl std::error::Error for AuthError {}
+
+impl AuthError {
+    fn internal(inner: anyhow::Error) -> Self {
+        Self {
+            inner,
+            err_kind: AuthErrorKind::Internal,
+        }
+    }
+
+    fn forbidden(inner: anyhow::Error) -> Self {
+        Self {
+            inner,
+            err_kind: AuthErrorKind::Forbbiden,
+        }
+    }
+
+    fn bad_request(inner: anyhow::Error) -> Self {
+        Self {
+            inner,
+            err_kind: AuthErrorKind::BadRequest,
+        }
+    }
+}
+
+#[derive(Debug)]
+pub enum AuthErrorKind {
+    Forbbiden,
+    BadRequest,
+    Internal,
+}
 
 pub const AUTH_USER_NAME: &str = "AuthUser";
 pub const AUTH_SESSION_NAME: &str = "AuthSession";
@@ -27,7 +98,7 @@ pub fn is_auth_entity_name(entity_name: &str) -> bool {
 fn get_auth_user_type(version: &Version) -> Result<Entity> {
     match version.type_system.lookup_builtin_type(AUTH_USER_NAME) {
         Ok(Type::Entity(t)) => Ok(t),
-        _ => anyhow::bail!("Internal error: type AuthUser not found"),
+        _ => internal!("type AuthUser not found"),
     }
 }
 
@@ -43,7 +114,7 @@ pub async fn get_username_from_id(
     match (user_id, user_type) {
         (None, _) => None,
         (Some(_), Err(e)) => {
-            warn!("{:?}", e);
+            log::warn!("{:?}", e);
             None
         }
         (Some(id), Ok(user_type)) => {

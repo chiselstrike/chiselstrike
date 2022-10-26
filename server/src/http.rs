@@ -1,6 +1,6 @@
 // SPDX-FileCopyrightText: © 2022 ChiselStrike <info@chiselstrike.com>
 
-use crate::auth;
+use crate::authentication;
 use crate::server::Server;
 use crate::version::{Version, VersionJob};
 use anyhow::{Context, Error, Result};
@@ -143,7 +143,8 @@ async fn handle_version_request(
         .and_then(|value| value.to_str().ok())
         .map(|value| value.into());
 
-    let username = auth::get_username_from_id(&server, &version, user_id.as_deref()).await;
+    let username =
+        authentication::get_username_from_id(&server, &version, user_id.as_deref()).await;
     if !version
         .policy_system
         .user_authorization
