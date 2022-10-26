@@ -21,7 +21,8 @@ pub struct PolicyEvalInstance {
     create: Option<WritePolicyInstance>,
     update: Option<WritePolicyInstance>,
     on_read: Option<TransformPolicyInstance>,
-    on_save: Option<TransformPolicyInstance>,
+    on_create: Option<TransformPolicyInstance>,
+    on_update: Option<TransformPolicyInstance>,
     geoloc: Option<GeoLocPolicyInstance>,
     /// When a read entity is transformed, it is marked as dirty, and its id is put in the dirty
     /// set. Upon write, we check if the entity is part of this set, and throw an error if it is.
@@ -67,7 +68,8 @@ impl PolicyEvalInstance {
             create: None,
             update: None,
             on_read: None,
-            on_save: None,
+            on_create: None,
+            on_update: None,
             geoloc: None,
             chisel_ctx,
         }
@@ -140,12 +142,24 @@ impl PolicyEvalInstance {
         Ok(())
     }
 
-    /// Applies the onRead transform to value.
+    /// Applies the onCreate transform to value.
     ///
     /// This mutates value! therefore value should be set as mutable.
-    pub fn transform_on_write(&mut self, ctx: &PolicyContext, val: &JsValue) -> Result<()> {
+    pub fn transform_on_create(&mut self, ctx: &PolicyContext, val: &JsValue) -> Result<()> {
         let chisel_ctx = self.chisel_ctx.clone();
-        self.get_or_load_on_save_policy_instance(ctx)?
+        self.get_or_load_on_create_policy_instance(ctx)?
+            .map(|p| p.transform(ctx, val, &chisel_ctx))
+            .transpose()?;
+
+        Ok(())
+    }
+
+    /// Applies the onUpdate transform to value.
+    ///
+    /// This mutates value! therefore value should be set as mutable.
+    pub fn transform_on_update(&mut self, ctx: &PolicyContext, val: &JsValue) -> Result<()> {
+        let chisel_ctx = self.chisel_ctx.clone();
+        self.get_or_load_on_update_policy_instance(ctx)?
             .map(|p| p.transform(ctx, val, &chisel_ctx))
             .transpose()?;
 
@@ -163,7 +177,8 @@ impl PolicyEvalInstance {
     create_get_or_load_instance!(create, WritePolicyInstance);
     create_get_or_load_instance!(update, WritePolicyInstance);
     create_get_or_load_instance!(on_read, TransformPolicyInstance);
-    create_get_or_load_instance!(on_save, TransformPolicyInstance);
+    create_get_or_load_instance!(on_create, TransformPolicyInstance);
+    create_get_or_load_instance!(on_update, TransformPolicyInstance);
     create_get_or_load_instance!(geoloc, GeoLocPolicyInstance);
 }
 

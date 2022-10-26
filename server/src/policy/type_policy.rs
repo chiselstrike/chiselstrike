@@ -68,5 +68,6 @@ pub struct TypePolicy {
     pub update: Option<WritePolicy>,
     pub geoloc: Option<GeoLocPolicy>,
     pub on_read: Option<TransformPolicy>,
-    pub on_save: Option<TransformPolicy>,
+    pub on_create: Option<TransformPolicy>,
+    pub on_update: Option<TransformPolicy>,
 }

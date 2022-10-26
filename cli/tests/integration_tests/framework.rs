@@ -590,10 +590,13 @@ impl Chisel {
     }
 
     pub async fn post_json<V: Serialize>(&self, url: &str, data: V) {
-        self.post(url).json(data).send().await.assert_ok();
+        self.post_json_response(url, data).await.assert_ok();
     }
 
-    #[allow(dead_code)]
+    pub async fn post_json_response<V: Serialize>(&self, url: &str, data: V) -> Response {
+        self.post(url).json(data).send().await
+    }
+
     pub async fn patch_json<V: Serialize>(&self, url: &str, data: V) {
         self.patch(url).json(data).send().await.assert_ok();
     }
