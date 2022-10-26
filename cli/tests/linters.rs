@@ -83,7 +83,7 @@ mod linters {
 
     #[test]
     fn unused_dependencies() {
-        cargo_install("0.1.29", "cargo-udeps", "cargo-udeps");
+        cargo_install("0.1.34", "cargo-udeps", "cargo-udeps");
         nightly(["udeps"]);
     }
 
