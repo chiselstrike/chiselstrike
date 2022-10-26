@@ -29,7 +29,8 @@ pub enum PolicyName {
     Create,
     Update,
     OnRead,
-    OnSave,
+    OnCreate,
+    OnUpdate,
     GeoLoc,
 }
 
@@ -83,7 +84,8 @@ impl FromStr for PolicyName {
             "create" => Ok(Self::Create),
             "update" => Ok(Self::Update),
             "onRead" => Ok(Self::OnRead),
-            "onSave" => Ok(Self::OnSave),
+            "onCreate" => Ok(Self::OnCreate),
+            "onUpdate" => Ok(Self::OnUpdate),
             "geoLoc" => Ok(Self::GeoLoc),
             other => bail!("unknown policy `{other}`"),
         }
@@ -139,7 +141,7 @@ impl Policies {
                                                     }
                                                     _ => bail!("Only arrow functions are supported in policies"),
                                                 },
-                                                PolicyName::OnRead | PolicyName::OnSave | PolicyName::GeoLoc => {
+                                                PolicyName::OnRead | PolicyName::OnCreate | PolicyName::OnUpdate | PolicyName::GeoLoc => {
                                                     match &*kv.value {
                                                         Expr::Arrow(arrow) => {
                                                             TransformPolicy::from_arrow(arrow)?

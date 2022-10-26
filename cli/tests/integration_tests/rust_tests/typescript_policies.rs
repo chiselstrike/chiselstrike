@@ -125,12 +125,19 @@ pub async fn typescript_policies(c: TestContext) {
         "policies/Person.ts",
         r##"
         export default {
-            onSave: (person, ctx) => {
+            onCreate: (person, ctx) => {
                 if (person.name == "changeAge") {
                     person.age = 100;
                 }
                 return person;
             },
+            onUpdate: (person, ctx) => {
+                if (person.name = "changeAge") {
+                    person.age = 200;
+                }
+
+                return person;
+            }
         }
     "##,
     );
@@ -227,15 +234,34 @@ async fn check_write_filter(c: TestContext) -> TestContext {
 
 async fn check_write_transform(c: TestContext) -> TestContext {
     // create marin is ok
-    c.chisel
-        .post_json("/dev/person", json!({"name": "changeAge", "age": 193}))
+    let resp = c
+        .chisel
+        .post_json_response("/dev/person", json!({"name": "changeAge", "age": 193}))
         .await;
+
+    resp.assert_ok();
+
+    let json = resp.json();
+    let id = json["id"].as_str().unwrap();
 
     let age = c.chisel.get_json("/dev/person?.name=changeAge").await["results"][0]["age"]
         .as_u64()
         .unwrap();
 
     assert_eq!(age, 100);
+
+    c.chisel
+        .patch_json(
+            &format!("/dev/person/{id}"),
+            json!({"name": "changeAge", "age": 193}),
+        )
+        .await;
+
+    let age = c.chisel.get_json("/dev/person?.name=changeAge").await["results"][0]["age"]
+        .as_u64()
+        .unwrap();
+
+    assert_eq!(age, 200);
 
     c
 }
