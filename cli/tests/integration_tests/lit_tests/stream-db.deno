@@ -28,7 +28,7 @@ export default async function chisel(req: Request) {
     }
     await Promise.all(promises);
 
-    let cursor = Data.cursor();
+    let cursor = Data.cursor().sortBy("num");
     let asyncIter = cursor[Symbol.asyncIterator]();
     let read_one = false;
     let stream = new ReadableStream({
