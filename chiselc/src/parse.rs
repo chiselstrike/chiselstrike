@@ -55,7 +55,7 @@ fn canonical_transforms(module: &mut Module) {
 
 #[derive(Default)]
 pub struct ParserContext {
-    sm: Lrc<SourceMap>,
+    pub sm: Lrc<SourceMap>,
     error_buffer: ErrorBuffer,
 }
 
