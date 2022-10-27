@@ -277,13 +277,476 @@ impl RegionBuilder<'_> {
     }
 }
 
-        }
-        vm.visit(current);
-        out.push(current);
+#[cfg(test)]
+mod test {
+    use std::collections::{hash_map::Entry, HashMap};
 
-        // a statement always has a unique neighbor, because of the "end" node of the CFG.
-        current = graph.neighbors(current).next().unwrap();
+    use petgraph::{dot::Dot, Graph};
+
+    use super::*;
+
+    /// Creates a CFG from a graph description in the format:
+    /// [from_idx] [T|F]?-> [to_idx]
+    ///
+    /// `T->` is a "true" edge from a conditional node to another node.
+    /// `F->` is a "false" edge from a conditional node to another nodes.
+    /// `->` is a flow edge between 2 nodes.
+    /// node indexes must be declared in order, of the indexing will be messed up
+    ///
+    /// Declare the start and end node last. Refer to existing tests for examples.
+    fn parse_graph(text: &str) -> ControlFlow {
+        let mut graph = Graph::<Node, Edge>::default();
+        let mut indexes = HashMap::<&str, Idx>::new();
+
+        let mut insert_node = |graph: &mut Graph<Node, Edge>, node| -> Idx {
+            match indexes.entry(node) {
+                Entry::Occupied(e) => *e.get(),
+                Entry::Vacant(e) => {
+                    let weight = match *e.key() {
+                        "start" => Node::Start,
+                        "end" => Node::End,
+                        _ => Node::Stmt,
+                    };
+                    let idx = graph.add_node(weight);
+                    e.insert(idx);
+                    idx
+                }
+            }
+        };
+
+        for line in text.lines().filter(|l| !l.trim().is_empty()) {
+            let mut parts = line.split_whitespace();
+            let from = parts.next().unwrap();
+            let edge = match parts.next().unwrap() {
+                "T->" => Edge::True,
+                "F->" => Edge::False,
+                "->" => Edge::Flow,
+                _ => unreachable!(),
+            };
+            let to = parts.next().unwrap();
+
+            let from_node = insert_node(&mut graph, from);
+            let to_node = insert_node(&mut graph, to);
+
+            dbg!((from_node, to_node, edge));
+            graph.add_edge(from_node, to_node, edge);
+        }
+
+        let start = *indexes.get("start").unwrap();
+        let end = *indexes.get("end").unwrap();
+
+        ControlFlow {
+            inner: graph,
+            start,
+            end,
+        }
     }
 
-    (Some(BasicBlock(out).into()), Some(current))
+    #[test]
+    fn single_basic_block() {
+        let description = r#"
+        0 -> 1
+        1 -> 2
+
+        start -> 0
+        2 -> end"#;
+        let cfg = parse_graph(description);
+        let region = Region::from_cfg(&cfg, &|_| StmtKind::BBComponent);
+        let expected = Region::BasicBlock(BasicBlock(vec![Idx::new(0), Idx::new(1), Idx::new(2)]));
+
+        assert_eq!(region, expected);
+    }
+
+    #[test]
+    fn single_cond_region() {
+        let description = r#"
+        0 T-> 1
+        0 F-> 2
+
+        start -> 0
+        1 -> end
+        2 -> end"#;
+        let cfg = parse_graph(description);
+        let region = Region::from_cfg(&cfg, &|idx| match idx.index() {
+            0 => StmtKind::Conditional,
+            _ => StmtKind::BBComponent,
+        });
+        let expected = Region::Cond(
+            CondRegion {
+                test_region: Region::BasicBlock(BasicBlock(vec![Idx::new(0)])),
+                cons_region: Region::BasicBlock(BasicBlock(vec![Idx::new(1)])),
+                alt_region: Region::BasicBlock(BasicBlock(vec![Idx::new(2)])),
+            }
+            .into(),
+        );
+
+        assert_eq!(region, expected);
+    }
+
+    #[test]
+    fn simple_seq_region() {
+        let description = r#"
+        0 -> 1
+        1 -> 2
+        2 T-> 3
+        2 F-> 4
+
+        start -> 0
+        3 -> end
+        4 -> end"#;
+        let cfg = parse_graph(description);
+        let region = Region::from_cfg(&cfg, &|idx| match idx.index() {
+            2 => StmtKind::Conditional,
+            _ => StmtKind::BBComponent,
+        });
+        let expected = Region::Seq(
+            SeqRegion(
+                Region::BasicBlock(BasicBlock(vec![Idx::new(0), Idx::new(1)])),
+                Region::Cond(
+                    CondRegion {
+                        test_region: Region::BasicBlock(BasicBlock(vec![Idx::new(2)])),
+                        cons_region: Region::BasicBlock(BasicBlock(vec![Idx::new(3)])),
+                        alt_region: Region::BasicBlock(BasicBlock(vec![Idx::new(4)])),
+                    }
+                    .into(),
+                ),
+            )
+            .into(),
+        );
+
+        assert_eq!(region, expected);
+    }
+
+    #[test]
+    fn seq_region_cond_first() {
+        let description = r#"
+        0 T-> 1
+        0 F-> 2
+        2 -> 3
+        1 -> 3
+
+        start -> 0
+        3 -> end"#;
+        let cfg = parse_graph(description);
+        let region = Region::from_cfg(&cfg, &|idx| match idx.index() {
+            0 => StmtKind::Conditional,
+            _ => StmtKind::BBComponent,
+        });
+        let expected = Region::Seq(
+            SeqRegion(
+                Region::Cond(
+                    CondRegion {
+                        test_region: Region::BasicBlock(BasicBlock(vec![Idx::new(0)])),
+                        cons_region: Region::BasicBlock(BasicBlock(vec![Idx::new(1)])),
+                        alt_region: Region::BasicBlock(BasicBlock(vec![Idx::new(2)])),
+                    }
+                    .into(),
+                ),
+                Region::BasicBlock(BasicBlock(vec![Idx::new(3)])),
+            )
+            .into(),
+        );
+
+        assert_eq!(region, expected);
+    }
+
+    #[test]
+    fn cond_with_seq_cond_branch() {
+        let description = r#"
+        0 T-> 1
+        0 F-> 2
+        2 -> 3
+        3 T-> 4
+
+        start -> 0
+        1 -> end
+        4 -> end
+        3 F-> end"#;
+        let cfg = parse_graph(description);
+        let region = Region::from_cfg(&cfg, &|idx| match idx.index() {
+            0 | 3 => StmtKind::Conditional,
+            _ => StmtKind::BBComponent,
+        });
+
+        let expected = Region::Cond(
+            CondRegion {
+                test_region: Region::BasicBlock(BasicBlock(vec![Idx::new(0)])),
+                cons_region: Region::BasicBlock(BasicBlock(vec![Idx::new(1)])),
+                alt_region: Region::Seq(
+                    SeqRegion(
+                        Region::BasicBlock(BasicBlock(vec![Idx::new(2)])),
+                        Region::Cond(
+                            CondRegion {
+                                test_region: Region::BasicBlock(BasicBlock(vec![Idx::new(3)])),
+                                cons_region: Region::BasicBlock(BasicBlock(vec![Idx::new(4)])),
+                                alt_region: Region::BasicBlock(BasicBlock(vec![])),
+                            }
+                            .into(),
+                        ),
+                    )
+                    .into(),
+                ),
+            }
+            .into(),
+        );
+
+        assert_eq!(region, expected);
+    }
+
+    #[test]
+    fn random_complex() {
+        let description = r#"
+        0 T-> 1
+        1 -> 2
+        0 F-> 3
+        3 T-> 4
+        3 F-> 5
+        5 -> 6
+        4 -> 7
+        6 -> 7
+
+        start -> 0
+        7 -> end
+        2 -> end"#;
+        let cfg = parse_graph(description);
+        let region = Region::from_cfg(&cfg, &|idx| match idx.index() {
+            0 | 3 => StmtKind::Conditional,
+            _ => StmtKind::BBComponent,
+        });
+
+        let expected = Region::Cond(
+            CondRegion {
+                test_region: Region::BasicBlock(BasicBlock(vec![Idx::new(0)])),
+                cons_region: Region::BasicBlock(BasicBlock(vec![Idx::new(1), Idx::new(2)])),
+                alt_region: Region::Seq(
+                    SeqRegion(
+                        Region::Cond(
+                            CondRegion {
+                                test_region: Region::BasicBlock(BasicBlock(vec![Idx::new(3)])),
+                                cons_region: Region::BasicBlock(BasicBlock(vec![Idx::new(4)])),
+                                alt_region: Region::BasicBlock(BasicBlock(vec![
+                                    Idx::new(5),
+                                    Idx::new(6),
+                                ])),
+                            }
+                            .into(),
+                        ),
+                        Region::BasicBlock(BasicBlock(vec![Idx::new(7)])),
+                    )
+                    .into(),
+                ),
+            }
+            .into(),
+        );
+
+        assert_eq!(region, expected);
+    }
+
+    #[test]
+    fn seq_seq_regions() {
+        let description = r#"
+        0 T-> 1
+        0 F-> 2
+
+        1 -> 3
+        2 -> 3
+
+        3 T-> 4
+        3 F-> 5
+
+        4 -> 6
+        5 -> 6
+
+        start -> 0
+        6 -> end"#;
+        let cfg = parse_graph(description);
+        let region = Region::from_cfg(&cfg, &|idx| match idx.index() {
+            0 | 3 => StmtKind::Conditional,
+            _ => StmtKind::BBComponent,
+        });
+
+        let expected = Region::Seq(
+            SeqRegion(
+                Region::Seq(
+                    SeqRegion(
+                        Region::Cond(
+                            CondRegion {
+                                test_region: Region::BasicBlock(BasicBlock(vec![Idx::new(0)])),
+                                cons_region: Region::BasicBlock(BasicBlock(vec![Idx::new(1)])),
+                                alt_region: Region::BasicBlock(BasicBlock(vec![Idx::new(2)])),
+                            }
+                            .into(),
+                        ),
+                        Region::Cond(
+                            CondRegion {
+                                test_region: Region::BasicBlock(BasicBlock(vec![Idx::new(3)])),
+                                cons_region: Region::BasicBlock(BasicBlock(vec![Idx::new(4)])),
+                                alt_region: Region::BasicBlock(BasicBlock(vec![Idx::new(5)])),
+                            }
+                            .into(),
+                        ),
+                    )
+                    .into(),
+                ),
+                Region::BasicBlock(BasicBlock(vec![Idx::new(6)])),
+            )
+            .into(),
+        );
+
+        assert_eq!(region, expected);
+    }
+
+    #[test]
+    #[should_panic]
+    fn invalid_conditional_node_missing_edge() {
+        let description = r#"
+        0 T-> 1
+
+        start -> 0
+        1 -> end"#;
+        let cfg = parse_graph(description);
+
+        Region::from_cfg(&cfg, &|idx| match idx.index() {
+            0 => StmtKind::Conditional,
+            _ => StmtKind::BBComponent,
+        });
+    }
+
+    #[test]
+    #[should_panic]
+    fn invalid_conditional_node_too_many_edges() {
+        let description = r#"
+        0 T-> 1
+        0 F-> 2
+        0 -> 3
+
+        start -> 0
+        1 -> end"#;
+        let cfg = parse_graph(description);
+
+        Region::from_cfg(&cfg, &|idx| match idx.index() {
+            0 => StmtKind::Conditional,
+            _ => StmtKind::BBComponent,
+        });
+    }
+
+    #[test]
+    fn empty_cfg() {
+        let description = r#"start -> end"#;
+        let cfg = parse_graph(description);
+
+        let region = Region::from_cfg(&cfg, &|_| StmtKind::BBComponent);
+
+        let expected = Region::BasicBlock(BasicBlock::default());
+        assert_eq!(region, expected);
+    }
+
+    #[test]
+    fn complex_multiple_cond_incidence() {
+        let description = r#"
+        0 F-> 1
+        0 T-> 2
+
+        1 T-> 3
+        3 T-> 4
+        3 F-> 5
+        1 F-> 5
+        4 -> 6
+        5 F-> 7
+
+        2 T-> 8
+        2 F-> 9
+
+        start -> 0
+        7 -> end
+        5 T-> end
+        6 -> end
+        8 -> end
+        9 -> end
+        "#;
+
+        let cfg = parse_graph(description);
+
+        println!("{}", Dot::new(cfg.graph()));
+
+        let region = Region::from_cfg(&cfg, &|idx| match idx.index() {
+            0 | 1 | 2 | 3 | 5 => StmtKind::Conditional,
+            _ => StmtKind::BBComponent,
+        });
+
+        let expected = Region::Cond(
+            CondRegion {
+                test_region: Region::BasicBlock(BasicBlock(vec![Idx::new(0)])),
+                cons_region: Region::Cond(
+                    CondRegion {
+                        test_region: Region::BasicBlock(BasicBlock(vec![Idx::new(2)])),
+                        cons_region: Region::BasicBlock(BasicBlock(vec![Idx::new(8)])),
+                        alt_region: Region::BasicBlock(BasicBlock(vec![Idx::new(9)])),
+                    }
+                    .into(),
+                ),
+                alt_region: Region::Cond(
+                    CondRegion {
+                        test_region: Region::BasicBlock(BasicBlock(vec![Idx::new(1)])),
+                        cons_region: Region::Cond(
+                            CondRegion {
+                                test_region: Region::BasicBlock(BasicBlock(vec![Idx::new(3)])),
+                                cons_region: Region::BasicBlock(BasicBlock(vec![
+                                    Idx::new(4),
+                                    Idx::new(6),
+                                ])),
+                                alt_region: Region::Cond(
+                                    CondRegion {
+                                        test_region: Region::BasicBlock(BasicBlock(vec![
+                                            Idx::new(5),
+                                        ])),
+                                        cons_region: Region::BasicBlock(BasicBlock(vec![])),
+                                        alt_region: Region::BasicBlock(BasicBlock(vec![Idx::new(
+                                            7,
+                                        )])),
+                                    }
+                                    .into(),
+                                ),
+                            }
+                            .into(),
+                        ),
+                        alt_region: Region::Cond(
+                            CondRegion {
+                                test_region: Region::BasicBlock(BasicBlock(vec![Idx::new(5)])),
+                                cons_region: Region::BasicBlock(BasicBlock(vec![])),
+                                alt_region: Region::BasicBlock(BasicBlock(vec![Idx::new(7)])),
+                            }
+                            .into(),
+                        ),
+                    }
+                    .into(),
+                ),
+            }
+            .into(),
+        );
+        assert_eq!(region, expected);
+    }
+
+    #[test]
+    #[should_panic]
+    #[ignore = "TODO: implement loop support"]
+    fn backref_cond_branch() {
+        let description = r#"
+        0 -> 1
+        1 T-> 2
+        1 F-> 0
+
+        start -> 0
+        2 -> end
+        "#;
+        let cfg = parse_graph(description);
+
+        let region = Region::from_cfg(&cfg, &|idx| match idx.index() {
+            1 => StmtKind::Conditional,
+            _ => StmtKind::BBComponent,
+        });
+
+        let expected = Region::BasicBlock(BasicBlock::default());
+        assert_eq!(region, expected);
+    }
 }
