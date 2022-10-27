@@ -178,7 +178,6 @@ jobs:
           tar xf kafka_2.12-3.2.3.tgz
           ./kafka_2.12-3.2.3/bin/zookeeper-server-start.sh -daemon kafka_2.12-3.2.3/config/zookeeper.properties
           ./kafka_2.12-3.2.3/bin/kafka-server-start.sh -daemon kafka_2.12-3.2.3/config/server.properties
-          ./kafka_2.12-3.2.3/bin/kafka-topics.sh --create --topic testing --bootstrap-server localhost:9092
 
     - name: Run Kafka integration tests
       uses: actions-rs/cargo@v1

@@ -11,6 +11,7 @@ use colored::Colorize;
 use enclose::enclose;
 use futures::ready;
 use futures::stream::{FuturesUnordered, StreamExt};
+use rskafka::client::ClientBuilder;
 use std::any::Any;
 use std::future::Future;
 use std::io::{stdout, Write};
@@ -158,12 +159,22 @@ async fn setup_test_context(
     }
 
     let kafka_connection = opt.kafka_connection.to_owned();
+    let mut kafka_topics = vec![];
+    if let Some(ref kafka_connection) = kafka_connection {
+        for idx in 0..instance.spec.kafka_topics {
+            let prefix = instance.spec.name.replace(':', "_");
+            let kafka_topic = format!("{}_topic_{}", prefix, idx);
+            create_kafka_topic(kafka_connection, &kafka_topic).await;
+            kafka_topics.push(kafka_topic);
+        }
+    }
 
     TestContext {
         chiseld,
         chisel,
         _db: db,
         kafka_connection,
+        kafka_topics,
     }
 }
 
@@ -183,6 +194,24 @@ fn repo_dir() -> PathBuf {
 
 fn chiseld() -> String {
     bin_dir().join("chiseld").to_str().unwrap().to_string()
+}
+
+async fn create_kafka_topic(connection: &str, topic: &str) {
+    let client = ClientBuilder::new(vec![connection.to_string()])
+        .build()
+        .await
+        .unwrap();
+    let controller_client = client.controller_client().unwrap();
+    let result = controller_client
+        .create_topic(
+            topic, 1,     // partitions
+            1,     // replication factor
+            5_000, // timeout (ms)
+        )
+        .await;
+    if let Err(err) = result {
+        println!("Warning: failed to create topic `{}`: {}", topic, err);
+    }
 }
 
 struct TestFuture {

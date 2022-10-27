@@ -19,6 +19,7 @@ pub struct TestSpec {
     pub start_chiseld: bool,
     pub test_fn: &'static (dyn TestFn + Sync),
     pub chiseld_args: &'static [&'static str],
+    pub kafka_topics: i32,
 }
 
 pub struct TestInstance {
