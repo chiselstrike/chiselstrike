@@ -1,14 +1,12 @@
 // SPDX-FileCopyrightText: © 2022 ChiselStrike <info@chiselstrike.com>
 
+use crate::nursery::Nursery;
 use crate::version::{Version, VersionJob};
 use anyhow::Result;
-use futures::future;
-use futures::stream::{FuturesUnordered, Stream};
+use futures::stream::StreamExt;
 use parking_lot::RwLock;
 use std::collections::HashMap;
-use std::pin::Pin;
 use std::sync::Arc;
-use std::task::{Context, Poll, Waker};
 use tokio::sync::mpsc;
 use utils::{CancellableTaskHandle, TaskHandle};
 
@@ -16,14 +14,8 @@ use utils::{CancellableTaskHandle, TaskHandle};
 ///
 /// The trunk keeps track of the active [`Version`]s and monitors the version tasks.
 pub struct Trunk {
-    state: Arc<RwLock<TrunkState>>,
-}
-
-#[derive(Default)]
-struct TrunkState {
-    versions: HashMap<String, TrunkVersion>,
-    tasks: FuturesUnordered<CancellableTaskHandle<Result<()>>>,
-    waker: Option<Waker>,
+    versions: RwLock<HashMap<String, TrunkVersion>>,
+    nursery: Nursery<CancellableTaskHandle<Result<()>>>,
 }
 
 #[derive(Clone)]
@@ -37,23 +29,19 @@ pub struct TrunkVersion {
 
 impl Trunk {
     pub fn list_versions(&self) -> Vec<Arc<Version>> {
-        let state = self.state.read();
-        state.versions.values().map(|v| v.version.clone()).collect()
+        self.versions.read().values().map(|v| v.version.clone()).collect()
     }
 
     pub fn list_trunk_versions(&self) -> Vec<TrunkVersion> {
-        let state = self.state.read();
-        state.versions.values().cloned().collect()
+        self.versions.read().values().cloned().collect()
     }
 
     pub fn get_trunk_version(&self, version_id: &str) -> Option<TrunkVersion> {
-        let state = self.state.read();
-        state.versions.get(version_id).cloned()
+        self.versions.read().get(version_id).cloned()
     }
 
     pub fn get_version(&self, version_id: &str) -> Option<Arc<Version>> {
-        let state = self.state.read();
-        state.versions.get(version_id).map(|v| v.version.clone())
+        self.versions.read().get(version_id).map(|v| v.version.clone())
     }
 
     // Adds a new version to the trunk.
@@ -65,48 +53,37 @@ impl Trunk {
         job_tx: mpsc::Sender<VersionJob>,
         task: CancellableTaskHandle<Result<()>>,
     ) {
-        let mut state = self.state.write();
         let version_id = version.version_id.clone();
-        state
-            .versions
-            .insert(version_id, TrunkVersion { version, job_tx });
-        state.tasks.push(task);
-        // we added the task to `state.tasks`, but we need to explicitly wake up the task that
-        // polls `state.tasks`, otherwise we won't get notifications from the newly added task (see
-        // documentation of `FuturesUnordered` for details)
-        if let Some(waker) = state.waker.take() {
-            waker.wake()
-        }
+        self.versions.write().insert(version_id, TrunkVersion { version, job_tx });
+        self.nursery.nurse(task);
     }
 
     pub fn remove_version(&self, version_id: &str) -> Option<Arc<Version>> {
-        let mut state = self.state.write();
-        // if there is still a task in `state.tasks` for this version, we just leave it alone. it
-        // should terminate on its own when its `mpsc::Sender<VersionJob>` is dropped.
-        state
-            .versions
+        self.versions.write()
             .remove(version_id)
             .map(|trunk_version| trunk_version.version)
+        // if there is still a task in `self.nursery` for this version, we just leave it alone. it
+        // should terminate on its own when its `mpsc::Sender<VersionJob>` is dropped.
     }
 }
 
 pub async fn spawn() -> Result<(Trunk, TaskHandle<Result<()>>)> {
-    let state = Arc::new(RwLock::new(TrunkState::default()));
+    let (nursery, mut nursery_stream) = Nursery::new();
     let trunk = Trunk {
-        state: state.clone(),
+        versions: RwLock::new(HashMap::new()),
+        nursery,
     };
-    let fut = future::poll_fn(move |cx| poll(&mut state.write(), cx));
-    let task = TaskHandle(tokio::task::spawn(fut));
-    Ok((trunk, task))
-}
 
-// Polls the trunk for completion.
-fn poll(state: &mut TrunkState, cx: &mut Context) -> Poll<Result<()>> {
-    while let Poll::Ready(Some(task_res)) = Pin::new(&mut state.tasks).poll_next(cx) {
-        if let Some(Err(task_err)) = task_res {
-            return Poll::Ready(Err(task_err));
+    let task = TaskHandle(tokio::task::spawn(async move  {
+        while let Some(result) = nursery_stream.next().await {
+            match result {
+                Some(Ok(_)) => {}, // task terminated successfully
+                Some(Err(err)) => return Err(err),
+                None => {}, // task was cancelled
+            }
         }
-    }
-    state.waker = Some(cx.waker().clone());
-    Poll::Pending
+        Ok(())
+    }));
+
+    Ok((trunk, task))
 }

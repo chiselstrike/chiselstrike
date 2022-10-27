@@ -33,6 +33,7 @@ pub(crate) mod http;
 pub(crate) mod internal;
 pub(crate) mod kafka;
 pub(crate) mod module_loader;
+mod nursery;
 pub mod ops;
 pub(crate) mod opt;
 pub(crate) mod policies;
