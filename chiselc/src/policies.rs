@@ -10,7 +10,7 @@ use anyhow::{bail, Context, Result};
 use quine_mc_cluskey::Bool;
 use serde_json::Value;
 use swc_common::sync::Lrc;
-use swc_common::{SourceMap, Span};
+use swc_common::SourceMap;
 use swc_ecmascript::ast::{
     ArrowExpr, BinaryOp, Expr, ExprStmt, Ident, Lit, MemberProp, Module, ModuleDecl, ModuleItem,
     Prop, PropName, PropOrSpread, Stmt, UnaryOp,
@@ -106,10 +106,10 @@ impl Policies {
                 .to_owned(),
             false,
         )?;
-        Self::parse(&module)
+        Self::parse(&module, ctx.sm)
     }
 
-    fn parse(module: &Module) -> Result<Self> {
+    fn parse(module: &Module, sm: Lrc<SourceMap>) -> Result<Self> {
         let mut policies = HashMap::new();
 
         for module in &module.body {
@@ -137,14 +137,14 @@ impl Policies {
                                                     Expr::Arrow(arrow) => {
                                                         let arrow_func =
                                                             ArrowFunction::parse(arrow)?;
-                                                        FilterPolicy::from_arrow(&arrow_func)?.into()
+                                                        FilterPolicy::from_arrow(&arrow_func, sm.clone())?.into()
                                                     }
                                                     _ => bail!("Only arrow functions are supported in policies"),
                                                 },
                                                 PolicyName::OnRead | PolicyName::OnCreate | PolicyName::OnUpdate | PolicyName::GeoLoc => {
                                                     match &*kv.value {
                                                         Expr::Arrow(arrow) => {
-                                                            TransformPolicy::from_arrow(arrow)?
+                                                            TransformPolicy::from_arrow(arrow, sm.clone())?
                                                                 .into()
                                                         },
                                                         _ => bail!("Only arrow functions are supported in policies"),
@@ -207,7 +207,7 @@ pub struct FilterPolicy {
 }
 
 impl FilterPolicy {
-    fn from_arrow(arrow: &ArrowFunction) -> Result<Self> {
+    fn from_arrow(arrow: &ArrowFunction, sm: Lrc<SourceMap>) -> Result<Self> {
         let params: Vec<_> = arrow.params().map(|(name, _)| name).collect();
         let params = PolicyParams::from_idents(&params);
 
@@ -217,7 +217,7 @@ impl FilterPolicy {
         let actions = Arc::new(actions.simplify(&predicates));
         let where_conds = generate_where_from_rules(&actions).map(|c| c.simplify(&predicates));
         let env = Arc::new(builder.env);
-        let js_code = emit_arrow_js_code(arrow.orig)?;
+        let js_code = emit_arrow_js_code(arrow.orig, sm)?;
 
         Ok(Self {
             where_conds,
@@ -696,29 +696,24 @@ pub struct TransformPolicy {
 }
 
 impl TransformPolicy {
-    fn from_arrow(arrow: &ArrowExpr) -> Result<Self> {
-        let js_code = emit_arrow_js_code(arrow)?;
+    fn from_arrow(arrow: &ArrowExpr, sm: Lrc<SourceMap>) -> Result<Self> {
+        let js_code = emit_arrow_js_code(arrow, sm)?;
         Ok(Self { js_code })
     }
 }
 
-fn emit_arrow_js_code(arrow: &ArrowExpr) -> Result<Box<[u8]>> {
+fn emit_arrow_js_code(arrow: &ArrowExpr, sm: Lrc<SourceMap>) -> Result<Box<[u8]>> {
     let module = Module {
         body: vec![ModuleItem::Stmt(Stmt::Expr(ExprStmt {
-            span: Span::default(),
+            span: arrow.span,
             expr: Box::new(Expr::Arrow(arrow.clone())),
         }))],
-        span: Span::default(),
+        span: arrow.span,
         shebang: None,
     };
 
     let mut js_code = Vec::new();
-    emit(
-        module,
-        Target::JavaScript,
-        Lrc::new(SourceMap::default()),
-        &mut js_code,
-    )?;
+    emit(module, Target::JavaScript, sm, &mut js_code)?;
 
     Ok(js_code.into_boxed_slice())
 }
