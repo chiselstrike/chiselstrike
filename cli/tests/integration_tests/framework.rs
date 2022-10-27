@@ -834,6 +834,7 @@ pub struct TestContext {
     // before we try to drop the database.
     pub _db: Database,
     pub kafka_connection: Option<String>,
+    pub kafka_topics: Vec<String>,
 }
 
 impl TestContext {
@@ -852,6 +853,11 @@ impl TestContext {
     pub async fn start_chiseld(&mut self) {
         self.chiseld.start().await;
         wait_for_chiseld_startup(&mut self.chiseld, &self.chisel).await;
+    }
+
+    /// Returns a Kafka topic for this test case.
+    pub fn kafka_topic(&self, idx: usize) -> String {
+        self.kafka_topics.get(idx).unwrap().clone()
     }
 }
 

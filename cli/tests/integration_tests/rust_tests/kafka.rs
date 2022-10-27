@@ -30,10 +30,10 @@ pub async fn test_kafka_apply(c: TestContext) {
         .expect("Event handler defined: /dev/test-topic");
 }
 
-#[chisel_macros::test(modules = Node)]
+#[chisel_macros::test(modules = Node, kafka_topics = 1)]
 pub async fn test_kafka_consume(c: TestContext) {
-    if let Some(kafka_connection) = c.kafka_connection {
-        let kafka_topic = "testing";
+    if let Some(ref kafka_connection) = c.kafka_connection {
+        let kafka_topic = c.kafka_topic(0);
         c.chisel.write(
             "models/event.ts",
             r##"
@@ -69,7 +69,7 @@ pub async fn test_kafka_consume(c: TestContext) {
             .await
             .expect(&expected);
     
-        let client = ClientBuilder::new(vec![kafka_connection])
+        let client = ClientBuilder::new(vec![kafka_connection.to_string()])
             .build()
             .await
             .unwrap();

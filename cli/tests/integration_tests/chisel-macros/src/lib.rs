@@ -6,7 +6,7 @@ use proc_macro::TokenStream;
 use proc_macro2::Span;
 use syn::{
     parse::{Parse, ParseStream},
-    parse_macro_input, ExprArray, Ident, ItemFn, LitBool, LitStr, Token,
+    parse_macro_input, ExprArray, Ident, ItemFn, LitBool, LitInt, LitStr, Token,
 };
 
 /// Arguments to the test macro
@@ -21,6 +21,8 @@ struct TestArgs {
     start_chiseld: Option<LitBool>,
     /// A list of args to pass to chiseld
     chiseld_args: Option<ExprArray>,
+    /// A number of Kafka topics to crate for the test.
+    kafka_topics: Option<LitInt>,
 }
 
 impl Parse for TestArgs {
@@ -30,6 +32,7 @@ impl Parse for TestArgs {
         let mut db = None;
         let mut start_chiseld = None;
         let mut chiseld_args = None;
+        let mut kafka_topics = None;
 
         // TODO: use `syn::AttributeArgs` or the `darling` crate to parse the arguments
         while !input.is_empty() {
@@ -55,6 +58,10 @@ impl Parse for TestArgs {
                     let _: Token!(=) = input.parse()?;
                     chiseld_args = Some(input.parse()?);
                 }
+                "kafka_topics" if kafka_topics.is_none() => {
+                    let _: Token!(=) = input.parse()?;
+                    kafka_topics = Some(input.parse()?);
+                }
                 other => {
                     return Err(syn::Error::new(
                         key.span(),
@@ -75,6 +82,7 @@ impl Parse for TestArgs {
             db,
             start_chiseld,
             chiseld_args,
+            kafka_topics,
         })
     }
 }
@@ -99,6 +107,9 @@ pub fn test(args: TokenStream, input: TokenStream) -> TokenStream {
         .chiseld_args
         .map(|s| quote::quote! {&#s})
         .unwrap_or_else(|| quote::quote! {&[]});
+    let kafka_topics = args
+        .kafka_topics
+        .unwrap_or_else(|| LitInt::new("0", Span::call_site()));
 
     quote::quote! {
         ::inventory::submit! {
@@ -110,6 +121,7 @@ pub fn test(args: TokenStream, input: TokenStream) -> TokenStream {
                 start_chiseld: #start_chiseld,
                 test_fn: &#fun_name,
                 chiseld_args: #chiseld_args,
+                kafka_topics: #kafka_topics,
             }
         }
 
