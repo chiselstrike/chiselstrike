@@ -1,6 +1,6 @@
 // SPDX-FileCopyrightText: © 2022 ChiselStrike <info@chiselstrike.com>
 
-use futures::stream::{FuturesUnordered, Stream, FusedStream};
+use futures::stream::{FusedStream, FuturesUnordered, Stream};
 use guard::guard;
 use parking_lot::Mutex;
 use std::future::Future;
@@ -31,7 +31,9 @@ impl<Fut> Nursery<Fut> {
             futures: FuturesUnordered::new(),
             waker: None,
         }));
-        let stream = NurseryStream { state: Arc::downgrade(&state) };
+        let stream = NurseryStream {
+            state: Arc::downgrade(&state),
+        };
         let nursery = Nursery { state };
         (nursery, stream)
     }
@@ -47,8 +49,9 @@ impl<Fut> Nursery<Fut> {
 
 impl<T> Nursery<TaskHandle<T>> {
     pub fn spawn<Fut>(&self, fut: Fut)
-        where Fut: Future<Output = T> + Send + 'static,
-              T: Send + 'static
+    where
+        Fut: Future<Output = T> + Send + 'static,
+        T: Send + 'static,
     {
         self.nurse(TaskHandle(tokio::task::spawn(fut)))
     }
@@ -66,13 +69,14 @@ impl<T> Nursery<CancellableTaskHandle<T>> {
 */
 
 impl<Fut, T> Stream for NurseryStream<Fut>
-    where Fut: Future<Output = T>
+where
+    Fut: Future<Output = T>,
 {
     type Item = T;
 
     fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<T>> {
         let this = self.get_mut();
-        guard!{let Some(state) = Weak::upgrade(&this.state) else {
+        guard! {let Some(state) = Weak::upgrade(&this.state) else {
             return Poll::Ready(None);
         }};
 
@@ -86,7 +90,8 @@ impl<Fut, T> Stream for NurseryStream<Fut>
 }
 
 impl<Fut, T> FusedStream for NurseryStream<Fut>
-    where Fut: Future<Output = T>
+where
+    Fut: Future<Output = T>,
 {
     fn is_terminated(&self) -> bool {
         self.state.strong_count() == 0

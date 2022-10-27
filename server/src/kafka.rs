@@ -3,10 +3,10 @@
 use crate::nursery::{Nursery, NurseryStream};
 use crate::server::Server;
 use crate::version::VersionJob;
-use anyhow::{Result, Context};
+use anyhow::{Context, Result};
 use deno_core::serde_v8;
 use enclose::enclose;
-use futures::stream::{StreamExt, TryStreamExt, FuturesUnordered};
+use futures::stream::{FuturesUnordered, StreamExt, TryStreamExt};
 use parking_lot::Mutex;
 use rskafka::client::{
     consumer::{StartOffset, StreamConsumerBuilder},
@@ -57,23 +57,32 @@ impl KafkaService {
         }
         let partition_client = Arc::new(self.client.partition_client(topic.clone(), 0).unwrap());
         topics.insert(topic.clone(), partition_client.clone());
-        self.topic_nursery.spawn(handle_topic(server, partition_client, topic));
+        self.topic_nursery
+            .spawn(handle_topic(server, partition_client, topic));
     }
 }
 
 pub async fn spawn(service: Arc<KafkaService>) -> Result<TaskHandle<Result<()>>> {
-    let stream = service.topic_stream.lock()
-        .take().expect("trying to spawn a KafkaService multiple times");
+    let stream = service
+        .topic_stream
+        .lock()
+        .take()
+        .expect("trying to spawn a KafkaService multiple times");
     let task = tokio::task::spawn(stream.try_collect());
     Ok(TaskHandle(task))
 }
 
-async fn handle_topic(server: Arc<Server>, client: Arc<PartitionClient>, topic: String) -> Result<()> {
+async fn handle_topic(
+    server: Arc<Server>,
+    client: Arc<PartitionClient>,
+    topic: String,
+) -> Result<()> {
     let mut stream = StreamConsumerBuilder::new(client, StartOffset::Latest)
         .with_max_wait_ms(100)
         .build();
     while let Some(event) = stream.next().await {
-        let (record_and_offset, _) = event.context("Could not receive Kafka event from consumer")?;
+        let (record_and_offset, _) =
+            event.context("Could not receive Kafka event from consumer")?;
         handle_event(&server, topic.clone(), record_and_offset.record).await?;
     }
     Ok(())

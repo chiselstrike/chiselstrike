@@ -29,7 +29,11 @@ pub struct TrunkVersion {
 
 impl Trunk {
     pub fn list_versions(&self) -> Vec<Arc<Version>> {
-        self.versions.read().values().map(|v| v.version.clone()).collect()
+        self.versions
+            .read()
+            .values()
+            .map(|v| v.version.clone())
+            .collect()
     }
 
     pub fn list_trunk_versions(&self) -> Vec<TrunkVersion> {
@@ -41,7 +45,10 @@ impl Trunk {
     }
 
     pub fn get_version(&self, version_id: &str) -> Option<Arc<Version>> {
-        self.versions.read().get(version_id).map(|v| v.version.clone())
+        self.versions
+            .read()
+            .get(version_id)
+            .map(|v| v.version.clone())
     }
 
     // Adds a new version to the trunk.
@@ -54,12 +61,15 @@ impl Trunk {
         task: CancellableTaskHandle<Result<()>>,
     ) {
         let version_id = version.version_id.clone();
-        self.versions.write().insert(version_id, TrunkVersion { version, job_tx });
+        self.versions
+            .write()
+            .insert(version_id, TrunkVersion { version, job_tx });
         self.nursery.nurse(task);
     }
 
     pub fn remove_version(&self, version_id: &str) -> Option<Arc<Version>> {
-        self.versions.write()
+        self.versions
+            .write()
             .remove(version_id)
             .map(|trunk_version| trunk_version.version)
         // if there is still a task in `self.nursery` for this version, we just leave it alone. it
@@ -74,12 +84,12 @@ pub async fn spawn() -> Result<(Trunk, TaskHandle<Result<()>>)> {
         nursery,
     };
 
-    let task = TaskHandle(tokio::task::spawn(async move  {
+    let task = TaskHandle(tokio::task::spawn(async move {
         while let Some(result) = nursery_stream.next().await {
             match result {
-                Some(Ok(_)) => {}, // task terminated successfully
+                Some(Ok(_)) => {} // task terminated successfully
                 Some(Err(err)) => return Err(err),
-                None => {}, // task was cancelled
+                None => {} // task was cancelled
             }
         }
         Ok(())
