@@ -76,8 +76,8 @@ pub async fn run(opt: Opt) -> Result<()> {
         .await
         .context("Could not start an internal HTTP server")?;
 
-    let kafka_task = match server.opt.kafka_connection.clone() {
-        Some(_) => kafka::spawn(server.clone()).await?.fuse(),
+    let kafka_task = match server.kafka_service.clone() {
+        Some(service) => kafka::spawn(service).await?.fuse(),
         None => Fuse::terminated(),
     };
 

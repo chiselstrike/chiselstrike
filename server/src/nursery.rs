@@ -1,3 +1,5 @@
+// SPDX-FileCopyrightText: © 2022 ChiselStrike <info@chiselstrike.com>
+
 use futures::stream::{FuturesUnordered, Stream, FusedStream};
 use guard::guard;
 use parking_lot::Mutex;
@@ -5,6 +7,7 @@ use std::future::Future;
 use std::pin::Pin;
 use std::sync::{Arc, Weak};
 use std::task::{Context, Poll, Waker};
+use utils::TaskHandle;
 
 #[derive(Debug, Clone)]
 pub struct Nursery<Fut> {
@@ -42,7 +45,6 @@ impl<Fut> Nursery<Fut> {
     }
 }
 
-/*
 impl<T> Nursery<TaskHandle<T>> {
     pub fn spawn<Fut>(&self, fut: Fut)
         where Fut: Future<Output = T> + Send + 'static,
@@ -52,6 +54,7 @@ impl<T> Nursery<TaskHandle<T>> {
     }
 }
 
+/*
 impl<T> Nursery<CancellableTaskHandle<T>> {
     pub fn spawn<Fut>(&self, fut: Fut)
         where Fut: Future<Output = T> + Send + 'static,
