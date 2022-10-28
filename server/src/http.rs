@@ -1,6 +1,8 @@
 // SPDX-FileCopyrightText: © 2022 ChiselStrike <info@chiselstrike.com>
 
-use crate::authentication::{authenticate, AuthErrorKind, Authentication};
+use crate::authentication::{authenticate, Authentication};
+use crate::authorization::authorize;
+use crate::error::{Error as ChiselError, ErrorKind};
 use crate::server::Server;
 use crate::version::{Version, VersionJob};
 use anyhow::{Context, Error, Result};
@@ -127,6 +129,14 @@ pub struct HttpResponse {
     pub body: serde_v8::ZeroCopyBuf,
 }
 
+fn handle_chisel_error(error: ChiselError) -> Result<hyper::Response<hyper::Body>> {
+    match error.err_kind {
+        ErrorKind::Forbbiden => Ok(handle_forbidden(error.inner.to_string())),
+        ErrorKind::BadRequest => Ok(handle_bad_request(error.inner.to_string())),
+        ErrorKind::Internal => Err(error.inner),
+    }
+}
+
 async fn handle_version_request(
     server: Arc<Server>,
     version: Arc<Version>,
@@ -137,20 +147,24 @@ async fn handle_version_request(
     let (req_parts, req_body) = request.into_parts();
     let req_body = hyper::body::to_bytes(req_body).await?;
 
-    let authentication = match authenticate(&req_parts, &server, &version, &routing_path).await {
+    let authentication = match authenticate(&req_parts, &server.secrets).await {
         Ok(auth) => auth,
-        Err(e) => match e.err_kind {
-            AuthErrorKind::Forbbiden => return Ok(handle_forbidden(e.inner.to_string())),
-            AuthErrorKind::BadRequest => return Ok(handle_bad_request(e.inner.to_string())),
-            AuthErrorKind::Internal => return Err(e.inner),
-        },
+        Err(e) => return handle_chisel_error(e),
     };
 
-    let user_id = match authentication {
-        Authentication::UserId(ref uid) => Some(uid.clone()),
-        _ => None,
-    };
+    if let Err(e) = authorize(
+        &server,
+        &version,
+        &authentication,
+        &routing_path,
+        &req_parts,
+    )
+    .await
+    {
+        return handle_chisel_error(e);
+    }
 
+    let user_id = authentication.user_id().map(ToString::to_string);
     let http_request = HttpRequest {
         method: req_parts.method.as_str().into(),
         uri: req_parts.uri.to_string(),

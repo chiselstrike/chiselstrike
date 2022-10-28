@@ -1,9 +1,7 @@
 // SPDX-FileCopyrightText: © 2022 ChiselStrike <info@chiselstrike.com>
 
 use super::{Entity, Field, InternalObject, ObjectType, Type, TypeId};
-use crate::authentication::{
-    AUTH_ACCOUNT_NAME, AUTH_SESSION_NAME, AUTH_TOKEN_NAME, AUTH_USER_NAME,
-};
+use crate::authorization::{AUTH_ACCOUNT_NAME, AUTH_SESSION_NAME, AUTH_TOKEN_NAME, AUTH_USER_NAME};
 use crate::datastore::QueryEngine;
 use std::collections::HashMap;
 use std::sync::Arc;
