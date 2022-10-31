@@ -62,13 +62,13 @@ fn decoding_key_from_pem(key: &str) -> Result<DecodingKey> {
 fn authenticate_jwt(secrets: &RwLock<JsonObject>, token: &str) -> Result<Authentication> {
     // get public signing key.
     let lock = secrets.read();
-    let secret_value = match lock.get("CHISEL_JWT_VALIDATION_KEY") {
-        Some(key) => key,
+    let dkey_json = match lock.get("CHISEL_JWT_VALIDATION_KEY") {
+        Some(json) => json,
         None => internal!(
             "Missing jwt validation key: please set `CHISEL_JWT_VALIDATION_KEY` in your secrets"
         ),
     };
-    match secret_value.as_str() {
+    match dkey_json.as_str() {
         Some(pem_str) => {
             let dkey = decoding_key_from_pem(pem_str)?;
             let json = validate_token(token, dkey)?;
