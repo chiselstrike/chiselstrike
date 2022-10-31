@@ -154,7 +154,6 @@ const _program = new Commander.Command(packageJson.name)
         "Rewrite an existing directory",
     )
     .action((projectDirectory, options) => {
-        console.log(JSON.stringify(options));
         run(
             projectDirectory,
             options.chiselVersion,
