@@ -138,9 +138,13 @@ async fn make_server(opt: Opt) -> Result<(Arc<Server>, TaskHandle<Result<()>>)> 
     let type_systems = meta_service.load_type_systems(&builtin_types).await?;
     let type_systems = tokio::sync::Mutex::new(type_systems);
 
-    let secrets = match secrets::get_secrets(&opt).await {
-        Ok(secrets) => secrets,
-        Err(err) => {
+    let secrets = match (
+        secrets::get_secrets(&opt).await,
+        opt.disable_secrets_polling,
+    ) {
+        (Ok(secrets), _) => secrets,
+        (Err(err), true) => return Err(err),
+        (Err(err), false) => {
             log::error!("Could not read secrets: {:?}", err);
             JsonObject::default()
         }
