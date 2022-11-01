@@ -236,7 +236,9 @@ async fn apply(server: Arc<Server>, request: ApplyRequest) -> Result<ApplyRespon
     //
     // if an error happens, let's just ignore it: the `refresh_secrets()` task, which is
     // responsible for periodic updating of the secrets, will show the error
-    let _: Result<()> = server::update_secrets(&server).await;
+    if !server.opt.disable_secrets_polling {
+        let _: Result<()> = server::update_secrets(&server).await;
+    }
 
     Ok(ApplyResponse {
         types: result.type_names_user_order,
