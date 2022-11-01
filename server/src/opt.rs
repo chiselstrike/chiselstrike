@@ -71,6 +71,14 @@ pub struct Opt {
     #[structopt(long)]
     pub refresh_secrets_only_once: bool,
 
+    /// Sets exponential factor for backoff in secrets update
+    #[structopt(long, default_value = "2")]
+    pub secrets_refresh_exponential_backoff_factor: f32,
+
+    /// Sets maximum delay in seconds to wait before to retry secrets update
+    #[structopt(long, default_value = "600")]
+    pub secrets_refresh_max_exponential_backoff_s: f32,
+
     #[structopt(long)]
     pub typescript_policies: bool,
 
