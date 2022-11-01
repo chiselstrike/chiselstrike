@@ -67,6 +67,10 @@ pub struct Opt {
     #[structopt(long, default_value = "1")]
     pub secrets_polling_period_s: f32,
 
+    /// Stop refreshing secrets after the first successful refresh
+    #[structopt(long)]
+    pub refresh_secrets_only_once: bool,
+
     #[structopt(long)]
     pub typescript_policies: bool,
 

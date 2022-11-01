@@ -277,6 +277,10 @@ async fn refresh_secrets(server: Arc<Server>) -> Result<()> {
             last_try_was_failure = true;
         } else {
             last_try_was_failure = false;
+
+            if server.opt.refresh_secrets_only_once {
+                return Ok(());
+            }
         }
         tokio::time::sleep(Duration::from_secs_f32(server.opt.secrets_polling_period_s)).await;
     }
