@@ -16,9 +16,8 @@ export class TopicMap {
         this.topics = {};
     }
 
-    async topic(topic: string, handler: EventHandler) {
+    topic(topic: string, handler: EventHandler) {
         this.topics[topic] = handler;
-        await opAsync("op_chisel_subscribe_topic", topic);
     }
 }
 

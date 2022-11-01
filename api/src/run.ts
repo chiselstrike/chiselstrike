@@ -33,10 +33,14 @@ export default async function run(
     specialAfter(routeMap);
     const router = new Router(routeMap);
 
+    // subscribe to all requested Kafka topics
     const topicMap = userTopicMap ?? new TopicMap();
+    for (const topic in topicMap.topics) {
+        opSync("op_chisel_subscribe_topic", topic);
+    }
 
     // signal to Rust that we are ready to handle jobs
-    Deno.core.opSync("op_chisel_ready");
+    opSync("op_chisel_ready");
 
     // register new error class
     // @ts-ignore: Dynamic property
