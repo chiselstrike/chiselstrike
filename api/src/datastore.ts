@@ -1,6 +1,8 @@
 // SPDX-FileCopyrightText: © 2022 ChiselStrike <info@chiselstrike.com>
 
 import { crud } from "./crud.ts";
+import { evalFilter } from "./filter.ts";
+import type { FilterExpr } from "./filter.ts";
 import type { RouteMap } from "./routing.ts";
 import { opAsync, opSync } from "./utils.ts";
 import { SimpleTypeSystem, TypeSystem } from "./type_system.ts";
@@ -289,13 +291,13 @@ class PredicateFilter<T> extends Operator<T, T> {
 }
 
 /**
- * ExpressionFilter operator is intended only to be used by Chisel compiler.
+ * InternalFilter operator is intended only to be used by Chisel compiler.
  * It applies `predicate` on each element and keeps only those for which
  * the `predicate` returns true. The Chisel compiler provides an `expression`
  * as well which is to be equivalent to the predicate and which is sent to
  * the Rust backend for direct Database evaluation if possible.
  */
-class ExpressionFilter<T> extends Operator<T, T> {
+class InternalFilter<T> extends Operator<T, T> {
     constructor(
         inner: Operator<unknown, T>,
         public predicate: (arg: T) => boolean,
@@ -312,6 +314,41 @@ class ExpressionFilter<T> extends Operator<T, T> {
             [Symbol.asyncIterator]: async function* () {
                 for await (const arg of iter) {
                     if (predicate(arg)) {
+                        yield arg;
+                    }
+                }
+            },
+        };
+    }
+
+    recordToOutput(rawRecord: unknown): T {
+        return this.inner!.recordToOutput(rawRecord);
+    }
+}
+
+/**
+ * ExpressionFilter operator filters cursor elements based on
+ * given filter `expression`. The filter `expression` has a syntax
+ * similar to MongoDB query expressions. For more information,
+ * examine the `FilterExpr` type.
+ */
+class ExpressionFilter<T> extends Operator<T, T> {
+    constructor(
+        inner: Operator<unknown, T>,
+        public expression: FilterExpr,
+    ) {
+        super(inner);
+    }
+
+    apply(
+        iter: AsyncIterable<T>,
+    ): AsyncIterable<T> {
+        const expr = this.expression;
+        return {
+            [Symbol.asyncIterator]: async function* () {
+                for await (const arg of iter) {
+                    const record = arg as unknown as Record<string, unknown>;
+                    if (evalFilter(expr, record)) {
                         yield arg;
                     }
                 }
@@ -540,9 +577,17 @@ export class ChiselCursor<T> {
      * object `restrictions`.
      */
     filter(restrictions: Partial<T>): ChiselCursor<T>;
+    /**
+     * Restricts this cursor to contain only such elements that match the FilterExpr
+     * object. The FilterExpr object follows the syntax is very similar to MongoDB query
+     * objects.
+     */
+    filter(filterExpr: FilterExpr): ChiselCursor<T>;
 
     // Common implementation for filter overloads.
-    filter(arg1: ((arg: T) => boolean) | Partial<T>): ChiselCursor<T> {
+    filter(
+        arg1: ((arg: T) => boolean) | Partial<T> | FilterExpr,
+    ): ChiselCursor<T> {
         if (typeof arg1 == "function") {
             return new ChiselCursor(
                 new PredicateFilter(
@@ -551,28 +596,10 @@ export class ChiselCursor<T> {
                 ),
             );
         } else {
-            const restrictions = arg1;
-            const expr = restrictionsToFilterExpr(restrictions);
-            if (expr === undefined) {
-                // If it's an empty restriction, no need to create an empty filter.
-                return this;
-            }
-            const predicate = (arg: T) => {
-                for (const key in restrictions) {
-                    if (restrictions[key] === undefined) {
-                        continue;
-                    }
-                    if (arg[key] != restrictions[key]) {
-                        return false;
-                    }
-                }
-                return true;
-            };
             return new ChiselCursor(
                 new ExpressionFilter(
                     this.inner,
-                    predicate,
-                    expr,
+                    arg1 as FilterExpr,
                 ),
             );
         }
@@ -584,7 +611,7 @@ export class ChiselCursor<T> {
         expression: Record<string, unknown>,
         postPredicate?: (arg: T) => boolean,
     ) {
-        let op: Operator<T, T> = new ExpressionFilter(
+        let op: Operator<T, T> = new InternalFilter(
             this.inner,
             exprPredicate,
             expression,

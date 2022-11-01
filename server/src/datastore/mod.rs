@@ -56,6 +56,7 @@ pub mod crud;
 mod dbconn;
 pub mod engine;
 pub mod expr;
+mod filter;
 pub mod meta;
 pub mod query;
 pub mod value;

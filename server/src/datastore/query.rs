@@ -10,6 +10,7 @@ use serde_derive::{Deserialize, Serialize};
 
 use crate::auth::AUTH_USER_NAME;
 use crate::datastore::expr::{BinaryExpr, Expr, PropertyAccess, Value as ExprValue};
+use crate::datastore::filter;
 use crate::feat_typescript_policies;
 use crate::policy::PolicyContext;
 use crate::types::{Entity, Field, ObjectType, Type, TypeId};
@@ -798,9 +799,13 @@ pub enum QueryOpChain {
     BaseEntity {
         name: String,
     },
-    #[serde(rename = "ExpressionFilter")]
+    #[serde(rename = "InternalFilter")]
     Filter {
         expression: Expr,
+        inner: Box<QueryOpChain>,
+    },
+    ExpressionFilter {
+        expression: serde_json::Value,
         inner: Box<QueryOpChain>,
     },
     #[serde(rename = "ColumnsSelect")]
@@ -838,6 +843,12 @@ fn convert_ops(op: QueryOpChain) -> Result<(String, Vec<QueryOp>)> {
             return Ok((name, vec![]));
         }
         Op::Filter { expression, inner } => (QueryOp::Filter { expression }, inner),
+        Op::ExpressionFilter { expression, inner } => (
+            QueryOp::Filter {
+                expression: filter::to_expr(&expression)?,
+            },
+            inner,
+        ),
         Op::Projection { fields, inner } => (QueryOp::Projection { fields }, inner),
         Op::Take { count, inner } => (QueryOp::Take { count }, inner),
         Op::Skip { count, inner } => (QueryOp::Skip { count }, inner),
