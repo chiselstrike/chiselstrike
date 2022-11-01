@@ -77,6 +77,7 @@ api_listen_addr = "localhost:12345"
         "worker_threads": 1,
         "chisel_secret_location": Value::Null,
         "chisel_secret_key_location": Value::Null,
+        "secrets_polling_period_s": 1.0,
     });
 
     assert_eq!(out, expected);
@@ -116,6 +117,7 @@ api_listen_addr = "localhost:12345"
         "worker_threads": 1,
         "chisel_secret_location": Value::Null,
         "chisel_secret_key_location": Value::Null,
+        "secrets_polling_period_s": 1.0,
     });
 
     assert_eq!(out, expected);
@@ -153,6 +155,7 @@ api_listen_addr = "localhost:12345"
         "worker_threads": 1,
         "chisel_secret_location": Value::Null,
         "chisel_secret_key_location": Value::Null,
+        "secrets_polling_period_s": 1.0,
     });
 
     assert_eq!(out, expected);
@@ -199,6 +202,7 @@ api_listen_addr = "localhost:12346"
         "worker_threads": 1,
         "chisel_secret_location": Value::Null,
         "chisel_secret_key_location": Value::Null,
+        "secrets_polling_period_s": 1.0,
     });
 
     assert_eq!(out, expected);

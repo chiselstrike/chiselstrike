@@ -67,6 +67,10 @@ pub struct Opt {
     #[structopt(long, env = "CHISEL_SECRET_LOCATION")]
     pub chisel_secret_location: Option<String>,
 
+    /// Sets secrets polling period in seconds (can be float).
+    #[structopt(long, default_value = "1")]
+    pub secrets_polling_period_s: f32,
+
     /// Prints the configuration resulting from the merging of all the configuration sources,
     /// including default values, in the JSON format.
     /// This is the configuration that will be used when starting chiseld.
