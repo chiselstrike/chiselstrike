@@ -2,9 +2,9 @@
 
 use once_cell::sync::OnceCell;
 
-pub use crate::auth::is_auth_entity_name;
 pub use crate::opt::Opt;
 pub use crate::server::run;
+pub use authorization::is_auth_entity_name;
 
 pub(crate) type JsonObject = serde_json::Map<String, serde_json::Value>;
 
@@ -26,8 +26,12 @@ pub struct Features {
 #[macro_use]
 extern crate log;
 
+#[macro_use]
+pub(crate) mod error;
+
 pub(crate) mod apply;
-pub(crate) mod auth;
+pub(crate) mod authentication;
+pub(crate) mod authorization;
 pub(crate) mod datastore;
 pub(crate) mod http;
 pub(crate) mod internal;

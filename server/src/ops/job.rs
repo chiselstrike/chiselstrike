@@ -49,21 +49,21 @@ async fn op_chisel_accept_job(
             let HttpRequestResponse {
                 request,
                 response_tx,
+                authentication,
             } = request_response;
 
             let ctx_rid = {
                 let path = request.routing_path.clone();
                 let headers = request.headers.iter().cloned().collect();
                 let method = request.method.clone();
-                let user_id = request.user_id.clone();
                 let response_tx = RefCell::new(Some(response_tx));
 
                 let job_info = Rc::new(JobInfo::HttpRequest {
                     method,
                     path,
                     headers,
-                    user_id,
                     response_tx,
+                    authentication,
                 });
 
                 let ctx = JobContext {

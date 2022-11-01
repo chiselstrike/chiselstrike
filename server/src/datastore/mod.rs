@@ -122,6 +122,7 @@ mod test {
     use url::Url;
 
     use crate::{
+        authentication::Authentication,
         policy::engine::PolicyEngine,
         types::{self, Entity, Field, ObjectType, Type},
         JsonObject,
@@ -190,8 +191,8 @@ mod test {
                 method: "POST".into(),
                 path: "".into(),
                 headers,
-                user_id: None,
                 response_tx: Default::default(),
+                authentication: Authentication::None,
             });
             let policy_context = PolicyContext {
                 cache: Default::default(),

@@ -1,6 +1,8 @@
 // SPDX-FileCopyrightText: © 2022 ChiselStrike <info@chiselstrike.com>
 
-use crate::auth;
+use crate::authentication::{authenticate, Authentication};
+use crate::authorization::authorize;
+use crate::error::{Error as ChiselError, ErrorKind};
 use crate::server::Server;
 use crate::version::{Version, VersionJob};
 use anyhow::{Context, Error, Result};
@@ -102,6 +104,7 @@ async fn try_handle_request(
 #[derive(Debug)]
 pub struct HttpRequestResponse {
     pub request: HttpRequest,
+    pub authentication: Authentication,
     pub response_tx: oneshot::Sender<HttpResponse>,
 }
 
@@ -126,6 +129,14 @@ pub struct HttpResponse {
     pub body: serde_v8::ZeroCopyBuf,
 }
 
+fn handle_chisel_error(error: ChiselError) -> Result<hyper::Response<hyper::Body>> {
+    match error.err_kind {
+        ErrorKind::Forbbiden => Ok(handle_forbidden(error.inner.to_string())),
+        ErrorKind::BadRequest => Ok(handle_bad_request(error.inner.to_string())),
+        ErrorKind::Internal => Err(error.inner),
+    }
+}
+
 async fn handle_version_request(
     server: Arc<Server>,
     version: Arc<Version>,
@@ -136,33 +147,24 @@ async fn handle_version_request(
     let (req_parts, req_body) = request.into_parts();
     let req_body = hyper::body::to_bytes(req_body).await?;
 
-    // TODO: we don't authenticate the user!!!
-    let user_id: Option<String> = req_parts
-        .headers
-        .get("ChiselUID")
-        .and_then(|value| value.to_str().ok())
-        .map(|value| value.into());
+    let authentication = match authenticate(&req_parts, &server.secrets).await {
+        Ok(auth) => auth,
+        Err(e) => return handle_chisel_error(e),
+    };
 
-    let username = auth::get_username_from_id(&server, &version, user_id.as_deref()).await;
-    if !version
-        .policy_system
-        .user_authorization
-        .is_allowed(username.as_deref(), &routing_path)
+    if let Err(e) = authorize(
+        &server,
+        &version,
+        &authentication,
+        &routing_path,
+        &req_parts,
+    )
+    .await
     {
-        return Ok(handle_forbidden("Unauthorized user"));
+        return handle_chisel_error(e);
     }
 
-    {
-        let secrets = server.secrets.read();
-        if !version.policy_system.secret_authorization.is_allowed(
-            &req_parts,
-            &secrets,
-            &routing_path,
-        ) {
-            return Ok(handle_forbidden("Invalid header authentication"));
-        }
-    }
-
+    let user_id = authentication.user_id().map(ToString::to_string);
     let http_request = HttpRequest {
         method: req_parts.method.as_str().into(),
         uri: req_parts.uri.to_string(),
@@ -181,6 +183,7 @@ async fn handle_version_request(
     let (response_tx, response_rx) = oneshot::channel();
     let job = VersionJob::Http(HttpRequestResponse {
         request: http_request,
+        authentication,
         response_tx,
     });
     // ignore the error that `send()` returns if the corresponding `mpsc::Receiver` was dropped.
@@ -268,9 +271,16 @@ fn handle_not_found(msg: String) -> hyper::Response<hyper::Body> {
         .unwrap()
 }
 
-fn handle_forbidden(msg: &'static str) -> hyper::Response<hyper::Body> {
+fn handle_forbidden(msg: String) -> hyper::Response<hyper::Body> {
     hyper::Response::builder()
         .status(hyper::StatusCode::FORBIDDEN)
+        .body(hyper::Body::from(msg))
+        .unwrap()
+}
+
+fn handle_bad_request(msg: String) -> hyper::Response<hyper::Body> {
+    hyper::Response::builder()
+        .status(hyper::StatusCode::BAD_REQUEST)
         .body(hyper::Body::from(msg))
         .unwrap()
 }

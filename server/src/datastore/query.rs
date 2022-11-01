@@ -8,7 +8,7 @@ use anyhow::{anyhow, Context, Result};
 use enum_as_inner::EnumAsInner;
 use serde_derive::{Deserialize, Serialize};
 
-use crate::auth::AUTH_USER_NAME;
+use crate::authorization::AUTH_USER_NAME;
 use crate::datastore::expr::{BinaryExpr, Expr, PropertyAccess, Value as ExprValue};
 use crate::datastore::filter;
 use crate::feat_typescript_policies;

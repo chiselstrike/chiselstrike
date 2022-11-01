@@ -1,12 +1,14 @@
-// SPDX-FileCopyrightText: © 2021 ChiselStrike <info@chiselstrike.com>
+use http::request::Parts;
+use sqlx::Row;
 
+use crate::authentication::Authentication;
 use crate::datastore::engine::SqlWithArguments;
 use crate::datastore::query::SqlValue;
+use crate::error::Result;
 use crate::server::Server;
-use crate::types::{Entity, Type};
+use crate::types::Entity;
+use crate::types::Type;
 use crate::version::Version;
-use anyhow::Result;
-use sqlx::Row;
 
 pub const AUTH_USER_NAME: &str = "AuthUser";
 pub const AUTH_SESSION_NAME: &str = "AuthSession";
@@ -27,12 +29,12 @@ pub fn is_auth_entity_name(entity_name: &str) -> bool {
 fn get_auth_user_type(version: &Version) -> Result<Entity> {
     match version.type_system.lookup_builtin_type(AUTH_USER_NAME) {
         Ok(Type::Entity(t)) => Ok(t),
-        _ => anyhow::bail!("Internal error: type AuthUser not found"),
+        _ => internal!("type AuthUser not found"),
     }
 }
 
 /// Extracts the username of the logged-in user, or None if there was no login.
-pub async fn get_username_from_id(
+async fn get_username_from_id(
     server: &Server,
     version: &Version,
     user_id: Option<&str>,
@@ -43,7 +45,7 @@ pub async fn get_username_from_id(
     match (user_id, user_type) {
         (None, _) => None,
         (Some(_), Err(e)) => {
-            warn!("{:?}", e);
+            log::warn!("{:?}", e);
             None
         }
         (Some(id), Ok(user_type)) => {
@@ -65,4 +67,44 @@ pub async fn get_username_from_id(
             }
         }
     }
+}
+
+async fn authorize_user_id(
+    server: &Server,
+    version: &Version,
+    authentication: &Authentication,
+    routing_path: &str,
+) -> Result<()> {
+    let user_id = authentication.user_id();
+    let username = get_username_from_id(server, version, user_id).await;
+    if !version
+        .policy_system
+        .user_authorization
+        .is_allowed(username.as_deref(), routing_path)
+    {
+        forbidden!("Unauthorized user");
+    }
+
+    Ok(())
+}
+
+pub async fn authorize(
+    server: &Server,
+    version: &Version,
+    authentication: &Authentication,
+    routing_path: &str,
+    req_parts: &Parts,
+) -> Result<()> {
+    authorize_user_id(server, version, authentication, routing_path).await?;
+
+    let secrets = server.secrets.read();
+    if !version
+        .policy_system
+        .secret_authorization
+        .is_allowed(req_parts, &secrets, routing_path)
+    {
+        forbidden!("Invalid header authentication");
+    }
+
+    Ok(())
 }
