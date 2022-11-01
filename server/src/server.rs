@@ -81,7 +81,7 @@ pub async fn run(opt: Opt) -> Result<()> {
         None => Fuse::terminated(),
     };
 
-    let secrets_task = TaskHandle(tokio::task::spawn(refresh_secrets(server.clone())));
+    let secrets_task = TaskHandle(tokio::task::spawn(refresh_secrets(server.clone(), server.opt.disable_secrets_polling)));
     let signal_task = TaskHandle(tokio::task::spawn(wait_for_signals()));
 
     info!("ChiselStrike server is ready 🚀");
@@ -267,11 +267,7 @@ async fn start_builtin_version(server: Arc<Server>) -> Result<()> {
     Ok(())
 }
 
-async fn refresh_secrets(server: Arc<Server>) -> Result<()> {
-    if server.opt.disable_secrets_polling {
-        return Ok(());
-    }
-
+async fn refresh_secrets(server: Arc<Server>, stop_on_success: bool) -> Result<()> {
     let mut last_try_was_failure = false;
     loop {
         if let Err(err) = update_secrets(&server).await {
@@ -281,6 +277,10 @@ async fn refresh_secrets(server: Arc<Server>) -> Result<()> {
             last_try_was_failure = true;
         } else {
             last_try_was_failure = false;
+
+            if stop_on_success {
+                return Ok(());
+            }
         }
         tokio::time::sleep(Duration::from_secs_f32(server.opt.secrets_polling_period_s)).await;
     }
