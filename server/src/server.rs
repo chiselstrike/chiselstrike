@@ -268,6 +268,10 @@ async fn start_builtin_version(server: Arc<Server>) -> Result<()> {
 }
 
 async fn refresh_secrets(server: Arc<Server>) -> Result<()> {
+    if server.opt.disable_secrets_polling {
+        return Ok(());
+    }
+
     let mut last_try_was_failure = false;
     loop {
         if let Err(err) = update_secrets(&server).await {

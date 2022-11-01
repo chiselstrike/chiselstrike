@@ -67,6 +67,10 @@ pub struct Opt {
     #[structopt(long, default_value = "1")]
     pub secrets_polling_period_s: f32,
 
+    /// Disables periodic polling to update secrets.
+    #[structopt(long)]
+    pub disable_secrets_polling: bool,
+
     #[structopt(long)]
     pub typescript_policies: bool,
 
