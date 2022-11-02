@@ -278,8 +278,12 @@ static EXPR_FILTER_ENDPOINT: &str = r#"
     import { Person } from "../models/person.ts";
 
     export default async function chisel(req: ChiselRequest) {
-        return await Person.cursor()
-            .filter((_) => true) // Ensure in-TS eval when not optimized.
+        let c = Person.cursor();
+        if (req.query.getBool("tsFiltering")) {
+            // Enforces in-TS eval.
+            c = c.filter((p) => p.id != btoa(p.id!))
+        }
+        return await c
             .filter(await req.json())
             .sortBy("firstName")
             .map(p => p.firstName)
@@ -294,8 +298,9 @@ pub async fn expr_filter_basic(c: TestContext) {
     c.chisel.apply_ok().await;
     store_people(&c.chisel).await;
 
+    let url = format!("/dev/query?tsFiltering={}", !c.optimized);
     c.chisel
-        .post("/dev/query")
+        .post(&url)
         .json(json!({
             "lastName": "Plhak"
         }))
@@ -304,7 +309,7 @@ pub async fn expr_filter_basic(c: TestContext) {
         .assert_json(json!(["Jan"]));
 
     c.chisel
-        .post("/dev/query")
+        .post(&url)
         .json(json!({
             "age": 666
         }))
@@ -313,7 +318,7 @@ pub async fn expr_filter_basic(c: TestContext) {
         .assert_json(json!(["Glauber"]));
 
     c.chisel
-        .post("/dev/query")
+        .post(&url)
         .json(json!({
             "age": {"$gte": 666, "$lt": 667}
         }))
@@ -330,8 +335,9 @@ pub async fn expr_filter_logical_ops(c: TestContext) {
     c.chisel.apply_ok().await;
     store_people(&c.chisel).await;
 
+    let url = format!("/dev/query?tsFiltering={}", !c.optimized);
     c.chisel
-        .post("/dev/query")
+        .post(&url)
         .json(json!({
             "$not": {"firstName": "Glauber"}
         }))
@@ -340,7 +346,7 @@ pub async fn expr_filter_logical_ops(c: TestContext) {
         .assert_json(json!(["Jan", "Pekka"]));
 
     c.chisel
-        .post("/dev/query")
+        .post(&url)
         .json(json!({
             "$and": [
                 {"age": {"$gte": 666}},
@@ -352,7 +358,7 @@ pub async fn expr_filter_logical_ops(c: TestContext) {
         .assert_json(json!(["Glauber"]));
 
     c.chisel
-        .post("/dev/query")
+        .post(&url)
         .json(json!({
             "$or": [
                 {"age": 666},
@@ -364,7 +370,7 @@ pub async fn expr_filter_logical_ops(c: TestContext) {
         .assert_json(json!(["Glauber", "Pekka"]));
 
     c.chisel
-        .post("/dev/query")
+        .post(&url)
         .json(json!({
             "$and": [
                 {
@@ -394,8 +400,9 @@ pub async fn expr_filter_comparators(c: TestContext) {
     c.chisel.apply_ok().await;
     store_people(&c.chisel).await;
 
+    let url = format!("/dev/query?tsFiltering={}", !c.optimized);
     c.chisel
-        .post("/dev/query")
+        .post(&url)
         .json(json!({
             "firstName": {"$eq": "Jan"}
         }))
@@ -404,7 +411,7 @@ pub async fn expr_filter_comparators(c: TestContext) {
         .assert_json(json!(["Jan"]));
 
     c.chisel
-        .post("/dev/query")
+        .post(&url)
         .json(json!({
             "firstName": {"$ne": "Jan"}
         }))
@@ -413,7 +420,7 @@ pub async fn expr_filter_comparators(c: TestContext) {
         .assert_json(json!(["Glauber", "Pekka"]));
 
     c.chisel
-        .post("/dev/query")
+        .post(&url)
         .json(json!({
             "age": {"$gt": 666}
         }))
@@ -422,7 +429,7 @@ pub async fn expr_filter_comparators(c: TestContext) {
         .assert_json(json!(["Pekka"]));
 
     c.chisel
-        .post("/dev/query")
+        .post(&url)
         .json(json!({
             "age": {"$gte": 666}
         }))
@@ -431,7 +438,7 @@ pub async fn expr_filter_comparators(c: TestContext) {
         .assert_json(json!(["Glauber", "Pekka"]));
 
     c.chisel
-        .post("/dev/query")
+        .post(&url)
         .json(json!({
             "age": {"$lt": 666}
         }))
@@ -439,7 +446,7 @@ pub async fn expr_filter_comparators(c: TestContext) {
         .await
         .assert_json(json!(["Jan"]));
     c.chisel
-        .post("/dev/query")
+        .post(&url)
         .json(json!({
             "age": {"$lte": 666}
         }))
@@ -448,7 +455,7 @@ pub async fn expr_filter_comparators(c: TestContext) {
         .assert_json(json!(["Glauber", "Jan"]));
 }
 
-#[chisel_macros::test(modules = Deno, optimize = Both)]
+#[chisel_macros::test(modules = Deno, optimize = Yes)]
 pub async fn expr_filter_nested_entities(c: TestContext) {
     c.chisel.write("models/person.ts", PERSON_MODEL);
     c.chisel.write(
@@ -477,8 +484,12 @@ pub async fn expr_filter_nested_entities(c: TestContext) {
         import { Company } from "../models/company.ts";
 
         export default async function chisel(req: ChiselRequest) {
-            return await Company.cursor()
-                .filter((_) => true) // Ensure in-TS eval when not optimized.
+            let c = Company.cursor();
+            if (req.query.getBool("tsFiltering")) {
+                // Enforces in-TS eval.
+                c = c.filter((p) => p.id != btoa(p.id!))
+            }
+            return await c
                 .filter(await req.json())
                 .sortBy("name")
                 .map(c => c.name)
@@ -517,8 +528,9 @@ pub async fn expr_filter_nested_entities(c: TestContext) {
         )
         .await;
 
+    let url = format!("/dev/query?tsFiltering={}", !c.optimized);
     c.chisel
-        .post("/dev/query")
+        .post(&url)
         .json(json!({
             "ceo": {
                 "firstName": "Glauber"
@@ -528,7 +540,7 @@ pub async fn expr_filter_nested_entities(c: TestContext) {
         .await
         .assert_json(json!(["ChiselStrike"]));
     c.chisel
-        .post("/dev/query")
+        .post(&url)
         .json(json!({
             "ceo": {
                 "age": {"$gt": 666}

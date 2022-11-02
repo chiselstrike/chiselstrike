@@ -835,6 +835,8 @@ pub struct TestContext {
     pub _db: Database,
     pub kafka_connection: Option<String>,
     pub kafka_topics: Vec<String>,
+    /// Specifies whether this test is run with chisel compiler enabled
+    pub optimized: bool,
 }
 
 impl TestContext {
