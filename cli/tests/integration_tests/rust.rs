@@ -175,6 +175,7 @@ async fn setup_test_context(
         _db: db,
         kafka_connection,
         kafka_topics,
+        optimized: instance.optimize,
     }
 }
 
