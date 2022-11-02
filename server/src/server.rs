@@ -269,16 +269,24 @@ async fn start_builtin_version(server: Arc<Server>) -> Result<()> {
 
 async fn refresh_secrets(server: Arc<Server>) -> Result<()> {
     let mut last_try_was_failure = false;
+    let mut delay_s = server.opt.secrets_polling_period_s;
     loop {
+        tokio::time::sleep(Duration::from_secs_f32(delay_s)).await;
         if let Err(err) = update_secrets(&server).await {
             if !last_try_was_failure {
                 log::warn!("Could not re-read secrets: {:?}", err);
             }
             last_try_was_failure = true;
+            delay_s *= server.opt.secrets_refresh_exponential_backoff_factor;
+            delay_s = delay_s.min(server.opt.secrets_refresh_max_exponential_backoff_s);
         } else {
             last_try_was_failure = false;
+            delay_s = server.opt.secrets_polling_period_s;
+
+            if server.opt.refresh_secrets_only_once {
+                return Ok(());
+            }
         }
-        tokio::time::sleep(Duration::from_secs_f32(server.opt.secrets_polling_period_s)).await;
     }
 }
 

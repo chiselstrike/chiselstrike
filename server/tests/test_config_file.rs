@@ -77,6 +77,9 @@ api_listen_addr = "localhost:12345"
         "chisel_secret_location": Value::Null,
         "chisel_secret_key_location": Value::Null,
         "secrets_polling_period_s": 1.0,
+        "refresh_secrets_only_once": false,
+        "secrets_refresh_exponential_backoff_factor": 2.0,
+        "secrets_refresh_max_exponential_backoff_s": 600.0,
         "typescript_policies": false,
     });
 
@@ -117,6 +120,9 @@ api_listen_addr = "localhost:12345"
         "chisel_secret_location": Value::Null,
         "chisel_secret_key_location": Value::Null,
         "secrets_polling_period_s": 1.0,
+        "refresh_secrets_only_once": false,
+        "secrets_refresh_exponential_backoff_factor": 2.0,
+        "secrets_refresh_max_exponential_backoff_s": 600.0,
         "typescript_policies": false,
     });
 
@@ -155,6 +161,9 @@ api_listen_addr = "localhost:12345"
         "chisel_secret_location": Value::Null,
         "chisel_secret_key_location": Value::Null,
         "secrets_polling_period_s": 1.0,
+        "refresh_secrets_only_once": false,
+        "secrets_refresh_exponential_backoff_factor": 2.0,
+        "secrets_refresh_max_exponential_backoff_s": 600.0,
         "typescript_policies": false,
     });
 
@@ -202,6 +211,9 @@ api_listen_addr = "localhost:12346"
         "chisel_secret_location": Value::Null,
         "chisel_secret_key_location": Value::Null,
         "secrets_polling_period_s": 1.0,
+        "refresh_secrets_only_once": false,
+        "secrets_refresh_exponential_backoff_factor": 2.0,
+        "secrets_refresh_max_exponential_backoff_s": 600.0,
         "typescript_policies": false,
     });
 
