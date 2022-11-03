@@ -1,7 +1,6 @@
 // SPDX-FileCopyrightText: © 2022 ChiselStrike <info@chiselstrike.com>
 
 use anyhow::Result;
-use petgraph::dot::Dot;
 use swc_ecmascript::ast::{
     ArrowExpr, BlockStmtOrExpr, Decl, Ident, Pat, Stmt, TsEntityName, TsType,
 };
@@ -24,7 +23,6 @@ impl<'a> ArrowFunction<'a> {
         match &arrow.body {
             BlockStmtOrExpr::BlockStmt(block) => {
                 let (cfg, stmt_map) = ControlFlow::build(&block.stmts)?;
-                println!("{}", Dot::new(&cfg.inner));
                 let regions = Region::from_cfg(&cfg, &|idx| match stmt_map[idx].stmt {
                     Stmt::If(_) => StmtKind::Conditional,
                     Stmt::Block(_) => StmtKind::Ignore,

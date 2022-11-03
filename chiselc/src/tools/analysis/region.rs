@@ -667,8 +667,6 @@ mod test {
 
         let cfg = parse_graph(description);
 
-        println!("{}", Dot::new(cfg.graph()));
-
         let region = Region::from_cfg(&cfg, &|idx| match idx.index() {
             0 | 1 | 2 | 3 | 5 => StmtKind::Conditional,
             _ => StmtKind::BBComponent,
