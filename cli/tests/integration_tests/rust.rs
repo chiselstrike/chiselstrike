@@ -106,6 +106,7 @@ async fn setup_test_context(
         chisel_path,
         tmp_dir: tmp_dir.clone(),
         client: reqwest::Client::new(),
+        capture: !opt.nocapture,
     };
 
     let mut args = vec![
