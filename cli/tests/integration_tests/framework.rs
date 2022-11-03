@@ -15,7 +15,7 @@ use std::{error, fmt, io, str};
 use anyhow::{anyhow, Context, Result};
 use bytes::{Buf, Bytes, BytesMut};
 use futures::future::Fuse;
-use futures::{pin_mut, Future, FutureExt};
+use futures::{join, pin_mut, Future, FutureExt};
 use serde::Serialize;
 use tempdir::TempDir;
 use tokio::io::{duplex, AsyncRead, AsyncReadExt, AsyncWriteExt, DuplexStream};
@@ -245,6 +245,10 @@ impl ProcessOutput {
             Err(self)
         }
     }
+
+    pub fn contains(&self, pattern: &str) -> bool {
+        self.stdout.output.contains(pattern) || self.stderr.output.contains(pattern)
+    }
 }
 
 impl From<std::process::Output> for ProcessOutput {
@@ -444,6 +448,8 @@ pub struct Chisel {
     pub chisel_path: PathBuf,
     pub tmp_dir: Arc<TempDir>,
     pub client: reqwest::Client,
+    /// If false, chisel's output will be forwarded to stdout.
+    pub capture: bool,
 }
 
 impl Chisel {
@@ -451,14 +457,38 @@ impl Chisel {
     pub async fn exec(&self, cmd: &str, args: &[&str]) -> Result<ProcessOutput, ProcessOutput> {
         let rpc_url = format!("http://{}", self.rpc_address);
         let args = [&["--rpc-addr", &rpc_url, cmd], args].concat();
-
-        let output = tokio::process::Command::new(&self.chisel_path)
+        let mut child = tokio::process::Command::new(&self.chisel_path)
             .args(args)
             .current_dir(&*self.tmp_dir)
-            .output()
-            .await
-            .unwrap_or_else(|e| panic!("could not execute `chisel {}`: {}", cmd, e));
-        ProcessOutput::from(output).into_result()
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .unwrap();
+
+        let (stdout, stderr, status) =
+            join!(
+                self.tee_and_read(child.stdout.take().unwrap()),
+                self.tee_and_read(child.stderr.take().unwrap()),
+                child.wait().map(|exit| exit
+                    .unwrap_or_else(|e| panic!("could not execute `chisel {}`: {}", cmd, e)))
+            );
+
+        let output = ProcessOutput::from(std::process::Output {
+            status,
+            stdout,
+            stderr,
+        });
+        output.into_result()
+    }
+
+    async fn tee_and_read<R>(&self, output: R) -> Vec<u8>
+    where
+        R: AsyncRead + Send + Unpin + 'static,
+    {
+        let mut stdout = wrap_tee(output, self.capture);
+        let mut stdout_buff = vec![];
+        stdout.read_to_end(&mut stdout_buff).await.unwrap();
+        stdout_buff
     }
 
     /// Runs `chisel apply`.

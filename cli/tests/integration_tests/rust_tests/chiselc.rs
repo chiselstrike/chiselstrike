@@ -30,6 +30,7 @@ pub async fn check_optimization(c: TestContext) {
                 .toArray();
         }"#,
     );
-    c.chisel.apply_ok().await;
+    let output = c.chisel.apply_ok().await;
+    assert!(!output.contains("no ChiselStrike compiler"));
     c.chisel.get("/dev/query").send().await.assert_ok();
 }
