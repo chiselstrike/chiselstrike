@@ -245,6 +245,10 @@ impl ProcessOutput {
             Err(self)
         }
     }
+
+    pub fn contains(&self, pattern: &str) -> bool {
+        self.stdout.output.contains(pattern) || self.stderr.output.contains(pattern)
+    }
 }
 
 impl From<std::process::Output> for ProcessOutput {
