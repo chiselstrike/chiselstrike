@@ -17,6 +17,7 @@ use crate::types::ObjectType;
 use self::engine::{boa_err_to_anyhow, ChiselRequestContext, PolicyEngine};
 use self::instances::PolicyEvalInstance;
 use self::utils::{entity_map_to_js_value, js_value_to_entity_value};
+mod debug;
 pub mod engine;
 mod instances;
 mod interpreter;

@@ -9,6 +9,7 @@ use boa_engine::{JsString, JsValue};
 use chiselc::policies::{Cond, Environment, LogicOp, PolicyName, Predicate, Predicates, Var};
 use serde_json::Value as JsonValue;
 
+use super::debug::debug;
 use super::interpreter::{self, InterpreterContext, JsonResolver};
 use super::store::PolicyStore;
 use super::type_policy::{GeoLocPolicy, ReadPolicy, TransformPolicy, TypePolicy, WritePolicy};
@@ -78,6 +79,7 @@ impl PolicyEngine {
         let mut context = boa_engine::Context::default();
         let action = Action::js_value(&mut context)?;
         context.register_global_property("Action", action, Attribute::all());
+        context.register_global_function("debug", 0, debug);
         Ok(Self {
             boa_ctx: Rc::new(RefCell::new(context)),
             policies: Default::default(),
