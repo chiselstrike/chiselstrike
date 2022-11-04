@@ -3,7 +3,7 @@
 use crate::nursery::{Nursery, NurseryStream};
 use crate::server::Server;
 use crate::version::VersionJob;
-use anyhow::{Context, Result};
+use anyhow::Result;
 use deno_core::serde_v8;
 use enclose::enclose;
 use futures::stream::{FuturesUnordered, StreamExt, TryStreamExt};
@@ -81,9 +81,14 @@ async fn handle_topic(
         .with_max_wait_ms(100)
         .build();
     while let Some(event) = stream.next().await {
-        let (record_and_offset, _) =
-            event.context("Could not receive Kafka event from consumer")?;
-        handle_event(&server, topic.clone(), record_and_offset.record).await?;
+        match event {
+            Ok((record_and_offset, _)) => {
+                handle_event(&server, topic.clone(), record_and_offset.record).await?;
+            }
+            Err(err) => {
+                warn!("Failed to receive Kafka event: {}", err);
+            }
+        }
     }
     Ok(())
 }
