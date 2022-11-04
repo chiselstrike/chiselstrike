@@ -110,7 +110,7 @@ fn map_array_type(handler: &Handler, x: &TsType) -> Result<TypeEnum> {
                 TsKeywordTypeKind::TsBooleanKeyword => Ok(TypeEnum::Bool(true)),
                 _ => Err(swc_err(handler, x, "type keyword not supported")),
             },
-            TsType::TsArrayType(_) => map_array_type(handler, &*array_type.elem_type),
+            TsType::TsArrayType(_) => map_array_type(handler, &array_type.elem_type),
             TsType::TsTypeRef(tr) => match &tr.type_name {
                 TsEntityName::Ident(id) => {
                     let ident_name = ident_to_string(id);

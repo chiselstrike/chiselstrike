@@ -135,7 +135,7 @@ impl Manifest {
                 continue;
             }
             anyhow::ensure!(
-                base_dir != dir && dir.starts_with(&base_dir),
+                base_dir != dir && dir.starts_with(base_dir),
                 "{} has to be a subdirectory of the current directory",
                 dir.display()
             );

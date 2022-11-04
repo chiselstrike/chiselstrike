@@ -108,7 +108,7 @@ pub(crate) async fn apply(
 
     for p in &policies {
         policy_req.push(PolicyUpdateRequest {
-            policy_config: read_to_string(&p)?,
+            policy_config: read_to_string(p)?,
             path: p.display().to_string(),
         });
     }
@@ -216,7 +216,7 @@ fn is_chiselc_available() -> bool {
         _ => return false,
     };
     let mut cmd = std::process::Command::new(cmd);
-    cmd.args(&["--version"]);
+    cmd.args(["--version"]);
     match cmd.output() {
         Ok(output) => output.status.success(),
         _ => false,

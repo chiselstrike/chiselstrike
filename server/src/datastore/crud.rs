@@ -465,7 +465,7 @@ fn url_query_to_filter(
 
 fn parse_sort(base_type: &Entity, value: &str) -> Result<SortBy> {
     let mut ascending = true;
-    let field_name = if let Some(suffix) = value.strip_prefix(&['-', '+']) {
+    let field_name = if let Some(suffix) = value.strip_prefix(['-', '+']) {
         if value.starts_with('-') {
             ascending = false;
         }
@@ -564,7 +564,7 @@ fn make_property_chain(
 }
 
 fn convert_operator(op_str: Option<&str>) -> Result<BinaryOp> {
-    if op_str == None {
+    if op_str.is_none() {
         return Ok(BinaryOp::Eq);
     }
     let op = match op_str.unwrap() {

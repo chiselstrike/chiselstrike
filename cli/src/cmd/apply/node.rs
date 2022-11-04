@@ -64,7 +64,7 @@ pub(crate) async fn apply(
                     gen_dir.display()
                 )
             })?;
-            fs::create_dir_all(&gen_parent_path).with_context(|| {
+            fs::create_dir_all(gen_parent_path).with_context(|| {
                 format!("Could not create directory {}", gen_parent_path.display())
             })?;
 

@@ -292,7 +292,7 @@ impl PartialEq<str> for EntityValue {
 
 impl<'a> PartialEq<&'a str> for EntityValue {
     fn eq(&self, other: &&str) -> bool {
-        eq_str(self, *other)
+        eq_str(self, other)
     }
 }
 
@@ -304,7 +304,7 @@ impl PartialEq<EntityValue> for str {
 
 impl<'a> PartialEq<EntityValue> for &'a str {
     fn eq(&self, other: &EntityValue) -> bool {
-        eq_str(other, *self)
+        eq_str(other, self)
     }
 }
 
