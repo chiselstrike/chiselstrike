@@ -1005,17 +1005,17 @@ export class ChiselEntity {
     }
 
     /**
-     * Generates endpoint code to handle REST methods GET/PUT/POST/DELETE for this entity.
+     * Returns a RouteMap that handles REST methods GET/PUT/POST/DELETE for this entity.
      *
      * @example
      *
-     * Put this in the file 'endpoints/comments.ts':
+     * Put this in the file 'routes/comments.ts':
      * ```typescript
      * import { Comment } from "../models/comment";
      * export default Comment.crud();
      * ```
      *
-     * This results in a /comments endpoint that correctly handles all REST methods over Comment. The default  endpoints are:
+     * This results in a /comments route that correctly handles all REST methods over Comment. The the generated routes are:
      *
      * * **POST:**
      *     * `/comments`             Creates a new object. Payload is a JSON with the properties of `Comment` as keys.
@@ -1036,9 +1036,9 @@ export class ChiselEntity {
      * * **PATCH:**
      *     * `/comments/:id`         modifies the element with the given ID. Payload is a JSON with the properties of `Comment` that will be modified as keys.
      *
-     * If you need more control over which method to generate and their behavior, see the top-level `crud()` function
+     * If you need more control over which methods to generate and their behavior, see the top-level `crud()` function.
      *
-     * @returns A route map suitable as a default export in a route.
+     * @returns A RouteMap suitable as a default export in a route module.
      */
     static crud(): RouteMap {
         return crud(this);
