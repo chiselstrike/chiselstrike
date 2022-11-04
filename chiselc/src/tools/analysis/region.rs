@@ -235,6 +235,8 @@ impl RegionBuilder<'_> {
         (Some(region.into()), cons_end)
     }
 
+    /// In control flow analysis, leader nodes mark the boundaries of basic blocks.
+    /// see: https://en.wikipedia.org/wiki/Basic_block
     fn is_leader(&self, idx: Idx) -> bool {
         let graph = self.cfg.graph();
         // is this the first statement?
@@ -281,7 +283,7 @@ impl RegionBuilder<'_> {
 mod test {
     use std::collections::{hash_map::Entry, HashMap};
 
-    use petgraph::{dot::Dot, Graph};
+    use petgraph::Graph;
 
     use super::*;
 
