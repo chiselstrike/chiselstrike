@@ -126,7 +126,7 @@ impl Rewriter {
                 Stmt::Decl(decl)
             }
             Stmt::Expr(expr_stmt) => {
-                let expr = self.rewrite_expr(&*expr_stmt.expr);
+                let expr = self.rewrite_expr(&expr_stmt.expr);
                 let expr_stmt = ExprStmt {
                     span: expr_stmt.span,
                     expr: Box::new(expr),
@@ -240,7 +240,7 @@ impl Rewriter {
     }
 
     fn rewrite_expr_or_spread(&mut self, expr_or_spread: &ExprOrSpread) -> ExprOrSpread {
-        let expr = self.rewrite_expr(&*expr_or_spread.expr);
+        let expr = self.rewrite_expr(&expr_or_spread.expr);
         ExprOrSpread {
             spread: expr_or_spread.spread,
             expr: Box::new(expr),

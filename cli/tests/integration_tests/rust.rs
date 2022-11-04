@@ -61,7 +61,7 @@ async fn setup_test_context(
         Modules::Deno => {
             execute_async(
                 tokio::process::Command::new(&chisel_path)
-                    .args(&[
+                    .args([
                         "init",
                         "--no-examples",
                         "--optimize",

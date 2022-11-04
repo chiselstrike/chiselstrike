@@ -146,7 +146,7 @@ impl<T> Drop for Arc<T> {
 impl<T> Deref for Arc<T> {
     type Target = T;
     fn deref(&self) -> &Self::Target {
-        &*self.inner
+        &self.inner
     }
 }
 

@@ -735,7 +735,7 @@ impl QueryEngine {
             TypeId::Array(element_type) => {
                 let val = match fields.get(&field.name) {
                     Some(field) => {
-                        self.validate_array(element_type, field)
+                        Self::validate_array(element_type, field)
                             .context("provided value for array has invalid type")?;
                         serde_json::to_string(field)?
                     }
@@ -750,7 +750,7 @@ impl QueryEngine {
 
     /// `validate_array` ensures that given JSON `value` is an array and it's elements are of
     /// compliant type with `element_type`.
-    fn validate_array(&self, element_type: &TypeId, value: &EntityValue) -> Result<()> {
+    fn validate_array(element_type: &TypeId, value: &EntityValue) -> Result<()> {
         let elements = value.as_array()?;
         for (i, e) in elements.iter().enumerate() {
             macro_rules! bail {
@@ -778,8 +778,7 @@ impl QueryEngine {
                     unreachable!("ArrayBuffer can't be contained within an array")
                 }
                 TypeId::Boolean => maybe_bail!(is_boolean),
-                TypeId::Array(inner_element) => self
-                    .validate_array(inner_element, e)
+                TypeId::Array(inner_element) => Self::validate_array(inner_element, e)
                     .context("failed to validate inner array at position {i}")?,
                 TypeId::Entity { .. } => {
                     unreachable!("entity can't be a contained within an array")

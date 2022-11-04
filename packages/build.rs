@@ -78,9 +78,9 @@ fn openssl_legacy_provider_supported() -> bool {
 
 fn mkdir_empty(dir: &Path) {
     if dir.exists() {
-        fs::remove_dir_all(&dir).expect(&format!("Cannot cleanup directory {}", dir.display()));
+        fs::remove_dir_all(dir).expect(&format!("Cannot cleanup directory {}", dir.display()));
     }
-    fs::create_dir_all(&dir).expect(&format!("Cannot create directory {}", dir.display()));
+    fs::create_dir_all(dir).expect(&format!("Cannot create directory {}", dir.display()));
 }
 
 fn write(output: &Path, data: &str) {

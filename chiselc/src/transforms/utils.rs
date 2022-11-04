@@ -137,7 +137,7 @@ pub fn convert_bin_expr(expr: &BinExpr) -> Option<QExpr> {
 fn convert_expr(expr: &Expr) -> Option<QExpr> {
     match expr {
         Expr::Bin(bin_expr) => convert_bin_expr(bin_expr),
-        Expr::Paren(paren_expr) => convert_expr(&*paren_expr.expr),
+        Expr::Paren(paren_expr) => convert_expr(&paren_expr.expr),
         Expr::Lit(Lit::Num(number)) => Some(QExpr::Value(QValue::Num(number.value))),
         Expr::Lit(Lit::Str(s)) => Some(QExpr::Value(QValue::Str(format!("{}", s.value)))),
         Expr::Member(member_expr) => {
