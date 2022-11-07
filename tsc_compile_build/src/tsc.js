@@ -31,13 +31,13 @@
             return "\n";
         },
         directoryExists(path) {
-            return Deno.core.opSync("dir_exists", path);
+            return Deno.core.ops.dir_exists(path);
         },
         fileExists(path) {
-            return Deno.core.opSync("file_exists", path);
+            return Deno.core.ops.file_exists(path);
         },
         getCurrentDirectory() {
-            return Deno.core.opSync("get_cwd");
+            return Deno.core.ops.get_cwd();
         },
         getDefaultLibLocation() {
             return "/default/lib/location";
@@ -46,13 +46,12 @@
             return undefined;
         },
         writeFile(fileName, contents) {
-            Deno.core.opSync("write", fileName, contents);
+            Deno.core.ops.write(fileName, contents);
         },
         resolveModuleNames(moduleNames, containingFile) {
             const ret = [];
             for (const name of moduleNames) {
-                const fname = Deno.core.opSync(
-                    "resolve",
+                const fname = Deno.core.ops.resolve(
                     name,
                     containingFile,
                 );
@@ -73,8 +72,7 @@
             const ret = [];
             for (const name of typeReferenceDirectiveNames) {
                 const strName = typeof name == "string" ? name : name.fileName;
-                const fname = Deno.core.opSync(
-                    "resolve",
+                const fname = Deno.core.ops.resolve(
                     strName,
                     containingFile,
                 );
@@ -87,7 +85,7 @@
             if (v !== undefined) {
                 return v;
             }
-            v = Deno.core.opSync("read", specifier);
+            v = Deno.core.ops.read(specifier);
             readCache[specifier] = v;
             return v;
         },
@@ -145,7 +143,7 @@
                 allDiagnostics,
                 host,
             );
-            Deno.core.opSync("diagnostic", diag);
+            Deno.core.ops.diagnostic(diag);
         }
     }
 
@@ -153,7 +151,7 @@
         try {
             return compileAux(root, isWorker, lib, emitDeclarations);
         } catch (e) {
-            Deno.core.opSync("diagnostic", e.stack + "\n");
+            Deno.core.ops.diagnostic(e.stack + "\n");
             return false;
         }
     }

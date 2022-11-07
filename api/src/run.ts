@@ -40,7 +40,7 @@ export default async function run(
         opSync("op_chisel_subscribe_topic", topic);
     }
 
-    const workerIdx = Deno.core.opSync("op_chisel_get_worker_idx");
+    const workerIdx = Deno.core.ops.op_chisel_get_worker_idx();
 
     // signal to Rust that we are ready to handle jobs
     opSync("op_chisel_ready");
@@ -90,8 +90,7 @@ export default async function run(
 }
 
 // TODO: explore what this does in more detail
-Deno.core.opSync(
-    "op_set_promise_reject_callback",
+Deno.core.ops.op_set_promise_reject_callback(
     (type: number, _promise: unknown, reason: unknown) => {
         if (type == 0) { // PromiseRejectWithNoHandler
             // Without this function deno pushes the exception to

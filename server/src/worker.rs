@@ -98,6 +98,7 @@ async fn run(init: WorkerInit) -> Result<()> {
         cpu_count: 1,
         debug_flag: false,
         enable_testing_features: false,
+        locale: deno_core::v8::icu::get_language_tag(),
         is_tty: false,
         inspect: init.server.opt.inspect || init.server.opt.inspect_brk,
         // FIXME: make location a configuration parameter
@@ -137,6 +138,7 @@ async fn run(init: WorkerInit) -> Result<()> {
         compiled_wasm_module_store: None,
         stdio: Default::default(),
         cache_storage_dir: None,
+        startup_snapshot: None,
     };
 
     use deno_runtime::permissions::Permissions;
