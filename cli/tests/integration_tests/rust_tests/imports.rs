@@ -35,17 +35,32 @@ async fn deno_land_module(mut c: TestContext) {
     );
 
     c.chisel.apply_ok().await;
-    assert_eq!(
-        c.chisel.get_text("/dev/indented").await,
-        "test    foo"
-    );
+    assert_eq!(c.chisel.get_text("/dev/indented").await, "test    foo");
 
     // Try after restart as well
     c.restart_chiseld().await;
-    assert_eq!(
-        c.chisel.get_text("/dev/indented").await,
-        "test    foo"
+    assert_eq!(c.chisel.get_text("/dev/indented").await, "test    foo");
+}
+
+#[self::test(modules = Deno)]
+async fn node_std(mut c: TestContext) {
+    c.chisel.write(
+        "routes/foo.ts",
+        r##"
+        import * as module from "https://deno.land/std@0.145.0/node/module.ts";
+
+        export default async function (req: Request) {
+            return "Hello from foo";
+        }
+    "##,
     );
+
+    c.chisel.apply_ok().await;
+    assert_eq!(c.chisel.get_text("/dev/foo").await, "Hello from foo");
+
+    // Try after restart as well
+    c.restart_chiseld().await;
+    assert_eq!(c.chisel.get_text("/dev/foo").await, "Hello from foo");
 }
 
 #[self::test(modules = Node)]
@@ -69,9 +84,15 @@ async fn builtin_deno_std(c: TestContext) {
     );
 
     c.chisel.apply_ok().await;
-    c.chisel.get("/dev/semver").send().await
+    c.chisel
+        .get("/dev/semver")
+        .send()
+        .await
         .assert_json(json!(true));
-    c.chisel.get("/dev/node_buffer").send().await
+    c.chisel
+        .get("/dev/node_buffer")
+        .send()
+        .await
         .assert_json(json!(100));
 }
 
@@ -101,7 +122,10 @@ async fn node(c: TestContext) {
     );
 
     c.chisel.apply_ok().await;
-    c.chisel.get("/dev/import").send().await
+    c.chisel
+        .get("/dev/import")
+        .send()
+        .await
         .assert_json(json!([true, 43, 31]));
 }
 
@@ -118,7 +142,10 @@ async fn node_dynamic_import(c: TestContext) {
     );
 
     c.chisel.apply_ok().await;
-    c.chisel.get("/dev/import").send().await
+    c.chisel
+        .get("/dev/import")
+        .send()
+        .await
         .assert_json(json!(100));
 }
 
@@ -136,6 +163,9 @@ async fn node_require(c: TestContext) {
     );
 
     c.chisel.apply_ok().await;
-    c.chisel.get("/dev/import").send().await
+    c.chisel
+        .get("/dev/import")
+        .send()
+        .await
         .assert_json(json!(100));
 }
