@@ -105,23 +105,22 @@ pub async fn update_and_load(c: TestContext) {
     run_add_and_load_test(c).await;
 }
 
+static DATED_MODEL: &str = r#"
+    import { ChiselEntity } from "@chiselstrike/api"
+    export class Dated extends ChiselEntity {
+        date: Date;
+    }
+"#;
+
+static DATED_CRUD: &str = r#"
+    import { Dated } from "../models/dated.ts";
+    export default Dated.crud();
+"#;
+
 #[chisel_macros::test(modules = Deno)]
 pub async fn crud(c: TestContext) {
-    c.chisel.write(
-        "models/dated.ts",
-        r#"
-        import { ChiselEntity } from "@chiselstrike/api"
-        export class Dated extends ChiselEntity {
-            date: Date;
-        }"#,
-    );
-    c.chisel.write(
-        "routes/dates.ts",
-        r#"
-        import { Dated } from "../models/dated.ts";
-        export default Dated.crud();
-        "#,
-    );
+    c.chisel.write("models/dated.ts", DATED_MODEL);
+    c.chisel.write("routes/dates.ts", DATED_CRUD);
     c.chisel.write(
         "routes/read.ts",
         r#"
@@ -174,6 +173,91 @@ pub async fn crud(c: TestContext) {
         }),
     )
     .unwrap();
+}
+
+#[chisel_macros::test(modules = Deno)]
+pub async fn crud_string_date(c: TestContext) {
+    c.chisel.write("models/dated.ts", DATED_MODEL);
+    c.chisel.write("routes/dates.ts", DATED_CRUD);
+    c.chisel.apply_ok().await;
+    // Leverages JavaScript's Date construction.
+    c.chisel
+        .post_json(
+            "/dev/dates",
+            json!({
+                "date": "2022-11-07T20:05:32.797Z"
+            }),
+        )
+        .await;
+    json_is_subset(
+        &c.chisel.get_json("/dev/dates?all=true").await,
+        &json!({
+            "results": [{
+                "date": 1667851532797i64
+            }]
+        }),
+    )
+    .unwrap();
+}
+
+#[chisel_macros::test(modules = Deno)]
+pub async fn crud_optional(c: TestContext) {
+    c.chisel.write(
+        "models/dated.ts",
+        r#"
+            import { ChiselEntity } from "@chiselstrike/api"
+            export class Dated extends ChiselEntity {
+                date?: Date;
+            }
+        "#,
+    );
+    c.chisel.write("routes/dates.ts", DATED_CRUD);
+    c.chisel.apply_ok().await;
+    // Make sure that null doesn't get converted to Date(0)
+    c.chisel
+        .post_json("/dev/dates", json!({ "date": null }))
+        .await;
+
+    let r = c.chisel.get_json("/dev/dates?all=true").await;
+    let dated = &r["results"].as_array().unwrap()[0];
+    assert!(dated["date"].is_null());
+}
+
+#[chisel_macros::test(modules = Deno)]
+pub async fn crud_invalid_value(c: TestContext) {
+    c.chisel.write("models/dated.ts", DATED_MODEL);
+    c.chisel.write("routes/dates.ts", DATED_CRUD);
+    c.chisel.apply_ok().await;
+
+    c.chisel
+        .post("/dev/dates")
+        .json(json!({ "date": null }))
+        .send()
+        .await
+        // TODO: It should return 400
+        .assert_status(500);
+
+    c.chisel
+        .post("/dev/dates")
+        .json(json!({ "date": "Some foo string" }))
+        .send()
+        .await
+        .assert_status(500);
+
+    // Invalid month number
+    c.chisel
+        .post("/dev/dates")
+        .json(json!({ "date": "2022-13-07T20:05:32.797Z" }))
+        .send()
+        .await
+        .assert_status(500);
+
+    c.chisel
+        .post("/dev/dates")
+        .json(json!({ "date": true }))
+        .send()
+        .await
+        .assert_status(500);
 }
 
 #[chisel_macros::test(modules = Deno)]

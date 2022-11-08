@@ -1310,7 +1310,13 @@ function mergeSourceIntoEntity(
             } else if (
                 typeof fieldValue == "string" || typeof fieldValue == "number"
             ) {
-                target[field.name] = new Date(fieldValue);
+                const date = new Date(fieldValue);
+                if (Number.isNaN(date.valueOf())) {
+                    throw new Error(
+                        `failed to convert value '${fieldValue}' to Date for field ${field.name}`,
+                    );
+                }
+                target[field.name] = date;
             } else {
                 throw new Error(
                     `field ${field.name} of entity ${entityName} is Date, but provided value ${fieldValue} is not an instance of Date`,
