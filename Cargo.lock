@@ -5207,7 +5207,7 @@ dependencies = [
 [[package]]
 name = "sqlx"
 version = "0.6.1"
-source = "git+https://github.com/chiselstrike/sqlx.git?rev=bcfb6ca404f9070d9a2e187c717fd4bd166fc19f#bcfb6ca404f9070d9a2e187c717fd4bd166fc19f"
+source = "git+https://github.com/chiselstrike/sqlx.git?rev=7f2af7cb951222829eb86d34abd0affd005083ed#7f2af7cb951222829eb86d34abd0affd005083ed"
 dependencies = [
  "sqlx-core",
  "sqlx-macros",
@@ -5216,7 +5216,7 @@ dependencies = [
 [[package]]
 name = "sqlx-core"
 version = "0.6.1"
-source = "git+https://github.com/chiselstrike/sqlx.git?rev=bcfb6ca404f9070d9a2e187c717fd4bd166fc19f#bcfb6ca404f9070d9a2e187c717fd4bd166fc19f"
+source = "git+https://github.com/chiselstrike/sqlx.git?rev=7f2af7cb951222829eb86d34abd0affd005083ed#7f2af7cb951222829eb86d34abd0affd005083ed"
 dependencies = [
  "ahash",
  "atoi",
@@ -5271,7 +5271,7 @@ dependencies = [
 [[package]]
 name = "sqlx-macros"
 version = "0.6.1"
-source = "git+https://github.com/chiselstrike/sqlx.git?rev=bcfb6ca404f9070d9a2e187c717fd4bd166fc19f#bcfb6ca404f9070d9a2e187c717fd4bd166fc19f"
+source = "git+https://github.com/chiselstrike/sqlx.git?rev=7f2af7cb951222829eb86d34abd0affd005083ed#7f2af7cb951222829eb86d34abd0affd005083ed"
 dependencies = [
  "dotenvy",
  "either",
@@ -5289,7 +5289,7 @@ dependencies = [
 [[package]]
 name = "sqlx-rt"
 version = "0.6.1"
-source = "git+https://github.com/chiselstrike/sqlx.git?rev=bcfb6ca404f9070d9a2e187c717fd4bd166fc19f#bcfb6ca404f9070d9a2e187c717fd4bd166fc19f"
+source = "git+https://github.com/chiselstrike/sqlx.git?rev=7f2af7cb951222829eb86d34abd0affd005083ed#7f2af7cb951222829eb86d34abd0affd005083ed"
 dependencies = [
  "once_cell",
  "tokio",

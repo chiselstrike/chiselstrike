@@ -105,7 +105,7 @@ impl TryFrom<&Field> for ColumnDef {
             TypeId::Boolean => column_def.boolean(),
             TypeId::ArrayBuffer => column_def.binary(),
             TypeId::Entity { .. } | TypeId::EntityId { .. } => column_def.text(), // Foreign key, must the be same type as Type::Id
-            TypeId::Array(_) => column_def.text(), // Arrays are stored as serialized JSONs.
+            TypeId::Array(_) => column_def.json_binary(), // Arrays are stored as serialized JSONs.
         };
 
         Ok(column_def)
@@ -132,6 +132,7 @@ impl SqlWithArguments {
                 SqlValue::I64(arg) => sqlx_query = sqlx_query.bind(arg),
                 SqlValue::String(arg) => sqlx_query = sqlx_query.bind(arg),
                 SqlValue::Bytes(arg) => sqlx_query = sqlx_query.bind(arg),
+                SqlValue::Json(arg) => sqlx_query = sqlx_query.bind(arg),
             };
         }
         sqlx_query
@@ -451,8 +452,8 @@ impl QueryEngine {
                         }
                         TypeId::Entity { .. } => anyhow::bail!("object is not a scalar"),
                         TypeId::Array(_) => {
-                            let array_str = row.get::<&str, _>(column_idx);
-                            serde_json::from_str::<EntityValue>(array_str)
+                            let array_json = row.get::<serde_json::Value, _>(column_idx);
+                            serde_json::from_value::<EntityValue>(array_json)
                                 .context("failed to deserialize array from raw JSON string")?
                         }
                     };
@@ -737,11 +738,14 @@ impl QueryEngine {
                     Some(field) => {
                         Self::validate_array(element_type, field)
                             .context("provided value for array has invalid type")?;
-                        serde_json::to_string(field)?
+                        serde_json::to_value(field)?
                     }
-                    None => field.generate_value().context("failed to generate value")?,
+                    None => serde_json::from_str(
+                        &field.generate_value().context("failed to generate value")?,
+                    )
+                    .context("Failed to convert provided default value to json array")?,
                 };
-                SqlValue::String(val)
+                SqlValue::Json(val)
             }
         };
 

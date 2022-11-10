@@ -25,6 +25,7 @@ pub enum SqlValue {
     I64(i64),
     String(String),
     Bytes(Vec<u8>),
+    Json(serde_json::Value),
 }
 
 impl From<&str> for SqlValue {
