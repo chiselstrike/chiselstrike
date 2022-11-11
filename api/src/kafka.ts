@@ -1,6 +1,6 @@
 // SPDX-FileCopyrightText: © 2022 ChiselStrike <info@chiselstrike.com>
 
-import { requestContext } from "./datastore.ts";
+import { ChiselEntity, requestContext } from "./datastore.ts";
 import { opAsync, opSync } from "./utils.ts";
 
 export type KafkaEvent = {
@@ -8,6 +8,14 @@ export type KafkaEvent = {
     key: Uint8Array;
     value: Uint8Array;
 };
+
+export class ChiselOutbox extends ChiselEntity {
+    timestamp: Date;
+    seqNo: number;
+    topic: string;
+    key: ArrayBuffer;
+    value: ArrayBuffer;
+}
 
 export class TopicMap {
     topics: Record<string, EventHandler>;
@@ -70,4 +78,49 @@ export async function handleKafkaEvent(
             console.error(`Error when rolling back transaction: ${e}`);
         }
     }
+}
+
+export type PublishEventArgs = {
+    topic: string;
+    key?: string | ArrayBuffer;
+    value?: string | ArrayBuffer;
+};
+
+/**
+ * Publish an event on a topic.
+ *
+ * Note: the `publishEvent()` API guarantees at least once semantics, which
+ * means that the event is guaranteed to be published on the topic one or
+ * more times. However, unlike with exactly-once semantics that Kafka, for
+ * example, provides, the application is required to de-duplicate events
+ * in cases where processing the same event twice results in invalid
+ * behavior.
+ *
+ * @version experimental
+ */
+export async function publishEvent(args: PublishEventArgs): Promise<void> {
+    const timestamp = new Date();
+    // TODO: Switch `seqNo` to a proper sequence when #1893 is done.
+    const seqNo = await ChiselOutbox.cursor().count();
+    const topic = args.topic;
+    const encoder = new TextEncoder();
+    const convert = (value?: string | ArrayBuffer) => {
+        if (!value) {
+            return undefined;
+        }
+        if (typeof value === "string") {
+            return encoder.encode(value);
+        }
+        return value;
+    };
+    const key = convert(args.key);
+    const value = convert(args.value);
+    await ChiselOutbox.create({
+        timestamp,
+        seqNo,
+        topic,
+        key,
+        value,
+    });
+    await opAsync("op_chisel_publish");
 }

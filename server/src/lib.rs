@@ -40,6 +40,7 @@ pub(crate) mod module_loader;
 mod nursery;
 pub mod ops;
 pub(crate) mod opt;
+pub(crate) mod outbox;
 pub(crate) mod policies;
 mod policy;
 pub(crate) mod prefix_map;

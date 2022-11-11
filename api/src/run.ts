@@ -15,7 +15,8 @@ import { DirtyEntityError, PermissionDeniedError } from "./policies.ts";
 // A generic job that we receive from Rust
 type AcceptedJob =
     | { type: "http"; request: HttpRequest; ctxRid: number }
-    | { type: "kafka"; event: KafkaEvent; ctxRid: number };
+    | { type: "kafka"; event: KafkaEvent; ctxRid: number }
+    | { type: "outbox"; ctxRid: number };
 
 // This is the entry point into the TypeScript runtime, called from `main.js`
 // with structures that describe the user-defined behavior (such as how to
@@ -38,6 +39,8 @@ export default async function run(
     for (const topic in topicMap.topics) {
         opSync("op_chisel_subscribe_topic", topic);
     }
+
+    const workerIdx = Deno.core.opSync("op_chisel_get_worker_idx");
 
     // signal to Rust that we are ready to handle jobs
     opSync("op_chisel_ready");
@@ -72,10 +75,13 @@ export default async function run(
         } else if (job.type == "kafka") {
             requestContext.rid = job.ctxRid;
             await handleKafkaEvent(topicMap, job.event);
+        } else if (job.type == "outbox") {
+            if (workerIdx == 0) {
+                await opAsync("op_chisel_poll_outbox", job.ctxRid);
+            }
         } else {
             throw new Error("Unknown type of AcceptedJob");
         }
-
         if (requestContext.rid !== undefined) {
             Deno.core.close(requestContext.rid);
             requestContext.rid = undefined;

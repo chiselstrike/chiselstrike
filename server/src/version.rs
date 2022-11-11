@@ -59,6 +59,7 @@ pub struct Version {
 pub enum VersionJob {
     Http(HttpRequestResponse),
     Kafka(KafkaEvent),
+    Outbox,
 }
 
 pub async fn spawn(

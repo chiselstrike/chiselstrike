@@ -63,6 +63,7 @@ sqlx = { git = "https://github.com/chiselstrike/sqlx.git", rev = "bcfb6ca404f907
 structopt = "0.3.23"
 structopt-toml = "0.5.1"
 thiserror = "1.0"
+time = "0.3.16"
 tokio = { version = "1.11.0", features = ["net", "rt", "time"] }
 tokio-stream = { version = "0.1", features = ["net"] }
 tonic = "0.5.2"

@@ -3,6 +3,7 @@
 use super::{Entity, Field, InternalObject, ObjectType, Type, TypeId};
 use crate::authorization::{AUTH_ACCOUNT_NAME, AUTH_SESSION_NAME, AUTH_TOKEN_NAME, AUTH_USER_NAME};
 use crate::datastore::QueryEngine;
+use crate::outbox::OUTBOX_NAME;
 use std::collections::HashMap;
 use std::sync::Arc;
 
@@ -70,6 +71,18 @@ impl BuiltinTypes {
             ],
             "auth_account",
         );
+        add_custom_entity(
+            &mut types,
+            OUTBOX_NAME,
+            vec![
+                date_field("timestamp"),
+                number_field("seqNo"),
+                string_field("topic"),
+                optional_array_buffer_field("key"),
+                optional_array_buffer_field("value"),
+            ],
+            "outbox",
+        );
 
         Self { types }
     }
@@ -101,6 +114,21 @@ fn add_auth_entity(
     });
 }
 
+fn add_custom_entity(
+    types: &mut HashMap<String, Type>,
+    type_name: &'static str,
+    fields: Vec<Field>,
+    backing_table: &'static str,
+) {
+    types.insert(type_name.into(), {
+        let desc = InternalObject {
+            name: type_name,
+            backing_table,
+        };
+        Entity::Custom(Arc::new(ObjectType::new(&desc, fields, vec![]).unwrap())).into()
+    });
+}
+
 fn string_field(name: &str) -> Field {
     Field {
         id: None,
@@ -121,11 +149,53 @@ fn optional_string_field(name: &str) -> Field {
     f
 }
 
+fn number_field(name: &str) -> Field {
+    Field {
+        id: None,
+        name: name.into(),
+        type_id: TypeId::Float,
+        labels: vec![],
+        default: None,
+        effective_default: None,
+        is_optional: false,
+        version_id: "__chiselstrike".into(),
+        is_unique: false,
+    }
+}
+
 fn optional_number_field(name: &str) -> Field {
     Field {
         id: None,
         name: name.into(),
         type_id: TypeId::Float,
+        labels: vec![],
+        default: None,
+        effective_default: None,
+        is_optional: true,
+        version_id: "__chiselstrike".into(),
+        is_unique: false,
+    }
+}
+
+fn date_field(name: &str) -> Field {
+    Field {
+        id: None,
+        name: name.into(),
+        type_id: TypeId::JsDate,
+        labels: vec![],
+        default: None,
+        effective_default: None,
+        is_optional: false,
+        version_id: "__chiselstrike".into(),
+        is_unique: false,
+    }
+}
+
+fn optional_array_buffer_field(name: &str) -> Field {
+    Field {
+        id: None,
+        name: name.into(),
+        type_id: TypeId::ArrayBuffer,
         labels: vec![],
         default: None,
         effective_default: None,

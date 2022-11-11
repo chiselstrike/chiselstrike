@@ -173,6 +173,7 @@ jobs:
 
     - name: Setup Apache Kafka
       run: |
+          sudo apt-get update
           sudo apt-get install -y openjdk-8-jre-headless
           curl -O https://downloads.apache.org/kafka/3.2.3/kafka_2.12-3.2.3.tgz
           tar xf kafka_2.12-3.2.3.tgz
