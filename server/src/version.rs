@@ -124,7 +124,9 @@ async fn run(
             } else {
                 log::Level::Info
             };
-            log!(log_level, "Version {:?} is ready", version_id);
+            if version_id != "__chiselstrike" {
+                log!(log_level, "Version {:?} is ready", version_id);
+            }
         }
         Ok(())
     }));
