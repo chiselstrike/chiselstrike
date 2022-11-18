@@ -297,7 +297,7 @@ impl MetaService {
                     write!(full_str, "\n\t{}\n\t{}-wal\n\t{}-shm", s, s, s).unwrap();
                 }
 
-                info!("{}", &full_str);
+                debug!("{}", &full_str);
                 Ok(())
             }
             Ok(false) => Ok(()),
