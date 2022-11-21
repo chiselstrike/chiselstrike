@@ -12,7 +12,7 @@
         "@chiselstrike/api": "file:../../packages/chiselstrike-api",
         "email-validator": "^2.0.4",
         "esbuild": "^0.14.14",
-        "typescript": "^4.5.4"
+        "typescript": "^4.8.3"
     },
     "devDependencies": {
         "@chiselstrike/cli": "0.9.0",
