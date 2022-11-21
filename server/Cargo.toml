@@ -54,7 +54,7 @@ serde_with = { version = "2.0.1", features = ["base64"] }
 serde_yaml = "0.9.13"
 sha2 = "0.10.2"
 socket2 = { version = "0.3.18", features = ["unix", "reuseport"] }
-sqlx = { git = "https://github.com/chiselstrike/sqlx.git", rev = "bcfb6ca404f9070d9a2e187c717fd4bd166fc19f", features = [
+sqlx = { git = "https://github.com/chiselstrike/sqlx.git", rev = "7f2af7cb951222829eb86d34abd0affd005083ed", features = [
     "any",
     "postgres",
     "sqlite",

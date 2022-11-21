@@ -1,7 +1,8 @@
 use super::migrate_to_2;
 use super::schema::*;
 use super::{execute, fetch_all};
-use anyhow::{bail, Result};
+use anyhow::{bail, Context, Result};
+use sqlx::any::AnyKind;
 use sqlx::Row;
 
 pub struct MigrateContext<'t, 'c> {
@@ -46,7 +47,11 @@ pub async fn migrate_schema_step(
             migrate_to_3(ctx).await?;
             Some("3")
         }
-        "3" => None,
+        "3" => {
+            migrate_to_4(ctx).await?;
+            Some("4")
+        }
+        "4" => None,
         _ => bail!("Don't know how to migrate from version {:?}", old_version),
     })
 }
@@ -345,6 +350,62 @@ async fn migrate_to_3(ctx: &mut MigrateContext<'_, '_>) -> Result<()> {
             .primary_key(sea_query::Index::create().col(PolicyStore::Version)),
     )
     .await?;
+
+    Ok(())
+}
+
+async fn migrate_to_4(ctx: &mut MigrateContext<'_, '_>) -> Result<()> {
+    if ctx.transaction.kind() == AnyKind::Sqlite {
+        // Nothing to be done for sqlite as jsonb is just an alias for text.
+        return Ok(());
+    }
+    let query = sea_query::Query::select()
+        .column(FieldNames::FieldName)
+        .column(Fields::FieldType)
+        .column(Types::BackingTable)
+        .from(Fields::Table)
+        .inner_join(
+            FieldNames::Table,
+            sea_query::Expr::tbl(Fields::Table, Fields::FieldId)
+                .equals(FieldNames::Table, FieldNames::FieldId),
+        )
+        .inner_join(
+            Types::Table,
+            sea_query::Expr::tbl(Fields::Table, Fields::TypeId).equals(Types::Table, Types::TypeId),
+        )
+        .to_owned();
+
+    let rows = fetch_all_stmt(ctx, &query).await?;
+
+    #[derive(Debug)]
+    struct Field {
+        full_name: String,
+        type_: String,
+        backing_table: String,
+    }
+    let fields = rows
+        .into_iter()
+        .map(|row| Field {
+            full_name: row.get(0),
+            type_: row.get(1),
+            backing_table: row.get(2),
+        })
+        .filter(|field| field.type_.starts_with("Array"));
+
+    for field in fields {
+        let field_name = field
+            .full_name
+            .rsplit_once('.')
+            .context("Field name has unexpected format")?
+            .1;
+
+        let raw_sql = format!(
+            "ALTER TABLE \"{table}\" ALTER COLUMN \"{column}\" TYPE jsonb USING \"{column}\"::jsonb",
+            table = field.backing_table,
+            column = field_name
+        );
+        execute(ctx.transaction, sqlx::query(&raw_sql)).await?;
+    }
 
     Ok(())
 }
