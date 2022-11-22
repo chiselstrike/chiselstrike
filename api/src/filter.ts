@@ -15,29 +15,29 @@ export type FieldFilter = PrimitiveValue | {
     [key: string]: FieldFilter;
 };
 
-export type FilterExpr = {
-    "$and"?: FilterExpr[];
-    "$or"?: FilterExpr[];
-    "$not"?: FilterExpr;
-} & { [key: string]: FieldFilter };
+export type FilterExpr<T> = {
+    "$and"?: FilterExpr<T>[];
+    "$or"?: FilterExpr<T>[];
+    "$not"?: FilterExpr<T>;
+} & { [key in keyof Partial<T>]: FieldFilter };
 
-export function evalFilter(
-    filterExpr: FilterExpr,
+export function evalFilter<T>(
+    filterExpr: FilterExpr<T>,
     v: Record<string, unknown>,
 ): boolean {
     return Object.entries(filterExpr).every(([key, filter]) => {
         if (key === "$and") {
-            const operands = filter as FilterExpr[];
-            return operands.every((innerFilter: FilterExpr) =>
+            const operands = filter as FilterExpr<T>[];
+            return operands.every((innerFilter: FilterExpr<T>) =>
                 evalFilter(innerFilter, v)
             );
         } else if (key === "$or") {
-            const operands = filter as FilterExpr[];
-            return operands.some((innerFilter: FilterExpr) =>
+            const operands = filter as FilterExpr<T>[];
+            return operands.some((innerFilter: FilterExpr<T>) =>
                 evalFilter(innerFilter, v)
             );
         } else if (key === "$not") {
-            return !evalFilter(filter as FilterExpr, v);
+            return !evalFilter(filter as FilterExpr<T>, v);
         } else {
             return evalFieldFilter(
                 filter as FieldFilter,
