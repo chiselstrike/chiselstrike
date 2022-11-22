@@ -146,6 +146,37 @@ pub async fn find_many_invalid_argument(c: TestContext) {
 }
 
 #[chisel_macros::test(modules = Deno, optimize = Both)]
+pub async fn find_many_with_expr(c: TestContext) {
+    c.chisel.copy_to_dir("examples/person.ts", "models");
+    c.chisel.copy_to_dir("examples/store.ts", "routes");
+    c.chisel.write(
+        "routes/find_many.ts",
+        r##"
+        import { ChiselRequest } from "@chiselstrike/api"
+        import { Person } from "../models/person.ts";
+
+        export default async function chisel(req: ChiselRequest) {
+            let people = (await Person.findMany({
+                "age": {"$gt": 0}
+            }))
+            .map(p => p.first_name);
+            people.sort();
+            return people;
+        }
+    "##,
+    );
+
+    c.chisel.apply_ok().await;
+    store_people(&c.chisel).await;
+
+    c.chisel
+        .get("/dev/find_many")
+        .send()
+        .await
+        .assert_json(json!(["Glauber", "Pekka"]));
+}
+
+#[chisel_macros::test(modules = Deno, optimize = Both)]
 pub async fn find_one(c: TestContext) {
     c.chisel.copy_to_dir("examples/person.ts", "models");
     c.chisel.copy_to_dir("examples/store.ts", "routes");
@@ -224,6 +255,34 @@ pub async fn find_one(c: TestContext) {
             name,
         );
     }
+}
+
+#[chisel_macros::test(modules = Deno, optimize = Both)]
+pub async fn find_one_with_expr(c: TestContext) {
+    c.chisel.copy_to_dir("examples/person.ts", "models");
+    c.chisel.copy_to_dir("examples/store.ts", "routes");
+    c.chisel.write(
+        "routes/find_one.ts",
+        r##"
+        import { ChiselRequest } from "@chiselstrike/api"
+        import { Person } from "../models/person.ts";
+
+        export default async function chisel(req: ChiselRequest) {
+            const person = await Person.findOne({
+                "age": {"$gt": 700}
+            });
+            return person!.first_name;
+        }
+    "##,
+    );
+
+    c.chisel.apply_ok().await;
+    store_people(&c.chisel).await;
+    c.chisel
+        .get("/dev/find_one")
+        .send()
+        .await
+        .assert_text("Pekka");
 }
 
 #[chisel_macros::test(modules = Deno, optimize = Both)]

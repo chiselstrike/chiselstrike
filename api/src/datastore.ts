@@ -335,7 +335,7 @@ class InternalFilter<T> extends Operator<T, T> {
 class ExpressionFilter<T> extends Operator<T, T> {
     constructor(
         inner: Operator<unknown, T>,
-        public expression: FilterExpr,
+        public expression: FilterExpr<T>,
     ) {
         super(inner);
     }
@@ -582,11 +582,11 @@ export class ChiselCursor<T> {
      * object. The FilterExpr object follows the syntax is very similar to MongoDB query
      * objects.
      */
-    filter(filterExpr: FilterExpr): ChiselCursor<T>;
+    filter(filterExpr: FilterExpr<T>): ChiselCursor<T>;
 
     // Common implementation for filter overloads.
     filter(
-        arg1: ((arg: T) => boolean) | Partial<T> | FilterExpr,
+        arg1: ((arg: T) => boolean) | Partial<T> | FilterExpr<T>,
     ): ChiselCursor<T> {
         if (typeof arg1 == "function") {
             return new ChiselCursor(
@@ -599,7 +599,7 @@ export class ChiselCursor<T> {
             return new ChiselCursor(
                 new ExpressionFilter(
                     this.inner,
-                    arg1 as FilterExpr,
+                    arg1 as FilterExpr<T>,
                 ),
             );
         }
@@ -737,7 +737,7 @@ export function chiselIterator<T extends ChiselEntity>(
 }
 
 export type UpsertArgs<T> = {
-    restrictions: Partial<T>;
+    restrictions: Partial<T> | FilterExpr<T>;
     create: Partial<T>;
     update: Partial<T>;
 };
@@ -856,16 +856,27 @@ export class ChiselEntity {
         take?: number,
     ): Promise<T[]>;
 
+    /**
+     * Returns all entities of type T matching given `filterExpr`.
+     * You can optionaly specify `take` parameter that will limit the number of
+     * results to at most `take` elements.
+     */
     static async findMany<T extends ChiselEntity>(
         this: { new (): T },
-        arg1: ((arg: T) => boolean) | Partial<T>,
+        filterExpr: FilterExpr<T>,
+        take?: number,
+    ): Promise<T[]>;
+
+    static async findMany<T extends ChiselEntity>(
+        this: { new (): T },
+        arg1: ((arg: T) => boolean) | Partial<T> | FilterExpr<T>,
         take?: number,
     ): Promise<T[]> {
         let it = undefined;
         if (typeof arg1 == "function") {
             it = chiselIterator<T>(this).filter(arg1);
         } else {
-            it = chiselIterator<T>(this).filter(arg1);
+            it = chiselIterator<T>(this).filter(arg1 as FilterExpr<T>);
         }
         if (take !== undefined) {
             it = it.take(take);
@@ -910,15 +921,23 @@ export class ChiselEntity {
         restrictions: Partial<T>,
     ): Promise<T | undefined>;
 
+    /** Returns a single object that matches the `FilterExpr` object `filterExpr` passed as its parameter.
+     *
+     * If more than one match is found, any is returned. */
     static async findOne<T extends ChiselEntity>(
         this: { new (): T },
-        arg1: ((arg: T) => boolean) | Partial<T>,
+        filterExpr: FilterExpr<T>,
+    ): Promise<T | undefined>;
+
+    static async findOne<T extends ChiselEntity>(
+        this: { new (): T },
+        arg1: ((arg: T) => boolean) | Partial<T> | FilterExpr<T>,
     ): Promise<T | undefined> {
         let it = undefined;
         if (typeof arg1 == "function") {
             it = chiselIterator<T>(this).filter(arg1);
         } else {
-            it = chiselIterator<T>(this).filter(arg1);
+            it = chiselIterator<T>(this).filter(arg1 as FilterExpr<T>);
         }
         for await (const value of it) {
             return value;
@@ -1094,7 +1113,9 @@ export class ChiselEntity {
         this: { new (): T },
         args: UpsertArgs<T>,
     ): Promise<T> {
-        const it = chiselIterator<T>(this).filter(args.restrictions);
+        const it = chiselIterator<T>(this).filter(
+            args.restrictions as FilterExpr<T>,
+        );
         let foundEntity = null;
         for await (const value of it) {
             foundEntity = value;
