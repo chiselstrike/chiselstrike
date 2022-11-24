@@ -1,6 +1,8 @@
 // SPDX-FileCopyrightText: © 2022 ChiselStrike <info@chiselstrike.com>
 
+import { responseFromJson } from "./utils.ts";
 import type { ChiselRequest } from "./request.ts";
+import { typeSystem } from "./type_system.ts";
 
 /** Container for HTTP routes and their handlers.
  *
@@ -44,6 +46,7 @@ export class RouteMap {
     constructor() {
         this.routes = [];
         this.middlewares = [];
+        this.addInternalRoutes();
     }
 
     /** Adds a route to the route map.
@@ -69,7 +72,12 @@ export class RouteMap {
      *
      * [url-pattern-api]: https://developer.mozilla.org/en-US/docs/Web/API/URL_Pattern_API
      */
-    route(method: string | string[], path: string, handler: Handler): this {
+    route(
+        method: string | string[],
+        path: string,
+        handler: Handler,
+        clientMetadata?: CrudMetadata,
+    ): this {
         const methods = Array.isArray(method) ? method : [method];
         const pathPattern = path[0] !== "/" ? "/" + path : path;
         this.routes.push({
@@ -78,6 +86,7 @@ export class RouteMap {
             handler,
             middlewares: [],
             legacyFileName: undefined,
+            clientMetadata,
         });
         return this;
     }
@@ -109,6 +118,7 @@ export class RouteMap {
                 handler: route.handler,
                 middlewares: route.middlewares.concat(routeMap.middlewares),
                 legacyFileName: route.legacyFileName,
+                clientMetadata: route.clientMetadata,
             });
         }
         return this;
@@ -180,6 +190,31 @@ export class RouteMap {
         }
         return routeMap;
     }
+
+    // Adds internal endpoint listing all endpoints.c
+    private addInternalRoutes(): this {
+        const routeMap = this;
+        async function getAllRoutes(_req: ChiselRequest): Promise<Response> {
+            const routes = routeMap.routes.map((r) => {
+                let clientMetadata = undefined;
+                if (r.clientMetadata !== undefined) {
+                    clientMetadata = {
+                        entityType: typeSystem.findEntity(
+                            r.clientMetadata.entityName,
+                        ),
+                    };
+                }
+                return {
+                    methods: r.methods,
+                    pathPattern: r.pathPattern,
+                    clientMetadata,
+                };
+            });
+            routes.sort((a, b) => (a.pathPattern > b.pathPattern ? 1 : -1));
+            return responseFromJson(routes);
+        }
+        return this.get("/__chisel_internal/routes", getAllRoutes);
+    }
 }
 
 export type Route = {
@@ -189,6 +224,13 @@ export type Route = {
     middlewares: Middleware[];
     // TODO: remove this when we no longer need the legacy properties in `ChiselRequest`
     legacyFileName: string | undefined;
+    clientMetadata?: CrudMetadata;
+};
+
+/** Metadata used to generate chisel client code.
+ */
+export type CrudMetadata = {
+    entityName: string;
 };
 
 /** A request handler that maps HTTP request to an HTTP response. */

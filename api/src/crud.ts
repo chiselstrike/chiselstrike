@@ -63,6 +63,7 @@ export function crud<
 ): RouteMap {
     const createResponse = config?.createResponse ?? responseFromJson;
     const routeMap = new RouteMap();
+    const entityName = entity.name;
 
     // Returns all entities matching the filter in the `filter` URL parameter.
     async function getAll(req: ChiselRequest): Promise<Response> {
@@ -72,7 +73,7 @@ export function crud<
         );
     }
     if (config?.getAll ?? true) {
-        routeMap.get("/", getAll);
+        routeMap.route("GET", "/", getAll, { entityName });
     }
 
     // Returns a specific entity matching :id
@@ -86,7 +87,7 @@ export function crud<
         }
     }
     if (config?.getOne ?? true) {
-        routeMap.get("/:id", getOne);
+        routeMap.route("GET", "/:id", getOne, { entityName });
     }
 
     // Creates and returns a new entity from the `req` payload. Ignores the payload's id property and assigns a fresh one.
@@ -97,7 +98,7 @@ export function crud<
         return createResponse(u, 200);
     }
     if (config?.post ?? config?.write ?? true) {
-        routeMap.post("/", post);
+        routeMap.route("POST", "/", post, { entityName });
     }
 
     // Updates and returns the entity matching :id from the `req` payload.
@@ -108,7 +109,7 @@ export function crud<
         return createResponse(u, 200);
     }
     if (config?.put ?? config?.write ?? true) {
-        routeMap.put("/:id", put);
+        routeMap.route("PUT", "/:id", put, { entityName });
     }
 
     // Modifies an entity matching :id from the `req` payload.
@@ -129,7 +130,7 @@ export function crud<
         return createResponse(orig, 200);
     }
     if (config?.patch ?? config?.write ?? true) {
-        routeMap.patch("/:id", patch);
+        routeMap.route("PATCH", "/:id", patch, { entityName });
     }
 
     // Deletes all entities matching the filter in the `filter` URL parameter.
@@ -141,7 +142,7 @@ export function crud<
         );
     }
     if (config?.deleteAll ?? config?.write ?? true) {
-        routeMap.delete("/", deleteAll);
+        routeMap.route("DELETE", "/", deleteAll, { entityName });
     }
 
     // Deletes the entity matching :id
@@ -151,7 +152,7 @@ export function crud<
         return createResponse(`Deleted ID ${id}`, 200);
     }
     if (config?.deleteOne ?? config?.write ?? true) {
-        routeMap.delete("/:id", deleteOne);
+        routeMap.route("DELETE", "/:id", deleteOne, { entityName });
     }
 
     return routeMap;

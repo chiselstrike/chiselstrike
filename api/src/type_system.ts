@@ -1,4 +1,5 @@
 // SPDX-FileCopyrightText: © 2022 ChiselStrike <info@chiselstrike.com>
+import { opSync } from "./utils.ts";
 
 export type SimpleTypeSystem = {
     entities: Record<string, Entity>;
@@ -33,3 +34,7 @@ export class TypeSystem {
         return this.ts.entities[name];
     }
 }
+
+export const typeSystem: TypeSystem = new TypeSystem(
+    opSync("op_chisel_get_type_system") as SimpleTypeSystem,
+);

@@ -97,7 +97,6 @@ pub async fn basic(c: TestContext) {
     c.chisel.write("models/person.ts", PERSON_MODEL);
     c.chisel.write("routes/people.ts", PEOPLE_CRUD);
     c.chisel.apply_ok().await;
-
     assert_eq!(
         c.chisel.get_json("/dev/people").await,
         json!({"results": []})

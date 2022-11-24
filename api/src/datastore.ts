@@ -5,7 +5,7 @@ import { evalFilter } from "./filter.ts";
 import type { FilterExpr } from "./filter.ts";
 import type { RouteMap } from "./routing.ts";
 import { opAsync, opSync } from "./utils.ts";
-import { SimpleTypeSystem, TypeSystem } from "./type_system.ts";
+import { typeSystem } from "./type_system.ts";
 /**
  * Base class for various Operators applicable on `ChiselCursor`. An
  * implementation of Operator<T> processes an AsyncIterable<T> and
@@ -1202,10 +1202,6 @@ export const requestContext: {
     method: "",
     userId: undefined,
 };
-
-const typeSystem: TypeSystem = new TypeSystem(
-    opSync("op_chisel_get_type_system") as SimpleTypeSystem,
-);
 
 function ensureNotGet() {
     if (requestContext.method === "GET") {
