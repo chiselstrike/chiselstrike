@@ -13,6 +13,8 @@ use syn::{
 struct TestArgs {
     /// Variant of the `ModulesSpec` enum.
     modules: Ident,
+    /// Variant of the `ClientModeSpec` enum.
+    client_modes: Option<Ident>,
     /// Variant of the `OptimizeSpec` enum.
     optimize: Option<Ident>,
     /// Variant of the `DatabaseSpec` enum.
@@ -28,6 +30,7 @@ struct TestArgs {
 impl Parse for TestArgs {
     fn parse(input: ParseStream) -> syn::Result<Self> {
         let mut modules = None;
+        let mut client_modes = None;
         let mut optimize = None;
         let mut db = None;
         let mut start_chiseld = None;
@@ -41,6 +44,10 @@ impl Parse for TestArgs {
                 "modules" if modules.is_none() => {
                     let _: Token!(=) = input.parse()?;
                     modules = Some(input.parse()?);
+                }
+                "client_modes" if client_modes.is_none() => {
+                    let _: Token!(=) = input.parse()?;
+                    client_modes = Some(input.parse()?);
                 }
                 "optimize" if optimize.is_none() => {
                     let _: Token!(=) = input.parse()?;
@@ -78,6 +85,7 @@ impl Parse for TestArgs {
         Ok(Self {
             modules: modules
                 .ok_or_else(|| syn::Error::new(input.span(), "missing modules argument"))?,
+            client_modes,
             optimize,
             db,
             start_chiseld,
@@ -94,6 +102,9 @@ pub fn test(args: TokenStream, input: TokenStream) -> TokenStream {
     let fun_name = &fun.sig.ident;
     let fun_name_str = fun_name.to_string();
     let modules = args.modules;
+    let client_modes = args
+        .client_modes
+        .unwrap_or_else(|| Ident::new("Deno", Span::call_site()));
     let optimize = args
         .optimize
         .unwrap_or_else(|| Ident::new("Yes", Span::call_site()));
@@ -116,6 +127,7 @@ pub fn test(args: TokenStream, input: TokenStream) -> TokenStream {
             crate::suite::TestSpec {
                 name: concat!(module_path!(), "::", #fun_name_str),
                 modules: crate::suite::ModulesSpec::#modules,
+                client_modes: crate::suite::ClientModeSpec::#client_modes,
                 optimize: crate::suite::OptimizeSpec::#optimize,
                 db: crate::suite::DatabaseSpec::#db,
                 start_chiseld: #start_chiseld,

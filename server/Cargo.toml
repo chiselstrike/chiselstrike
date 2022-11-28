@@ -67,7 +67,7 @@ time = "0.3.16"
 tokio = { version = "1.11.0", features = ["net", "rt", "time"] }
 tokio-stream = { version = "0.1", features = ["net"] }
 tonic = "0.5.2"
-url = "2.2"
+url = "2.3"
 utils = { path = "../utils" }
 uuid = { version = "0.8.2", features = ["v4"] }
 
@@ -75,6 +75,7 @@ uuid = { version = "0.8.2", features = ["v4"] }
 proptest = "1.0.0"
 tempdir = "0.3.7"
 tempfile = "3.2.0"
+urlencoding = "2.1.2"
 
 [build-dependencies]
 # FIXME: We have additional dependencies here to work around

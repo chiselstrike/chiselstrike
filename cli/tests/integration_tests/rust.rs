@@ -1,12 +1,13 @@
 // SPDX-FileCopyrightText: © 2022 ChiselStrike <info@chiselstrike.com>
 
-use crate::common::get_free_port;
+use crate::common::{bin_dir, cargo_install, get_deno_version, get_free_port, repo_dir};
 use crate::database::{Database, DatabaseConfig, PostgresDb, SqliteDb};
 use crate::framework::{
-    execute_async, wait_for_chiseld_startup, Chisel, GuardedChild, TestContext,
+    execute_async, wait_for_chiseld_startup, Chisel, GuardedChild, TestContext, TypeScriptRunner,
 };
 use crate::suite::{Modules, TestInstance, TestSuite};
 use crate::Opt;
+
 use colored::Colorize;
 use enclose::enclose;
 use futures::ready;
@@ -16,7 +17,6 @@ use std::any::Any;
 use std::future::Future;
 use std::io::{stdout, Write};
 use std::net::{Ipv4Addr, SocketAddr};
-use std::path::PathBuf;
 use std::pin::Pin;
 use std::sync::atomic::AtomicU16;
 use std::sync::Arc;
@@ -100,6 +100,12 @@ async fn setup_test_context(
         }
     };
 
+    let ts_runner = TypeScriptRunner {
+        tmp_dir: tmp_dir.clone(),
+        capture: !opt.nocapture,
+        client_mode: instance.client_mode,
+    };
+
     let chisel = Chisel {
         rpc_address: chiseld_config.rpc_address,
         api_address: chiseld_config.api_address,
@@ -107,6 +113,7 @@ async fn setup_test_context(
         tmp_dir: tmp_dir.clone(),
         client: reqwest::Client::new(),
         capture: !opt.nocapture,
+        client_mode: instance.client_mode,
     };
 
     let mut args = vec![
@@ -173,25 +180,13 @@ async fn setup_test_context(
     TestContext {
         chiseld,
         chisel,
+        ts_runner,
         _db: db,
         kafka_connection,
         kafka_topics,
         optimized: instance.optimize,
+        client_mode: instance.client_mode,
     }
-}
-
-fn bin_dir() -> PathBuf {
-    let mut path = std::env::current_exe().unwrap();
-    path.pop();
-    path.pop();
-    path
-}
-
-fn repo_dir() -> PathBuf {
-    let mut path = bin_dir();
-    path.pop();
-    path.pop();
-    path
 }
 
 fn chiseld() -> String {
@@ -215,7 +210,6 @@ async fn create_kafka_topic(connection: &str, topic: &str) {
         println!("Warning: failed to create topic `{}`: {}", topic, err);
     }
 }
-
 struct TestFuture {
     instance: Option<Arc<TestInstance>>,
     task: tokio::task::JoinHandle<Duration>,
@@ -238,15 +232,22 @@ impl Future for TestFuture {
 
 fn format_test_instance(instance: &TestInstance) -> String {
     format!(
-        "test {} ({:?}, optimize={})",
+        "test {} ({:?}, optimize={}, cli={:?})",
         instance.spec.name.bold(),
         instance.modules,
         instance.optimize,
+        instance.client_mode,
     )
+}
+
+fn ensure_dependencies() {
+    let version = get_deno_version();
+    cargo_install(&version, "deno", "deno");
 }
 
 #[tokio::main]
 pub(crate) async fn run_tests(opt: Arc<Opt>) -> bool {
+    ensure_dependencies();
     let suite = TestSuite::from_inventory();
     let ports_counter = Arc::new(AtomicU16::new(30000));
     let parallel = opt.parallel.unwrap_or_else(num_cpus::get);

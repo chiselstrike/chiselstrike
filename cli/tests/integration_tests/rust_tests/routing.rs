@@ -615,14 +615,22 @@ async fn route_reflection(c: TestContext) {
     );
     c.chisel.apply_ok().await;
 
-    #[derive(Debug, Deserialize)]
-    struct SimplifiedType {
-        name: String,
+    #[derive(Debug, Clone, Deserialize)]
+    #[serde(rename_all = "camelCase")]
+    struct CrudHandler {
+        entity_name: String,
     }
+
+    #[derive(Debug, Clone, Deserialize)]
+    #[serde(tag = "kind", content = "handler")]
+    enum HandlerKind {
+        Crud(CrudHandler),
+    }
+
     #[derive(Debug, Deserialize)]
     #[serde(rename_all = "camelCase")]
     struct CrudMeta {
-        entity_type: SimplifiedType,
+        handler: HandlerKind,
     }
     #[derive(Debug, Deserialize)]
     #[serde(rename_all = "camelCase")]
@@ -632,11 +640,12 @@ async fn route_reflection(c: TestContext) {
         client_metadata: Option<CrudMeta>,
     }
 
-    let routes_json = c.chisel.get_json("/dev/__chisel_internal/routes").await;
+    let routes_json = c.chisel.get_json("/dev/__chiselstrike/routes").await;
     let routes: Vec<Route> = serde_json::from_value(routes_json).unwrap();
     for r in routes {
         if r.path_pattern == "/people/" && r.methods == vec!["GET"] {
-            assert_eq!(r.client_metadata.unwrap().entity_type.name, "Person");
+            let HandlerKind::Crud(handler) = r.client_metadata.unwrap().handler;
+            assert_eq!(handler.entity_name, "Person");
         }
     }
 }

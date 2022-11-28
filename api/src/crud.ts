@@ -3,6 +3,7 @@ import { opAsync, responseFromJson } from "./utils.ts";
 import { ChiselEntity, mergeIntoEntity, requestContext } from "./datastore.ts";
 import { ChiselRequest } from "./request.ts";
 import { RouteMap } from "./routing.ts";
+import { ClientMetadata, CrudHandler } from "./routing.ts";
 
 type ChiselEntityClass<T extends ChiselEntity> = {
     new (): T;
@@ -63,7 +64,14 @@ export function crud<
 ): RouteMap {
     const createResponse = config?.createResponse ?? responseFromJson;
     const routeMap = new RouteMap();
-    const entityName = entity.name;
+    const clientMetadata = (handlerName: CrudHandler): ClientMetadata => {
+        return {
+            handler: {
+                kind: "Crud",
+                handler: { kind: handlerName, entityName: entity.name },
+            },
+        };
+    };
 
     // Returns all entities matching the filter in the `filter` URL parameter.
     async function getAll(req: ChiselRequest): Promise<Response> {
@@ -73,7 +81,7 @@ export function crud<
         );
     }
     if (config?.getAll ?? true) {
-        routeMap.route("GET", "/", getAll, { entityName });
+        routeMap.route("GET", "/", getAll, clientMetadata("GetMany"));
     }
 
     // Returns a specific entity matching :id
@@ -87,7 +95,7 @@ export function crud<
         }
     }
     if (config?.getOne ?? true) {
-        routeMap.route("GET", "/:id", getOne, { entityName });
+        routeMap.route("GET", "/:id", getOne, clientMetadata("GetOne"));
     }
 
     // Creates and returns a new entity from the `req` payload. Ignores the payload's id property and assigns a fresh one.
@@ -98,7 +106,7 @@ export function crud<
         return createResponse(u, 200);
     }
     if (config?.post ?? config?.write ?? true) {
-        routeMap.route("POST", "/", post, { entityName });
+        routeMap.route("POST", "/", post, clientMetadata("PostOne"));
     }
 
     // Updates and returns the entity matching :id from the `req` payload.
@@ -109,7 +117,7 @@ export function crud<
         return createResponse(u, 200);
     }
     if (config?.put ?? config?.write ?? true) {
-        routeMap.route("PUT", "/:id", put, { entityName });
+        routeMap.route("PUT", "/:id", put, clientMetadata("PutOne"));
     }
 
     // Modifies an entity matching :id from the `req` payload.
@@ -130,7 +138,7 @@ export function crud<
         return createResponse(orig, 200);
     }
     if (config?.patch ?? config?.write ?? true) {
-        routeMap.route("PATCH", "/:id", patch, { entityName });
+        routeMap.route("PATCH", "/:id", patch, clientMetadata("PatchOne"));
     }
 
     // Deletes all entities matching the filter in the `filter` URL parameter.
@@ -142,7 +150,7 @@ export function crud<
         );
     }
     if (config?.deleteAll ?? config?.write ?? true) {
-        routeMap.route("DELETE", "/", deleteAll, { entityName });
+        routeMap.route("DELETE", "/", deleteAll, clientMetadata("DeleteMany"));
     }
 
     // Deletes the entity matching :id
@@ -152,7 +160,12 @@ export function crud<
         return createResponse(`Deleted ID ${id}`, 200);
     }
     if (config?.deleteOne ?? config?.write ?? true) {
-        routeMap.route("DELETE", "/:id", deleteOne, { entityName });
+        routeMap.route(
+            "DELETE",
+            "/:id",
+            deleteOne,
+            clientMetadata("DeleteOne"),
+        );
     }
 
     return routeMap;
