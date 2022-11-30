@@ -588,6 +588,7 @@ impl QueryEngine {
         queries: &[SqlWithArguments],
         transaction: &mut Transaction<'_, Any>,
     ) -> Result<()> {
+        dbg!(queries);
         for q in queries {
             transaction.execute(q.get_sqlx()).await?;
         }
