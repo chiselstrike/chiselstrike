@@ -394,10 +394,25 @@ impl MetaService {
             &mut transaction,
             sqlx::query(
                 r#"
-                INSERT INTO chisel_version (version, version_id)
-                VALUES ($1, $2)
-                ON CONFLICT(version_id) DO UPDATE SET version = $1
+                UPDATE chisel_version
+                SET version = $1
                 WHERE chisel_version.version_id = $2"#,
+            )
+            .bind(version.as_str())
+            .bind("chiselstrike"),
+        )
+        .await?;
+        execute(
+            &mut transaction,
+            sqlx::query(
+                r#"
+                INSERT INTO chisel_version (version, version_id)
+                SELECT $1, $2
+                WHERE NOT EXISTS (
+                    SELECT 1
+                    FROM chisel_version
+                    WHERE chisel_version.version_id = $2
+                )"#,
             )
             .bind(version.as_str())
             .bind("chiselstrike"),
@@ -431,17 +446,37 @@ impl MetaService {
         version_id: &str,
         info: &VersionInfo,
     ) -> Result<()> {
-        let add_api = sqlx::query(
-            r#"
-            INSERT INTO api_info (api_version, app_name, version_tag)
-            VALUES ($1, $2, $3)
-            ON CONFLICT(api_version) DO UPDATE SET app_name = $2, version_tag = $3
-            WHERE api_info.api_version = $1"#,
+        // upsert the version in the database
+        execute(
+            transaction,
+            sqlx::query(
+                r#"
+                UPDATE api_info
+                SET app_name = $2, version_tag = $3
+                WHERE api_info.api_version = $1"#,
+            )
+            .bind(version_id.to_owned())
+            .bind(info.name.clone())
+            .bind(info.tag.clone()),
         )
-        .bind(version_id.to_owned())
-        .bind(info.name.clone())
-        .bind(info.tag.clone());
-        execute(transaction, add_api).await?;
+        .await?;
+        execute(
+            transaction,
+            sqlx::query(
+                r#"
+                INSERT INTO api_info (api_version, app_name, version_tag)
+                SELECT $1, $2, $3
+                WHERE NOT EXISTS (
+                    SELECT 1
+                    FROM api_info
+                    WHERE api_info.api_version = $1
+                )"#,
+            )
+            .bind(version_id.to_owned())
+            .bind(info.name.clone())
+            .bind(info.tag.clone()),
+        )
+        .await?;
         Ok(())
     }
 
@@ -698,16 +733,34 @@ impl MetaService {
         version_id: &str,
         policy: &str,
     ) -> Result<()> {
-        let add_policy = sqlx::query(
-            r#"
-            INSERT INTO policies (policy_str, version)
-            VALUES ($1, $2)
-            ON CONFLICT(version) DO UPDATE SET policy_str = $1
-            WHERE policies.version = $2"#,
+        execute(
+            transaction,
+            sqlx::query(
+                r#"
+                UPDATE policies
+                SET policy_str = $1
+                WHERE policies.version = $2"#,
+            )
+            .bind(policy.to_owned())
+            .bind(version_id.to_owned()),
         )
-        .bind(policy.to_owned())
-        .bind(version_id.to_owned());
-        execute(transaction, add_policy).await?;
+        .await?;
+        execute(
+            transaction,
+            sqlx::query(
+                r#"
+                INSERT INTO policies (policy_str, version)
+                SELECT $1, $2
+                WHERE NOT EXISTS (
+                    SELECT 1
+                    FROM policies
+                    WHERE policies.version = $2
+                )"#,
+            )
+            .bind(policy.to_owned())
+            .bind(version_id.to_owned()),
+        )
+        .await?;
         Ok(())
     }
 
@@ -742,16 +795,34 @@ impl MetaService {
     ) -> Result<()> {
         // TODO: json is probably not the right format.
         let json = serde_json::to_string(&sources)?;
-        let add_policy = sqlx::query(
-            r#"
-            INSERT INTO policy_store (store, version)
-            VALUES ($1, $2)
-            ON CONFLICT(version) DO UPDATE SET store = $1
-            WHERE policy_store.version = $2"#,
+        execute(
+            transaction,
+            sqlx::query(
+                r#"
+                UPDATE policy_store
+                SET store = $1
+                WHERE policy_store.version = $2"#,
+            )
+            .bind(json.clone())
+            .bind(version_id.to_owned()),
         )
-        .bind(json)
-        .bind(version_id.to_owned());
-        execute(transaction, add_policy).await?;
+        .await?;
+        execute(
+            transaction,
+            sqlx::query(
+                r#"
+                INSERT INTO policy_store (store, version)
+                SELECT $1, $2
+                WHERE NOT EXISTS (
+                    SELECT 1
+                    FROM policy_store
+                    WHERE policy_store.version = $2
+                )"#,
+            )
+            .bind(json)
+            .bind(version_id.to_owned()),
+        )
+        .await?;
         Ok(())
     }
 

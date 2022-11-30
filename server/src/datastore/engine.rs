@@ -574,8 +574,8 @@ impl QueryEngine {
         ty: &ObjectType,
         fields_map: &EntityMap,
     ) -> Result<()> {
-        let query = self.prepare_insertion_shallow(ty, fields_map)?;
-        self.run_sql_queries(&[query], txn).await?;
+        let queries = self.prepare_insertion_shallow(ty, fields_map)?;
+        self.run_sql_queries(&queries, txn).await?;
         Ok(())
     }
 
@@ -671,8 +671,13 @@ impl QueryEngine {
             query_args.push(arg);
         }
 
+        let (update, insert) = self.make_insert_query(ty, fields_map)?;
         inserts.push(SqlWithArguments {
-            sql: self.make_insert_query(ty, fields_map)?,
+            sql: update,
+            args: query_args.clone(),
+        });
+        inserts.push(SqlWithArguments {
+            sql: insert,
             args: query_args,
         });
         let obj_id = obj_id
@@ -794,7 +799,11 @@ impl QueryEngine {
 
     /// For given object of type `ty` and its value `ty_value` computes a string
     /// representing SQL query which inserts the object into database.
-    fn make_insert_query(&self, ty: &ObjectType, fields_map: &EntityMap) -> Result<String> {
+    fn make_insert_query(
+        &self,
+        ty: &ObjectType,
+        fields_map: &EntityMap,
+    ) -> Result<(String, String)> {
         let mut field_binds = String::new();
         let mut field_names = vec![];
         let mut id_name = String::new();
@@ -840,25 +849,39 @@ impl QueryEngine {
                 ty.name()
             );
         }
+        let update_sql = std::format!(
+            r#"
+            UPDATE "{backing_table}"
+                SET {update_binds}
+                WHERE "{backing_table}"."{id_name}" = {id_bind};
+            "#,
+            backing_table = &ty.backing_table(),
+        );
+        let insert_sql = std::format!(
+            r#"
+            INSERT INTO "{backing_table}" ({field_names})
+                SELECT {field_binds}
+                WHERE NOT EXISTS (
+                    SELECT 1
+                    FROM "{backing_table}"
+                    WHERE "{backing_table}"."{id_name}" = {id_bind}
+                );
+            "#,
+            backing_table = &ty.backing_table(),
+            field_names = field_names
+                .into_iter()
+                .map(|f| format!("\"{}\"", f))
+                .join(","),
+        );
 
-        Ok(std::format!(
-            "INSERT INTO \"{}\" ({}) VALUES ({}) ON CONFLICT ({}) DO UPDATE SET {} WHERE \"{}\".\"{}\" = {}",
-            &ty.backing_table(),
-            field_names.into_iter().map(|f| format!("\"{}\"", f)).join(","),
-            field_binds,
-            id_name,
-            update_binds,
-            &ty.backing_table(),
-            id_name,
-            id_bind,
-        ))
+        Ok((update_sql, insert_sql))
     }
 
     fn prepare_insertion_shallow(
         &self,
         ty: &ObjectType,
         fields_map: &EntityMap,
-    ) -> Result<SqlWithArguments> {
+    ) -> Result<Vec<SqlWithArguments>> {
         let mut query_args = Vec::<SqlValue>::new();
         for field in ty.all_fields() {
             if fields_map.get(&field.name).is_none() && field.is_optional {
@@ -870,10 +893,17 @@ impl QueryEngine {
             query_args.push(arg);
         }
 
-        Ok(SqlWithArguments {
-            sql: self.make_insert_query(ty, fields_map)?,
-            args: query_args,
-        })
+        let (update, insert) = self.make_insert_query(ty, fields_map)?;
+        Ok(vec![
+            SqlWithArguments {
+                sql: update,
+                args: query_args.clone(),
+            },
+            SqlWithArguments {
+                sql: insert,
+                args: query_args.clone(),
+            },
+        ])
     }
 
     fn apply_write_policies(
