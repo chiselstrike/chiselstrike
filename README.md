@@ -52,7 +52,7 @@ streaming platforms.
 To get a CRUD API working in 30 seconds or less, first create a new project:
 
 ```console
-npx -y create-chiselstrike-app my-app
+npx -y create-chiselstrike-app@latest my-app
 cd my-app
 ```
 
