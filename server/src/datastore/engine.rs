@@ -589,7 +589,10 @@ impl QueryEngine {
         transaction: &mut Transaction<'_, Any>,
     ) -> Result<()> {
         for q in queries {
-            transaction.execute(q.get_sqlx()).await?;
+            if let Err(e) = transaction.execute(q.get_sqlx()).await {
+                println!("Failed query: {:#?}", q);
+                anyhow::bail!(e);
+            }
         }
 
         Ok(())
