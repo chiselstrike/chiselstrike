@@ -5,7 +5,7 @@ import { ChiselRequest } from "./request.ts";
 import { RouteMap } from "./routing.ts";
 import { ClientMetadata, CrudHandler } from "./routing.ts";
 
-type ChiselEntityClass<T extends ChiselEntity> = {
+export type ChiselEntityClass<T extends ChiselEntity> = {
     new (): T;
     findOne: (_: { id: string }) => Promise<T | undefined>;
     findMany: (_: Partial<T>) => Promise<T[]>;
