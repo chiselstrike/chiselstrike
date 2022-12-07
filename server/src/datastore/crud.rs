@@ -862,7 +862,8 @@ mod tests {
                     {"age": {"$gt": 20, "$lt": 30}}
                 ]
             }));
-            let r = qe.run_query_vec(&ctx, "Person", url).await;
+            let mut r = qe.run_query_vec(&ctx, "Person", url).await;
+            r.sort();
             assert_eq!(r, vec!["John", "Steve"]);
             ctx
         })
