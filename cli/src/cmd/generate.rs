@@ -30,24 +30,13 @@ pub(crate) async fn cmd_generate(opts: Opts) -> Result<()> {
     create_dir_all(&opts.output_dir)
         .await
         .context("failed to create directory for generated client files")?;
-
-    let mut client = ChiselRpcClient::connect(opts.server_url.to_owned()).await?;
-    let request = tonic::Request::new(DescribeRequest {});
-    let response = execute!(client.describe(request).await);
-    let version_def = response
-        .version_defs
-        .iter()
-        .find(|def| def.version_id == opts.version)
-        .context(anyhow!(
-            "can't generate client with an unknown version '{:?}'",
-            opts.version
-        ))?;
+    let version_def = fetch_version_def(&opts).await?;
 
     let mut models_file = File::create(opts.output_dir.join("models.ts"))?;
-    write_models(&mut models_file, version_def)?;
+    write_models(&mut models_file, &version_def)?;
 
     let mut reflection_file = File::create(opts.output_dir.join("reflection.ts"))?;
-    write_reflection(&mut reflection_file, version_def)?;
+    write_reflection(&mut reflection_file, &version_def)?;
 
     let routes = get_routing_info(&opts.api_addres, &opts.version).await?;
     let mut client_file = File::create(opts.output_dir.join("client.ts"))?;
@@ -64,6 +53,21 @@ pub(crate) async fn cmd_generate(opts: Opts) -> Result<()> {
     )?;
 
     Ok(())
+}
+
+async fn fetch_version_def(opts: &Opts) -> Result<VersionDefinition> {
+    let mut client = ChiselRpcClient::connect(opts.server_url.to_owned()).await?;
+    let request = tonic::Request::new(DescribeRequest {});
+    let response = execute!(client.describe(request).await);
+    let version_def = response
+        .version_defs
+        .iter()
+        .find(|def| def.version_id == opts.version)
+        .context(anyhow!(
+            "can't generate client with an unknown version '{:?}'",
+            opts.version
+        ))?;
+    Ok(version_def.clone())
 }
 
 fn write_models(output: &mut File, version_def: &VersionDefinition) -> Result<()> {
