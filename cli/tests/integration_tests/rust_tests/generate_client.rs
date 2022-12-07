@@ -179,7 +179,8 @@ pub async fn get_by_id(c: TestContext) {
         &format!(
             "
             const person = await cli.people.id('{jan_id}').get();
-            assertEquals(person.firstName, 'Jan')
+            assertEquals(person.id, '{jan_id}');
+            assertEquals(person.firstName, 'Jan');
             ",
         ),
     );

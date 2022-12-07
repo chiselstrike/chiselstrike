@@ -125,7 +125,7 @@ fn describe(server: &Server) -> DescribeResponse {
                 .values()
                 .map(|entity| {
                     let field_defs = entity
-                        .user_fields()
+                        .all_fields()
                         .map(|field| {
                             let field_type = version.type_system.get(&field.type_id).unwrap();
                             FieldDefinition {

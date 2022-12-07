@@ -31,9 +31,11 @@ $CHISEL apply
 $CHISEL describe
 
 # CHECK: class Bar {
-# CHECK:   [[^ *b: string]]
+# CHECK: @unique id: string
+# CHECK: b: string
 # CHECK: }
 # CHECK: class Foo {
-# CHECK:   [[^ *a: string]]
+# CHECK: @unique id: string
+# CHECK: a: string
 # CHECK: }
 # CHECK: Label policy: pii
