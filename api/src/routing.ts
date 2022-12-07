@@ -69,7 +69,12 @@ export class RouteMap {
      *
      * [url-pattern-api]: https://developer.mozilla.org/en-US/docs/Web/API/URL_Pattern_API
      */
-    route(method: string | string[], path: string, handler: Handler): this {
+    route(
+        method: string | string[],
+        path: string,
+        handler: Handler,
+        clientMetadata?: ClientMetadata,
+    ): this {
         const methods = Array.isArray(method) ? method : [method];
         const pathPattern = path[0] !== "/" ? "/" + path : path;
         this.routes.push({
@@ -78,6 +83,7 @@ export class RouteMap {
             handler,
             middlewares: [],
             legacyFileName: undefined,
+            clientMetadata,
         });
         return this;
     }
@@ -109,6 +115,7 @@ export class RouteMap {
                 handler: route.handler,
                 middlewares: route.middlewares.concat(routeMap.middlewares),
                 legacyFileName: route.legacyFileName,
+                clientMetadata: route.clientMetadata,
             });
         }
         return this;
@@ -189,6 +196,30 @@ export type Route = {
     middlewares: Middleware[];
     // TODO: remove this when we no longer need the legacy properties in `ChiselRequest`
     legacyFileName: string | undefined;
+    clientMetadata?: ClientMetadata;
+};
+
+export type CrudHandler =
+    | "GetOne"
+    | "GetMany"
+    | "PostOne"
+    | "PatchOne"
+    | "PutOne"
+    | "DeleteOne"
+    | "DeleteMany";
+
+/** Metadata used to generate chisel client code.
+ */
+export type ClientMetadata = {
+    /// Specifies hanlder to be used to handle given route.
+    handler: {
+        kind: "Crud";
+        handler: {
+            kind: CrudHandler;
+            /// Name of the entity that given CRUD handler concenrs.
+            entityName: string;
+        };
+    };
 };
 
 /** A request handler that maps HTTP request to an HTTP response. */

@@ -2,7 +2,7 @@
 
 use crate::cmd::apply::apply;
 use crate::cmd::dev::cmd_dev;
-use crate::cmd::generate::cmd_generate;
+use crate::cmd::generate;
 use crate::project::{create_project, CreateProjectOptions};
 use crate::proto::chisel_rpc_client::ChiselRpcClient;
 use crate::proto::{
@@ -36,11 +36,22 @@ fn parse_version(version: &str) -> anyhow::Result<String> {
     Ok(version.to_string())
 }
 
+fn parse_generate_mode(mode: &str) -> anyhow::Result<generate::Mode> {
+    match mode {
+        "deno" => Ok(generate::Mode::Deno),
+        "node" => Ok(generate::Mode::Node),
+        _ => anyhow::bail!("allowed generate modes are 'deno' and 'node'. Got {mode:?}"),
+    }
+}
+
 pub(crate) static DEFAULT_API_VERSION: &str = "dev";
 
 #[derive(Parser, Debug)]
 #[command(name = "chisel", version = env!("VERGEN_GIT_SEMVER_LIGHTWEIGHT"))]
 struct Opt {
+    /// User-visible HTTP API server listen address.
+    #[structopt(short, long, default_value = "localhost:8080")]
+    api_listen_addr: String,
     /// RPC server address.
     #[arg(short, long, default_value = "http://localhost:50051")]
     rpc_addr: String,
@@ -78,10 +89,15 @@ enum Command {
     },
     /// Generate a ChiselStrike client API for this project.
     Generate {
-        /// Output file
-        output: PathBuf,
+        /// Output directory where the generated client files will be written.
+        /// If the folder doesn't exist, it will be created.
+        output_dir: PathBuf,
         #[arg(long, default_value = DEFAULT_API_VERSION, value_parser = parse_version)]
+        /// Specifies version of the chisel API for which the client will be generated.
         version: String,
+        /// Compatibility mode of the generated client. Either 'node' or 'deno'.
+        #[arg(long, default_value = "node", value_parser = parse_generate_mode)]
+        mode: generate::Mode,
     },
     /// Create a new ChiselStrike project.
     New {
@@ -190,6 +206,7 @@ async fn main() -> Result<()> {
 
     let opt = Opt::parse_from(chisel_args);
     let server_url = opt.rpc_addr;
+    let api_listen_addr = opt.api_listen_addr;
     match opt.cmd {
         Command::Init {
             force,
@@ -276,8 +293,19 @@ async fn main() -> Result<()> {
             }
             spawn_server(chiseld_args, fut, cb).await?;
         }
-        Command::Generate { output, version } => {
-            cmd_generate(server_url, output, version).await?;
+        Command::Generate {
+            output_dir,
+            version,
+            mode,
+        } => {
+            let args = generate::Opts {
+                server_url,
+                api_addres: api_listen_addr,
+                output_dir,
+                version,
+                mode,
+            };
+            generate::cmd_generate(args).await?;
         }
         Command::New {
             path,

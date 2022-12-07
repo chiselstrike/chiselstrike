@@ -3,6 +3,7 @@
         "files": {
             "include": [
                 "api",
+                "cli/src/cmd/generate_src",
                 "server",
                 "packages",
                 "deno.json",
@@ -31,12 +32,14 @@
         "files": {
             "include": [
                 "api",
+                "cli/src/cmd/generate_src",
                 "server",
                 "packages",
                 "tsc_compile",
                 "tsc_compile_build"
             ],
             "exclude": [
+                "cli/src/cmd/generate_src/client.ts",
                 "tsc_compile/tests/",
                 "third_party",
                 "packages/create-chiselstrike-app/node_modules/",

@@ -7,6 +7,7 @@ use std::net::SocketAddr;
 use std::path::{Path, PathBuf};
 use std::pin::Pin;
 use std::process::{ExitStatus, Stdio};
+use std::str::FromStr;
 use std::sync::Arc;
 use std::task::Poll;
 use std::time::Duration;
@@ -20,10 +21,13 @@ use serde::Serialize;
 use tempdir::TempDir;
 use tokio::io::{duplex, AsyncRead, AsyncReadExt, AsyncWriteExt, DuplexStream};
 
+use crate::common::repo_dir;
 use crate::database::Database;
+use crate::suite::ClientMode;
 
 pub mod prelude {
     pub use super::{json_is_subset, Chisel, Response, TestContext};
+    pub use crate::suite::ClientMode;
     pub use bytes::Bytes;
     pub use chisel_macros::test;
     pub use once_cell::sync::Lazy;
@@ -141,6 +145,16 @@ impl AsyncRead for Tee {
         pin_mut!(input);
         input.poll_read(cx, buf)
     }
+}
+
+async fn tee_and_read<R>(output: R, capture: bool) -> Vec<u8>
+where
+    R: AsyncRead + Send + Unpin + 'static,
+{
+    let mut stdout = wrap_tee(output, capture);
+    let mut stdout_buff = vec![];
+    stdout.read_to_end(&mut stdout_buff).await.unwrap();
+    stdout_buff
 }
 
 pub struct GuardedChild {
@@ -442,6 +456,40 @@ impl AsyncTestableOutput {
     }
 }
 
+async fn run_command(
+    cmd: &PathBuf,
+    args: &[&str],
+    dir: &std::path::Path,
+    capture: bool,
+) -> Result<ProcessOutput, ProcessOutput> {
+    let mut child = tokio::process::Command::new(cmd)
+        .args(args)
+        .current_dir(dir)
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .unwrap_or_else(|_| {
+            panic!("failed to run command {cmd:?} with args {args:?} in dir {dir:?}")
+        });
+
+    let (stdout, stderr, status) = join!(
+        tee_and_read(child.stdout.take().unwrap(), capture),
+        tee_and_read(child.stderr.take().unwrap(), capture),
+        child.wait().map(|exit| exit.unwrap_or_else(|e| panic!(
+            "could not execute `chisel {}`: {}",
+            cmd.display(),
+            e
+        )))
+    );
+
+    let output = ProcessOutput::from(std::process::Output {
+        status,
+        stdout,
+        stderr,
+    });
+    output.into_result()
+}
+
 pub struct Chisel {
     pub rpc_address: SocketAddr,
     pub api_address: SocketAddr,
@@ -450,45 +498,26 @@ pub struct Chisel {
     pub client: reqwest::Client,
     /// If false, chisel's output will be forwarded to stdout.
     pub capture: bool,
+    pub client_mode: ClientMode,
 }
 
 impl Chisel {
     /// Runs a `chisel` subcommand.
     pub async fn exec(&self, cmd: &str, args: &[&str]) -> Result<ProcessOutput, ProcessOutput> {
         let rpc_url = format!("http://{}", self.rpc_address);
-        let args = [&["--rpc-addr", &rpc_url, cmd], args].concat();
-        let mut child = tokio::process::Command::new(&self.chisel_path)
-            .args(args)
-            .current_dir(&*self.tmp_dir)
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped())
-            .spawn()
-            .unwrap();
-
-        let (stdout, stderr, status) =
-            join!(
-                self.tee_and_read(child.stdout.take().unwrap()),
-                self.tee_and_read(child.stderr.take().unwrap()),
-                child.wait().map(|exit| exit
-                    .unwrap_or_else(|e| panic!("could not execute `chisel {}`: {}", cmd, e)))
-            );
-
-        let output = ProcessOutput::from(std::process::Output {
-            status,
-            stdout,
-            stderr,
-        });
-        output.into_result()
-    }
-
-    async fn tee_and_read<R>(&self, output: R) -> Vec<u8>
-    where
-        R: AsyncRead + Send + Unpin + 'static,
-    {
-        let mut stdout = wrap_tee(output, self.capture);
-        let mut stdout_buff = vec![];
-        stdout.read_to_end(&mut stdout_buff).await.unwrap();
-        stdout_buff
+        let api_address = format!("{}", self.api_address);
+        let args = [
+            &[
+                "--rpc-addr",
+                &rpc_url,
+                "--api-listen-addr",
+                &api_address,
+                cmd,
+            ],
+            args,
+        ]
+        .concat();
+        run_command(&self.chisel_path, &args, self.tmp_dir.path(), self.capture).await
     }
 
     /// Runs `chisel apply`.
@@ -513,14 +542,30 @@ impl Chisel {
         self.exec("wait", &[]).await
     }
 
-    /// Runs `chisel describe` awaiting the readiness of chiseld service
+    /// Runs `chisel describe`
     pub async fn describe(&self) -> Result<ProcessOutput, ProcessOutput> {
         self.exec("describe", &[]).await
     }
 
-    /// Runs `chisel describe` awaiting the readiness of chiseld service
+    /// Runs `chisel describe` and asserts that it succeeds.
     pub async fn describe_ok(&self) -> ProcessOutput {
         self.describe().await.expect("chisel describe failed")
+    }
+
+    /// Runs `chisel generate`
+    pub async fn generate(&self, target_dir: &str) -> Result<ProcessOutput, ProcessOutput> {
+        let mode = match self.client_mode {
+            ClientMode::Deno => "deno",
+            ClientMode::Node => "node",
+        };
+        self.exec("generate", &["--mode", mode, target_dir]).await
+    }
+
+    /// Runs `chisel generate` and asserts that it succeeds.
+    pub async fn generate_ok(&self, target_dir: &str) -> ProcessOutput {
+        self.generate(target_dir)
+            .await
+            .expect("chisel generate failed")
     }
 
     /// Writes given `bytes` into a file on given relative `path` in ChiselStrike project.
@@ -857,9 +902,94 @@ impl Response {
     }
 }
 
+pub struct TypeScriptRunner {
+    pub tmp_dir: Arc<TempDir>,
+    /// If false, deno's and ts-node's output will be forwarded to stdout.
+    pub capture: bool,
+    pub client_mode: ClientMode,
+}
+
+impl TypeScriptRunner {
+    /// Writes `src_code` to `src_path` and runs it.
+    pub async fn run(
+        &self,
+        src_path: &str,
+        src_code: &str,
+    ) -> Result<ProcessOutput, ProcessOutput> {
+        let src_path = Path::new(src_path);
+        match self.client_mode {
+            ClientMode::Deno => self.deno_run(src_path, src_code).await,
+            ClientMode::Node => self.node_run(src_path, src_code).await,
+        }
+    }
+
+    /// Writes `src_code` to `src_path` and runs it. Panics on error result.
+    pub async fn run_ok(&self, src_path: &str, src_code: &str) -> ProcessOutput {
+        self.run(src_path, src_code)
+            .await
+            .expect("failed to compile and execute given source file")
+    }
+
+    async fn deno_run(
+        &self,
+        src_path: &Path,
+        src_code: &str,
+    ) -> Result<ProcessOutput, ProcessOutput> {
+        self.write(src_path, src_code);
+        let src_path = self.tmp_dir.path().join(src_path);
+        let src_path = src_path.display().to_string();
+
+        let args = vec!["run", "--allow-net", &src_path];
+        run_command(
+            &repo_dir().join(".chisel_dev/bin/deno"),
+            &args,
+            self.tmp_dir.path(),
+            self.capture,
+        )
+        .await
+    }
+
+    pub async fn node_run(
+        &self,
+        src_path: &Path,
+        src_code: &str,
+    ) -> Result<ProcessOutput, ProcessOutput> {
+        self.write(src_path, src_code);
+        let full_path = self.tmp_dir.path().join(src_path);
+        run_command(
+            &PathBuf::from_str("ts-node").unwrap(),
+            &[
+                "--esm",
+                "-T",
+                "--skipProject",
+                "-O",
+                r#"{"lib":["esnext", "webworker"]}"#,
+                full_path.file_name().unwrap().to_str().unwrap(),
+            ],
+            full_path.parent().unwrap(),
+            self.capture,
+        )
+        .await
+    }
+
+    /// Writes given `bytes` into a file on given relative `path` in ChiselStrike project.
+    fn write_bytes(&self, path: &Path, bytes: &[u8]) {
+        let full_path = self.tmp_dir.path().join(path);
+        fs::write(full_path, bytes)
+            .unwrap_or_else(|e| panic!("Unable to write to {:?}: {}", path, e));
+    }
+
+    /// Writes given `text` (probably code) into a file on given relative `path`
+    /// in ChiselStrike project.
+    fn write(&self, path: &Path, text: &str) {
+        self.write_bytes(path, text.as_bytes());
+    }
+}
+
 pub struct TestContext {
     pub chiseld: GuardedChild,
     pub chisel: Chisel,
+    pub ts_runner: TypeScriptRunner,
     // Note: The Database must come after chiseld to ensure that chiseld is dropped and terminated
     // before we try to drop the database.
     pub _db: Database,
@@ -867,6 +997,7 @@ pub struct TestContext {
     pub kafka_topics: Vec<String>,
     /// Specifies whether this test is run with chisel compiler enabled
     pub optimized: bool,
+    pub client_mode: ClientMode,
 }
 
 impl TestContext {

@@ -1,3 +1,5 @@
+use serde::Deserialize;
+
 use crate::framework::prelude::{test, *};
 
 #[test(modules = Both)]
@@ -586,4 +588,64 @@ async fn errors(c: TestContext) {
         .await
         .assert_status(404)
         .assert_text("There is no route for \"/nonexistent\"");
+}
+
+#[test(modules = Deno)]
+async fn route_reflection(c: TestContext) {
+    c.chisel.write(
+        "models/person.ts",
+        r#"
+        import { ChiselEntity } from "@chiselstrike/api";
+
+        export class Person extends ChiselEntity {
+            first_name: string = "";
+            last_name: string = "";
+            age: number = 0;
+            human: boolean = false;
+            height: number = 1;
+        }
+    "#,
+    );
+    c.chisel.write(
+        "routes/people.ts",
+        r#"
+        import { Person } from "../models/person.ts";
+        export default Person.crud();
+    "#,
+    );
+    c.chisel.apply_ok().await;
+
+    #[derive(Debug, Clone, Deserialize)]
+    #[serde(rename_all = "camelCase")]
+    struct CrudHandler {
+        entity_name: String,
+    }
+
+    #[derive(Debug, Clone, Deserialize)]
+    #[serde(tag = "kind", content = "handler")]
+    enum HandlerKind {
+        Crud(CrudHandler),
+    }
+
+    #[derive(Debug, Deserialize)]
+    #[serde(rename_all = "camelCase")]
+    struct CrudMeta {
+        handler: HandlerKind,
+    }
+    #[derive(Debug, Deserialize)]
+    #[serde(rename_all = "camelCase")]
+    struct Route {
+        methods: Vec<String>,
+        path_pattern: String,
+        client_metadata: Option<CrudMeta>,
+    }
+
+    let routes_json = c.chisel.get_json("/dev/__chiselstrike/routes").await;
+    let routes: Vec<Route> = serde_json::from_value(routes_json).unwrap();
+    for r in routes {
+        if r.path_pattern == "/people/" && r.methods == vec!["GET"] {
+            let HandlerKind::Crud(handler) = r.client_metadata.unwrap().handler;
+            assert_eq!(handler.entity_name, "Person");
+        }
+    }
 }

@@ -13,6 +13,7 @@ use super::query::{Mutation, QueryOp, QueryPlan, SortBy, SortKey};
 use super::value::EntityMap;
 use super::{DataContext, QueryEngine};
 use crate::datastore::expr::{BinaryExpr, BinaryOp, Expr, PropertyAccess, Value as ExprValue};
+use crate::datastore::filter;
 use crate::policy::{PolicyError, PolicyProcessor, ValidatedEntityStream};
 use crate::types::{Entity, Type, TypeSystem};
 use crate::{feat_typescript_policies, JsonObject};
@@ -261,6 +262,13 @@ impl Query {
                         format!("failed to parse offset. Expected u64, got '{}'", value)
                     })?;
                     q.offset = Some(o);
+                }
+                "filter" => {
+                    let json_filter: serde_json::Value =
+                        serde_json::from_str(value).context("failed to parse filter parameter")?;
+                    let filter_expr = filter::to_expr(&json_filter)
+                        .context("failed to convert filter json to filtering expression")?;
+                    q.filters.push(filter_expr);
                 }
                 "cursor" => {
                     anyhow::ensure!(
@@ -815,6 +823,47 @@ mod tests {
                 .run_query_vec(&ctx, "Company", url(".ceo.age~lte=20"))
                 .await;
             assert_eq!(r, vec!["ChiselStrike"]);
+            ctx
+        })
+        .await;
+    }
+
+    #[tokio::test]
+    async fn test_filter_object() {
+        let alan = json!({"name": "Alan", "age": json!(30f32)});
+        let john = json!({"name": "John", "age": json!(20f32)});
+        let steve = json!({"name": "Steve", "age": json!(29f32)});
+        let (query_engine, _db_file) = setup_clear_db(&*ENTITIES).await;
+        let qe = &query_engine;
+        qe.with_dummy_ctx(Default::default(), |ctx| async {
+            add_row(qe, &PERSON_TY, &alan, &ctx).await;
+            add_row(qe, &PERSON_TY, &john, &ctx).await;
+            add_row(qe, &PERSON_TY, &steve, &ctx).await;
+            ctx
+        })
+        .await;
+
+        fn filter_to_url(filter: serde_json::Value) -> Url {
+            let filter_str = serde_json::to_string(&filter).unwrap();
+            let query = format!("filter={}", urlencoding::encode(&filter_str));
+            url(&query)
+        }
+
+        qe.with_dummy_ctx(Default::default(), |ctx| async {
+            let url = filter_to_url(json!({
+                "name": "Alan"
+            }));
+            let r = qe.run_query_vec(&ctx, "Person", url).await;
+            assert_eq!(r, vec!["Alan"]);
+
+            let url = filter_to_url(json!({
+                "$or": [
+                    {"name": "John"},
+                    {"age": {"$gt": 20, "$lt": 30}}
+                ]
+            }));
+            let r = qe.run_query_vec(&ctx, "Person", url).await;
+            assert_eq!(r, vec!["John", "Steve"]);
             ctx
         })
         .await;

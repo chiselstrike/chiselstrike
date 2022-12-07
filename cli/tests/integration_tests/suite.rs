@@ -14,6 +14,7 @@ pub struct TestSuite {
 pub struct TestSpec {
     pub name: &'static str,
     pub modules: ModulesSpec,
+    pub client_modes: ClientModeSpec,
     pub optimize: OptimizeSpec,
     pub db: DatabaseSpec,
     pub start_chiseld: bool,
@@ -25,6 +26,7 @@ pub struct TestSpec {
 pub struct TestInstance {
     pub spec: &'static TestSpec,
     pub modules: Modules,
+    pub client_mode: ClientMode,
     pub optimize: bool,
     pub db_config: DatabaseConfig,
 }
@@ -42,9 +44,10 @@ impl TestSuite {
         iproduct!(
             self.tests.iter(),
             [Modules::Deno, Modules::Node],
+            [ClientMode::Deno, ClientMode::Node],
             [true, false]
         )
-        .filter_map(|(test_spec, modules, optimize)| {
+        .filter_map(|(test_spec, modules, client_mode, optimize)| {
             if let Some(name_regex) = opt.test.as_ref().or(opt.test_arg.as_ref()) {
                 if !name_regex.is_match(test_spec.name) {
                     return None;
@@ -55,6 +58,13 @@ impl TestSuite {
                 (ModulesSpec::Deno, Modules::Deno) => {}
                 (ModulesSpec::Node, Modules::Node) => {}
                 (ModulesSpec::Both, _) => {}
+                (_, _) => return None,
+            }
+
+            match (test_spec.client_modes, client_mode) {
+                (ClientModeSpec::Deno, ClientMode::Deno) => {}
+                (ClientModeSpec::Node, ClientMode::Node) => {}
+                (ClientModeSpec::Both, _) => {}
                 (_, _) => return None,
             }
 
@@ -86,6 +96,7 @@ impl TestSuite {
             Some(TestInstance {
                 spec: test_spec,
                 modules,
+                client_mode,
                 optimize,
                 db_config,
             })
@@ -103,6 +114,20 @@ pub enum ModulesSpec {
 
 #[derive(Copy, Clone, Debug)]
 pub enum Modules {
+    Deno,
+    Node,
+}
+
+#[derive(Copy, Clone, Debug)]
+pub enum ClientModeSpec {
+    Deno,
+    #[allow(dead_code)]
+    Node,
+    Both,
+}
+
+#[derive(Copy, Clone, Debug)]
+pub enum ClientMode {
     Deno,
     Node,
 }

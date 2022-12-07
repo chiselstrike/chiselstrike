@@ -11,7 +11,8 @@ const versionId = opSync("op_chisel_get_version_id") as string;
 const versionInfo = opSync("op_chisel_get_version_info") as VersionInfo;
 
 export function specialBefore(routeMap: RouteMap) {
-    function handleSwagger(): Response {
+    // Handle Swagger
+    routeMap.get("/", () => {
         const paths: Record<string, unknown> = {};
         for (const route of routeMap.routes) {
             paths[`/${versionId}${route.pathPattern}`] = {};
@@ -25,11 +26,23 @@ export function specialBefore(routeMap: RouteMap) {
             },
             paths,
         };
-
         return responseFromJson(swagger);
-    }
+    });
 
-    routeMap.get("/", handleSwagger);
+    // Handle internal routes reflection. For each route, we return an object listing
+    // its accepted methods, path pattern and optional client metadata that are used
+    // to generate client code.
+    routeMap.get(`/__chiselstrike/routes`, () => {
+        const routes = routeMap.routes.map((r) => {
+            return {
+                methods: r.methods,
+                pathPattern: r.pathPattern,
+                clientMetadata: r.clientMetadata,
+            };
+        });
+        routes.sort((a, b) => (a.pathPattern > b.pathPattern ? 1 : -1));
+        return responseFromJson(routes);
+    });
 }
 
 export function specialAfter(_routeMap: RouteMap) {
