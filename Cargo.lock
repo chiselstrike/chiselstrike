@@ -764,6 +764,7 @@ dependencies = [
  "chisel-macros",
  "clap 4.0.27",
  "colored",
+ "dprint-plugin-typescript",
  "enclose",
  "endpoint_tsc",
  "file-mode",
@@ -1288,6 +1289,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f0691d08faa4f1fd9898ecfbe82c32623f89969e92e7b97b5119a18399609d25"
 dependencies = [
  "data-url",
+ "dprint-swc-ecma-ast-view",
  "serde",
  "swc_atoms 0.2.13",
  "swc_common 0.17.25",
@@ -1800,6 +1802,47 @@ name = "dotenvy"
 version = "0.15.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "03d8c417d7a8cb362e0c37e5d815f5eb7c37f79ff93707329d5a194e42e54ca0"
+
+[[package]]
+name = "dprint-core"
+version = "0.55.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1741a00ab79da9edf86cdecf63399321eba60b5b9a301b3c99fbba1744fdc050"
+dependencies = [
+ "anyhow",
+ "bumpalo",
+ "indexmap",
+ "rustc-hash",
+ "serde",
+]
+
+[[package]]
+name = "dprint-plugin-typescript"
+version = "0.67.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6929da48aa12ba4bfc42d6f4e134b1d73fb31ff662c9938e9dafae4063000e66"
+dependencies = [
+ "anyhow",
+ "deno_ast 0.14.1",
+ "dprint-core",
+ "rustc-hash",
+ "serde",
+]
+
+[[package]]
+name = "dprint-swc-ecma-ast-view"
+version = "0.55.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "43f9e087f831642347a4b0370824cedf4649b7bff5065c25d53cd73094c014ca"
+dependencies = [
+ "bumpalo",
+ "num-bigint",
+ "rustc-hash",
+ "swc_atoms 0.2.13",
+ "swc_common 0.17.25",
+ "swc_ecmascript 0.143.0",
+ "text_lines 0.4.1",
+]
 
 [[package]]
 name = "dprint-swc-ext"
