@@ -6,9 +6,10 @@ use anyhow::{anyhow, Context, Result};
 use serde::Deserialize;
 use serde_json::json;
 use std::collections::HashMap;
+use std::fmt::Write as _;
 use std::fs::File;
-use std::io::Write;
-use std::path::PathBuf;
+use std::io::Write as _;
+use std::path::{Path, PathBuf};
 use tokio::fs::create_dir_all;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -32,25 +33,25 @@ pub(crate) async fn cmd_generate(opts: Opts) -> Result<()> {
         .context("failed to create directory for generated client files")?;
     let version_def = fetch_version_def(&opts).await?;
 
-    let mut models_file = File::create(opts.output_dir.join("models.ts"))?;
-    write_models(&mut models_file, &version_def)?;
+    let mut files = vec![];
 
-    let mut reflection_file = File::create(opts.output_dir.join("reflection.ts"))?;
-    write_reflection(&mut reflection_file, &version_def)?;
+    files.push(("models.ts", generate_models(&version_def)?));
+    files.push(("reflection.ts", generate_reflection(&version_def)?));
 
     let routes = get_routing_info(&opts.api_addres, &opts.version).await?;
-    let mut client_file = File::create(opts.output_dir.join("client.ts"))?;
-    write_routing_client(&mut client_file, &routes, &opts)?;
+    let client_code = generate_routing_client(&routes, &opts)?;
+    files.push(("client.ts", client_code));
+    files.push(("client_lib.ts", generate_client_lib(&opts)?));
+    files.push((
+        "filter.ts",
+        include_str!("../../../api/src/filter.ts").to_owned(),
+    ));
 
-    let mut client_lib_file = File::create(opts.output_dir.join("client_lib.ts"))?;
-    write_client_lib(&mut client_lib_file, &opts)?;
-
-    let mut filter_file = File::create(opts.output_dir.join("filter.ts"))?;
-    write!(
-        filter_file,
-        "{}",
-        include_str!("../../../api/src/filter.ts")
-    )?;
+    for (file_name, src_code) in files {
+        let formatted_code = format_typescript(std::path::Path::new(file_name), src_code)?;
+        let mut file = File::create(opts.output_dir.join(file_name))?;
+        write!(file, "{}", formatted_code)?;
+    }
 
     Ok(())
 }
@@ -70,10 +71,10 @@ async fn fetch_version_def(opts: &Opts) -> Result<VersionDefinition> {
     Ok(version_def.clone())
 }
 
-fn write_models(output: &mut File, version_def: &VersionDefinition) -> Result<()> {
+fn generate_models(version_def: &VersionDefinition) -> Result<String> {
+    let mut output = String::new();
     for def in &version_def.type_defs {
         writeln!(output, "export type {} = {{", def.name)?;
-        writeln!(output, "    id: string;")?;
         for field in &def.field_defs {
             let field_type = field.field_type()?;
             writeln!(
@@ -86,12 +87,11 @@ fn write_models(output: &mut File, version_def: &VersionDefinition) -> Result<()
         }
         writeln!(output, "}}")?;
     }
-    Ok(())
+    Ok(output)
 }
 
-fn write_reflection(output: &mut File, version_def: &VersionDefinition) -> Result<()> {
-    write!(output, "{}", include_str!("generate_src/reflection.ts"))?;
-
+fn generate_reflection(version_def: &VersionDefinition) -> Result<String> {
+    let mut output = String::new();
     let entites: HashMap<String, TypeDefinition> = HashMap::from_iter(
         version_def
             .type_defs
@@ -99,6 +99,7 @@ fn write_reflection(output: &mut File, version_def: &VersionDefinition) -> Resul
             .map(|ty| (ty.name.to_owned(), ty.clone())),
     );
 
+    write!(output, "{}", include_str!("generate_src/reflection.ts"))?;
     for entity_name in entites.keys() {
         writeln!(
             output,
@@ -107,7 +108,7 @@ fn write_reflection(output: &mut File, version_def: &VersionDefinition) -> Resul
             make_entity_type_obj(&entites, entity_name)?
         )?;
     }
-    Ok(())
+    Ok(output)
 }
 
 fn make_entity_type_obj(
@@ -396,7 +397,9 @@ fn generate_routing_obj(route: &SubRoute, url_prefix: &str) -> Result<String> {
     Ok(format!("{{{}}}\n", handlers.join(",\n")))
 }
 
-fn write_routing_client(output: &mut File, routes: &Vec<RouteInfo>, opts: &Opts) -> Result<()> {
+fn generate_routing_client(routes: &Vec<RouteInfo>, opts: &Opts) -> Result<String> {
+    let mut output = String::new();
+
     let imports = match opts.mode {
         Mode::Deno => {
             r#"
@@ -413,7 +416,7 @@ fn write_routing_client(output: &mut File, routes: &Vec<RouteInfo>, opts: &Opts)
             "#
         }
     };
-    write!(output, "{}", &imports)?;
+    writeln!(output, "{}", &imports)?;
     write!(output, "{}", include_str!("generate_src/client.ts"))?;
     let root = build_routing(routes)?;
 
@@ -432,10 +435,11 @@ fn write_routing_client(output: &mut File, routes: &Vec<RouteInfo>, opts: &Opts)
         generate_routing_obj(&root, "")?
     )?;
 
-    Ok(())
+    format_typescript(Path::new("client.ts"), output)
 }
 
-fn write_client_lib(output: &mut File, opts: &Opts) -> Result<()> {
+fn generate_client_lib(opts: &Opts) -> Result<String> {
+    let mut output = String::new();
     let imports = match opts.mode {
         Mode::Deno => {
             r#"
@@ -450,7 +454,13 @@ fn write_client_lib(output: &mut File, opts: &Opts) -> Result<()> {
         "#
         }
     };
-    write!(output, "{}", &imports)?;
+    write!(output, "{}\n\n", &imports)?;
     write!(output, "{}", include_str!("generate_src/client_lib.ts"))?;
-    Ok(())
+    Ok(output)
+}
+
+fn format_typescript(file_path: &Path, file_text: String) -> Result<String> {
+    let config = dprint_plugin_typescript::configuration::ConfigurationBuilder::new().build();
+    let formatted_text = dprint_plugin_typescript::format_text(file_path, &file_text, &config)?;
+    Ok(formatted_text.unwrap_or(file_text))
 }

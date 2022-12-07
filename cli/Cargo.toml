@@ -8,6 +8,7 @@ edition = "2021"
 anyhow = "1.0"
 chisel_server = { package = "server", path = "../server" }
 clap = { version = "4.0", features = ["derive"] }
+dprint-plugin-typescript = "0.67"
 endpoint_tsc = { path = "../endpoint_tsc" }
 futures = "0.3.21"
 guard = "0.5"
