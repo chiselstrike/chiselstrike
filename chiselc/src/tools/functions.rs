@@ -1,7 +1,11 @@
 // SPDX-FileCopyrightText: © 2022 ChiselStrike <info@chiselstrike.com>
 
 use anyhow::Result;
-use swc_ecmascript::ast::{ArrowExpr, BlockStmtOrExpr, Ident, Pat, TsEntityName, TsType};
+use swc_ecmascript::ast::{
+    ArrowExpr, BlockStmtOrExpr, Decl, Ident, Pat, Stmt, TsEntityName, TsType,
+};
+
+use crate::tools::analysis::region::StmtKind;
 
 use super::analysis::control_flow::ControlFlow;
 use super::analysis::region::Region;
@@ -19,7 +23,15 @@ impl<'a> ArrowFunction<'a> {
         match &arrow.body {
             BlockStmtOrExpr::BlockStmt(block) => {
                 let (cfg, stmt_map) = ControlFlow::build(&block.stmts)?;
-                let regions = Region::from_cfg(&cfg, &stmt_map);
+                let regions = Region::from_cfg(&cfg, &|idx| match stmt_map[idx].stmt {
+                    Stmt::If(_) => StmtKind::Conditional,
+                    Stmt::Block(_) => StmtKind::Ignore,
+                    Stmt::Empty(_) => StmtKind::Ignore,
+                    Stmt::Decl(Decl::Var(_)) | Stmt::Expr(_) | Stmt::Return(_) => {
+                        StmtKind::BBComponent
+                    }
+                    _ => unimplemented!(),
+                });
                 Ok(Self {
                     orig: arrow,
                     stmt_map,

@@ -39,7 +39,8 @@ pub struct Entry<'a> {
 #[derive(Debug, Clone)]
 pub enum Node {
     Stmt,
-    Labeled(&'static str),
+    Start,
+    End,
 }
 
 type CfgGraph = Graph<Node, Edge>;
@@ -103,16 +104,16 @@ impl<'a> CFGBuilder<'a, CfgGraph> {
                 }
                 Ok((root, cons_out))
             }
-            Stmt::While(while_stmt) => {
-                let root = self.add_stmt_node(stmt);
-                let (body_root, body_outs) = self.stmt(&while_stmt.body)?;
-                self.inner.add_edge(root, body_root, Edge::False);
-
-                self.merge_out(&body_outs, root);
-
-                Ok((root, vec![(root, Edge::True)]))
-            }
-            Stmt::Expr(_) | Stmt::Decl(_) => {
+            // Stmt::While(while_stmt) => {
+            //     let root = self.add_stmt_node(stmt);
+            //     let (body_root, body_outs) = self.stmt(&while_stmt.body)?;
+            //     self.inner.add_edge(root, body_root, Edge::False);
+            //
+            //     self.merge_out(&body_outs, root);
+            //
+            //     Ok((root, vec![(root, Edge::True)]))
+            // }
+            Stmt::Expr(_) | Stmt::Decl(_) | Stmt::Empty(_) => {
                 let idx = self.add_stmt_node(stmt);
                 Ok((idx, vec![(idx, Edge::Flow)]))
             }
@@ -121,6 +122,18 @@ impl<'a> CFGBuilder<'a, CfgGraph> {
                 self.inner.add_edge(idx, self.end, Edge::Flow);
                 Ok((idx, vec![]))
             }
+            // Stmt::Debugger(_) => todo!(),
+            // Stmt::With(_) => todo!(),
+            // Stmt::Labeled(_) => todo!(),
+            // Stmt::Break(_) => todo!(),
+            // Stmt::Continue(_) => todo!(),
+            // Stmt::Switch(_) => todo!(),
+            // Stmt::Throw(_) => todo!(),
+            // Stmt::Try(_) => todo!(),
+            // Stmt::DoWhile(_) => todo!(),
+            // Stmt::For(_) => todo!(),
+            // Stmt::ForIn(_) => todo!(),
+            // Stmt::ForOf(_) => todo!(),
             _ => bail!("unsupported statement type"),
         }
     }
@@ -141,18 +154,18 @@ impl<'a> CFGBuilder<'a, CfgGraph> {
 /// D-IR, where this representation is more convenient.
 #[derive(Default, Clone)]
 pub struct ControlFlow<G = CfgGraph> {
-    inner: G,
-    start: Idx,
+    pub inner: G,
+    pub(crate) start: Idx,
     #[allow(dead_code)]
-    end: Idx,
+    pub(crate) end: Idx,
 }
 
 impl ControlFlow<CfgGraph> {
     // FIXME: it might be a good idea to artificially bind the graph and the map together with a lifetime.
     pub fn build(stmts: &[Stmt]) -> Result<(Self, StmtMap)> {
         let mut inner = Graph::new();
-        let start = inner.add_node(Node::Labeled("start"));
-        let end = inner.add_node(Node::Labeled("stop"));
+        let start = inner.add_node(Node::Start);
+        let end = inner.add_node(Node::End);
         let mut builder = CFGBuilder {
             inner,
             previous: start,
@@ -183,7 +196,8 @@ impl ControlFlow<CfgGraph> {
     pub fn dot(&self) -> String {
         let node_getter = |_, (idx, node): (Idx, &Node)| match node {
             Node::Stmt => format!(r#"label="L{}" "#, idx.index() - 1),
-            Node::Labeled(label) => format!(r#"label = "{label}""#),
+            Node::Start => r#"label = "Start""#.into(),
+            Node::End => r#"label = "End""#.into(),
         };
 
         impl fmt::Display for Node {
