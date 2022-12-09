@@ -14,12 +14,16 @@ export function urlJoin(...urlParts: string[]): URL {
     return new URL(url);
 }
 
+function assertNever(x: never): never {
+    return x;
+}
+
 async function throwOnError(resp: Response) {
     if (!resp.ok) {
         // TODO: Improve error handling
         throw Error(
             `failed to post an entity. Got error code ${resp.status} (${resp.statusText}) with message: '${await resp
-                .text}'`,
+                .text()}'`,
         );
     }
 }
@@ -38,7 +42,7 @@ async function sendJson(
     return resp;
 }
 
-function jsonToEntity<Entity>(
+function entityFromJson<Entity>(
     entityType: reflect.Entity,
     inputValue: Record<string, unknown>,
 ): Entity {
@@ -57,14 +61,14 @@ function jsonToEntity<Entity>(
                 continue;
             } else {
                 throw new Error(
-                    `field ${fieldName} of entity ${entityName} is not optional but undefined/null was received for the field`,
+                    `field '${fieldName}' of entity '${entityName}' is not optional but undefined/null was received for the field`,
                 );
             }
         }
 
         const err = (typeName: string) => {
             return Error(
-                `field ${field.name} of entity ${entityName} is ${typeName}, but provided value is of type ${typeof fieldValue}`,
+                `field '${field.name}' of entity '${entityName}' is ${typeName}, but provided value is of type ${typeof fieldValue}`,
             );
         };
         const fieldType = field.type.name;
@@ -84,26 +88,26 @@ function jsonToEntity<Entity>(
             }
             entityValue[fieldName] = fieldValue;
         } else if (fieldType === "arrayBuffer") {
-            entityValue[fieldName] = convertArrayBuffer(
+            entityValue[fieldName] = arrayBufferFromJson(
                 entityName,
                 fieldName,
                 fieldValue,
             );
         } else if (fieldType === "date") {
-            entityValue[fieldName] = convertDate(
+            entityValue[fieldName] = dateFromJson(
                 entityName,
                 fieldName,
                 fieldValue,
             );
         } else if (fieldType === "array") {
-            entityValue[fieldName] = convertArray(
+            entityValue[fieldName] = arrayFromJson(
                 entityName,
                 fieldName,
                 field.type.elementType,
                 fieldValue,
             );
         } else if (fieldType === "entity") {
-            entityValue[fieldName] = convertEntity(
+            entityValue[fieldName] = nestedEntityFromJson(
                 entityName,
                 fieldName,
                 field.type.entityType,
@@ -119,28 +123,28 @@ function jsonToEntity<Entity>(
     return entityValue as unknown as Entity;
 }
 
-function convertDate(
-    entityName: string,
-    fieldName: string,
+function dateFromJson(
+    parentName: string,
+    parentField: string,
     value: unknown,
 ): Date {
     if (typeof value === "string" || typeof value === "number") {
         const date = new Date(value);
         if (Number.isNaN(date.valueOf())) {
             throw new Error(
-                `failed to convert value to Date for field ${fieldName}`,
+                `failed to convert value to Date for field '${parentField}'`,
             );
         }
         return date;
     }
     throw new Error(
-        `field ${fieldName} of entity ${entityName} is Date, but received value is not an instance of string nor number`,
+        `field '${parentField}' of entity '${parentName}' is Date, but received value is not an instance of string nor number`,
     );
 }
 
-function convertArrayBuffer(
-    entityName: string,
-    fieldName: string,
+function arrayBufferFromJson(
+    parentName: string,
+    parentField: string,
     value: unknown,
 ): ArrayBuffer {
     if (typeof value === "string") {
@@ -150,14 +154,14 @@ function convertArrayBuffer(
         );
     } else {
         throw Error(
-            `field ${fieldName} of entity ${entityName} is ArrayBuffer (transported as string), but received value is of type ${typeof value}`,
+            `field '${parentField}' of entity '${parentName}' is ArrayBuffer (transported as string), but received value is of type ${typeof value}`,
         );
     }
 }
 
-function convertArray(
-    entityName: string,
-    fieldName: string,
+function arrayFromJson(
+    parentName: string,
+    parentField: string,
     elementType: reflect.Type,
     arrayValue: unknown,
 ): unknown[] {
@@ -171,26 +175,26 @@ function convertArray(
                 return arrayValue;
             case "date":
                 return arrayValue.map((e) =>
-                    convertDate(entityName, fieldName, e)
+                    dateFromJson(parentName, parentField, e)
                 );
             case "arrayBuffer":
                 return arrayValue.map((e) =>
-                    convertArrayBuffer(entityName, fieldName, e)
+                    arrayBufferFromJson(parentName, parentField, e)
                 );
             case "array":
                 return arrayValue.map((e) =>
-                    convertArray(
-                        entityName,
-                        fieldName,
+                    arrayFromJson(
+                        parentName,
+                        parentField,
                         elementType.elementType,
                         e,
                     )
                 );
             case "entity":
                 return arrayValue.map((e) =>
-                    convertEntity(
-                        entityName,
-                        fieldName,
+                    nestedEntityFromJson(
+                        parentName,
+                        parentField,
                         elementType.entityType,
                         e,
                     )
@@ -198,7 +202,7 @@ function convertArray(
             default:
                 assertNever(elementTypeName);
                 throw new Error(
-                    `field '${fieldName}' of entity '${entityName}' has unexpected array element type '${elementTypeName}'`,
+                    `field '${parentField}' of entity '${parentName}' has unexpected array element type '${elementTypeName}'`,
                 );
         }
     } else {
@@ -208,27 +212,201 @@ function convertArray(
     }
 }
 
-function convertEntity(
-    entityName: string,
-    fieldName: string,
-    entityType: reflect.Entity,
-    entityValue: unknown,
+function nestedEntityFromJson(
+    parentName: string,
+    parentField: string,
+    nestedType: reflect.Entity,
+    nestedValue: unknown,
 ): unknown {
-    if (typeof entityValue === "object") {
+    if (typeof nestedValue === "object") {
         type RecordType = Record<string, unknown>;
-        return jsonToEntity<unknown>(
-            entityType,
-            entityValue as RecordType,
+        return entityFromJson<unknown>(
+            nestedType,
+            nestedValue as RecordType,
         );
     } else {
         throw new Error(
-            `field ${fieldName} of entity ${entityName} is Entity, but received value is not an object`,
+            `field '${parentField}' of entity '${parentName}' is Entity, but received value is not an object`,
         );
     }
 }
 
-function assertNever(x: never): never {
-    return x;
+function entityToJson<Entity>(
+    entityType: reflect.Entity,
+    entityValue: Entity,
+    allowMissingId: boolean,
+): Record<string, unknown> {
+    const inputEntity = entityValue as Record<string, unknown>;
+    const outputJson: Record<string, unknown> = {};
+    const entityName = entityType.name;
+
+    for (const field of entityType.fields) {
+        const fieldName = field.name;
+        const fieldValue = inputEntity[fieldName];
+
+        if (fieldValue === undefined || fieldValue === null) {
+            if (field.isOptional) {
+                continue;
+            }
+            if (fieldName == "id" && allowMissingId) {
+                continue;
+            }
+            throw new Error(
+                `field '${fieldName}' of entity '${entityName}' is not optional but undefined/null was received for the field`,
+            );
+        }
+
+        const err = (typeName: string) => {
+            return Error(
+                `field '${field.name}' of entity '${entityName}' is ${typeName}, but provided value is of type ${typeof fieldValue}`,
+            );
+        };
+        const fieldType = field.type.name;
+        if (fieldType === "string" || fieldType === "entityId") {
+            if (typeof fieldValue !== "string") {
+                throw err("string");
+            }
+            outputJson[fieldName] = fieldValue;
+        } else if (fieldType === "number") {
+            if (typeof fieldValue !== "number") {
+                throw err("number");
+            }
+            outputJson[fieldName] = fieldValue;
+        } else if (fieldType === "boolean") {
+            if (typeof fieldValue !== "boolean") {
+                throw err("boolean");
+            }
+            outputJson[fieldName] = fieldValue;
+        } else if (fieldType === "arrayBuffer") {
+            // JSON.stringify performs automatic conversion.
+            outputJson[fieldName] = arrayBufferToJson(fieldValue);
+        } else if (fieldType === "date") {
+            outputJson[fieldName] = dateToJson(
+                entityName,
+                fieldName,
+                fieldValue,
+            );
+        } else if (fieldType === "array") {
+            outputJson[fieldName] = arrayToJson(
+                entityName,
+                fieldName,
+                field.type.elementType,
+                fieldValue,
+                allowMissingId,
+            );
+        } else if (fieldType === "entity") {
+            outputJson[fieldName] = nestedEntityToJson(
+                entityName,
+                fieldName,
+                field.type.entityType,
+                fieldValue,
+                allowMissingId,
+            );
+        } else {
+            assertNever(fieldType);
+            throw new Error(
+                `field '${fieldName}' of entity '${entityName}' has unexpected type '${fieldType}'`,
+            );
+        }
+    }
+    return outputJson;
+}
+
+function dateToJson(
+    parentName: string,
+    parentField: string,
+    value: unknown,
+): number {
+    if (value instanceof Date) {
+        return value.getTime();
+    }
+    throw new Error(
+        `field '${parentField}' of entity '${parentName}' is Date, but provided value is of different type`,
+    );
+}
+
+function arrayBufferToJson(value: unknown): string {
+    let binary = "";
+    const bytes = new Uint8Array(value as ArrayBufferLike);
+    const len = bytes.byteLength;
+    for (let i = 0; i < len; i++) {
+        binary += String.fromCharCode(bytes[i]);
+    }
+    return btoa(binary);
+}
+
+function arrayToJson(
+    parentName: string,
+    parentField: string,
+    elementType: reflect.Type,
+    arrayValue: unknown,
+    allowMissingId: boolean,
+): unknown[] {
+    if (Array.isArray(arrayValue)) {
+        const elementTypeName = elementType.name;
+        switch (elementTypeName) {
+            case "string":
+            case "number":
+            case "boolean":
+            case "entityId":
+                return arrayValue;
+            case "arrayBuffer":
+                return arrayValue.map(arrayBufferToJson);
+            case "date":
+                return arrayValue.map((e) =>
+                    dateToJson(parentName, parentField, e)
+                );
+            case "array":
+                return arrayValue.map((e) =>
+                    arrayToJson(
+                        parentName,
+                        parentField,
+                        elementType.elementType,
+                        e,
+                        allowMissingId,
+                    )
+                );
+            case "entity":
+                return arrayValue.map((e) => {
+                    nestedEntityToJson(
+                        parentName,
+                        parentField,
+                        elementType.entityType,
+                        e,
+                        allowMissingId,
+                    );
+                });
+            default:
+                assertNever(elementTypeName);
+                throw new Error(
+                    `field '${parentField}' of entity '${parentName}' has unexpected array element type '${elementTypeName}'`,
+                );
+        }
+    } else {
+        throw new Error(
+            `expected Array, but provided value is not an instance of Array`,
+        );
+    }
+}
+
+function nestedEntityToJson(
+    parentName: string,
+    parentField: string,
+    nestedType: reflect.Entity,
+    nestedValue: unknown,
+    allowMissingId: boolean,
+): Record<string, unknown> {
+    if (typeof nestedValue === "object") {
+        return entityToJson<unknown>(
+            nestedType,
+            nestedValue as unknown,
+            allowMissingId,
+        );
+    } else {
+        throw new Error(
+            `field '${parentField}' of entity '${parentName}' is Entity, but provided value is not an object`,
+        );
+    }
 }
 
 export function makeGetOne<Entity>(
@@ -238,7 +416,7 @@ export function makeGetOne<Entity>(
     return async () => {
         const resp = await fetch(url, { method: "GET" });
         await throwOnError(resp);
-        return jsonToEntity<Entity>(entityType, await resp.json());
+        return entityFromJson<Entity>(entityType, await resp.json());
     };
 }
 
@@ -307,7 +485,7 @@ export function makeGetMany<Entity>(
                 prevPage,
                 prevPageUrl: resp.prev_page,
                 results: resp.results.map((e) =>
-                    jsonToEntity<Entity>(entityType, e)
+                    entityFromJson<Entity>(entityType, e)
                 ),
             };
         }
@@ -379,15 +557,26 @@ export function makeGetAll<Entity>(
     };
 }
 
-export function makePostOne<Entity>(
+// This magic is necessary to allow passing of nested objects without ID. However, once we allow plain objects
+// we will have to generate the ID-less entities explictly because otherwise we might accidentaly
+// remove 'id' fields from plain objects.
+type OmitDistributive<T, K extends PropertyKey> = T extends
+    Record<string, unknown> ? OmitRecursively<T, K> : T;
+type OmitRecursively<T extends Record<string, unknown>, K extends PropertyKey> =
+    Omit<
+        { [P in keyof T]: OmitDistributive<T[P], K> },
+        K
+    >;
+
+export function makePostOne<Entity extends Record<string, unknown>>(
     url: URL,
     entityType: reflect.Entity,
-): (entity: Omit<Entity, "id">) => Promise<Entity> {
-    return async (entity: Omit<Entity, "id">) => {
-        // TODO: We should probably do the inverse of jsonToEntity.
-        const resp = await sendJson(url, "POST", entity);
+): (entity: OmitRecursively<Entity, "id">) => Promise<Entity> {
+    return async (entity: OmitRecursively<Entity, "id">) => {
+        const entityJson = entityToJson(entityType, entity, true);
+        const resp = await sendJson(url, "POST", entityJson);
         await throwOnError(resp);
-        return jsonToEntity<Entity>(entityType, await resp.json());
+        return entityFromJson<Entity>(entityType, await resp.json());
     };
 }
 
@@ -396,9 +585,10 @@ export function makePutOne<Entity>(
     entityType: reflect.Entity,
 ): (entity: Entity) => Promise<Entity> {
     return async (entity: Entity) => {
-        const resp = await sendJson(url, "PUT", entity);
+        const entityJson = entityToJson(entityType, entity, false);
+        const resp = await sendJson(url, "PUT", entityJson);
         await throwOnError(resp);
-        return jsonToEntity<Entity>(entityType, await resp.json());
+        return entityFromJson<Entity>(entityType, await resp.json());
     };
 }
 
@@ -407,9 +597,10 @@ export function makePatchOne<Entity>(
     entityType: reflect.Entity,
 ): (entity: Partial<Entity>) => Promise<Entity> {
     return async (entity: Partial<Entity>) => {
-        const resp = await sendJson(url, "PATCH", entity);
+        const entityJson = entityToJson(entityType, entity, false);
+        const resp = await sendJson(url, "PATCH", entityJson);
         await throwOnError(resp);
-        return jsonToEntity<Entity>(entityType, await resp.json());
+        return entityFromJson<Entity>(entityType, await resp.json());
     };
 }
 
