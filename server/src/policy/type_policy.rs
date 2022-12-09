@@ -4,26 +4,36 @@ use boa_engine::prelude::JsObject;
 use chiselc::policies::{Cond, Environment, FilterPolicy, Predicates};
 
 #[derive(Debug, Clone)]
-pub struct ReadPolicy {
-    pub filter: Option<Cond>,
+pub struct SkipFilter {
+    pub skip_condition: Option<Cond>,
     pub predicates: Predicates,
     pub env: Arc<Environment>,
     pub ctx_param_name: String,
     pub entity_param_name: String,
+}
+
+#[derive(Debug, Clone)]
+pub struct ReadPolicy {
+    pub filter: Option<SkipFilter>,
     pub function: JsObject,
 }
 
 impl ReadPolicy {
     pub fn new(function: JsObject, policy: &FilterPolicy) -> Self {
-        let entity_param_name = policy.params().get_positional_param_name(0).to_owned();
-        let ctx_param_name = policy.params().get_positional_param_name(1).to_owned();
-        Self {
-            predicates: policy.predicates.clone(),
-            filter: policy.where_conds.clone(),
-            env: policy.env.clone(),
-            ctx_param_name,
-            entity_param_name,
-            function,
+        match policy {
+            FilterPolicy::Optimized(policy) => {
+                let entity_param_name = policy.params.get_positional_param_name(0).to_owned();
+                let ctx_param_name = policy.params.get_positional_param_name(1).to_owned();
+                let filter = Some(SkipFilter {
+                    predicates: policy.predicates.clone(),
+                    skip_condition: policy.skip_cond.clone(),
+                    env: policy.env.clone(),
+                    ctx_param_name,
+                    entity_param_name,
+                });
+                Self { filter, function }
+            }
+            FilterPolicy::Js { .. } => todo!(),
         }
     }
 }

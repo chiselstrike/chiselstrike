@@ -155,26 +155,30 @@ impl PolicyEngine {
         chisel_ctx: &dyn ChiselRequestContext,
     ) -> Result<Option<Expr>> {
         match policy.filter {
-            Some(ref filter) => {
-                let chisel_ctx = chisel_ctx.to_value();
-                let resolver = JsonResolver {
-                    name: &policy.ctx_param_name,
-                    value: &chisel_ctx,
-                };
+            Some(ref filter) => match filter.skip_condition {
+                Some(ref skip_cond) => {
+                    let chisel_ctx = chisel_ctx.to_value();
+                    let resolver = JsonResolver {
+                        name: &filter.ctx_param_name,
+                        value: &chisel_ctx,
+                    };
 
-                let mut context = InterpreterContext {
-                    env: &policy.env,
-                    resolver: &resolver,
-                    boa: &mut self.boa_ctx.borrow_mut(),
-                };
+                    let mut context = InterpreterContext {
+                        env: &filter.env,
+                        resolver: &resolver,
+                        boa: &mut self.boa_ctx.borrow_mut(),
+                    };
 
-                let predicates = policy
-                    .predicates
-                    .map(|p| interpreter::eval(p, &mut context));
-                let cond = filter.simplify(&predicates);
-                cond_to_expr(&cond, &predicates, &policy.entity_param_name, &policy.env).map(Some)
-            }
-            None => Ok(None),
+                    let predicates = filter
+                        .predicates
+                        .map(|p| interpreter::eval(p, &mut context));
+                    let cond = skip_cond.simplify(&predicates);
+                    cond_to_expr(&cond, &predicates, &filter.entity_param_name, &filter.env)
+                        .map(Some)
+                }
+                None => Ok(None),
+            },
+            _ => Ok(None),
         }
     }
 
@@ -217,18 +221,35 @@ fn cond_to_expr(
     entity_param_name: &str,
     env: &Environment,
 ) -> Result<Expr> {
+    let expr = cond_to_expr_reccur(cond, preds, entity_param_name, env)?;
+    // we need to invert the expression: the skip condition tells us what to skip, i.e what element
+    // SHOULD NOT conform to.
+    Ok(Expr::Not(Box::new(expr)))
+}
+
+fn cond_to_expr_reccur(
+    cond: &Cond,
+    preds: &Predicates,
+    entity_param_name: &str,
+    env: &Environment,
+) -> Result<Expr> {
     let val = match cond {
         Cond::And(left, right) => {
-            let right = cond_to_expr(right, preds, entity_param_name, env)?;
-            let left = cond_to_expr(left, preds, entity_param_name, env)?;
+            let right = cond_to_expr_reccur(right, preds, entity_param_name, env)?;
+            let left = cond_to_expr_reccur(left, preds, entity_param_name, env)?;
             BinaryExpr::and(left, right)
         }
         Cond::Or(left, right) => {
-            let right = cond_to_expr(right, preds, entity_param_name, env)?;
-            let left = cond_to_expr(left, preds, entity_param_name, env)?;
+            let right = cond_to_expr_reccur(right, preds, entity_param_name, env)?;
+            let left = cond_to_expr_reccur(left, preds, entity_param_name, env)?;
             BinaryExpr::or(left, right)
         }
-        Cond::Not(cond) => Expr::Not(Box::new(cond_to_expr(cond, preds, entity_param_name, env)?)),
+        Cond::Not(cond) => Expr::Not(Box::new(cond_to_expr_reccur(
+            cond,
+            preds,
+            entity_param_name,
+            env,
+        )?)),
         Cond::Predicate(id) => {
             let predicate = preds.get(*id);
             predicate_to_expr(predicate, entity_param_name, env)?

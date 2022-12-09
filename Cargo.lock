@@ -655,15 +655,20 @@ version = "0.15.0-dev.0"
 dependencies = [
  "anyhow",
  "bimap",
+ "boa_engine",
  "clap 4.0.27",
  "indexmap",
+ "itertools 0.10.5",
+ "maplit",
  "petgraph 0.6.2",
  "quine-mc_cluskey",
+ "regex",
  "serde",
  "serde_json",
  "swc_atoms 0.3.1",
  "swc_common 0.25.0",
  "swc_ecmascript 0.185.0",
+ "url 2.3.1",
  "vec_map",
 ]
 
@@ -3382,6 +3387,12 @@ checksum = "62bb907fe88d54d8d9ce32a3cceab4218ed2f6b7d35617cafe9adf84e43919cb"
 dependencies = [
  "libc",
 ]
+
+[[package]]
+name = "maplit"
+version = "1.0.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3e2e65a1a2e43cfcb47a895c4c8b10d1f4a61097f9f254f183aee60cad9c651d"
 
 [[package]]
 name = "match_cfg"

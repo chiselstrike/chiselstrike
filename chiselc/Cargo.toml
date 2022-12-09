@@ -16,4 +16,11 @@ serde_json = "1.0.81"
 swc_atoms = "0.3.0"
 swc_common = "0.25.0"
 swc_ecmascript = { version = "0.185.0", features = ["visit", "parser", "transforms", "codegen", "typescript"] }
+url = "2.3.1"
 vec_map = "0.8.2"
+
+[dev-dependencies]
+boa_engine = "0.16.0"
+itertools = "0.10.5"
+maplit = "1.0.2"
+regex = "1.6.0"

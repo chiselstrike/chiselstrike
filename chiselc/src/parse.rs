@@ -1,8 +1,8 @@
 // SPDX-FileCopyrightText: © 2022 ChiselStrike <info@chiselstrike.com>
-
-use anyhow::{anyhow, Result};
 use std::io::Write;
 use std::sync::Arc;
+
+use anyhow::{anyhow, Result};
 use swc_common::{
     errors::{emitter, Handler},
     source_map::FileName,
@@ -16,17 +16,18 @@ use swc_ecmascript::{
     codegen::{text_writer::JsWriter, Emitter},
     transforms::hygiene,
 };
+use url::Url;
 
 use crate::rewrite::{Rewriter, Target};
 use crate::symbols::Symbols;
 
 #[derive(Clone, Default)]
-struct ErrorBuffer {
+pub struct ErrorBuffer {
     inner: Arc<std::sync::Mutex<Vec<u8>>>,
 }
 
 impl ErrorBuffer {
-    fn get(&self) -> String {
+    pub fn get(&self) -> String {
         String::from_utf8_lossy(&self.inner.lock().unwrap().clone()).to_string()
     }
 }
@@ -53,26 +54,45 @@ fn canonical_transforms(module: &mut Module) {
     })
 }
 
-#[derive(Default)]
 pub struct ParserContext {
     pub sm: Lrc<SourceMap>,
-    error_buffer: ErrorBuffer,
+    pub error_buffer: ErrorBuffer,
+    pub handler: Handler,
+}
+
+impl Default for ParserContext {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl ParserContext {
     pub fn new() -> Self {
-        Self::default()
-    }
-
-    pub fn parse(&self, code: String, apply_transforms: bool) -> Result<Module> {
+        let sm = Lrc::new(SourceMap::default());
+        let error_buffer = ErrorBuffer::default();
         let emitter = Box::new(emitter::EmitterWriter::new(
-            Box::new(self.error_buffer.clone()),
-            Some(self.sm.clone()),
+            Box::new(error_buffer.clone()),
+            Some(sm.clone()),
             false,
             true,
         ));
         let handler = Handler::with_emitter(true, false, emitter);
-        let fm = self.sm.new_source_file(FileName::Anon, code);
+        Self {
+            sm,
+            error_buffer,
+            handler,
+        }
+    }
+
+    pub fn parse(
+        &self,
+        code: String,
+        file_name: Option<Url>,
+        apply_transforms: bool,
+    ) -> Result<Module> {
+        let fm = self
+            .sm
+            .new_source_file(file_name.map(FileName::Url).unwrap_or(FileName::Anon), code);
         let config = swc_ecmascript::parser::TsConfig {
             decorators: true,
             ..Default::default()
@@ -87,12 +107,12 @@ impl ParserContext {
         let mut parser = Parser::new_from(lexer);
 
         for e in parser.take_errors() {
-            e.into_diagnostic(&handler).emit();
+            e.into_diagnostic(&self.handler).emit();
         }
 
         let mut module = parser.parse_typescript_module().map_err(|e| {
             // Unrecoverable fatal error occurred
-            e.into_diagnostic(&handler).emit();
+            e.into_diagnostic(&self.handler).emit();
             anyhow!("Parse failed: {}", self.error_buffer.get())
         })?;
 
@@ -112,7 +132,7 @@ pub fn compile<W: Write>(
 ) -> Result<()> {
     let ctx = ParserContext::new();
     // FIXME: We probably need a name for better error messages.
-    let module = ctx.parse(code, false)?;
+    let module = ctx.parse(code, None, false)?;
 
     let mut rewriter = Rewriter::new(symbols);
     let module = rewriter.rewrite(module);
