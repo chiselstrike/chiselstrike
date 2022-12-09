@@ -17,4 +17,5 @@ export { RouteMap } from "./routing.ts";
 export type { Handler, MiddlewareHandler, MiddlewareNext } from "./routing.ts";
 export { getSecret, responseFromJson } from "./utils.ts";
 export type { JSONValue } from "./utils.ts";
-export type { Action, ReqContext } from "./policies.ts";
+export type { ReqContext } from "./policies.ts";
+export { Action } from "./policies.ts";
