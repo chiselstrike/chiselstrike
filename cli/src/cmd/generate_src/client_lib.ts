@@ -350,7 +350,7 @@ export function makeGetAll<Entity>(
     origUrl: URL,
     serverUrl: string,
     entityType: reflect.Entity,
-): (params?: GetParams<Entity>) => Promise<Entity[]> {
+): (params?: GetAllParams<Entity>) => Promise<Entity[]> {
     const makeIter = makeGetManyIter<Entity>(origUrl, serverUrl, entityType);
     return async function (params?: GetAllParams<Entity>): Promise<Entity[]> {
         let iterParams = {};

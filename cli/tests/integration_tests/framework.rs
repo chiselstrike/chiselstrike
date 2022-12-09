@@ -939,7 +939,7 @@ impl TypeScriptRunner {
         let src_path = self.tmp_dir.path().join(src_path);
         let src_path = src_path.display().to_string();
 
-        let args = vec!["run", "--allow-net", &src_path];
+        let args = vec!["run", "--allow-net", "--check=all", &src_path];
         run_command(
             &repo_dir().join(".chisel_dev/bin/deno"),
             &args,
@@ -960,7 +960,6 @@ impl TypeScriptRunner {
             &PathBuf::from_str("ts-node").unwrap(),
             &[
                 "--esm",
-                "-T",
                 "--skipProject",
                 "-O",
                 r#"{"lib":["esnext", "webworker"]}"#,
