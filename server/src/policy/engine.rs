@@ -173,8 +173,6 @@ impl PolicyEngine {
                         .predicates
                         .map(|p| interpreter::eval(p, &mut context));
                     let cond = skip_cond.simplify(&predicates);
-                    dbg!(&cond);
-                    dbg!(&predicates);
                     cond_to_expr(&cond, &predicates, &filter.entity_param_name, &filter.env)
                         .map(Some)
                 }
