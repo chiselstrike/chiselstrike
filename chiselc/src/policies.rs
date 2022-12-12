@@ -291,7 +291,9 @@ impl FilterPolicy {
         let params: Vec<_> = arrow.params().map(|(name, _)| name).collect();
         let params = PolicyParams::from_idents(&params);
         let mut builder = RulesBuilder::new(&arrow.stmt_map, &ctx.handler);
-        let skip_cond = builder.skip_condition_from_region(&arrow.regions, Cond::True)?;
+        let skip_cond = builder
+            .skip_condition_from_region(&arrow.regions, Cond::True)?
+            .map(Cond::not);
         let predicates = builder.predicates;
         let env = Arc::new(builder.env);
         let js_code = emit_arrow_js_code(arrow.orig, ctx.sm.clone())?;
@@ -377,6 +379,10 @@ impl Cond {
         Self::from_bool(simp, &mapping)
     }
 
+    fn not(c: Self) -> Self {
+        Self::Not(c.into())
+    }
+
     fn or(lhs: Cond, rhs: Cond) -> Self {
         match (lhs, rhs) {
             (Cond::True, _) | (_, Cond::True) => Cond::True,
@@ -442,7 +448,7 @@ impl Cond {
                 Self::from_bool(&it[0], mapping),
                 Self::from_bool(&it[1], mapping),
             ),
-            Bool::Not(b) => Cond::Not(Box::new(Self::from_bool(b, mapping))),
+            Bool::Not(b) => Cond::not(Self::from_bool(b, mapping)),
         }
     }
 }
@@ -680,12 +686,12 @@ impl<'a, 'h> RulesBuilder<'a, 'h> {
     ) -> anyhow::Result<Option<Cond>> {
         let action = match region {
             Region::Cond(region) => {
-                let test_cond = Box::new(self.extract_cond_from_test(&region.test_region));
+                let test_cond = self.extract_cond_from_test(&region.test_region);
 
-                let cons_cond = Cond::and(*test_cond.clone(), cond.clone());
+                let cons_cond = Cond::and(test_cond.clone(), cond.clone());
                 let cons_cond = self.skip_condition_from_region(&region.cons_region, cons_cond)?;
 
-                let alt_cond = Cond::and(Cond::Not(test_cond), cond);
+                let alt_cond = Cond::and(Cond::not(test_cond), cond);
                 let alt_cond = self.skip_condition_from_region(&region.alt_region, alt_cond)?;
 
                 match (cons_cond, alt_cond) {
