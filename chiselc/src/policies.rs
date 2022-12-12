@@ -912,7 +912,8 @@ mod test {
                     let code = code_gen(&map);
                     let read_filter = filter_from(&code);
                     let read_filter = read_filter.as_optimized().unwrap();
-                    let cond = read_filter.skip_cond.as_ref().unwrap();
+                    // the test works with inverted condition
+                    let cond = Cond::not(read_filter.skip_cond.as_ref().unwrap().clone());
                     let body = &read_filter.js_code;
                     let should_skip = eval_cond(&cond, &comb);
 
@@ -1109,7 +1110,7 @@ mod test {
         let filter = filter_from(code);
         let filter = filter.as_optimized().unwrap();
         let debug_skip_cond = format!("{:?}", filter.skip_cond.as_ref().unwrap());
-        assert_eq!(debug_skip_cond, "(p3 && (!p2 && (!p1 && !p0)))");
+        assert_eq!(debug_skip_cond, "!(p3 && (!p2 && (!p1 && !p0)))");
     }
 
     #[test]
@@ -1135,6 +1136,6 @@ mod test {
             "{:?}",
             filter.as_optimized().unwrap().skip_cond.as_ref().unwrap()
         );
-        assert_eq!(skip, "p0")
+        assert_eq!(skip, "!p0")
     }
 }
