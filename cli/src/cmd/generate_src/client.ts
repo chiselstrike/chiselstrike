@@ -1,3 +1,6 @@
-export function createChiselClient(serverUrl: string, version?: string) {
-    return ΩcreateClient(serverUrl, version);
+export function createChiselClient(
+    serverUrl: string,
+    params?: Ωlib.ClientParams,
+) {
+    return ΩcreateClient(serverUrl, params ?? {});
 }

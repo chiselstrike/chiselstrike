@@ -1,3 +1,28 @@
+export type ClientParams = {
+    version?: string;
+    headers?: Headers | Record<string, string>;
+};
+
+export type InternalClientParams = {
+    version?: string;
+    headers?: Headers;
+};
+
+export function cliParamsToInternal(
+    cliParams?: ClientParams,
+): InternalClientParams {
+    const params: InternalClientParams = {};
+    if (cliParams !== undefined) {
+        if (cliParams.headers !== undefined) {
+            params.headers = new Headers(cliParams.headers);
+        }
+        if (cliParams.version !== undefined) {
+            params.version = cliParams.version;
+        }
+    }
+    return params;
+}
+
 export function urlJoin(...urlParts: string[]): URL {
     let url = urlParts[0] || "";
     for (let i = 1; i < urlParts.length; i++) {
@@ -32,10 +57,14 @@ async function sendJson(
     url: URL,
     method: string,
     body: unknown,
+    cliHeaders?: Headers,
 ): Promise<Response> {
+    const headers = cliHeaders ?? new Headers();
+    headers.set("Content-Type", "application/json");
+
     const resp = await fetch(url, {
         method,
-        headers: { "Content-Type": "application/json" },
+        headers,
         body: JSON.stringify(body),
     });
     await throwOnError(resp);
@@ -424,9 +453,13 @@ function nestedEntityToJson(
 export function makeGetOne<Entity>(
     url: URL,
     entityType: reflect.Entity,
+    cliParams: InternalClientParams,
 ): () => Promise<Entity> {
     return async () => {
-        const resp = await fetch(url, { method: "GET" });
+        const resp = await fetch(url, {
+            method: "GET",
+            headers: cliParams.headers,
+        });
         await throwOnError(resp);
         return entityFromJson<Entity>(entityType, await resp.json());
     };
@@ -450,6 +483,7 @@ export function makeGetMany<Entity>(
     origUrl: URL,
     serverUrl: string,
     entityType: reflect.Entity,
+    cliParams: InternalClientParams,
 ): (params: GetParams<Entity>) => Promise<GetResponse<Entity>> {
     return async function (
         params: GetParams<Entity>,
@@ -469,7 +503,10 @@ export function makeGetMany<Entity>(
         }
 
         async function makeResponse(url: URL): Promise<GetResponse<Entity>> {
-            const r = await fetch(url, { method: "GET" });
+            const r = await fetch(url, {
+                method: "GET",
+                headers: cliParams.headers,
+            });
             await throwOnError(r);
 
             type PagingResponse = {
@@ -509,8 +546,14 @@ export function makeGetManyIter<Entity>(
     origUrl: URL,
     serverUrl: string,
     entityType: reflect.Entity,
+    cliParams: InternalClientParams,
 ): (params?: GetParams<Entity>) => AsyncIterable<Entity> {
-    const getPage = makeGetMany<Entity>(origUrl, serverUrl, entityType);
+    const getPage = makeGetMany<Entity>(
+        origUrl,
+        serverUrl,
+        entityType,
+        cliParams,
+    );
     return function (params?: GetParams<Entity>): AsyncIterable<Entity> {
         return {
             [Symbol.asyncIterator]: async function* () {
@@ -540,8 +583,14 @@ export function makeGetAll<Entity>(
     origUrl: URL,
     serverUrl: string,
     entityType: reflect.Entity,
+    cliParams: InternalClientParams,
 ): (params?: GetAllParams<Entity>) => Promise<Entity[]> {
-    const makeIter = makeGetManyIter<Entity>(origUrl, serverUrl, entityType);
+    const makeIter = makeGetManyIter<Entity>(
+        origUrl,
+        serverUrl,
+        entityType,
+        cliParams,
+    );
     return async function (params?: GetAllParams<Entity>): Promise<Entity[]> {
         let iterParams = {};
         let limit;
@@ -583,10 +632,11 @@ type OmitRecursively<T extends Record<string, unknown>, K extends PropertyKey> =
 export function makePostOne<Entity extends Record<string, unknown>>(
     url: URL,
     entityType: reflect.Entity,
+    cliParams: InternalClientParams,
 ): (entity: OmitRecursively<Entity, "id">) => Promise<Entity> {
     return async (entity: OmitRecursively<Entity, "id">) => {
         const entityJson = entityToJson(entityType, entity, true);
-        const resp = await sendJson(url, "POST", entityJson);
+        const resp = await sendJson(url, "POST", entityJson, cliParams.headers);
         await throwOnError(resp);
         return entityFromJson<Entity>(entityType, await resp.json());
     };
@@ -595,10 +645,11 @@ export function makePostOne<Entity extends Record<string, unknown>>(
 export function makePutOne<Entity>(
     url: URL,
     entityType: reflect.Entity,
+    cliParams: InternalClientParams,
 ): (entity: Entity) => Promise<Entity> {
     return async (entity: Entity) => {
         const entityJson = entityToJson(entityType, entity, false);
-        const resp = await sendJson(url, "PUT", entityJson);
+        const resp = await sendJson(url, "PUT", entityJson, cliParams.headers);
         await throwOnError(resp);
         return entityFromJson<Entity>(entityType, await resp.json());
     };
@@ -607,28 +658,44 @@ export function makePutOne<Entity>(
 export function makePatchOne<Entity>(
     url: URL,
     entityType: reflect.Entity,
+    cliParams: InternalClientParams,
 ): (entity: Partial<Entity>) => Promise<Entity> {
     return async (entity: Partial<Entity>) => {
         const entityJson = entityToJson(entityType, entity, false);
-        const resp = await sendJson(url, "PATCH", entityJson);
+        const resp = await sendJson(
+            url,
+            "PATCH",
+            entityJson,
+            cliParams.headers,
+        );
         await throwOnError(resp);
         return entityFromJson<Entity>(entityType, await resp.json());
     };
 }
 
-export function makeDeleteOne(url: URL): () => Promise<void> {
+export function makeDeleteOne(
+    url: URL,
+    cliParams: InternalClientParams,
+): () => Promise<void> {
     return async () => {
-        const resp = await fetch(url, { method: "DELETE" });
+        const resp = await fetch(url, {
+            method: "DELETE",
+            headers: cliParams.headers,
+        });
         await throwOnError(resp);
     };
 }
 
 export function makeDeleteMany<Entity>(
     url: URL,
+    cliParams: InternalClientParams,
 ): (filter: FilterExpr<Entity>) => Promise<void> {
     return async (filter: FilterExpr<Entity>) => {
         url.searchParams.set("filter", JSON.stringify(filter));
-        const resp = await fetch(url, { method: "DELETE" });
+        const resp = await fetch(url, {
+            method: "DELETE",
+            headers: cliParams.headers,
+        });
         await throwOnError(resp);
     };
 }
