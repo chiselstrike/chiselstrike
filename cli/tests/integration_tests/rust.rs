@@ -1,6 +1,6 @@
 // SPDX-FileCopyrightText: © 2022 ChiselStrike <info@chiselstrike.com>
 
-use crate::common::{bin_dir, cargo_install, get_deno_version, get_free_port, repo_dir};
+use crate::common::{bin_dir, get_free_port, repo_dir};
 use crate::database::{Database, DatabaseConfig, PostgresDb, SqliteDb};
 use crate::framework::{
     execute_async, wait_for_chiseld_startup, Chisel, GuardedChild, TestContext, TypeScriptRunner,
@@ -240,14 +240,8 @@ fn format_test_instance(instance: &TestInstance) -> String {
     )
 }
 
-fn ensure_dependencies() {
-    let version = get_deno_version();
-    cargo_install(&version, "deno", "deno");
-}
-
 #[tokio::main]
 pub(crate) async fn run_tests(opt: Arc<Opt>) -> bool {
-    ensure_dependencies();
     let suite = TestSuite::from_inventory();
     let ports_counter = Arc::new(AtomicU16::new(30000));
     let parallel = opt.parallel.unwrap_or_else(num_cpus::get);

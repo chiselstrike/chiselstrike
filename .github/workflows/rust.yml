@@ -21,7 +21,7 @@ jobs:
   build:
     runs-on: self-hosted
     container:
-      image: ghcr.io/chiselstrike/rust-build-image:v1.0
+      image: ghcr.io/chiselstrike/rust-build-image:v1.2
       options: --user 1000
     steps:
     - name: checkout repo
@@ -90,7 +90,7 @@ jobs:
   postgres-test:
     runs-on: self-hosted
     container:
-      image: ghcr.io/chiselstrike/rust-build-image:v1.0
+      image: ghcr.io/chiselstrike/rust-build-image:v1.2
       options: --user 1000
     services:
       postgres:
