@@ -45,6 +45,10 @@ async function sendJson(
 class AccessContext {
     constructor(private context: string) {}
 
+    static fromEntity(entityName: string): AccessContext {
+        return new AccessContext(entityName);
+    }
+
     onField(field: string): AccessContext {
         return new AccessContext(this.context + `.${field}`);
     }
@@ -69,7 +73,7 @@ function entityFromJson<Entity>(
 ): Entity {
     const entityValue: Record<string, unknown> = {};
     const entityName = entityType.name;
-    entityContext = entityContext ?? new AccessContext(entityName);
+    entityContext = entityContext ?? AccessContext.fromEntity(entityName);
 
     for (const field of entityType.fields) {
         if (!(field.name in inputValue)) {
@@ -254,7 +258,7 @@ function entityToJson<Entity>(
     const inputEntity = entityValue as Record<string, unknown>;
     const outputJson: Record<string, unknown> = {};
     const entityName = entityType.name;
-    entityContext = entityContext ?? new AccessContext(entityName);
+    entityContext = entityContext ?? AccessContext.fromEntity(entityName);
 
     for (const field of entityType.fields) {
         const fieldName = field.name;
@@ -295,7 +299,6 @@ function entityToJson<Entity>(
             }
             outputJson[fieldName] = fieldValue;
         } else if (fieldType === "arrayBuffer") {
-            // JSON.stringify performs automatic conversion.
             outputJson[fieldName] = arrayBufferToJson(context, fieldValue);
         } else if (fieldType === "date") {
             outputJson[fieldName] = dateToJson(
