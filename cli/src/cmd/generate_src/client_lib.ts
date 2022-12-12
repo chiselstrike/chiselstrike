@@ -42,18 +42,42 @@ async function sendJson(
     return resp;
 }
 
+class AccessContext {
+    constructor(private context: string) {}
+
+    onField(field: string): AccessContext {
+        return new AccessContext(this.context + `.${field}`);
+    }
+
+    onArray(idx?: number): AccessContext {
+        if (idx !== undefined) {
+            return new AccessContext(this.context + `[${idx}]`);
+        } else {
+            return new AccessContext(this.context + `[]`);
+        }
+    }
+
+    toString(): string {
+        return this.context;
+    }
+}
+
 function entityFromJson<Entity>(
     entityType: reflect.Entity,
     inputValue: Record<string, unknown>,
+    entityContext?: AccessContext,
 ): Entity {
     const entityValue: Record<string, unknown> = {};
     const entityName = entityType.name;
+    entityContext = entityContext ?? new AccessContext(entityName);
+
     for (const field of entityType.fields) {
         if (!(field.name in inputValue)) {
             continue;
         }
         const fieldName = field.name;
         const fieldValue = inputValue[fieldName];
+        const context = entityContext.onField(fieldName);
 
         if (fieldValue === null || fieldValue === undefined) {
             if (field.isOptional) {
@@ -61,14 +85,14 @@ function entityFromJson<Entity>(
                 continue;
             } else {
                 throw new Error(
-                    `field '${fieldName}' of entity '${entityName}' is not optional but undefined/null was received for the field`,
+                    `${context} is not optional but undefined/null was received for the field`,
                 );
             }
         }
 
         const err = (typeName: string) => {
             return Error(
-                `field '${field.name}' of entity '${entityName}' is ${typeName}, but provided value is of type ${typeof fieldValue}`,
+                `${context} is of type ${typeName}, but provided value is of type ${typeof fieldValue}`,
             );
         };
         const fieldType = field.type.name;
@@ -89,34 +113,30 @@ function entityFromJson<Entity>(
             entityValue[fieldName] = fieldValue;
         } else if (fieldType === "arrayBuffer") {
             entityValue[fieldName] = arrayBufferFromJson(
-                entityName,
-                fieldName,
+                context,
                 fieldValue,
             );
         } else if (fieldType === "date") {
             entityValue[fieldName] = dateFromJson(
-                entityName,
-                fieldName,
+                context,
                 fieldValue,
             );
         } else if (fieldType === "array") {
             entityValue[fieldName] = arrayFromJson(
-                entityName,
-                fieldName,
+                context,
                 field.type.elementType,
                 fieldValue,
             );
         } else if (fieldType === "entity") {
             entityValue[fieldName] = nestedEntityFromJson(
-                entityName,
-                fieldName,
+                context,
                 field.type.entityType,
                 fieldValue,
             );
         } else {
             assertNever(fieldType);
             throw new Error(
-                `field '${fieldName}' of entity '${entityName}' has unexpected type '${fieldType}'`,
+                `${context} has unexpected type '${fieldType}'`,
             );
         }
     }
@@ -124,27 +144,25 @@ function entityFromJson<Entity>(
 }
 
 function dateFromJson(
-    parentName: string,
-    parentField: string,
+    context: AccessContext,
     value: unknown,
 ): Date {
     if (typeof value === "string" || typeof value === "number") {
         const date = new Date(value);
         if (Number.isNaN(date.valueOf())) {
             throw new Error(
-                `failed to convert value to Date for field '${parentField}'`,
+                `failed to convert value to Date for ${context}`,
             );
         }
         return date;
     }
     throw new Error(
-        `field '${parentField}' of entity '${parentName}' is Date, but received value is not an instance of string nor number`,
+        `${context} is of type Date, but received value is not an instance of string nor number`,
     );
 }
 
 function arrayBufferFromJson(
-    parentName: string,
-    parentField: string,
+    context: AccessContext,
     value: unknown,
 ): ArrayBuffer {
     if (typeof value === "string") {
@@ -154,19 +172,19 @@ function arrayBufferFromJson(
         );
     } else {
         throw Error(
-            `field '${parentField}' of entity '${parentName}' is ArrayBuffer (transported as string), but received value is of type ${typeof value}`,
+            `${context} is of type ArrayBuffer (transported as string), but received value is of type ${typeof value}`,
         );
     }
 }
 
 function arrayFromJson(
-    parentName: string,
-    parentField: string,
+    context: AccessContext,
     elementType: reflect.Type,
     arrayValue: unknown,
 ): unknown[] {
     if (Array.isArray(arrayValue)) {
         const elementTypeName = elementType.name;
+        const arrayContext = context.onArray();
         switch (elementTypeName) {
             case "string":
             case "number":
@@ -174,18 +192,15 @@ function arrayFromJson(
             case "entityId":
                 return arrayValue;
             case "date":
-                return arrayValue.map((e) =>
-                    dateFromJson(parentName, parentField, e)
-                );
+                return arrayValue.map((e) => dateFromJson(arrayContext, e));
             case "arrayBuffer":
                 return arrayValue.map((e) =>
-                    arrayBufferFromJson(parentName, parentField, e)
+                    arrayBufferFromJson(arrayContext, e)
                 );
             case "array":
                 return arrayValue.map((e) =>
                     arrayFromJson(
-                        parentName,
-                        parentField,
+                        arrayContext,
                         elementType.elementType,
                         e,
                     )
@@ -193,8 +208,7 @@ function arrayFromJson(
             case "entity":
                 return arrayValue.map((e) =>
                     nestedEntityFromJson(
-                        parentName,
-                        parentField,
+                        arrayContext,
                         elementType.entityType,
                         e,
                     )
@@ -202,19 +216,18 @@ function arrayFromJson(
             default:
                 assertNever(elementTypeName);
                 throw new Error(
-                    `field '${parentField}' of entity '${parentName}' has unexpected array element type '${elementTypeName}'`,
+                    `${context} has unexpected array element type '${elementTypeName}'`,
                 );
         }
     } else {
         throw new Error(
-            `expected Array, but received value is not an instance of Array`,
+            `${context} is expected to be an Array, but received value is not an instance of Array`,
         );
     }
 }
 
 function nestedEntityFromJson(
-    parentName: string,
-    parentField: string,
+    context: AccessContext,
     nestedType: reflect.Entity,
     nestedValue: unknown,
 ): unknown {
@@ -223,10 +236,11 @@ function nestedEntityFromJson(
         return entityFromJson<unknown>(
             nestedType,
             nestedValue as RecordType,
+            context,
         );
     } else {
         throw new Error(
-            `field '${parentField}' of entity '${parentName}' is Entity, but received value is not an object`,
+            `${context} is Entity, but received value is not an object`,
         );
     }
 }
@@ -235,14 +249,17 @@ function entityToJson<Entity>(
     entityType: reflect.Entity,
     entityValue: Entity,
     allowMissingId: boolean,
+    entityContext?: AccessContext,
 ): Record<string, unknown> {
     const inputEntity = entityValue as Record<string, unknown>;
     const outputJson: Record<string, unknown> = {};
     const entityName = entityType.name;
+    entityContext = entityContext ?? new AccessContext(entityName);
 
     for (const field of entityType.fields) {
         const fieldName = field.name;
         const fieldValue = inputEntity[fieldName];
+        const context = entityContext.onField(fieldName);
 
         if (fieldValue === undefined || fieldValue === null) {
             if (field.isOptional) {
@@ -252,13 +269,13 @@ function entityToJson<Entity>(
                 continue;
             }
             throw new Error(
-                `field '${fieldName}' of entity '${entityName}' is not optional but undefined/null was received for the field`,
+                `${context} is not optional but undefined/null was received for the field`,
             );
         }
 
         const err = (typeName: string) => {
             return Error(
-                `field '${field.name}' of entity '${entityName}' is ${typeName}, but provided value is of type ${typeof fieldValue}`,
+                `${context} is of type ${typeName}, but provided value is of type ${typeof fieldValue}`,
             );
         };
         const fieldType = field.type.name;
@@ -279,25 +296,22 @@ function entityToJson<Entity>(
             outputJson[fieldName] = fieldValue;
         } else if (fieldType === "arrayBuffer") {
             // JSON.stringify performs automatic conversion.
-            outputJson[fieldName] = arrayBufferToJson(fieldValue);
+            outputJson[fieldName] = arrayBufferToJson(context, fieldValue);
         } else if (fieldType === "date") {
             outputJson[fieldName] = dateToJson(
-                entityName,
-                fieldName,
+                context,
                 fieldValue,
             );
         } else if (fieldType === "array") {
             outputJson[fieldName] = arrayToJson(
-                entityName,
-                fieldName,
+                context,
                 field.type.elementType,
                 fieldValue,
                 allowMissingId,
             );
         } else if (fieldType === "entity") {
             outputJson[fieldName] = nestedEntityToJson(
-                entityName,
-                fieldName,
+                context,
                 field.type.entityType,
                 fieldValue,
                 allowMissingId,
@@ -305,7 +319,7 @@ function entityToJson<Entity>(
         } else {
             assertNever(fieldType);
             throw new Error(
-                `field '${fieldName}' of entity '${entityName}' has unexpected type '${fieldType}'`,
+                `${context} has unexpected type '${fieldType}'`,
             );
         }
     }
@@ -313,19 +327,18 @@ function entityToJson<Entity>(
 }
 
 function dateToJson(
-    parentName: string,
-    parentField: string,
+    context: AccessContext,
     value: unknown,
 ): number {
     if (value instanceof Date) {
         return value.getTime();
     }
     throw new Error(
-        `field '${parentField}' of entity '${parentName}' is Date, but provided value is of different type`,
+        `${context} is of type Date, but provided value is of different type`,
     );
 }
 
-function arrayBufferToJson(value: unknown): string {
+function arrayBufferToJson(_context: AccessContext, value: unknown): string {
     let binary = "";
     const bytes = new Uint8Array(value as ArrayBufferLike);
     const len = bytes.byteLength;
@@ -336,14 +349,14 @@ function arrayBufferToJson(value: unknown): string {
 }
 
 function arrayToJson(
-    parentName: string,
-    parentField: string,
+    context: AccessContext,
     elementType: reflect.Type,
     arrayValue: unknown,
     allowMissingId: boolean,
 ): unknown[] {
     if (Array.isArray(arrayValue)) {
         const elementTypeName = elementType.name;
+        const arrayContext = context.onArray();
         switch (elementTypeName) {
             case "string":
             case "number":
@@ -353,14 +366,11 @@ function arrayToJson(
             case "arrayBuffer":
                 return arrayValue.map(arrayBufferToJson);
             case "date":
-                return arrayValue.map((e) =>
-                    dateToJson(parentName, parentField, e)
-                );
+                return arrayValue.map((e) => dateToJson(arrayContext, e));
             case "array":
                 return arrayValue.map((e) =>
                     arrayToJson(
-                        parentName,
-                        parentField,
+                        arrayContext,
                         elementType.elementType,
                         e,
                         allowMissingId,
@@ -369,8 +379,7 @@ function arrayToJson(
             case "entity":
                 return arrayValue.map((e) => {
                     nestedEntityToJson(
-                        parentName,
-                        parentField,
+                        arrayContext,
                         elementType.entityType,
                         e,
                         allowMissingId,
@@ -379,19 +388,18 @@ function arrayToJson(
             default:
                 assertNever(elementTypeName);
                 throw new Error(
-                    `field '${parentField}' of entity '${parentName}' has unexpected array element type '${elementTypeName}'`,
+                    `${context} has unexpected array element type '${elementTypeName}'`,
                 );
         }
     } else {
         throw new Error(
-            `expected Array, but provided value is not an instance of Array`,
+            `expected Array for ${context}, but provided value is not an instance of Array`,
         );
     }
 }
 
 function nestedEntityToJson(
-    parentName: string,
-    parentField: string,
+    context: AccessContext,
     nestedType: reflect.Entity,
     nestedValue: unknown,
     allowMissingId: boolean,
@@ -401,10 +409,11 @@ function nestedEntityToJson(
             nestedType,
             nestedValue as unknown,
             allowMissingId,
+            context,
         );
     } else {
         throw new Error(
-            `field '${parentField}' of entity '${parentName}' is Entity, but provided value is not an object`,
+            `${context} is of type Entity, but provided value is not an object`,
         );
     }
 }
