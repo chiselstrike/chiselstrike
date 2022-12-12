@@ -21,7 +21,6 @@ use serde::Serialize;
 use tempdir::TempDir;
 use tokio::io::{duplex, AsyncRead, AsyncReadExt, AsyncWriteExt, DuplexStream};
 
-use crate::common::repo_dir;
 use crate::database::Database;
 use crate::suite::ClientMode;
 
@@ -941,7 +940,7 @@ impl TypeScriptRunner {
 
         let args = vec!["run", "--allow-net", "--check=all", &src_path];
         run_command(
-            &repo_dir().join(".chisel_dev/bin/deno"),
+            &PathBuf::from_str("deno").unwrap(),
             &args,
             self.tmp_dir.path(),
             self.capture,

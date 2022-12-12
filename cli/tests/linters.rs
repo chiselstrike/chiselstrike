@@ -3,7 +3,7 @@
 mod common;
 
 mod linters {
-    use crate::common::{cargo, cargo_install, get_deno_version, nightly, run};
+    use crate::common::{cargo, cargo_install, nightly, run};
 
     #[test]
     fn eslint() {
@@ -13,10 +13,6 @@ mod linters {
 
     #[test]
     fn deno_checks() {
-        // Find our deno version and install that. We don't use --path
-        // because that always reinstall the binary.
-        let version = get_deno_version();
-        cargo_install(&version, "deno", "deno");
         run("deno", ["lint", "--config", "deno.json"]);
         run("deno", ["fmt", "--config", "deno.json", "--check"]);
     }
