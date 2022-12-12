@@ -14,12 +14,16 @@ export function urlJoin(...urlParts: string[]): URL {
     return new URL(url);
 }
 
+function assertNever(x: never): never {
+    return x;
+}
+
 async function throwOnError(resp: Response) {
     if (!resp.ok) {
         // TODO: Improve error handling
         throw Error(
             `failed to post an entity. Got error code ${resp.status} (${resp.statusText}) with message: '${await resp
-                .text}'`,
+                .text()}'`,
         );
     }
 }
@@ -38,18 +42,42 @@ async function sendJson(
     return resp;
 }
 
-function jsonToEntity<Entity>(
+class AccessContext {
+    constructor(private context: string) {}
+
+    onField(field: string): AccessContext {
+        return new AccessContext(this.context + `.${field}`);
+    }
+
+    onArray(idx?: number): AccessContext {
+        if (idx !== undefined) {
+            return new AccessContext(this.context + `[${idx}]`);
+        } else {
+            return new AccessContext(this.context + `[]`);
+        }
+    }
+
+    toString(): string {
+        return this.context;
+    }
+}
+
+function entityFromJson<Entity>(
     entityType: reflect.Entity,
     inputValue: Record<string, unknown>,
+    entityContext?: AccessContext,
 ): Entity {
     const entityValue: Record<string, unknown> = {};
     const entityName = entityType.name;
+    entityContext = entityContext ?? new AccessContext(entityName);
+
     for (const field of entityType.fields) {
         if (!(field.name in inputValue)) {
             continue;
         }
         const fieldName = field.name;
         const fieldValue = inputValue[fieldName];
+        const context = entityContext.onField(fieldName);
 
         if (fieldValue === null || fieldValue === undefined) {
             if (field.isOptional) {
@@ -57,14 +85,14 @@ function jsonToEntity<Entity>(
                 continue;
             } else {
                 throw new Error(
-                    `field ${fieldName} of entity ${entityName} is not optional but undefined/null was received for the field`,
+                    `${context} is not optional but undefined/null was received for the field`,
                 );
             }
         }
 
         const err = (typeName: string) => {
             return Error(
-                `field ${field.name} of entity ${entityName} is ${typeName}, but provided value is of type ${typeof fieldValue}`,
+                `${context} is of type ${typeName}, but provided value is of type ${typeof fieldValue}`,
             );
         };
         const fieldType = field.type.name;
@@ -84,63 +112,57 @@ function jsonToEntity<Entity>(
             }
             entityValue[fieldName] = fieldValue;
         } else if (fieldType === "arrayBuffer") {
-            entityValue[fieldName] = convertArrayBuffer(
-                entityName,
-                fieldName,
+            entityValue[fieldName] = arrayBufferFromJson(
+                context,
                 fieldValue,
             );
         } else if (fieldType === "date") {
-            entityValue[fieldName] = convertDate(
-                entityName,
-                fieldName,
+            entityValue[fieldName] = dateFromJson(
+                context,
                 fieldValue,
             );
         } else if (fieldType === "array") {
-            entityValue[fieldName] = convertArray(
-                entityName,
-                fieldName,
+            entityValue[fieldName] = arrayFromJson(
+                context,
                 field.type.elementType,
                 fieldValue,
             );
         } else if (fieldType === "entity") {
-            entityValue[fieldName] = convertEntity(
-                entityName,
-                fieldName,
+            entityValue[fieldName] = nestedEntityFromJson(
+                context,
                 field.type.entityType,
                 fieldValue,
             );
         } else {
             assertNever(fieldType);
             throw new Error(
-                `field '${fieldName}' of entity '${entityName}' has unexpected type '${fieldType}'`,
+                `${context} has unexpected type '${fieldType}'`,
             );
         }
     }
     return entityValue as unknown as Entity;
 }
 
-function convertDate(
-    entityName: string,
-    fieldName: string,
+function dateFromJson(
+    context: AccessContext,
     value: unknown,
 ): Date {
     if (typeof value === "string" || typeof value === "number") {
         const date = new Date(value);
         if (Number.isNaN(date.valueOf())) {
             throw new Error(
-                `failed to convert value to Date for field ${fieldName}`,
+                `failed to convert value to Date for ${context}`,
             );
         }
         return date;
     }
     throw new Error(
-        `field ${fieldName} of entity ${entityName} is Date, but received value is not an instance of string nor number`,
+        `${context} is of type Date, but received value is not an instance of string nor number`,
     );
 }
 
-function convertArrayBuffer(
-    entityName: string,
-    fieldName: string,
+function arrayBufferFromJson(
+    context: AccessContext,
     value: unknown,
 ): ArrayBuffer {
     if (typeof value === "string") {
@@ -150,19 +172,19 @@ function convertArrayBuffer(
         );
     } else {
         throw Error(
-            `field ${fieldName} of entity ${entityName} is ArrayBuffer (transported as string), but received value is of type ${typeof value}`,
+            `${context} is of type ArrayBuffer (transported as string), but received value is of type ${typeof value}`,
         );
     }
 }
 
-function convertArray(
-    entityName: string,
-    fieldName: string,
+function arrayFromJson(
+    context: AccessContext,
     elementType: reflect.Type,
     arrayValue: unknown,
 ): unknown[] {
     if (Array.isArray(arrayValue)) {
         const elementTypeName = elementType.name;
+        const arrayContext = context.onArray();
         switch (elementTypeName) {
             case "string":
             case "number":
@@ -170,27 +192,23 @@ function convertArray(
             case "entityId":
                 return arrayValue;
             case "date":
-                return arrayValue.map((e) =>
-                    convertDate(entityName, fieldName, e)
-                );
+                return arrayValue.map((e) => dateFromJson(arrayContext, e));
             case "arrayBuffer":
                 return arrayValue.map((e) =>
-                    convertArrayBuffer(entityName, fieldName, e)
+                    arrayBufferFromJson(arrayContext, e)
                 );
             case "array":
                 return arrayValue.map((e) =>
-                    convertArray(
-                        entityName,
-                        fieldName,
+                    arrayFromJson(
+                        arrayContext,
                         elementType.elementType,
                         e,
                     )
                 );
             case "entity":
                 return arrayValue.map((e) =>
-                    convertEntity(
-                        entityName,
-                        fieldName,
+                    nestedEntityFromJson(
+                        arrayContext,
                         elementType.entityType,
                         e,
                     )
@@ -198,37 +216,206 @@ function convertArray(
             default:
                 assertNever(elementTypeName);
                 throw new Error(
-                    `field '${fieldName}' of entity '${entityName}' has unexpected array element type '${elementTypeName}'`,
+                    `${context} has unexpected array element type '${elementTypeName}'`,
                 );
         }
     } else {
         throw new Error(
-            `expected Array, but received value is not an instance of Array`,
+            `${context} is expected to be an Array, but received value is not an instance of Array`,
         );
     }
 }
 
-function convertEntity(
-    entityName: string,
-    fieldName: string,
-    entityType: reflect.Entity,
-    entityValue: unknown,
+function nestedEntityFromJson(
+    context: AccessContext,
+    nestedType: reflect.Entity,
+    nestedValue: unknown,
 ): unknown {
-    if (typeof entityValue === "object") {
+    if (typeof nestedValue === "object") {
         type RecordType = Record<string, unknown>;
-        return jsonToEntity<unknown>(
-            entityType,
-            entityValue as RecordType,
+        return entityFromJson<unknown>(
+            nestedType,
+            nestedValue as RecordType,
+            context,
         );
     } else {
         throw new Error(
-            `field ${fieldName} of entity ${entityName} is Entity, but received value is not an object`,
+            `${context} is Entity, but received value is not an object`,
         );
     }
 }
 
-function assertNever(x: never): never {
-    return x;
+function entityToJson<Entity>(
+    entityType: reflect.Entity,
+    entityValue: Entity,
+    allowMissingId: boolean,
+    entityContext?: AccessContext,
+): Record<string, unknown> {
+    const inputEntity = entityValue as Record<string, unknown>;
+    const outputJson: Record<string, unknown> = {};
+    const entityName = entityType.name;
+    entityContext = entityContext ?? new AccessContext(entityName);
+
+    for (const field of entityType.fields) {
+        const fieldName = field.name;
+        const fieldValue = inputEntity[fieldName];
+        const context = entityContext.onField(fieldName);
+
+        if (fieldValue === undefined || fieldValue === null) {
+            if (field.isOptional) {
+                continue;
+            }
+            if (fieldName == "id" && allowMissingId) {
+                continue;
+            }
+            throw new Error(
+                `${context} is not optional but undefined/null was received for the field`,
+            );
+        }
+
+        const err = (typeName: string) => {
+            return Error(
+                `${context} is of type ${typeName}, but provided value is of type ${typeof fieldValue}`,
+            );
+        };
+        const fieldType = field.type.name;
+        if (fieldType === "string" || fieldType === "entityId") {
+            if (typeof fieldValue !== "string") {
+                throw err("string");
+            }
+            outputJson[fieldName] = fieldValue;
+        } else if (fieldType === "number") {
+            if (typeof fieldValue !== "number") {
+                throw err("number");
+            }
+            outputJson[fieldName] = fieldValue;
+        } else if (fieldType === "boolean") {
+            if (typeof fieldValue !== "boolean") {
+                throw err("boolean");
+            }
+            outputJson[fieldName] = fieldValue;
+        } else if (fieldType === "arrayBuffer") {
+            // JSON.stringify performs automatic conversion.
+            outputJson[fieldName] = arrayBufferToJson(context, fieldValue);
+        } else if (fieldType === "date") {
+            outputJson[fieldName] = dateToJson(
+                context,
+                fieldValue,
+            );
+        } else if (fieldType === "array") {
+            outputJson[fieldName] = arrayToJson(
+                context,
+                field.type.elementType,
+                fieldValue,
+                allowMissingId,
+            );
+        } else if (fieldType === "entity") {
+            outputJson[fieldName] = nestedEntityToJson(
+                context,
+                field.type.entityType,
+                fieldValue,
+                allowMissingId,
+            );
+        } else {
+            assertNever(fieldType);
+            throw new Error(
+                `${context} has unexpected type '${fieldType}'`,
+            );
+        }
+    }
+    return outputJson;
+}
+
+function dateToJson(
+    context: AccessContext,
+    value: unknown,
+): number {
+    if (value instanceof Date) {
+        return value.getTime();
+    }
+    throw new Error(
+        `${context} is of type Date, but provided value is of different type`,
+    );
+}
+
+function arrayBufferToJson(_context: AccessContext, value: unknown): string {
+    let binary = "";
+    const bytes = new Uint8Array(value as ArrayBufferLike);
+    const len = bytes.byteLength;
+    for (let i = 0; i < len; i++) {
+        binary += String.fromCharCode(bytes[i]);
+    }
+    return btoa(binary);
+}
+
+function arrayToJson(
+    context: AccessContext,
+    elementType: reflect.Type,
+    arrayValue: unknown,
+    allowMissingId: boolean,
+): unknown[] {
+    if (Array.isArray(arrayValue)) {
+        const elementTypeName = elementType.name;
+        const arrayContext = context.onArray();
+        switch (elementTypeName) {
+            case "string":
+            case "number":
+            case "boolean":
+            case "entityId":
+                return arrayValue;
+            case "arrayBuffer":
+                return arrayValue.map(arrayBufferToJson);
+            case "date":
+                return arrayValue.map((e) => dateToJson(arrayContext, e));
+            case "array":
+                return arrayValue.map((e) =>
+                    arrayToJson(
+                        arrayContext,
+                        elementType.elementType,
+                        e,
+                        allowMissingId,
+                    )
+                );
+            case "entity":
+                return arrayValue.map((e) => {
+                    nestedEntityToJson(
+                        arrayContext,
+                        elementType.entityType,
+                        e,
+                        allowMissingId,
+                    );
+                });
+            default:
+                assertNever(elementTypeName);
+                throw new Error(
+                    `${context} has unexpected array element type '${elementTypeName}'`,
+                );
+        }
+    } else {
+        throw new Error(
+            `expected Array for ${context}, but provided value is not an instance of Array`,
+        );
+    }
+}
+
+function nestedEntityToJson(
+    context: AccessContext,
+    nestedType: reflect.Entity,
+    nestedValue: unknown,
+    allowMissingId: boolean,
+): Record<string, unknown> {
+    if (typeof nestedValue === "object") {
+        return entityToJson<unknown>(
+            nestedType,
+            nestedValue as unknown,
+            allowMissingId,
+            context,
+        );
+    } else {
+        throw new Error(
+            `${context} is of type Entity, but provided value is not an object`,
+        );
+    }
 }
 
 export function makeGetOne<Entity>(
@@ -238,7 +425,7 @@ export function makeGetOne<Entity>(
     return async () => {
         const resp = await fetch(url, { method: "GET" });
         await throwOnError(resp);
-        return jsonToEntity<Entity>(entityType, await resp.json());
+        return entityFromJson<Entity>(entityType, await resp.json());
     };
 }
 
@@ -307,7 +494,7 @@ export function makeGetMany<Entity>(
                 prevPage,
                 prevPageUrl: resp.prev_page,
                 results: resp.results.map((e) =>
-                    jsonToEntity<Entity>(entityType, e)
+                    entityFromJson<Entity>(entityType, e)
                 ),
             };
         }
@@ -350,7 +537,7 @@ export function makeGetAll<Entity>(
     origUrl: URL,
     serverUrl: string,
     entityType: reflect.Entity,
-): (params?: GetParams<Entity>) => Promise<Entity[]> {
+): (params?: GetAllParams<Entity>) => Promise<Entity[]> {
     const makeIter = makeGetManyIter<Entity>(origUrl, serverUrl, entityType);
     return async function (params?: GetAllParams<Entity>): Promise<Entity[]> {
         let iterParams = {};
@@ -379,15 +566,26 @@ export function makeGetAll<Entity>(
     };
 }
 
-export function makePostOne<Entity>(
+// This magic is necessary to allow passing of nested objects without ID. However, once we allow plain objects
+// we will have to generate the ID-less entities explictly because otherwise we might accidentaly
+// remove 'id' fields from plain objects.
+type OmitDistributive<T, K extends PropertyKey> = T extends
+    Record<string, unknown> ? OmitRecursively<T, K> : T;
+type OmitRecursively<T extends Record<string, unknown>, K extends PropertyKey> =
+    Omit<
+        { [P in keyof T]: OmitDistributive<T[P], K> },
+        K
+    >;
+
+export function makePostOne<Entity extends Record<string, unknown>>(
     url: URL,
     entityType: reflect.Entity,
-): (entity: Omit<Entity, "id">) => Promise<Entity> {
-    return async (entity: Omit<Entity, "id">) => {
-        // TODO: We should probably do the inverse of jsonToEntity.
-        const resp = await sendJson(url, "POST", entity);
+): (entity: OmitRecursively<Entity, "id">) => Promise<Entity> {
+    return async (entity: OmitRecursively<Entity, "id">) => {
+        const entityJson = entityToJson(entityType, entity, true);
+        const resp = await sendJson(url, "POST", entityJson);
         await throwOnError(resp);
-        return jsonToEntity<Entity>(entityType, await resp.json());
+        return entityFromJson<Entity>(entityType, await resp.json());
     };
 }
 
@@ -396,9 +594,10 @@ export function makePutOne<Entity>(
     entityType: reflect.Entity,
 ): (entity: Entity) => Promise<Entity> {
     return async (entity: Entity) => {
-        const resp = await sendJson(url, "PUT", entity);
+        const entityJson = entityToJson(entityType, entity, false);
+        const resp = await sendJson(url, "PUT", entityJson);
         await throwOnError(resp);
-        return jsonToEntity<Entity>(entityType, await resp.json());
+        return entityFromJson<Entity>(entityType, await resp.json());
     };
 }
 
@@ -407,9 +606,10 @@ export function makePatchOne<Entity>(
     entityType: reflect.Entity,
 ): (entity: Partial<Entity>) => Promise<Entity> {
     return async (entity: Partial<Entity>) => {
-        const resp = await sendJson(url, "PATCH", entity);
+        const entityJson = entityToJson(entityType, entity, false);
+        const resp = await sendJson(url, "PATCH", entityJson);
         await throwOnError(resp);
-        return jsonToEntity<Entity>(entityType, await resp.json());
+        return entityFromJson<Entity>(entityType, await resp.json());
     };
 }
 

@@ -82,12 +82,34 @@ fn generate_models(version_def: &VersionDefinition) -> Result<String> {
                 "    {}{}: {};",
                 field.name,
                 if field.is_optional { "?" } else { "" },
-                field_type
+                type_enum_to_code(field_type)?
             )?;
         }
         writeln!(output, "}}")?;
     }
     Ok(output)
+}
+
+fn type_enum_to_code(type_enum: &TypeEnum) -> Result<String> {
+    let ty_str = match &type_enum {
+        TypeEnum::ArrayBuffer(_) => "ArrayBuffer".to_owned(),
+        TypeEnum::Bool(_) => "boolean".to_owned(),
+        TypeEnum::JsDate(_) => "Date".to_owned(),
+        TypeEnum::Number(_) => "number".to_owned(),
+        TypeEnum::String(_) | TypeEnum::EntityId(_) => "string".to_owned(),
+        TypeEnum::Array(container) => {
+            let element_type = &container
+                .value_type
+                .as_ref()
+                .context("container has no value")?
+                .type_enum
+                .as_ref()
+                .context("type enum is not present in TypeMsg")?;
+            format!("{}[]", type_enum_to_code(element_type)?)
+        }
+        TypeEnum::Entity(entity_name) => entity_name.to_owned(),
+    };
+    Ok(ty_str)
 }
 
 fn generate_reflection(version_def: &VersionDefinition) -> Result<String> {
