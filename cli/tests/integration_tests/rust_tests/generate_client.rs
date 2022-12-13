@@ -259,6 +259,7 @@ static ALL_TYPES_PERSON_MODEL: &str = r#"
         father?: Id<Person>;
         birthDate: Date;
         doctorVisits: Date[];
+        favoriteWord: ArrayBuffer;
         dog: Dog = new Dog();
     }
 
@@ -268,7 +269,7 @@ static ALL_TYPES_PERSON_MODEL: &str = r#"
     }
 "#;
 
-#[chisel_macros::test(modules = Deno, client_modes = Deno)]
+#[chisel_macros::test(modules = Deno, client_modes = Both)]
 pub async fn post_all_types(c: TestContext) {
     c.chisel.write("models/models.ts", ALL_TYPES_PERSON_MODEL);
     c.chisel.write(
@@ -291,6 +292,7 @@ pub async fn post_all_types(c: TestContext) {
                 father: 'some id',
                 birthDate: new Date(42),
                 doctorVisits: [new Date(333), new Date(12345)],
+                favoriteWord: new TextEncoder().encode("Koníček"),
                 dog: {
                     name: 'Rex',
                     birthDate: new Date(999),
@@ -306,6 +308,7 @@ pub async fn post_all_types(c: TestContext) {
             assertEquals(jan.father, person.father);
             assertEquals(jan.birthDate, person.birthDate);
             assertEquals(jan.doctorVisits, person.doctorVisits);
+            assertEquals(jan.favoriteWord, person.favoriteWord);
             assertEquals(jan.dog.name, 'Rex');
             assertEquals(jan.dog.birthDate, new Date(999));
         "#,
