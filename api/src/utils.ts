@@ -37,7 +37,8 @@ export function responseFromJson(body: unknown, status = 200) {
     const isNullBody = status == 101 || status == 103 ||
         status == 204 || status == 205 || status == 304;
 
-    const json = isNullBody ? null : stringifyJson(body);
+    const jsonBody = valueToJson(body);
+    const json = isNullBody ? null : stringifyJson(jsonBody);
     return new Response(json, {
         status: status,
         headers: [
@@ -48,29 +49,61 @@ export function responseFromJson(body: unknown, status = 200) {
 
 const isDebug = opSync("op_chisel_is_debug") as boolean;
 
-/** Stringifies a `Json` value into JSON. Handles `Map` and `Set` correctly. */
+/** Stringifies a `Json` value into JSON. */
 function stringifyJson(value: unknown, space?: string | number): string {
     if (space === undefined && isDebug) {
         space = 2;
     }
+    return JSON.stringify(value, undefined, space);
+}
 
-    function replacer(this: unknown, _key: string, value: unknown): unknown {
-        if (value instanceof Map) {
-            const obj: Record<string, unknown> = {};
-            for (const [k, v] of value.entries()) {
-                obj["" + k] = v;
+function valueToJson(v: unknown): JSONValue {
+    if (v === undefined || v === null) {
+        return null;
+    } else if (typeof v === "string" || v instanceof String) {
+        return v as string;
+    } else if (typeof v === "number" || v instanceof Number) {
+        return v as number;
+    } else if (typeof v === "boolean" || v instanceof Boolean) {
+        return v as boolean;
+    } else if (v instanceof Date) {
+        return v.getTime();
+    } else if (v instanceof ArrayBuffer || ArrayBuffer.isView(v)) {
+        let binary = "";
+        const bytes = new Uint8Array(v as ArrayBufferLike);
+        const len = bytes.byteLength;
+        for (let i = 0; i < len; i++) {
+            binary += String.fromCharCode(bytes[i]);
+        }
+        return btoa(binary);
+    } else if (Array.isArray(v)) {
+        return v.map(valueToJson);
+    } else if (v instanceof Set) {
+        const array = [];
+        for (const e of v) {
+            array.push(valueToJson(e));
+        }
+        return array;
+    } else if (v instanceof Map) {
+        const jsonObj: { [x: string]: JSONValue } = {};
+        for (const [key, value] of v.entries()) {
+            jsonObj["" + key] = valueToJson(value);
+        }
+        return jsonObj;
+    } else if (typeof v === "object") {
+        const jsonObj: { [x: string]: JSONValue } = {};
+        for (const [key, value] of Object.entries(v)) {
+            // Javascript's JSON objects omit undefined values.
+            if (value !== undefined) {
+                jsonObj[key] = valueToJson(value);
             }
-            return obj;
         }
-
-        if (value instanceof Set) {
-            return Array.from(value);
-        }
-
-        return value;
+        return jsonObj;
+    } else {
+        throw new Error(
+            `encountered unexpected value type '${typeof v}' when converting to JSON`,
+        );
     }
-
-    return JSON.stringify(value, replacer, space);
 }
 
 /** HTTP status codes */
