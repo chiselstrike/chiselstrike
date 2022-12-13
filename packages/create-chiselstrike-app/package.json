@@ -9,7 +9,7 @@
         "typescript"
     ],
     "description": "Create full TypeScript backends with one command",
-    "homepage": "https://www.chiselstrike.com",
+    "homepage": "https://chiselstrike.com",
     "repository": {
         "type": "git",
         "url": "https://github.com/chiselstrike/chiselstrike.git",
