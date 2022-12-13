@@ -9,7 +9,7 @@
         "typescript"
     ],
     "description": "The prototype-to-production backend framework for TypeScript",
-    "homepage": "https://www.chiselstrike.com",
+    "homepage": "https://chiselstrike.com",
     "repository": {
         "type": "git",
         "url": "https://github.com/chiselstrike/chiselstrike.git",

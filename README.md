@@ -88,7 +88,7 @@ curl -X POST -d '{"content": "First comment", "by": "Jill"}' localhost:8080/dev/
 
 ### Is ChiselStrike a database?
 
-No. The [founding team at ChiselStrike](https://www.chiselstrike.com/about-us) have written databases from scratch before and
+No. The [founding team at ChiselStrike](https://chiselstrike.com/about-us) have written databases from scratch before and
 we believe there are better things to do in life, like pretty much anything else. ChiselStrike comes bundled with SQLite,
 providing developers with a zero-conf *relational-like abstraction* that allows one to think of backends
 from the business needs down, instead of from the database up.
@@ -232,5 +232,5 @@ Our documentation (including a quick tutorial) is available at [docs.chiselstrik
 
 Don't want the hassle of deploying and managing this yourself?
 
-Our hosted version is available [here](https://www.chiselstrike.com/login) and is now in beta. You can deploy your project
+Our hosted version is available [here](https://chiselstrike.com/login) and is now in beta. You can deploy your project
 straight from your git repository and see your backend materializing in front of your eyes.

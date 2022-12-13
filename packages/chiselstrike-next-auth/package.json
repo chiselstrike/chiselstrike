@@ -7,7 +7,7 @@
         "next-auth"
     ],
     "description": "ChiselStrike adapter for NextAuth.js",
-    "homepage": "https://www.chiselstrike.com",
+    "homepage": "https://chiselstrike.com",
     "repository": {
         "type": "git",
         "url": "https://github.com/chiselstrike/chiselstrike.git",
