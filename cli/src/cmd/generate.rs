@@ -28,9 +28,6 @@ pub struct Opts {
 }
 
 pub(crate) async fn cmd_generate(opts: Opts) -> Result<()> {
-    create_dir_all(&opts.output_dir)
-        .await
-        .context("failed to create directory for generated client files")?;
     let version_def = fetch_version_def(&opts).await?;
 
     let mut files = vec![];
@@ -46,6 +43,10 @@ pub(crate) async fn cmd_generate(opts: Opts) -> Result<()> {
         "filter.ts",
         include_str!("../../../api/src/filter.ts").to_owned(),
     ));
+
+    create_dir_all(&opts.output_dir)
+        .await
+        .context("failed to create directory for generated client files")?;
 
     for (file_name, src_code) in files {
         let formatted_code = format_typescript(std::path::Path::new(file_name), src_code)?;
