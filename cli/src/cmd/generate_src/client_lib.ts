@@ -23,6 +23,23 @@ export function cliParamsToInternal(
     return params;
 }
 
+type InputHeaders = Headers | Record<string, string> | undefined;
+function mergeHeaders(
+    baseHeaders: Headers | Record<string, string> | undefined,
+    otherHeaders: Headers | Record<string, string> | undefined,
+): Headers | undefined {
+    if (baseHeaders === undefined && otherHeaders === undefined) {
+        return undefined;
+    }
+    const base = new Headers(baseHeaders);
+    const other = new Headers(otherHeaders);
+
+    other.forEach((value: string, key: string) => {
+        base.set(key, value);
+    });
+    return base;
+}
+
 export function urlJoin(...urlParts: string[]): URL {
     let url = urlParts[0] || "";
     for (let i = 1; i < urlParts.length; i++) {
@@ -454,11 +471,11 @@ export function makeGetOne<Entity>(
     url: URL,
     entityType: reflect.Entity,
     cliParams: InternalClientParams,
-): () => Promise<Entity> {
-    return async () => {
+): (headers?: Headers | Record<string, string>) => Promise<Entity> {
+    return async (headers?: Headers | Record<string, string>) => {
         const resp = await fetch(url, {
             method: "GET",
-            headers: cliParams.headers,
+            headers: mergeHeaders(cliParams.headers, headers),
         });
         await throwOnError(resp);
         return entityFromJson<Entity>(entityType, await resp.json());
@@ -469,6 +486,7 @@ export type GetParams<Entity> = {
     pageSize?: number;
     offset?: number;
     filter?: FilterExpr<Entity>;
+    headers?: Headers | Record<string, string>;
 };
 
 export type GetResponse<Entity> = {
@@ -501,11 +519,12 @@ export function makeGetMany<Entity>(
             const encodedFilter = JSON.stringify(params.filter);
             url.searchParams.set("filter", encodedFilter);
         }
+        const headers = mergeHeaders(cliParams.headers, params.headers);
 
         async function makeResponse(url: URL): Promise<GetResponse<Entity>> {
             const r = await fetch(url, {
                 method: "GET",
-                headers: cliParams.headers,
+                headers,
             });
             await throwOnError(r);
 
@@ -577,6 +596,7 @@ export type GetAllParams<Entity> = {
     limit?: number;
     offset?: number;
     filter?: FilterExpr<Entity>;
+    headers?: Headers | Record<string, string>;
 };
 
 export function makeGetAll<Entity>(
@@ -598,6 +618,7 @@ export function makeGetAll<Entity>(
             iterParams = {
                 offset: params.offset,
                 filter: params.filter,
+                headers: params.headers,
             };
             limit = params.limit;
         }
@@ -633,10 +654,21 @@ export function makePostOne<Entity extends Record<string, unknown>>(
     url: URL,
     entityType: reflect.Entity,
     cliParams: InternalClientParams,
-): (entity: OmitRecursively<Entity, "id">) => Promise<Entity> {
-    return async (entity: OmitRecursively<Entity, "id">) => {
+): (
+    entity: OmitRecursively<Entity, "id">,
+    headers?: Headers | Record<string, string>,
+) => Promise<Entity> {
+    return async (
+        entity: OmitRecursively<Entity, "id">,
+        headers?: Headers | Record<string, string>,
+    ) => {
         const entityJson = entityToJson(entityType, entity, true);
-        const resp = await sendJson(url, "POST", entityJson, cliParams.headers);
+        const resp = await sendJson(
+            url,
+            "POST",
+            entityJson,
+            mergeHeaders(cliParams.headers, headers),
+        );
         await throwOnError(resp);
         return entityFromJson<Entity>(entityType, await resp.json());
     };
@@ -646,10 +678,21 @@ export function makePutOne<Entity>(
     url: URL,
     entityType: reflect.Entity,
     cliParams: InternalClientParams,
-): (entity: Entity) => Promise<Entity> {
-    return async (entity: Entity) => {
+): (
+    entity: Entity,
+    headers?: Headers | Record<string, string>,
+) => Promise<Entity> {
+    return async (
+        entity: Entity,
+        headers?: Headers | Record<string, string>,
+    ) => {
         const entityJson = entityToJson(entityType, entity, false);
-        const resp = await sendJson(url, "PUT", entityJson, cliParams.headers);
+        const resp = await sendJson(
+            url,
+            "PUT",
+            entityJson,
+            mergeHeaders(cliParams.headers, headers),
+        );
         await throwOnError(resp);
         return entityFromJson<Entity>(entityType, await resp.json());
     };
@@ -659,14 +702,20 @@ export function makePatchOne<Entity>(
     url: URL,
     entityType: reflect.Entity,
     cliParams: InternalClientParams,
-): (entity: Partial<Entity>) => Promise<Entity> {
-    return async (entity: Partial<Entity>) => {
+): (
+    entity: Partial<Entity>,
+    headers?: Headers | Record<string, string>,
+) => Promise<Entity> {
+    return async (
+        entity: Partial<Entity>,
+        headers?: Headers | Record<string, string>,
+    ) => {
         const entityJson = entityToJson(entityType, entity, false);
         const resp = await sendJson(
             url,
             "PATCH",
             entityJson,
-            cliParams.headers,
+            mergeHeaders(cliParams.headers, headers),
         );
         await throwOnError(resp);
         return entityFromJson<Entity>(entityType, await resp.json());
@@ -676,11 +725,11 @@ export function makePatchOne<Entity>(
 export function makeDeleteOne(
     url: URL,
     cliParams: InternalClientParams,
-): () => Promise<void> {
-    return async () => {
+): (headers?: Headers | Record<string, string>) => Promise<void> {
+    return async (headers?: Headers | Record<string, string>) => {
         const resp = await fetch(url, {
             method: "DELETE",
-            headers: cliParams.headers,
+            headers: mergeHeaders(cliParams.headers, headers),
         });
         await throwOnError(resp);
     };
@@ -689,12 +738,18 @@ export function makeDeleteOne(
 export function makeDeleteMany<Entity>(
     url: URL,
     cliParams: InternalClientParams,
-): (filter: FilterExpr<Entity>) => Promise<void> {
-    return async (filter: FilterExpr<Entity>) => {
+): (
+    filter: FilterExpr<Entity>,
+    headers?: Headers | Record<string, string>,
+) => Promise<void> {
+    return async (
+        filter: FilterExpr<Entity>,
+        headers?: Headers | Record<string, string>,
+    ) => {
         url.searchParams.set("filter", JSON.stringify(filter));
         const resp = await fetch(url, {
             method: "DELETE",
-            headers: cliParams.headers,
+            headers: mergeHeaders(cliParams.headers, headers),
         });
         await throwOnError(resp);
     };
