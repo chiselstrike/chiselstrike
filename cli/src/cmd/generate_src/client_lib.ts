@@ -35,7 +35,7 @@ function mergeHeaders(
     const other = new Headers(otherHeaders);
 
     other.forEach((value: string, key: string) => {
-        base.set(key, value);
+        base.append(key, value);
     });
     return base;
 }
