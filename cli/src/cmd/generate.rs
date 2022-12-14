@@ -356,39 +356,39 @@ fn handler_to_ts(handler: &RouteHandler, url: &str) -> Vec<String> {
     match &crud_handler {
         CrudHandler::DeleteMany(entity_name) => {
             vec![format!(
-                "delete: Ωlib.makeDeleteMany<Ωmodels.{entity_name}>(Ωurl(`{url}`), ΩcliParams)"
+                "delete: Ωlib.makeDeleteMany<Ωmodels.{entity_name}>(Ωurl(`{url}`), Ωparams)"
             )]
         }
         CrudHandler::DeleteOne(_) => vec![format!(
-            "delete: Ωlib.makeDeleteOne(Ωurl(`{url}`), ΩcliParams)"
+            "delete: Ωlib.makeDeleteOne(Ωurl(`{url}`), Ωparams)"
         )],
         CrudHandler::GetMany(entity_name) => {
             vec![format!(
-                "get: Ωlib.makeGetMany<Ωmodels.{entity_name}>(Ωurl(`{url}`), ΩserverUrl, Ωreflection.Ω{entity_name}, ΩcliParams)"
+                "get: Ωlib.makeGetMany<Ωmodels.{entity_name}>(Ωurl(`{url}`), ΩserverUrl, Ωreflection.Ω{entity_name}, Ωparams)"
             ), format!(
-                "getIter: Ωlib.makeGetManyIter<Ωmodels.{entity_name}>(Ωurl(`{url}`), ΩserverUrl, Ωreflection.Ω{entity_name}, ΩcliParams)"
+                "getIter: Ωlib.makeGetManyIter<Ωmodels.{entity_name}>(Ωurl(`{url}`), ΩserverUrl, Ωreflection.Ω{entity_name}, Ωparams)"
             ), format!(
-                "getAll: Ωlib.makeGetAll<Ωmodels.{entity_name}>(Ωurl(`{url}`), ΩserverUrl, Ωreflection.Ω{entity_name}, ΩcliParams)"
+                "getAll: Ωlib.makeGetAll<Ωmodels.{entity_name}>(Ωurl(`{url}`), ΩserverUrl, Ωreflection.Ω{entity_name}, Ωparams)"
             )]
         }
         CrudHandler::GetOne(entity_name) => {
             vec![format!(
-                "get: Ωlib.makeGetOne<Ωmodels.{entity_name}>(Ωurl(`{url}`), Ωreflection.Ω{entity_name}, ΩcliParams)"
+                "get: Ωlib.makeGetOne<Ωmodels.{entity_name}>(Ωurl(`{url}`), Ωreflection.Ω{entity_name}, Ωparams)"
             )]
         }
         CrudHandler::PatchOne(entity_name) => {
             vec![format!(
-                "patch: Ωlib.makePatchOne<Ωmodels.{entity_name}>(Ωurl(`{url}`), Ωreflection.Ω{entity_name}, ΩcliParams)"
+                "patch: Ωlib.makePatchOne<Ωmodels.{entity_name}>(Ωurl(`{url}`), Ωreflection.Ω{entity_name}, Ωparams)"
             )]
         }
         CrudHandler::PostOne(entity_name) => {
             vec![format!(
-                "post: Ωlib.makePostOne<Ωmodels.{entity_name}>(Ωurl(`{url}`), Ωreflection.Ω{entity_name}, ΩcliParams)"
+                "post: Ωlib.makePostOne<Ωmodels.{entity_name}>(Ωurl(`{url}`), Ωreflection.Ω{entity_name}, Ωparams)"
             )]
         }
         CrudHandler::PutOne(entity_name) => {
             vec![format!(
-                "put: Ωlib.makePutOne<Ωmodels.{entity_name}>(Ωurl(`{url}`), Ωreflection.Ω{entity_name}, ΩcliParams)"
+                "put: Ωlib.makePutOne<Ωmodels.{entity_name}>(Ωurl(`{url}`), Ωreflection.Ω{entity_name}, Ωparams)"
             )]
         }
     }
@@ -447,9 +447,9 @@ fn generate_routing_client(routes: &Vec<RouteInfo>, opts: &Opts) -> Result<Strin
     writeln!(
         output,
         r#"
-            function ΩcreateClient(ΩserverUrl: string, Ωparams?: Ωlib.ClientParams) {{
-                const ΩcliParams = Ωlib.cliParamsToInternal(Ωparams);
-                const Ωversion = ΩcliParams.version ?? '{}';
+            function ΩcreateClient(ΩserverUrl: string, ΩclientParams?: Ωlib.ClientParams) {{
+                const Ωparams = Ωlib.cliParamsToInternal(ΩclientParams);
+                const Ωversion = Ωparams.version ?? '{}';
                 const Ωurl = (url: string) => {{
                     return Ωlib.urlJoin(ΩserverUrl, Ωversion, url);
                 }};
