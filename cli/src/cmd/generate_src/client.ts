@@ -1,6 +1,7 @@
+export type ClientParams = Ωlib.ClientParams;
 export function createChiselClient(
     serverUrl: string,
-    params?: Ωlib.ClientParams,
+    params?: ClientParams,
 ) {
     return ΩcreateClient(serverUrl, params ?? {});
 }
