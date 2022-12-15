@@ -21,7 +21,7 @@ pub enum Mode {
 #[derive(Debug)]
 pub struct Opts {
     pub server_url: String,
-    pub api_addres: String,
+    pub api_addr: String,
     pub output_dir: PathBuf,
     pub version: String,
     pub mode: Mode,
@@ -35,7 +35,7 @@ pub(crate) async fn cmd_generate(opts: Opts) -> Result<()> {
     files.push(("models.ts", generate_models(&version_def)?));
     files.push(("reflection.ts", generate_reflection(&version_def)?));
 
-    let routes = get_routing_info(&opts.api_addres, &opts.version).await?;
+    let routes = get_routing_info(&opts.api_addr, &opts.version).await?;
     let client_code = generate_routing_client(&routes, &opts)?;
     files.push(("client.ts", client_code));
     files.push(("client_lib.ts", generate_client_lib(&opts)?));

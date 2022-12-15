@@ -300,7 +300,7 @@ async fn main() -> Result<()> {
         } => {
             let args = generate::Opts {
                 server_url,
-                api_addres: api_listen_addr,
+                api_addr: api_listen_addr,
                 output_dir,
                 version,
                 mode,
