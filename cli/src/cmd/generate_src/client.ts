@@ -1,7 +1,7 @@
 /**
  * Container for extra configuration information for client API requests.
  */
-export type ClientParams = Ωlib.ClientParams;
+export type ClientConfig = Ωlib.ClientConfig;
 
 /**
  * Creates an object that exposes an API to make requests of a ChiselStrike
@@ -25,8 +25,8 @@ export type ClientParams = Ωlib.ClientParams;
  *
  * ```
  * const baseUrl = "https://[REPO-NAME]-[GITHUB-ACCOUNT].chiselstrike.io"
- * const params = { version: "[BRANCH]" }
- * const chiselClient = createChiselClient(baseUrl, params)
+ * const config = { version: "[BRANCH]" }
+ * const chiselClient = createChiselClient(baseUrl, config)
  * ```
  *
  * Where `[REPO-NAME]` and `[GITHUB-ACCOUNT]` are the names of your GitHub repo
@@ -63,14 +63,14 @@ export type ClientParams = Ωlib.ClientParams;
  * completion, except for `getIter()` which returns an AsyncIterable`.
  *
  * @param serverUrl - The base endpoint URL of the backend service
- * @param params - ClientParams object that enables customization of the
+ * @param config - ClientConfig object that enables customization of the
  *   requests issues by the client. The default client is configured to use the
  *   version of the backend for which the API was generated.
  * @returns an object configured to make requests of ChiselStrike entities
  */
 export function createChiselClient(
     serverUrl: string,
-    params?: ClientParams,
+    config?: ClientConfig,
 ) {
-    return ΩcreateClient(serverUrl, params ?? {});
+    return ΩcreateClient(serverUrl, config ?? {});
 }
