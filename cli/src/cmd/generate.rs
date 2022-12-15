@@ -365,11 +365,11 @@ fn handler_to_ts(handler: &RouteHandler, url: &str) -> Vec<String> {
         )],
         CrudHandler::GetMany(entity_name) => {
             vec![format!(
-                "get: Ωlib.makeGetMany<Ωmodels.{entity_name}>(Ωurl(`{url}`), ΩserverUrl, Ωreflection.Ω{entity_name}, Ωconfig)"
+                "get: Ωlib.makeGetMany<Ωmodels.{entity_name}>(Ωurl(`{url}`), Ωreflection.Ω{entity_name}, Ωconfig)"
             ), format!(
-                "getIter: Ωlib.makeGetManyIter<Ωmodels.{entity_name}>(Ωurl(`{url}`), ΩserverUrl, Ωreflection.Ω{entity_name}, Ωconfig)"
+                "getIter: Ωlib.makeGetManyIter<Ωmodels.{entity_name}>(Ωurl(`{url}`), Ωreflection.Ω{entity_name}, Ωconfig)"
             ), format!(
-                "getAll: Ωlib.makeGetAll<Ωmodels.{entity_name}>(Ωurl(`{url}`), ΩserverUrl, Ωreflection.Ω{entity_name}, Ωconfig)"
+                "getAll: Ωlib.makeGetAll<Ωmodels.{entity_name}>(Ωurl(`{url}`), Ωreflection.Ω{entity_name}, Ωconfig)"
             )]
         }
         CrudHandler::GetOne(entity_name) => {
@@ -448,11 +448,11 @@ fn generate_routing_client(routes: &Vec<RouteInfo>, opts: &Opts) -> Result<Strin
     writeln!(
         output,
         r#"
-            function ΩcreateClient(ΩserverUrl: string, ΩclientConfig?: Ωlib.ClientConfig) {{
+            function ΩcreateClient(ΩclientConfig: Ωlib.ClientConfig) {{
                 const Ωconfig = Ωlib.cliConfigToInternal(ΩclientConfig);
                 const Ωversion = Ωconfig.version ?? '{}';
                 const Ωurl = (url: string) => {{
-                    return Ωlib.urlJoin(ΩserverUrl, Ωversion, url);
+                    return Ωlib.urlJoin(Ωconfig.serverUrl, Ωversion, url);
                 }};
                 return {};
             }}
