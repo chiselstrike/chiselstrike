@@ -1,5 +1,13 @@
 export type ClientParams = {
+    /**
+     * The version of the ChiselStrike backend to use. This becomes the first
+     * path segment in the endpoint URL. If omitted, the default is the version
+     * of the backend at the time `chisel generate` was run.
+     */
     version?: string;
+    /**
+     * Additional HTTP headers to provide with each request.
+     */
     headers?: Headers | Record<string, string>;
 };
 
