@@ -1,5 +1,12 @@
 export type ClientConfig = {
     /**
+     * The base endpoint URL of the ChiselStrike backend.
+     *
+     * For example, this will be "http://localhost:8080" during local
+     * development.
+     */
+    serverUrl: string;
+    /**
      * The version of the ChiselStrike backend to use. This becomes the first
      * path segment in the endpoint URL. If omitted, the default is the version
      * of the backend at the time `chisel generate` was run.
@@ -12,14 +19,15 @@ export type ClientConfig = {
 };
 
 export type InternalClientConfig = {
+    serverUrl: string;
     version?: string;
     headers?: Headers;
 };
 
 export function cliConfigToInternal(
-    cliConfig?: ClientConfig,
+    cliConfig: ClientConfig,
 ): InternalClientConfig {
-    const config: InternalClientConfig = {};
+    const config: InternalClientConfig = { serverUrl: cliConfig.serverUrl };
     if (cliConfig !== undefined) {
         if (cliConfig.headers !== undefined) {
             config.headers = new Headers(cliConfig.headers);
@@ -507,7 +515,6 @@ export type GetResponse<Entity> = {
 
 export function makeGetMany<Entity>(
     origUrl: URL,
-    serverUrl: string,
     entityType: reflect.Entity,
     cliConfig: InternalClientConfig,
 ): (params: GetParams<Entity>) => Promise<GetResponse<Entity>> {
@@ -547,12 +554,14 @@ export function makeGetMany<Entity>(
             let prevPage = undefined;
             if (resp.next_page !== undefined) {
                 nextPage = () => {
-                    return makeResponse(new URL(resp.next_page!, serverUrl));
+                    const url = new URL(resp.next_page!, cliConfig.serverUrl);
+                    return makeResponse(url);
                 };
             }
             if (resp.prev_page !== undefined) {
                 prevPage = () => {
-                    return makeResponse(new URL(resp.prev_page!, serverUrl));
+                    const url = new URL(resp.prev_page!, cliConfig.serverUrl);
+                    return makeResponse(url);
                 };
             }
             return {
@@ -571,13 +580,11 @@ export function makeGetMany<Entity>(
 
 export function makeGetManyIter<Entity>(
     origUrl: URL,
-    serverUrl: string,
     entityType: reflect.Entity,
     cliConfig: InternalClientConfig,
 ): (params?: GetParams<Entity>) => AsyncIterable<Entity> {
     const getPage = makeGetMany<Entity>(
         origUrl,
-        serverUrl,
         entityType,
         cliConfig,
     );
@@ -609,13 +616,11 @@ export type GetAllParams<Entity> = {
 
 export function makeGetAll<Entity>(
     origUrl: URL,
-    serverUrl: string,
     entityType: reflect.Entity,
     cliConfig: InternalClientConfig,
 ): (params?: GetAllParams<Entity>) => Promise<Entity[]> {
     const makeIter = makeGetManyIter<Entity>(
         origUrl,
-        serverUrl,
         entityType,
         cliConfig,
     );

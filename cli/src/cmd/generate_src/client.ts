@@ -69,8 +69,7 @@ export type ClientConfig = Ωlib.ClientConfig;
  * @returns an object configured to make requests of ChiselStrike entities
  */
 export function createChiselClient(
-    serverUrl: string,
-    config?: ClientConfig,
+    config: ClientConfig,
 ) {
-    return ΩcreateClient(serverUrl, config ?? {});
+    return ΩcreateClient(config);
 }

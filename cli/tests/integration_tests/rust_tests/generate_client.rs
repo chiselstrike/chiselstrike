@@ -91,7 +91,7 @@ fn with_client(c: &TestContext, src: &str) -> String {
                 {imports}
                 {common_funs}
 
-                const cli = createChiselClient('http://{}');
+                const cli = createChiselClient({{ serverUrl: 'http://{}' }});
                 {src}
             "#,
                 c.chisel.api_address
@@ -118,7 +118,7 @@ fn with_client(c: &TestContext, src: &str) -> String {
                 {imports}
                 {common_funs}
                 async function main() {{
-                    const cli = createChiselClient('http://{}');
+                    const cli = createChiselClient({{ serverUrl: 'http://{}' }});
                     {src}
                 }}
                 main();
