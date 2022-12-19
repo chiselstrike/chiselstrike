@@ -687,16 +687,16 @@ export function makePostOne<Entity extends Record<string, unknown>>(
     };
 }
 
-export function makePutOne<Entity>(
+export function makePutOne<Entity extends Record<string, unknown>>(
     url: URL,
     entityType: reflect.Entity,
     cliConfig: InternalClientConfig,
 ): (
-    entity: Entity,
+    entity: OmitRecursively<Entity, "id">,
     headers?: Headers | Record<string, string>,
 ) => Promise<Entity> {
     return async (
-        entity: Entity,
+        entity: OmitRecursively<Entity, "id">,
         headers?: Headers | Record<string, string>,
     ) => {
         const entityJson = entityToJson(entityType, entity, false);
