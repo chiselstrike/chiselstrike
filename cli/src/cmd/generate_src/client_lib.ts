@@ -314,7 +314,6 @@ function nestedEntityFromJson(
 function entityToJson<Entity>(
     entityType: reflect.Entity,
     entityValue: Entity,
-    allowMissingId: boolean,
     entityContext?: AccessContext,
 ): Record<string, unknown> {
     const inputEntity = entityValue as Record<string, unknown>;
@@ -331,7 +330,7 @@ function entityToJson<Entity>(
             if (field.isOptional) {
                 continue;
             }
-            if (fieldName == "id" && allowMissingId) {
+            if (fieldName == "id") {
                 continue;
             }
             throw new Error(
@@ -372,14 +371,12 @@ function entityToJson<Entity>(
                 context,
                 field.type.elementType,
                 fieldValue,
-                allowMissingId,
             );
         } else if (fieldType === "entity") {
             outputJson[fieldName] = nestedEntityToJson(
                 context,
                 field.type.entityType,
                 fieldValue,
-                allowMissingId,
             );
         } else {
             assertNever(fieldType);
@@ -417,7 +414,6 @@ function arrayToJson(
     context: AccessContext,
     elementType: reflect.Type,
     arrayValue: unknown,
-    allowMissingId: boolean,
 ): unknown[] {
     if (Array.isArray(arrayValue)) {
         const elementTypeName = elementType.name;
@@ -438,7 +434,6 @@ function arrayToJson(
                         arrayContext,
                         elementType.elementType,
                         e,
-                        allowMissingId,
                     )
                 );
             case "entity":
@@ -447,7 +442,6 @@ function arrayToJson(
                         arrayContext,
                         elementType.entityType,
                         e,
-                        allowMissingId,
                     );
                 });
             default:
@@ -467,13 +461,11 @@ function nestedEntityToJson(
     context: AccessContext,
     nestedType: reflect.Entity,
     nestedValue: unknown,
-    allowMissingId: boolean,
 ): Record<string, unknown> {
     if (typeof nestedValue === "object") {
         return entityToJson<unknown>(
             nestedType,
             nestedValue as unknown,
-            allowMissingId,
             context,
         );
     } else {
@@ -675,7 +667,7 @@ export function makePostOne<Entity extends Record<string, unknown>>(
         entity: OmitRecursively<Entity, "id">,
         headers?: Headers | Record<string, string>,
     ) => {
-        const entityJson = entityToJson(entityType, entity, true);
+        const entityJson = entityToJson(entityType, entity);
         const resp = await sendJson(
             url,
             "POST",
@@ -699,7 +691,7 @@ export function makePutOne<Entity extends Record<string, unknown>>(
         entity: OmitRecursively<Entity, "id">,
         headers?: Headers | Record<string, string>,
     ) => {
-        const entityJson = entityToJson(entityType, entity, false);
+        const entityJson = entityToJson(entityType, entity);
         const resp = await sendJson(
             url,
             "PUT",
@@ -723,7 +715,7 @@ export function makePatchOne<Entity>(
         entity: Partial<Entity>,
         headers?: Headers | Record<string, string>,
     ) => {
-        const entityJson = entityToJson(entityType, entity, false);
+        const entityJson = entityToJson(entityType, entity);
         const resp = await sendJson(
             url,
             "PATCH",
