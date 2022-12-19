@@ -82,7 +82,8 @@ fn with_client(c: &TestContext, src: &str) -> String {
     match c.client_mode {
         ClientMode::Deno => {
             let imports = r#"
-                import { createChiselClient } from "./client.ts";
+                import { createChiselClient, type WithoutId} from "./client.ts";
+                import * as models from "./models.ts";
                 import { type GetParams } from "./client_lib.ts";
                 import { assertEquals, assert } from "https://deno.land/std@0.167.0/testing/asserts.ts";
             "#;
@@ -99,7 +100,8 @@ fn with_client(c: &TestContext, src: &str) -> String {
         }
         ClientMode::Node => {
             let imports = r#"
-                import { createChiselClient } from "./client";
+                import { createChiselClient, type WithoutId } from "./client";
+                import * as models from "./models";
                 import { type GetParams } from "./client_lib";
 
                 function assert(expr: unknown, msg = "") {
@@ -342,6 +344,64 @@ pub async fn special_characters_in_path(c: TestContext) {
             const names = ppl.map(p => p.firstName);
             names.sort();
             assertEquals(names, ["Glauber", "Jan", "Pekka"]);
+        "#,
+    );
+    c.ts_runner.run_ok("generated/test.ts", &src).await;
+}
+
+#[chisel_macros::test(modules = Deno, client_modes = Both)]
+pub async fn put_without_id_field(c: TestContext) {
+    c.chisel.write(
+        "models/person.ts",
+        r#"
+            import { ChiselEntity } from "@chiselstrike/api";
+            export class Person extends ChiselEntity {
+                name: string;
+            }
+        "#,
+    );
+    c.chisel.write(
+        "models/animal.ts",
+        r#"
+            import { ChiselEntity } from "@chiselstrike/api";
+            export class Animal extends ChiselEntity {
+                kind: string;
+            }
+        "#,
+    );
+    c.chisel.write("routes/people.ts", PEOPLE_CRUD);
+    c.chisel.write(
+        "routes/animals.ts",
+        r#"
+        import { Animal } from "../models/animal.ts";
+        export default Animal.crud();
+    "#,
+    );
+    c.chisel.apply_ok().await;
+
+    c.chisel.generate_ok("generated").await;
+    let src = with_client(
+        &c,
+        r#"
+            const janId = "6ac16358-7fd6-11ed-a1eb-0242ac120002"
+            const person = await cli.people.id(janId).put({name: "Jan"});
+            assertEquals(person.id, janId);
+            assertEquals(person.name, "Jan");
+
+            const jan = await cli.people.id(janId).get();
+            assertEquals(jan.name, "Jan");
+
+            const dougId = "6ac166c8-7fd6-11ed-a1eb-0242ac120002"
+            const doug: WithoutId<models.Person> = {name: "Doug"};
+            const maybeDoug = await cli.people.id(dougId).put(doug);
+            assertEquals(maybeDoug.id, dougId);
+            assertEquals(maybeDoug.name, "Doug");
+
+            const mouseId = "67ea724a-7fd7-11ed-a1eb-0242ac120002"
+            const mouse: WithoutId<models.Animal> = {kind: "mouse"};
+            const maybeMouse = await cli.animals.id(mouseId).put(mouse);
+            assertEquals(maybeMouse.id, mouseId);
+            assertEquals(maybeMouse.kind, "mouse");
         "#,
     );
     c.ts_runner.run_ok("generated/test.ts", &src).await;

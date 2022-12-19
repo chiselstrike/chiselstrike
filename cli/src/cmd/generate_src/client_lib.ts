@@ -644,27 +644,16 @@ export function makeGetAll<Entity>(
     };
 }
 
-// This magic is necessary to allow passing of nested objects without ID. However, once we allow plain objects
-// we will have to generate the ID-less entities explictly because otherwise we might accidentaly
-// remove 'id' fields from plain objects.
-type OmitDistributive<T, K extends PropertyKey> = T extends
-    Record<string, unknown> ? OmitRecursively<T, K> : T;
-type OmitRecursively<T extends Record<string, unknown>, K extends PropertyKey> =
-    Omit<
-        { [P in keyof T]: OmitDistributive<T[P], K> },
-        K
-    >;
-
 export function makePostOne<Entity extends Record<string, unknown>>(
     url: URL,
     entityType: reflect.Entity,
     cliConfig: InternalClientConfig,
 ): (
-    entity: OmitRecursively<Entity, "id">,
+    entity: WithoutId<Entity>,
     headers?: Headers | Record<string, string>,
 ) => Promise<Entity> {
     return async (
-        entity: OmitRecursively<Entity, "id">,
+        entity: WithoutId<Entity>,
         headers?: Headers | Record<string, string>,
     ) => {
         const entityJson = entityToJson(entityType, entity);
@@ -684,11 +673,11 @@ export function makePutOne<Entity extends Record<string, unknown>>(
     entityType: reflect.Entity,
     cliConfig: InternalClientConfig,
 ): (
-    entity: OmitRecursively<Entity, "id">,
+    entity: WithoutId<Entity>,
     headers?: Headers | Record<string, string>,
 ) => Promise<Entity> {
     return async (
-        entity: OmitRecursively<Entity, "id">,
+        entity: WithoutId<Entity>,
         headers?: Headers | Record<string, string>,
     ) => {
         const entityJson = entityToJson(entityType, entity);

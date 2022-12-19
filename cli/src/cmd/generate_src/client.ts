@@ -2,6 +2,11 @@
  * Container for extra configuration information for client API requests.
  */
 export type ClientConfig = Ωlib.ClientConfig;
+/**
+ * This generic turns given `Entity` type into a type without id fields
+ * (it removes id fields for nested entities as well)
+ */
+export type WithoutId<Entity> = ΩWithoutId<Entity>;
 
 /**
  * Creates an object that exposes an API to make requests of a ChiselStrike
