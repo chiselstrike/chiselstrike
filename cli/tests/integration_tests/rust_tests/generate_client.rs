@@ -315,3 +315,34 @@ pub async fn post_all_types(c: TestContext) {
     );
     c.ts_runner.run_ok("generated/test.ts", &src).await;
 }
+
+#[chisel_macros::test(modules = Deno, client_modes = Both)]
+pub async fn special_characters_in_path(c: TestContext) {
+    c.chisel.write("models/person.ts", PERSON_MODEL);
+    c.chisel.write(
+        "routes/index.ts",
+        r#"
+        import { RouteMap } from "@chiselstrike/api";
+        import { Person } from "../models/person.ts";
+
+        export default new RouteMap()
+            .prefix("people", Person.crud())
+            .prefix("@pretty-wild=people", Person.crud())
+        "#,
+    );
+
+    c.chisel.apply_ok().await;
+    store_people(&c.chisel).await;
+
+    c.chisel.generate_ok("generated").await;
+    let src = with_client(
+        &c,
+        r#"
+            const ppl = (await cli["@pretty-wild=people"].get({pageSize: 3})).results;
+            const names = ppl.map(p => p.firstName);
+            names.sort();
+            assertEquals(names, ["Glauber", "Jan", "Pekka"]);
+        "#,
+    );
+    c.ts_runner.run_ok("generated/test.ts", &src).await;
+}

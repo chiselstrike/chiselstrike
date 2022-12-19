@@ -405,7 +405,7 @@ fn generate_routing_obj(route: &SubRoute, url_prefix: &str) -> Result<String> {
     for (segment, subroute) in &route.children {
         let handler = match segment {
             RouteSegment::FixedText(segment) => format!(
-                "{segment}: {}",
+                "\"{segment}\": {}",
                 generate_routing_obj(subroute, &path_join(url_prefix, segment))?
             ),
             RouteSegment::Wildcard(segment) => {
