@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: © 2022 ChiselStrike <info@chiselstrike.com>
 
 export function opSync(opName: string, a?: unknown, b?: unknown): unknown {
-    return Deno.core.opSync(opName, a, b);
+    return Deno.core.ops[opName](a, b);
 }
 
 export function opAsync(

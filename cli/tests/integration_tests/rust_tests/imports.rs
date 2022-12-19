@@ -47,7 +47,7 @@ async fn node_std(mut c: TestContext) {
     c.chisel.write(
         "routes/foo.ts",
         r##"
-        import * as module from "https://deno.land/std@0.145.0/node/module.ts";
+        import * as module from "https://deno.land/std@0.165.0/node/module.ts";
 
         export default async function (req: Request) {
             return "Hello from foo";
