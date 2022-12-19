@@ -32,7 +32,11 @@ pub(crate) async fn cmd_generate(opts: Opts) -> Result<()> {
 
     let mut files = vec![];
 
-    files.push(("models.ts", generate_models(&version_def)?));
+    files.push(("models.ts", generate_models(&version_def, false)?));
+    files.push((
+        "models_without_id.ts",
+        generate_models_without_id(&version_def, &opts)?,
+    ));
     files.push(("reflection.ts", generate_reflection(&version_def)?));
 
     let routes = get_routing_info(&opts.api_addr, &opts.version).await?;
@@ -72,11 +76,14 @@ async fn fetch_version_def(opts: &Opts) -> Result<VersionDefinition> {
     Ok(version_def.clone())
 }
 
-fn generate_models(version_def: &VersionDefinition) -> Result<String> {
+fn generate_models(version_def: &VersionDefinition, omit_id: bool) -> Result<String> {
     let mut output = String::new();
     for def in &version_def.type_defs {
         writeln!(output, "export type {} = {{", def.name)?;
         for field in &def.field_defs {
+            if omit_id && field.name == "id" {
+                continue;
+            }
             let field_type = field.field_type()?;
             writeln!(
                 output,
@@ -111,6 +118,33 @@ fn type_enum_to_code(type_enum: &TypeEnum) -> Result<String> {
         TypeEnum::Entity(entity_name) => entity_name.to_owned(),
     };
     Ok(ty_str)
+}
+
+fn generate_models_without_id(version_def: &VersionDefinition, opts: &Opts) -> Result<String> {
+    let mut output = String::new();
+
+    let imports = match opts.mode {
+        Mode::Deno => r#"import * as Ωmodels from "./models.ts";"#,
+        Mode::Node => r#"import * as Ωmodels from "./models";"#,
+    };
+    write!(output, "{}\n\n", &imports)?;
+
+    write!(
+        output,
+        "{}\n{}\n",
+        include_str!("generate_src/models_without_id.ts"),
+        generate_models(version_def, true)?
+    )?;
+
+    let entity_names = version_def.type_defs.iter().map(|entity| &entity.name);
+    let without_id_chain = entity_names.fold("never".to_string(), |acc, x| {
+        format!("ΩIfEquals<ΩEntityType, Ωmodels.{x}, {x}, {acc}>")
+    });
+    write!(
+        output,
+        "export type ΩWithoutId<ΩEntityType> = {without_id_chain};"
+    )?;
+    Ok(output)
 }
 
 fn generate_reflection(version_def: &VersionDefinition) -> Result<String> {
@@ -431,6 +465,7 @@ fn generate_routing_client(routes: &Vec<RouteInfo>, opts: &Opts) -> Result<Strin
                 import * as Ωlib from "./client_lib.ts";
                 import * as Ωmodels from "./models.ts";
                 import * as Ωreflection from "./reflection.ts";
+                import { type ΩWithoutId } from "./models_without_id.ts";
             "#
         }
         Mode::Node => {
@@ -438,6 +473,7 @@ fn generate_routing_client(routes: &Vec<RouteInfo>, opts: &Opts) -> Result<Strin
                 import * as Ωlib from "./client_lib";
                 import * as Ωmodels from "./models";
                 import * as Ωreflection from "./reflection";
+                import { type ΩWithoutId } from "./models_without_id";
             "#
         }
     };
@@ -471,12 +507,14 @@ fn generate_client_lib(opts: &Opts) -> Result<String> {
             r#"
             import { type FilterExpr } from "./filter.ts";
             import * as reflect from "./reflection.ts";
+            import { type ΩWithoutId as WithoutId } from "./models_without_id.ts";
         "#
         }
         Mode::Node => {
             r#"
             import { type FilterExpr } from "./filter";
             import * as reflect from "./reflection";
+            import { type ΩWithoutId as WithoutId } from "./models_without_id";
         "#
         }
     };
