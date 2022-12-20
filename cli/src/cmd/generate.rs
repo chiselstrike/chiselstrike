@@ -496,8 +496,7 @@ fn generate_routing_client(routes: &Vec<RouteInfo>, opts: &Opts) -> Result<Strin
         opts.version,
         generate_routing_obj(&root, "")?
     )?;
-
-    format_typescript(Path::new("client.ts"), output)
+    Ok(output)
 }
 
 fn generate_client_lib(opts: &Opts) -> Result<String> {
