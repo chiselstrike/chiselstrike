@@ -330,7 +330,6 @@ mod test {
             let from_node = insert_node(&mut graph, from);
             let to_node = insert_node(&mut graph, to);
 
-            dbg!((from_node, to_node, edge));
             graph.add_edge(from_node, to_node, edge);
         }
 

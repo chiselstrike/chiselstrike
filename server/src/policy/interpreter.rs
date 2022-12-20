@@ -22,7 +22,9 @@ impl JsonResolver<'_> {
             Var::Member(obj, prop) => {
                 let obj = env.get(*obj);
                 let value = self.get_value(env, obj)?;
-                value.get(prop)
+                // return null so we don't mistake that for an impossiblity to evaluate:
+                // we could go down the property chain, but then found nothing.
+                value.get(prop).or(Some(&JsonValue::Null))
             }
             _ => None,
         }

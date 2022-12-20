@@ -265,3 +265,57 @@ async fn check_write_transform(c: TestContext) -> TestContext {
 
     c
 }
+
+#[chisel_macros::test(modules = Deno, chiseld_args = ["--typescript-policies"])]
+pub async fn read_ctx_headers(c: TestContext) {
+    c.chisel.write(
+        "models/person.ts",
+        r##"
+        import { ChiselEntity } from "@chiselstrike/api";
+        export class Person extends ChiselEntity {
+            userId: number;
+        }
+    "##,
+    );
+    c.chisel.write(
+        "routes/person.ts",
+        r##"
+        import { Person } from "../models/person.ts";
+
+        export default Person.crud();
+    "##,
+    );
+    c.chisel.apply_ok().await;
+
+    c.chisel
+        .post_json("/dev/person", json!({ "userId": 1 }))
+        .await;
+
+    c.chisel.write(
+        "policies/Person.ts",
+        r##"
+        export default {
+            read: (person, ctx) => {
+                if (person.userId == ctx.headers["userid"]) {
+                    return Action.Allow;
+                } else {
+                    return Action.Skip;
+                }
+            }
+        }
+    "##,
+    );
+
+    c.chisel.apply_ok().await;
+
+    let results = c
+        .chisel
+        .get("/dev/person")
+        .header("userId", "1")
+        .send()
+        .await;
+    assert_eq!(results.json()["results"].as_array().unwrap().len(), 1);
+
+    let results = c.chisel.get("/dev/person").send().await;
+    assert!(results.json()["results"].as_array().unwrap().is_empty());
+}
