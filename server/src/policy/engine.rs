@@ -155,26 +155,30 @@ impl PolicyEngine {
         chisel_ctx: &dyn ChiselRequestContext,
     ) -> Result<Option<Expr>> {
         match policy.filter {
-            Some(ref filter) => {
-                let chisel_ctx = chisel_ctx.to_value();
-                let resolver = JsonResolver {
-                    name: &policy.ctx_param_name,
-                    value: &chisel_ctx,
-                };
+            Some(ref filter) => match filter.skip_condition {
+                Some(ref skip_cond) => {
+                    let chisel_ctx = chisel_ctx.to_value();
+                    let resolver = JsonResolver {
+                        name: &filter.ctx_param_name,
+                        value: &chisel_ctx,
+                    };
 
-                let mut context = InterpreterContext {
-                    env: &policy.env,
-                    resolver: &resolver,
-                    boa: &mut self.boa_ctx.borrow_mut(),
-                };
+                    let mut context = InterpreterContext {
+                        env: &filter.env,
+                        resolver: &resolver,
+                        boa: &mut self.boa_ctx.borrow_mut(),
+                    };
 
-                let predicates = policy
-                    .predicates
-                    .map(|p| interpreter::eval(p, &mut context));
-                let cond = filter.simplify(&predicates);
-                cond_to_expr(&cond, &predicates, &policy.entity_param_name, &policy.env).map(Some)
-            }
-            None => Ok(None),
+                    let predicates = filter
+                        .predicates
+                        .map(|p| interpreter::eval(p, &mut context));
+                    let cond = skip_cond.simplify(&predicates);
+                    cond_to_expr(&cond, &predicates, &filter.entity_param_name, &filter.env)
+                        .map(Some)
+                }
+                None => Ok(None),
+            },
+            _ => Ok(None),
         }
     }
 
@@ -217,18 +221,33 @@ fn cond_to_expr(
     entity_param_name: &str,
     env: &Environment,
 ) -> Result<Expr> {
+    let expr = cond_to_expr_reccur(cond, preds, entity_param_name, env)?;
+    Ok(expr)
+}
+
+fn cond_to_expr_reccur(
+    cond: &Cond,
+    preds: &Predicates,
+    entity_param_name: &str,
+    env: &Environment,
+) -> Result<Expr> {
     let val = match cond {
         Cond::And(left, right) => {
-            let right = cond_to_expr(right, preds, entity_param_name, env)?;
-            let left = cond_to_expr(left, preds, entity_param_name, env)?;
+            let right = cond_to_expr_reccur(right, preds, entity_param_name, env)?;
+            let left = cond_to_expr_reccur(left, preds, entity_param_name, env)?;
             BinaryExpr::and(left, right)
         }
         Cond::Or(left, right) => {
-            let right = cond_to_expr(right, preds, entity_param_name, env)?;
-            let left = cond_to_expr(left, preds, entity_param_name, env)?;
+            let right = cond_to_expr_reccur(right, preds, entity_param_name, env)?;
+            let left = cond_to_expr_reccur(left, preds, entity_param_name, env)?;
             BinaryExpr::or(left, right)
         }
-        Cond::Not(cond) => Expr::Not(Box::new(cond_to_expr(cond, preds, entity_param_name, env)?)),
+        Cond::Not(cond) => Expr::Not(Box::new(cond_to_expr_reccur(
+            cond,
+            preds,
+            entity_param_name,
+            env,
+        )?)),
         Cond::Predicate(id) => {
             let predicate = preds.get(*id);
             predicate_to_expr(predicate, entity_param_name, env)?
@@ -563,86 +582,57 @@ mod test {
             .unwrap()
             .unwrap();
 
-        // sorry for what's next... :()
-        // p1 = !(name == "marin" && true) = !A
-        let p1 = Expr::Not(
-            BinaryExpr::and(
-                BinaryExpr::eq(
-                    Expr::Property(PropertyAccess {
-                        property: "name".into(),
-                        object: Expr::Parameter { position: 0 }.into(),
-                    }),
-                    Expr::Value {
-                        value: Value::String("marin".into()),
-                    },
-                ),
-                Expr::Value {
-                    value: Value::Bool(true),
-                },
-            )
-            .into(),
-        );
-
-        // p2 = !(name == Jim && age < 178) = !C
-        let p2 = Expr::Not(
-            BinaryExpr::and(
-                BinaryExpr::eq(
-                    Expr::Property(PropertyAccess {
-                        property: "name".into(),
-                        object: Expr::Parameter { position: 0 }.into(),
-                    }),
-                    Expr::Value {
-                        value: Value::String("Jim".into()),
-                    },
-                ),
-                BinaryExpr::lt(
-                    Expr::Property(PropertyAccess {
-                        property: "age".into(),
-                        object: Expr::Parameter { position: 0 }.into(),
-                    }),
-                    Expr::Value {
-                        value: Value::F64(178.0),
-                    },
-                ),
-            )
-            .into(),
-        );
-
-        // p3 = p1 && p2 = !A && !C
-        let p3 = BinaryExpr::and(p1, p2);
-
-        // p4 = (age == 42) && !(name == "marin" && true) = !A && B
-        let p4 = BinaryExpr::and(
+        let p0 = BinaryExpr::and(
             BinaryExpr::eq(
+                Expr::Property(PropertyAccess {
+                    property: "name".into(),
+                    object: Expr::Parameter { position: 0 }.into(),
+                }),
+                Expr::Value {
+                    value: Value::String("marin".into()),
+                },
+            ),
+            Expr::Value {
+                value: Value::Bool(true),
+            },
+        );
+
+        let p1 = BinaryExpr::eq(
+            Expr::Property(PropertyAccess {
+                property: "age".into(),
+                object: Expr::Parameter { position: 0 }.into(),
+            }),
+            Expr::Value {
+                value: Value::F64(42.0),
+            },
+        );
+
+        let p2 = BinaryExpr::and(
+            BinaryExpr::eq(
+                Expr::Property(PropertyAccess {
+                    property: "name".into(),
+                    object: Expr::Parameter { position: 0 }.into(),
+                }),
+                Expr::Value {
+                    value: Value::String("Jim".into()),
+                },
+            ),
+            BinaryExpr::lt(
                 Expr::Property(PropertyAccess {
                     property: "age".into(),
                     object: Expr::Parameter { position: 0 }.into(),
                 }),
                 Expr::Value {
-                    value: Value::F64(42.0),
+                    value: Value::F64(178.0),
                 },
-            ),
-            Expr::Not(
-                BinaryExpr::and(
-                    BinaryExpr::eq(
-                        Expr::Property(PropertyAccess {
-                            property: "name".into(),
-                            object: Expr::Parameter { position: 0 }.into(),
-                        }),
-                        Expr::Value {
-                            value: Value::String("marin".into()),
-                        },
-                    ),
-                    Expr::Value {
-                        value: Value::Bool(true),
-                    },
-                )
-                .into(),
             ),
         );
 
-        // expected = p3 || p4 = (!A && !C) || (!A && B) : SUCCESS this is what we wanted!
-        let expected = BinaryExpr::or(p3, p4);
+        // expected = ((!p0 && p1) || (!p0 && !p2)) : SUCCESS this is what we wanted!
+        let expected = BinaryExpr::or(
+            BinaryExpr::and(Expr::not(p0.clone()), p1),
+            BinaryExpr::and(Expr::not(p0), Expr::not(p2)),
+        );
 
         assert_eq!(expected, expr);
     }

@@ -23,6 +23,12 @@ pub enum Expr {
     Not(Box<Self>),
 }
 
+impl Expr {
+    pub fn not(e: Self) -> Self {
+        Self::Not(e.into())
+    }
+}
+
 impl From<Value> for Expr {
     fn from(value: Value) -> Self {
         Expr::Value { value }

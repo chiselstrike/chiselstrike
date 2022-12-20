@@ -7,6 +7,7 @@ use std::sync::Arc;
 use anyhow::{anyhow, bail, Context, Result};
 use petgraph::graphmap::GraphMap;
 use petgraph::Directed;
+use url::Url;
 
 use crate::datastore::{MetaService, QueryEngine};
 use crate::feat_typescript_policies;
@@ -52,7 +53,10 @@ impl ParsedPolicies {
                         .to_owned();
                     let policy_code = p.policy_config.as_bytes().to_vec().into_boxed_slice();
                     // Check that the policy code is valid
-                    chiselc::policies::Policies::parse_code(&policy_code)?;
+                    chiselc::policies::Policies::check(
+                        &policy_code,
+                        Url::from_file_path(path).unwrap(),
+                    )?;
                     policy_sources.insert(entity_name, policy_code);
                 }
                 _ => {
