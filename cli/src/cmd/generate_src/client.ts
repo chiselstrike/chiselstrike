@@ -16,6 +16,9 @@ export type WithoutId<Entity> = ΩWithoutId<Entity>;
  * routes](https://docs.chiselstrike.com/reference/routing/entity-crud) declared
  * in the backend.
  *
+ * For a full reference on this generated client API, see the
+ * [documentation](https://docs.chiselstrike.com/reference/ts-client-api/).
+ *
  * **Creating a client object**
  *
  * To create a client configured to access a ChiselStrike backend running
@@ -50,6 +53,7 @@ export type WithoutId<Entity> = ΩWithoutId<Entity>;
  *
  * - `chiselClient.myEntities.delete()`
  * - `chiselClient.myEntities.get()`
+ * - `chiselClient.myEntities.getAll()`
  * - `chiselClient.myEntities.getIter()`
  * - `chiselClient.myEntities.post()`
  *
