@@ -406,3 +406,34 @@ pub async fn put_without_id_field(c: TestContext) {
     );
     c.ts_runner.run_ok("generated/test.ts", &src).await;
 }
+
+#[chisel_macros::test(modules = Deno, client_modes = Both)]
+pub async fn patch(c: TestContext) {
+    c.chisel.write("models/person.ts", PERSON_MODEL);
+    c.chisel.write("routes/people.ts", PEOPLE_CRUD);
+
+    c.chisel.apply_ok().await;
+    let ids = store_people(&c.chisel).await;
+    let jan_id = ids.get("jan").unwrap();
+
+    c.chisel.generate_ok("generated").await;
+    let src = with_client(
+        &c,
+        &format!(
+            "
+            const patchedJan = await cli.people.id('{jan_id}').patch({{
+                age: 30
+            }});
+
+            assertEquals(patchedJan.id, '{jan_id}');
+            assertEquals(patchedJan.age, 30);
+
+            const dbJan = await cli.people.id('{jan_id}').get();
+            assertEquals(dbJan.id, '{jan_id}');
+            assertEquals(dbJan.age, 30);
+
+            ",
+        ),
+    );
+    c.ts_runner.run_ok("generated/test.ts", &src).await;
+}
