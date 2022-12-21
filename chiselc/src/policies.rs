@@ -267,7 +267,6 @@ pub enum Cond {
 impl Cond {
     pub fn simplify(&self, preds: &Predicates) -> Self {
         // FIXME: if there are too many predicates, we might need to use another algorithm.
-
         let mut mapping = Vec::new();
         let b = self.to_bool(preds, &mut mapping);
         // FIXME: why exactly is this method returning a vec?
@@ -317,14 +316,16 @@ impl Cond {
             Bool::True => Cond::True,
             Bool::False => Cond::False,
             Bool::Term(i) => Cond::Predicate(mapping[*i as usize]),
-            Bool::And(it) => Cond::And(
-                Box::new(Self::from_bool(&it[0], mapping)),
-                Box::new(Self::from_bool(&it[1], mapping)),
-            ),
-            Bool::Or(it) => Cond::Or(
-                Box::new(Self::from_bool(&it[0], mapping)),
-                Box::new(Self::from_bool(&it[1], mapping)),
-            ),
+            Bool::And(it) => it
+                .iter()
+                .map(|it| Self::from_bool(it, mapping))
+                .reduce(|acc, val| Cond::And(acc.into(), val.into()))
+                .unwrap(),
+            Bool::Or(it) => it
+                .iter()
+                .map(|it| Self::from_bool(it, mapping))
+                .reduce(|acc, val| Cond::Or(acc.into(), val.into()))
+                .unwrap(),
             Bool::Not(b) => Cond::Not(Box::new(Self::from_bool(b, mapping))),
         }
     }
