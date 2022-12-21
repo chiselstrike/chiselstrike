@@ -339,7 +339,7 @@ fn add_default_headers(response: &mut hyper::Response<hyper::Body>) {
         ("access-control-allow-origin", "*"),
         (
             "access-control-allow-methods",
-            "POST, PUT, GET, OPTIONS, DELETE",
+            "POST, PUT, GET, OPTIONS, DELETE, PATCH",
         ),
         ("access-control-allow-headers", "Content-Type,ChiselUID"),
     ];
