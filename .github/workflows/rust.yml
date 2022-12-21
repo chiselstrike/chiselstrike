@@ -55,8 +55,8 @@ jobs:
             path: ~/.npm
             key: ${{ runner.os }}-node-${{ hashFiles('**/package-lock.json') }}
 
-    - name: Install ts-node
-      run: npm install -g ts-node
+    - name: Install dev deps
+      run: npm install
 
     - name: Cargo config
       run: |
@@ -127,8 +127,8 @@ jobs:
             path: ~/.npm
             key: ${{ runner.os }}-node-${{ hashFiles('**/package-lock.json') }}
 
-    - name: Install ts-node
-      run: npm install -g ts-node
+    - name: Install dev deps
+      run: npm install
 
     - name: Cargo config
       run: |
