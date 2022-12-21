@@ -21,6 +21,7 @@ use serde::Serialize;
 use tempdir::TempDir;
 use tokio::io::{duplex, AsyncRead, AsyncReadExt, AsyncWriteExt, DuplexStream};
 
+use crate::common::repo_dir;
 use crate::database::Database;
 use crate::suite::ClientMode;
 
@@ -956,15 +957,16 @@ impl TypeScriptRunner {
         self.write(src_path, src_code);
         let full_path = self.tmp_dir.path().join(src_path);
         run_command(
-            &PathBuf::from_str("ts-node").unwrap(),
+            &PathBuf::from_str("npm").unwrap(),
             &[
-                "--esm",
-                "--skipProject",
-                "-O",
-                r#"{"lib":["esnext", "webworker"]}"#,
-                full_path.file_name().unwrap().to_str().unwrap(),
+                "exec",
+                "-c",
+                &format!(
+                    r#"ts-node --esm --skipProject -O '{{"lib":["esnext", "webworker"]}}' {}"#,
+                    full_path.display()
+                ),
             ],
-            full_path.parent().unwrap(),
+            &repo_dir(),
             self.capture,
         )
         .await

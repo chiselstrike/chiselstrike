@@ -95,7 +95,7 @@ async function sendJson(
     const headers = cliHeaders ?? new Headers();
     headers.set("Content-Type", "application/json");
 
-    const resp = await fetch(url, {
+    const resp = await fetch(url.toString(), {
         method,
         headers,
         body: JSON.stringify(body),
@@ -481,7 +481,7 @@ export function makeGetOne<Entity>(
     cliConfig: InternalClientConfig,
 ): (headers?: Headers | Record<string, string>) => Promise<Entity> {
     return async (headers?: Headers | Record<string, string>) => {
-        const resp = await fetch(url, {
+        const resp = await fetch(url.toString(), {
             method: "GET",
             headers: mergeHeaders(cliConfig.headers, headers),
         });
@@ -529,7 +529,7 @@ export function makeGetMany<Entity>(
         const headers = mergeHeaders(cliConfig.headers, params.headers);
 
         async function makeResponse(url: URL): Promise<GetResponse<Entity>> {
-            const r = await fetch(url, {
+            const r = await fetch(url.toString(), {
                 method: "GET",
                 headers,
             });
@@ -721,7 +721,7 @@ export function makeDeleteOne(
     cliConfig: InternalClientConfig,
 ): (headers?: Headers | Record<string, string>) => Promise<void> {
     return async (headers?: Headers | Record<string, string>) => {
-        const resp = await fetch(url, {
+        const resp = await fetch(url.toString(), {
             method: "DELETE",
             headers: mergeHeaders(cliConfig.headers, headers),
         });
@@ -741,7 +741,7 @@ export function makeDeleteMany<Entity>(
         headers?: Headers | Record<string, string>,
     ) => {
         url.searchParams.set("filter", JSON.stringify(filter));
-        const resp = await fetch(url, {
+        const resp = await fetch(url.toString(), {
             method: "DELETE",
             headers: mergeHeaders(cliConfig.headers, headers),
         });
