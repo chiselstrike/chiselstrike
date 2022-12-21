@@ -362,12 +362,12 @@ fn parse_class_decl<P: AsRef<Path>>(
 ) -> Result<()> {
     match decl {
         Decl::Class(x) => {
-            let mut field_defs = Vec::default();
             let name = ident_to_string(&x.ident);
             if !valid_types.insert(name.clone()) {
                 bail!("Model {} defined twice", name);
             }
 
+            let mut field_defs: Vec<FieldDefinition> = Vec::default();
             for member in &x.class.body {
                 match member {
                     ClassMember::ClassProp(x) => match parse_class_prop(x, &name, handler) {
@@ -376,6 +376,16 @@ fn parse_class_decl<P: AsRef<Path>>(
                             bail!("{}", err);
                         }
                         Ok(fd) => {
+                            if field_defs.iter().any(|field| field.name == fd.name) {
+                                anyhow::bail!(swc_err(
+                                    handler,
+                                    x,
+                                    &format!(
+                                        "found duplicate field `{}` on entity type `{name}`",
+                                        fd.name
+                                    ),
+                                ))
+                            }
                             field_defs.push(fd);
                         }
                     },
