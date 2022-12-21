@@ -697,11 +697,11 @@ export function makePatchOne<Entity>(
     entityType: reflect.Entity,
     cliConfig: InternalClientConfig,
 ): (
-    entity: Partial<Entity>,
+    entity: Partial<WithoutId<Entity>>,
     headers?: Headers | Record<string, string>,
 ) => Promise<Entity> {
     return async (
-        entity: Partial<Entity>,
+        entity: Partial<WithoutId<Entity>>,
         headers?: Headers | Record<string, string>,
     ) => {
         const entityJson = entityToJson(entityType, entity);
