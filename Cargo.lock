@@ -652,6 +652,7 @@ dependencies = [
  "clap 4.0.29",
  "indexmap",
  "petgraph 0.6.2",
+ "proptest",
  "quine-mc_cluskey",
  "serde",
  "serde_json",

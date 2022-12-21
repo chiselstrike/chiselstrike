@@ -23,7 +23,6 @@ impl<'a> ArrowFunction<'a> {
         match &arrow.body {
             BlockStmtOrExpr::BlockStmt(block) => {
                 let (cfg, stmt_map) = ControlFlow::build(&block.stmts)?;
-                println!("{}", cfg.dot());
                 let regions = Region::from_cfg(&cfg, &|idx| match stmt_map[idx].stmt {
                     Stmt::If(_) => StmtKind::Conditional,
                     Stmt::Block(_) => StmtKind::Ignore,

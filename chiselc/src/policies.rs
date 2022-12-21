@@ -253,7 +253,7 @@ pub enum LogicOp {
     Or,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Cond {
     And(Box<Self>, Box<Self>),
     Or(Box<Self>, Box<Self>),
@@ -520,6 +520,16 @@ impl Predicates {
     pub fn map(&self, f: impl FnMut(&Predicate) -> Predicate) -> Self {
         Self(self.0.iter().map(f).collect())
     }
+
+    #[cfg(test)]
+    pub fn len(&self) -> usize {
+        self.0.len()
+    }
+
+    #[cfg(test)]
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
 }
 
 impl Deref for Actions {
@@ -717,4 +727,50 @@ fn emit_arrow_js_code(arrow: &ArrowExpr, sm: Lrc<SourceMap>) -> Result<Box<[u8]>
     emit(module, Target::JavaScript, sm, &mut js_code)?;
 
     Ok(js_code.into_boxed_slice())
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    use proptest::{collection, prelude::*, sample::Index};
+
+    fn arb_predicates() -> impl Strategy<Value = Predicates> {
+        collection::vec(any::<usize>().prop_map(Predicate::Var), 1..50).prop_map(Predicates)
+    }
+
+    fn arb_cond(preds: Predicates) -> impl Strategy<Value = (Cond, Predicates)> {
+        let preds_len = preds.len();
+        let leaf = prop_oneof![
+            Just(Cond::True),
+            Just(Cond::False),
+            // don't really care about what predicate
+            any::<Index>().prop_map(move |index| Cond::Predicate(index.index(preds_len))),
+        ];
+        let cond_strat = leaf.prop_recursive(
+            8,   // 8 levels deep
+            256, // Shoot for maximum size of 256 nodes
+            10,  // We put up to 10 items per collection
+            |inner| {
+                prop_oneof![
+                    // Take the inner strategy and make the two recursive cases.
+                    (inner.clone(), inner.clone()).prop_map(|(l, r)| Cond::Or(l.into(), r.into())),
+                    (inner.clone(), inner.clone()).prop_map(|(l, r)| Cond::And(l.into(), r.into())),
+                    inner.prop_map(|c| Cond::Not(c.into()))
+                ]
+            },
+        );
+
+        (cond_strat, Just(preds))
+    }
+
+    proptest! {
+        #[test]
+        fn roundtrip_convert((cond, preds) in arb_predicates().prop_flat_map(arb_cond)) {
+            let mut mapping = Vec::new();
+            let bool = cond.to_bool(&preds, &mut mapping);
+            let ret = Cond::from_bool(&bool, &mapping);
+
+            assert_eq!(ret, cond);
+        }
+    }
 }
