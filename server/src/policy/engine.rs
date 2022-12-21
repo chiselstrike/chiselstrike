@@ -270,7 +270,7 @@ fn predicate_to_expr(pred: &Predicate, entity_param_name: &str, env: &Environmen
                 right,
             })
         }
-        Predicate::Not(_) => todo!(),
+        Predicate::Not(pred) => Expr::Not(predicate_to_expr(pred, entity_param_name, env)?.into()),
         Predicate::Lit(val) => Expr::Value {
             value: Value::from(val),
         },
