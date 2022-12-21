@@ -61,7 +61,11 @@ pub async fn duplicate_fields(c: TestContext) {
         export class Foo extends ChiselEntity { a?: string; a: string; }
     "##,
     );
-    c.chisel.apply_err().await;
+    c.chisel
+        .apply_err()
+        .await
+        .stderr
+        .read(r#"found duplicate field `a` on entity type `Foo`"#);
 }
 
 #[self::test(modules = Deno)]
