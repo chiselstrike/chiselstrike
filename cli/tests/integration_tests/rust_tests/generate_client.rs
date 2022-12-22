@@ -431,7 +431,34 @@ pub async fn patch(c: TestContext) {
             const dbJan = await cli.people.id('{jan_id}').get();
             assertEquals(dbJan.id, '{jan_id}');
             assertEquals(dbJan.age, 30);
+            ",
+        ),
+    );
+    c.ts_runner.run_ok("generated/test.ts", &src).await;
+}
 
+#[chisel_macros::test(modules = Deno, client_modes = Both)]
+pub async fn delete(c: TestContext) {
+    c.chisel.write("models/person.ts", PERSON_MODEL);
+    c.chisel.write("routes/people.ts", PEOPLE_CRUD);
+
+    c.chisel.apply_ok().await;
+    let ids = store_people(&c.chisel).await;
+    let jan_id = ids.get("jan").unwrap();
+
+    c.chisel.generate_ok("generated").await;
+    let src = with_client(
+        &c,
+        &format!(
+            "
+            await cli.people.id('{jan_id}').delete();
+            let allPeople = await cli.people.getAll();
+            let pplNames = allPeople.map(p => p.firstName).sort();
+            assertEquals(pplNames, ['Glauber', 'Pekka']);
+
+            await cli.people.delete({{firstName: 'Glauber'}});
+            allPeople = await cli.people.getAll();
+            assertEquals(allPeople.map(p => p.firstName), ['Pekka']);
             ",
         ),
     );
