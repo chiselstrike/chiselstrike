@@ -224,6 +224,42 @@ pub async fn get_all_filter(c: TestContext) {
 }
 
 #[chisel_macros::test(modules = Deno, client_modes = Both)]
+pub async fn get_all_with_date_filter(c: TestContext) {
+    c.chisel.write(
+        "models/dated.ts",
+        r#"
+            import { ChiselEntity } from "@chiselstrike/api";
+            export class Dated extends ChiselEntity {
+                date: Date;
+            }
+        "#,
+    );
+    c.chisel.write(
+        "routes/dates.ts",
+        r#"
+        import { Dated } from "../models/dated.ts";
+        export default Dated.crud();
+    "#,
+    );
+    c.chisel.apply_ok().await;
+
+    c.chisel.generate_ok("generated").await;
+    let src = with_client(
+        &c,
+        r#"
+            const date1 = await cli.dates.post({date: new Date(123)});
+            const date2 = await cli.dates.post({date: new Date(999)});
+
+            const dates = await cli.dates.getAll({
+                filter: {date: {$gt: new Date(123)}}
+            });
+            assertEquals(dates, [date2]);
+        "#,
+    );
+    c.ts_runner.run_ok("generated/test.ts", &src).await;
+}
+
+#[chisel_macros::test(modules = Deno, client_modes = Both)]
 pub async fn get_by_id(c: TestContext) {
     c.chisel.write("models/person.ts", PERSON_MODEL);
     c.chisel.write("routes/people.ts", PEOPLE_CRUD);

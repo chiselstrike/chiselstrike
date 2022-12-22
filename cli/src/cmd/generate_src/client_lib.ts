@@ -86,6 +86,65 @@ async function throwOnError(resp: Response) {
     }
 }
 
+export type JSONValue =
+    | string
+    | number
+    | boolean
+    | null
+    | { [x: string]: JSONValue }
+    | Array<JSONValue>;
+
+// This function is duplicated in utils.ts. If you happen to improve it,
+// don't forget to update the other one as well.
+function valueToJson(v: unknown): JSONValue {
+    if (v === undefined || v === null) {
+        return null;
+    } else if (typeof v === "string" || v instanceof String) {
+        return v as string;
+    } else if (typeof v === "number" || v instanceof Number) {
+        return v as number;
+    } else if (typeof v === "boolean" || v instanceof Boolean) {
+        return v as boolean;
+    } else if (v instanceof Date) {
+        return v.getTime();
+    } else if (v instanceof ArrayBuffer || ArrayBuffer.isView(v)) {
+        let binary = "";
+        const bytes = new Uint8Array(v as ArrayBufferLike);
+        const len = bytes.byteLength;
+        for (let i = 0; i < len; i++) {
+            binary += String.fromCharCode(bytes[i]);
+        }
+        return btoa(binary);
+    } else if (Array.isArray(v)) {
+        return v.map(valueToJson);
+    } else if (v instanceof Set) {
+        const array = [];
+        for (const e of v) {
+            array.push(valueToJson(e));
+        }
+        return array;
+    } else if (v instanceof Map) {
+        const jsonObj: { [x: string]: JSONValue } = {};
+        for (const [key, value] of v.entries()) {
+            jsonObj["" + key] = valueToJson(value);
+        }
+        return jsonObj;
+    } else if (typeof v === "object") {
+        const jsonObj: { [x: string]: JSONValue } = {};
+        for (const [key, value] of Object.entries(v)) {
+            // Javascript's JSON objects omit undefined values.
+            if (value !== undefined) {
+                jsonObj[key] = valueToJson(value);
+            }
+        }
+        return jsonObj;
+    } else {
+        throw new Error(
+            `encountered unexpected value type '${typeof v}' when converting to JSON`,
+        );
+    }
+}
+
 async function sendJson(
     url: URL,
     method: string,
@@ -529,7 +588,8 @@ export function makeGetMany<Entity>(
             url.searchParams.set("offset", params.offset.toString());
         }
         if (params.filter !== undefined) {
-            const encodedFilter = JSON.stringify(params.filter);
+            const jsonFilter = valueToJson(params.filter);
+            const encodedFilter = JSON.stringify(jsonFilter);
             url.searchParams.set("filter", encodedFilter);
         }
         const headers = mergeHeaders(cliConfig.headers, params.headers);
@@ -746,7 +806,8 @@ export function makeDeleteMany<Entity>(
         filter: FilterExpr<Entity>,
         headers?: Headers | Record<string, string>,
     ) => {
-        url.searchParams.set("filter", JSON.stringify(filter));
+        const jsonFilter = valueToJson(filter);
+        url.searchParams.set("filter", JSON.stringify(jsonFilter));
         const resp = await fetch(url.toString(), {
             method: "DELETE",
             headers: mergeHeaders(cliConfig.headers, headers),
