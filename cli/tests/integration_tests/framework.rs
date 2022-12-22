@@ -930,6 +930,13 @@ impl TypeScriptRunner {
             .expect("failed to compile and execute given source file")
     }
 
+    /// Same as `run_ok`, but expects error.
+    pub async fn run_err(&self, src_path: &str, src_code: &str) -> ProcessOutput {
+        self.run(src_path, src_code)
+            .await
+            .expect_err("the execution of given source file was expect to fail but didn't")
+    }
+
     async fn deno_run(
         &self,
         src_path: &Path,
