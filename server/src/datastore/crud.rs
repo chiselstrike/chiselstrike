@@ -192,30 +192,6 @@ fn make_page_url(url_path: &str, url_query: &[(String, String)], cursor: &str) -
     format!("{}?{}", url_path, page_query.finish())
 }
 
-/// Constructs Delete Mutation from CRUD url query.
-pub fn delete_from_url_query(
-    ctx: &DataContext,
-    type_name: &str,
-    url_query: &[(String, String)],
-) -> Result<Mutation> {
-    let base_entity = match ctx.type_system.lookup_type(type_name) {
-        Ok(Type::Entity(ty)) => ty,
-        Ok(ty) => anyhow::bail!("Cannot delete scalar type {type_name} ({})", ty.name()),
-        Err(_) => anyhow::bail!("Cannot delete from type `{type_name}`, type not found"),
-    };
-    let filter_expr = url_query_to_filter(&base_entity, url_query, &ctx.type_system)
-        .context("failed to convert crud URL to filter expression")?;
-    if filter_expr.is_none() {
-        let delete_all = url_query
-            .iter()
-            .any(|(key, value)| key == "all" && value == "true");
-        if !delete_all {
-            anyhow::bail!("crud delete requires a filter to be set or `all=true` parameter.")
-        }
-    }
-    Mutation::delete_from_expr(ctx, type_name, &filter_expr)
-}
-
 /// Query is used in the process of parsing crud url query to rust representation.
 struct Query {
     page_size: u64,
@@ -450,27 +426,6 @@ fn json_to_value(field_type: &Type, value: &serde_json::Value) -> Result<Expr> {
     Ok(expr_val.into())
 }
 
-/// Parses all CRUD query-string filters over `base_type` from provided `url_query`.
-fn url_query_to_filter(
-    base_type: &Entity,
-    url_query: &[(String, String)],
-    ts: &TypeSystem,
-) -> Result<Option<Expr>> {
-    let mut filter = None;
-    for (param_key, value) in url_query.iter() {
-        let param_key = param_key.to_string();
-        if let Some(param_key) = param_key.strip_prefix('.') {
-            let expression = filter_from_param(base_type, param_key, value, ts)
-                .context("failed to parse filter")?;
-
-            filter = filter
-                .map_or(expression.clone(), |e| BinaryExpr::and(expression, e))
-                .into();
-        }
-    }
-    Ok(filter)
-}
-
 fn parse_sort(base_type: &Entity, value: &str) -> Result<SortBy> {
     let mut ascending = true;
     let field_name = if let Some(suffix) = value.strip_prefix(['-', '+']) {
@@ -586,6 +541,61 @@ fn convert_operator(op_str: Option<&str>) -> Result<BinaryOp> {
         op => anyhow::bail!("found unsupported operator '{}'", op),
     };
     Ok(op)
+}
+
+/// Constructs Delete Mutation from CRUD url query.
+pub fn delete_from_url_query(
+    ctx: &DataContext,
+    type_name: &str,
+    url_query: &[(String, String)],
+) -> Result<Mutation> {
+    let base_entity = match ctx.type_system.lookup_type(type_name) {
+        Ok(Type::Entity(ty)) => ty,
+        Ok(ty) => anyhow::bail!("Cannot delete scalar type {type_name} ({})", ty.name()),
+        Err(_) => anyhow::bail!("Cannot delete from type `{type_name}`, type not found"),
+    };
+    let filter_expr = delete_query_to_filter(&base_entity, url_query, &ctx.type_system)
+        .context("failed to convert crud URL to filter expression")?;
+    if filter_expr.is_none() {
+        let delete_all = url_query
+            .iter()
+            .any(|(key, value)| key == "all" && value == "true");
+        if !delete_all {
+            anyhow::bail!("crud delete requires a filter to be set or `all=true` parameter.")
+        }
+    }
+    Mutation::delete_from_expr(ctx, type_name, &filter_expr)
+}
+
+/// Parses all Delete CRUD query-string filters over `base_type` from provided `url_query`.
+fn delete_query_to_filter(
+    base_type: &Entity,
+    url_query: &[(String, String)],
+    ts: &TypeSystem,
+) -> Result<Option<Expr>> {
+    let mut conditions = vec![];
+    for (param_key, value) in url_query.iter() {
+        let param_key = param_key.to_string();
+        if let Some(param_key) = param_key.strip_prefix('.') {
+            let expr = filter_from_param(base_type, param_key, value, ts)
+                .context("failed to parse filter")?;
+            conditions.push(expr);
+        } else if param_key == "filter" {
+            let json_filter: serde_json::Value =
+                serde_json::from_str(value).context("failed to parse filter parameter")?;
+            let expr = filter::to_expr(&json_filter)
+                .context("failed to convert filter json to filtering expression")?;
+            conditions.push(expr);
+        }
+    }
+    let filter = conditions.into_iter().fold(None, |acc, expr| {
+        if let Some(filter) = acc {
+            Some(BinaryExpr::and(filter, expr))
+        } else {
+            Some(expr)
+        }
+    });
+    Ok(filter)
 }
 
 #[cfg(test)]
