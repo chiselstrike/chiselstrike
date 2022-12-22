@@ -20,7 +20,7 @@ export type FilterExpr<T> = {
     "$not"?: FilterExpr<T>;
 } & { [key in keyof T]?: FieldFilter<T[key]> };
 
-type PrimitiveValue = string | number | boolean | null | undefined;
+type PrimitiveValue = string | number | boolean | Date | null | undefined;
 type EntityValue = PrimitiveValue | { [key: string]: EntityValue };
 
 export function evalFilter<T>(
@@ -53,10 +53,14 @@ function evalFieldFilter(
     filter: FieldFilter<unknown>,
     v: EntityValue,
 ): boolean {
-    const valueIsObj = typeof v === "object" && v !== null;
-    if (typeof filter === "object" && filter !== null) {
+    const valueIsEntity = v !== null && typeof v === "object" &&
+        !(v instanceof Date);
+    if (
+        filter !== null && typeof filter === "object" &&
+        !(filter instanceof Date)
+    ) {
         return Object.entries(filter).every(([key, filterValue]) => {
-            if (valueIsObj) {
+            if (valueIsEntity) {
                 if (key in v) {
                     return evalFieldFilter(filterValue, v[key]);
                 } else {
@@ -71,7 +75,7 @@ function evalFieldFilter(
             }
         });
     } else {
-        if (valueIsObj) {
+        if (valueIsEntity) {
             throw Error(
                 `failed to filter with filter value '${
                     JSON.stringify(filter)

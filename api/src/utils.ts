@@ -57,6 +57,8 @@ function stringifyJson(value: unknown, space?: string | number): string {
     return JSON.stringify(value, undefined, space);
 }
 
+// This function is duplicated in client_lib.ts. If you happen to improve it,
+// don't forget to update the other one as well.
 function valueToJson(v: unknown): JSONValue {
     if (v === undefined || v === null) {
         return null;
