@@ -1,6 +1,3 @@
-export type PrimitiveValue = string | number | boolean | null | undefined;
-export type EntityValue = PrimitiveValue | { [key: string]: EntityValue };
-
 export type ComparisonOperator =
     | "$eq"
     | "$gt"
@@ -9,17 +6,22 @@ export type ComparisonOperator =
     | "$lte"
     | "$ne";
 
-export type FieldFilter = PrimitiveValue | {
-    ComparisonOperator: PrimitiveValue;
-} | {
-    [key: string]: FieldFilter;
-};
+export type FieldFilter<ValueType> = ValueType extends Record<string, unknown>
+    ? { [key in keyof ValueType]?: FieldFilter<ValueType[key]> }
+    : 
+        | ValueType
+        | {
+            [key in ComparisonOperator]?: ValueType;
+        };
 
 export type FilterExpr<T> = {
     "$and"?: FilterExpr<T>[];
     "$or"?: FilterExpr<T>[];
     "$not"?: FilterExpr<T>;
-} & { [key in keyof Partial<T>]: FieldFilter };
+} & { [key in keyof T]?: FieldFilter<T[key]> };
+
+type PrimitiveValue = string | number | boolean | null | undefined;
+type EntityValue = PrimitiveValue | { [key: string]: EntityValue };
 
 export function evalFilter<T>(
     filterExpr: FilterExpr<T>,
@@ -40,14 +42,17 @@ export function evalFilter<T>(
             return !evalFilter(filter as FilterExpr<T>, v);
         } else {
             return evalFieldFilter(
-                filter as FieldFilter,
+                filter,
                 v[key] as EntityValue,
             );
         }
     });
 }
 
-function evalFieldFilter(filter: FieldFilter, v: EntityValue): boolean {
+function evalFieldFilter(
+    filter: FieldFilter<unknown>,
+    v: EntityValue,
+): boolean {
     const valueIsObj = typeof v === "object" && v !== null;
     if (typeof filter === "object" && filter !== null) {
         return Object.entries(filter).every(([key, filterValue]) => {

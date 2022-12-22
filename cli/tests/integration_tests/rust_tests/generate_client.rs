@@ -172,6 +172,58 @@ pub async fn get_all(c: TestContext) {
 }
 
 #[chisel_macros::test(modules = Deno, client_modes = Both)]
+pub async fn get_all_filter(c: TestContext) {
+    c.chisel.write("models/person.ts", PERSON_MODEL);
+    c.chisel.write("routes/people.ts", PEOPLE_CRUD);
+
+    c.chisel.apply_ok().await;
+    store_people(&c.chisel).await;
+
+    c.chisel.generate_ok("generated").await;
+
+    let src = with_client(
+        &c,
+        "
+            const ppl = await cli.people.getAll({
+                filter: {firstName: 'Jan'}
+            });
+            const names = ppl.map(p => p.firstName);
+            assertEquals(names, ['Jan']);
+        ",
+    );
+    c.ts_runner.run_ok("generated/test.ts", &src).await;
+
+    // Make sure that filter is properly typed
+    let src = with_client(
+        &c,
+        r#"
+            await cli.people.getAll({
+                filter: {firstName: 10}
+            });
+        "#,
+    );
+    c.ts_runner
+        .run_err("generated/test.ts", &src)
+        .await
+        .stderr
+        .read("Type 'number' is not assignable to type");
+
+    let src = with_client(
+        &c,
+        r#"
+            await cli.people.getAll({
+                filter: {firstName: {$gt: 10}}
+            });
+        "#,
+    );
+    c.ts_runner
+        .run_err("generated/test.ts", &src)
+        .await
+        .stderr
+        .read("Type 'number' is not assignable to type");
+}
+
+#[chisel_macros::test(modules = Deno, client_modes = Both)]
 pub async fn get_by_id(c: TestContext) {
     c.chisel.write("models/person.ts", PERSON_MODEL);
     c.chisel.write("routes/people.ts", PEOPLE_CRUD);
