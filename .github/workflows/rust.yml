@@ -14,7 +14,6 @@ env:
   CARGO_TERM_COLOR: always
   REGISTRY: ghcr.io
   IMAGE_NAME: ${{ github.repository }}
-  nightly-version: nightly-2022-08-29
   POSTGRES_PASSWORD: postgres
 
 jobs:
@@ -38,16 +37,8 @@ jobs:
       with:
           node-version: 18
 
-    - name: Install nightly rust toolchain
-      uses: actions-rs/toolchain@v1
-      with:
-          toolchain: ${{ env.nightly-version }}
-          components: rustfmt, clippy
-
     - name: set up cache
-      uses: Swatinem/rust-cache@v1
-      with:
-          key: ${{ env.nightly-version }}
+      uses: Swatinem/rust-cache@v2
 
     - name: set up node cache
       uses: actions/cache@v2

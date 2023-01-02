@@ -122,13 +122,6 @@ pub fn cargo<'a, T: IntoIterator<Item = &'a str>>(args: T) -> Command {
 }
 
 #[allow(dead_code)]
-pub fn nightly<'a, T: IntoIterator<Item = &'a str>>(args: T) -> Command {
-    let mut ret = cargo(itertools::chain(["+nightly-2022-08-29"], args));
-    ret.env("CARGO_TARGET_DIR", "./target/nightly");
-    ret
-}
-
-#[allow(dead_code)]
 pub fn cargo_install(version: &str, pkg: &str, bin: &str) {
     ensure_correct_version(pkg, version);
     create_dir_all(&*CHISEL_BIN_DIR).unwrap();
