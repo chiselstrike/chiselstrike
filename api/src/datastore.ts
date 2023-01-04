@@ -1079,7 +1079,7 @@ export class ChiselEntity {
      */
     static async create<T extends ChiselEntity>(
         this: { new (): T },
-        ...properties: Record<string, unknown>[]
+        ...properties: Partial<T>[]
     ): Promise<T> {
         const entity = buildEntity(
             this,
