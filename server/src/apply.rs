@@ -150,7 +150,15 @@ or
             }
 
             let field_ty = field.field_type()?;
-            let field_ty = if field_ty.is_builtin(type_system)? {
+            let field_ty = if let TypeEnum::EntityId(entity_name) = field_ty {
+                if !type_names.contains(entity_name) {
+                    bail!(
+                        "field `{}` of entity `{name}` is of type `Id<{entity_name}>`, but entity `{entity_name}` is undefined",
+                        field.name
+                    );
+                }
+                Type::EntityId(entity_name.to_owned())
+            } else if field_ty.is_builtin(type_system)? {
                 field_ty.get_builtin(type_system)?
             } else if let TypeEnum::Entity(entity_name) = field_ty {
                 match new_types.get(entity_name) {
@@ -159,16 +167,11 @@ or
                         bail!("field type `{entity_name}` is neither a built-in nor a custom type",)
                     }
                 }
-            } else if let TypeEnum::EntityId(entity_name) = field_ty {
-                if !type_names.contains(entity_name) {
-                    bail!(
-                        "field `{}` of entity `{name}` is of type `Id<{entity_name}>`, but entity `{entity_name}` is undefined",
-                        field.name
-                    );
-                }
-                Type::EntityId(entity_name.to_owned())
             } else {
-                bail!("field type must either be entity, entity id or be a builtin");
+                bail!(
+                    "field `{}` of entity `{name}` is neither entity, entity id or be a builtin (actual type: {:?})",
+                    field.name, field_ty
+                );
             };
 
             fields.push(Field::new(
@@ -371,10 +374,9 @@ impl TypeEnum {
             | TypeEnum::Number(_)
             | TypeEnum::Bool(_)
             | TypeEnum::JsDate(_)
-            | TypeEnum::ArrayBuffer(_) => true,
-            TypeEnum::Entity(name) | TypeEnum::EntityId(name) => {
-                ts.lookup_builtin_type(name).is_ok()
-            }
+            | TypeEnum::ArrayBuffer(_)
+            | TypeEnum::EntityId(_) => true,
+            TypeEnum::Entity(name) => ts.lookup_builtin_type(name).is_ok(),
             TypeEnum::Array(inner) => inner.value_type()?.is_builtin(ts)?,
         };
         Ok(is_builtin)
