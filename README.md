@@ -67,7 +67,7 @@ export class BlogComment extends ChiselEntity {
 }
 ```
 
-Add an endpoint by writing the following TypeScript code to `endpoints/comments.ts`:
+Add a route by writing the following TypeScript code to `routes/comments.ts`:
 
 ```typescript
 import { BlogComment } from "../models/BlogComment";
@@ -80,11 +80,17 @@ Start the development server with:
 npm run dev
 ```
 
-And there you go, you now have a scalable CRUD API that you can post comments to.
+This server will provide a CRUD API that you can use to add and query instances
+of the BlogComment entity.
 
 ```console
 curl -X POST -d '{"content": "First comment", "by": "Jill"}' localhost:8080/dev/comments
+
+curl localhost:8080/dev/comments
 ```
+
+For a more detailed tutorial about how to get started with ChiselStrike, follow
+our [Getting started tutorial](https://docs.chiselstrike.com/tutorials/getting-started/).
 
 ### Is ChiselStrike a database?
 
