@@ -155,3 +155,54 @@ pub async fn test(c: TestContext) {
             .assert_status(500);
     }
 }
+
+#[chisel_macros::test(modules = Deno)]
+pub async fn array_of_ids(c: TestContext) {
+    c.chisel.write(
+        "models/types.ts",
+        r##"
+        import { ChiselEntity, Id } from '@chiselstrike/api';
+
+        export class Person extends ChiselEntity {
+            name: string;
+        }
+        export class Company extends ChiselEntity {
+            name: string;
+            employees: Id<Person>[];
+        }
+    "##,
+    );
+    c.chisel.write(
+        "routes/store.ts",
+        r##"
+        import { Person, Company } from "../models/types.ts";
+        export default async function chisel(req: Request) {
+            const jan = await Person.create({
+                name: "Jan",
+            });
+            const person = await Company.create({
+                name: "foo",
+                employees: [jan.id],
+            });
+        }
+    "##,
+    );
+
+    c.chisel.write(
+        "routes/get.ts",
+        r##"
+        import { Company, Person } from "../models/types.ts";
+        export default async function chisel(req: Request) {
+            const company = await Company.findOne({name: "foo"});
+            const janId = company!.employees![0];
+            return await Person.findOne({id: janId});
+        }
+    "##,
+    );
+
+    c.chisel.apply().await.expect("chisel apply failed");
+
+    c.chisel.post_json("/dev/store", json!({})).await;
+    let jan = c.chisel.get_json("/dev/get").await;
+    assert_eq!(jan["name"], "Jan");
+}
