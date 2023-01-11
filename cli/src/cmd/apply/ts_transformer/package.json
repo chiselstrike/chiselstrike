@@ -1,0 +1,16 @@
+{
+  "name": "ts_transformer",
+  "version": "1.0.0",
+  "description": "",
+  "main": "main.ts",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "path": "^0.12.7",
+    "ts-morph": "^17.0.1",
+    "typescript": "^4.9.4"
+  }
+}

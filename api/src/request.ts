@@ -1,6 +1,7 @@
 // SPDX-FileCopyrightText: © 2022 ChiselStrike <info@chiselstrike.com>
 
 import type { AuthUser } from "./datastore.ts";
+import type { JSONValue, ReflectionType } from "./utils.ts";
 
 /** Extends the Request class adding ChiselStrike-specific helpers
  *
@@ -27,7 +28,7 @@ export class ChiselRequest extends Request {
         user: AuthUser | undefined,
         query: URLSearchParams,
         params: Record<string, string>,
-        legacyFileName: string | undefined,
+        legacyFileName: string | undefined
     ) {
         super(input, init);
         this.path = path;
@@ -56,6 +57,52 @@ export class ChiselRequest extends Request {
     /** @deprecated */
     get version(): string {
         return this.versionId;
+    }
+}
+
+export type RequestConstructorArgs = {
+    input: string;
+    init: RequestInit;
+    path: string;
+    versionId: string;
+    user: AuthUser | undefined;
+    query: URLSearchParams;
+    params: Record<string, string>;
+    legacyFileName: string | undefined;
+};
+
+export class RequestWithQuery<QueryParams extends Record<string, unknown>> extends ChiselRequest {
+    constructor(args: RequestConstructorArgs, private queryReflection: ReflectionType) {
+        super(
+            args.input,
+            args.init,
+            args.path,
+            args.versionId,
+            args.user,
+            args.query,
+            args.params,
+            args.legacyFileName
+        );
+    }
+    queryParams(): QueryParams {
+        return {} as QueryParams;
+    }
+}
+
+export class JsonRequest<
+    QueryParams extends Record<string, unknown>,
+    JsonBody = JSONValue
+> extends RequestWithQuery<QueryParams> {
+    constructor(
+        args: RequestConstructorArgs,
+        queryReflection: ReflectionType,
+        private bodyReflection: ReflectionType
+    ) {
+        super(args, queryReflection);
+    }
+
+    jsonBody(): JsonBody {
+        return {} as JsonBody;
     }
 }
 

@@ -128,6 +128,8 @@ pub(crate) async fn apply(
     fs::write(&root_path, root_code)
         .context(format!("Could not write to file {}", root_path.display()))?;
 
+    do_code_transformations(&cwd, &route_gen_dir, &root_path).await?;
+
     let banner = concat!(
         "import { createRequire as __createRequire } from 'chisel://deno-std/node/module.ts'; ",
         "var require = __createRequire(import.meta.url);",
@@ -167,6 +169,30 @@ pub(crate) async fn apply(
     }];
 
     Ok((modules, index_candidates))
+}
+
+async fn do_code_transformations(
+    cwd: &PathBuf,
+    route_gen_dir: &PathBuf,
+    root_path: &PathBuf,
+) -> Result<()> {
+    dbg!(cwd);
+    let transformer_proc = npx(
+        "ts-node",
+        &[
+            "/home/asd/chstrike/chiselstrike/cli/src/cmd/apply/ts_transformer/src/main.ts",
+            cwd.to_str().unwrap(),
+            route_gen_dir.to_str().unwrap(),
+            root_path.to_str().unwrap(),
+        ],
+    )?;
+
+    let tsc_output = transformer_proc
+        .wait_with_output()
+        .await
+        .context("Could not run tsc to type-check the code")?;
+    println!("{}", String::from_utf8_lossy(&tsc_output.stdout));
+    ensure_success(tsc_output).context("Type-checking with tsc failed")
 }
 
 fn esbuild<A: AsRef<OsStr>>(args: &[A]) -> Result<tokio::process::Child> {
