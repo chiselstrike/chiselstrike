@@ -79,7 +79,11 @@ async fn setup_test_context(
             execute_async(
                 tokio::process::Command::new("node")
                     .arg(&create_app_js)
-                    .args(["--chisel-version", "latest"])
+                    .args([
+                        "--chisel-api-version",
+                        "../../../../packages/chiselstrike-api",
+                    ])
+                    .args(["--chisel-cli-version", "latest"])
                     .arg("--no-install")
                     .arg("./")
                     .current_dir(tmp_dir.path()),

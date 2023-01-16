@@ -98,7 +98,9 @@ fn main() -> ExitCode {
         "node",
         [
             "packages/create-chiselstrike-app/dist/index.js",
-            "--chisel-version",
+            "--chisel-api-version",
+            "../../../../packages/chiselstrike-api",
+            "--chisel-cli-version",
             "latest",
             "--rewrite",
             "cli/tests/integration_tests/cache",

@@ -10,9 +10,9 @@
     "author": "",
     "license": "ISC",
     "dependencies": {
-        "@chiselstrike/api": "{{chiselVersion}}"
+        "@chiselstrike/api": "{{chiselApiVersion}}"
     },
     "devDependencies": {
-        "@chiselstrike/cli": "{{chiselVersion}}"
+        "@chiselstrike/cli": "{{chiselCliVersion}}"
     }
 }
