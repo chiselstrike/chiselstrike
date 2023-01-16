@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: © 2022 ChiselStrike <info@chiselstrike.com>
 
 import type { AuthUser } from "./datastore.ts";
-import type { JSONValue, ReflectionType } from "./utils.ts";
+import { ChiselError, HTTP_STATUS, JSONValue, ReflectionType } from "./utils.ts";
 
 /** Extends the Request class adding ChiselStrike-specific helpers
  *
@@ -29,14 +29,30 @@ export class ChiselRequest extends Request {
         query: URLSearchParams,
         params: Record<string, string>,
         legacyFileName: string | undefined
+    );
+    constructor(req: ChiselRequest);
+    constructor(
+        arg1: string | ChiselRequest,
+        init?: RequestInit,
+        path?: string,
+        versionId?: string,
+        user?: AuthUser | undefined,
+        query?: URLSearchParams,
+        params?: Record<string, string>,
+        legacyFileName?: string | undefined
     ) {
-        super(input, init);
-        this.path = path;
-        this.versionId = versionId;
-        this.user = user;
-        this.query = new Query(query);
-        this.params = new Params(params);
-        this.legacyFileName = legacyFileName;
+        if (arg1 instanceof ChiselRequest) {
+            super(arg1 as unknown as Request);
+            Object.assign(this, arg1);
+        } else {
+            super(arg1, init);
+            this.path = path!;
+            this.versionId = versionId!;
+            this.user = user;
+            this.query = new Query(query!);
+            this.params = new Params(params!);
+            this.legacyFileName = legacyFileName!;
+        }
     }
 
     /** @deprecated */
@@ -60,49 +76,74 @@ export class ChiselRequest extends Request {
     }
 }
 
-export type RequestConstructorArgs = {
-    input: string;
-    init: RequestInit;
-    path: string;
-    versionId: string;
-    user: AuthUser | undefined;
-    query: URLSearchParams;
-    params: Record<string, string>;
-    legacyFileName: string | undefined;
-};
+type QueryParameterValue = string | number | boolean | undefined;
 
-export class RequestWithQuery<QueryParams extends Record<string, unknown>> extends ChiselRequest {
-    constructor(args: RequestConstructorArgs, private queryReflection: ReflectionType) {
-        super(
-            args.input,
-            args.init,
-            args.path,
-            args.versionId,
-            args.user,
-            args.query,
-            args.params,
-            args.legacyFileName
-        );
+export class RequestWithQuery<
+    QueryParams extends Record<string, QueryParameterValue>
+> extends ChiselRequest {
+    private typedQueryParams: QueryParams;
+    constructor(req: ChiselRequest, queryParams: Record<string, ReflectionType>) {
+        super(req);
+        this.typedQueryParams = this.queryToTyped(queryParams);
     }
+    private queryToTyped(fields: Record<string, ReflectionType>): QueryParams {
+        const query: Record<string, QueryParameterValue> = {};
+        for (const fieldName in fields) {
+            const fieldType = fields[fieldName];
+            if (this.query.get(fieldName) === undefined) {
+                throw new ChiselError(
+                    HTTP_STATUS.BAD_REQUEST,
+                    `required request query parameter missing: ${fieldName}`
+                );
+            }
+            if (fieldType.name === "string") {
+                query[fieldName] = this.query.get(fieldName);
+            } else if (fieldType.name === "number") {
+                const fieldValue = this.query.getNumber(fieldName);
+                if (fieldValue === undefined) {
+                    throw new ChiselError(
+                        HTTP_STATUS.BAD_REQUEST,
+                        `provided request query parameter '${fieldName}' must be of type number but isn't`
+                    );
+                }
+                query[fieldName] = fieldValue;
+            } else if (fieldType.name === "boolean") {
+                const fieldValue = this.query.getBool(fieldName);
+                if (fieldValue === undefined) {
+                    throw new ChiselError(
+                        HTTP_STATUS.BAD_REQUEST,
+                        `provided request query parameter '${fieldName}' must be of type boolean but isn't`
+                    );
+                }
+                query[fieldName] = fieldValue;
+            } else {
+                throw new Error(
+                    `encountered unexpected reflection type ${fieldType.name} while converting QueryParameters`
+                );
+            }
+        }
+        return query as QueryParams;
+    }
+
     queryParams(): QueryParams {
-        return {} as QueryParams;
+        return this.typedQueryParams;
     }
 }
 
 export class JsonRequest<
-    QueryParams extends Record<string, unknown>,
+    QueryParams extends Record<string, QueryParameterValue>,
     JsonBody = JSONValue
 > extends RequestWithQuery<QueryParams> {
     constructor(
-        args: RequestConstructorArgs,
-        queryReflection: ReflectionType,
+        req: ChiselRequest,
+        queryParams: Record<string, ReflectionType>,
         private bodyReflection: ReflectionType
     ) {
-        super(args, queryReflection);
+        super(req, queryParams);
     }
 
-    jsonBody(): JsonBody {
-        return {} as JsonBody;
+    async jsonBody(): Promise<JsonBody> {
+        return (await this.json()) as JsonBody;
     }
 }
 

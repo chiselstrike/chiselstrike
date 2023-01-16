@@ -92,6 +92,8 @@ pub(crate) async fn apply(
         Ok(())
     };
 
+    do_code_transformations(&cwd).await?;
+
     let route_gen_dir = cwd.join(".routegen");
     let event_gen_dir = cwd.join(".eventgen");
 
@@ -127,8 +129,6 @@ pub(crate) async fn apply(
     let root_path = bundler_input_dir.path().join("__root.ts");
     fs::write(&root_path, root_code)
         .context(format!("Could not write to file {}", root_path.display()))?;
-
-    do_code_transformations(&cwd, &route_gen_dir, &root_path).await?;
 
     let banner = concat!(
         "import { createRequire as __createRequire } from 'chisel://deno-std/node/module.ts'; ",
@@ -171,19 +171,13 @@ pub(crate) async fn apply(
     Ok((modules, index_candidates))
 }
 
-async fn do_code_transformations(
-    cwd: &PathBuf,
-    route_gen_dir: &PathBuf,
-    root_path: &PathBuf,
-) -> Result<()> {
+async fn do_code_transformations(cwd: &PathBuf) -> Result<()> {
     dbg!(cwd);
     let transformer_proc = npx(
         "ts-node",
         &[
             "/home/asd/chstrike/chiselstrike/cli/src/cmd/apply/ts_transformer/src/main.ts",
             cwd.to_str().unwrap(),
-            route_gen_dir.to_str().unwrap(),
-            root_path.to_str().unwrap(),
         ],
     )?;
 

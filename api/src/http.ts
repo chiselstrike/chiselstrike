@@ -4,7 +4,7 @@ import { loggedInUser, requestContext } from "./datastore.ts";
 import { PermissionDeniedError } from "./policies.ts";
 import { ChiselRequest } from "./request.ts";
 import { Handler, Middleware, Router, RouterMatch } from "./routing.ts";
-import { HTTP_STATUS, opAsync, opSync, responseFromJson } from "./utils.ts";
+import { HTTP_STATUS, ChiselError, opAsync, opSync, responseFromJson } from "./utils.ts";
 
 // HTTP request that we receive from Rust
 export type HttpRequest = {
@@ -29,23 +29,20 @@ const isDebug = opSync("op_chisel_is_debug") as boolean;
 // Handle an HTTP request. This should only be called from `run.ts`, see the `run()` function from details.
 export async function handleHttpRequest(
     router: Router,
-    httpRequest: HttpRequest,
+    httpRequest: HttpRequest
 ): Promise<HttpResponse> {
-    const routerMatch = router.lookup(
-        httpRequest.method,
-        httpRequest.routingPath,
-    );
+    const routerMatch = router.lookup(httpRequest.method, httpRequest.routingPath);
     if (routerMatch === "not_found") {
         return textResponse(
             HTTP_STATUS.NOT_FOUND,
-            `There is no route for ${JSON.stringify(httpRequest.routingPath)}`,
+            `There is no route for ${JSON.stringify(httpRequest.routingPath)}`
         );
     } else if (routerMatch === "method_not_allowed") {
         return textResponse(
             HTTP_STATUS.METHOD_NOT_ALLOWED,
-            `Method ${httpRequest.method} is not supported for ${
-                JSON.stringify(httpRequest.routingPath)
-            }`,
+            `Method ${httpRequest.method} is not supported for ${JSON.stringify(
+                httpRequest.routingPath
+            )}`
         );
     }
 
@@ -69,16 +66,17 @@ export async function handleHttpRequest(
             method: httpRequest.method,
             headers: httpRequest.headers,
             // Request() complains if there is a body in a GET/HEAD request
-            body: (httpRequest.method == "GET" || httpRequest.method == "HEAD")
-                ? undefined
-                : httpRequest.body,
+            body:
+                httpRequest.method == "GET" || httpRequest.method == "HEAD"
+                    ? undefined
+                    : httpRequest.body,
         },
         url.pathname,
         versionId,
         user,
         url.searchParams,
         routerMatch.params,
-        routerMatch.legacyFileName,
+        routerMatch.legacyFileName
     );
 
     try {
@@ -97,25 +95,30 @@ export async function handleHttpRequest(
         };
     } catch (e) {
         let description = "";
-        if (e instanceof Error && e.stack !== undefined) {
-            description = e.stack;
+        let code: number;
+
+        if (e instanceof PermissionDeniedError) {
+            code = HTTP_STATUS.FORBIDDEN;
+        } else if (e instanceof ChiselError) {
+            code = e.httpErrorCode;
+            if (e.message !== undefined) {
+                description += `${e.message}\n`;
+            }
         } else {
-            description = "" + e;
+            code = HTTP_STATUS.INTERNAL_SERVER_ERROR;
         }
-        let message =
-            `Error in ${httpRequest.method} ${httpRequest.uri}: ${description}`;
+
+        if (e instanceof Error && e.stack !== undefined) {
+            description += e.stack;
+        } else {
+            description += e;
+        }
+        let message = `Error in ${httpRequest.method} ${httpRequest.uri}: ${description}`;
 
         try {
             opSync("op_chisel_rollback_transaction", requestContext.rid);
         } catch (e) {
             message += `\nError when rolling back transaction: ${e}`;
-        }
-
-        let code: number;
-        if (e instanceof PermissionDeniedError) {
-            code = HTTP_STATUS.FORBIDDEN;
-        } else {
-            code = HTTP_STATUS.INTERNAL_SERVER_ERROR;
         }
 
         console.error(message);
@@ -127,23 +130,15 @@ export async function handleHttpRequest(
     }
 }
 
-function handleRouterMatch(
-    routerMatch: RouterMatch,
-    request: ChiselRequest,
-): Promise<Response> {
-    return handleMiddlewareChain(
-        routerMatch.middlewares,
-        routerMatch.handler,
-        request,
-        0,
-    );
+function handleRouterMatch(routerMatch: RouterMatch, request: ChiselRequest): Promise<Response> {
+    return handleMiddlewareChain(routerMatch.middlewares, routerMatch.handler, request, 0);
 }
 
 async function handleMiddlewareChain(
     middlewares: Middleware[],
     handler: Handler,
     request: ChiselRequest,
-    middlewareIndex: number,
+    middlewareIndex: number
 ): Promise<Response> {
     if (middlewareIndex >= middlewares.length) {
         // call the handler function
@@ -158,17 +153,8 @@ async function handleMiddlewareChain(
     } else {
         // call the middleware handler, passing a callback that will continue in the middleware chain
         const next = (request: ChiselRequest) =>
-            handleMiddlewareChain(
-                middlewares,
-                handler,
-                request,
-                middlewareIndex + 1,
-            );
-        return middlewares[middlewareIndex].handler.call(
-            undefined,
-            request,
-            next,
-        );
+            handleMiddlewareChain(middlewares, handler, request, middlewareIndex + 1);
+        return middlewares[middlewareIndex].handler.call(undefined, request, next);
     }
 }
 

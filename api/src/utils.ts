@@ -95,11 +95,16 @@ function valueToJson(v: unknown): JSONValue {
 
 /** HTTP status codes */
 export const HTTP_STATUS = {
+    BAD_REQUEST: 400,
     FORBIDDEN: 403,
     INTERNAL_SERVER_ERROR: 500,
     METHOD_NOT_ALLOWED: 405,
     NOT_FOUND: 404,
 };
+
+export class ChiselError {
+    constructor(public httpErrorCode: number, public message?: string) {}
+}
 
 export type ReflectionType =
     | { name: "undefined" }

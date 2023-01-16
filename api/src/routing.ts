@@ -1,6 +1,6 @@
 // SPDX-FileCopyrightText: © 2022 ChiselStrike <info@chiselstrike.com>
 
-import type { ChiselRequest, RequestWithQuery, JsonRequest, Query } from "./request.ts";
+import { ChiselRequest, RequestWithQuery, JsonRequest, Query } from "./request.ts";
 import { JSONValue, ReflectionType } from "./utils.ts";
 
 /** Container for HTTP routes and their handlers.
@@ -139,8 +139,14 @@ export class RouteMap {
         handler: PostHandler<QueryParams, JsonBody> | Handler,
         reflection?: EndpointReflection
     ): this {
-        console.log(reflection);
-        return this.route("POST", path, handler as Handler);
+        if (reflection !== undefined) {
+            const postHandler = handler as PostHandler<QueryParams, JsonBody>;
+            return this.route("POST", path, (req: ChiselRequest) => {
+                return postHandler(new JsonRequest(req, reflection.queryParams, reflection.jsonBody));
+            });
+        } else {
+            return this.route("POST", path, handler as Handler);
+        }
     }
 
     /** A shorthand for `route()` with `PUT` method. */
@@ -276,8 +282,8 @@ export type MiddlewareHandler = (request: ChiselRequest, next: MiddlewareNext) =
 export type MiddlewareNext = (request: ChiselRequest) => Promise<Response>;
 
 export type EndpointReflection = {
-    queryParams?: ReflectionType;
-    jsonBody?: ReflectionType;
+    queryParams: Record<string, ReflectionType>;
+    jsonBody: ReflectionType;
     returnType?: ReflectionType;
 };
 
