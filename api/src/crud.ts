@@ -42,10 +42,7 @@ export type ChiselEntityClass<T extends ChiselEntity> = {
  *    value of `write`.
  * @returns A route map suitable as a default export in a route file.
  */
-export function crud<
-    T extends ChiselEntity,
-    E extends ChiselEntityClass<T>,
->(
+export function crud<T extends ChiselEntity, E extends ChiselEntityClass<T>>(
     entity: E,
     config?: {
         createResponse?: (
@@ -67,7 +64,7 @@ export function crud<
     const clientMetadata = (handlerName: CrudHandler): ClientMetadata => {
         return {
             handler: {
-                kind: "Crud",
+                kind: "crud",
                 handler: { kind: handlerName, entityName: entity.name },
             },
         };
@@ -124,10 +121,7 @@ export function crud<
     async function patch(req: ChiselRequest): Promise<Response> {
         const orig = await entity.findOne({ id: req.params.get("id") });
         if (!orig) {
-            return createResponse(
-                "object does not exist, cannot PATCH",
-                404,
-            );
+            return createResponse("object does not exist, cannot PATCH", 404);
         }
         mergeIntoEntity(
             entity.name,

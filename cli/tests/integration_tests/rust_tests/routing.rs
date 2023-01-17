@@ -611,7 +611,7 @@ async fn route_reflection(c: TestContext) {
     }
 
     #[derive(Debug, Clone, Deserialize)]
-    #[serde(tag = "kind", content = "handler")]
+    #[serde(tag = "kind", content = "handler", rename_all = "camelCase")]
     enum HandlerKind {
         Crud(CrudHandler),
     }

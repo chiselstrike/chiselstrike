@@ -171,8 +171,7 @@ pub(crate) async fn apply(
     Ok((modules, index_candidates))
 }
 
-async fn do_code_transformations(cwd: &PathBuf) -> Result<()> {
-    dbg!(cwd);
+async fn do_code_transformations(cwd: &Path) -> Result<()> {
     let transformer_proc = npx(
         "ts-node",
         &[

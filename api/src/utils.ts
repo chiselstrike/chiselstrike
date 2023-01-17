@@ -4,11 +4,17 @@ export function opSync(opName: string, a?: unknown, b?: unknown): unknown {
     return Deno.core.opSync(opName, a, b);
 }
 
-export function opAsync(opName: string, a?: unknown, b?: unknown): Promise<unknown> {
+export function opAsync(
+    opName: string,
+    a?: unknown,
+    b?: unknown,
+): Promise<unknown> {
     return Deno.core.opAsync(opName, a, b);
 }
 
-export type JSONValue = string | number | boolean | null | { [x: string]: JSONValue } | Array<JSONValue>;
+export type JSONValue = string | number | boolean | null | {
+    [x: string]: JSONValue;
+} | Array<JSONValue>;
 
 /**
  * Gets a secret from the environment
@@ -24,7 +30,8 @@ export function getSecret(key: string): JSONValue | undefined {
 /** Converts a JSON value into a `Response`. */
 export function responseFromJson(body: unknown, status = 200) {
     // https://fetch.spec.whatwg.org/#null-body-status
-    const isNullBody = status == 101 || status == 103 || status == 204 || status == 205 || status == 304;
+    const isNullBody = status == 101 || status == 103 || status == 204 ||
+        status == 205 || status == 304;
 
     const jsonBody = valueToJson(body);
     const json = isNullBody ? null : stringifyJson(jsonBody);
@@ -89,7 +96,9 @@ function valueToJson(v: unknown): JSONValue {
         }
         return jsonObj;
     } else {
-        throw new Error(`encountered unexpected value type '${typeof v}' when converting to JSON`);
+        throw new Error(
+            `encountered unexpected value type '${typeof v}' when converting to JSON`,
+        );
     }
 }
 
@@ -108,11 +117,16 @@ export class ChiselError {
 
 export type ReflectionType =
     | { name: "undefined" }
+    | { name: "null" }
     | { name: "string" }
     | { name: "number" }
     | { name: "boolean" }
     | { name: "date" }
     | { name: "arrayBuffer" }
     | { name: "array"; elementType: ReflectionType }
-    | { name: "namedObject"; typeName: string; fields: Record<string, ReflectionType> }
+    | {
+        name: "namedObject";
+        typeName: string;
+        fields: Record<string, ReflectionType>;
+    }
     | { name: "anonymousObject"; fields: Record<string, ReflectionType> };

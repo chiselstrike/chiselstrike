@@ -20,11 +20,6 @@ async function transformSources(projectDir: string) {
         console.log(diag.getMessageText());
     }
 
-    console.log(project.getAmbientModules());
-    for (const module of project.getAmbientModules()) {
-        console.log(module.getEscapedName());
-    }
-
     const tc = project.getTypeChecker();
     tc.getApparentType;
     for (const srcFile of project.getSourceFiles()) {
@@ -61,8 +56,10 @@ function modifyCallExpression(tc: tsm.TypeChecker, callExpr: tsm.CallExpression)
 }
 
 type HandlerReflection = {
-    queryParams: Record<string, ReflectionType>;
-    jsonBody: ReflectionType;
+    request: {
+        query: Record<string, ReflectionType>;
+        jsonBody?: ReflectionType;
+    };
 };
 
 function analyzeHandlerTypeArguments(
@@ -78,58 +75,55 @@ function analyzeHandlerTypeArguments(
         const callSignature = arrowHandler.getSignature();
         const params = callSignature.getParameters();
         assertEquals(params.length, 1, "Endpoint handler must have only one argument");
+        const requestParamSymbol = params[0];
 
-        const requestArg = params[0].getValueDeclarationOrThrow();
-        const requestType = tc.getTypeAtLocation(requestArg);
+        const requestArg = requestParamSymbol.getValueDeclarationOrThrow();
+        const requestType = requestArg.getType();
         const requestTypeSymbol = requestType.getSymbol();
-        if (requestTypeSymbol !== undefined && requestTypeSymbol.getName() === "JsonRequest") {
-            const typeArgs = requestType.getTypeArguments();
-            assertEquals(
-                typeArgs.length,
-                2,
-                "JsonRequest must have both QueryParams and JsonBody type arguments"
-            );
+        if (requestTypeSymbol !== undefined && requestTypeSymbol.getName() === "ChiselRequest") {
+            const requestParameter = requestParamSymbol
+                .getValueDeclarationOrThrow()
+                .asKindOrThrow(tsm.SyntaxKind.Parameter);
+            const parameterChildren = requestParameter.getChildren();
 
-            const queryType = typeArgs[0];
-            const bodyType = typeArgs[1];
+            // Situation where there is parameter without type
+            // (req) => {...}
+            if (parameterChildren.length !== 3) {
+                return undefined;
+            }
+
+            const typeNode = parameterChildren[2].asKindOrThrow(tsm.SyntaxKind.TypeReference);
+            const typeArgs = typeNode.getTypeArguments();
+
+            // If there are no type arguments, we don't reflect for now.
+            // (req: ChiselRequest) => {...}
+            if (typeArgs.length === 0) {
+                return undefined;
+            }
+
+            const queryType = typeArgs[0].getType();
             const queryReflection = getTypeReflection(tc, queryType);
-            if (queryReflection.name === "namedObject" || queryReflection.name === "anonymousObject") {
-                return {
-                    queryParams: queryReflection.fields as Record<string, ReflectionType>,
-                    jsonBody: getTypeReflection(tc, bodyType),
-                };
-            } else {
+            if (queryReflection.name !== "namedObject" && queryReflection.name !== "anonymousObject") {
                 throw new Error(
-                    `got an an unexpected reflection type for QueryParams: '${queryReflection.name}'`
+                    `got an an unexpected reflection type for TypedQuery: '${queryReflection.name}'`
                 );
             }
+
+            // There could be just QueryType specified.
+            // (req: ChiselRequest<Query>) => {...} vs (req: ChiselRequest<Query, Body>) => {...}
+            let bodyReflection;
+            if (typeArgs.length >= 2) {
+                const bodyType = typeArgs[1].getType();
+                bodyReflection = getTypeReflection(tc, bodyType);
+            }
+
+            return {
+                request: {
+                    query: queryReflection.fields,
+                    jsonBody: bodyReflection,
+                },
+            };
         }
-
-        // assertEquals(
-        //     callSignatures.length,
-        //     1,
-        //     "Unexpected number of call signatures of Handler passed to RouteMap.route"
-        // );
-        // const callSignature = callSignatures[0];
-        // const returnType = this.tc.getReturnTypeOfSignature(callSignature);
-        // const simplifiedReturnType = typeToJsonSerializable(this.tc, returnType);
-        // console.log(simplifiedReturnType);
-
-        // const params = callSignature.parameters;
-        // assertEquals(
-        //     params.length,
-        //     1,
-        //     "Unexpected number of call parameters of Handler passed to RouteMap.route"
-        // );
-        // const queryParams = params[0].valueDeclaration;
-        // assert(queryParams !== undefined, "QueryParams argument is missing a declaration");
-        // const queryParamsType = this.tc.getTypeAtLocation(queryParams!);
-        // const queryParamsSimplified = typeToJsonSerializable(this.tc, queryParamsType);
-        // console.log(queryParamsSimplified);
-        // return {
-        //     paramsTypeId: this.registerUsedType(queryParamsSimplified),
-        //     returnTypeId: this.registerUsedType(simplifiedReturnType),
-        // };
     } else {
         // TODO
         // throw new Error("Not implemented");

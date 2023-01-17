@@ -1,6 +1,11 @@
 // SPDX-FileCopyrightText: © 2022 ChiselStrike <info@chiselstrike.com>
 
-import { ChiselRequest, RequestWithQuery, JsonRequest, Query } from "./request.ts";
+import {
+    ChiselRequest,
+    Query,
+    QueryParamsGeneric,
+    RequestReflection,
+} from "./request.ts";
 import { JSONValue, ReflectionType } from "./utils.ts";
 
 /** Container for HTTP routes and their handlers.
@@ -74,7 +79,7 @@ export class RouteMap {
         method: string | string[],
         path: string,
         handler: Handler,
-        clientMetadata?: ClientMetadata
+        clientMetadata?: ClientMetadata,
     ): this {
         const methods = Array.isArray(method) ? method : [method];
         const pathPattern = path[0] !== "/" ? "/" + path : path;
@@ -129,24 +134,29 @@ export class RouteMap {
 
     /** A shorthand for `route()` with `POST` method. */
     post(path: string, handler: Handler): this;
-    post<QueryParams extends Record<string, unknown> = Record<string, unknown>, JsonBody = JSONValue>(
+    post<
+        QueryParams extends QueryParamsGeneric = Record<string, string>,
+        JsonBody = JSONValue,
+    >(
         path: string,
         handler: PostHandler<QueryParams, JsonBody>,
-        reflection?: EndpointReflection
+        reflection?: EndpointReflection,
     ): this;
-    post<QueryParams extends Record<string, unknown>, JsonBody>(
+    post<QueryParams extends QueryParamsGeneric, JsonBody>(
         path: string,
         handler: PostHandler<QueryParams, JsonBody> | Handler,
-        reflection?: EndpointReflection
+        reflection?: EndpointReflection,
     ): this {
-        if (reflection !== undefined) {
-            const postHandler = handler as PostHandler<QueryParams, JsonBody>;
-            return this.route("POST", path, (req: ChiselRequest) => {
-                return postHandler(new JsonRequest(req, reflection.queryParams, reflection.jsonBody));
-            });
-        } else {
-            return this.route("POST", path, handler as Handler);
+        let meta: ClientMetadata | undefined;
+        if (reflection !== undefined && reflection.request !== undefined) {
+            meta = {
+                handler: {
+                    kind: "generic",
+                    request: reflection.request,
+                },
+            };
         }
+        return this.route("POST", path, handler as Handler, meta);
     }
 
     /** A shorthand for `route()` with `PUT` method. */
@@ -199,7 +209,9 @@ export class RouteMap {
             };
             routeMap.routes.push(route);
         } else {
-            throw new TypeError(`Cannot convert ${typeof routes} into a RouteMap`);
+            throw new TypeError(
+                `Cannot convert ${typeof routes} into a RouteMap`,
+            );
         }
         return routeMap;
     }
@@ -228,18 +240,25 @@ export type CrudHandler =
  */
 export type ClientMetadata = {
     /// Specifies hanlder to be used to handle given route.
-    handler: {
-        kind: "Crud";
-        handler: {
-            kind: CrudHandler;
-            /// Name of the entity that given CRUD handler concenrs.
-            entityName: string;
+    handler:
+        | {
+            kind: "crud";
+            handler: {
+                kind: CrudHandler;
+                /// Name of the entity that given CRUD handler concenrs.
+                entityName: string;
+            };
+        }
+        | {
+            kind: "generic";
+            request: RequestReflection;
         };
-    };
 };
 
 /** A request handler that maps HTTP request to an HTTP response. */
-export type Handler = (req: ChiselRequest) => ResponseLike | Promise<ResponseLike>;
+export type Handler = (
+    req: ChiselRequest,
+) => ResponseLike | Promise<ResponseLike>;
 
 /** Anything that we can convert to a `Response`:
  *
@@ -250,8 +269,11 @@ export type Handler = (req: ChiselRequest) => ResponseLike | Promise<ResponseLik
 export type ResponseLike = Response | string | unknown;
 
 /** A request handler that maps HTTP request to an HTTP response. */
-export type PostHandler<QueryParams extends Record<string, unknown>, JsonBody> = (
-    req: JsonRequest<QueryParams, JsonBody>
+export type PostHandler<
+    TypedQuery extends QueryParamsGeneric = Record<string, string>,
+    TypedJsonBody = JSONValue,
+> = (
+    req: ChiselRequest<TypedQuery, TypedJsonBody>,
 ) => ResponseLike | Promise<ResponseLike>;
 
 /** Anything that we can convert to a `RouteMap`:
@@ -277,13 +299,15 @@ export type Middleware = {
  *
  * Support for middlewares is experimental and it may change in the future.
  */
-export type MiddlewareHandler = (request: ChiselRequest, next: MiddlewareNext) => Promise<Response>;
+export type MiddlewareHandler = (
+    request: ChiselRequest,
+    next: MiddlewareNext,
+) => Promise<Response>;
 
 export type MiddlewareNext = (request: ChiselRequest) => Promise<Response>;
 
 export type EndpointReflection = {
-    queryParams: Record<string, ReflectionType>;
-    jsonBody: ReflectionType;
+    request?: RequestReflection;
     returnType?: ReflectionType;
 };
 
@@ -291,10 +315,15 @@ export class Router {
     private routes: RouterRoute[];
 
     constructor(routeMap: RouteMap) {
-        this.routes = routeMap.routes.map((route) => new RouterRoute(route, routeMap.middlewares));
+        this.routes = routeMap.routes.map((route) =>
+            new RouterRoute(route, routeMap.middlewares)
+        );
     }
 
-    lookup(method: string, path: string): RouterMatch | "not_found" | "method_not_allowed" {
+    lookup(
+        method: string,
+        path: string,
+    ): RouterMatch | "not_found" | "method_not_allowed" {
         for (const route of this.routes) {
             const match = route.match(method, path);
             if (match !== null) {
@@ -317,6 +346,7 @@ export type RouterMatch = {
     handler: Handler;
     middlewares: Middleware[];
     legacyFileName: string | undefined;
+    reflection?: ClientMetadata;
 };
 
 class RouterRoute {
@@ -325,17 +355,23 @@ class RouterRoute {
     handler: Handler;
     middlewares: Middleware[];
     legacyFileName: string | undefined;
+    reflection?: ClientMetadata;
 
     constructor(route: Route, routeMapMiddlewares: Middleware[]) {
         // HACK: we use the hostname part of the URL Pattern to match the method
         const methodPattern = route.methods
             .map((method) => (method == "*" ? ".*" : method.toLowerCase()))
             .join("|");
-        this.pattern = new URLPattern(`http://(${methodPattern})${route.pathPattern}`);
-        this.pathOnlyPattern = new URLPattern(`http://dummy-host${route.pathPattern}`);
+        this.pattern = new URLPattern(
+            `http://(${methodPattern})${route.pathPattern}`,
+        );
+        this.pathOnlyPattern = new URLPattern(
+            `http://dummy-host${route.pathPattern}`,
+        );
         this.handler = route.handler;
         this.middlewares = route.middlewares.concat(routeMapMiddlewares);
         this.legacyFileName = route.legacyFileName;
+        this.reflection = route.clientMetadata;
     }
 
     match(method: string, path: string): RouterMatch | null {
@@ -354,6 +390,7 @@ class RouterRoute {
             handler: this.handler,
             middlewares: this.middlewares,
             legacyFileName: this.legacyFileName,
+            reflection: this.reflection,
         };
     }
 
