@@ -43,36 +43,41 @@ pub(crate) async fn apply(
     let mut index_candidates = vec![];
     let mut chiselc_procs = vec![];
 
-    let mut preprocess_source = |file_path: &mut PathBuf, gen_dir: &Path| -> Result<()> {
+    let copy_source = |file_path: &mut PathBuf, gen_dir: &Path| {
+        let file_rel_path = file_path.strip_prefix(&cwd).with_context(|| {
+            format!("File {} is not a part of this project", file_path.display(),)
+        })?;
+
+        // NOTE: this a horrible hack to make relative imports work
+        // it is common that file "routes/books.ts" imports "models/Book.ts" using
+        // "../models/Book.ts". to make this work with the bundler, we must place the generated
+        // file into ".gen/books.ts".
+        let mut file_rel_components = file_rel_path.components();
+        file_rel_components.next();
+        let file_rel_path = file_rel_components.as_path();
+
+        let gen_file_path = gen_dir.join(file_rel_path);
+        let gen_parent_path = gen_file_path.parent().ok_or_else(|| {
+            anyhow!(
+                "{} doesn't have a parent. Shouldn't have reached this far!",
+                gen_dir.display()
+            )
+        })?;
+        fs::create_dir_all(gen_parent_path)
+            .with_context(|| format!("Could not create directory {}", gen_parent_path.display()))?;
+        fs::copy(&file_path, &gen_file_path)
+            .context("failed to copy source file to .gen directory")?;
+
+        // use the chiselc-processed file instead of the original file in the route map
+        *file_path = gen_file_path;
+        Ok::<(), anyhow::Error>(())
+    };
+
+    let mut preprocess_source = |file_path: &PathBuf| -> Result<()> {
         if optimize {
-            let file_rel_path = file_path.strip_prefix(&cwd).with_context(|| {
-                format!("File {} is not a part of this project", file_path.display(),)
-            })?;
-
-            // NOTE: this a horrible hack to make relative imports work
-            // it is common that file "routes/books.ts" imports "models/Book.ts" using
-            // "../models/Book.ts". to make this work with the bundler, we must place the generated
-            // file into ".gen/books.ts".
-            let mut file_rel_components = file_rel_path.components();
-            file_rel_components.next();
-            let file_rel_path = file_rel_components.as_path();
-
-            let gen_file_path = gen_dir.join(file_rel_path);
-            let gen_parent_path = gen_file_path.parent().ok_or_else(|| {
-                anyhow!(
-                    "{} doesn't have a parent. Shouldn't have reached this far!",
-                    gen_dir.display()
-                )
-            })?;
-            fs::create_dir_all(gen_parent_path).with_context(|| {
-                format!("Could not create directory {}", gen_parent_path.display())
-            })?;
-
-            let chiselc_proc = chiselc_spawn(file_path, &gen_file_path, entities)
+            let chiselc_proc = chiselc_spawn(file_path, file_path, entities)
                 .context("Could not start `chiselc`")?;
 
-            // use the chiselc-processed file instead of the original file in the route map
-            *file_path = gen_file_path;
             chiselc_procs.push(chiselc_proc);
         }
 
@@ -92,17 +97,24 @@ pub(crate) async fn apply(
         Ok(())
     };
 
-    do_code_transformations(&cwd).await?;
-
     let route_gen_dir = cwd.join(".routegen");
     let event_gen_dir = cwd.join(".eventgen");
 
-    // TODO: we need to preprocess all source files with chiselc, not just routes and events
     for route in route_map.routes.iter_mut() {
-        preprocess_source(&mut route.file_path, &route_gen_dir)?;
+        copy_source(&mut route.file_path, &route_gen_dir)?;
     }
     for topic in topic_map.topics.iter_mut() {
-        preprocess_source(&mut topic.file_path, &event_gen_dir)?;
+        copy_source(&mut topic.file_path, &event_gen_dir)?;
+    }
+
+    do_code_transformations(&cwd).await?;
+
+    // TODO: we need to preprocess all source files with chiselc, not just routes and events
+    for route in route_map.routes.iter_mut() {
+        preprocess_source(&route.file_path)?;
+    }
+    for topic in topic_map.topics.iter_mut() {
+        preprocess_source(&topic.file_path)?;
     }
 
     for proc in chiselc_procs.into_iter() {

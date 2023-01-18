@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: © 2022 ChiselStrike <info@chiselstrike.com>
 
 use std::fs::File;
-use std::io::{self, Read, Write};
+use std::io::{self, Cursor, Read, Write};
 use std::path::PathBuf;
 
 use anyhow::{Context, Result};
@@ -38,17 +38,25 @@ fn main() -> Result<()> {
         }
         None => Box::new(io::stdin()) as Box<dyn Read>,
     };
-    let output = match opt.output {
-        Some(path) => File::create(path).map(|file| Box::new(file) as Box<dyn Write>),
-        None => Ok(Box::new(io::stdout()) as Box<dyn Write>),
-    }?;
     let mut data = String::new();
     input.read_to_string(&mut data)?;
     let mut symbols = Symbols::new();
     for entity in opt.entities {
         symbols.register_entity(&entity);
     }
-    compile(data, symbols, opt.target, output)?;
+
+    let mut output = Cursor::new(Vec::new());
+    compile(data, symbols, opt.target, &mut output)?;
+
+    match opt.output {
+        Some(path) => {
+            File::create(path)?.write_all(output.get_ref())?;
+        }
+        None => {
+            io::stdout().lock().write_all(output.get_ref())?;
+        }
+    };
+
     Ok(())
 }
 

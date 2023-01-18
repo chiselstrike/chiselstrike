@@ -9,8 +9,7 @@ async function transformSources(projectDir: string) {
     const project = new tsm.Project({
         tsConfigFilePath: path.join(projectDir, "tsconfig.json"),
     });
-    console.log(fs.readFileSync(path.join(projectDir, "tsconfig.json"), "utf-8"));
-    const routesDir = path.join(projectDir, "routes");
+    const routesDir = path.join(projectDir, ".routegen");
 
     project.addSourceFilesAtPaths([path.join(routesDir, "/**/*{.d.ts,.ts}")]);
     project.resolveSourceFileDependencies();
@@ -26,7 +25,6 @@ async function transformSources(projectDir: string) {
         if (!srcFile.getFilePath().startsWith(routesDir)) {
             continue;
         }
-        console.log(srcFile.getFilePath());
         await processRouteFile(tc, srcFile);
     }
 }
