@@ -1,6 +1,5 @@
-import * as tsm from "ts-morph";
-
-import { assert, assertEquals } from "./utils";
+import { assert, assertEquals } from "https://deno.land/std@0.173.0/testing/asserts.ts";
+import * as tsm from "https://deno.land/x/ts_morph@17.0.1/mod.ts";
 
 export type ReflectionType =
     | { name: "undefined" }

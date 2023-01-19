@@ -29,6 +29,7 @@ tempfile = "3.2.0"
 tokio = { version = "1.11.0", features = ["rt-multi-thread", "net", "fs", "process", "signal"] }
 toml = "0.5.8"
 tonic = "0.5.2"
+tsc_reflection = { path = "../tsc_reflection" }
 url = "2.2"
 utils = { path = "../utils" }
 

@@ -12,6 +12,7 @@ use anyhow::{anyhow, bail, Context, Result};
 use std::ffi::{OsStr, OsString};
 use std::path::{Path, PathBuf};
 use std::{env, fs};
+use tsc_reflection;
 
 pub(crate) async fn apply(
     mut route_map: FileRouteMap,
@@ -107,7 +108,7 @@ pub(crate) async fn apply(
         copy_source(&mut topic.file_path, &event_gen_dir)?;
     }
 
-    do_code_transformations(&cwd).await?;
+    tsc_reflection::transform_in_place(&cwd).await?;
 
     // TODO: we need to preprocess all source files with chiselc, not just routes and events
     for route in route_map.routes.iter_mut() {
@@ -181,23 +182,6 @@ pub(crate) async fn apply(
     }];
 
     Ok((modules, index_candidates))
-}
-
-async fn do_code_transformations(cwd: &Path) -> Result<()> {
-    let transformer_proc = npx(
-        "ts-node",
-        &[
-            "/home/asd/chstrike/chiselstrike/cli/src/cmd/apply/ts_transformer/src/main.ts",
-            cwd.to_str().unwrap(),
-        ],
-    )?;
-
-    let tsc_output = transformer_proc
-        .wait_with_output()
-        .await
-        .context("Could not run tsc to type-check the code")?;
-    println!("{}", String::from_utf8_lossy(&tsc_output.stdout));
-    ensure_success(tsc_output).context("Type-checking with tsc failed")
 }
 
 fn esbuild<A: AsRef<OsStr>>(args: &[A]) -> Result<tokio::process::Child> {

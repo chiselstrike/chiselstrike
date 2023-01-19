@@ -8,4 +8,4 @@
 /.env
 Session.vim
 /cli/tests/integration_tests/cache
-/cli/src/cmd/apply/ts_transformer/node_modules/
+tsc_reflection/node_modules/

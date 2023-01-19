@@ -10,6 +10,7 @@ members = [
     "my_tsc",
     "packages",
     "server",
+    "tsc_reflection",
     "tsc_compile",
     "utils",
 ]

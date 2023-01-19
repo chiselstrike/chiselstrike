@@ -1,9 +1,8 @@
-import * as path from "path";
-import * as tsm from "ts-morph";
-import * as fs from "fs";
+import { assert, assertEquals } from "https://deno.land/std@0.173.0/testing/asserts.ts";
+import * as path from "https://deno.land/std@0.173.0/path/mod.ts";
+import * as tsm from "https://deno.land/x/ts_morph@17.0.1/mod.ts";
 
-import { assert, assertEquals } from "./utils";
-import { ReflectionType, getTypeReflection } from "./reflection";
+import { ReflectionType, getTypeReflection } from "./reflection.ts";
 
 async function transformSources(projectDir: string) {
     const project = new tsm.Project({
@@ -128,6 +127,4 @@ function analyzeHandlerTypeArguments(
     }
 }
 
-const args = process.argv.slice(2);
-// TODO: Proper arguments parsing
-transformSources(args[0]);
+transformSources(Deno.args[0]);
