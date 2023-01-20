@@ -4,15 +4,10 @@ use std::env;
 use std::path::PathBuf;
 
 fn main() {
-    // The default is to scan the entire package. The following is the
-    // solution recommended in
-    // https://doc.rust-lang.org/cargo/reference/build-scripts.html#cargorerun-if-changedpath
-    println!("cargo:rerun-if-changed=build.rs");
-
     let out_dir = PathBuf::from(env::var_os("OUT_DIR").unwrap());
     let bundle_path = out_dir.join("generate_reflection.js");
 
-    std::process::Command::new("deno")
+    let x = std::process::Command::new("deno")
         .args(vec![
             "bundle",
             "src/main.ts",
@@ -22,4 +17,10 @@ fn main() {
         .stderr(std::process::Stdio::piped())
         .output()
         .expect("Could not run `deno` to bundle tsc_reflection tool");
+
+    if !x.status.success() {
+        eprintln!("STDOUT:\n{}", String::from_utf8_lossy(&x.stdout));
+        eprintln!("STDERR:\n{}", String::from_utf8_lossy(&x.stderr));
+        panic!("deno bundle exited with non-zero status while bundling tsc_reflection tool");
+    }
 }

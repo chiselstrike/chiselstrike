@@ -2,7 +2,6 @@
 
 import {
     ChiselRequest,
-    Query,
     QueryParamsGeneric,
     RequestReflection,
 } from "./request.ts";

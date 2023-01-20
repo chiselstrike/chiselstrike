@@ -3,13 +3,7 @@
 import { loggedInUser, requestContext } from "./datastore.ts";
 import { PermissionDeniedError } from "./policies.ts";
 import { ChiselRequest } from "./request.ts";
-import {
-    ClientMetadata,
-    Handler,
-    Middleware,
-    Router,
-    RouterMatch,
-} from "./routing.ts";
+import { Router, RouterMatch } from "./routing.ts";
 import {
     ChiselError,
     HTTP_STATUS,
