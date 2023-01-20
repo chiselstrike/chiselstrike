@@ -8,11 +8,13 @@ use crate::events::FileTopicMap;
 use crate::project::read_to_string;
 use crate::proto::{IndexCandidate, Module};
 use crate::routes::FileRouteMap;
-use anyhow::{anyhow, bail, Context, Result};
+use anyhow::{bail, Context, Result};
 use std::ffi::{OsStr, OsString};
 use std::path::{Path, PathBuf};
 use std::{env, fs};
 use tsc_reflection;
+
+use super::common::{create_tmp_route_files, create_tmp_topic_files};
 
 pub(crate) async fn apply(
     mut route_map: FileRouteMap,
@@ -41,38 +43,16 @@ pub(crate) async fn apply(
     }
 
     let cwd = env::current_dir()?;
+
+    let route_gen_dir = cwd.join(".routegen");
+    let event_gen_dir = cwd.join(".eventgen");
+
+    route_map = create_tmp_route_files(route_map, &route_gen_dir)?;
+    topic_map = create_tmp_topic_files(topic_map, &event_gen_dir)?;
+    tsc_reflection::transform_in_place(&cwd, &route_gen_dir, false).await?;
+
     let mut index_candidates = vec![];
     let mut chiselc_procs = vec![];
-
-    let copy_source = |file_path: &mut PathBuf, gen_dir: &Path| {
-        let file_rel_path = file_path.strip_prefix(&cwd).with_context(|| {
-            format!("File {} is not a part of this project", file_path.display(),)
-        })?;
-
-        // NOTE: this a horrible hack to make relative imports work
-        // it is common that file "routes/books.ts" imports "models/Book.ts" using
-        // "../models/Book.ts". to make this work with the bundler, we must place the generated
-        // file into ".gen/books.ts".
-        let mut file_rel_components = file_rel_path.components();
-        file_rel_components.next();
-        let file_rel_path = file_rel_components.as_path();
-
-        let gen_file_path = gen_dir.join(file_rel_path);
-        let gen_parent_path = gen_file_path.parent().ok_or_else(|| {
-            anyhow!(
-                "{} doesn't have a parent. Shouldn't have reached this far!",
-                gen_dir.display()
-            )
-        })?;
-        fs::create_dir_all(gen_parent_path)
-            .with_context(|| format!("Could not create directory {}", gen_parent_path.display()))?;
-        fs::copy(&file_path, &gen_file_path)
-            .context("failed to copy source file to .gen directory")?;
-
-        // use the chiselc-processed file instead of the original file in the route map
-        *file_path = gen_file_path;
-        Ok::<(), anyhow::Error>(())
-    };
 
     let mut preprocess_source = |file_path: &PathBuf| -> Result<()> {
         if optimize {
@@ -97,18 +77,6 @@ pub(crate) async fn apply(
 
         Ok(())
     };
-
-    let route_gen_dir = cwd.join(".routegen");
-    let event_gen_dir = cwd.join(".eventgen");
-
-    for route in route_map.routes.iter_mut() {
-        copy_source(&mut route.file_path, &route_gen_dir)?;
-    }
-    for topic in topic_map.topics.iter_mut() {
-        copy_source(&mut topic.file_path, &event_gen_dir)?;
-    }
-
-    tsc_reflection::transform_in_place(&cwd).await?;
 
     // TODO: we need to preprocess all source files with chiselc, not just routes and events
     for route in route_map.routes.iter_mut() {

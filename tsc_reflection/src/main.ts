@@ -4,11 +4,14 @@ import * as tsm from "https://deno.land/x/ts_morph@17.0.1/mod.ts";
 
 import { ReflectionType, getTypeReflection } from "./reflection.ts";
 
-async function transformSources(projectDir: string) {
+async function transformSources(projectDir: string, routesDir: string, mode: "node" | "deno") {
+    if (mode !== "node") {
+        throw new Error("Only Node mode is supported");
+    }
+    // const resolutionHost = mode === "deno" ? tsm.ResolutionHosts.deno : undefined;
     const project = new tsm.Project({
         tsConfigFilePath: path.join(projectDir, "tsconfig.json"),
     });
-    const routesDir = path.join(projectDir, ".routegen");
 
     project.addSourceFilesAtPaths([path.join(routesDir, "/**/*{.d.ts,.ts}")]);
     project.resolveSourceFileDependencies();
@@ -127,4 +130,4 @@ function analyzeHandlerTypeArguments(
     }
 }
 
-transformSources(Deno.args[0]);
+transformSources(Deno.args[0], Deno.args[1], Deno.args[2] as "deno" | "node");

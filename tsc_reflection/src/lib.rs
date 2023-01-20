@@ -48,7 +48,11 @@ fn source_from_code(url: &Url, code: &str) -> ModuleSource {
     }
 }
 
-pub async fn transform_in_place(project_root: &Path) -> Result<()> {
+pub async fn transform_in_place(
+    project_root: &Path,
+    routes_dir: &Path,
+    deno_mode: bool,
+) -> Result<()> {
     let module_loader = Rc::new(ModuleLoader);
     let create_web_worker_cb = Arc::new(|_| panic!("Web workers are not supported"));
     let web_worker_preload_module_cb = Arc::new(|_| panic!("Web workers are not supported"));
@@ -56,7 +60,15 @@ pub async fn transform_in_place(project_root: &Path) -> Result<()> {
 
     let options = WorkerOptions {
         bootstrap: BootstrapOptions {
-            args: vec![project_root.to_string_lossy().to_string()],
+            args: vec![
+                project_root.to_string_lossy().to_string(),
+                routes_dir.to_string_lossy().to_string(),
+                if deno_mode {
+                    "deno".to_string()
+                } else {
+                    "node".to_string()
+                },
+            ],
             ..Default::default()
         },
         web_worker_preload_module_cb,
