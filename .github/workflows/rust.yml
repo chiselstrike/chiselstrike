@@ -136,7 +136,7 @@ jobs:
   kafka-test:
     runs-on: self-hosted
     container:
-      image: ghcr.io/chiselstrike/rust-build-image:v1.1
+      image: ghcr.io/chiselstrike/rust-build-image:v1.2
       options: --user 1000
     steps:
     - name: Checkout repository
