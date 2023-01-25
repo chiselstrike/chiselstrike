@@ -83,7 +83,11 @@ function analyzeHandlerTypeArguments(
     if (arrowHandler !== undefined) {
         const callSignature = arrowHandler.getSignature();
         const params = callSignature.getParameters();
-        assertEquals(params.length, 1, "Endpoint handler must have only one argument");
+        // If the handler doesn't take req parameter, there is nothing to be done.
+        if (params.length === 0) {
+            return undefined
+        }
+        assert(params.length <= 1, "Endpoint handler must have one or zero arguments");
         const requestParamSymbol = params[0];
 
         const requestArg = requestParamSymbol.getValueDeclarationOrThrow();
