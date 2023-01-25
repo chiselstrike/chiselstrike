@@ -22,8 +22,8 @@ pub(crate) fn create_tmp_topic_files(
     gen_dir: &Path,
 ) -> Result<FileTopicMap> {
     let cwd = env::current_dir()?;
-    for route in file_map.topics.iter_mut() {
-        copy_source(&cwd, &mut route.file_path, gen_dir)?;
+    for topic in file_map.topics.iter_mut() {
+        copy_source(&cwd, &mut topic.file_path, gen_dir)?;
     }
     Ok(file_map)
 }

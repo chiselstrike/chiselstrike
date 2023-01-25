@@ -22,7 +22,6 @@ async function transformSources(projectDir: string, routesDir: string, mode: "no
     }
 
     const tc = project.getTypeChecker();
-    tc.getApparentType;
     for (const srcFile of project.getSourceFiles()) {
         if (!srcFile.getFilePath().startsWith(routesDir)) {
             continue;
@@ -44,13 +43,23 @@ async function processRouteFile(tc: tsm.TypeChecker, srcFile: tsm.SourceFile) {
 function modifyCallExpression(tc: tsm.TypeChecker, callExpr: tsm.CallExpression) {
     const propertyAccess = callExpr.getExpression().asKind(tsm.SyntaxKind.PropertyAccessExpression);
     if (propertyAccess !== undefined) {
-        if (propertyAccess.getName() === "post") {
-            const reflection = analyzeHandlerTypeArguments(tc, callExpr);
-            if (reflection !== undefined) {
-                // TODO: This is a little bit hacky, but ReflectionType
-                // contains only objects and strings so it should work well.
-                callExpr.addArgument(JSON.stringify(reflection));
-            }
+        if (propertyAccess.getName() !== "post") {
+            return;
+        }
+        const parent = propertyAccess.getParent();
+        if (parent === undefined) {
+            return;
+        }
+        const parentSymbol = parent.getType().getSymbol();
+        if (parentSymbol === undefined || parentSymbol.getName() !== "RouteMap") {
+            return;
+        }
+
+        const reflection = analyzeHandlerTypeArguments(tc, callExpr);
+        if (reflection !== undefined) {
+            // TODO: This is a little bit hacky, but ReflectionType
+            // contains only objects and strings so it should work well.
+            callExpr.addArgument(JSON.stringify(reflection));
         }
     }
 }

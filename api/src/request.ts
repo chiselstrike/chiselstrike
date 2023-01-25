@@ -4,8 +4,8 @@ import type { AuthUser } from "./datastore.ts";
 import {
     ChiselError,
     HTTP_STATUS,
-    JSONValue,
-    ReflectionType,
+    type JSONValue,
+    type ReflectionType,
 } from "./utils.ts";
 
 export type RequestReflection = {
