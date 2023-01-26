@@ -8,3 +8,4 @@
 /.env
 Session.vim
 /cli/tests/integration_tests/cache
+tsc_reflection/node_modules/

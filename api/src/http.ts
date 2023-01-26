@@ -3,8 +3,14 @@
 import { loggedInUser, requestContext } from "./datastore.ts";
 import { PermissionDeniedError } from "./policies.ts";
 import { ChiselRequest } from "./request.ts";
-import { Handler, Middleware, Router, RouterMatch } from "./routing.ts";
-import { HTTP_STATUS, opAsync, opSync, responseFromJson } from "./utils.ts";
+import { Router, RouterMatch } from "./routing.ts";
+import {
+    ChiselError,
+    HTTP_STATUS,
+    opAsync,
+    opSync,
+    responseFromJson,
+} from "./utils.ts";
 
 // HTTP request that we receive from Rust
 export type HttpRequest = {
@@ -44,7 +50,9 @@ export async function handleHttpRequest(
         return textResponse(
             HTTP_STATUS.METHOD_NOT_ALLOWED,
             `Method ${httpRequest.method} is not supported for ${
-                JSON.stringify(httpRequest.routingPath)
+                JSON.stringify(
+                    httpRequest.routingPath,
+                )
             }`,
         );
     }
@@ -69,7 +77,7 @@ export async function handleHttpRequest(
             method: httpRequest.method,
             headers: httpRequest.headers,
             // Request() complains if there is a body in a GET/HEAD request
-            body: (httpRequest.method == "GET" || httpRequest.method == "HEAD")
+            body: httpRequest.method == "GET" || httpRequest.method == "HEAD"
                 ? undefined
                 : httpRequest.body,
         },
@@ -97,10 +105,23 @@ export async function handleHttpRequest(
         };
     } catch (e) {
         let description = "";
-        if (e instanceof Error && e.stack !== undefined) {
-            description = e.stack;
+        let code: number;
+
+        if (e instanceof PermissionDeniedError) {
+            code = HTTP_STATUS.FORBIDDEN;
+        } else if (e instanceof ChiselError) {
+            code = e.httpErrorCode;
+            if (e.message !== undefined) {
+                description += `${e.message}\n`;
+            }
         } else {
-            description = "" + e;
+            code = HTTP_STATUS.INTERNAL_SERVER_ERROR;
+        }
+
+        if (e instanceof Error && e.stack !== undefined) {
+            description += e.stack;
+        } else {
+            description += e;
         }
         let message =
             `Error in ${httpRequest.method} ${httpRequest.uri}: ${description}`;
@@ -109,13 +130,6 @@ export async function handleHttpRequest(
             opSync("op_chisel_rollback_transaction", requestContext.rid);
         } catch (e) {
             message += `\nError when rolling back transaction: ${e}`;
-        }
-
-        let code: number;
-        if (e instanceof PermissionDeniedError) {
-            code = HTTP_STATUS.FORBIDDEN;
-        } else {
-            code = HTTP_STATUS.INTERNAL_SERVER_ERROR;
         }
 
         console.error(message);
@@ -131,23 +145,23 @@ function handleRouterMatch(
     routerMatch: RouterMatch,
     request: ChiselRequest,
 ): Promise<Response> {
-    return handleMiddlewareChain(
-        routerMatch.middlewares,
-        routerMatch.handler,
-        request,
-        0,
-    );
+    return handleMiddlewareChain(routerMatch, request, 0);
 }
 
 async function handleMiddlewareChain(
-    middlewares: Middleware[],
-    handler: Handler,
+    match: RouterMatch,
     request: ChiselRequest,
     middlewareIndex: number,
 ): Promise<Response> {
-    if (middlewareIndex >= middlewares.length) {
+    if (middlewareIndex >= match.middlewares.length) {
+        if (
+            match.reflection !== undefined &&
+            match.reflection.handler.kind === "generic"
+        ) {
+            request.loadReflection(match.reflection.handler.request);
+        }
         // call the handler function
-        const responseLike = await handler.call(undefined, request);
+        const responseLike = await match.handler.call(undefined, request);
         if (responseLike instanceof Response) {
             return responseLike;
         } else if (typeof responseLike === "string") {
@@ -158,13 +172,8 @@ async function handleMiddlewareChain(
     } else {
         // call the middleware handler, passing a callback that will continue in the middleware chain
         const next = (request: ChiselRequest) =>
-            handleMiddlewareChain(
-                middlewares,
-                handler,
-                request,
-                middlewareIndex + 1,
-            );
-        return middlewares[middlewareIndex].handler.call(
+            handleMiddlewareChain(match, request, middlewareIndex + 1);
+        return match.middlewares[middlewareIndex].handler.call(
             undefined,
             request,
             next,

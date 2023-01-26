@@ -15,7 +15,8 @@ function isDirEmpty(dirname: string) {
 
 function run(
     projectDirectory: string,
-    chiselVersion: string,
+    chiselApiVersion: string,
+    chiselCliVersion: string,
     install: boolean,
     rewrite: boolean,
 ) {
@@ -25,7 +26,9 @@ function run(
         if (!rewrite && !isDirEmpty(projectDirectory)) {
             console.log(
                 `Cannot create ChiselStrike project: directory ${
-                    chalk.red(projectDirectory)
+                    chalk.red(
+                        projectDirectory,
+                    )
                 } already exists.`,
             );
             process.exit(1);
@@ -75,7 +78,7 @@ function run(
         const template = Handlebars.compile(source);
         fs.writeFileSync(
             path.join(projectDirectory, f),
-            template({ projectName, chiselVersion }),
+            template({ projectName, chiselApiVersion, chiselCliVersion }),
         );
     }
     fs.appendFileSync(
@@ -141,22 +144,22 @@ const _program = new Commander.Command(packageJson.name)
     .version(packageJson.version)
     .arguments("<project-directory>")
     .option(
-        "-c, --chisel-version <version>",
-        "ChiselStrike version to use.",
+        "-a, --chisel-api-version <version>",
+        "ChiselStrike API version to use.",
         packageJson.version,
     )
     .option(
-        "--no-install",
-        "Do not install dependencies",
+        "-c, --chisel-cli-version <version>",
+        "ChiselStrike CLI version to use.",
+        packageJson.version,
     )
-    .option(
-        "--rewrite",
-        "Rewrite an existing directory",
-    )
+    .option("--no-install", "Do not install dependencies")
+    .option("--rewrite", "Rewrite an existing directory")
     .action((projectDirectory, options) => {
         run(
             projectDirectory,
-            options.chiselVersion,
+            options.chiselApiVersion,
+            options.chiselCliVersion,
             !!options.install,
             !!options.rewrite,
         );

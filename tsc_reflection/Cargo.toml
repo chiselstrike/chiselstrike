@@ -1,0 +1,12 @@
+[package]
+name = "tsc_reflection"
+version = "0.16.0-dev.0"
+authors = ["ChiselStrike"]
+edition = "2021"
+
+[dependencies]
+anyhow = "1.0.68"
+deno_runtime = { path = "../third_party/deno/runtime" }
+
+[lib]
+name = "tsc_reflection"

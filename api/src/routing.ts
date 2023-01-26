@@ -1,6 +1,11 @@
 // SPDX-FileCopyrightText: © 2022 ChiselStrike <info@chiselstrike.com>
 
-import type { ChiselRequest } from "./request.ts";
+import {
+    ChiselRequest,
+    QueryParamsGeneric,
+    RequestReflection,
+} from "./request.ts";
+import { JSONValue, ReflectionType } from "./utils.ts";
 
 /** Container for HTTP routes and their handlers.
  *
@@ -127,8 +132,30 @@ export class RouteMap {
     }
 
     /** A shorthand for `route()` with `POST` method. */
-    post(path: string, handler: Handler): this {
-        return this.route("POST", path, handler);
+    post(path: string, handler: Handler): this;
+    post<
+        QueryParams extends QueryParamsGeneric = Record<string, string>,
+        JsonBody = JSONValue,
+    >(
+        path: string,
+        handler: PostHandler<QueryParams, JsonBody>,
+        reflection?: EndpointReflection,
+    ): this;
+    post<QueryParams extends QueryParamsGeneric, JsonBody>(
+        path: string,
+        handler: PostHandler<QueryParams, JsonBody> | Handler,
+        reflection?: EndpointReflection,
+    ): this {
+        let meta: ClientMetadata | undefined;
+        if (reflection !== undefined && reflection.request !== undefined) {
+            meta = {
+                handler: {
+                    kind: "generic",
+                    request: reflection.request,
+                },
+            };
+        }
+        return this.route("POST", path, handler as Handler, meta);
     }
 
     /** A shorthand for `route()` with `PUT` method. */
@@ -212,14 +239,19 @@ export type CrudHandler =
  */
 export type ClientMetadata = {
     /// Specifies hanlder to be used to handle given route.
-    handler: {
-        kind: "Crud";
-        handler: {
-            kind: CrudHandler;
-            /// Name of the entity that given CRUD handler concenrs.
-            entityName: string;
+    handler:
+        | {
+            kind: "crud";
+            handler: {
+                kind: CrudHandler;
+                /// Name of the entity that given CRUD handler concenrs.
+                entityName: string;
+            };
+        }
+        | {
+            kind: "generic";
+            request: RequestReflection;
         };
-    };
 };
 
 /** A request handler that maps HTTP request to an HTTP response. */
@@ -235,14 +267,20 @@ export type Handler = (
  */
 export type ResponseLike = Response | string | unknown;
 
+/** A request handler that maps HTTP request to an HTTP response. */
+export type PostHandler<
+    TypedQuery extends QueryParamsGeneric = Record<string, string>,
+    TypedJsonBody = JSONValue,
+> = (
+    req: ChiselRequest<TypedQuery, TypedJsonBody>,
+) => ResponseLike | Promise<ResponseLike>;
+
 /** Anything that we can convert to a `RouteMap`:
  *
  * - `RouteMap` is used as-is
  * - `Handler` handles requests for all methods and all paths
  */
-export type RouteMapLike =
-    | RouteMap
-    | Handler;
+export type RouteMapLike = RouteMap | Handler;
 
 export type Middleware = {
     handler: MiddlewareHandler;
@@ -266,6 +304,11 @@ export type MiddlewareHandler = (
 ) => Promise<Response>;
 
 export type MiddlewareNext = (request: ChiselRequest) => Promise<Response>;
+
+export type EndpointReflection = {
+    request?: RequestReflection;
+    returnType?: ReflectionType;
+};
 
 export class Router {
     private routes: RouterRoute[];
@@ -302,6 +345,7 @@ export type RouterMatch = {
     handler: Handler;
     middlewares: Middleware[];
     legacyFileName: string | undefined;
+    reflection?: ClientMetadata;
 };
 
 class RouterRoute {
@@ -310,11 +354,12 @@ class RouterRoute {
     handler: Handler;
     middlewares: Middleware[];
     legacyFileName: string | undefined;
+    reflection?: ClientMetadata;
 
     constructor(route: Route, routeMapMiddlewares: Middleware[]) {
         // HACK: we use the hostname part of the URL Pattern to match the method
         const methodPattern = route.methods
-            .map((method) => method == "*" ? ".*" : method.toLowerCase())
+            .map((method) => (method == "*" ? ".*" : method.toLowerCase()))
             .join("|");
         this.pattern = new URLPattern(
             `http://(${methodPattern})${route.pathPattern}`,
@@ -325,6 +370,7 @@ class RouterRoute {
         this.handler = route.handler;
         this.middlewares = route.middlewares.concat(routeMapMiddlewares);
         this.legacyFileName = route.legacyFileName;
+        this.reflection = route.clientMetadata;
     }
 
     match(method: string, path: string): RouterMatch | null {
@@ -343,6 +389,7 @@ class RouterRoute {
             handler: this.handler,
             middlewares: this.middlewares,
             legacyFileName: this.legacyFileName,
+            reflection: this.reflection,
         };
     }
 

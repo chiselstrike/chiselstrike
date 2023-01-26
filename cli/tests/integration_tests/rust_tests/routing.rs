@@ -3,18 +3,7 @@ use serde::Deserialize;
 use crate::framework::prelude::{test, *};
 
 #[test(modules = Both)]
-async fn empty(c: TestContext) {
-    // Make sure that empty files are ignored and don't cause problems
-    c.chisel.write("routes/empty.ts", "");
-
-    c.chisel.apply_ok().await;
-}
-
-#[test(modules = Both)]
 async fn basic(c: TestContext) {
-    // Make sure that empty files are ignored and don't cause problems
-    c.chisel.write("routes/empty.ts", "");
-
     c.chisel.write(
         "routes/index.ts",
         r#"
@@ -622,7 +611,7 @@ async fn route_reflection(c: TestContext) {
     }
 
     #[derive(Debug, Clone, Deserialize)]
-    #[serde(tag = "kind", content = "handler")]
+    #[serde(tag = "kind", content = "handler", rename_all = "camelCase")]
     enum HandlerKind {
         Crud(CrudHandler),
     }

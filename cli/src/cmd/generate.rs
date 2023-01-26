@@ -277,7 +277,7 @@ async fn get_routing_info(api_listen_addr: &str, version: &str) -> Result<Vec<Ro
 }
 
 #[derive(Debug, Clone, Deserialize)]
-#[serde(tag = "kind", content = "handler")]
+#[serde(tag = "kind", content = "handler", rename_all = "camelCase")]
 enum HandlerKind {
     Crud(CrudHandler),
 }

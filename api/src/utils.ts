@@ -12,13 +12,9 @@ export function opAsync(
     return Deno.core.opAsync(opName, a, b);
 }
 
-export type JSONValue =
-    | string
-    | number
-    | boolean
-    | null
-    | { [x: string]: JSONValue }
-    | Array<JSONValue>;
+export type JSONValue = string | number | boolean | null | {
+    [x: string]: JSONValue;
+} | Array<JSONValue>;
 
 /**
  * Gets a secret from the environment
@@ -34,16 +30,14 @@ export function getSecret(key: string): JSONValue | undefined {
 /** Converts a JSON value into a `Response`. */
 export function responseFromJson(body: unknown, status = 200) {
     // https://fetch.spec.whatwg.org/#null-body-status
-    const isNullBody = status == 101 || status == 103 ||
-        status == 204 || status == 205 || status == 304;
+    const isNullBody = status == 101 || status == 103 || status == 204 ||
+        status == 205 || status == 304;
 
     const jsonBody = valueToJson(body);
     const json = isNullBody ? null : stringifyJson(jsonBody);
     return new Response(json, {
         status: status,
-        headers: [
-            ["content-type", "application/json"],
-        ],
+        headers: [["content-type", "application/json"]],
     });
 }
 
@@ -110,8 +104,29 @@ function valueToJson(v: unknown): JSONValue {
 
 /** HTTP status codes */
 export const HTTP_STATUS = {
+    BAD_REQUEST: 400,
     FORBIDDEN: 403,
     INTERNAL_SERVER_ERROR: 500,
     METHOD_NOT_ALLOWED: 405,
     NOT_FOUND: 404,
 };
+
+export class ChiselError {
+    constructor(public httpErrorCode: number, public message?: string) {}
+}
+
+export type ReflectionType =
+    | { name: "undefined" }
+    | { name: "null" }
+    | { name: "string" }
+    | { name: "number" }
+    | { name: "boolean" }
+    | { name: "date" }
+    | { name: "arrayBuffer" }
+    | { name: "array"; elementType: ReflectionType }
+    | {
+        name: "namedObject";
+        typeName: string;
+        fields: Record<string, ReflectionType>;
+    }
+    | { name: "anonymousObject"; fields: Record<string, ReflectionType> };
