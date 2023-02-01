@@ -235,8 +235,3 @@ Also, consider:
 ## Next steps?
 
 Our documentation (including a quick tutorial) is available at [docs.chiselstrike.com](https://docs.chiselstrike.com)
-
-Don't want the hassle of deploying and managing this yourself?
-
-Our hosted version is available [here](https://chiselstrike.com/login) and is now in beta. You can deploy your project
-straight from your git repository and see your backend materializing in front of your eyes.
