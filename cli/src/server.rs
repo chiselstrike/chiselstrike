@@ -14,7 +14,7 @@ pub(crate) fn start_server(chiseld_args: Vec<String>) -> anyhow::Result<tokio::p
     println!();
     println!("⚠️  This software is for evaluation purposes only. Do not use it in production. ⚠️ ");
     println!();
-    println!("📚 Docs:    https://docs.chiselstrike.com");
+    println!("📚 Docs:    https://cs.docs.chiselstrike.com");
     println!("💬 Discord: https://discord.gg/4B5D7hYwub");
     println!("📧 Email:   beta@chiselstrike.com");
     println!();

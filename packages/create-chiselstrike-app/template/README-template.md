@@ -13,7 +13,7 @@ npm run dev
 Which starts a local development server of the example code.
 
 For more help in getting started with ChiselStrike development, check out the
-[online documentation](https://docs.chiselstrike.com).
+[online documentation](https://cs.docs.chiselstrike.com).
 
 ## Docker Support
 
