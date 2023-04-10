@@ -135,7 +135,7 @@ if (os.type() == "Windows_NT") {
     );
     console.log("");
     console.log(
-        "For more information, see the documentation at: https://docs.chiselstrike.com",
+        "For more information, see the documentation at: https://cs.docs.chiselstrike.com",
     );
     process.exit(1);
 }

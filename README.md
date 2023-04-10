@@ -90,7 +90,7 @@ curl localhost:8080/dev/comments
 ```
 
 For a more detailed tutorial about how to get started with ChiselStrike, follow
-our [Getting started tutorial](https://docs.chiselstrike.com/tutorials/getting-started/).
+our [Getting started tutorial](https://cs.docs.chiselstrike.com/tutorials/getting-started/).
 
 ### Is ChiselStrike a database?
 
@@ -118,7 +118,7 @@ to the API.
 ChiselStrike, on the other hand, starts from your code and automates the decisions needed to implement that into the database, much
 like what a [compiler](https://blog.chiselstrike.com/my-other-database-is-a-compiler-10fd527a4d78) would do.
 
-Let's look at [ChiselStrike's documentation](https://docs.chiselstrike.com/Intro/first) for an example of what's needed to create a comment on a blog post:
+Let's look at [ChiselStrike's documentation](https://cs.docs.chiselstrike.com/Intro/first) for an example of what's needed to create a comment on a blog post:
 
 ```typescript
 import { ChiselEntity } from "@chiselstrike/api"
@@ -234,4 +234,4 @@ Also, consider:
 
 ## Next steps?
 
-Our documentation (including a quick tutorial) is available at [docs.chiselstrike.com](https://docs.chiselstrike.com)
+Our documentation (including a quick tutorial) is available at [here](https://cs.docs.chiselstrike.com)

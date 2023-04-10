@@ -11,13 +11,13 @@ export type WithoutId<Entity> = ΩWithoutId<Entity>;
 /**
  * Creates an object that exposes an API to make requests of a ChiselStrike
  * backend using the automatically generated [RESTful entity CRUD
- * API](https://docs.chiselstrike.com/reference/entity-crud-api/). This API
+ * API](https://cs.docs.chiselstrike.com/reference/entity-crud-api/). This API
  * invokes the [entity CRUD
- * routes](https://docs.chiselstrike.com/reference/routing/entity-crud) declared
+ * routes](https://cs.docs.chiselstrike.com/reference/routing/entity-crud) declared
  * in the backend.
  *
  * For a full reference on this generated client API, see the
- * [documentation](https://docs.chiselstrike.com/reference/ts-client-api/).
+ * [documentation](https://cs.docs.chiselstrike.com/reference/ts-client-api/).
  *
  * **Creating a client object**
  *
@@ -67,7 +67,7 @@ export type WithoutId<Entity> = ΩWithoutId<Entity>;
  *
  * Each of these generated methods corresponds to the functionality of the
  * [ChiselStrike RESTful entity CRUD HTTP
- * methods](https://docs.chiselstrike.com/reference/entity-crud-api/supported-http-methods).
+ * methods](https://cs.docs.chiselstrike.com/reference/entity-crud-api/supported-http-methods).
  * Each call returns a promise that becomes fulfilled or rejected upon
  * completion, except for `getIter()` which returns an AsyncIterable`.
  *
